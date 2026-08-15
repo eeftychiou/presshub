@@ -17,3 +17,13 @@ yarn-error.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# Environment & local secrets
+*.env
+.env
+.env.*
+.env.local
+.env.*.local
+
+# Local MCP configuration
+mcp_config.json
