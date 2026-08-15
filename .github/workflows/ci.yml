@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-tests:
+    name: TypeScript workflow tests (Jest + tsc)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: presshub-workflow
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: presshub-workflow/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (strict)
+        run: npx tsc --noEmit
+
+      - name: Run Jest suite
+        run: npm test
+
+  php-tests:
+    name: PHP plugin tests (harness + lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: presshub-ai-editor
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Run PHP unit tests (TDD harness)
+        run: |
+          set -e
+          for t in tests/WorkflowRecursionTest.php tests/ImagenProjectIdTest.php \
+                   tests/SideloadMediaTest.php tests/ClassifyIntentProviderTest.php \
+                   tests/ChatRoutingAdminGateTest.php tests/RateLimiterTest.php \
+                   tests/AjaxIntegrationRateLimitTest.php; do
+            echo "=== $t ==="
+            php "$t"
+          done
+
+      - name: PHP syntax lint (all plugin files)
+        run: |
+          set -e
+          find . -name '*.php' -not -path './includes/plugin-update-checker/*' -print0 \
+            | xargs -0 -n1 php -l > /dev/null

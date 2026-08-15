@@ -1,4 +1,16 @@
 jQuery(document).ready(function($) {
+    // Escape a string for safe insertion into HTML. Used for any server
+    // or AI-provided content rendered into the admin UI (defense in depth
+    // against a provider response containing markup).
+    function presshubEsc(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     $('#presshub-ai-test-api').on('click', function(e) {
         e.preventDefault();
         var $btn = $(this);
@@ -103,7 +115,7 @@ jQuery(document).ready(function($) {
             $('#presshub-ai-review-spinner').removeClass('is-active');
             $btn.prop('disabled', false);
             if(response.success) {
-                var html = '<div class="scorecard-box"><strong>Score: ' + response.data.score + '/100</strong><p>' + response.data.feedback + '</p></div>';
+                var html = '<div class="scorecard-box"><strong>Score: ' + presshubEsc(response.data.score) + '/100</strong><p>' + presshubEsc(response.data.feedback) + '</p></div>';
                 $('#presshub-ai-scorecard-results').html(html);
                 alert('Review completed. Status updated.');
             } else {
