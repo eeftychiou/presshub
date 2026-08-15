@@ -6,18 +6,84 @@ class PressHub_AI_API_Client {
     private $google_cloud_api_key;
     private $provider;
     private $model;
+    private $temperature;
+    private $max_tokens;
+    private $timeout;
 
     public function __construct() {
         $this->api_key = get_option( 'presshub_ai_api_key' );
         $this->google_cloud_api_key = get_option( 'presshub_ai_google_cloud_api_key' );
         $this->provider = get_option( 'presshub_ai_provider', 'openai' );
-        $this->model = get_option( 'presshub_ai_model', 'gpt-4o' );
+        // Per-provider config (P2): the model/tuning are read from the
+        // ACTIVE provider's options, with the legacy global model as a
+        // fallback for sites that have not run the migration yet.
+        $this->model = $this->resolve_model( $this->provider );
+        $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $this->provider, self::default_temperature() );
+        $this->max_tokens = (int) get_option( 'presshub_ai_max_tokens_' . $this->provider, self::default_max_tokens() );
+        $this->timeout = (int) get_option( 'presshub_ai_timeout_' . $this->provider, self::default_timeout( $this->provider ) );
     }
 
-    public function test_connection() {
+    private static function default_temperature(): float {
+        return 0.7;
+    }
+
+    private static function default_max_tokens(): int {
+        return 2000;
+    }
+
+    private static function default_timeout( $provider ): int {
+        return 'openai' === $provider ? 60 : 90;
+    }
+
+    private static function default_model( $provider ): string {
+        switch ( $provider ) {
+            case 'anthropic':
+                return 'claude-3-5-sonnet-20240620';
+            case 'gemini':
+                return 'gemini-1.5-pro-latest';
+            default:
+                return 'gpt-4o';
+        }
+    }
+
+    /**
+     * Resolve the model for a provider: per-provider option first, then the
+     * legacy global option, then the provider default.
+     */
+    private function resolve_model( $provider ): string {
+        $model = (string) get_option( 'presshub_ai_model_' . $provider, '' );
+        if ( '' === $model ) {
+            $model = (string) get_option( 'presshub_ai_model', '' );
+        }
+        if ( '' === $model ) {
+            $model = self::default_model( $provider );
+        }
+        return $model;
+    }
+
+    /**
+     * Test the connection for a specific provider (defaults to the active
+     * one). Re-snapshots the target provider's config so testing a
+     * non-active provider uses its own model/tuning.
+     *
+     * @param string|null $provider openai|anthropic|gemini
+     */
+    public function test_connection( $provider = null ) {
+        $provider = $provider ? $provider : $this->provider;
+        if ( ! in_array( $provider, [ 'openai', 'anthropic', 'gemini' ], true ) ) {
+            $provider = 'openai';
+        }
+
         if ( empty( $this->api_key ) ) {
             return new WP_Error( 'no_api_key', 'API key is missing.' );
         }
+
+        $this->provider    = $provider;
+        $this->model       = $this->resolve_model( $provider );
+        $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $provider, self::default_temperature() );
+        $this->max_tokens  = (int) get_option( 'presshub_ai_max_tokens_' . $provider, self::default_max_tokens() );
+        $this->timeout     = (int) get_option( 'presshub_ai_timeout_' . $provider, self::default_timeout( $provider ) );
+
         $sys = 'You are a test bot.';
         $user = 'Reply with exactly the word "Hello" and nothing else.';
         return $this->call_provider( $sys, $user, false, [] );
@@ -66,8 +132,9 @@ class PressHub_AI_API_Client {
 
         // Route through the user's configured provider so classifier cost
         // and behaviour match the rest of the system. Falls back to the
-        // default provider if none is configured.
-        $result = $this->call_provider( $sys_prompt, $prompt, false, [] );
+        // default provider if none is configured. Temperature is locked to
+        // 0.0 for deterministic classification.
+        $result = $this->call_provider( $sys_prompt, $prompt, false, [], 0.0 );
         if ( is_wp_error( $result ) ) {
             return 'chat'; // Default fallback
         }
@@ -87,7 +154,8 @@ class PressHub_AI_API_Client {
      */
     public function build_imagen_url() {
         $project_id = get_option( 'presshub_ai_gcloud_project_id', 'presshub-ai' );
-        return 'https://us-central1-aiplatform.googleapis.com/v1/projects/' . $project_id . '/locations/us-central1/publishers/google/models/imagen-3.0-generate-002:predict?key=' . $this->google_cloud_api_key;
+        $region     = get_option( 'presshub_ai_imagen_region', 'us-central1' );
+        return 'https://' . $region . '-aiplatform.googleapis.com/v1/projects/' . $project_id . '/locations/' . $region . '/publishers/google/models/imagen-3.0-generate-002:predict?key=' . $this->google_cloud_api_key;
     }
 
     /**
@@ -200,10 +268,11 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'no_gc_key', 'Google Cloud API key is missing.' );
         }
 
-        // 1. Synthesize media link/details into script using Gemini
+        // 1. Synthesize media link/details into script using Gemini.
+        // Temperature locked to 0.0 so the narration script is deterministic.
         $sys_prompt = "You are a professional news radio narrator. Convert the user's prompt or media notes into a short 4-5 sentence radio report script. Output ONLY the speech script and nothing else.";
         $sys_prompt = apply_filters( 'presshub_ai_audio_script_prompt', $sys_prompt );
-        $script = $this->call_gemini( $sys_prompt, $prompt, false, [] );
+        $script = $this->call_gemini( $sys_prompt, $prompt, false, [], 0.0 );
         if ( is_wp_error( $script ) ) return $script;
 
         // 2. Call Google Cloud TTS
@@ -259,17 +328,23 @@ class PressHub_AI_API_Client {
         );
     }
 
-    public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files ) {
+    /**
+     * @param float|null $temperature Explicit temperature override (used to
+     *                                lock classify_intent / audio scripts to
+     *                                0.0); null uses the provider's configured
+     *                                temperature.
+     */
+    public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
         if ( $this->provider === 'anthropic' ) {
-            return $this->call_anthropic( $sys_prompt, $user_prompt, $files );
+            return $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature );
         } elseif ( $this->provider === 'gemini' ) {
-            return $this->call_gemini( $sys_prompt, $user_prompt, $json_mode, $files );
+            return $this->call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature );
         } else {
-            return $this->call_openai( $sys_prompt, $user_prompt, $json_mode, $files );
+            return $this->call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature );
         }
     }
 
-    private function call_openai( $sys_prompt, $user_prompt, $json_mode, $files ) {
+    private function call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
         if ( ! empty( $files ) ) {
             return new WP_Error( 'file_error', 'OpenAI chat completions do not support direct PDF/Audio uploads natively in this basic integration. Please select Google Gemini for multi-modal files.' );
         }
@@ -279,17 +354,25 @@ class PressHub_AI_API_Client {
             'messages' => [
                 [ 'role' => 'system', 'content' => $sys_prompt ],
                 [ 'role' => 'user', 'content' => $user_prompt ]
-            ]
+            ],
+            'temperature' => null === $temperature ? $this->temperature : (float) $temperature
         ];
         if ( $json_mode ) $body['response_format'] = [ 'type' => 'json_object' ];
 
+        $headers = [
+            'Authorization' => 'Bearer ' . $this->api_key,
+            'Content-Type'  => 'application/json'
+        ];
+        // P6: optional OpenAI-Organization header for multi-org accounts.
+        $org = get_option( 'presshub_ai_openai_org', '' );
+        if ( ! empty( $org ) ) {
+            $headers['OpenAI-Organization'] = $org;
+        }
+
         $response = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $this->api_key,
-                'Content-Type'  => 'application/json'
-            ],
+            'headers' => $headers,
             'body' => wp_json_encode( $body ),
-            'timeout' => 60
+            'timeout' => $this->timeout
         ] );
 
         if ( is_wp_error( $response ) ) return $response;
@@ -303,7 +386,7 @@ class PressHub_AI_API_Client {
         return new WP_Error( 'api_error', 'Invalid response from OpenAI.' );
     }
 
-    private function call_anthropic( $sys_prompt, $user_prompt, $files ) {
+    private function call_anthropic( $sys_prompt, $user_prompt, $files, $temperature = null ) {
         $content_array = [];
         
         foreach ( $files as $file_path ) {
@@ -327,10 +410,13 @@ class PressHub_AI_API_Client {
             'text' => $user_prompt
         ];
 
+        // P6: pin the anthropic-version header via settings (default 2023-06-01).
+        $version = (string) get_option( 'presshub_ai_anthropic_version', '2023-06-01' );
+
         $response = wp_remote_post( 'https://api.anthropic.com/v1/messages', [
             'headers' => [
                 'x-api-key' => $this->api_key,
-                'anthropic-version' => '2023-06-01',
+                'anthropic-version' => $version,
                 'Content-Type' => 'application/json'
             ],
             'body' => wp_json_encode( [
@@ -339,9 +425,10 @@ class PressHub_AI_API_Client {
                 'messages' => [
                     [ 'role' => 'user', 'content' => $content_array ]
                 ],
-                'max_tokens' => 2000
+                'max_tokens' => $this->max_tokens,
+                'temperature' => null === $temperature ? $this->temperature : (float) $temperature
             ] ),
-            'timeout' => 90 // PDFs can take longer
+            'timeout' => $this->timeout
         ] );
 
         if ( is_wp_error( $response ) ) return $response;
@@ -355,7 +442,7 @@ class PressHub_AI_API_Client {
         return new WP_Error( 'api_error', 'Invalid response from Anthropic.' );
     }
 
-    private function call_gemini( $sys_prompt, $user_prompt, $json_mode, $files ) {
+    private function call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $this->model . ':generateContent?key=' . $this->api_key;
         
         $parts = [];
@@ -382,14 +469,15 @@ class PressHub_AI_API_Client {
             ]
         ];
         
+        $body['generationConfig'] = [ 'temperature' => null === $temperature ? $this->temperature : (float) $temperature ];
         if ( $json_mode ) {
-            $body['generationConfig'] = [ 'responseMimeType' => 'application/json' ];
+            $body['generationConfig']['responseMimeType'] = 'application/json';
         }
 
         $response = wp_remote_post( $url, [
             'headers' => [ 'Content-Type' => 'application/json' ],
             'body' => wp_json_encode( $body ),
-            'timeout' => 90 // Media processing can take longer
+            'timeout' => $this->timeout
         ] );
 
         if ( is_wp_error( $response ) ) return $response;

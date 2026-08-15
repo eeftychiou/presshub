@@ -162,6 +162,9 @@ if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
 if ( ! function_exists( 'register_setting' ) ) {
     function register_setting( $option_group, $option_name, $args = [] ) {
         $GLOBALS['REGISTERED_SETTINGS'][] = $option_name;
+        if ( is_array( $args ) && ! empty( $args['sanitize_callback'] ) ) {
+            $GLOBALS['SANITIZE_CALLBACKS'][ $option_name ] = $args['sanitize_callback'];
+        }
     }
 }
 
@@ -419,5 +422,93 @@ if ( ! function_exists( 'wp_schedule_event' ) ) {
     function wp_schedule_event( $timestamp, $recurrence, $hook, $args = [] ) {
         $GLOBALS['RECURRING_EVENTS'][] = [ 'time' => $timestamp, 'recurrence' => $recurrence, 'hook' => $hook, 'args' => $args ];
         return true;
+    }
+}
+
+// --- Stubs for presets feature (user meta) + settings overhaul (Settings API) ---
+
+if ( ! function_exists( 'get_user_meta' ) ) {
+    function get_user_meta( $user_id, $key, $single = false ) {
+        $store = $GLOBALS['USER_META_STORE'] ?? [];
+        $val = $store[ $user_id ][ $key ] ?? ( $single ? '' : [] );
+        return $val;
+    }
+}
+
+if ( ! function_exists( 'update_user_meta' ) ) {
+    function update_user_meta( $user_id, $key, $value ) {
+        $GLOBALS['USER_META_STORE'][ $user_id ][ $key ] = $value;
+        return true;
+    }
+}
+
+if ( ! function_exists( 'delete_user_meta' ) ) {
+    function delete_user_meta( $user_id, $key, $value = '' ) {
+        unset( $GLOBALS['USER_META_STORE'][ $user_id ][ $key ] );
+        return true;
+    }
+}
+
+if ( ! function_exists( 'wp_get_current_user' ) ) {
+    function wp_get_current_user() {
+        $id = (int) ( $GLOBALS['CURRENT_USER_ID'] ?? 0 );
+        return (object) [ 'ID' => $id, 'roles' => $GLOBALS['CURRENT_USER_ROLES'] ?? [] ];
+    }
+}
+
+if ( ! function_exists( 'admin_url' ) ) {
+    function admin_url( $path = '' ) {
+        return 'http://example.test/wp-admin/' . ltrim( $path, '/' );
+    }
+}
+
+if ( ! function_exists( 'wp_unslash' ) ) {
+    function wp_unslash( $value ) {
+        return is_string( $value ) ? stripslashes( $value ) : $value;
+    }
+}
+
+if ( ! function_exists( 'add_settings_section' ) ) {
+    function add_settings_section( $id, $title, $callback, $page ) {
+        $GLOBALS['SECTIONS'][ $page ][] = [ 'id' => $id, 'title' => $title, 'callback' => $callback ];
+        return true;
+    }
+}
+
+if ( ! function_exists( 'add_settings_field' ) ) {
+    function add_settings_field( $id, $title, $callback, $page, $section, $args = [] ) {
+        $GLOBALS['FIELDS'][ $page ][ $section ][] = [ 'id' => $id, 'title' => $title, 'callback' => $callback, 'args' => $args ];
+        return true;
+    }
+}
+
+if ( ! function_exists( 'do_settings_sections' ) ) {
+    function do_settings_sections( $page ) {
+        $GLOBALS['RENDERED_SECTIONS'][ $page ] = true;
+    }
+}
+
+if ( ! function_exists( 'settings_fields' ) ) {
+    function settings_fields( $option_group ) {
+        $GLOBALS['RENDERED_SETTINGS_FIELDS'][ $option_group ] = true;
+    }
+}
+
+if ( ! function_exists( 'add_help_tab' ) ) {
+    function add_help_tab( $args ) {
+        $GLOBALS['HELP_TABS'][] = $args;
+        return true;
+    }
+}
+
+if ( ! function_exists( 'wp_die' ) ) {
+    function wp_die( $message = '', $title = '', $args = [] ) {
+        throw new RuntimeException( 'wp_die: ' . ( is_string( $message ) ? $message : json_encode( $message ) ) );
+    }
+}
+
+if ( ! function_exists( 'sanitize_text_field' ) ) {
+    function sanitize_text_field( $str ) {
+        return trim( (string) $str );
     }
 }
