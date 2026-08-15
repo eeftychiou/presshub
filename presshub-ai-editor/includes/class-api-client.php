@@ -1,6 +1,10 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-preset-sanitizer.php';
+require_once __DIR__ . '/class-preset-store.php';
+require_once __DIR__ . '/class-preset-resolver.php';
+
 class PressHub_AI_API_Client {
     private $api_key;
     private $google_cloud_api_key;
@@ -89,12 +93,28 @@ class PressHub_AI_API_Client {
         return $this->call_provider( $sys, $user, false, [] );
     }
 
-    public function generate_draft( $sources, $instructions, $uploaded_files = [] ) {
+    public function generate_draft( $sources, $instructions, $uploaded_files = [], $preset_slug = '' ) {
         if ( empty( $this->api_key ) ) {
             return new WP_Error( 'no_api_key', 'API key is missing.' );
         }
 
         $sys_prompt = 'You are a professional AI journalist.';
+
+        // Per-author instruction presets (2026-08-15 design §3): the
+        // resolver returns at most ONE instruction text to append, or null
+        // when no preset applies (unknown/disabled/empty preset, '__none__'
+        // sentinel, endpoint gating, or no presets configured). The default
+        // '' falls back to the author's own default preset — backward
+        // compatible with the pre-preset 3-arg call.
+        $preset = PressHub_AI_Preset_Resolver::resolve_for_user(
+            get_current_user_id(),
+            'draft',
+            $preset_slug
+        );
+        if ( $preset !== null ) {
+            $sys_prompt .= "\n\n" . $preset;
+        }
+
         $sys_prompt = apply_filters( 'presshub_ai_draft_system_prompt', $sys_prompt );
         $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions;
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );

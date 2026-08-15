@@ -44,6 +44,8 @@ class PressHub_AI_Metaboxes {
             <p class="description">What should the AI focus on in this draft?</p>
             <textarea id="presshub-ai-instructions" rows="2" maxlength="5000" style="width:100%;"></textarea>
             
+            <?php $this->render_preset_selector(); ?>
+            
             <button type="button" id="presshub-ai-generate-draft" class="button button-primary" data-post-id="<?php echo esc_attr( $post->ID ); ?>" style="margin-top: 10px;">
                 Generate Initial Draft
             </button>
@@ -66,6 +68,73 @@ class PressHub_AI_Metaboxes {
                 <?php endif; ?>
             </div>
         </div>
+        <?php
+    }
+
+    /**
+     * Render the per-request "Author Style Preset" dropdown (design doc
+     * §4.1). Options: a sentinel first option, then the author's enabled
+     * presets, then enabled plugin defaults the author hasn't disabled
+     * (labelled " (default)"). Preselects the author's default preset
+     * slug. The plugin-default library is seeded lazily on first load.
+     */
+    private function render_preset_selector(): void {
+        $user_id = (int) get_current_user_id();
+
+        if ( ! class_exists( 'PressHub_AI_Preset_Store' ) ) {
+            require_once __DIR__ . '/class-preset-sanitizer.php';
+            require_once __DIR__ . '/class-preset-store.php';
+        }
+
+        // Seed the curated plugin defaults lazily when the option has
+        // never been written (idempotent — existing data is untouched).
+        if ( false === get_option( PressHub_AI_Preset_Store::OPTION_DEFAULT_PRESETS, false ) ) {
+            PressHub_AI_Preset_Store::seed_plugin_defaults();
+        }
+
+        $author_presets  = PressHub_AI_Preset_Store::get_author_presets( $user_id );
+        $plugin_defaults = PressHub_AI_Preset_Store::get_plugin_defaults();
+        $disabled        = PressHub_AI_Preset_Store::get_disabled_defaults( $user_id );
+        $default_slug    = PressHub_AI_Preset_Store::get_author_default_slug( $user_id );
+
+        $options = [];
+        $seen    = [];
+
+        foreach ( $author_presets as $preset ) {
+            if ( empty( $preset['enabled'] ) ) {
+                continue;
+            }
+            $seen[ $preset['slug'] ] = true;
+            $options[] = [ 'value' => $preset['slug'], 'label' => $preset['name'] ];
+        }
+
+        foreach ( $plugin_defaults as $preset ) {
+            if ( empty( $preset['enabled'] ) ) {
+                continue;
+            }
+            if ( in_array( $preset['slug'], $disabled, true ) ) {
+                continue;
+            }
+            // On a slug collision the author's own preset wins.
+            if ( isset( $seen[ $preset['slug'] ] ) ) {
+                continue;
+            }
+            $seen[ $preset['slug'] ] = true;
+            $options[] = [ 'value' => $preset['slug'], 'label' => $preset['name'] . ' (default)' ];
+        }
+
+        $selected = ( $default_slug !== '' && isset( $seen[ $default_slug ] ) )
+            ? $default_slug
+            : '__plugin_default__';
+        ?>
+        <h3>Author Style Preset</h3>
+        <select id="presshub-ai-preset" name="instruction_preset_id" style="width:100%;">
+            <option value="__plugin_default__"<?php echo $selected === '__plugin_default__' ? ' selected="selected"' : ''; ?>>&mdash; Use my default &mdash;</option>
+            <?php foreach ( $options as $option ) : ?>
+                <option value="<?php echo esc_attr( $option['value'] ); ?>"<?php echo $selected === $option['value'] ? ' selected="selected"' : ''; ?>><?php echo esc_html( $option['label'] ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description">Pick a preset to influence the system prompt. The per-article instructions above still take precedence in the user prompt.</p>
         <?php
     }
 }

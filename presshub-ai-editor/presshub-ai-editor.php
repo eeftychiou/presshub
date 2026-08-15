@@ -21,6 +21,11 @@ require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-preset-sanitizer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-preset-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-preset-resolver.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-admin-presets.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-author-presets.php';
 
 // Initialize GitHub Update Checker
 if ( file_exists( PRESSHUB_AI_DIR . 'includes/plugin-update-checker/plugin-update-checker.php' ) ) {
@@ -108,8 +113,18 @@ function presshub_ai_execute_research_job( $research_id ) {
     
     $api = new PressHub_AI_API_Client();
     
-    $sys_prompt = "You are a senior investigative research assistant. Your task is to perform an in-depth topic synthesis and research synthesis.
-Use the provided instructions and the current post draft context to compile a comprehensive, well-structured, and objective research report in clean HTML format. Use headings, lists, and quotes where appropriate. DO NOT output code block wrappers (like ```html). Only output the raw HTML.";
+    $sys_prompt = "You are a senior investigative research assistant. Your task is to perform an in-depth topic synthesis and research synthesis.\nUse the provided instructions and the current post draft context to compile a comprehensive, well-structured, and objective research report in clean HTML format. Use headings, lists, and quotes where appropriate. DO NOT output code block wrappers (like ```html). Only output the raw HTML.";
+
+    // Per-author instruction presets (2026-08-15 design §3.3): the author
+    // who initiated the research gets their preset appended to the system
+    // prompt, before the existing filter runs. Unknown/absent initiator
+    // (user id 0) resolves to null and leaves the prompt untouched.
+    $research_user_id = (int) get_post_meta( $research_id, '_research_user_id', true );
+    $preset = PressHub_AI_Preset_Resolver::resolve_for_user( $research_user_id, 'research', null );
+    if ( $preset !== null ) {
+        $sys_prompt .= "\n\n" . $preset;
+    }
+
     $sys_prompt = apply_filters( 'presshub_ai_research_system_prompt', $sys_prompt );
 
     $user_prompt = "User prompt / request: " . $prompt . "\n\nAssociated Post Content Context:\n" . $post_content;

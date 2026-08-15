@@ -57,7 +57,11 @@ jobs:
                    tests/SideloadMediaTest.php tests/ClassifyIntentProviderTest.php \
                    tests/ChatRoutingAdminGateTest.php tests/RateLimiterTest.php \
                    tests/AjaxIntegrationRateLimitTest.php tests/ResearchCleanupTest.php \
-                   tests/PromptFiltersTest.php tests/InputLimitsTest.php; do
+                   tests/PromptFiltersTest.php tests/InputLimitsTest.php \
+                   tests/PresetSanitizerTest.php tests/PresetStoreTest.php \
+                   tests/PresetResolverTest.php tests/SettingsPageTest.php \
+                   tests/PerProviderConfigTest.php tests/SettingsSanitizeTest.php \
+                   tests/InstructionCompositionTest.php tests/AuthorInstructionsTest.php; do
             echo "=== $t ==="
             php "$t"
           done

@@ -51,6 +51,7 @@ jQuery(document).ready(function($) {
         formData.append('post_id', postId);
         formData.append('sources', sources);
         formData.append('instructions', instructions);
+        formData.append('instruction_preset_id', $('#presshub-ai-preset').val() || '');
 
         if (fileInput && fileInput.files.length > 0) {
             for (var i = 0; i < fileInput.files.length; i++) {
