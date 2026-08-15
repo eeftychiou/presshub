@@ -33,6 +33,7 @@ class PressHub_AI_Settings {
         register_setting( 'presshub_ai_options', 'presshub_ai_model' );
         register_setting( 'presshub_ai_options', 'presshub_ai_api_key' );
         register_setting( 'presshub_ai_options', 'presshub_ai_google_cloud_api_key' );
+        register_setting( 'presshub_ai_options', 'presshub_ai_gcloud_project_id' );
         register_setting( 'presshub_ai_options', 'presshub_ai_github_token' );
     }
 
@@ -72,6 +73,13 @@ class PressHub_AI_Settings {
                         <td>
                             <input type="password" name="presshub_ai_google_cloud_api_key" id="presshub_ai_google_cloud_api_key" value="<?php echo esc_attr( get_option( 'presshub_ai_google_cloud_api_key' ) ); ?>" class="regular-text" />
                             <p class="description">Required for Google Cloud Imagen and Text-to-Speech integration.</p>
+                        </td>
+                    </tr>
+                    <tr valign="top">
+                        <th scope="row">Google Cloud Project ID (Imagen)</th>
+                        <td>
+                            <input type="text" name="presshub_ai_gcloud_project_id" id="presshub_ai_gcloud_project_id" value="<?php echo esc_attr( get_option( 'presshub_ai_gcloud_project_id', 'presshub-ai' ) ); ?>" class="regular-text" />
+                            <p class="description">Google Cloud project ID used in the Vertex AI Imagen endpoint URL. Defaults to <code>presshub-ai</code>.</p>
                         </td>
                     </tr>
                     <tr valign="top">

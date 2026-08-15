@@ -106,3 +106,73 @@ if ( ! function_exists( 'do_action' ) ) {
         }
     }
 }
+
+if ( ! function_exists( 'wp_remote_post' ) ) {
+    /**
+     * Stubbed wp_remote_post. Records every call and consults an optional
+     * capture filter set by tests; otherwise returns a fake success that
+     * the API client will treat as 'no predictions' and fall back to mock.
+     */
+    function wp_remote_post( $url, $args = [] ) {
+        $GLOBALS['CAPTURED_REQUESTS'][] = [ $url, $args ];
+        if ( isset( $GLOBALS['CAPTURE_FILTER'] ) ) {
+            $captured = call_user_func( $GLOBALS['CAPTURE_FILTER'], null, [ $url, $args ] );
+            if ( $captured !== null ) return $captured;
+        }
+        return [
+            'response' => [ 'code' => 200 ],
+            'body'     => '{"predictions":[]}',
+        ];
+    }
+}
+
+if ( ! function_exists( 'wp_remote_get' ) ) {
+    function wp_remote_get( $url, $args = [] ) {
+        $GLOBALS['CAPTURED_GETS'][] = [ $url, $args ];
+        return new WP_Error( 'no_network', 'stub: network disabled in tests' );
+    }
+}
+
+if ( ! function_exists( 'wp_json_encode' ) ) {
+    function wp_json_encode( $data, $options = 0, $depth = 512 ) {
+        return json_encode( $data, $options, $depth );
+    }
+}
+
+if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
+    function wp_remote_retrieve_body( $response ) {
+        if ( is_array( $response ) ) return $response['body'] ?? '';
+        return '';
+    }
+}
+
+if ( ! function_exists( 'register_setting' ) ) {
+    function register_setting( $option_group, $option_name, $args = [] ) {
+        $GLOBALS['REGISTERED_SETTINGS'][] = $option_name;
+    }
+}
+
+if ( ! class_exists( 'WP_Error' ) ) {
+    class WP_Error {
+        public $code;
+        public $message;
+        public function __construct( $code = '', $message = '' ) {
+            $this->code = $code;
+            $this->message = $message;
+        }
+        public function get_error_code() { return $this->code; }
+        public function get_error_message() { return $this->message; }
+    }
+}
+
+if ( ! function_exists( 'is_wp_error' ) ) {
+    function is_wp_error( $thing ) {
+        return $thing instanceof WP_Error;
+    }
+}
+
+if ( ! function_exists( 'get_temp_dir' ) ) {
+    function get_temp_dir() {
+        return sys_get_temp_dir() . '/';
+    }
+}

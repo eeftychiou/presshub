@@ -79,15 +79,22 @@ Output ONLY the lowercase classification string (e.g. 'chat' or 'research') and 
         return 'chat';
     }
 
+    /**
+     * Build the Google Cloud Vertex AI Imagen endpoint URL using the
+     * configured project ID, defaulting to 'presshub-ai' so existing
+     * deployments keep working without configuration.
+     */
+    public function build_imagen_url() {
+        $project_id = get_option( 'presshub_ai_gcloud_project_id', 'presshub-ai' );
+        return 'https://us-central1-aiplatform.googleapis.com/v1/projects/' . $project_id . '/locations/us-central1/publishers/google/models/imagen-3.0-generate-002:predict?key=' . $this->google_cloud_api_key;
+    }
+
     public function generate_image_via_imagen( $prompt ) {
         if ( empty( $this->google_cloud_api_key ) ) {
             return new WP_Error( 'no_gc_key', 'Google Cloud API key is missing.' );
         }
         
-        $url = 'https://imagen.googleapis.com/v1/projects/YOUR_PROJECT_ID/locations/us-central1/publishers/google/models/imagen-3.0-generate-002:predict?key=' . $this->google_cloud_api_key;
-        // Note: If project name/location is not configured, we fallback to a simpler general key-enabled endpoint or mock
-        // In our case we will use standard Google Cloud Vertex AI endpoint structure or general Imagen v1 endpoint:
-        $url = 'https://us-central1-aiplatform.googleapis.com/v1/projects/presshub-ai/locations/us-central1/publishers/google/models/imagen-3.0-generate-002:predict?key=' . $this->google_cloud_api_key;
+        $url = $this->build_imagen_url();
         
         $body = [
             'instances' => [
