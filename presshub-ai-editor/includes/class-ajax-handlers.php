@@ -93,6 +93,15 @@ class PressHub_AI_Ajax_Handlers {
         $sources = isset( $_POST['sources'] ) ? sanitize_textarea_field( $_POST['sources'] ) : '';
         $instructions = isset( $_POST['instructions'] ) ? sanitize_textarea_field( $_POST['instructions'] ) : '';
 
+        // Input length limits: guard the AI endpoints against oversized
+        // payloads that would waste tokens / cost money.
+        if ( strlen( $sources ) > 20000 ) {
+            wp_send_json_error( 'Sources exceed the 20,000 character limit.' );
+        }
+        if ( strlen( $instructions ) > 5000 ) {
+            wp_send_json_error( 'Instructions exceed the 5,000 character limit.' );
+        }
+
         $uploaded_files = [];
         if ( ! empty( $_FILES['files'] ) ) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -139,6 +148,9 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $content = isset( $_POST['content'] ) ? wp_kses_post( $_POST['content'] ) : '';
+        if ( strlen( $content ) > 100000 ) {
+            wp_send_json_error( 'Content exceeds the 100,000 character limit.' );
+        }
         $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
 
         if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
@@ -172,6 +184,9 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $prompt = isset( $_POST['prompt'] ) ? sanitize_textarea_field( $_POST['prompt'] ) : '';
+        if ( strlen( $prompt ) > 5000 ) {
+            wp_send_json_error( 'Prompt exceeds the 5,000 character limit.' );
+        }
         $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
 
         if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
@@ -228,7 +243,7 @@ class PressHub_AI_Ajax_Handlers {
             wp_schedule_single_event( time(), 'presshub_ai_do_research', [ $research_id ] );
 
             $this->record_rate_limit();
-            wp_send_json_success( [ 'type' => 'research', 'status' => 'pending', 'research_id' => $research_id ] );
+            wp_send_json_success( [ 'type' => 'research', 'status' => 'pending', 'research_id' => $research_id, 'scheduled_at' => time() ] );
         } elseif ( 'image' === $intent ) {
             $img = $api->generate_image_via_imagen( $prompt );
             if ( is_wp_error( $img ) ) {

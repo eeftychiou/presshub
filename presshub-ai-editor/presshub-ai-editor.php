@@ -20,6 +20,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-metaboxes.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';
 
 // Initialize GitHub Update Checker
 if ( file_exists( PRESSHUB_AI_DIR . 'includes/plugin-update-checker/plugin-update-checker.php' ) ) {
@@ -45,6 +46,7 @@ function presshub_ai_init() {
     new PressHub_AI_Metaboxes();
     new PressHub_AI_Ajax_Handlers();
     new PressHub_AI_Workflow();
+    PressHub_AI_Research_Cleanup::register();
 }
 add_action( 'plugins_loaded', 'presshub_ai_init' );
 
@@ -65,7 +67,7 @@ add_action( 'enqueue_block_editor_assets', function() {
     wp_enqueue_script(
         'presshub-ai-sidebar',
         PRESSHUB_AI_URL . 'assets/sidebar.js',
-        ['wp-plugins', 'wp-edit-post', 'wp-element', 'wp-components'],
+        ['jquery', 'wp-plugins', 'wp-edit-post', 'wp-element', 'wp-components'],
         PRESSHUB_AI_VERSION,
         true
     );
@@ -77,6 +79,19 @@ add_action( 'enqueue_block_editor_assets', function() {
 
 add_action( 'presshub_ai_do_research', 'presshub_ai_execute_research_job' );
 
+/**
+ * NOTE ON WP-CRON DEPENDENCY:
+ * Deep-research jobs are scheduled with wp_schedule_single_event(), which
+ * only fires when WordPress itself is loaded (typically on site traffic).
+ * On low-traffic sites a research job may sit 'pending' until someone
+ * visits. For reliable execution, configure a real cron on the server:
+ *
+ *   wp config set DISABLE_WP_CRON true --raw
+ *   # crontab:  * * * * * wp cron event run --due-now --path=/path/to/wp
+ *
+ * The AJAX response to the client includes 'scheduled_at' so the UI can
+ * surface the expected execution time.
+ */
 function presshub_ai_execute_research_job( $research_id ) {
     $research_post = get_post( $research_id );
     if ( ! $research_post || 'presshub_research' !== $research_post->post_type ) {
@@ -95,6 +110,7 @@ function presshub_ai_execute_research_job( $research_id ) {
     
     $sys_prompt = "You are a senior investigative research assistant. Your task is to perform an in-depth topic synthesis and research synthesis.
 Use the provided instructions and the current post draft context to compile a comprehensive, well-structured, and objective research report in clean HTML format. Use headings, lists, and quotes where appropriate. DO NOT output code block wrappers (like ```html). Only output the raw HTML.";
+    $sys_prompt = apply_filters( 'presshub_ai_research_system_prompt', $sys_prompt );
 
     $user_prompt = "User prompt / request: " . $prompt . "\n\nAssociated Post Content Context:\n" . $post_content;
     

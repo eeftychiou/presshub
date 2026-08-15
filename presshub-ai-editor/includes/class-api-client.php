@@ -29,7 +29,9 @@ class PressHub_AI_API_Client {
         }
 
         $sys_prompt = 'You are a professional AI journalist.';
+        $sys_prompt = apply_filters( 'presshub_ai_draft_system_prompt', $sys_prompt );
         $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions;
+        $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 
         return $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
     }
@@ -40,6 +42,7 @@ class PressHub_AI_API_Client {
         }
 
         $sys_prompt = 'You are an exacting news editor.';
+        $sys_prompt = apply_filters( 'presshub_ai_scorecard_system_prompt', $sys_prompt );
         $user_prompt = "Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).\n\nDraft:\n" . $content;
 
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [] );
@@ -59,6 +62,7 @@ class PressHub_AI_API_Client {
 
     public function classify_intent( $prompt ) {
         $sys_prompt = "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else.";
+        $sys_prompt = apply_filters( 'presshub_ai_classify_intent_prompt', $sys_prompt );
 
         // Route through the user's configured provider so classifier cost
         // and behaviour match the rest of the system. Falls back to the
@@ -198,6 +202,7 @@ class PressHub_AI_API_Client {
 
         // 1. Synthesize media link/details into script using Gemini
         $sys_prompt = "You are a professional news radio narrator. Convert the user's prompt or media notes into a short 4-5 sentence radio report script. Output ONLY the speech script and nothing else.";
+        $sys_prompt = apply_filters( 'presshub_ai_audio_script_prompt', $sys_prompt );
         $script = $this->call_gemini( $sys_prompt, $prompt, false, [] );
         if ( is_wp_error( $script ) ) return $script;
 

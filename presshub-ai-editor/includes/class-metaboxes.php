@@ -38,11 +38,11 @@ class PressHub_AI_Metaboxes {
             <h3>Multi-Modal Source Material</h3>
             <p class="description">Attach research files (PDF, DOCX, MP3, MP4) or paste URLs/notes.</p>
             <input type="file" id="presshub-ai-files" multiple accept=".pdf,.docx,.mp3,.mp4,.wav,.m4a" style="margin-bottom: 10px; display: block;" />
-            <textarea id="presshub-ai-sources" rows="4" style="width:100%;" placeholder="Paste notes or URLs here..."></textarea>
+            <textarea id="presshub-ai-sources" rows="4" maxlength="20000" style="width:100%;" placeholder="Paste notes or URLs here..."></textarea>
             
             <h3>Journalist Instructions</h3>
             <p class="description">What should the AI focus on in this draft?</p>
-            <textarea id="presshub-ai-instructions" rows="2" style="width:100%;"></textarea>
+            <textarea id="presshub-ai-instructions" rows="2" maxlength="5000" style="width:100%;"></textarea>
             
             <button type="button" id="presshub-ai-generate-draft" class="button button-primary" data-post-id="<?php echo esc_attr( $post->ID ); ?>" style="margin-top: 10px;">
                 Generate Initial Draft

@@ -373,3 +373,51 @@ if ( ! function_exists( '__' ) ) {
         return $text;
     }
 }
+
+// --- Stubs for research cleanup + prompt filters ---
+
+if ( ! defined( 'DAY_IN_SECONDS' ) ) {
+    define( 'DAY_IN_SECONDS', 86400 );
+}
+
+if ( ! function_exists( 'add_filter' ) ) {
+    function add_filter( $tag, $callback, $priority = 10, $accepted_args = 1 ) {
+        $GLOBALS['FILTERS'][ $tag ][] = [ 'callback' => $callback, 'priority' => $priority, 'accepted_args' => $accepted_args ];
+        return true;
+    }
+}
+
+if ( ! function_exists( 'apply_filters' ) ) {
+    function apply_filters( $tag, $value, ...$args ) {
+        foreach ( ( $GLOBALS['FILTERS'][ $tag ] ?? [] ) as $entry ) {
+            $value = call_user_func_array( $entry['callback'], array_merge( [ $value ], $args ) );
+        }
+        return $value;
+    }
+}
+
+if ( ! function_exists( 'get_posts' ) ) {
+    function get_posts( $args = [] ) {
+        return $GLOBALS['GET_POSTS_RESULT'] ?? [];
+    }
+}
+
+if ( ! function_exists( 'wp_delete_post' ) ) {
+    function wp_delete_post( $post_id, $force = false ) {
+        $GLOBALS['DELETED_POSTS'][] = [ 'id' => $post_id, 'force' => $force ];
+        return true;
+    }
+}
+
+if ( ! function_exists( 'wp_next_scheduled' ) ) {
+    function wp_next_scheduled( $hook, $args = [] ) {
+        return $GLOBALS['NEXT_SCHEDULED'][ $hook ] ?? false;
+    }
+}
+
+if ( ! function_exists( 'wp_schedule_event' ) ) {
+    function wp_schedule_event( $timestamp, $recurrence, $hook, $args = [] ) {
+        $GLOBALS['RECURRING_EVENTS'][] = [ 'time' => $timestamp, 'recurrence' => $recurrence, 'hook' => $hook, 'args' => $args ];
+        return true;
+    }
+}
