@@ -1,0 +1,26 @@
+{
+    "mcpServers": {
+        "browser-automation": {
+            "args": [
+                "C:/Users/User/Antigravity/Gemini Assistant/mcp-servers/browser-automation/dist/src/index.js"
+            ],
+            "command": "node"
+        },
+        "model-router": {
+            "args": [
+                "C:/Users/User/Antigravity/Gemini Assistant/mcp-servers/model-router/dist/index.js"
+            ],
+            "command": "node"
+        },
+        "royal-mcp": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "mcp-remote",
+                "https://presshub.cy/wp-json/royal-mcp/v1/mcp",
+                "--header",
+                "X-Royal-MCP-API-Key:77b09e6c14eb66c8e3557635cb92011e"
+            ]
+        }
+    }
+}
