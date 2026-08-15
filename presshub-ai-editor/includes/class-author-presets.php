@@ -51,6 +51,13 @@ class PressHub_AI_Author_Presets {
         $disabled        = PressHub_AI_Preset_Store::get_disabled_defaults( $user_id );
         $default_slug    = PressHub_AI_Preset_Store::get_author_default_slug( $user_id );
 
+        // The AJAX handlers scope every author mutation to the CURRENT
+        // user's own library (see class-ajax-handlers.php), so the
+        // controls are only live on your own profile; viewing another
+        // user's profile renders the section read-only.
+        $is_self = ( $user_id === (int) get_current_user_id() );
+        $control_state = $is_self ? '' : ' disabled="disabled"';
+
         // Default-preset options: the user's enabled presets first, then
         // enabled plugin defaults they haven't disabled (labelled
         // " (default)"). On a slug collision the user's own preset wins.
@@ -90,10 +97,15 @@ class PressHub_AI_Author_Presets {
         $nonce    = wp_create_nonce( 'presshub_ai_nonce' );
         ?>
         <h2><?php echo esc_html( __( 'PressHub AI Presets', 'presshub-ai-editor' ) ); ?></h2>
-        <div id="presshub-ai-author-presets" data-user-id="<?php echo esc_attr( $user_id ); ?>">
+        <div id="presshub-ai-author-presets" data-user-id="<?php echo esc_attr( $user_id ); ?>" data-can-edit="<?php echo $is_self ? '1' : '0'; ?>">
             <p class="description">
                 <?php echo esc_html( __( 'Named instruction presets are appended to the fixed editorial system prompt for your AI drafts — they cannot replace it.', 'presshub-ai-editor' ) ); ?>
             </p>
+            <?php if ( ! $is_self ) : ?>
+                <p class="description">
+                    <?php echo esc_html( __( 'Presets are managed by each author from their own profile, so the controls below are read-only here.', 'presshub-ai-editor' ) ); ?>
+                </p>
+            <?php endif; ?>
 
             <h3><?php echo esc_html( __( 'My presets', 'presshub-ai-editor' ) ); ?></h3>
             <table class="widefat striped" id="presshub-ai-author-presets-table">
@@ -117,25 +129,25 @@ class PressHub_AI_Author_Presets {
                         <td><code><?php echo esc_html( $preset['slug'] ); ?></code></td>
                         <td class="presshub-preset-text"><?php echo esc_html( $this->excerpt( $preset['instruction_text'], 120 ) ); ?></td>
                         <td>
-                            <button type="button" class="button presshub-preset-edit"><?php echo esc_html( __( 'Edit', 'presshub-ai-editor' ) ); ?></button>
-                            <button type="button" class="button presshub-preset-delete"><?php echo esc_html( __( 'Delete', 'presshub-ai-editor' ) ); ?></button>
+                            <button type="button" class="button presshub-preset-edit"<?php echo $control_state; ?>><?php echo esc_html( __( 'Edit', 'presshub-ai-editor' ) ); ?></button>
+                            <button type="button" class="button presshub-preset-delete"<?php echo $control_state; ?>><?php echo esc_html( __( 'Delete', 'presshub-ai-editor' ) ); ?></button>
                         </td>
                     </tr>
                     <tr class="presshub-preset-edit-row" style="display:none;">
                         <td colspan="4">
                             <p>
                                 <label><?php echo esc_html( __( 'Name', 'presshub-ai-editor' ) ); ?><br />
-                                    <input type="text" class="presshub-edit-name regular-text" maxlength="80" value="<?php echo esc_attr( $preset['name'] ); ?>" />
+                                    <input type="text" class="presshub-edit-name regular-text" maxlength="80" value="<?php echo esc_attr( $preset['name'] ); ?>"<?php echo $control_state; ?> />
                                 </label>
                             </p>
                             <p>
                                 <label><?php echo esc_html( __( 'Instruction text', 'presshub-ai-editor' ) ); ?><br />
-                                    <textarea class="presshub-edit-text large-text" rows="3" maxlength="4000"><?php echo esc_textarea( $preset['instruction_text'] ); ?></textarea>
+                                    <textarea class="presshub-edit-text large-text" rows="3" maxlength="4000"<?php echo $control_state; ?>><?php echo esc_textarea( $preset['instruction_text'] ); ?></textarea>
                                 </label>
                             </p>
                             <p>
-                                <button type="button" class="button button-primary presshub-edit-save"><?php echo esc_html( __( 'Save', 'presshub-ai-editor' ) ); ?></button>
-                                <button type="button" class="button presshub-edit-cancel"><?php echo esc_html( __( 'Cancel', 'presshub-ai-editor' ) ); ?></button>
+                                <button type="button" class="button button-primary presshub-edit-save"<?php echo $control_state; ?>><?php echo esc_html( __( 'Save', 'presshub-ai-editor' ) ); ?></button>
+                                <button type="button" class="button presshub-edit-cancel"<?php echo $control_state; ?>><?php echo esc_html( __( 'Cancel', 'presshub-ai-editor' ) ); ?></button>
                             </p>
                         </td>
                     </tr>
@@ -148,31 +160,31 @@ class PressHub_AI_Author_Presets {
             <form id="presshub-ai-author-add-preset-form">
                 <p>
                     <label for="presshub-ai-author-new-preset-name"><?php echo esc_html( __( 'Name', 'presshub-ai-editor' ) ); ?><br />
-                        <input type="text" id="presshub-ai-author-new-preset-name" class="regular-text" maxlength="80" />
+                        <input type="text" id="presshub-ai-author-new-preset-name" class="regular-text" maxlength="80"<?php echo $control_state; ?> />
                     </label>
                 </p>
                 <p>
                     <label for="presshub-ai-author-new-preset-text"><?php echo esc_html( __( 'Instruction text', 'presshub-ai-editor' ) ); ?><br />
-                        <textarea id="presshub-ai-author-new-preset-text" class="large-text" rows="4" maxlength="4000"></textarea>
+                        <textarea id="presshub-ai-author-new-preset-text" class="large-text" rows="4" maxlength="4000"<?php echo $control_state; ?>></textarea>
                     </label>
                 </p>
                 <p class="description">
                     <?php echo esc_html( __( 'The slug is generated automatically from the name (e.g. "Concise wire style" → "concise-wire-style").', 'presshub-ai-editor' ) ); ?>
                 </p>
-                <button type="submit" class="button button-primary"><?php echo esc_html( __( 'Add preset', 'presshub-ai-editor' ) ); ?></button>
+                <button type="submit" class="button button-primary"<?php echo $control_state; ?>><?php echo esc_html( __( 'Add preset', 'presshub-ai-editor' ) ); ?></button>
             </form>
 
             <h3><?php echo esc_html( __( 'Default preset', 'presshub-ai-editor' ) ); ?></h3>
             <p class="description">
                 <?php echo esc_html( __( 'Applied automatically when no preset is picked in the post editor.', 'presshub-ai-editor' ) ); ?>
             </p>
-            <select id="presshub-ai-default-preset">
+            <select id="presshub-ai-default-preset"<?php echo $control_state; ?>>
                 <option value=""><?php echo esc_html( __( '— No default —', 'presshub-ai-editor' ) ); ?></option>
                 <?php foreach ( $default_options as $option ) : ?>
                     <option value="<?php echo esc_attr( $option['value'] ); ?>"<?php echo $default_slug === $option['value'] ? ' selected="selected"' : ''; ?>><?php echo esc_html( $option['label'] ); ?></option>
                 <?php endforeach; ?>
             </select>
-            <button type="button" class="button presshub-ai-save-default"><?php echo esc_html( __( 'Save default', 'presshub-ai-editor' ) ); ?></button>
+            <button type="button" class="button presshub-ai-save-default"<?php echo $control_state; ?>><?php echo esc_html( __( 'Save default', 'presshub-ai-editor' ) ); ?></button>
 
             <h3><?php echo esc_html( __( 'Copy from plugin defaults', 'presshub-ai-editor' ) ); ?></h3>
             <p class="description">
@@ -181,12 +193,12 @@ class PressHub_AI_Author_Presets {
             <?php if ( empty( $copy_options ) ) : ?>
                 <p class="description"><?php echo esc_html( __( 'No plugin defaults available.', 'presshub-ai-editor' ) ); ?></p>
             <?php else : ?>
-                <select id="presshub-ai-copy-preset">
+                <select id="presshub-ai-copy-preset"<?php echo $control_state; ?>>
                     <?php foreach ( $copy_options as $option ) : ?>
                         <option value="<?php echo esc_attr( $option['value'] ); ?>"><?php echo esc_html( $option['label'] ); ?></option>
                     <?php endforeach; ?>
                 </select>
-                <button type="button" class="button presshub-ai-copy-preset-btn"><?php echo esc_html( __( 'Copy to my presets', 'presshub-ai-editor' ) ); ?></button>
+                <button type="button" class="button presshub-ai-copy-preset-btn"<?php echo $control_state; ?>><?php echo esc_html( __( 'Copy to my presets', 'presshub-ai-editor' ) ); ?></button>
             <?php endif; ?>
         </div>
 
@@ -226,6 +238,14 @@ class PressHub_AI_Author_Presets {
 
             var $section = $('#presshub-ai-author-presets');
             var userId = $section.data('user-id');
+            var canEdit = String($section.data('can-edit')) === '1';
+
+            // Read-only view when this is another user's profile: the
+            // AJAX handlers only ever mutate the CURRENT user's library,
+            // so no mutation handlers are bound.
+            if (!canEdit) {
+                return;
+            }
 
             $('#presshub-ai-author-add-preset-form').on('submit', function(e) {
                 e.preventDefault();
