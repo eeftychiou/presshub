@@ -176,3 +176,115 @@ if ( ! function_exists( 'get_temp_dir' ) ) {
         return sys_get_temp_dir() . '/';
     }
 }
+
+if ( ! function_exists( 'media_handle_sideload' ) ) {
+    /**
+     * Stubbed media_handle_sideload(). Returns a configurable fake media id,
+     * or a WP_Error when SIDELOAD_FAIL is set. Captures the file_array so
+     * tests can assert filename propagation through the sideload_media helper.
+     */
+    function media_handle_sideload( $file_array, $post_id = 0, $title = null, $post_data = [] ) {
+        if ( isset( $GLOBALS['SIDELOAD_CAPTURE'] ) ) {
+            $GLOBALS['SIDELOAD_CAPTURE'][] = $file_array;
+        }
+        if ( ! empty( $GLOBALS['SIDELOAD_LAST_POST_ID_OVERRIDE'] ) ) {
+            $GLOBALS['SIDELOAD_LAST_POST_ID'] = $post_id;
+        }
+        if ( ! empty( $GLOBALS['SIDELOAD_LAST_TITLE_OVERRIDE'] ) ) {
+            $GLOBALS['SIDELOAD_LAST_TITLE'] = $title;
+        }
+        if ( ! empty( $GLOBALS['SIDELOAD_FAIL'] ) ) {
+            return new WP_Error( $GLOBALS['SIDELOAD_FAIL']['code'], $GLOBALS['SIDELOAD_FAIL']['msg'] );
+        }
+        $id = $GLOBALS['SIDELOAD_RETURN_ID'] ?? null;
+        if ( $id ) {
+            return $id;
+        }
+        return $GLOBALS['SIDELOAD_FIXED_ID'] ?? 1;
+    }
+}
+
+if ( ! function_exists( 'wp_get_attachment_url' ) ) {
+    function wp_get_attachment_url( $id ) {
+        return 'http://example.test/?attachment_id=' . $id;
+    }
+}
+
+if ( ! function_exists( 'wp_handle_upload' ) ) {
+    function wp_handle_upload( &$file, $overrides = false, $time = null ) {
+        // Tests for the upload path don't reach here, but provide a stub.
+        return [ 'error' => 'wp_handle_upload not stubbed' ];
+    }
+}
+
+// In the stubbed environment, real wp-admin includes don't exist. We
+// materialise empty stubs at ABSPATH/wp-admin/includes/ so the plugin's
+// require_once calls don't fatal. See TestBootstrap.
+
+if ( ! function_exists( 'check_ajax_referer' ) ) {
+    /**
+     * Stubbed check_ajax_referer. By default the nonce is valid; tests can
+     * flip NONCE_VALID to false to exercise the permission failure path.
+     */
+    function check_ajax_referer( $action = -1, $query_arg = false, $die = true ) {
+        if ( empty( $GLOBALS['NONCE_VALID'] ) ) {
+            if ( $die ) {
+                throw new RuntimeException( 'check_ajax_referer failed' );
+            }
+            return false;
+        }
+        return true;
+    }
+}
+
+if ( ! function_exists( 'wp_send_json_error' ) ) {
+    function wp_send_json_error( $data = null, $status_code = null, $options = 0 ) {
+        $GLOBALS['JSON_RESPONSES'][] = [ 'success' => false, 'data' => $data ];
+        // Mirror WP's behavior: wp_send_json_error calls wp_die() internally.
+        throw new RuntimeException( 'wp_send_json_error: ' . ( is_string( $data ) ? $data : wp_json_encode( $data ) ) );
+    }
+}
+
+if ( ! function_exists( 'wp_send_json_success' ) ) {
+    function wp_send_json_success( $data = null, $status_code = null, $options = 0 ) {
+        $GLOBALS['JSON_RESPONSES'][] = [ 'success' => true, 'data' => $data ];
+        throw new RuntimeException( 'wp_send_json_success' );
+    }
+}
+
+if ( ! function_exists( 'wp_insert_post' ) ) {
+    function wp_insert_post( $postarr, $wp_error = false ) {
+        $id = $GLOBALS['WP_INSERT_POST_COUNTER'] = ( $GLOBALS['WP_INSERT_POST_COUNTER'] ?? 100 ) + 1;
+        $GLOBALS['WP_INSERTED_POSTS'][] = $postarr;
+        return $id;
+    }
+}
+
+if ( ! function_exists( 'wp_schedule_single_event' ) ) {
+    function wp_schedule_single_event( $timestamp, $hook, $args = [] ) {
+        $GLOBALS['SCHEDULED_EVENTS'][] = [ 'time' => $timestamp, 'hook' => $hook, 'args' => $args ];
+        return true;
+    }
+}
+
+if ( ! function_exists( 'wp_html_excerpt' ) ) {
+    function wp_html_excerpt( $str, $length, $more = '&hellip;' ) {
+        $str = wp_strip_all_tags( $str );
+        if ( strlen( $str ) > $length ) {
+            $str = substr( $str, 0, $length ) . $more;
+        }
+        return $str;
+    }
+}
+
+if ( ! function_exists( 'wp_strip_all_tags' ) ) {
+    function wp_strip_all_tags( $string, $remove_breaks = false ) {
+        return strip_tags( $string );
+    }
+}
+
+if ( ! function_exists( 'sanitize_textarea_field' ) ) {
+    function sanitize_textarea_field( $str ) {
+        return trim( $str );
+    }
+}

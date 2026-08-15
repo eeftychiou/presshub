@@ -125,8 +125,25 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( 'Permission denied.' );
         }
 
+        // Gate paid media generation (Imagen / Cloud TTS) to admins only.
+        // Authors can still use chat + research. This prevents a low-priv
+        // user from racking up Google Cloud costs without an admin's
+        // explicit configuration of the project + keys.
+        $pre_intent = isset( $_POST['intent'] ) ? sanitize_textarea_field( $_POST['intent'] ) : '';
+        if ( in_array( $pre_intent, [ 'image', 'report' ], true ) && ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Permission denied.' );
+        }
+
         $api = new PressHub_AI_API_Client();
         $intent = $api->classify_intent( $prompt );
+
+        // Defence in depth: even if the LLM classifier resolves to an
+        // image/report intent, an author must not be able to trigger the
+        // paid call. (Belt-and-suspenders in case the client somehow
+        // bypasses the pre_intent hint above.)
+        if ( in_array( $intent, [ 'image', 'report' ], true ) && ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Permission denied.' );
+        }
 
         if ( 'chat' === $intent ) {
             $result = $api->call_provider( 'You are a helpful AI journalist assistant.', $prompt, false, [] );

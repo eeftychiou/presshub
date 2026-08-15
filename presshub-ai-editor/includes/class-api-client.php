@@ -58,19 +58,16 @@ class PressHub_AI_API_Client {
     }
 
     public function classify_intent( $prompt ) {
-        $sys_prompt = "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.
-- 'chat': Normal Q&A, general questions, writing suggestions, conversations.
-- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.
-- 'image': Requests to generate, create, draw, paint, or design an image/illustration.
-- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.
-Output ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else.";
-        
-        // Call Gemini (fallback to call_provider defaults)
-        $result = $this->call_gemini( $sys_prompt, $prompt, false, [] );
+        $sys_prompt = "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else.";
+
+        // Route through the user's configured provider so classifier cost
+        // and behaviour match the rest of the system. Falls back to the
+        // default provider if none is configured.
+        $result = $this->call_provider( $sys_prompt, $prompt, false, [] );
         if ( is_wp_error( $result ) ) {
             return 'chat'; // Default fallback
         }
-        
+
         $classified = preg_replace( '/[\`"\'\.]/', '', trim( strtolower( $result ) ) );
         // Basic validation
         if ( in_array( $classified, [ 'chat', 'research', 'image', 'report' ] ) ) {
@@ -89,13 +86,59 @@ Output ONLY the lowercase classification string (e.g. 'chat' or 'research') and 
         return 'https://us-central1-aiplatform.googleapis.com/v1/projects/' . $project_id . '/locations/us-central1/publishers/google/models/imagen-3.0-generate-002:predict?key=' . $this->google_cloud_api_key;
     }
 
+    /**
+     * Shared media-sideload helper used by every code path that needs to
+     * attach an externally produced asset (image or audio) to a post.
+     *
+     * Writes $data to a fresh tmp file, requires the wp-admin media
+     * helpers, sideloads via media_handle_sideload(), unlinks the tmp
+     * file, and returns ['id' => $media_id, 'url' => $attachment_url]
+     * on success or a WP_Error on failure. WP_Error propagates untouched
+     * so callers can decide how to surface it.
+     *
+     * @param string $filename Filename for the new attachment (must
+     *                         include extension; wp_check_filetype
+     *                         relies on it).
+     * @param string $data     Raw bytes to write into the tmp file.
+     *                         Caller is responsible for any prior
+     *                         base64 / JSON decoding.
+     * @param int    $post_id  Post to attach the media to (0 = no parent).
+     * @param string $title    Title for the new attachment.
+     * @return array|WP_Error  ['id' => int, 'url' => string] or WP_Error.
+     */
+    private function sideload_media( $filename, $data, $post_id, $title ) {
+        $filepath = get_temp_dir() . $filename;
+        file_put_contents( $filepath, $data );
+
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+
+        $file_array = [
+            'name'     => $filename,
+            'tmp_name' => $filepath,
+        ];
+
+        $media_id = media_handle_sideload( $file_array, $post_id, $title );
+        @unlink( $filepath );
+
+        if ( is_wp_error( $media_id ) ) {
+            return $media_id;
+        }
+
+        return [
+            'id'  => $media_id,
+            'url' => wp_get_attachment_url( $media_id ),
+        ];
+    }
+
     public function generate_image_via_imagen( $prompt ) {
         if ( empty( $this->google_cloud_api_key ) ) {
             return new WP_Error( 'no_gc_key', 'Google Cloud API key is missing.' );
         }
-        
+
         $url = $this->build_imagen_url();
-        
+
         $body = [
             'instances' => [
                 [ 'prompt' => $prompt ]
@@ -106,7 +149,7 @@ Output ONLY the lowercase classification string (e.g. 'chat' or 'research') and 
                 'outputMimeType' => 'image/jpeg'
             ]
         ];
-        
+
         $response = wp_remote_post( $url, [
             'headers' => [ 'Content-Type' => 'application/json' ],
             'body' => wp_json_encode( $body ),
@@ -116,39 +159,19 @@ Output ONLY the lowercase classification string (e.g. 'chat' or 'research') and 
         if ( is_wp_error( $response ) ) {
             return $this->mock_image_generation( $prompt );
         }
-        
+
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
-        
+
         if ( isset( $res_body['predictions'][0]['bytesBase64Encoded'] ) ) {
             $image_data = base64_decode( $res_body['predictions'][0]['bytesBase64Encoded'] );
-            
-            $tmp_dir = get_temp_dir();
-            $filename = 'ai-image-' . time() . '-' . uniqid() . '.jpg';
-            $filepath = $tmp_dir . $filename;
-            file_put_contents( $filepath, $image_data );
-            
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-            require_once ABSPATH . 'wp-admin/includes/file.php';
-            require_once ABSPATH . 'wp-admin/includes/media.php';
-            
-            $file_array = [
-                'name' => $filename,
-                'tmp_name' => $filepath
-            ];
-            
-            $media_id = media_handle_sideload( $file_array, 0, $prompt );
-            @unlink( $filepath );
-            
-            if ( is_wp_error( $media_id ) ) {
-                return $media_id;
-            }
-            
-            return [
-                'id' => $media_id,
-                'url' => wp_get_attachment_url( $media_id )
-            ];
+            return $this->sideload_media(
+                'ai-image-' . time() . '-' . uniqid() . '.jpg',
+                $image_data,
+                0,
+                $prompt
+            );
         }
-        
+
         // Mock / fallback if endpoint is not accessible or setup failed:
         // Generate a default geometric placeholder image so the feature doesn't completely block
         return $this->mock_image_generation($prompt);
@@ -157,31 +180,15 @@ Output ONLY the lowercase classification string (e.g. 'chat' or 'research') and 
     private function mock_image_generation($prompt) {
         // Standard mock image URL for demonstration / playground fallback
         $mock_url = 'https://picsum.photos/seed/' . md5($prompt) . '/600/600';
-        $tmp_dir = get_temp_dir();
-        $filename = 'ai-image-mock-' . time() . '-' . uniqid() . '.jpg';
-        $filepath = $tmp_dir . $filename;
-        
         $response = wp_remote_get( $mock_url );
         if ( is_wp_error( $response ) ) return $response;
-        file_put_contents( $filepath, wp_remote_retrieve_body( $response ) );
-        
-        require_once ABSPATH . 'wp-admin/includes/image.php';
-        require_once ABSPATH . 'wp-admin/includes/file.php';
-        require_once ABSPATH . 'wp-admin/includes/media.php';
-        
-        $file_array = [
-            'name' => $filename,
-            'tmp_name' => $filepath
-        ];
-        
-        $media_id = media_handle_sideload( $file_array, 0, $prompt );
-        @unlink( $filepath );
-        
-        if ( is_wp_error( $media_id ) ) return $media_id;
-        return [
-            'id' => $media_id,
-            'url' => wp_get_attachment_url( $media_id )
-        ];
+
+        return $this->sideload_media(
+            'ai-image-mock-' . time() . '-' . uniqid() . '.jpg',
+            wp_remote_retrieve_body( $response ),
+            0,
+            $prompt
+        );
     }
 
     public function generate_audio_report( $prompt, $post_id ) {
@@ -220,29 +227,13 @@ Output ONLY the lowercase classification string (e.g. 'chat' or 'research') and 
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $res_body['audioContent'] ) ) {
             $audio_data = base64_decode( $res_body['audioContent'] );
-            
-            $tmp_dir = get_temp_dir();
-            $filename = 'ai-report-' . time() . '-' . uniqid() . '.mp3';
-            $filepath = $tmp_dir . $filename;
-            file_put_contents( $filepath, $audio_data );
-            
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-            require_once ABSPATH . 'wp-admin/includes/file.php';
-            require_once ABSPATH . 'wp-admin/includes/media.php';
-            
-            $file_array = [
-                'name' => $filename,
-                'tmp_name' => $filepath
-            ];
-            
-            $media_id = media_handle_sideload( $file_array, $post_id, 'AI Audio Report' );
-            @unlink( $filepath );
-            
-            if ( is_wp_error( $media_id ) ) return $media_id;
-            return [
-                'id' => $media_id,
-                'url' => wp_get_attachment_url( $media_id )
-            ];
+
+            return $this->sideload_media(
+                'ai-report-' . time() . '-' . uniqid() . '.mp3',
+                $audio_data,
+                $post_id,
+                'AI Audio Report'
+            );
         }
 
         return $this->mock_audio_generation($script, $post_id);
@@ -252,31 +243,15 @@ Output ONLY the lowercase classification string (e.g. 'chat' or 'research') and 
         // Sideload a tiny silent/placeholder MP3 file as fallback for testing
         // Generate a simple raw file or download a standard silence MP3
         $mock_url = 'https://github.com/anars/blank-audio/raw/master/250-milliseconds-of-silence.mp3'; // simple sample file
-        $tmp_dir = get_temp_dir();
-        $filename = 'ai-audio-mock-' . time() . '-' . uniqid() . '.mp3';
-        $filepath = $tmp_dir . $filename;
-        
         $response = wp_remote_get( $mock_url );
         if ( is_wp_error( $response ) ) return $response;
-        file_put_contents( $filepath, wp_remote_retrieve_body( $response ) );
-        
-        require_once ABSPATH . 'wp-admin/includes/image.php';
-        require_once ABSPATH . 'wp-admin/includes/file.php';
-        require_once ABSPATH . 'wp-admin/includes/media.php';
-        
-        $file_array = [
-            'name' => $filename,
-            'tmp_name' => $filepath
-        ];
-        
-        $media_id = media_handle_sideload( $file_array, $post_id, 'Mock Audio Report: ' . substr($script, 0, 50) );
-        @unlink( $filepath );
-        
-        if ( is_wp_error( $media_id ) ) return $media_id;
-        return [
-            'id' => $media_id,
-            'url' => wp_get_attachment_url( $media_id )
-        ];
+
+        return $this->sideload_media(
+            'ai-audio-mock-' . time() . '-' . uniqid() . '.mp3',
+            wp_remote_retrieve_body( $response ),
+            $post_id,
+            'Mock Audio Report: ' . substr( $script, 0, 50 )
+        );
     }
 
     public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files ) {
