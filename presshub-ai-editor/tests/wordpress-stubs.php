@@ -11,6 +11,19 @@ if ( ! defined( 'ABSPATH' ) ) {
     define( 'ABSPATH', sys_get_temp_dir() . '/presshub-test/' );
 }
 
+// Materialise empty stubs at ABSPATH/wp-admin/includes/ so the plugin's
+// require_once calls don't fatal. This must happen here (not just once on
+// a dev machine) because CI runners start with an empty temp dir.
+if ( ! is_dir( ABSPATH . 'wp-admin/includes' ) ) {
+    mkdir( ABSPATH . 'wp-admin/includes', 0777, true );
+}
+foreach ( [ 'image.php', 'file.php', 'media.php' ] as $stub_file ) {
+    $stub_path = ABSPATH . 'wp-admin/includes/' . $stub_file;
+    if ( ! file_exists( $stub_path ) ) {
+        file_put_contents( $stub_path, '' );
+    }
+}
+
 if ( ! defined( 'HOOK_INVOCATION_COUNT' ) ) {
     // Tracks how many times transition_post_status handlers fire.
     $GLOBALS['HOOK_INVOCATION_COUNT'] = 0;
