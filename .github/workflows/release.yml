@@ -1,0 +1,49 @@
+name: Release PressHub AI Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Version tag (e.g. v1.1.0)'
+        required: true
+        default: 'v1.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine Version Tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG_NAME=${{ github.event.inputs.version_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package Plugin Archive
+        run: |
+          # Package the presshub-ai-editor folder into presshub-ai-editor.zip
+          zip -r presshub-ai-editor.zip presshub-ai-editor/ -x "*/.*"
+
+      - name: Create GitHub Release & Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.TAG_NAME }}
+          name: PressHub AI Co-Pilot ${{ steps.vars.outputs.TAG_NAME }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: presshub-ai-editor.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

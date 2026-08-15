@@ -21,6 +21,25 @@ require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 
+// Initialize GitHub Update Checker
+if ( file_exists( PRESSHUB_AI_DIR . 'includes/plugin-update-checker/plugin-update-checker.php' ) ) {
+    require_once PRESSHUB_AI_DIR . 'includes/plugin-update-checker/plugin-update-checker.php';
+    
+    $presshub_update_checker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+        'https://github.com/eeftychiou/presshub/',
+        __FILE__,
+        'presshub-ai-editor'
+    );
+    
+    $presshub_update_checker->setBranch( 'main' );
+    $presshub_update_checker->getVcsApi()->enableReleaseAssets();
+    
+    $github_token = get_option( 'presshub_ai_github_token' );
+    if ( ! empty( $github_token ) ) {
+        $presshub_update_checker->setAuthentication( $github_token );
+    }
+}
+
 function presshub_ai_init() {
     new PressHub_AI_Settings();
     new PressHub_AI_Metaboxes();

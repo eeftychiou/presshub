@@ -33,6 +33,7 @@ class PressHub_AI_Settings {
         register_setting( 'presshub_ai_options', 'presshub_ai_model' );
         register_setting( 'presshub_ai_options', 'presshub_ai_api_key' );
         register_setting( 'presshub_ai_options', 'presshub_ai_google_cloud_api_key' );
+        register_setting( 'presshub_ai_options', 'presshub_ai_github_token' );
     }
 
     public function render_settings_page() {
@@ -71,6 +72,13 @@ class PressHub_AI_Settings {
                         <td>
                             <input type="password" name="presshub_ai_google_cloud_api_key" id="presshub_ai_google_cloud_api_key" value="<?php echo esc_attr( get_option( 'presshub_ai_google_cloud_api_key' ) ); ?>" class="regular-text" />
                             <p class="description">Required for Google Cloud Imagen and Text-to-Speech integration.</p>
+                        </td>
+                    </tr>
+                    <tr valign="top">
+                        <th scope="row">GitHub Token (Optional)</th>
+                        <td>
+                            <input type="password" name="presshub_ai_github_token" id="presshub_ai_github_token" value="<?php echo esc_attr( get_option( 'presshub_ai_github_token' ) ); ?>" class="regular-text" />
+                            <p class="description">GitHub Personal Access Token (PAT). Only required if the GitHub repository is private to enable automatic updates.</p>
                         </td>
                     </tr>
                 </table>
