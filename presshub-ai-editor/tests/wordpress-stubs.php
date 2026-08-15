@@ -288,3 +288,75 @@ if ( ! function_exists( 'sanitize_textarea_field' ) ) {
         return trim( $str );
     }
 }
+
+if ( ! function_exists( 'get_current_user_id' ) ) {
+    function get_current_user_id() {
+        return (int) ( $GLOBALS['CURRENT_USER_ID'] ?? 0 );
+    }
+}
+
+if ( ! function_exists( 'get_transient' ) ) {
+    /**
+     * Stubbed get_transient. Reads from a process-local store. Returns the
+     * stored value, or false when missing/expired. Supports a controllable
+     * clock via TIME_NOW for deterministic window-expiry tests.
+     */
+    function get_transient( $key ) {
+        $store = $GLOBALS['TRANSIENT_STORE'] ?? [];
+        if ( ! array_key_exists( $key, $store ) ) {
+            return false;
+        }
+        $entry = $store[ $key ];
+        $expires_at = $entry['expires_at'] ?? 0;
+        $now = $GLOBALS['TIME_NOW'] ?? time();
+        if ( $expires_at > 0 && $expires_at <= $now ) {
+            unset( $GLOBALS['TRANSIENT_STORE'][ $key ] );
+            return false;
+        }
+        return $entry['value'];
+    }
+}
+
+if ( ! function_exists( 'set_transient' ) ) {
+    /**
+     * Stubbed set_transient. Stores value + computed expiry in the same
+     * process-local store. Expiry is computed from TIME_NOW when supplied
+     * (tests), otherwise real time() (production).
+     */
+    function set_transient( $key, $value, $expiration = 0 ) {
+        $now = $GLOBALS['TIME_NOW'] ?? time();
+        $GLOBALS['TRANSIENT_STORE'][ $key ] = [
+            'value'      => $value,
+            'expires_at' => $expiration > 0 ? $now + $expiration : 0,
+        ];
+        return true;
+    }
+}
+
+if ( ! function_exists( 'delete_transient' ) ) {
+    function delete_transient( $key ) {
+        unset( $GLOBALS['TRANSIENT_STORE'][ $key ] );
+        return true;
+    }
+}
+
+if ( ! function_exists( 'wp_kses_post' ) ) {
+    /**
+     * Stubbed wp_kses_post. Without a real WP install we just strip tags —
+     * the existing tests don't actually validate the HTML round-trip.
+     */
+    function wp_kses_post( $data ) {
+        return is_string( $data ) ? trim( $data ) : $data;
+    }
+}
+
+if ( ! function_exists( '__' ) ) {
+    /**
+     * Stubbed translation function. Without WP's l10n stack we just pass
+     * the string through; the rate limiter's error messages are still
+     * meaningful English for end users.
+     */
+    function __( $text, $domain = null ) {
+        return $text;
+    }
+}

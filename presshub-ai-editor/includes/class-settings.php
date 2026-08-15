@@ -35,6 +35,11 @@ class PressHub_AI_Settings {
         register_setting( 'presshub_ai_options', 'presshub_ai_google_cloud_api_key' );
         register_setting( 'presshub_ai_options', 'presshub_ai_gcloud_project_id' );
         register_setting( 'presshub_ai_options', 'presshub_ai_github_token' );
+        // Cost-control / rate-limit options. Disabled by default so
+        // existing behaviour is preserved — opt-in only.
+        register_setting( 'presshub_ai_options', 'presshub_ai_rate_limit_enabled' );
+        register_setting( 'presshub_ai_options', 'presshub_ai_rate_limit_per_hour' );
+        register_setting( 'presshub_ai_options', 'presshub_ai_rate_limit_window_seconds' );
     }
 
     public function render_settings_page() {
@@ -87,6 +92,34 @@ class PressHub_AI_Settings {
                         <td>
                             <input type="password" name="presshub_ai_github_token" id="presshub_ai_github_token" value="<?php echo esc_attr( get_option( 'presshub_ai_github_token' ) ); ?>" class="regular-text" />
                             <p class="description">GitHub Personal Access Token (PAT). Only required if the GitHub repository is private to enable automatic updates.</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <h2 class="title">Rate Limiting / Cost Controls</h2>
+                <p>Cap the AI endpoints so a single user (or a runaway script) cannot rack up unbounded API costs. Disabled by default — opt-in only.</p>
+                <table class="form-table">
+                    <tr valign="top">
+                        <th scope="row">Enable Per-User Rate Limit</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="presshub_ai_rate_limit_enabled" id="presshub_ai_rate_limit_enabled" value="1" <?php checked( 1, (int) get_option( 'presshub_ai_rate_limit_enabled', 0 ) ); ?> />
+                                Throttle AI actions when a user exceeds the configured budget
+                            </label>
+                        </td>
+                    </tr>
+                    <tr valign="top">
+                        <th scope="row">Requests per Window</th>
+                        <td>
+                            <input type="number" min="1" step="1" name="presshub_ai_rate_limit_per_hour" id="presshub_ai_rate_limit_per_hour" value="<?php echo esc_attr( (int) get_option( 'presshub_ai_rate_limit_per_hour', 30 ) ); ?>" class="small-text" />
+                            <p class="description">Maximum number of AI actions (draft, review, chat, research) a single user may make within the window. Defaults to 30.</p>
+                        </td>
+                    </tr>
+                    <tr valign="top">
+                        <th scope="row">Window Length (seconds)</th>
+                        <td>
+                            <input type="number" min="1" max="86400" step="1" name="presshub_ai_rate_limit_window_seconds" id="presshub_ai_rate_limit_window_seconds" value="<?php echo esc_attr( (int) get_option( 'presshub_ai_rate_limit_window_seconds', 3600 ) ); ?>" class="small-text" />
+                            <p class="description">Length of the rolling window in seconds. Defaults to 3600 (1 hour). The counter resets once the window expires.</p>
                         </td>
                     </tr>
                 </table>

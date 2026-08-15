@@ -1,6 +1,8 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-rate-limiter.php';
+
 class PressHub_AI_Ajax_Handlers {
     public function __construct() {
         add_action( 'wp_ajax_presshub_ai_generate_draft', [ $this, 'generate_draft' ] );
@@ -8,6 +10,53 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_test_api', [ $this, 'test_api_connection' ] );
         add_action( 'wp_ajax_presshub_ai_chat', [ $this, 'handle_chat_routing' ] );
         add_action( 'wp_ajax_presshub_ai_check_research', [ $this, 'check_research_status' ] );
+    }
+
+    /**
+     * Per-user rate-limit bucket key.
+     */
+    private function rate_limit_key(): string {
+        return 'presshub_ai_rl_' . (int) get_current_user_id();
+    }
+
+    /**
+     * The configured per-window limit. Defaults to 30/hour if the
+     * setting hasn't been saved yet.
+     */
+    private function rate_limit_per_window(): int {
+        return (int) get_option( 'presshub_ai_rate_limit_per_hour', 30 );
+    }
+
+    /**
+     * The configured window length (seconds). Defaults to 3600 (1 hour).
+     */
+    private function rate_limit_window_seconds(): int {
+        return (int) get_option( 'presshub_ai_rate_limit_window_seconds', 3600 );
+    }
+
+    /**
+     * Check the rate limiter; if blocked, send a JSON error and abort
+     * the caller via wp_send_json_error's die semantics.
+     */
+    private function enforce_rate_limit(): void {
+        $limiter = new PressHub_AI_Rate_Limiter();
+        $result  = $limiter->check(
+            $this->rate_limit_key(),
+            $this->rate_limit_per_window(),
+            $this->rate_limit_window_seconds()
+        );
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+    }
+
+    /**
+     * Record that a request just happened (only after the API call
+     * succeeded — failed API calls don't burn the user's budget).
+     */
+    private function record_rate_limit(): void {
+        $limiter = new PressHub_AI_Rate_Limiter();
+        $limiter->record( $this->rate_limit_key() );
     }
 
     public function test_api_connection() {
@@ -65,6 +114,7 @@ class PressHub_AI_Ajax_Handlers {
             }
         }
 
+        $this->enforce_rate_limit();
         $api = new PressHub_AI_API_Client();
         $draft = $api->generate_draft( $sources, $instructions, $uploaded_files );
 
@@ -77,6 +127,7 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( $draft->get_error_message() );
         }
 
+        $this->record_rate_limit();
         wp_send_json_success( [ 'draft' => wp_kses_post( $draft ) ] );
     }
 
@@ -94,6 +145,7 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( 'Permission denied.' );
         }
 
+        $this->enforce_rate_limit();
         $api = new PressHub_AI_API_Client();
         $scorecard = $api->generate_scorecard( $content );
 
@@ -103,12 +155,13 @@ class PressHub_AI_Ajax_Handlers {
 
         if ( $post_id ) {
             update_post_meta( $post_id, '_presshub_ai_scorecard', $scorecard );
-            
+
             if ( isset( $scorecard['score'] ) && intval( $scorecard['score'] ) >= 80 ) {
                 wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
             }
         }
 
+        $this->record_rate_limit();
         wp_send_json_success( $scorecard );
     }
 
@@ -134,6 +187,12 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( 'Permission denied.' );
         }
 
+        // Per-user rate limit for the AI-costly chat + research paths.
+        // Image / report are admin-only above, so the rate limiter is
+        // intentionally not consulted for those branches — the admin
+        // gate is already the first line of defence.
+        $this->enforce_rate_limit();
+
         $api = new PressHub_AI_API_Client();
         $intent = $api->classify_intent( $prompt );
 
@@ -150,6 +209,7 @@ class PressHub_AI_Ajax_Handlers {
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );
             }
+            $this->record_rate_limit();
             wp_send_json_success( [ 'type' => 'chat', 'content' => $result ] );
         } elseif ( 'research' === $intent ) {
             $research_id = wp_insert_post( [
@@ -167,6 +227,7 @@ class PressHub_AI_Ajax_Handlers {
 
             wp_schedule_single_event( time(), 'presshub_ai_do_research', [ $research_id ] );
 
+            $this->record_rate_limit();
             wp_send_json_success( [ 'type' => 'research', 'status' => 'pending', 'research_id' => $research_id ] );
         } elseif ( 'image' === $intent ) {
             $img = $api->generate_image_via_imagen( $prompt );

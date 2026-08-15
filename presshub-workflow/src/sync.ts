@@ -1,3 +1,5 @@
+import { createWordPressSyncClient, WordPressSyncClient, WordPressSyncOptions } from './wordpress-sync';
+
 export async function processDrafts(
     fetchDrafts: () => Promise<any[]>,
     updatePost: (id: number, data: any) => Promise<boolean>
@@ -17,4 +19,23 @@ export async function processDrafts(
         count++;
     }
     return count;
+}
+
+/**
+ * Convenience wrapper: wires a `WordPressSyncClient` to `processDrafts`.
+ * If `options` is provided, a new client is built via `createWordPressSyncClient`.
+ * Otherwise the supplied `client` is used as-is.
+ */
+export function processDraftsWithClient(
+    client: WordPressSyncClient,
+    options?: WordPressSyncOptions
+) {
+    const resolvedClient = options
+        ? createWordPressSyncClient({
+              baseUrl: options.baseUrl,
+              authToken: options.authToken,
+              ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+          })
+        : client;
+    return processDrafts(resolvedClient.fetchDrafts, resolvedClient.updatePost);
 }

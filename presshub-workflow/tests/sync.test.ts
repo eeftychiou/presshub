@@ -1,4 +1,5 @@
-import { processDrafts } from '../src/sync';
+import { processDrafts, processDraftsWithClient } from '../src/sync';
+import { createWordPressSyncClient } from '../src/wordpress-sync';
 
 describe('WordPress Sync', () => {
     it('processes a draft post and returns the updated post data', async () => {
@@ -44,5 +45,50 @@ describe('WordPress Sync', () => {
             .mockRejectedValueOnce(new Error('update_failed'));
         await expect(processDrafts(fetchDrafts, updatePost)).rejects.toThrow('update_failed');
         expect(updatePost).toHaveBeenCalledTimes(2);
+    });
+
+    it('processDraftsWithClient wires a WordPressSyncClient into processDrafts', async () => {
+        const drafts = [{ id: 1, title: 'A', status: 'draft' }, { id: 2, title: 'B', status: 'draft' }];
+        const fetchImpl = jest.fn()
+            .mockResolvedValueOnce({ ok: true, status: 200, json: async () => drafts } as any)
+            .mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: 1 }) } as any);
+        const client = createWordPressSyncClient({
+            baseUrl: 'https://wp.example.test',
+            authToken: 'token',
+            fetchImpl: fetchImpl as unknown as typeof fetch,
+        });
+
+        const count = await processDraftsWithClient(client);
+
+        expect(count).toBe(2);
+        // First call: fetchDrafts. Next two: updatePost(id=1), updatePost(id=2).
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+        expect(fetchImpl.mock.calls[1][0]).toBe('https://wp.example.test/wp-json/wp/v2/posts/1');
+        expect(fetchImpl.mock.calls[2][0]).toBe('https://wp.example.test/wp-json/wp/v2/posts/2');
+    });
+
+    it('processDraftsWithClient builds a fresh client when options are passed', async () => {
+        const fetchImpl = jest.fn()
+            .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ id: 99 }] } as any)
+            .mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: 99 }) } as any);
+        // Pass a placeholder client (should be ignored when options provided) plus
+        // a different fetchImpl in options to confirm the convenience fn uses the
+        // options-driven client, not the placeholder.
+        const placeholderClient = createWordPressSyncClient({
+            baseUrl: 'https://other.example.test',
+            authToken: 'placeholder',
+            fetchImpl: jest.fn() as unknown as typeof fetch,
+        });
+
+        const count = await processDraftsWithClient(placeholderClient, {
+            baseUrl: 'https://wp.example.test',
+            authToken: 'token',
+            fetchImpl: fetchImpl as unknown as typeof fetch,
+        });
+
+        expect(count).toBe(1);
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        expect(fetchImpl.mock.calls[0][0]).toBe('https://wp.example.test/wp-json/wp/v2/posts?status=draft&per_page=100');
+        expect(fetchImpl.mock.calls[1][0]).toBe('https://wp.example.test/wp-json/wp/v2/posts/99');
     });
 });
