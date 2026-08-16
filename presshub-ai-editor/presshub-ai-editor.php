@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'PRESSHUB_AI_VERSION', '1.1.0' );
+define( 'PRESSHUB_AI_VERSION', '1.2.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -33,6 +33,33 @@ require_once PRESSHUB_AI_DIR . 'includes/class-preset-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-preset-resolver.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-admin-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-author-presets.php';
+
+/**
+ * Auto-update hardening: force the canonical plugin folder name during
+ * upgrades.
+ *
+ * WordPress renames the freshly-extracted update folder to match the
+ * name of the INSTALLED plugin folder. If that folder was renamed or
+ * typo'd (e.g. 'pressshub-ai-editor') the rename target already exists
+ * and the update fails with "Unable to rename the update to match the
+ * existing directory". Forcing destination_name makes WP always install
+ * into the canonical 'presshub-ai-editor' folder and re-point the
+ * active-plugin entry, so folder-name drift can never block updates.
+ *
+ * @since 1.2.0
+ */
+add_filter(
+    'upgrader_package_options',
+    function ( $options ) {
+        if ( empty( $options['hook_extra']['plugin'] ) || ! is_string( $options['hook_extra']['plugin'] ) ) {
+            return $options;
+        }
+        if ( false !== strpos( $options['hook_extra']['plugin'], 'presshub-ai-editor.php' ) ) {
+            $options['destination_name'] = 'presshub-ai-editor';
+        }
+        return $options;
+    }
+);
 
 /**
  * Deactivation: clear both research crons so a deactivated plugin stops
