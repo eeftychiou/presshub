@@ -53,6 +53,10 @@ class PressHub_AI_API_Client {
     /**
      * Resolve the model for a provider: per-provider option first, then the
      * legacy global option, then the provider default.
+     *
+     * A leading 'models/' path fragment is stripped (Low-17) so users can
+     * paste full model paths like 'models/gemini-2.0-flash' without the
+     * request URL ending up as '/models/models/gemini-2.0-flash:...'.
      */
     private function resolve_model( $provider ): string {
         $model = (string) get_option( 'presshub_ai_model_' . $provider, '' );
@@ -62,7 +66,7 @@ class PressHub_AI_API_Client {
         if ( '' === $model ) {
             $model = self::default_model( $provider );
         }
-        return $model;
+        return preg_replace( '#^models/#', '', $model );
     }
 
     /**
@@ -171,11 +175,14 @@ class PressHub_AI_API_Client {
      * Build the Google Cloud Vertex AI Imagen endpoint URL using the
      * configured project ID, defaulting to 'presshub-ai' so existing
      * deployments keep working without configuration.
+     *
+     * The API key is deliberately NOT part of the URL (Low-20); it is
+     * sent in the x-goog-api-key header by generate_image_via_imagen().
      */
     public function build_imagen_url() {
         $project_id = get_option( 'presshub_ai_gcloud_project_id', 'presshub-ai' );
         $region     = get_option( 'presshub_ai_imagen_region', 'us-central1' );
-        return 'https://' . $region . '-aiplatform.googleapis.com/v1/projects/' . $project_id . '/locations/' . $region . '/publishers/google/models/imagen-3.0-generate-002:predict?key=' . $this->google_cloud_api_key;
+        return 'https://' . $region . '-aiplatform.googleapis.com/v1/projects/' . $project_id . '/locations/' . $region . '/publishers/google/models/imagen-3.0-generate-002:predict';
     }
 
     /**
@@ -243,7 +250,10 @@ class PressHub_AI_API_Client {
         ];
 
         $response = wp_remote_post( $url, [
-            'headers' => [ 'Content-Type' => 'application/json' ],
+            'headers' => [
+                'Content-Type'   => 'application/json',
+                'x-goog-api-key' => $this->google_cloud_api_key,
+            ],
             'body' => wp_json_encode( $body ),
             'timeout' => 60
         ] );
@@ -295,8 +305,9 @@ class PressHub_AI_API_Client {
         $script = $this->call_gemini( $sys_prompt, $prompt, false, [], 0.0 );
         if ( is_wp_error( $script ) ) return $script;
 
-        // 2. Call Google Cloud TTS
-        $url = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' . $this->google_cloud_api_key;
+        // 2. Call Google Cloud TTS. The key travels in the x-goog-api-key
+        // header (Low-20), never in the URL query string.
+        $url = 'https://texttospeech.googleapis.com/v1/text:synthesize';
         $body = [
             'input' => [ 'text' => $script ],
             'voice' => [
@@ -309,7 +320,10 @@ class PressHub_AI_API_Client {
         ];
 
         $response = wp_remote_post( $url, [
-            'headers' => [ 'Content-Type' => 'application/json' ],
+            'headers' => [
+                'Content-Type'   => 'application/json',
+                'x-goog-api-key' => $this->google_cloud_api_key,
+            ],
             'body' => wp_json_encode( $body ),
             'timeout' => 60
         ] );
@@ -375,6 +389,7 @@ class PressHub_AI_API_Client {
                 [ 'role' => 'system', 'content' => $sys_prompt ],
                 [ 'role' => 'user', 'content' => $user_prompt ]
             ],
+            'max_tokens' => $this->max_tokens,
             'temperature' => null === $temperature ? $this->temperature : (float) $temperature
         ];
         if ( $json_mode ) $body['response_format'] = [ 'type' => 'json_object' ];
@@ -489,7 +504,10 @@ class PressHub_AI_API_Client {
             ]
         ];
         
-        $body['generationConfig'] = [ 'temperature' => null === $temperature ? $this->temperature : (float) $temperature ];
+        $body['generationConfig'] = [
+            'temperature'     => null === $temperature ? $this->temperature : (float) $temperature,
+            'maxOutputTokens' => $this->max_tokens,
+        ];
         if ( $json_mode ) {
             $body['generationConfig']['responseMimeType'] = 'application/json';
         }

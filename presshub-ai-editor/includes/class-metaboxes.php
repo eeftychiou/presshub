@@ -60,10 +60,12 @@ class PressHub_AI_Metaboxes {
             <span id="presshub-ai-review-spinner" class="spinner"></span>
             
             <div id="presshub-ai-scorecard-results" style="margin-top: 15px;">
-                <?php if ( $scorecard ) : ?>
+                <?php if ( is_array( $scorecard ) && isset( $scorecard['score'] ) && is_numeric( $scorecard['score'] ) ) : ?>
                     <div class="scorecard-box">
                         <strong>Score: <?php echo esc_html( $scorecard['score'] ); ?>/100</strong>
-                        <p><?php echo esc_html( $scorecard['feedback'] ); ?></p>
+                        <?php if ( isset( $scorecard['feedback'] ) && is_string( $scorecard['feedback'] ) ) : ?>
+                            <p><?php echo esc_html( $scorecard['feedback'] ); ?></p>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             </div>

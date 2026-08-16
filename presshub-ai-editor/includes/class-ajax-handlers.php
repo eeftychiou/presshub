@@ -75,8 +75,12 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( 'Permission denied.' );
         }
 
+        // P6: the per-provider Test Connection buttons send the target
+        // provider; fall back to the active provider when absent.
+        $provider = isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : null;
+
         $api = new PressHub_AI_API_Client();
-        $result = $api->test_connection();
+        $result = $api->test_connection( $provider );
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );
@@ -99,8 +103,8 @@ class PressHub_AI_Ajax_Handlers {
             }
         }
 
-        $sources = isset( $_POST['sources'] ) ? sanitize_textarea_field( $_POST['sources'] ) : '';
-        $instructions = isset( $_POST['instructions'] ) ? sanitize_textarea_field( $_POST['instructions'] ) : '';
+        $sources = isset( $_POST['sources'] ) ? sanitize_textarea_field( wp_unslash( $_POST['sources'] ) ) : '';
+        $instructions = isset( $_POST['instructions'] ) ? sanitize_textarea_field( wp_unslash( $_POST['instructions'] ) ) : '';
 
         // Per-request preset selection (2026-08-15 design §4.2): slug or
         // sentinel picked in the metabox; '' means "use the author's
@@ -116,10 +120,23 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( 'Instructions exceed the 5,000 character limit.' );
         }
 
+        // Enforce the rate limit BEFORE touching any file: a blocked
+        // request must not leave orphaned uploads behind (Medium-9).
+        $this->enforce_rate_limit();
+
         $uploaded_files = [];
         if ( ! empty( $_FILES['files'] ) ) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
             $files = $_FILES['files'];
+
+            // Upload validation (Low-15): whitelist the extensions the AI
+            // providers actually accept, and cap each file at 50 MB. The
+            // WHOLE batch is validated before ANY file is moved, so a
+            // mixed batch never leaves partially-moved files behind.
+            $allowed_extensions = [ 'pdf', 'docx', 'mp3', 'mp4', 'wav', 'm4a' ];
+            $max_file_size      = 50 * 1024 * 1024; // 50 MB
+
+            $valid_files = [];
             foreach ( $files['name'] as $key => $value ) {
                 if ( $files['name'][$key] ) {
                     $file = [
@@ -129,15 +146,24 @@ class PressHub_AI_Ajax_Handlers {
                         'error'    => $files['error'][$key],
                         'size'     => $files['size'][$key]
                     ];
-                    $movefile = wp_handle_upload( $file, [ 'test_form' => false ] );
-                    if ( $movefile && ! isset( $movefile['error'] ) ) {
-                        $uploaded_files[] = $movefile['file']; // Absolute path
+                    $filetype = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'] );
+                    if ( ! in_array( strtolower( (string) ( $filetype['ext'] ?? '' ) ), $allowed_extensions, true ) ) {
+                        wp_send_json_error( 'Unsupported file type. Allowed: PDF, DOCX, MP3, MP4, WAV, M4A.' );
                     }
+                    if ( (int) $file['size'] > $max_file_size ) {
+                        wp_send_json_error( 'File exceeds the 50 MB size limit.' );
+                    }
+                    $valid_files[] = $file;
+                }
+            }
+            foreach ( $valid_files as $file ) {
+                $movefile = wp_handle_upload( $file, [ 'test_form' => false ] );
+                if ( $movefile && ! isset( $movefile['error'] ) ) {
+                    $uploaded_files[] = $movefile['file']; // Absolute path
                 }
             }
         }
 
-        $this->enforce_rate_limit();
         $api = new PressHub_AI_API_Client();
         $draft = $api->generate_draft( $sources, $instructions, $uploaded_files, $preset_slug );
 
@@ -161,7 +187,7 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( 'Permission denied.' );
         }
 
-        $content = isset( $_POST['content'] ) ? wp_kses_post( $_POST['content'] ) : '';
+        $content = isset( $_POST['content'] ) ? wp_kses_post( wp_unslash( $_POST['content'] ) ) : '';
         if ( strlen( $content ) > 100000 ) {
             wp_send_json_error( 'Content exceeds the 100,000 character limit.' );
         }
@@ -183,7 +209,13 @@ class PressHub_AI_Ajax_Handlers {
             update_post_meta( $post_id, '_presshub_ai_scorecard', $scorecard );
 
             if ( isset( $scorecard['score'] ) && intval( $scorecard['score'] ) >= 80 ) {
-                wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
+                // High-1 guard: run_review() must never demote an
+                // already-published post. Only non-published posts are
+                // transitioned to 'pending' for editorial review.
+                $post = get_post( $post_id );
+                if ( $post && 'publish' !== $post->post_status ) {
+                    wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
+                }
             }
         }
 
@@ -197,7 +229,7 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( 'Permission denied.' );
         }
 
-        $prompt = isset( $_POST['prompt'] ) ? sanitize_textarea_field( $_POST['prompt'] ) : '';
+        $prompt = isset( $_POST['prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) : '';
         if ( strlen( $prompt ) > 5000 ) {
             wp_send_json_error( 'Prompt exceeds the 5,000 character limit.' );
         }
@@ -211,7 +243,7 @@ class PressHub_AI_Ajax_Handlers {
         // Authors can still use chat + research. This prevents a low-priv
         // user from racking up Google Cloud costs without an admin's
         // explicit configuration of the project + keys.
-        $pre_intent = isset( $_POST['intent'] ) ? sanitize_textarea_field( $_POST['intent'] ) : '';
+        $pre_intent = isset( $_POST['intent'] ) ? sanitize_text_field( wp_unslash( $_POST['intent'] ) ) : '';
         if ( in_array( $pre_intent, [ 'image', 'report' ], true ) && ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( 'Permission denied.' );
         }
@@ -254,7 +286,9 @@ class PressHub_AI_Ajax_Handlers {
             $research_id = wp_insert_post( [
                 'post_type' => 'presshub_research',
                 'post_title' => 'Research for post #' . $post_id . ': ' . wp_html_excerpt( $prompt, 50, '...' ),
-                'post_status' => 'publish'
+                // Low-16: insert as 'pending' directly — no publish-then-
+                // revert dance through the editorial workflow guard.
+                'post_status' => 'pending'
             ] );
             if ( ! $research_id || is_wp_error( $research_id ) ) {
                 $error_msg = is_wp_error( $research_id ) ? $research_id->get_error_message() : 'Failed to create research post.';
@@ -321,9 +355,10 @@ class PressHub_AI_Ajax_Handlers {
     // All five handlers share the same nonce ('presshub_ai_nonce' /
     // 'nonce'), the same JSON envelope, and the same per-user coarse
     // throttle: max 60 preset mutations per minute (checked before the
-    // mutation, recorded after it succeeds). The throttle reuses
-    // PressHub_AI_Rate_Limiter with a dedicated bucket key so preset CRUD
-    // never consumes the AI-call rate limit.
+    // mutation, recorded after it succeeds). The throttle uses a
+    // dedicated, FORCE-ENABLED limiter (Medium-5) with its own bucket key
+    // so preset CRUD is always throttled at 60/min and never consumes
+    // the AI-call rate limit.
     // ------------------------------------------------------------------
 
     /**
@@ -337,7 +372,7 @@ class PressHub_AI_Ajax_Handlers {
      * Check the preset throttle; wp_send_json_error when blocked.
      */
     private function enforce_preset_throttle(): void {
-        $limiter = new PressHub_AI_Rate_Limiter();
+        $limiter = new PressHub_AI_Rate_Limiter( true );
         $result  = $limiter->check( $this->preset_throttle_key(), 60, 60 );
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );
@@ -346,10 +381,12 @@ class PressHub_AI_Ajax_Handlers {
 
     /**
      * Record a successful preset mutation against the throttle bucket.
+     * The explicit limit/window args keep record() in sync with the
+     * check() above.
      */
     private function record_preset_throttle(): void {
-        $limiter = new PressHub_AI_Rate_Limiter();
-        $limiter->record( $this->preset_throttle_key() );
+        $limiter = new PressHub_AI_Rate_Limiter( true );
+        $limiter->record( $this->preset_throttle_key(), 60, 60 );
     }
 
     /**

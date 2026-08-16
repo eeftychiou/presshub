@@ -82,7 +82,7 @@ class SettingsPageTest
         }
 
         $rate = array_column( $fields['presshub_ai_rate_limits'] ?? [], 'id' );
-        foreach ( [ 'presshub_ai_rate_limit_enabled', 'presshub_ai_rate_limit_per_hour', 'presshub_ai_rate_limit_window_seconds' ] as $field ) {
+        foreach ( [ 'presshub_ai_rate_limit_enabled', 'presshub_ai_rate_limit_per_hour', 'presshub_ai_rate_limit_window_seconds', 'presshub_ai_research_retention_days' ] as $field ) {
             if ( ! in_array( $field, $rate, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_rate_limits; got: " . implode( ', ', $rate );
             }
@@ -114,6 +114,10 @@ class SettingsPageTest
             'presshub_ai_rate_limit_enabled',
             'presshub_ai_rate_limit_per_hour',
             'presshub_ai_rate_limit_window_seconds',
+            'presshub_ai_research_retention_days',
+            'presshub_ai_remove_api_key',
+            'presshub_ai_remove_google_cloud_api_key',
+            'presshub_ai_remove_github_token',
         ];
         $missing = array_diff( $expected_options, $registered );
         $extra   = array_diff( $registered, $expected_options );
@@ -265,6 +269,43 @@ class SettingsPageTest
         PressHub_AI_Settings::migrate_legacy_model();
         if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini'] ?? null ) !== 'gemini-legacy' ) {
             $failures[] = 'Migration should target the gemini key when gemini is active.';
+        }
+
+        // --- Case 9: "Remove stored key" checkboxes + retention field render ---
+        self::reset_world();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']           = '«redacted:sk-…»';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_github_token']      = '«redacted:ghp-…»';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = '«redacted:gc-…»';
+        $settings = new PressHub_AI_Settings();
+        foreach ( [
+            'render_api_key_field'           => 'presshub_ai_remove_api_key',
+            'render_github_token_field'      => 'presshub_ai_remove_github_token',
+            'render_google_cloud_api_key_field' => 'presshub_ai_remove_google_cloud_api_key',
+        ] as $renderer => $remove_flag ) {
+            ob_start();
+            $settings->{$renderer}();
+            $html = ob_get_clean();
+            if ( false === strpos( $html, 'name="' . $remove_flag . '"' ) ) {
+                $failures[] = "{$renderer} should render the {$remove_flag} checkbox; got: " . $html;
+            }
+        }
+        // Without a saved key the remove checkbox must not render.
+        self::reset_world();
+        $settings = new PressHub_AI_Settings();
+        ob_start();
+        $settings->render_api_key_field();
+        $html = ob_get_clean();
+        if ( false !== strpos( $html, 'presshub_ai_remove_api_key' ) ) {
+            $failures[] = 'render_api_key_field() must not offer "Remove stored key" when no key is saved.';
+        }
+        // Retention field renders with the default value and its option id.
+        self::reset_world();
+        $settings = new PressHub_AI_Settings();
+        ob_start();
+        $settings->render_research_retention_days_field();
+        $html = ob_get_clean();
+        if ( false === strpos( $html, 'name="presshub_ai_research_retention_days"' ) || false === strpos( $html, 'value="30"' ) ) {
+            $failures[] = 'render_research_retention_days_field() should render the option with the 30-day default; got: ' . $html;
         }
 
         if ( $failures ) {

@@ -1,8 +1,15 @@
 <?php
 /**
- * Plugin Name: PressHub AI Co-Pilot v1.1
+ * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
  * Version: 1.1.0
+ * Requires at least: 6.0
+ * Requires PHP: 7.4
+ * Tested up to: 6.7
+ * License: GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: presshub-ai-editor
+ * Domain Path: /languages
  * Author: Antigravity
  */
 
@@ -27,8 +34,22 @@ require_once PRESSHUB_AI_DIR . 'includes/class-preset-resolver.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-admin-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-author-presets.php';
 
+/**
+ * Deactivation: clear both research crons so a deactivated plugin stops
+ * scheduling work. Options, user metas and research posts are deliberately
+ * kept on deactivation — uninstall.php removes them on full uninstall.
+ */
+function presshub_ai_deactivate() {
+    wp_clear_scheduled_hook( 'presshub_ai_cleanup_research' );
+    wp_clear_scheduled_hook( 'presshub_ai_do_research' );
+}
+register_deactivation_hook( __FILE__, 'presshub_ai_deactivate' );
+
 // Initialize GitHub Update Checker
-if ( file_exists( PRESSHUB_AI_DIR . 'includes/plugin-update-checker/plugin-update-checker.php' ) ) {
+// PRESSHUB_AI_SKIP_UPDATE_CHECKER lets hosts (and the unit-test harness)
+// disable the embedded updater without deleting the library.
+if ( ! defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' )
+    && file_exists( PRESSHUB_AI_DIR . 'includes/plugin-update-checker/plugin-update-checker.php' ) ) {
     require_once PRESSHUB_AI_DIR . 'includes/plugin-update-checker/plugin-update-checker.php';
     
     $presshub_update_checker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(

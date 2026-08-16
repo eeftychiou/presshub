@@ -8,9 +8,10 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * admins create / edit / toggle / delete presets. All mutations are
  * delegated to the AJAX handlers in class-ajax-handlers.php
  * (presshub_ai_save_preset / presshub_ai_delete_preset with
- * scope=plugin); this file only renders the page plus a small
- * self-contained inline script that posts to those endpoints via
- * jQuery.ajax (presshubAI.ajax_url + presshubAI.nonce).
+ * scope=plugin); this file only renders the page. The jQuery that posts
+ * to those endpoints lives in assets/presets.js, enqueued with
+ * wp_localize_script (presshubAI.ajax_url + presshubAI.nonce +
+ * scope=plugin + translated strings).
  *
  * Self-registering: the file bottom hooks plugins_loaded so no other
  * wiring is needed once the file is require_once'd.
@@ -18,8 +19,46 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 class PressHub_AI_Admin_Presets {
 
+    /** Script handle shared by the admin page and the author profiles. */
+    const SCRIPT_HANDLE = 'presshub-ai-presets-js';
+
     public function __construct() {
         add_action( 'admin_menu', [ $this, 'add_presets_submenu' ] );
+        add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
+    }
+
+    /**
+     * Enqueue the shared presets asset on the admin library page, with the
+     * plugin-scope config (and translated strings) localized for it.
+     */
+    public function enqueue_scripts( $hook ) {
+        if ( 'settings_page_presshub-ai-presets' !== $hook ) {
+            return;
+        }
+        wp_enqueue_script( self::SCRIPT_HANDLE, PRESSHUB_AI_URL . 'assets/presets.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
+        wp_localize_script( self::SCRIPT_HANDLE, 'presshubAI', self::localize_args( 'plugin' ) );
+    }
+
+    /**
+     * Shared wp_localize_script payload for the presets asset. Both the
+     * admin page (scope=plugin) and the author profile sections
+     * (scope=author, user_id set) localize the same object so the JS has
+     * one place to read config + translations from.
+     */
+    public static function localize_args( string $scope, int $user_id = 0 ): array {
+        return [
+            'ajax_url' => admin_url( 'admin-ajax.php' ),
+            'nonce'    => wp_create_nonce( 'presshub_ai_nonce' ),
+            'scope'    => $scope,
+            'user_id'  => $user_id,
+            'i18n'     => [
+                'slug_required'    => __( 'Name must contain at least one letter or number to generate a slug.', 'presshub-ai-editor' ),
+                'error_prefix'     => __( 'Error: ', 'presshub-ai-editor' ),
+                'unknown_error'    => __( 'Unknown error.', 'presshub-ai-editor' ),
+                'connection_error' => __( 'Server connection error.', 'presshub-ai-editor' ),
+                'delete_confirm'   => __( 'Delete this preset?', 'presshub-ai-editor' ),
+            ],
+        ];
     }
 
     /**
@@ -54,9 +93,7 @@ class PressHub_AI_Admin_Presets {
             PressHub_AI_Preset_Store::seed_plugin_defaults();
         }
 
-        $presets  = PressHub_AI_Preset_Store::get_plugin_defaults();
-        $ajax_url = admin_url( 'admin-ajax.php' );
-        $nonce    = wp_create_nonce( 'presshub_ai_nonce' );
+        $presets = PressHub_AI_Preset_Store::get_plugin_defaults();
         ?>
         <div class="wrap">
             <h1><?php echo esc_html( __( 'PressHub AI — Instruction Presets', 'presshub-ai-editor' ) ); ?></h1>
@@ -135,113 +172,6 @@ class PressHub_AI_Admin_Presets {
                 <button type="submit" class="button button-primary"><?php echo esc_html( __( 'Add preset', 'presshub-ai-editor' ) ); ?></button>
             </form>
         </div>
-
-        <script>
-        (function($) {
-            var presshubAI = {
-                ajax_url: <?php echo wp_json_encode( $ajax_url ); ?>,
-                nonce: <?php echo wp_json_encode( $nonce ); ?>
-            };
-
-            /** Kebab-case slug from a display name (mirrors the server-side slug regex). */
-            function presshubPresetSlug(name) {
-                return String(name || '')
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, '-')
-                    .replace(/^-+|-+$/g, '')
-                    .slice(0, 40);
-            }
-
-            /** POST a preset mutation; reload the page on success, alert on error. */
-            function presshubPostPreset(data) {
-                data.nonce = presshubAI.nonce;
-                return $.ajax({
-                    url: presshubAI.ajax_url,
-                    type: 'POST',
-                    data: data
-                }).done(function(response) {
-                    if (response && response.success) {
-                        location.reload();
-                    } else {
-                        alert('Error: ' + (response && response.data ? response.data : 'Unknown error.'));
-                    }
-                }).fail(function() {
-                    alert('Server connection error.');
-                });
-            }
-
-            $('#presshub-ai-add-preset-form').on('submit', function(e) {
-                e.preventDefault();
-                var name = $('#presshub-ai-new-preset-name').val();
-                var text = $('#presshub-ai-new-preset-text').val();
-                var slug = presshubPresetSlug(name);
-                if (!slug) {
-                    alert('Name must contain at least one letter or number to generate a slug.');
-                    return;
-                }
-                presshubPostPreset({
-                    action: 'presshub_ai_save_preset',
-                    scope: 'plugin',
-                    slug: slug,
-                    name: name,
-                    instruction_text: text,
-                    enabled: 1
-                });
-            });
-
-            $('.presshub-preset-delete').on('click', function() {
-                var $row = $(this).closest('.presshub-preset-row');
-                if (!window.confirm('Delete this preset?')) {
-                    return;
-                }
-                presshubPostPreset({
-                    action: 'presshub_ai_delete_preset',
-                    scope: 'plugin',
-                    slug: $row.data('slug')
-                });
-            });
-
-            $('.presshub-preset-enabled').on('change', function() {
-                var $row = $(this).closest('.presshub-preset-row');
-                presshubPostPreset({
-                    action: 'presshub_ai_save_preset',
-                    scope: 'plugin',
-                    slug: $row.data('slug'),
-                    name: $row.find('.presshub-preset-name').text(),
-                    instruction_text: $row.data('text') || '',
-                    enabled: this.checked ? 1 : 0
-                });
-            });
-
-            $('.presshub-preset-edit').on('click', function() {
-                var $row = $(this).closest('.presshub-preset-row');
-                var $editRow = $row.next('.presshub-preset-edit-row');
-                $editRow.find('.presshub-edit-name').val($row.find('.presshub-preset-name').text());
-                $editRow.find('.presshub-edit-text').val($row.data('text') || '');
-                $row.hide();
-                $editRow.show();
-            });
-
-            $('.presshub-edit-cancel').on('click', function() {
-                var $editRow = $(this).closest('.presshub-preset-edit-row');
-                $editRow.hide();
-                $editRow.prev('.presshub-preset-row').show();
-            });
-
-            $('.presshub-edit-save').on('click', function() {
-                var $editRow = $(this).closest('.presshub-preset-edit-row');
-                var $row = $editRow.prev('.presshub-preset-row');
-                presshubPostPreset({
-                    action: 'presshub_ai_save_preset',
-                    scope: 'plugin',
-                    slug: $row.data('slug'),
-                    name: $editRow.find('.presshub-edit-name').val(),
-                    instruction_text: $editRow.find('.presshub-edit-text').val(),
-                    enabled: $row.find('.presshub-preset-enabled').is(':checked') ? 1 : 0
-                });
-            });
-        })(jQuery);
-        </script>
         <?php
     }
 

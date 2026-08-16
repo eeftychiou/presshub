@@ -61,7 +61,10 @@ jobs:
                    tests/PresetSanitizerTest.php tests/PresetStoreTest.php \
                    tests/PresetResolverTest.php tests/SettingsPageTest.php \
                    tests/PerProviderConfigTest.php tests/SettingsSanitizeTest.php \
-                   tests/InstructionCompositionTest.php tests/AuthorInstructionsTest.php; do
+                   tests/InstructionCompositionTest.php tests/AuthorInstructionsTest.php \
+                   tests/RunReviewStatusGuardTest.php tests/PresetThrottleTest.php \
+                   tests/UploadValidationTest.php tests/UninstallTest.php \
+                   tests/PresetsAssetsTest.php tests/MetaboxesRenderTest.php; do
             echo "=== $t ==="
             php "$t"
           done

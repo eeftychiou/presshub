@@ -227,9 +227,50 @@ if ( ! function_exists( 'wp_get_attachment_url' ) ) {
 }
 
 if ( ! function_exists( 'wp_handle_upload' ) ) {
+    /**
+     * Stubbed wp_handle_upload. Counts every invocation (HANDLE_UPLOAD_CALLS)
+     * so tests can assert that uploads never happen after a rate-limit
+     * rejection or validation failure. Tests may install a canned success
+     * via HANDLE_UPLOAD_RESULT.
+     */
     function wp_handle_upload( &$file, $overrides = false, $time = null ) {
-        // Tests for the upload path don't reach here, but provide a stub.
+        $GLOBALS['HANDLE_UPLOAD_CALLS'] = ( $GLOBALS['HANDLE_UPLOAD_CALLS'] ?? 0 ) + 1;
+        if ( isset( $GLOBALS['HANDLE_UPLOAD_RESULT'] ) ) {
+            return $GLOBALS['HANDLE_UPLOAD_RESULT'];
+        }
         return [ 'error' => 'wp_handle_upload not stubbed' ];
+    }
+}
+
+if ( ! function_exists( 'wp_check_filetype_and_ext' ) ) {
+    /**
+     * Stubbed wp_check_filetype_and_ext. Derives the extension from the
+     * filename — the real function consults the WP mime whitelist, which
+     * is exactly the behaviour the upload-validation tests need.
+     */
+    function wp_check_filetype_and_ext( $file, $filename, $mimes = null ) {
+        $ext = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
+        return [
+            'ext'             => $ext,
+            'type'            => 'application/octet-stream',
+            'proper_filename' => false,
+        ];
+    }
+}
+
+if ( ! function_exists( 'get_post' ) ) {
+    /**
+     * Stubbed get_post. Backed by a simple map ($GLOBALS['POSTS_STORE'],
+     * keyed by post ID, values are arrays) so tests can plant posts with
+     * a given status and observe status-guard behaviour.
+     */
+    function get_post( $post = null, $output = null, $filter = 'raw' ) {
+        $store = $GLOBALS['POSTS_STORE'] ?? [];
+        $id    = is_object( $post ) ? (int) $post->ID : (int) $post;
+        if ( ! isset( $store[ $id ] ) ) {
+            return null;
+        }
+        return (object) $store[ $id ];
     }
 }
 

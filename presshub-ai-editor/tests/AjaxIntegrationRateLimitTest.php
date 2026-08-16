@@ -150,6 +150,23 @@ class AjaxIntegrationRateLimitTest
             label: 'image_admin_gate_takes_priority'
         ) );
 
+        // ----- UPLOAD ORDER (Medium-9): the rate limit is enforced BEFORE
+        //       any file is moved, so a blocked request leaves no orphaned
+        //       uploads. Under the limit, the file is uploaded exactly once.
+        $failures = array_merge( $failures, self::drive_generate_draft_with_files(
+            enabled: true,
+            user_id: 5,
+            expect_blocked: false,
+            label: 'draft_files_under_limit'
+        ) );
+
+        $failures = array_merge( $failures, self::drive_generate_draft_with_files(
+            enabled: true,
+            user_id: 6,
+            expect_blocked: true,
+            label: 'draft_files_over_limit'
+        ) );
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {
@@ -220,6 +237,90 @@ class AjaxIntegrationRateLimitTest
             $label,
             'wp_send_json_success'
         );
+    }
+
+    /**
+     * Drive generate_draft() with a whitelisted PDF upload present, and
+     * assert both the rate-limit outcome AND the upload order: when the
+     * limiter blocks, wp_handle_upload must never be reached; when it
+     * passes, the file is uploaded exactly once before the API call.
+     *
+     * Uses the Gemini provider so the file actually reaches the API
+     * client (OpenAI rejects direct uploads).
+     */
+    private static function drive_generate_draft_with_files( bool $enabled, int $user_id, bool $expect_blocked, string $label ): array {
+        self::reset_world();
+        $GLOBALS['CURRENT_USER_ID'] = $user_id;
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['NONCE_VALID'] = true;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'gemini';
+        if ( $enabled ) {
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_per_hour'] = 3;
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_window_seconds'] = 3600;
+            if ( $expect_blocked ) {
+                $key = 'presshub_ai_rl_' . $user_id;
+                $GLOBALS['TRANSIENT_STORE'][ $key ] = [
+                    'value' => [ 'count' => 3, 'expires_at' => time() + 3600, 'window' => 3600 ],
+                    'expires_at' => time() + 3600,
+                ];
+            }
+        }
+        $GLOBALS['HANDLE_UPLOAD_CALLS'] = 0;
+        $tmpfile = tempnam( sys_get_temp_dir(), 'phu' );
+        $GLOBALS['HANDLE_UPLOAD_RESULT'] = [ 'file' => $tmpfile, 'url' => 'http://example.test/report.pdf' ];
+        $GLOBALS['CAPTURED_REQUESTS'] = [];
+        $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
+            [ $url ] = $req;
+            if ( str_contains( $url, 'generativelanguage.googleapis.com' ) ) {
+                return [
+                    'response' => [ 'code' => 200 ],
+                    'body'     => json_encode( [
+                        'candidates' => [ [ 'content' => [ 'parts' => [ [ 'text' => 'draft text' ] ] ] ] ],
+                    ] ),
+                ];
+            }
+            return [ 'response' => [ 'code' => 200 ], 'body' => '{}' ];
+        };
+        $_FILES = [ 'files' => [
+            'name'     => [ 0 => 'report.pdf' ],
+            'type'     => [ 0 => 'application/pdf' ],
+            'tmp_name' => [ 0 => '/tmp/phpXXXX' ],
+            'error'    => [ 0 => 0 ],
+            'size'     => [ 0 => 2048 ],
+        ] ];
+        $_POST = [
+            'sources'      => '',
+            'instructions' => 'write something',
+            'nonce'        => 'valid',
+        ];
+
+        $handler = new PressHub_AI_Ajax_Handlers();
+        $thrown = null;
+        try {
+            $handler->generate_draft();
+        } catch ( Throwable $e ) {
+            $thrown = $e;
+        }
+
+        $failures = self::assert_outcome(
+            $expect_blocked,
+            $thrown,
+            'Rate limit',
+            $label,
+            'wp_send_json_success'
+        );
+
+        $uploads = $GLOBALS['HANDLE_UPLOAD_CALLS'] ?? 0;
+        if ( $expect_blocked && $uploads !== 0 ) {
+            $failures[] = "{$label}: wp_handle_upload must not run when the rate limit blocks (orphaned-upload bug); calls={$uploads}";
+        }
+        if ( ! $expect_blocked && $uploads !== 1 ) {
+            $failures[] = "{$label}: wp_handle_upload should run exactly once when allowed; calls={$uploads}";
+        }
+        @unlink( $tmpfile );
+        return $failures;
     }
 
     /**
@@ -431,7 +532,10 @@ class AjaxIntegrationRateLimitTest
         $GLOBALS['SCHEDULED_EVENTS'] = [];
         $GLOBALS['NONCE_VALID'] = false;
         $GLOBALS['TIME_NOW'] = null;
+        $GLOBALS['HANDLE_UPLOAD_CALLS'] = 0;
+        unset( $GLOBALS['HANDLE_UPLOAD_RESULT'] );
         $_POST = [];
+        $_FILES = [];
     }
 }
 

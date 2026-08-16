@@ -11,7 +11,10 @@ jQuery(document).ready(function($) {
             .replace(/'/g, '&#039;');
     }
 
-    $('#presshub-ai-test-api').on('click', function(e) {
+    // Per-provider Test buttons: every .presshub-ai-test-api button carries
+    // data-provider ('' = the active provider) which the server uses to pick
+    // the provider + per-provider credentials for the connection test.
+    $('.presshub-ai-test-api').on('click', function(e) {
         e.preventDefault();
         var $btn = $(this);
         $('#presshub-ai-test-spinner').addClass('is-active');
@@ -20,7 +23,8 @@ jQuery(document).ready(function($) {
 
         $.post(presshubAI.ajax_url, {
             action: 'presshub_ai_test_api',
-            nonce: presshubAI.nonce
+            nonce: presshubAI.nonce,
+            provider: $btn.data('provider')
         }, function(response) {
             $('#presshub-ai-test-spinner').removeClass('is-active');
             $btn.prop('disabled', false);

@@ -12,9 +12,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
  * All mutations are delegated to the AJAX handlers in
  * class-ajax-handlers.php with scope=author and the viewed user's id in
  * the payload (user_id POST param); the handlers enforce the
- * ownership/admin capability checks. This file only renders the section
- * plus a small self-contained inline script that posts to those
- * endpoints via jQuery.ajax (presshubAI.ajax_url + presshubAI.nonce).
+ * ownership/admin capability checks. This file only renders the section;
+ * the jQuery lives in assets/presets.js (enqueued with wp_localize_script
+ * data via PressHub_AI_Admin_Presets::localize_args).
  *
  * Self-registering: the file bottom hooks plugins_loaded so no other
  * wiring is needed once the file is require_once'd.
@@ -25,6 +25,25 @@ class PressHub_AI_Author_Presets {
     public function __construct() {
         add_action( 'show_user_profile', [ $this, 'render_presets_section' ] );
         add_action( 'edit_user_profile', [ $this, 'render_presets_section' ] );
+        add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
+    }
+
+    /**
+     * Enqueue the shared presets asset on the profile screens. The viewed
+     * user id is informational (the JS reads it from the section's
+     * data-user-id attribute too); author mutations are always scoped to
+     * the current user server-side.
+     */
+    public function enqueue_scripts( $hook ) {
+        if ( 'profile.php' !== $hook && 'user-edit.php' !== $hook ) {
+            return;
+        }
+        $viewed_user_id = 'user-edit.php' === $hook
+            ? (int) ( $_GET['user_id'] ?? 0 )
+            : (int) get_current_user_id();
+
+        wp_enqueue_script( PressHub_AI_Admin_Presets::SCRIPT_HANDLE, PRESSHUB_AI_URL . 'assets/presets.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
+        wp_localize_script( PressHub_AI_Admin_Presets::SCRIPT_HANDLE, 'presshubAI', PressHub_AI_Admin_Presets::localize_args( 'author', $viewed_user_id ) );
     }
 
     /**
@@ -93,8 +112,6 @@ class PressHub_AI_Author_Presets {
             $copy_options[] = [ 'value' => $preset['slug'], 'label' => $preset['name'] ];
         }
 
-        $ajax_url = admin_url( 'admin-ajax.php' );
-        $nonce    = wp_create_nonce( 'presshub_ai_nonce' );
         ?>
         <h2><?php echo esc_html( __( 'PressHub AI Presets', 'presshub-ai-editor' ) ); ?></h2>
         <div id="presshub-ai-author-presets" data-user-id="<?php echo esc_attr( $user_id ); ?>" data-can-edit="<?php echo $is_self ? '1' : '0'; ?>">
@@ -201,131 +218,6 @@ class PressHub_AI_Author_Presets {
                 <button type="button" class="button presshub-ai-copy-preset-btn"<?php echo $control_state; ?>><?php echo esc_html( __( 'Copy to my presets', 'presshub-ai-editor' ) ); ?></button>
             <?php endif; ?>
         </div>
-
-        <script>
-        (function($) {
-            var presshubAI = {
-                ajax_url: <?php echo wp_json_encode( $ajax_url ); ?>,
-                nonce: <?php echo wp_json_encode( $nonce ); ?>
-            };
-
-            /** Kebab-case slug from a display name (mirrors the server-side slug regex). */
-            function presshubPresetSlug(name) {
-                return String(name || '')
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, '-')
-                    .replace(/^-+|-+$/g, '')
-                    .slice(0, 40);
-            }
-
-            /** POST a preset mutation; reload the page on success, alert on error. */
-            function presshubPostPreset(data) {
-                data.nonce = presshubAI.nonce;
-                return $.ajax({
-                    url: presshubAI.ajax_url,
-                    type: 'POST',
-                    data: data
-                }).done(function(response) {
-                    if (response && response.success) {
-                        location.reload();
-                    } else {
-                        alert('Error: ' + (response && response.data ? response.data : 'Unknown error.'));
-                    }
-                }).fail(function() {
-                    alert('Server connection error.');
-                });
-            }
-
-            var $section = $('#presshub-ai-author-presets');
-            var userId = $section.data('user-id');
-            var canEdit = String($section.data('can-edit')) === '1';
-
-            // Read-only view when this is another user's profile: the
-            // AJAX handlers only ever mutate the CURRENT user's library,
-            // so no mutation handlers are bound.
-            if (!canEdit) {
-                return;
-            }
-
-            $('#presshub-ai-author-add-preset-form').on('submit', function(e) {
-                e.preventDefault();
-                var name = $('#presshub-ai-author-new-preset-name').val();
-                var text = $('#presshub-ai-author-new-preset-text').val();
-                var slug = presshubPresetSlug(name);
-                if (!slug) {
-                    alert('Name must contain at least one letter or number to generate a slug.');
-                    return;
-                }
-                presshubPostPreset({
-                    action: 'presshub_ai_save_preset',
-                    scope: 'author',
-                    user_id: userId,
-                    slug: slug,
-                    name: name,
-                    instruction_text: text,
-                    enabled: 1
-                });
-            });
-
-            $section.find('.presshub-preset-delete').on('click', function() {
-                var $row = $(this).closest('.presshub-preset-row');
-                if (!window.confirm('Delete this preset?')) {
-                    return;
-                }
-                presshubPostPreset({
-                    action: 'presshub_ai_delete_preset',
-                    scope: 'author',
-                    user_id: userId,
-                    slug: $row.data('slug')
-                });
-            });
-
-            $section.find('.presshub-preset-edit').on('click', function() {
-                var $row = $(this).closest('.presshub-preset-row');
-                var $editRow = $row.next('.presshub-preset-edit-row');
-                $editRow.find('.presshub-edit-name').val($row.find('.presshub-preset-name').text());
-                $editRow.find('.presshub-edit-text').val($row.data('text') || '');
-                $row.hide();
-                $editRow.show();
-            });
-
-            $section.find('.presshub-edit-cancel').on('click', function() {
-                var $editRow = $(this).closest('.presshub-preset-edit-row');
-                $editRow.hide();
-                $editRow.prev('.presshub-preset-row').show();
-            });
-
-            $section.find('.presshub-edit-save').on('click', function() {
-                var $editRow = $(this).closest('.presshub-preset-edit-row');
-                var $row = $editRow.prev('.presshub-preset-row');
-                presshubPostPreset({
-                    action: 'presshub_ai_save_preset',
-                    scope: 'author',
-                    user_id: userId,
-                    slug: $row.data('slug'),
-                    name: $editRow.find('.presshub-edit-name').val(),
-                    instruction_text: $editRow.find('.presshub-edit-text').val(),
-                    enabled: 1
-                });
-            });
-
-            $('#presshub-ai-save-default').on('click', function() {
-                presshubPostPreset({
-                    action: 'presshub_ai_set_default_preset',
-                    user_id: userId,
-                    slug: $('#presshub-ai-default-preset').val() || ''
-                });
-            });
-
-            $('.presshub-ai-copy-preset-btn').on('click', function() {
-                presshubPostPreset({
-                    action: 'presshub_ai_copy_default_preset',
-                    user_id: userId,
-                    slug: $('#presshub-ai-copy-preset').val() || ''
-                });
-            });
-        })(jQuery);
-        </script>
         <?php
     }
 

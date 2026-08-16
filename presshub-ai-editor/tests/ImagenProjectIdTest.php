@@ -28,8 +28,10 @@ class ImagenProjectIdTest
         if ( ! str_contains( $url, 'projects/presshub-ai/locations/us-central1' ) ) {
             $failures[] = "Default URL should contain 'projects/presshub-ai/...', got: {$url}";
         }
-        if ( ! str_contains( $url, '?key=test-key' ) ) {
-            $failures[] = "URL should carry the API key, got: {$url}";
+        // Low-20: the Google Cloud key must never be embedded in the URL —
+        // it travels in the x-goog-api-key header instead.
+        if ( str_contains( $url, '?key=' ) || str_contains( $url, 'test-key' ) ) {
+            $failures[] = "URL must not embed the API key; got: {$url}";
         }
 
         // Case 2: option set to custom project id
@@ -48,6 +50,39 @@ class ImagenProjectIdTest
         $registered = self::collect_registered_settings();
         if ( ! in_array( 'presshub_ai_gcloud_project_id', $registered, true ) ) {
             $failures[] = "Settings class should register presshub_ai_gcloud_project_id; registered: " . implode( ', ', $registered );
+        }
+
+        // Case 4: generate_image_via_imagen sends the key in the
+        // x-goog-api-key header, not the URL query string.
+        self::reset_world();
+        $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
+            [ $url ] = $req;
+            if ( str_contains( $url, 'aiplatform.googleapis.com' ) ) {
+                return [
+                    'response' => [ 'code' => 200 ],
+                    'body'     => json_encode( [
+                        'predictions' => [ [ 'bytesBase64Encoded' => base64_encode( 'IMG' ) ] ],
+                    ] ),
+                ];
+            }
+            return [ 'response' => [ 'code' => 200 ], 'body' => '{}' ];
+        };
+        $client = new PressHub_AI_API_Client();
+        $result = $client->generate_image_via_imagen( 'a sunset over the newsroom' );
+        $req    = $GLOBALS['CAPTURED_REQUESTS'][0] ?? null;
+        if ( ! $req ) {
+            $failures[] = 'generate_image_via_imagen should make a request.';
+        } else {
+            [ $url, $args ] = $req;
+            if ( str_contains( $url, '?key=' ) ) {
+                $failures[] = "Imagen URL must not embed the API key; got: {$url}";
+            }
+            if ( ( $args['headers']['x-goog-api-key'] ?? null ) !== 'test-key' ) {
+                $failures[] = 'Imagen request should send x-goog-api-key header; got: ' . var_export( $args['headers'] ?? null, true );
+            }
+        }
+        if ( is_wp_error( $result ) ) {
+            $failures[] = 'generate_image_via_imagen should succeed: ' . $result->get_error_message();
         }
 
         if ( $failures ) {

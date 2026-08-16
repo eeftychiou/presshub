@@ -17,12 +17,36 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class PressHub_AI_Rate_Limiter {
 
     /**
+     * Optional forced enable/disable state, set via the constructor.
+     * null means "follow the global option" (the default).
+     *
+     * @var bool|null
+     */
+    private $enabled_override;
+
+    /**
+     * @param bool|null $enabled Force the limiter on/off regardless of the
+     *                           'presshub_ai_rate_limit_enabled' option.
+     *                           null (default) follows the option. The
+     *                           preset-CRUD throttle passes true so it is
+     *                           live even on sites that never opted into
+     *                           the AI-call rate limit.
+     */
+    public function __construct( $enabled = null ) {
+        $this->enabled_override = $enabled;
+    }
+
+    /**
      * Whether the rate limiter is currently enabled.
      *
      * Truthy values ('1', 1, true) enable it; anything else (including
-     * the option being absent entirely) leaves the limiter as a no-op.
+     * the option being absent entirely) leaves the limiter as a no-op —
+     * unless the constructor forced a value.
      */
     public function is_enabled(): bool {
+        if ( null !== $this->enabled_override ) {
+            return (bool) $this->enabled_override;
+        }
         return ! empty( get_option( 'presshub_ai_rate_limit_enabled' ) );
     }
 
@@ -81,19 +105,27 @@ class PressHub_AI_Rate_Limiter {
     /**
      * Record that a request under $key actually happened.
      *
-     * If the bucket is already at the configured limit we do NOT inflate
-     * the counter further (so retries against a blocked state do not
-     * push the user further from being able to make requests). The window
-     * expiry is also left untouched in that case so the timer is honest.
+     * If the bucket is already at the limit we do NOT inflate the counter
+     * further (so retries against a blocked state do not push the user
+     * further from being able to make requests). The window expiry is
+     * also left untouched in that case so the timer is honest.
      *
-     * @param string $key The rate-limit bucket key.
+     * @param string   $key            The rate-limit bucket key.
+     * @param int|null $limit          Max requests allowed in the window.
+     *                                 null (default) uses the configured
+     *                                 per-hour limit. Pass the same value
+     *                                 the matching check() used so the
+     *                                 counter and the check always agree.
+     * @param int|null $window_seconds Window length in seconds. null
+     *                                 (default) uses the configured window.
+     *                                 Pass the same value check() used.
      */
-    public function record( string $key ): void {
+    public function record( string $key, $limit = null, $window_seconds = null ): void {
         if ( ! $this->is_enabled() ) {
             return;
         }
 
-        $limit = $this->configured_limit();
+        $limit = null === $limit ? $this->configured_limit() : max( 1, (int) $limit );
 
         $entry  = $this->read_state( $key );
         $count  = (int) ( $entry['count'] ?? 0 );
@@ -118,7 +150,9 @@ class PressHub_AI_Rate_Limiter {
         // same window and matching check() calls stay in sync.
         $window = (int) ( $entry['window'] ?? 0 );
         if ( 0 === $expiry ) {
-            $window = $this->window_seconds_for_key( $key );
+            $window = null !== $window_seconds
+                ? max( 1, (int) $window_seconds )
+                : $this->window_seconds_for_key( $key );
             $expiry = $this->now() + $window;
         }
 

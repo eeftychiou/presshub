@@ -3,6 +3,16 @@
  * TDD tests for PressHub_AI_Research_Cleanup (stale research-log retention).
  */
 
+// Capturing get_posts: identical to the harness stub, but also records
+// the query args so tests can assert the retention window. Defined before
+// wordpress-stubs.php so the guarded stub is skipped.
+if ( ! function_exists( 'get_posts' ) ) {
+    function get_posts( $args = [] ) {
+        $GLOBALS['GET_POSTS_ARGS'][] = $args;
+        return $GLOBALS['GET_POSTS_RESULT'] ?? [];
+    }
+}
+
 require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/wp-action-wrapper.php';
 require_once __DIR__ . '/../includes/class-research-cleanup.php';
@@ -50,6 +60,44 @@ class ResearchCleanupTest
         PressHub_AI_Research_Cleanup::register();
         if ( ! empty( $GLOBALS['RECURRING_EVENTS'] ) ) {
             $failures[] = 'register() must not schedule when the event already exists.';
+        }
+
+        // --- Case 5: run() with no args reads the retention option ---
+        unset( $GLOBALS['GET_POSTS_RESULT'], $GLOBALS['GET_POSTS_ARGS'], $GLOBALS['DELETED_POSTS'], $GLOBALS['OPTIONS_STORE'] );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_research_retention_days'] = 7;
+        $GLOBALS['GET_POSTS_RESULT'] = [ 21 ];
+        PressHub_AI_Research_Cleanup::run();
+        $args   = $GLOBALS['GET_POSTS_ARGS'][0] ?? [];
+        $before = $args['date_query']['before'] ?? '';
+        $ts     = strtotime( $before );
+        if ( ! $ts || $ts > time() - 7 * DAY_IN_SECONDS || $ts <= time() - 8 * DAY_IN_SECONDS ) {
+            $failures[] = "run() should use the option's 7-day retention window; before: {$before}";
+        }
+        // Default fallback when the option is absent: DEFAULT_RETENTION_DAYS.
+        unset( $GLOBALS['OPTIONS_STORE'], $GLOBALS['GET_POSTS_ARGS'] );
+        PressHub_AI_Research_Cleanup::run();
+        $before = $GLOBALS['GET_POSTS_ARGS'][0]['date_query']['before'] ?? '';
+        $ts     = strtotime( $before );
+        if ( ! $ts || $ts > time() - 30 * DAY_IN_SECONDS || $ts <= time() - 31 * DAY_IN_SECONDS ) {
+            $failures[] = "run() should fall back to the 30-day default when the option is absent; before: {$before}";
+        }
+        // Explicit $days still wins over the option (cron-triggered sweep).
+        unset( $GLOBALS['GET_POSTS_ARGS'] );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_research_retention_days'] = 7;
+        PressHub_AI_Research_Cleanup::run( 3 );
+        $before = $GLOBALS['GET_POSTS_ARGS'][0]['date_query']['before'] ?? '';
+        $ts     = strtotime( $before );
+        if ( ! $ts || $ts > time() - 3 * DAY_IN_SECONDS || $ts <= time() - 4 * DAY_IN_SECONDS ) {
+            $failures[] = "an explicit \$days should override the option; before: {$before}";
+        }
+
+        // --- Case 6: run() clamps sub-1 retention to 1 day ---
+        unset( $GLOBALS['GET_POSTS_ARGS'] );
+        PressHub_AI_Research_Cleanup::run( 0 );
+        $before = $GLOBALS['GET_POSTS_ARGS'][0]['date_query']['before'] ?? '';
+        $ts     = strtotime( $before );
+        if ( ! $ts || $ts > time() - DAY_IN_SECONDS || $ts <= time() - 2 * DAY_IN_SECONDS ) {
+            $failures[] = "run(0) should clamp to a 1-day window; before: {$before}";
         }
 
         if ( $failures ) {

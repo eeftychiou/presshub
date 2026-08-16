@@ -3,6 +3,12 @@ const { PluginSidebar } = wp.editPost;
 const { el, useState, useEffect, useRef } = wp.element;
 const { Button, TextareaControl, Spinner, PanelBody } = wp.components;
 
+// Research status polling bounds: 40 attempts x 3s = 2 minutes max.
+// Beyond that the job is stuck (or the site's wp-cron is starved) and we
+// stop hammering the server, surfacing a 'timeout' status instead.
+const RESEARCH_POLL_MAX_ATTEMPTS = 40;
+const RESEARCH_POLL_INTERVAL_MS = 3000;
+
 const AICoPilotSidebar = () => {
     const [messages, setMessages] = useState([
         { role: 'ai', type: 'text', content: 'Hello! I am your AI Co-Pilot. I can chat, conduct in-depth research, generate images, or summarize media. How can I help you draft your article today?' }
@@ -10,6 +16,9 @@ const AICoPilotSidebar = () => {
     const [inputValue, setInputValue] = useState('');
     const [loading, setLoading] = useState(false);
     const messagesEndRef = useRef(null);
+    // Active research-poll intervals, cleared on unmount so a closed
+    // sidebar never keeps polling (or leaking timers) in the background.
+    const researchIntervalsRef = useRef([]);
 
     const scrollToBottom = () => {
         if (messagesEndRef.current) {
@@ -20,6 +29,14 @@ const AICoPilotSidebar = () => {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Unmount cleanup: stop every in-flight research poll.
+    useEffect(() => {
+        const intervals = researchIntervalsRef.current;
+        return () => {
+            intervals.forEach(clearInterval);
+        };
+    }, []);
 
     const handleSend = () => {
         if (!inputValue.trim() || loading) return;
@@ -78,7 +95,28 @@ const AICoPilotSidebar = () => {
     };
 
     const startPollingResearch = (researchId) => {
+        let attempts = 0;
+        const stopPolling = () => {
+            clearInterval(interval);
+            const idx = researchIntervalsRef.current.indexOf(interval);
+            if (idx !== -1) {
+                researchIntervalsRef.current.splice(idx, 1);
+            }
+        };
+        const timeoutPolling = () => {
+            stopPolling();
+            setMessages(prev => prev.map(msg =>
+                msg.researchId === researchId
+                    ? { ...msg, status: 'timeout', content: 'Research timed out after ' + RESEARCH_POLL_MAX_ATTEMPTS + ' attempts. The job may still be running — check back later or re-run the request.' }
+                    : msg
+            ));
+        };
         const interval = setInterval(() => {
+            attempts++;
+            if (attempts >= RESEARCH_POLL_MAX_ATTEMPTS) {
+                timeoutPolling();
+                return;
+            }
             jQuery.post(presshubAI.ajax_url, {
                 action: 'presshub_ai_check_research',
                 nonce: presshubAI.nonce,
@@ -87,14 +125,14 @@ const AICoPilotSidebar = () => {
                 if (response.success) {
                     const status = response.data.status;
                     if (status === 'completed') {
-                        clearInterval(interval);
+                        stopPolling();
                         setMessages(prev => prev.map(msg => 
                             msg.researchId === researchId 
                                 ? { ...msg, status: 'completed', content: response.data.content } 
                                 : msg
                         ));
                     } else if (status === 'failed') {
-                        clearInterval(interval);
+                        stopPolling();
                         setMessages(prev => prev.map(msg => 
                             msg.researchId === researchId 
                                 ? { ...msg, status: 'failed', content: 'Research failed: ' + response.data.error } 
@@ -108,7 +146,7 @@ const AICoPilotSidebar = () => {
                         ));
                     }
                 } else {
-                    clearInterval(interval);
+                    stopPolling();
                     setMessages(prev => prev.map(msg => 
                         msg.researchId === researchId 
                             ? { ...msg, status: 'failed', content: 'Polling error: ' + (response.data || 'Failed') } 
@@ -116,14 +154,15 @@ const AICoPilotSidebar = () => {
                     ));
                 }
             }).fail(() => {
-                clearInterval(interval);
+                stopPolling();
                 setMessages(prev => prev.map(msg => 
                     msg.researchId === researchId 
                         ? { ...msg, status: 'failed', content: 'Network polling error.' } 
                         : msg
                 ));
             });
-        }, 3000);
+        }, RESEARCH_POLL_INTERVAL_MS);
+        researchIntervalsRef.current.push(interval);
     };
 
     const insertBlock = (blockType, attributes) => {

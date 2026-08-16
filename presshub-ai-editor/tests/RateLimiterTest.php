@@ -179,6 +179,59 @@ class RateLimiterTest
             }
         }
 
+        // Case 8: constructor arg forces the limiter ON even when the
+        // global option is unset (the preset-CRUD throttle path).
+        self::reset_world();
+        $rl = new PressHub_AI_Rate_Limiter( true );
+        $key = 'presshub_ai_preset_7';
+        if ( true !== $rl->check( $key, 2, 60 ) ) {
+            $failures[] = "Forced-on limiter should enforce limits without the option being set.";
+        }
+        $rl->record( $key, 2, 60 );
+        $rl->record( $key, 2, 60 );
+        $blocked = $rl->check( $key, 2, 60 );
+        if ( ! ( $blocked instanceof WP_Error ) ) {
+            $failures[] = "Forced-on limiter should block at the explicit limit (2/2).";
+        }
+
+        // Case 9: constructor arg forces the limiter OFF even when the
+        // option is enabled.
+        self::reset_world();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
+        $rl = new PressHub_AI_Rate_Limiter( false );
+        for ( $i = 0; $i < 5; $i++ ) {
+            if ( true !== $rl->check( 'presshub_ai_rl_1', 1, 60 ) ) {
+                $failures[] = "Forced-off limiter must pass every check() despite the option being enabled.";
+                break;
+            }
+        }
+
+        // Case 10: record() honours explicit limit/window args; without
+        // args it falls back to the configured options.
+        self::reset_world();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_per_hour'] = 3;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_window_seconds'] = 3600;
+        $GLOBALS['TIME_NOW'] = 4_000_000;
+        $rl = new PressHub_AI_Rate_Limiter();
+        $key = 'presshub_ai_preset_5';
+        $rl->record( $key, 60, 60 );
+        $stored = $GLOBALS['TRANSIENT_STORE'][ $key ]['value'] ?? null;
+        if ( ( $stored['count'] ?? null ) !== 1 ) {
+            $failures[] = "record() with explicit args should record count 1; got " . var_export( $stored, true );
+        }
+        if ( ( $stored['expires_at'] ?? null ) !== 4_000_060 ) {
+            $failures[] = "record() with explicit window should anchor expiry at now+60; got " . var_export( $stored, true );
+        }
+        // Defaults: 3 records against the configured 3/hour, then blocked.
+        $key2 = 'presshub_ai_rl_5';
+        $rl->record( $key2 );
+        $rl->record( $key2 );
+        $rl->record( $key2 );
+        if ( ! ( $rl->check( $key2, 3, 3600 ) instanceof WP_Error ) ) {
+            $failures[] = "record() without args should use the configured limit (3).";
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {

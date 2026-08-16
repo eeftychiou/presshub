@@ -133,6 +133,21 @@ class PressHub_AI_Settings {
             'sanitize_callback' => [ __CLASS__, 'sanitize_api_key' ],
             'type'              => 'string',
         ] );
+        // "Remove stored key" checkboxes: posting 1 deletes the secret so
+        // a compromised key can be revoked through the UI (the masked
+        // round-trip alone can never clear a key).
+        register_setting( 'presshub_ai_options', 'presshub_ai_remove_api_key', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_remove_api_key' ],
+            'type'              => 'boolean',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_remove_google_cloud_api_key', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_remove_google_cloud_api_key' ],
+            'type'              => 'boolean',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_remove_github_token', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_remove_github_token' ],
+            'type'              => 'boolean',
+        ] );
         foreach ( self::PROVIDERS as $provider ) {
             register_setting( 'presshub_ai_options', 'presshub_ai_model_' . $provider, [
                 'sanitize_callback' => function ( $value ) use ( $provider ) {
@@ -193,6 +208,10 @@ class PressHub_AI_Settings {
             'sanitize_callback' => [ __CLASS__, 'sanitize_rate_limit_window_seconds' ],
             'type'              => 'integer',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_research_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_research_retention_days' ],
+            'type'              => 'integer',
+        ] );
 
         // --- P1: sections ---
         add_settings_section( 'presshub_ai_general', __( 'General', 'presshub-ai-editor' ), [ $this, 'render_general_section' ], 'presshub-ai' );
@@ -222,6 +241,7 @@ class PressHub_AI_Settings {
         add_settings_field( 'presshub_ai_rate_limit_enabled', __( 'Enable Per-User Rate Limit', 'presshub-ai-editor' ), [ $this, 'render_rate_limit_enabled_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
         add_settings_field( 'presshub_ai_rate_limit_per_hour', __( 'Requests per Window', 'presshub-ai-editor' ), [ $this, 'render_rate_limit_per_hour_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
         add_settings_field( 'presshub_ai_rate_limit_window_seconds', __( 'Window Length (seconds)', 'presshub-ai-editor' ), [ $this, 'render_rate_limit_window_seconds_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
+        add_settings_field( 'presshub_ai_research_retention_days', __( 'Research Log Retention (days)', 'presshub-ai-editor' ), [ $this, 'render_research_retention_days_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
     }
 
     // ------------------------------------------------------------------
@@ -330,6 +350,10 @@ class PressHub_AI_Settings {
         <input type="password" name="presshub_ai_api_key" id="presshub_ai_api_key" value="<?php echo self::esc_attr_safe( $mask ); ?>" placeholder="<?php echo self::esc_attr_safe( $mask ); ?>" class="regular-text" autocomplete="off" />
         <?php if ( '' !== $mask ) : ?>
             <p class="description"><?php echo __( 'Saved key ends in', 'presshub-ai-editor' ); ?> <code><?php echo self::esc_html_safe( $mask ); ?></code>. <?php echo __( 'Leave empty to keep it.', 'presshub-ai-editor' ); ?></p>
+            <label>
+                <input type="checkbox" name="presshub_ai_remove_api_key" id="presshub_ai_remove_api_key" value="1" />
+                <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
+            </label>
         <?php else : ?>
             <p class="description"><?php echo __( 'Used for the active AI provider (OpenAI, Anthropic or Gemini).', 'presshub-ai-editor' ); ?></p>
         <?php endif; ?>
@@ -400,6 +424,12 @@ class PressHub_AI_Settings {
         ?>
         <input type="password" name="presshub_ai_github_token" id="presshub_ai_github_token" value="<?php echo self::esc_attr_safe( $mask ); ?>" placeholder="<?php echo self::esc_attr_safe( $mask ); ?>" class="regular-text" autocomplete="off" />
         <p class="description"><?php echo __( 'GitHub Personal Access Token (PAT). Only required if the GitHub repository is private to enable automatic updates.', 'presshub-ai-editor' ); ?></p>
+        <?php if ( '' !== $mask ) : ?>
+            <label>
+                <input type="checkbox" name="presshub_ai_remove_github_token" id="presshub_ai_remove_github_token" value="1" />
+                <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
+            </label>
+        <?php endif; ?>
         <?php
     }
 
@@ -409,6 +439,12 @@ class PressHub_AI_Settings {
         ?>
         <input type="password" name="presshub_ai_google_cloud_api_key" id="presshub_ai_google_cloud_api_key" value="<?php echo self::esc_attr_safe( $mask ); ?>" placeholder="<?php echo self::esc_attr_safe( $mask ); ?>" class="regular-text" autocomplete="off" />
         <p class="description"><?php echo __( 'Required for Google Cloud Imagen and Text-to-Speech integration.', 'presshub-ai-editor' ); ?></p>
+        <?php if ( '' !== $mask ) : ?>
+            <label>
+                <input type="checkbox" name="presshub_ai_remove_google_cloud_api_key" id="presshub_ai_remove_google_cloud_api_key" value="1" />
+                <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
+            </label>
+        <?php endif; ?>
         <?php
     }
 
@@ -460,6 +496,18 @@ class PressHub_AI_Settings {
         <?php
     }
 
+    public function render_research_retention_days_field() {
+        $option  = 'presshub_ai_research_retention_days';
+        $default = class_exists( 'PressHub_AI_Research_Cleanup' )
+            ? PressHub_AI_Research_Cleanup::DEFAULT_RETENTION_DAYS
+            : 30;
+        $value   = (int) get_option( $option, $default );
+        ?>
+        <input type="number" min="1" max="3650" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'How long completed or failed research logs are kept before the daily cleanup deletes them. Defaults to 30 days.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
     // ------------------------------------------------------------------
     // P4 helpers.
     // ------------------------------------------------------------------
@@ -496,6 +544,36 @@ class PressHub_AI_Settings {
 
     public static function sanitize_github_token( $value ) {
         return self::sanitize_secret( $value, 'presshub_ai_github_token' );
+    }
+
+    /**
+     * "Remove stored key" checkbox sanitizers: posting 1 deletes the
+     * secret option outright (the only UI path that can clear a key, since
+     * empty/masked posts preserve the saved value). The flag option itself
+     * is stored as 0 either way.
+     */
+    public static function sanitize_remove_api_key( $value ) {
+        return self::sanitize_remove_key( $value, 'presshub_ai_api_key' );
+    }
+
+    public static function sanitize_remove_google_cloud_api_key( $value ) {
+        return self::sanitize_remove_key( $value, 'presshub_ai_google_cloud_api_key' );
+    }
+
+    public static function sanitize_remove_github_token( $value ) {
+        return self::sanitize_remove_key( $value, 'presshub_ai_github_token' );
+    }
+
+    private static function sanitize_remove_key( $value, $option_name ) {
+        if ( in_array( $value, [ 1, '1', true, 'on', 'true', 'yes' ], true ) ) {
+            delete_option( $option_name );
+        }
+        return 0;
+    }
+
+    public static function sanitize_research_retention_days( $value ) {
+        $n = (int) wp_unslash( $value );
+        return max( 1, min( 3650, $n ) );
     }
 
     public static function sanitize_model( $value, $provider = 'openai' ) {
@@ -565,6 +643,11 @@ class PressHub_AI_Settings {
      * critically — preserves the saved value when the post is empty or is
      * the masked placeholder (so re-saving the form never wipes a key the
      * admin didn't touch).
+     *
+     * Secrets are persisted with autoload disabled (update_option 3rd arg)
+     * so they are only fetched from the DB on demand instead of riding
+     * along on every request. The Settings API's own update_option call
+     * afterwards keeps the existing autoload value, so the flag sticks.
      */
     private static function sanitize_secret( $value, $option_name ) {
         $value = wp_unslash( $value );
@@ -575,16 +658,20 @@ class PressHub_AI_Settings {
         $existing = (string) get_option( $option_name, '' );
 
         if ( '' === $value || false !== strpos( $value, '••••' ) ) {
-            return $existing;
+            $final = $existing;
+        } else {
+            $value = wp_strip_all_tags( $value );
+            $value = preg_replace( '/[\r\n\t]+/', ' ', $value );
+            $value = trim( $value );
+            if ( strlen( $value ) > 512 ) {
+                $value = substr( $value, 0, 512 );
+            }
+            $final = $value;
         }
 
-        $value = wp_strip_all_tags( $value );
-        $value = preg_replace( '/[\r\n\t]+/', ' ', $value );
-        $value = trim( $value );
-        if ( strlen( $value ) > 512 ) {
-            $value = substr( $value, 0, 512 );
-        }
-        return $value;
+        update_option( $option_name, $final, false );
+
+        return $final;
     }
 
     /**

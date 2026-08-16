@@ -33,12 +33,20 @@ class PressHub_AI_Research_Cleanup {
     /**
      * Delete stale research logs.
      *
-     * @param int $days Retention window. Logs with a terminal status
+     * When no explicit $days is passed (the cron path), the retention
+     * window is read from the presshub_ai_research_retention_days option
+     * (settings page, Rate Limits section), falling back to
+     * DEFAULT_RETENTION_DAYS.
+     *
+     * @param int|null $days Retention window. Logs with a terminal status
      *                  (completed/failed) older than this many days are
      *                  deleted. Non-terminal logs are always kept.
      * @return int Number of posts deleted.
      */
-    public static function run( $days = self::DEFAULT_RETENTION_DAYS ) {
+    public static function run( $days = null ) {
+        if ( null === $days ) {
+            $days = (int) get_option( 'presshub_ai_research_retention_days', self::DEFAULT_RETENTION_DAYS );
+        }
         $days = max( 1, (int) $days );
 
         $stale = get_posts( [
