@@ -191,3 +191,35 @@ to produce `.po` / `.mo` files; those are dropped into
 
 GPL-2.0-or-later — see the plugin header in
 `presshub-ai-editor/presshub-ai-editor.php`.
+
+## Troubleshooting
+
+### "Update failed: Unable to rename the update to match the existing directory."
+
+WordPress downloads and extracts the new version, then renames the extracted
+folder into `wp-content/plugins/`. This error means that rename failed —
+almost always a **server-side permission/ownership problem**, not a release
+problem (the release zip is verified to contain a single top-level folder
+`presshub-ai-editor/` matching the installed slug). Check, in order:
+
+1. **Installed folder name** — the plugin must live in exactly
+   `wp-content/plugins/presshub-ai-editor/` (case-sensitive). If it was
+   installed from a differently-named zip or manually renamed, WordPress
+   tries to rename the update to match the odd name and fails. Fix:
+   deactivate, rename the folder to `presshub-ai-editor`, reactivate.
+2. **Filesystem permissions** — the PHP/web-server user (e.g. `www-data`)
+   needs write+execute on `wp-content/plugins/` itself (the rename creates
+   the new folder there) and must be able to delete the old plugin folder's
+   files (WP removes it before/while installing). Typical on FTP-installed
+   or root-owned sites:
+   `sudo chown -R www-data:www-data wp-content/plugins/presshub-ai-editor`
+   (adjust the user to match your PHP-FPM/Apache user).
+3. **Stale temp folder** — a leftover `wp-content/upgrade/presshub-ai-editor/`
+   from a failed run can block extraction. Delete `wp-content/upgrade/*`
+   and retry.
+4. **Case-sensitivity** — on Linux, `PressHub-AI-Editor` ≠ `presshub-ai-editor`.
+   If the folder name differs only by case, rename it to the lowercase slug.
+
+Manual fallback that bypasses the rename entirely: deactivate → delete the
+plugin folder → upload the release zip from the latest GitHub release
+(Plugins → Add New → Upload Plugin) → activate.
