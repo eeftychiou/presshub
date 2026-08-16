@@ -6,6 +6,7 @@ require_once __DIR__ . '/class-preset-sanitizer.php';
 require_once __DIR__ . '/class-preset-store.php';
 require_once __DIR__ . '/class-preset-resolver.php';
 require_once __DIR__ . '/class-url-fetcher.php';
+require_once __DIR__ . '/class-markdown.php';
 
 /**
  * Optional prompt inspection: when the presshub_ai_debug_prompts option
@@ -183,10 +184,18 @@ class PressHub_AI_API_Client {
         // reaches the model (presshub_ai_fetch_urls option / filter).
         $sources = PressHub_AI_URL_Fetcher::process_sources( $sources );
 
-        $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions;
+        $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions
+            . "\n\nFormat the draft as clean HTML for a WordPress post: use <h2> for section headings, <p> for paragraphs and <strong> for emphasis. Do NOT use Markdown syntax (no **, ## or *), and do NOT wrap the output in code fences.";
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 
         $result = $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
+
+        // 1.2.9: models often return Markdown — convert to clean HTML so
+        // the inserted draft renders properly in the WordPress editor.
+        if ( ! is_wp_error( $result ) ) {
+            $result = PressHub_AI_Markdown::to_html( $result );
+        }
+
         presshub_ai_log_prompts( 'draft', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, self::current_request_meta() );
 
         return $result;
