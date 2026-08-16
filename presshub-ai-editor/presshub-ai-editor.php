@@ -124,6 +124,15 @@ function presshub_ai_execute_research_job( $research_id ) {
         return;
     }
 
+    // C-2 (Antigravity review): WP-Cron can fire the same scheduled event
+    // twice (overlapping executions, manual `wp cron event run` while a
+    // request-triggered run is still in flight). Once a job is
+    // 'processing', a duplicate invocation must not start a second API
+    // call — the first execution owns the job.
+    if ( 'processing' === get_post_meta( $research_id, '_research_status', true ) ) {
+        return;
+    }
+
     update_post_meta( $research_id, '_research_status', 'processing' );
     
     $prompt = get_post_meta( $research_id, '_research_prompt', true );
@@ -136,17 +145,24 @@ function presshub_ai_execute_research_job( $research_id ) {
     
     $sys_prompt = "You are a senior investigative research assistant. Your task is to perform an in-depth topic synthesis and research synthesis.\nUse the provided instructions and the current post draft context to compile a comprehensive, well-structured, and objective research report in clean HTML format. Use headings, lists, and quotes where appropriate. DO NOT output code block wrappers (like ```html). Only output the raw HTML.";
 
+    // C-3 (Antigravity review): the base prompt is filtered FIRST so a
+    // filter that replaces the default keeps working, then the resolved
+    // per-author preset is appended on top, and the final composition is
+    // exposed through a dedicated hook for consumers that need to see or
+    // adjust the whole composed prompt.
+    $sys_prompt = apply_filters( 'presshub_ai_research_system_prompt', $sys_prompt );
+
     // Per-author instruction presets (2026-08-15 design §3.3): the author
     // who initiated the research gets their preset appended to the system
-    // prompt, before the existing filter runs. Unknown/absent initiator
-    // (user id 0) resolves to null and leaves the prompt untouched.
+    // prompt. Unknown/absent initiator (user id 0) resolves to null and
+    // leaves the prompt untouched.
     $research_user_id = (int) get_post_meta( $research_id, '_research_user_id', true );
     $preset = PressHub_AI_Preset_Resolver::resolve_for_user( $research_user_id, 'research', null );
     if ( $preset !== null ) {
         $sys_prompt .= "\n\n" . $preset;
     }
 
-    $sys_prompt = apply_filters( 'presshub_ai_research_system_prompt', $sys_prompt );
+    $sys_prompt = apply_filters( 'presshub_ai_composed_research_system_prompt', $sys_prompt );
 
     $user_prompt = "User prompt / request: " . $prompt . "\n\nAssociated Post Content Context:\n" . $post_content;
     
@@ -155,6 +171,11 @@ function presshub_ai_execute_research_job( $research_id ) {
     if ( is_wp_error( $report ) ) {
         update_post_meta( $research_id, '_research_status', 'failed' );
         update_post_meta( $research_id, '_error_message', $report->get_error_message() );
+        error_log( sprintf(
+            'PressHub AI: research job %d failed (provider error): %s',
+            $research_id,
+            $report->get_error_message()
+        ) );
         return;
     }
     
@@ -164,8 +185,14 @@ function presshub_ai_execute_research_job( $research_id ) {
     ] );
     
     if ( is_wp_error( $updated ) || 0 === $updated ) {
+        $update_error = is_wp_error( $updated ) ? $updated->get_error_message() : 'Failed to update research post content.';
         update_post_meta( $research_id, '_research_status', 'failed' );
-        update_post_meta( $research_id, '_error_message', is_wp_error( $updated ) ? $updated->get_error_message() : 'Failed to update research post content.' );
+        update_post_meta( $research_id, '_error_message', $update_error );
+        error_log( sprintf(
+            'PressHub AI: research job %d failed (post update): %s',
+            $research_id,
+            $update_error
+        ) );
         return;
     }
 

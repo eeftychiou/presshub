@@ -266,16 +266,22 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         if ( 'chat' === $intent ) {
-            // Per-author presets apply to chat too (design §3.3): the
-            // author's preset (or per-request selection) is appended to the
-            // chat system prompt before the new filter runs.
+            // Per-author presets apply to chat too (design §3.3). C-3
+            // composition order: the filter below runs on the BASE prompt
+            // FIRST (so full-replacement hooks no longer drop the preset),
+            // the resolved preset is appended AFTER it, and the
+            // presshub_ai_composed_chat_system_prompt filter sees the
+            // final composed string. Legacy contract for
+            // presshub_ai_chat_system_prompt: hooks receive the base
+            // prompt; use string concatenation (or the composed filter)
+            // to affect the preset-augmented prompt.
             $preset_slug = sanitize_text_field( wp_unslash( $_POST['instruction_preset_id'] ?? '' ) );
-            $sys = 'You are a helpful AI journalist assistant.';
+            $sys = apply_filters( 'presshub_ai_chat_system_prompt', 'You are a helpful AI journalist assistant.' );
             $preset = PressHub_AI_Preset_Resolver::resolve_for_user( get_current_user_id(), 'chat', $preset_slug );
             if ( $preset !== null ) {
                 $sys .= "\n\n" . $preset;
             }
-            $sys = apply_filters( 'presshub_ai_chat_system_prompt', $sys );
+            $sys = apply_filters( 'presshub_ai_composed_chat_system_prompt', $sys );
             $result = $api->call_provider( $sys, $prompt, false, [] );
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );

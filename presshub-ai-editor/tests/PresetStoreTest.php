@@ -40,6 +40,15 @@ class PresetStoreTest
         if ( count( $saved ) !== 2 ) {
             $failures[] = "save_plugin_defaults() should return the sanitized stored list (got " . count( $saved ) . ").";
         }
+        // P-1: the plugin-defaults option must never be autoloaded (it can
+        // hold up to ~200KB of serialized preset data).
+        $update_calls = $GLOBALS['UPDATE_OPTION_CALLS'] ?? [];
+        $last_update  = end( $update_calls );
+        if ( ! is_array( $last_update ) || $last_update[0] !== 'presshub_ai_default_presets' ) {
+            $failures[] = "save_plugin_defaults() should write via update_option('presshub_ai_default_presets', ...). Got: " . var_export( $last_update, true );
+        } elseif ( $last_update[2] !== false ) {
+            $failures[] = "save_plugin_defaults() must pass autoload=false (P-1). Got: " . var_export( $last_update[2], true );
+        }
         $read = PressHub_AI_Preset_Store::get_plugin_defaults();
         if ( count( $read ) !== 2 || $read[0]['slug'] !== 'wire-style' || $read[1]['slug'] !== 'interview-focus' ) {
             $failures[] = "Plugin defaults round-trip failed. Got: " . var_export( $read, true );
@@ -162,6 +171,14 @@ class PresetStoreTest
         // --- seed_plugin_defaults(): seeds exactly 3 curated presets when empty ---
         self::reset();
         PressHub_AI_Preset_Store::seed_plugin_defaults();
+        // P-1: the seed write must also pass autoload=false.
+        $seed_calls = $GLOBALS['UPDATE_OPTION_CALLS'] ?? [];
+        $seed_last  = end( $seed_calls );
+        if ( ! is_array( $seed_last ) || $seed_last[0] !== 'presshub_ai_default_presets' ) {
+            $failures[] = "seed_plugin_defaults() should write via update_option('presshub_ai_default_presets', ...). Got: " . var_export( $seed_last, true );
+        } elseif ( $seed_last[2] !== false ) {
+            $failures[] = "seed_plugin_defaults() must pass autoload=false (P-1). Got: " . var_export( $seed_last[2], true );
+        }
         $seeded = PressHub_AI_Preset_Store::get_plugin_defaults();
         if ( count( $seeded ) !== 3 ) {
             $failures[] = "seed_plugin_defaults() should seed exactly 3 presets. Got " . count( $seeded ) . ": " . var_export( $seeded, true );
@@ -228,6 +245,7 @@ class PresetStoreTest
     private static function reset(): void {
         unset( $GLOBALS['OPTIONS_STORE'] );
         unset( $GLOBALS['USER_META_STORE'] );
+        unset( $GLOBALS['UPDATE_OPTION_CALLS'] );
     }
 }
 

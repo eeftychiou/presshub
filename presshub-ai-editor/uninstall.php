@@ -72,23 +72,56 @@ $presshub_ai_user_meta_keys = [
     'presshub_ai_disabled_default_presets',
 ];
 
-$presshub_ai_user_ids = get_users( [ 'fields' => 'ID' ] );
-foreach ( $presshub_ai_user_ids as $presshub_ai_user_id ) {
-    foreach ( $presshub_ai_user_meta_keys as $presshub_ai_meta_key ) {
-        delete_user_meta( $presshub_ai_user_id, $presshub_ai_meta_key );
+// C-6/P-4 (Antigravity review): with $wpdb available, the per-user metas
+// collapse into ONE bulk DELETE — no user enumeration at all. Without it
+// (hostile hosts), walk users in 200-user batches so uninstall stays
+// bounded on large sites.
+global $wpdb;
+
+if ( isset( $wpdb ) && is_object( $wpdb ) && ! empty( $wpdb->usermeta ) ) {
+    $presshub_ai_placeholders = implode( ', ', array_fill( 0, count( $presshub_ai_user_meta_keys ), '%s' ) );
+    $wpdb->query( $wpdb->prepare(
+        "DELETE FROM {$wpdb->usermeta} WHERE meta_key IN ( {$presshub_ai_placeholders} )",
+        $presshub_ai_user_meta_keys
+    ) );
+} else {
+    $presshub_ai_offset = 0;
+    while ( true ) {
+        $presshub_ai_user_ids = get_users( [
+            'fields' => 'ID',
+            'number' => 200,
+            'offset' => $presshub_ai_offset,
+        ] );
+        if ( empty( $presshub_ai_user_ids ) ) {
+            break;
+        }
+        foreach ( $presshub_ai_user_ids as $presshub_ai_user_id ) {
+            foreach ( $presshub_ai_user_meta_keys as $presshub_ai_meta_key ) {
+                delete_user_meta( $presshub_ai_user_id, $presshub_ai_meta_key );
+            }
+        }
+        $presshub_ai_offset += count( $presshub_ai_user_ids );
     }
 }
 
-// All research log posts (any status).
-$presshub_ai_research_posts = get_posts( [
-    'post_type'      => 'presshub_research',
-    'post_status'    => 'any',
-    'posts_per_page' => -1,
-    'fields'         => 'ids',
-    'no_found_rows'  => true,
-] );
-foreach ( $presshub_ai_research_posts as $presshub_ai_post_id ) {
-    wp_delete_post( $presshub_ai_post_id, true );
+// All research log posts (any status), 200 per batch.
+$presshub_ai_offset = 0;
+while ( true ) {
+    $presshub_ai_research_posts = get_posts( [
+        'post_type'      => 'presshub_research',
+        'post_status'    => 'any',
+        'posts_per_page' => 200,
+        'offset'         => $presshub_ai_offset,
+        'fields'         => 'ids',
+        'no_found_rows'  => true,
+    ] );
+    if ( empty( $presshub_ai_research_posts ) ) {
+        break;
+    }
+    foreach ( $presshub_ai_research_posts as $presshub_ai_post_id ) {
+        wp_delete_post( $presshub_ai_post_id, true );
+    }
+    $presshub_ai_offset += count( $presshub_ai_research_posts );
 }
 
 // Belt-and-braces: no scheduled work may survive uninstall.

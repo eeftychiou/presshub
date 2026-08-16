@@ -64,7 +64,8 @@ jobs:
                    tests/InstructionCompositionTest.php tests/AuthorInstructionsTest.php \
                    tests/RunReviewStatusGuardTest.php tests/PresetThrottleTest.php \
                    tests/UploadValidationTest.php tests/UninstallTest.php \
-                   tests/PresetsAssetsTest.php tests/MetaboxesRenderTest.php; do
+                   tests/PresetsAssetsTest.php tests/MetaboxesRenderTest.php \
+                   tests/ResearchJobGuardTest.php; do
             echo "=== $t ==="
             php "$t"
           done

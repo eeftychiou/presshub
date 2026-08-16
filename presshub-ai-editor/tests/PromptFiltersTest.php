@@ -57,6 +57,42 @@ class PromptFiltersTest
             $failures[] = 'Default draft prompt missing when no filter registered. Body: ' . substr( $body, 0, 200 );
         }
 
+        // --- Case 5 (C-3 regression): a filter that FULLY REPLACES the
+        //             draft system prompt must not silently drop the
+        //             author's preset. The filter runs on the BASE prompt
+        //             first; the resolved preset is appended afterwards.
+        unset( $GLOBALS['FILTERS'], $GLOBALS['CAPTURED_REQUESTS'] );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PRESET_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['CURRENT_USER_ID'] = 7;
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'wire-style';
+        $base_seen = null;
+        $composed_seen = null;
+        add_filter( 'presshub_ai_draft_system_prompt', function ( $p ) use ( &$base_seen ) {
+            $base_seen = $p;
+            return 'CUSTOM_DRAFT_SYSTEM';
+        } );
+        add_filter( 'presshub_ai_composed_system_prompt', function ( $p ) use ( &$composed_seen ) {
+            $composed_seen = $p;
+            return $p;
+        } );
+        $api = new PressHub_AI_API_Client();
+        $api->generate_draft( 'source text', 'instructions text' );
+        $body = self::last_request_body();
+        if ( false === strpos( $body, 'CUSTOM_DRAFT_SYSTEM' ) ) {
+            $failures[] = 'C-3: replacing filter output must reach the body. Body: ' . substr( $body, 0, 200 );
+        }
+        if ( false === strpos( $body, 'PRESET_TEXT' ) ) {
+            $failures[] = 'C-3: preset must survive a fully-replacing draft filter. Body: ' . substr( $body, 0, 200 );
+        }
+        if ( $base_seen !== 'You are a professional AI journalist.' ) {
+            $failures[] = 'C-3: draft filter must receive the BASE prompt pre-append; got: ' . var_export( $base_seen, true );
+        }
+        if ( $composed_seen !== "CUSTOM_DRAFT_SYSTEM\n\nPRESET_TEXT" ) {
+            $failures[] = 'C-3: composed filter must receive filtered base + preset; got: ' . var_export( $composed_seen, true );
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {

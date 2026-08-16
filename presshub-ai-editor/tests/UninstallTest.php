@@ -1,6 +1,7 @@
 <?php
 /**
- * TDD tests for plugin lifecycle hygiene (Batch B):
+ * TDD tests for plugin lifecycle hygiene (Batch B) + uninstall batching
+ * (Batch C1, Antigravity C-6/P-4):
  *
  *   - presshub-ai-editor.php registers a deactivation hook whose callback
  *     clears both research crons (presshub_ai_cleanup_research and
@@ -8,11 +9,40 @@
  *   - uninstall.php refuses to run without WP_UNINSTALL_PLUGIN;
  *   - uninstall.php deletes every presshub_ai_* option, per-user preset
  *     metas for ALL users, and every presshub_research post, and clears
- *     the crons as belt-and-braces.
+ *     the crons as belt-and-braces;
+ *   - user enumeration and research-post queries are batched 200 at a
+ *     time (never posts_per_page=-1 / unbounded get_users);
+ *   - when $wpdb is available the per-user meta deletes collapse into ONE
+ *     bulk DELETE (no per-user delete_user_meta calls at all).
  *
  * The main plugin file is loaded with PRESSHUB_AI_SKIP_UPDATE_CHECKER so
  * the embedded PUC library (which needs a full WP install) is skipped.
+ * get_users/get_posts are overridden BEFORE wordpress-stubs.php so the
+ * uninstall batch loops can be driven with paging semantics.
  */
+
+// --- Paging-aware stubs for the uninstall batch loops. Defined before
+// wordpress-stubs.php so the guarded generic stubs are skipped. ---
+if ( ! function_exists( 'get_users' ) ) {
+    function get_users( $args = [] ) {
+        $GLOBALS['GET_USERS_ARGS'][] = $args;
+        $users = $GLOBALS['USERS'] ?? [];
+        if ( isset( $args['number'] ) && $args['number'] > 0 ) {
+            return array_slice( $users, (int) ( $args['offset'] ?? 0 ), (int) $args['number'] );
+        }
+        return $users;
+    }
+}
+if ( ! function_exists( 'get_posts' ) ) {
+    function get_posts( $args = [] ) {
+        $GLOBALS['GET_POSTS_ARGS'][] = $args;
+        $all = $GLOBALS['GET_POSTS_RESULT'] ?? [];
+        if ( isset( $args['posts_per_page'] ) && $args['posts_per_page'] > 0 ) {
+            return array_slice( $all, (int) ( $args['offset'] ?? 0 ), (int) $args['posts_per_page'] );
+        }
+        return $all;
+    }
+}
 
 // --- Extra stubs needed to load the main plugin file in the harness ---
 if ( ! function_exists( 'plugin_dir_path' ) ) {
@@ -40,11 +70,6 @@ if ( ! function_exists( 'delete_option' ) ) {
     function delete_option( $key ) {
         unset( $GLOBALS['OPTIONS_STORE'][ $key ] );
         return true;
-    }
-}
-if ( ! function_exists( 'get_users' ) ) {
-    function get_users( $args = [] ) {
-        return $GLOBALS['USERS'] ?? [];
     }
 }
 
@@ -92,7 +117,7 @@ class UninstallTest
         }
 
         // --- Case 3: uninstall removes options, user metas and research posts ---
-        unset( $GLOBALS['OPTIONS_STORE'], $GLOBALS['USER_META_STORE'], $GLOBALS['GET_POSTS_RESULT'], $GLOBALS['DELETED_POSTS'], $GLOBALS['CLEARED_HOOKS'], $GLOBALS['USERS'] );
+        self::reset_stores();
         $GLOBALS['OPTIONS_STORE'] = [
             'presshub_ai_provider'                      => 'openai',
             'presshub_ai_model'                         => 'gpt-4o',
@@ -145,7 +170,7 @@ class UninstallTest
         $GLOBALS['CLEARED_HOOKS']    = [];
 
         defined( 'WP_UNINSTALL_PLUGIN' ) || define( 'WP_UNINSTALL_PLUGIN', 'presshub-ai-editor/presshub-ai-editor.php' );
-        require_once __DIR__ . '/../uninstall.php';
+        self::run_uninstall();
 
         foreach ( $GLOBALS['OPTIONS_STORE'] as $key => $_ ) {
             if ( 0 === strpos( $key, 'presshub_ai_' ) ) {
@@ -175,6 +200,113 @@ class UninstallTest
                 $failures[] = "Uninstall should wp_clear_scheduled_hook( '{$hook}' ); cleared: " . json_encode( $cleared );
             }
         }
+        // The per-user path must batch: 200 at a time, never unbounded.
+        foreach ( $GLOBALS['GET_USERS_ARGS'] as $args ) {
+            if ( ( $args['number'] ?? 0 ) !== 200 ) {
+                $failures[] = 'get_users must be called with number=200; got: ' . json_encode( $args );
+            }
+        }
+        foreach ( $GLOBALS['GET_POSTS_ARGS'] as $args ) {
+            if ( ( $args['posts_per_page'] ?? 0 ) !== 200 ) {
+                $failures[] = 'get_posts must be called with posts_per_page=200 (never -1); got: ' . json_encode( $args );
+            }
+        }
+
+        // --- Case 4 (C-6/P-4): 450 users + 450 posts -> 200-per-batch loops ---
+        self::reset_stores();
+        $GLOBALS['USERS']            = range( 1, 450 );
+        $GLOBALS['GET_POSTS_RESULT'] = range( 1001, 1450 );
+        $GLOBALS['OPTIONS_STORE']    = [ 'presshub_ai_provider' => 'openai', 'unrelated' => 'keep' ];
+        $GLOBALS['USER_META_STORE']  = [];
+        foreach ( $GLOBALS['USERS'] as $uid ) {
+            $GLOBALS['USER_META_STORE'][ $uid ]['presshub_ai_author_presets'] = [ [ 'slug' => 'x' ] ];
+        }
+        self::run_uninstall();
+
+        if ( count( $GLOBALS['GET_USERS_ARGS'] ) !== 4 ) {
+            $failures[] = '450 users should take 3 data batches + 1 terminator probe; got ' . count( $GLOBALS['GET_USERS_ARGS'] ) . ': ' . json_encode( $GLOBALS['GET_USERS_ARGS'] );
+        }
+        $offsets = array_column( $GLOBALS['GET_USERS_ARGS'], 'offset' );
+        if ( $offsets !== [ 0, 200, 400, 450 ] ) {
+            $failures[] = 'get_users batch offsets should advance 0/200/400 then probe at 450; got: ' . json_encode( $offsets );
+        }
+        if ( count( $GLOBALS['GET_POSTS_ARGS'] ) !== 4 ) {
+            $failures[] = '450 posts should take 3 data batches + 1 terminator probe; got ' . count( $GLOBALS['GET_POSTS_ARGS'] ) . ': ' . json_encode( $GLOBALS['GET_POSTS_ARGS'] );
+        }
+        $post_offsets = array_column( $GLOBALS['GET_POSTS_ARGS'], 'offset' );
+        if ( $post_offsets !== [ 0, 200, 400, 450 ] ) {
+            $failures[] = 'get_posts batch offsets should advance 0/200/400 then probe at 450; got: ' . json_encode( $post_offsets );
+        }
+        foreach ( $GLOBALS['USERS'] as $uid ) {
+            if ( ! empty( $GLOBALS['USER_META_STORE'][ $uid ] ) ) {
+                $failures[] = "All plugin user metas must be deleted for user {$uid}; remaining: " . json_encode( $GLOBALS['USER_META_STORE'][ $uid ] );
+            }
+        }
+        $deleted = array_column( $GLOBALS['DELETED_POSTS'] ?? [], 'id' );
+        if ( count( $deleted ) !== 450 || $deleted[0] !== 1001 || $deleted[449] !== 1450 ) {
+            $failures[] = 'All 450 research posts should be deleted in order; got: ' . json_encode( [ 'count' => count( $deleted ), 'first' => $deleted[0] ?? null, 'last' => $deleted[449] ?? null ] );
+        }
+        if ( ( $GLOBALS['OPTIONS_STORE']['unrelated'] ?? null ) !== 'keep' ) {
+            $failures[] = 'Uninstall must not delete unrelated options (batch case).';
+        }
+
+        // --- Case 5 (C-6/P-4): $wpdb available -> ONE bulk DELETE, no user scan ---
+        self::reset_stores();
+        $GLOBALS['USERS']            = [ 1, 2 ];
+        $GLOBALS['GET_POSTS_RESULT'] = [ 201 ];
+        $GLOBALS['OPTIONS_STORE']    = [ 'presshub_ai_provider' => 'openai' ];
+        $GLOBALS['USER_META_STORE']  = [
+            1 => [ 'presshub_ai_author_presets' => [ [ 'slug' => 'a' ] ], 'nickname' => 'author-one' ],
+            2 => [ 'presshub_ai_default_preset_id' => 'b', 'nickname' => 'author-two' ],
+        ];
+        $wpdb = new class {
+            public $usermeta = 'wp_usermeta';
+            public $queries  = [];
+            public function prepare( $query, ...$args ) {
+                $flat = [];
+                foreach ( $args as $arg ) {
+                    if ( is_array( $arg ) ) {
+                        foreach ( $arg as $item ) { $flat[] = $item; }
+                    } else {
+                        $flat[] = $arg;
+                    }
+                }
+                $i = 0;
+                return preg_replace_callback( '/%s/', function () use ( $flat, &$i ) {
+                    return "'" . addslashes( (string) ( $flat[ $i++ ] ?? '' ) ) . "'";
+                }, $query );
+            }
+            public function query( $sql ) {
+                $this->queries[] = $sql;
+                return true;
+            }
+        };
+        $GLOBALS['wpdb'] = $wpdb;
+        self::run_uninstall();
+
+        if ( ! empty( $GLOBALS['GET_USERS_ARGS'] ) ) {
+            $failures[] = 'With $wpdb available, uninstall must NOT enumerate users; got: ' . json_encode( $GLOBALS['GET_USERS_ARGS'] );
+        }
+        if ( count( $wpdb->queries ) !== 1 ) {
+            $failures[] = 'Expected exactly one bulk $wpdb query; got: ' . json_encode( $wpdb->queries );
+        } else {
+            $sql = $wpdb->queries[0];
+            foreach ( [ 'DELETE FROM wp_usermeta', 'meta_key IN', 'presshub_ai_author_presets', 'presshub_ai_default_preset_id', 'presshub_ai_disabled_default_presets' ] as $needle ) {
+                if ( false === strpos( $sql, $needle ) ) {
+                    $failures[] = "Bulk query should contain '{$needle}'; got: {$sql}";
+                }
+            }
+        }
+        // The bulk DELETE replaced per-user deletes: the meta store must be
+        // untouched by uninstall (the DB query owns that data in prod).
+        if ( ( $GLOBALS['USER_META_STORE'][1]['nickname'] ?? null ) !== 'author-one' || ( $GLOBALS['USER_META_STORE'][1]['presshub_ai_author_presets'] ?? null ) === null ) {
+            $failures[] = 'Bulk path must not call delete_user_meta per user.';
+        }
+        $deleted = array_column( $GLOBALS['DELETED_POSTS'] ?? [], 'id' );
+        if ( $deleted !== [ 201 ] ) {
+            $failures[] = 'Research posts must still be deleted on the bulk path; got: ' . json_encode( $deleted );
+        }
+        unset( $GLOBALS['wpdb'] );
 
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
@@ -184,6 +316,30 @@ class UninstallTest
             exit( 1 );
         }
         echo "OK\n";
+    }
+
+    /** Reset every global store the uninstall scenarios touch. */
+    private static function reset_stores(): void {
+        unset(
+            $GLOBALS['OPTIONS_STORE'],
+            $GLOBALS['USER_META_STORE'],
+            $GLOBALS['GET_POSTS_RESULT'],
+            $GLOBALS['DELETED_POSTS'],
+            $GLOBALS['CLEARED_HOOKS'],
+            $GLOBALS['USERS'],
+            $GLOBALS['GET_USERS_ARGS'],
+            $GLOBALS['GET_POSTS_ARGS'],
+            $GLOBALS['wpdb']
+        );
+        $GLOBALS['GET_USERS_ARGS']  = [];
+        $GLOBALS['GET_POSTS_ARGS']  = [];
+        $GLOBALS['DELETED_POSTS']   = [];
+        $GLOBALS['CLEARED_HOOKS']   = [];
+    }
+
+    /** Run the uninstall script against the current global stores. */
+    private static function run_uninstall(): void {
+        include __DIR__ . '/../uninstall.php';
     }
 }
 

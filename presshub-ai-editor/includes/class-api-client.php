@@ -102,7 +102,7 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'no_api_key', 'API key is missing.' );
         }
 
-        $sys_prompt = 'You are a professional AI journalist.';
+        $sys_prompt = apply_filters( 'presshub_ai_draft_system_prompt', 'You are a professional AI journalist.' );
 
         // Per-author instruction presets (2026-08-15 design §3): the
         // resolver returns at most ONE instruction text to append, or null
@@ -110,6 +110,15 @@ class PressHub_AI_API_Client {
         // sentinel, endpoint gating, or no presets configured). The default
         // '' falls back to the author's own default preset — backward
         // compatible with the pre-preset 3-arg call.
+        //
+        // C-3 composition order: the filter above runs on the BASE prompt
+        // FIRST (so hooks that fully replace the string no longer drop the
+        // author's preset), the resolved preset is appended AFTER it, and
+        // the presshub_ai_composed_system_prompt filter below sees the
+        // final composed string. Legacy contract for
+        // presshub_ai_draft_system_prompt: hooks receive the base prompt;
+        // use string concatenation (or the composed filter) to affect the
+        // preset-augmented prompt.
         $preset = PressHub_AI_Preset_Resolver::resolve_for_user(
             get_current_user_id(),
             'draft',
@@ -119,7 +128,7 @@ class PressHub_AI_API_Client {
             $sys_prompt .= "\n\n" . $preset;
         }
 
-        $sys_prompt = apply_filters( 'presshub_ai_draft_system_prompt', $sys_prompt );
+        $sys_prompt = apply_filters( 'presshub_ai_composed_system_prompt', $sys_prompt );
         $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions;
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 
@@ -259,10 +268,16 @@ class PressHub_AI_API_Client {
         ] );
 
         if ( is_wp_error( $response ) ) {
+            error_log( 'PressHub AI [imagen] API error: ' . $response->get_error_message() );
             return $this->mock_image_generation( $prompt );
         }
 
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        if ( isset( $res_body['error']['message'] ) ) {
+            // D-3: log the provider's error before falling back to mock.
+            error_log( 'PressHub AI [imagen] API error: ' . $res_body['error']['message'] );
+        }
 
         if ( isset( $res_body['predictions'][0]['bytesBase64Encoded'] ) ) {
             $image_data = base64_decode( $res_body['predictions'][0]['bytesBase64Encoded'] );
@@ -329,10 +344,15 @@ class PressHub_AI_API_Client {
         ] );
 
         if ( is_wp_error( $response ) ) {
+            error_log( 'PressHub AI [tts] API error: ' . $response->get_error_message() );
             return $this->mock_audio_generation($script, $post_id);
         }
 
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( isset( $res_body['error']['message'] ) ) {
+            // D-3: log the provider's error before falling back to mock.
+            error_log( 'PressHub AI [tts] API error: ' . $res_body['error']['message'] );
+        }
         if ( isset( $res_body['audioContent'] ) ) {
             $audio_data = base64_decode( $res_body['audioContent'] );
 
@@ -410,14 +430,19 @@ class PressHub_AI_API_Client {
             'timeout' => $this->timeout
         ] );
 
-        if ( is_wp_error( $response ) ) return $response;
+        if ( is_wp_error( $response ) ) {
+            error_log( 'PressHub AI [openai] API error: ' . $response->get_error_message() );
+            return $response;
+        }
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $body['choices'][0]['message']['content'] ) ) {
             return $body['choices'][0]['message']['content'];
         }
         if ( isset( $body['error']['message'] ) ) {
+            error_log( 'PressHub AI [openai] API error: ' . $body['error']['message'] );
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
+        error_log( 'PressHub AI [openai] API error: Invalid response from OpenAI.' );
         return new WP_Error( 'api_error', 'Invalid response from OpenAI.' );
     }
 
@@ -466,19 +491,27 @@ class PressHub_AI_API_Client {
             'timeout' => $this->timeout
         ] );
 
-        if ( is_wp_error( $response ) ) return $response;
+        if ( is_wp_error( $response ) ) {
+            error_log( 'PressHub AI [anthropic] API error: ' . $response->get_error_message() );
+            return $response;
+        }
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $body['content'][0]['text'] ) ) {
             return $body['content'][0]['text'];
         }
         if ( isset( $body['error']['message'] ) ) {
+            error_log( 'PressHub AI [anthropic] API error: ' . $body['error']['message'] );
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
+        error_log( 'PressHub AI [anthropic] API error: Invalid response from Anthropic.' );
         return new WP_Error( 'api_error', 'Invalid response from Anthropic.' );
     }
 
     private function call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $this->model . ':generateContent?key=' . $this->api_key;
+        // S-1: the API key travels in the x-goog-api-key header (matching
+        // Imagen/TTS), NEVER in the URL query string — URLs end up in
+        // server access logs, proxies, CDNs and referer headers.
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $this->model . ':generateContent';
         
         $parts = [];
         foreach ( $files as $file_path ) {
@@ -513,19 +546,29 @@ class PressHub_AI_API_Client {
         }
 
         $response = wp_remote_post( $url, [
-            'headers' => [ 'Content-Type' => 'application/json' ],
+            'headers' => [
+                'Content-Type'   => 'application/json',
+                'x-goog-api-key' => $this->api_key,
+            ],
             'body' => wp_json_encode( $body ),
             'timeout' => $this->timeout
         ] );
 
-        if ( is_wp_error( $response ) ) return $response;
+        if ( is_wp_error( $response ) ) {
+            // D-3: surface provider failures in the server log; the error
+            // itself still propagates to the caller unchanged.
+            error_log( 'PressHub AI [gemini] API error: ' . $response->get_error_message() );
+            return $response;
+        }
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $body['candidates'][0]['content']['parts'][0]['text'] ) ) {
             return $body['candidates'][0]['content']['parts'][0]['text'];
         }
         if ( isset( $body['error']['message'] ) ) {
+            error_log( 'PressHub AI [gemini] API error: ' . $body['error']['message'] );
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
+        error_log( 'PressHub AI [gemini] API error: Invalid response from Gemini.' );
         return new WP_Error( 'api_error', 'Invalid response from Gemini.' );
     }
 }

@@ -57,8 +57,14 @@ if ( ! function_exists( 'get_option' ) ) {
 }
 
 if ( ! function_exists( 'update_option' ) ) {
-    function update_option( $key, $value ) {
+    /**
+     * Stubbed update_option. Stores the value and records every call
+     * (including the autoload argument) in UPDATE_OPTION_CALLS so tests
+     * can assert autoload flags (P-1: preset options must not autoload).
+     */
+    function update_option( $key, $value, $autoload = null ) {
         $GLOBALS['OPTIONS_STORE'][ $key ] = $value;
+        $GLOBALS['UPDATE_OPTION_CALLS'][] = [ $key, $value, $autoload ];
         return true;
     }
 }
@@ -552,4 +558,13 @@ if ( ! function_exists( 'sanitize_text_field' ) ) {
     function sanitize_text_field( $str ) {
         return trim( (string) $str );
     }
+}
+
+// D-3: the API client logs provider errors via error_log(). error_log is
+// a PHP built-in (cannot be stubbed), so redirect the log target to a
+// temp file instead — keeps test output clean and leaves the messages
+// inspectable at PRESSHUB_TEST_ERROR_LOG for any future logging tests.
+if ( ! defined( 'PRESSHUB_TEST_ERROR_LOG' ) ) {
+    define( 'PRESSHUB_TEST_ERROR_LOG', sys_get_temp_dir() . '/presshub-test-error.log' );
+    ini_set( 'error_log', PRESSHUB_TEST_ERROR_LOG );
 }

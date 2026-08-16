@@ -60,12 +60,16 @@ class PressHub_AI_Preset_Store {
     /**
      * Sanitize and store the plugin-default presets.
      *
+     * P-1: the option is written with autoload=false — the serialized
+     * preset list (up to ~200KB worst case) must not be loaded on every
+     * request.
+     *
      * @param array $presets
      * @return array The sanitized list that was stored.
      */
     public static function save_plugin_defaults( array $presets ): array {
         $clean = PressHub_AI_Preset_Sanitizer::sanitize_presets( $presets );
-        update_option( self::OPTION_DEFAULT_PRESETS, $clean );
+        update_option( self::OPTION_DEFAULT_PRESETS, $clean, false );
         return $clean;
     }
 
@@ -168,7 +172,8 @@ class PressHub_AI_Preset_Store {
         if ( is_array( $raw ) && count( $raw ) > 0 ) {
             return;
         }
-        update_option( self::OPTION_DEFAULT_PRESETS, self::SEEDED_PRESETS );
+        // P-1: same autoload=false as save_plugin_defaults().
+        update_option( self::OPTION_DEFAULT_PRESETS, self::SEEDED_PRESETS, false );
     }
 
     /**

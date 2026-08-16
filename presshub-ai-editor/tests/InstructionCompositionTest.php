@@ -289,7 +289,10 @@ class InstructionCompositionTest
             $failures[] = "Case 13b: 3-arg call should fall back to the author default. Got: " . var_export( $sys, true );
         }
 
-        // --- Case 14: filter receives the already-composed string ---
+        // --- Case 14 (C-3): the pre-composition filter receives the BASE
+        //             prompt only (preset appended AFTER it runs); the new
+        //             presshub_ai_composed_system_prompt filter receives
+        //             the full base + preset string.
         self::reset();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
@@ -302,20 +305,28 @@ class InstructionCompositionTest
         ];
         $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
         $captured = null;
+        $captured_composed = null;
         add_filter( 'presshub_ai_draft_system_prompt', function ( $p ) use ( &$captured ) {
             $captured = $p;
+            return $p;
+        } );
+        add_filter( 'presshub_ai_composed_system_prompt', function ( $p ) use ( &$captured_composed ) {
+            $captured_composed = $p;
             return $p;
         } );
         $api = new PressHub_AI_API_Client();
         $api->generate_draft( 'source text', 'instructions text', [], 'wire-style' );
         $expected = self::BUILTIN_DRAFT . "\n\n" . 'PLUGIN_TEXT';
-        if ( $captured !== $expected ) {
-            $failures[] = "Case 14: filter must receive the composed string (built-in + per-request preset). Got: " . var_export( $captured, true );
+        if ( $captured !== self::BUILTIN_DRAFT ) {
+            $failures[] = "Case 14: pre-composition filter must receive the BASE prompt (built-in, pre-append). Got: " . var_export( $captured, true );
         }
-        // And the filter's return value is what actually ships in the body.
+        if ( $captured_composed !== $expected ) {
+            $failures[] = "Case 14: composed filter must receive base + per-request preset. Got: " . var_export( $captured_composed, true );
+        }
+        // And the composed filter's return value is what actually ships in the body.
         $sys = self::last_openai_system();
         if ( $sys !== $expected ) {
-            $failures[] = "Case 14: filtered composed string must reach the request body. Got: " . var_export( $sys, true );
+            $failures[] = "Case 14: composed string must reach the request body. Got: " . var_export( $sys, true );
         }
 
         if ( $failures ) {

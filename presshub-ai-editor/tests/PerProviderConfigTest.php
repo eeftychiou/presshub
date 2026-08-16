@@ -114,6 +114,12 @@ class PerProviderConfigTest
         if ( false === strpos( $req['url'], '/models/gemini-1.5-pro-latest:generateContent' ) ) {
             $failures[] = 'Gemini URL should contain presshub_ai_model_gemini; got: ' . $req['url'];
         }
+        if ( str_contains( $req['url'], 'key=' ) ) {
+            $failures[] = 'Gemini URL must not embed the API key in the query string (S-1); got: ' . $req['url'];
+        }
+        if ( ( $req['args']['headers']['x-goog-api-key'] ?? null ) !== 'k' ) {
+            $failures[] = 'Gemini request should send x-goog-api-key header (S-1); got: ' . var_export( $req['args']['headers'] ?? null, true );
+        }
         if ( ( $body['generationConfig']['temperature'] ?? null ) !== 0.3 ) {
             $failures[] = 'Gemini generationConfig should carry temperature 0.3; got: ' . var_export( $body['generationConfig'] ?? null, true );
         }
@@ -184,6 +190,12 @@ class PerProviderConfigTest
         if ( ! $first || false === strpos( $first[0], 'generativelanguage.googleapis.com' ) ) {
             $failures[] = 'generate_audio_report should first call Gemini for the script; got: ' . var_export( $first[0] ?? null, true );
         } else {
+            if ( str_contains( $first[0], 'key=' ) ) {
+                $failures[] = 'Audio-script Gemini URL must not embed the API key (S-1); got: ' . $first[0];
+            }
+            if ( ( $first[1]['headers']['x-goog-api-key'] ?? null ) !== 'k' ) {
+                $failures[] = 'Audio-script Gemini call should send x-goog-api-key header (S-1); got: ' . var_export( $first[1]['headers'] ?? null, true );
+            }
             $body = json_decode( $first[1]['body'], true );
             if ( (float) ( $body['generationConfig']['temperature'] ?? null ) !== 0.0 ) {
                 $failures[] = 'Audio-script generation must force temperature 0.0; got: ' . var_export( $body['generationConfig'] ?? null, true );
