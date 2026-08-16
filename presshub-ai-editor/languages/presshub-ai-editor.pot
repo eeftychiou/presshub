@@ -1,0 +1,734 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PressHub AI Co-Pilot 1.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/eeftychiou/presshub/issues\n"
+"POT-Creation-Date: 2026-08-16 06:38+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: presshub-ai-editor\n"
+
+#: includes/class-metaboxes.php:125
+#: includes/class-author-presets.php:82
+msgid "(default)"
+msgstr ""
+
+#: includes/class-metaboxes.php:26
+msgid "AI Co-Author & Editorial Review"
+msgstr ""
+
+#: assets/sidebar.js:265
+msgid "AI Co-Pilot"
+msgstr ""
+
+#: assets/sidebar.js:254
+msgid "AI Generated Audio Report"
+msgstr ""
+
+#: assets/sidebar.js:239
+msgid "AI Generated Illustration"
+msgstr ""
+
+#: includes/class-settings.php:195
+msgid "AI Provider"
+msgstr ""
+
+#: presshub-ai-editor.php:67
+msgid "AI Research Log"
+msgstr ""
+
+#: presshub-ai-editor.php:66
+msgid "AI Research Logs"
+msgstr ""
+
+#: includes/class-ajax-handlers.php:78
+msgid "API Connection Successful!"
+msgstr ""
+
+#: includes/class-settings.php:197
+msgid "API Key"
+msgstr ""
+
+#: includes/class-api-client.php:51
+#: includes/class-api-client.php:67
+#: includes/class-api-client.php:105
+msgid "API key is missing."
+msgstr ""
+
+#: includes/class-admin-presets.php:119
+#: includes/class-author-presets.php:114
+msgid "Actions"
+msgstr ""
+
+#: includes/class-admin-presets.php:164
+#: includes/class-admin-presets.php:179
+#: includes/class-author-presets.php:156
+#: includes/class-author-presets.php:171
+msgid "Add preset"
+msgstr ""
+
+#: includes/class-admin-presets.php:98
+msgid "Administrator"
+msgstr ""
+
+#: includes/class-settings.php:301
+msgid "Anthropic"
+msgstr ""
+
+#: includes/class-settings.php:206
+msgid "Anthropic API Version"
+msgstr ""
+
+#: includes/class-api-client.php:398
+msgid "Anthropic only supports PDF document uploads. Audio/Video not supported."
+msgstr ""
+
+#: includes/class-author-presets.php:176
+msgid "Applied automatically when no preset is picked in the post editor."
+msgstr ""
+
+#: assets/sidebar.js:276
+msgid "Ask Co-Pilot or request research/image/audio..."
+msgstr ""
+
+#: includes/class-admin-presets.php:184
+msgid "Assign a default preset per category or per role. A matching category default beats a role default, which beats an author default. Choose “— Disable presets —” to force no preset for that category or role."
+msgstr ""
+
+#: includes/class-admin-presets.php:100
+msgid "Author"
+msgstr ""
+
+#: includes/class-admin-presets.php:187
+msgid "By category"
+msgstr ""
+
+#: includes/class-admin-presets.php:216
+msgid "By role"
+msgstr ""
+
+#: includes/class-admin-presets.php:155
+#: includes/class-author-presets.php:147
+msgid "Cancel"
+msgstr ""
+
+#: includes/class-settings.php:289
+msgid "Cap the AI endpoints so a single user cannot rack up unbounded API costs. Disabled by default — opt-in only."
+msgstr ""
+
+#: includes/class-admin-presets.php:191
+msgid "Category"
+msgstr ""
+
+#: includes/class-settings.php:277
+msgid "Choose which AI provider powers drafts, scorecards, chat and research."
+msgstr ""
+
+#: assets/sidebar.js:281
+msgid "Clear"
+msgstr ""
+
+#: assets/sidebar.js:104
+msgid "Connection failed."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:181
+msgid "Content exceeds the 100,000 character limit."
+msgstr ""
+
+#: includes/class-admin-presets.php:101
+msgid "Contributor"
+msgstr ""
+
+#: includes/class-author-presets.php:188
+msgid "Copy a plugin-default preset into your own library so you can edit it."
+msgstr ""
+
+#: includes/class-author-presets.php:186
+msgid "Copy from plugin defaults"
+msgstr ""
+
+#: includes/class-author-presets.php:198
+msgid "Copy to my presets"
+msgstr ""
+
+#: includes/class-admin-presets.php:192
+#: includes/class-admin-presets.php:221
+#: includes/class-author-presets.php:174
+msgid "Default preset"
+msgstr ""
+
+#: includes/class-settings.php:331
+msgid "Default:"
+msgstr ""
+
+#: includes/class-admin-presets.php:182
+msgid "Defaults by category & role"
+msgstr ""
+
+#: includes/class-admin-presets.php:138
+#: includes/class-author-presets.php:130
+msgid "Delete"
+msgstr ""
+
+#: includes/class-admin-presets.php:39
+#: assets/presets.js:69
+#: assets/presets.js:153
+msgid "Delete this preset?"
+msgstr ""
+
+#: assets/admin.js:92
+msgid "Draft generated successfully!"
+msgstr ""
+
+#: includes/class-admin-presets.php:137
+#: includes/class-author-presets.php:129
+msgid "Edit"
+msgstr ""
+
+#: includes/class-admin-presets.php:99
+msgid "Editor"
+msgstr ""
+
+#: includes/class-settings.php:213
+msgid "Enable Per-User Rate Limit"
+msgstr ""
+
+#: includes/class-admin-presets.php:118
+msgid "Enabled"
+msgstr ""
+
+#: includes/class-admin-presets.php:36
+#: assets/admin.js:39
+#: assets/admin.js:94
+#: assets/admin.js:135
+#: assets/sidebar.js:96
+#: assets/presets.js:31
+msgid "Error:"
+msgstr ""
+
+#: includes/class-ajax-handlers.php:294
+msgid "Failed to create research post."
+msgstr ""
+
+#: includes/class-api-client.php:124
+msgid "Failed to parse scorecard JSON."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:143
+msgid "File exceeds the 50 MB size limit."
+msgstr ""
+
+#: includes/class-settings.php:189
+msgid "General"
+msgstr ""
+
+#: includes/class-settings.php:388
+msgid "GitHub Personal Access Token (PAT). Only required if the GitHub repository is private to enable automatic updates."
+msgstr ""
+
+#: includes/class-settings.php:207
+msgid "GitHub Token (optional)"
+msgstr ""
+
+#: includes/class-settings.php:209
+msgid "Google Cloud API Key (Imagen/TTS)"
+msgstr ""
+
+#: includes/class-api-client.php:184
+#: includes/class-api-client.php:252
+msgid "Google Cloud API key is missing."
+msgstr ""
+
+#: includes/class-settings.php:210
+msgid "Google Cloud Project ID (Imagen)"
+msgstr ""
+
+#: includes/class-settings.php:285
+msgid "Google Cloud credentials used for Imagen image generation and Text-to-Speech."
+msgstr ""
+
+#: includes/class-settings.php:418
+msgid "Google Cloud project ID used in the Vertex AI Imagen endpoint URL. Defaults to presshub-ai."
+msgstr ""
+
+#: includes/class-settings.php:302
+msgid "Google Gemini"
+msgstr ""
+
+#: assets/sidebar.js:18
+msgid "Hello! I am your AI Co-Pilot. I can chat, conduct in-depth research, generate images, or summarize media. How can I help you draft your article today?"
+msgstr ""
+
+#: includes/class-settings.php:469
+msgid "How long completed or failed research logs are kept before the daily cleanup deletes them. Defaults to 30 days."
+msgstr ""
+
+#: includes/class-settings.php:211
+msgid "Imagen Region"
+msgstr ""
+
+#: assets/sidebar.js:73
+msgid "Initiating deep research task... Please wait."
+msgstr ""
+
+#: assets/sidebar.js:257
+msgid "Insert Audio Block"
+msgstr ""
+
+#: assets/sidebar.js:242
+msgid "Insert Image Block"
+msgstr ""
+
+#: assets/sidebar.js:226
+msgid "Insert Research Into Article"
+msgstr ""
+
+#: includes/class-admin-presets.php:117
+#: includes/class-admin-presets.php:149
+#: includes/class-admin-presets.php:172
+#: includes/class-author-presets.php:113
+#: includes/class-author-presets.php:141
+#: includes/class-author-presets.php:164
+msgid "Instruction text"
+msgstr ""
+
+#: includes/class-ajax-handlers.php:109
+msgid "Instructions exceed the 5,000 character limit."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:568
+msgid "Invalid key."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:481
+#: includes/class-ajax-handlers.php:514
+#: includes/class-ajax-handlers.php:537
+#: includes/class-ajax-handlers.php:572
+msgid "Invalid preset slug."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:432
+msgid "Invalid preset slug. Use 1-40 lowercase letters, numbers, or hyphens."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:337
+msgid "Invalid research post ID."
+msgstr ""
+
+#: includes/class-api-client.php:441
+msgid "Invalid response from Anthropic."
+msgstr ""
+
+#: includes/class-api-client.php:506
+msgid "Invalid response from Gemini."
+msgstr ""
+
+#: includes/class-api-client.php:380
+msgid "Invalid response from OpenAI."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:565
+msgid "Invalid scope."
+msgstr ""
+
+#: includes/class-settings.php:457
+msgid "Length of the rolling window in seconds. Defaults to 3600 (1 hour)."
+msgstr ""
+
+#: includes/class-settings.php:202
+msgid "Max Tokens (%s)"
+msgstr ""
+
+#: includes/class-settings.php:448
+msgid "Maximum number of AI actions (draft, review, chat, research) a single user may make within the window. Defaults to 30."
+msgstr ""
+
+#: includes/class-settings.php:351
+msgid "Maximum tokens per response (1-8192). Default 2000."
+msgstr ""
+
+#: includes/class-settings.php:191
+msgid "Media (Google Cloud)"
+msgstr ""
+
+#: includes/class-settings.php:200
+msgid "Model (%s)"
+msgstr ""
+
+#: includes/class-author-presets.php:107
+msgid "My presets"
+msgstr ""
+
+#: includes/class-admin-presets.php:115
+#: includes/class-admin-presets.php:144
+#: includes/class-admin-presets.php:167
+#: includes/class-author-presets.php:111
+#: includes/class-author-presets.php:136
+#: includes/class-author-presets.php:159
+msgid "Name"
+msgstr ""
+
+#: includes/class-admin-presets.php:35
+#: assets/presets.js:54
+#: assets/presets.js:137
+msgid "Name must contain at least one letter or number to generate a slug."
+msgstr ""
+
+#: includes/class-author-presets.php:99
+msgid "Named instruction presets are appended to the fixed editorial system prompt for your AI drafts — they cannot replace it."
+msgstr ""
+
+#: assets/sidebar.js:195
+msgid "Network polling error."
+msgstr ""
+
+#: includes/class-admin-presets.php:198
+msgid "No categories found."
+msgstr ""
+
+#: includes/class-author-presets.php:191
+msgid "No plugin defaults available."
+msgstr ""
+
+#: includes/class-admin-presets.php:125
+#: includes/class-author-presets.php:120
+msgid "No presets yet. Add one below."
+msgstr ""
+
+#: includes/class-settings.php:300
+msgid "OpenAI"
+msgstr ""
+
+#: includes/class-settings.php:205
+msgid "OpenAI Organization ID (optional)"
+msgstr ""
+
+#: includes/class-api-client.php:337
+msgid "OpenAI chat completions do not support direct PDF/Audio uploads natively in this basic integration. Please select Google Gemini for multi-modal files."
+msgstr ""
+
+#: includes/class-settings.php:370
+msgid "Optional. Sent as the OpenAI-Organization header. Only needed for multi-org accounts."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:64
+#: includes/class-ajax-handlers.php:85
+#: includes/class-ajax-handlers.php:91
+#: includes/class-ajax-handlers.php:176
+#: includes/class-ajax-handlers.php:186
+#: includes/class-ajax-handlers.php:218
+#: includes/class-ajax-handlers.php:228
+#: includes/class-ajax-handlers.php:237
+#: includes/class-ajax-handlers.php:254
+#: includes/class-ajax-handlers.php:326
+#: includes/class-ajax-handlers.php:331
+#: includes/class-ajax-handlers.php:389
+#: includes/class-ajax-handlers.php:421
+#: includes/class-ajax-handlers.php:424
+#: includes/class-ajax-handlers.php:473
+#: includes/class-ajax-handlers.php:476
+#: includes/class-ajax-handlers.php:506
+#: includes/class-ajax-handlers.php:532
+#: includes/class-ajax-handlers.php:557
+msgid "Permission denied."
+msgstr ""
+
+#: includes/class-admin-presets.php:111
+msgid "Plugin defaults"
+msgstr ""
+
+#: includes/class-admin-presets.php:108
+msgid "Plugin-default presets are available to every author as a starting point. Presets are appended to a fixed editorial system prompt — they cannot replace it."
+msgstr ""
+
+#: assets/sidebar.js:183
+msgid "Polling error:"
+msgstr ""
+
+#: includes/class-ajax-handlers.php:438
+msgid "Preset instructions exceed the 4,000 character limit."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:435
+msgid "Preset name exceeds the 80 character limit."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:517
+#: includes/class-ajax-handlers.php:575
+msgid "Preset not found or not enabled."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:494
+msgid "Preset not found."
+msgstr ""
+
+#: includes/class-author-presets.php:103
+msgid "Presets are managed by each author from their own profile, so the controls below are read-only here."
+msgstr ""
+
+#: includes/class-settings.php:39
+msgid "PressHub AI"
+msgstr ""
+
+#: includes/class-settings.php:259
+msgid "PressHub AI Help"
+msgstr ""
+
+#: includes/class-admin-presets.php:53
+#: includes/class-author-presets.php:96
+msgid "PressHub AI Presets"
+msgstr ""
+
+#: includes/class-settings.php:38
+#: includes/class-settings.php:235
+msgid "PressHub AI Settings"
+msgstr ""
+
+#: includes/class-settings.php:260
+msgid "PressHub AI settings: choose a provider under General, then configure the per-provider model and tuning under Providers. Keys are shown masked — only the last 4 characters are displayed; leave a key field empty to keep the saved key. Media (Google Cloud) configures Imagen/TTS. Rate Limits caps per-user AI costs."
+msgstr ""
+
+#: includes/class-admin-presets.php:52
+#: includes/class-admin-presets.php:106
+msgid "PressHub AI — Instruction Presets"
+msgstr ""
+
+#: includes/class-ajax-handlers.php:223
+msgid "Prompt exceeds the 5,000 character limit."
+msgstr ""
+
+#: includes/class-settings.php:190
+msgid "Providers"
+msgstr ""
+
+#: includes/class-settings.php:192
+msgid "Rate Limits"
+msgstr ""
+
+#: includes/class-rate-limiter.php:52
+msgid "Rate limit reached (%1$d requests). Try again in %2$d seconds."
+msgstr ""
+
+#: includes/class-settings.php:317
+#: includes/class-settings.php:392
+#: includes/class-settings.php:407
+msgid "Remove stored key"
+msgstr ""
+
+#: includes/class-settings.php:361
+msgid "Request timeout in seconds (5-300). Default"
+msgstr ""
+
+#: includes/class-settings.php:214
+msgid "Requests per Window"
+msgstr ""
+
+#: includes/class-settings.php:403
+msgid "Required for Google Cloud Imagen and Text-to-Speech integration."
+msgstr ""
+
+#: includes/class-settings.php:216
+msgid "Research Log Retention (days)"
+msgstr ""
+
+#: assets/sidebar.js:161
+msgid "Research failed:"
+msgstr ""
+
+#: includes/class-ajax-handlers.php:285
+msgid "Research for post #%1$d: %2$s"
+msgstr ""
+
+#: assets/sidebar.js:127
+msgid "Research timed out after %d attempts. The job may still be running — check back later or re-run the request."
+msgstr ""
+
+#: assets/admin.js:133
+msgid "Review completed. Status updated."
+msgstr ""
+
+#: includes/class-admin-presets.php:220
+msgid "Role"
+msgstr ""
+
+#: includes/class-settings.php:341
+msgid "Sampling temperature (0-2). Default 0.7. Intent classification and audio scripts are locked to 0.0 for determinism."
+msgstr ""
+
+#: includes/class-admin-presets.php:154
+#: includes/class-author-presets.php:146
+msgid "Save"
+msgstr ""
+
+#: includes/class-author-presets.php:184
+msgid "Save default"
+msgstr ""
+
+#: includes/class-settings.php:244
+msgid "Save your settings first, then verify each provider separately. Each test uses its own rate-limit budget so testing never burns your AI allowance."
+msgstr ""
+
+#: includes/class-settings.php:314
+msgid "Saved key ends in"
+msgstr ""
+
+#: includes/class-metaboxes.php:67
+#: assets/admin.js:129
+msgid "Score: %s/100"
+msgstr ""
+
+#: assets/sidebar.js:280
+msgid "Send"
+msgstr ""
+
+#: includes/class-admin-presets.php:38
+#: assets/admin.js:100
+#: assets/presets.js:36
+msgid "Server connection error."
+msgstr ""
+
+#: assets/admin.js:45
+msgid "Server error occurred."
+msgstr ""
+
+#: includes/class-admin-presets.php:116
+#: includes/class-author-presets.php:112
+msgid "Slug"
+msgstr ""
+
+#: includes/class-ajax-handlers.php:106
+msgid "Sources exceed the 20,000 character limit."
+msgstr ""
+
+#: assets/sidebar.js:171
+msgid "Status:"
+msgstr ""
+
+#: includes/class-admin-presets.php:102
+msgid "Subscriber"
+msgstr ""
+
+#: assets/admin.js:36
+msgid "Success! API is working."
+msgstr ""
+
+#: includes/class-settings.php:201
+msgid "Temperature (%s)"
+msgstr ""
+
+#: includes/class-settings.php:245
+msgid "Test Active Provider"
+msgstr ""
+
+#: includes/class-settings.php:247
+msgid "Test Anthropic"
+msgstr ""
+
+#: includes/class-settings.php:243
+msgid "Test Connection"
+msgstr ""
+
+#: includes/class-settings.php:248
+msgid "Test Gemini"
+msgstr ""
+
+#: includes/class-settings.php:246
+msgid "Test OpenAI"
+msgstr ""
+
+#: includes/class-admin-presets.php:177
+#: includes/class-author-presets.php:169
+msgid "The slug is generated automatically from the name (e.g. \"Concise wire style\" → \"concise-wire-style\")."
+msgstr ""
+
+#: includes/class-settings.php:438
+msgid "Throttle AI actions when a user exceeds the configured budget"
+msgstr ""
+
+#: includes/class-settings.php:203
+msgid "Timeout (%s)"
+msgstr ""
+
+#: includes/class-admin-presets.php:37
+#: assets/presets.js:32
+msgid "Unknown error."
+msgstr ""
+
+#: includes/class-ajax-handlers.php:140
+msgid "Unsupported file type. Allowed: PDF, DOCX, MP3, MP4, WAV, M4A."
+msgstr ""
+
+#: includes/class-settings.php:320
+msgid "Used for the active AI provider (OpenAI, Anthropic or Gemini)."
+msgstr ""
+
+#: includes/class-settings.php:427
+msgid "Vertex AI region for Imagen. Default us-central1. European tenants may use e.g. europe-west4 for data residency."
+msgstr ""
+
+#: includes/class-settings.php:215
+msgid "Window Length (seconds)"
+msgstr ""
+
+#: includes/class-ajax-handlers.php:268
+msgid "You are a helpful AI journalist assistant."
+msgstr ""
+
+#: includes/class-api-client.php:70
+msgid "You are a professional AI journalist."
+msgstr ""
+
+#: includes/class-api-client.php:257
+msgid "You are a professional news radio narrator. Convert the user's prompt or media notes into a short 4-5 sentence radio report script. Output ONLY the speech script and nothing else."
+msgstr ""
+
+#: presshub-ai-editor.php:118
+msgid "You are a senior investigative research assistant. Your task is to perform an in-depth topic synthesis and research synthesis.\nUse the provided instructions and the current post draft context to compile a comprehensive, well-structured, and objective research report in clean HTML format. Use headings, lists, and quotes where appropriate. DO NOT output code block wrappers (like ```html). Only output the raw HTML."
+msgstr ""
+
+#: includes/class-api-client.php:108
+msgid "You are an exacting news editor."
+msgstr ""
+
+#: includes/class-api-client.php:128
+msgid "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else."
+msgstr ""
+
+#: includes/class-admin-presets.php:62
+msgid "You do not have permission to access this page."
+msgstr ""
+
+#: includes/class-settings.php:225
+msgid "You do not have permission to view PressHub AI settings."
+msgstr ""
+
+#: includes/class-settings.php:379
+msgid "anthropic-version header. Default 2023-06-01."
+msgstr ""
+
+#: includes/class-admin-presets.php:244
+msgid "— Disable presets —"
+msgstr ""
+
+#: includes/class-admin-presets.php:243
+#: includes/class-author-presets.php:179
+msgid "— No default —"
+msgstr ""
+
+#: assets/sidebar.js:246
+msgid "🎙️ AI Radio Audio Report"
+msgstr ""
+
+#: assets/sidebar.js:231
+msgid "🎨 Generated Image"
+msgstr ""
+
+#: assets/sidebar.js:218
+msgid "🔍 Deep Research Synthesis"
+msgstr ""

@@ -79,8 +79,8 @@ add_action( 'plugins_loaded', 'presshub_ai_init' );
 add_action( 'init', function() {
     register_post_type( 'presshub_research', [
         'labels' => [
-            'name' => 'AI Research Logs',
-            'singular_name' => 'AI Research Log',
+            'name' => __( 'AI Research Logs', 'presshub-ai-editor' ),
+            'singular_name' => __( 'AI Research Log', 'presshub-ai-editor' ),
         ],
         'public' => false,
         'show_ui' => false,
@@ -93,7 +93,7 @@ add_action( 'enqueue_block_editor_assets', function() {
     wp_enqueue_script(
         'presshub-ai-sidebar',
         PRESSHUB_AI_URL . 'assets/sidebar.js',
-        ['jquery', 'wp-plugins', 'wp-edit-post', 'wp-element', 'wp-components'],
+        ['jquery', 'wp-plugins', 'wp-edit-post', 'wp-element', 'wp-components', 'wp-i18n'],
         PRESSHUB_AI_VERSION,
         true
     );
@@ -143,7 +143,7 @@ function presshub_ai_execute_research_job( $research_id ) {
     
     $api = new PressHub_AI_API_Client();
     
-    $sys_prompt = "You are a senior investigative research assistant. Your task is to perform an in-depth topic synthesis and research synthesis.\nUse the provided instructions and the current post draft context to compile a comprehensive, well-structured, and objective research report in clean HTML format. Use headings, lists, and quotes where appropriate. DO NOT output code block wrappers (like ```html). Only output the raw HTML.";
+    $sys_prompt = __( "You are a senior investigative research assistant. Your task is to perform an in-depth topic synthesis and research synthesis.\nUse the provided instructions and the current post draft context to compile a comprehensive, well-structured, and objective research report in clean HTML format. Use headings, lists, and quotes where appropriate. DO NOT output code block wrappers (like ```html). Only output the raw HTML.", 'presshub-ai-editor' );
 
     // C-3 (Antigravity review): the base prompt is filtered FIRST so a
     // filter that replaces the default keeps working, then the resolved

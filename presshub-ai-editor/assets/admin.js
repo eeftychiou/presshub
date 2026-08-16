@@ -1,3 +1,13 @@
+/**
+ * PressHub AI — classic editor (post.php / post-new.php) admin JS.
+ *
+ * Drives the metabox buttons (Generate Initial Draft, Run AI Editorial Review)
+ * and the Settings → PressHub AI "Test Connection" buttons. Strings are
+ * translatable via the wp.i18n runtime that the PHP enqueue wires in.
+ */
+/* global wp, jQuery, presshubAI, tinymce */
+const { __ } = wp.i18n;
+
 jQuery(document).ready(function($) {
     // Escape a string for safe insertion into HTML. Used for any server
     // or AI-provided content rendered into the admin UI (defense in depth
@@ -29,14 +39,16 @@ jQuery(document).ready(function($) {
             $('#presshub-ai-test-spinner').removeClass('is-active');
             $btn.prop('disabled', false);
             if (response.success) {
-                $('#presshub-ai-test-result').css('color', 'green').text('Success! API is working.');
+                $('#presshub-ai-test-result').css('color', 'green').text(__('Success! API is working.', 'presshub-ai-editor'));
             } else {
-                $('#presshub-ai-test-result').css('color', 'red').text('Error: ' + response.data);
+                $('#presshub-ai-test-result').css('color', 'red').text(
+                    __('Error: ', 'presshub-ai-editor') + response.data
+                );
             }
         }).fail(function() {
             $('#presshub-ai-test-spinner').removeClass('is-active');
             $btn.prop('disabled', false);
-            $('#presshub-ai-test-result').css('color', 'red').text('Server error occurred.');
+            $('#presshub-ai-test-result').css('color', 'red').text(__('Server error occurred.', 'presshub-ai-editor'));
         });
     });
 
@@ -46,9 +58,9 @@ jQuery(document).ready(function($) {
         var postId = $btn.data('post-id');
         var sources = $('#presshub-ai-sources').val();
         var instructions = $('#presshub-ai-instructions').val();
-        
+
         var fileInput = document.getElementById('presshub-ai-files');
-        
+
         var formData = new FormData();
         formData.append('action', 'presshub_ai_generate_draft');
         formData.append('nonce', presshubAI.nonce);
@@ -62,10 +74,10 @@ jQuery(document).ready(function($) {
                 formData.append('files[]', fileInput.files[i]);
             }
         }
-        
+
         $('#presshub-ai-draft-spinner').addClass('is-active');
         $btn.prop('disabled', true);
-        
+
         $.ajax({
             url: presshubAI.ajax_url,
             type: 'POST',
@@ -83,15 +95,15 @@ jQuery(document).ready(function($) {
                     } else if (typeof tinymce !== 'undefined' && tinymce.activeEditor) {
                         tinymce.activeEditor.execCommand('mceInsertContent', false, response.data.draft);
                     }
-                    alert('Draft generated successfully!');
+                    alert(__('Draft generated successfully!', 'presshub-ai-editor'));
                 } else {
-                    alert('Error: ' + response.data);
+                    alert(__('Error: ', 'presshub-ai-editor') + response.data);
                 }
             },
             error: function() {
                 $('#presshub-ai-draft-spinner').removeClass('is-active');
                 $btn.prop('disabled', false);
-                alert('Server connection error.');
+                alert(__('Server connection error.', 'presshub-ai-editor'));
             }
         });
     });
@@ -100,17 +112,17 @@ jQuery(document).ready(function($) {
         e.preventDefault();
         var $btn = $(this);
         var postId = $btn.data('post-id');
-        
+
         var content = '';
         if (wp.data && wp.data.select('core/editor')) {
             content = wp.data.select('core/editor').getEditedPostAttribute('content');
         } else if (typeof tinymce !== 'undefined' && tinymce.activeEditor) {
             content = tinymce.activeEditor.getContent();
         }
-        
+
         $('#presshub-ai-review-spinner').addClass('is-active');
         $btn.prop('disabled', true);
-        
+
         $.post(presshubAI.ajax_url, {
             action: 'presshub_ai_run_review',
             nonce: presshubAI.nonce,
@@ -120,11 +132,13 @@ jQuery(document).ready(function($) {
             $('#presshub-ai-review-spinner').removeClass('is-active');
             $btn.prop('disabled', false);
             if(response.success) {
-                var html = '<div class="scorecard-box"><strong>Score: ' + presshubEsc(response.data.score) + '/100</strong><p>' + presshubEsc(response.data.feedback) + '</p></div>';
+                var scoreText = __('Score: %s/100', 'presshub-ai-editor')
+                    .replace('%s', presshubEsc(response.data.score));
+                var html = '<div class="scorecard-box"><strong>' + scoreText + '</strong><p>' + presshubEsc(response.data.feedback) + '</p></div>';
                 $('#presshub-ai-scorecard-results').html(html);
-                alert('Review completed. Status updated.');
+                alert(__('Review completed. Status updated.', 'presshub-ai-editor'));
             } else {
-                alert('Error: ' + response.data);
+                alert(__('Error: ', 'presshub-ai-editor') + response.data);
             }
         });
     });

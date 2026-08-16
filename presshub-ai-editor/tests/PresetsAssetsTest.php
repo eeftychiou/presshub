@@ -66,7 +66,9 @@ class PresetsAssetsTest
         if ( ! $entry ) {
             $failures[] = 'Admin presets page should enqueue presshub-ai-presets-js; got: ' . json_encode( array_keys( $GLOBALS['ENQUEUED_SCRIPTS'] ?? [] ) );
         } else {
-            if ( $entry['deps'] !== [ 'jquery' ] || true !== $entry['in_footer'] || PRESSHUB_AI_VERSION !== $entry['ver'] ) {
+            // The i18n sweep (2026-08-16) added 'wp-i18n' to the deps;
+            // 'jquery' remains the hard contract for this asset.
+            if ( ! in_array( 'jquery', $entry['deps'], true ) || true !== $entry['in_footer'] || PRESSHUB_AI_VERSION !== $entry['ver'] ) {
                 $failures[] = 'presets asset should enqueue with jquery dep, in_footer=true and the plugin version; got: ' . json_encode( $entry );
             }
             $localized = $GLOBALS['LOCALIZED_SCRIPTS'][ PressHub_AI_Admin_Presets::SCRIPT_HANDLE ] ?? null;
@@ -138,6 +140,19 @@ class PresetsAssetsTest
         }
         if ( false !== strpos( $html, 'presshubAI.ajax_url' ) ) {
             $failures[] = 'Admin presets page must not inline the JS payload.';
+        }
+        // Org defaults section (2026-08-15 §9 Q3 / Antigravity A-6): both
+        // tables render; the role table always has the 5 standard roles.
+        if ( false === strpos( $html, 'id="presshub-ai-org-taxonomy-table"' ) || false === strpos( $html, 'id="presshub-ai-org-role-table"' ) ) {
+            $failures[] = 'Admin presets page should render the org defaults tables.';
+        }
+        foreach ( [ 'administrator', 'editor', 'author', 'contributor', 'subscriber' ] as $role ) {
+            if ( false === strpos( $html, 'data-scope="role" data-key="' . $role . '"' ) ) {
+                $failures[] = "Admin presets page should render a role select for '{$role}'.";
+            }
+        }
+        if ( false === strpos( $html, 'value="__none__"' ) ) {
+            $failures[] = 'Org selects should offer the disable sentinel option.';
         }
 
         // --- Case 5: author section render — markup intact, no inline script ---

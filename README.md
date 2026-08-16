@@ -161,6 +161,32 @@ The plugin writes to PHP's error log (`error_log`) on research-job
 failures (provider errors and post-update failures), each entry including
 the research post ID. Tests redirect the log target to a temp file.
 
+### Internationalization (i18n)
+
+All user-facing strings (PHP + JS) carry the `presshub-ai-editor`
+textdomain. To rebuild the gettext template after adding new
+translatable strings:
+
+```sh
+cd presshub-ai-editor
+php scripts/make-pot.php          # writes languages/presshub-ai-editor.pot
+```
+
+For WP.org-style translation tooling (requires WP-CLI and `wp i18n`):
+
+```sh
+wp i18n make-pot . languages/presshub-ai-editor.pot --domain=presshub-ai-editor
+```
+
+The PHP enqueue declares `wp-i18n` as a script dependency on
+`admin.js`, `sidebar.js`, and `presets.js`; in production the
+runtime translations are served by WordPress's standard
+`wp_set_script_translations()` call (not wired here because the
+plugin ships only one locale — English). Translators can open the
+generated `.pot` in Poedit or upload it to translate.wordpress.org
+to produce `.po` / `.mo` files; those are dropped into
+`presshub-ai-editor/languages/` next to the `.pot`.
+
 ## License
 
 GPL-2.0-or-later — see the plugin header in

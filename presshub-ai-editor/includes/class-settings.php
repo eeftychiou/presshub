@@ -36,7 +36,7 @@ class PressHub_AI_Settings {
 
     public function enqueue_scripts( $hook ) {
         if ( 'settings_page_presshub-ai' === $hook ) {
-            wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
+            wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
             wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
                 'ajax_url' => admin_url( 'admin-ajax.php' ),
                 'nonce'    => wp_create_nonce( 'presshub_ai_nonce' )

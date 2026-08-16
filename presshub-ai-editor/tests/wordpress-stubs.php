@@ -429,6 +429,63 @@ if ( ! function_exists( '__' ) ) {
     }
 }
 
+// i18n sweep (2026-08-16): esc_*__ mirror __() in the stub environment
+// so tests can render translated output without a full WP l10n stack.
+// In real WP these are the standard esc_html__ / esc_attr__ helpers.
+if ( ! function_exists( 'esc_html__' ) ) {
+    function esc_html__( $text, $domain = null ) {
+        return htmlspecialchars( (string) __( $text, $domain ), ENT_QUOTES, 'UTF-8' );
+    }
+}
+
+if ( ! function_exists( 'esc_attr__' ) ) {
+    function esc_attr__( $text, $domain = null ) {
+        return htmlspecialchars( (string) __( $text, $domain ), ENT_QUOTES, 'UTF-8' );
+    }
+}
+
+if ( ! function_exists( 'esc_html_x' ) ) {
+    function esc_html_x( $text, $context, $domain = null ) {
+        return htmlspecialchars( (string) __( $text, $domain ), ENT_QUOTES, 'UTF-8' );
+    }
+}
+
+// --- Stubs for the admin presets page (org defaults, 2026-08-15 §9 Q3) ---
+
+if ( ! function_exists( 'esc_html' ) ) {
+    function esc_html( $text ) {
+        return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+    }
+}
+
+if ( ! function_exists( 'esc_attr' ) ) {
+    function esc_attr( $text ) {
+        return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+    }
+}
+
+if ( ! function_exists( 'esc_textarea' ) ) {
+    function esc_textarea( $text ) {
+        return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+    }
+}
+
+if ( ! function_exists( 'get_terms' ) ) {
+    /**
+     * Stubbed get_terms. Returns the process-local TERMS_STORE array of
+     * term objects (term_id / name / slug), or [] by default so admin
+     * page renders degrade gracefully in tests. Real WP returns
+     * WP_Term[] or a WP_Error on failure — callers must handle both.
+     */
+    function get_terms( $args = [], $deprecated = '' ) {
+        $store = $GLOBALS['TERMS_STORE'] ?? [];
+        if ( ! is_array( $store ) ) {
+            return [];
+        }
+        return $store;
+    }
+}
+
 // --- Stubs for research cleanup + prompt filters ---
 
 if ( ! defined( 'DAY_IN_SECONDS' ) ) {

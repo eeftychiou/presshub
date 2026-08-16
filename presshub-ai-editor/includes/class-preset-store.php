@@ -2,12 +2,16 @@
 /**
  * Thin storage wrapper for instruction presets.
  *
- * Backs three storage layers:
+ * Backs five storage layers:
  *   - Plugin defaults:  option  'presshub_ai_default_presets'.
  *   - Per-author presets: user meta 'presshub_ai_author_presets'.
  *   - Per-author default slug: user meta 'presshub_ai_default_preset_id'.
  *   - Per-author disabled plugin-default slugs:
  *     user meta 'presshub_ai_disabled_default_presets'.
+ *   - Org defaults (2026-08-15 design §9 Q3 / Antigravity A-6):
+ *     option 'presshub_ai_taxonomy_presets' (term slug => preset slug)
+ *     and option 'presshub_ai_role_presets' (role => preset slug),
+ *     both admin-curated.
  *
  * Every read goes through PressHub_AI_Preset_Sanitizer so bad data in the
  * DB never escapes into prompts (defense in depth, design doc §1.4).
@@ -22,6 +26,15 @@ class PressHub_AI_Preset_Store {
     const META_AUTHOR_PRESETS           = 'presshub_ai_author_presets';
     const META_DEFAULT_SLUG             = 'presshub_ai_default_preset_id';
     const META_DISABLED_DEFAULT_PRESETS = 'presshub_ai_disabled_default_presets';
+    const OPTION_TAXONOMY_PRESETS       = 'presshub_ai_taxonomy_presets';
+    const OPTION_ROLE_PRESETS           = 'presshub_ai_role_presets';
+
+    /**
+     * Sentinel value stored in an org-default map to mean "no preset at
+     * this layer" (disables the rest of the chain for the request).
+     * Must stay in sync with PressHub_AI_Preset_Resolver::SENTINEL_NONE.
+     */
+    const ORG_NONE = '__none__';
 
     const SEEDED_PRESETS = [
         [
@@ -162,6 +175,69 @@ class PressHub_AI_Preset_Store {
     public static function set_disabled_defaults( int $user_id, array $slugs ): array {
         $clean = self::sanitize_slug_list( $slugs );
         update_user_meta( $user_id, self::META_DISABLED_DEFAULT_PRESETS, $clean );
+        return $clean;
+    }
+
+    /**
+     * Read the admin-curated per-taxonomy default map (sanitized).
+     *
+     * Map shape: term slug => preset slug, or term slug =>
+     * PressHub_AI_Preset_Store::ORG_NONE ('__none__') to disable presets
+     * for that term. Entries with illegal keys/values are dropped so bad
+     * data in the DB never escapes into resolution.
+     *
+     * @return array
+     */
+    public static function get_taxonomy_presets(): array {
+        $raw = get_option( self::OPTION_TAXONOMY_PRESETS, [] );
+        if ( ! is_array( $raw ) ) {
+            $raw = [];
+        }
+        return self::sanitize_org_map( $raw );
+    }
+
+    /**
+     * Sanitize and store the per-taxonomy default map.
+     *
+     * P-1: written with autoload=false, like the other preset options.
+     *
+     * @param array $map term slug => preset slug ('' / missing clears).
+     * @return array The sanitized map that was stored.
+     */
+    public static function save_taxonomy_presets( array $map ): array {
+        $clean = self::sanitize_org_map( $map );
+        update_option( self::OPTION_TAXONOMY_PRESETS, $clean, false );
+        return $clean;
+    }
+
+    /**
+     * Read the admin-curated per-role default map (sanitized).
+     *
+     * Map shape: role => preset slug, or role => ORG_NONE ('__none__')
+     * to disable presets for that role. Entries with illegal keys/values
+     * are dropped.
+     *
+     * @return array
+     */
+    public static function get_role_presets(): array {
+        $raw = get_option( self::OPTION_ROLE_PRESETS, [] );
+        if ( ! is_array( $raw ) ) {
+            $raw = [];
+        }
+        return self::sanitize_org_map( $raw );
+    }
+
+    /**
+     * Sanitize and store the per-role default map.
+     *
+     * P-1: written with autoload=false, like the other preset options.
+     *
+     * @param array $map role => preset slug ('' / missing clears).
+     * @return array The sanitized map that was stored.
+     */
+    public static function save_role_presets( array $map ): array {
+        $clean = self::sanitize_org_map( $map );
+        update_option( self::OPTION_ROLE_PRESETS, $clean, false );
         return $clean;
     }
 
@@ -392,6 +468,48 @@ class PressHub_AI_Preset_Store {
             }
             $seen[ $slug ] = true;
             $out[] = $slug;
+        }
+        return $out;
+    }
+
+    /**
+     * Sanitize an org-default map (term slug / role => preset slug).
+     *
+     * Rules (org defaults are admin-curated, but defense in depth):
+     *   - Keys must match the slug regex (term slugs and the standard
+     *     WP roles are all lowercase alphanumeric + hyphens).
+     *   - Values must be a slug-regex preset slug, ORG_NONE ('__none__',
+     *     the disable sentinel — underscores intentionally allowed), or
+     *     '' which means "cleared" and drops the entry from the map.
+     *   - First occurrence wins for duplicate keys.
+     *
+     * @param array $map
+     * @return array
+     */
+    private static function sanitize_org_map( array $map ): array {
+        $out = [];
+        foreach ( $map as $key => $value ) {
+            if ( ! is_string( $key ) && ! is_numeric( $key ) ) {
+                continue;
+            }
+            $key = (string) $key;
+            if ( $key === '' || ! preg_match( PressHub_AI_Preset_Sanitizer::SLUG_REGEX, $key ) ) {
+                continue;
+            }
+            if ( isset( $out[ $key ] ) ) {
+                continue;
+            }
+            if ( $value === null || $value === false ) {
+                continue;
+            }
+            $value = (string) $value;
+            if ( $value === '' ) {
+                continue; // cleared
+            }
+            if ( $value !== self::ORG_NONE && ! preg_match( PressHub_AI_Preset_Sanitizer::SLUG_REGEX, $value ) ) {
+                continue;
+            }
+            $out[ $key ] = $value;
         }
         return $out;
     }

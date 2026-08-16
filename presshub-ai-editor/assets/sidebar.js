@@ -1,3 +1,13 @@
+/**
+ * PressHub AI — Gutenberg sidebar (block editor) plugin.
+ *
+ * Renders the AI Co-Pilot panel (chat, research polling, image and audio
+ * report insertion). Strings are translatable via the wp.i18n runtime
+ * that the PHP enqueue wires in.
+ */
+/* global wp, jQuery, presshubAI */
+const { __, sprintf } = wp.i18n;
+
 const { registerPlugin } = wp.plugins;
 const { PluginSidebar } = wp.editPost;
 const { el, useState, useEffect, useRef } = wp.element;
@@ -11,7 +21,7 @@ const RESEARCH_POLL_INTERVAL_MS = 3000;
 
 const AICoPilotSidebar = () => {
     const [messages, setMessages] = useState([
-        { role: 'ai', type: 'text', content: 'Hello! I am your AI Co-Pilot. I can chat, conduct in-depth research, generate images, or summarize media. How can I help you draft your article today?' }
+        { role: 'ai', type: 'text', content: __('Hello! I am your AI Co-Pilot. I can chat, conduct in-depth research, generate images, or summarize media. How can I help you draft your article today?', 'presshub-ai-editor') }
     ]);
     const [inputValue, setInputValue] = useState('');
     const [loading, setLoading] = useState(false);
@@ -66,7 +76,7 @@ const AICoPilotSidebar = () => {
                         type: 'research',
                         status: 'pending',
                         researchId: data.research_id,
-                        content: 'Initiating deep research task... Please wait.'
+                        content: __('Initiating deep research task... Please wait.', 'presshub-ai-editor')
                     };
                     setMessages(prev => [...prev, researchMsg]);
                     startPollingResearch(data.research_id);
@@ -86,11 +96,19 @@ const AICoPilotSidebar = () => {
                     }]);
                 }
             } else {
-                setMessages(prev => [...prev, { role: 'ai', type: 'text', content: 'Error: ' + response.data }]);
+                setMessages(prev => [...prev, {
+                    role: 'ai',
+                    type: 'text',
+                    content: __('Error: ', 'presshub-ai-editor') + response.data
+                }]);
             }
         }).fail(() => {
             setLoading(false);
-            setMessages(prev => [...prev, { role: 'ai', type: 'text', content: 'Connection failed.' }]);
+            setMessages(prev => [...prev, {
+                role: 'ai',
+                type: 'text',
+                content: __('Connection failed.', 'presshub-ai-editor')
+            }]);
         });
     };
 
@@ -107,7 +125,15 @@ const AICoPilotSidebar = () => {
             stopPolling();
             setMessages(prev => prev.map(msg =>
                 msg.researchId === researchId
-                    ? { ...msg, status: 'timeout', content: 'Research timed out after ' + RESEARCH_POLL_MAX_ATTEMPTS + ' attempts. The job may still be running — check back later or re-run the request.' }
+                    ? {
+                        ...msg,
+                        status: 'timeout',
+                        content: sprintf(
+                            /* translators: %d: maximum polling attempts before giving up. */
+                            __('Research timed out after %d attempts. The job may still be running — check back later or re-run the request.', 'presshub-ai-editor'),
+                            RESEARCH_POLL_MAX_ATTEMPTS
+                        )
+                    }
                     : msg
             ));
         };
@@ -126,38 +152,54 @@ const AICoPilotSidebar = () => {
                     const status = response.data.status;
                     if (status === 'completed') {
                         stopPolling();
-                        setMessages(prev => prev.map(msg => 
-                            msg.researchId === researchId 
-                                ? { ...msg, status: 'completed', content: response.data.content } 
+                        setMessages(prev => prev.map(msg =>
+                            msg.researchId === researchId
+                                ? { ...msg, status: 'completed', content: response.data.content }
                                 : msg
                         ));
                     } else if (status === 'failed') {
                         stopPolling();
-                        setMessages(prev => prev.map(msg => 
-                            msg.researchId === researchId 
-                                ? { ...msg, status: 'failed', content: 'Research failed: ' + response.data.error } 
+                        setMessages(prev => prev.map(msg =>
+                            msg.researchId === researchId
+                                ? {
+                                    ...msg,
+                                    status: 'failed',
+                                    content: __('Research failed: ', 'presshub-ai-editor') + response.data.error
+                                }
                                 : msg
                         ));
                     } else {
-                        setMessages(prev => prev.map(msg => 
-                            msg.researchId === researchId 
-                                ? { ...msg, status: status, content: 'Status: ' + status + '...' } 
+                        setMessages(prev => prev.map(msg =>
+                            msg.researchId === researchId
+                                ? {
+                                    ...msg,
+                                    status: status,
+                                    content: __('Status: ', 'presshub-ai-editor') + status + '...'
+                                }
                                 : msg
                         ));
                     }
                 } else {
                     stopPolling();
-                    setMessages(prev => prev.map(msg => 
-                        msg.researchId === researchId 
-                            ? { ...msg, status: 'failed', content: 'Polling error: ' + (response.data || 'Failed') } 
+                    setMessages(prev => prev.map(msg =>
+                        msg.researchId === researchId
+                            ? {
+                                ...msg,
+                                status: 'failed',
+                                content: __('Polling error: ', 'presshub-ai-editor') + (response.data || __('Failed', 'presshub-ai-editor'))
+                            }
                             : msg
                     ));
                 }
             }).fail(() => {
                 stopPolling();
-                setMessages(prev => prev.map(msg => 
-                    msg.researchId === researchId 
-                        ? { ...msg, status: 'failed', content: 'Network polling error.' } 
+                setMessages(prev => prev.map(msg =>
+                    msg.researchId === researchId
+                        ? {
+                            ...msg,
+                            status: 'failed',
+                            content: __('Network polling error.', 'presshub-ai-editor')
+                        }
                         : msg
                 ));
             });
@@ -179,7 +221,7 @@ const AICoPilotSidebar = () => {
             return el('div', { key: index, className: bubbleClass }, msg.content);
         } else if (msg.type === 'research') {
             return el('div', { key: index, className: bubbleClass + ' research-card' },
-                el('div', { className: 'card-header' }, '🔍 Deep Research Synthesis'),
+                el('div', { className: 'card-header' }, __('🔍 Deep Research Synthesis', 'presshub-ai-editor')),
                 el('div', { className: 'card-body' }, msg.content),
                 msg.status === 'completed' && el(Button, {
                     isPrimary: true,
@@ -187,30 +229,38 @@ const AICoPilotSidebar = () => {
                         // Insert raw HTML in a custom HTML block or paragraphs
                         insertBlock('core/html', { content: msg.content });
                     }
-                }, 'Insert Research Into Article'),
+                }, __('Insert Research Into Article', 'presshub-ai-editor')),
                 (msg.status === 'pending' || msg.status === 'processing') && el(Spinner)
             );
         } else if (msg.type === 'image') {
             return el('div', { key: index, className: bubbleClass + ' image-card' },
-                el('div', { className: 'card-header' }, '🎨 Generated Image'),
+                el('div', { className: 'card-header' }, __('🎨 Generated Image', 'presshub-ai-editor')),
                 el('img', { src: msg.url, style: { width: '100%', borderRadius: '4px', marginBottom: '8px' } }),
                 el(Button, {
                     isPrimary: true,
                     onClick: () => {
-                        insertBlock('core/image', { url: msg.url, id: msg.id, alt: 'AI Generated Illustration' });
+                        insertBlock('core/image', {
+                            url: msg.url,
+                            id: msg.id,
+                            alt: __('AI Generated Illustration', 'presshub-ai-editor')
+                        });
                     }
-                }, 'Insert Image Block')
+                }, __('Insert Image Block', 'presshub-ai-editor'))
             );
         } else if (msg.type === 'report') {
             return el('div', { key: index, className: bubbleClass + ' report-card' },
-                el('div', { className: 'card-header' }, '🎙️ AI Radio Audio Report'),
+                el('div', { className: 'card-header' }, __('🎙️ AI Radio Audio Report', 'presshub-ai-editor')),
                 el('audio', { controls: true, src: msg.url, style: { width: '100%', marginBottom: '8px' } }),
                 el(Button, {
                     isPrimary: true,
                     onClick: () => {
-                        insertBlock('core/audio', { src: msg.url, id: msg.id, caption: 'AI Generated Audio Report' });
+                        insertBlock('core/audio', {
+                            src: msg.url,
+                            id: msg.id,
+                            caption: __('AI Generated Audio Report', 'presshub-ai-editor')
+                        });
                     }
-                }, 'Insert Audio Block')
+                }, __('Insert Audio Block', 'presshub-ai-editor'))
             );
         }
     };
@@ -218,7 +268,7 @@ const AICoPilotSidebar = () => {
     return el(PluginSidebar, {
         name: 'presshub-ai-copilot',
         icon: 'format-chat',
-        title: 'AI Co-Pilot',
+        title: __('AI Co-Pilot', 'presshub-ai-editor'),
     }, el('div', { className: 'presshub-sidebar-container' },
         el('div', { className: 'presshub-chat-messages' },
             messages.map((msg, index) => renderMessage(msg, index)),
@@ -229,12 +279,12 @@ const AICoPilotSidebar = () => {
             el(TextareaControl, {
                 value: inputValue,
                 onChange: setInputValue,
-                placeholder: 'Ask Co-Pilot or request research/image/audio...',
+                placeholder: __('Ask Co-Pilot or request research/image/audio...', 'presshub-ai-editor'),
                 rows: 2
             }),
             el('div', { className: 'presshub-chat-actions' },
-                el(Button, { isPrimary: true, onClick: handleSend, disabled: loading || !inputValue.trim() }, 'Send'),
-                el(Button, { isDestructive: true, isLink: true, onClick: () => setMessages([messages[0]]) }, 'Clear')
+                el(Button, { isPrimary: true, onClick: handleSend, disabled: loading || !inputValue.trim() }, __('Send', 'presshub-ai-editor')),
+                el(Button, { isDestructive: true, isLink: true, onClick: () => setMessages([messages[0]]) }, __('Clear', 'presshub-ai-editor'))
             )
         )
     ));

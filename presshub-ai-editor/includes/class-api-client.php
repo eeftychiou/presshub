@@ -61,7 +61,7 @@ class PressHub_AI_API_Client {
         }
 
         if ( empty( $this->api_key ) ) {
-            return new WP_Error( 'no_api_key', 'API key is missing.' );
+            return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
         $this->provider    = $provider;
@@ -77,10 +77,10 @@ class PressHub_AI_API_Client {
 
     public function generate_draft( $sources, $instructions, $uploaded_files = [], $preset_slug = '' ) {
         if ( empty( $this->api_key ) ) {
-            return new WP_Error( 'no_api_key', 'API key is missing.' );
+            return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
-        $sys_prompt = apply_filters( 'presshub_ai_draft_system_prompt', 'You are a professional AI journalist.' );
+        $sys_prompt = apply_filters( 'presshub_ai_draft_system_prompt', __( 'You are a professional AI journalist.', 'presshub-ai-editor' ) );
 
         // Per-author instruction presets (2026-08-15 design §3): the
         // resolver returns at most ONE instruction text to append, or null
@@ -115,10 +115,10 @@ class PressHub_AI_API_Client {
 
     public function generate_scorecard( $content ) {
         if ( empty( $this->api_key ) ) {
-            return new WP_Error( 'no_api_key', 'API key is missing.' );
+            return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
-        $sys_prompt = 'You are an exacting news editor.';
+        $sys_prompt = __( 'You are an exacting news editor.', 'presshub-ai-editor' );
         $sys_prompt = apply_filters( 'presshub_ai_scorecard_system_prompt', $sys_prompt );
         $user_prompt = "Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).\n\nDraft:\n" . $content;
 
@@ -134,11 +134,11 @@ class PressHub_AI_API_Client {
             return $decoded;
         }
         
-        return new WP_Error( 'json_error', 'Failed to parse scorecard JSON.' );
+        return new WP_Error( 'json_error', __( 'Failed to parse scorecard JSON.', 'presshub-ai-editor' ) );
     }
 
     public function classify_intent( $prompt ) {
-        $sys_prompt = "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else.";
+        $sys_prompt = __( "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else.", 'presshub-ai-editor' );
         $sys_prompt = apply_filters( 'presshub_ai_classify_intent_prompt', $sys_prompt );
 
         // Route through the user's configured provider so classifier cost
@@ -220,7 +220,7 @@ class PressHub_AI_API_Client {
 
     public function generate_image_via_imagen( $prompt ) {
         if ( empty( $this->google_cloud_api_key ) ) {
-            return new WP_Error( 'no_gc_key', 'Google Cloud API key is missing.' );
+            return new WP_Error( 'no_gc_key', __( 'Google Cloud API key is missing.', 'presshub-ai-editor' ) );
         }
 
         $url = $this->build_imagen_url();
@@ -288,12 +288,12 @@ class PressHub_AI_API_Client {
 
     public function generate_audio_report( $prompt, $post_id ) {
         if ( empty( $this->google_cloud_api_key ) ) {
-            return new WP_Error( 'no_gc_key', 'Google Cloud API key is missing.' );
+            return new WP_Error( 'no_gc_key', __( 'Google Cloud API key is missing.', 'presshub-ai-editor' ) );
         }
 
         // 1. Synthesize media link/details into script using Gemini.
         // Temperature locked to 0.0 so the narration script is deterministic.
-        $sys_prompt = "You are a professional news radio narrator. Convert the user's prompt or media notes into a short 4-5 sentence radio report script. Output ONLY the speech script and nothing else.";
+        $sys_prompt = __( "You are a professional news radio narrator. Convert the user's prompt or media notes into a short 4-5 sentence radio report script. Output ONLY the speech script and nothing else.", 'presshub-ai-editor' );
         $sys_prompt = apply_filters( 'presshub_ai_audio_script_prompt', $sys_prompt );
         $script = $this->call_gemini( $sys_prompt, $prompt, false, [], 0.0 );
         if ( is_wp_error( $script ) ) return $script;
@@ -378,7 +378,7 @@ class PressHub_AI_API_Client {
 
     private function call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
         if ( ! empty( $files ) ) {
-            return new WP_Error( 'file_error', 'OpenAI chat completions do not support direct PDF/Audio uploads natively in this basic integration. Please select Google Gemini for multi-modal files.' );
+            return new WP_Error( 'file_error', __( 'OpenAI chat completions do not support direct PDF/Audio uploads natively in this basic integration. Please select Google Gemini for multi-modal files.', 'presshub-ai-editor' ) );
         }
 
         $body = [
@@ -421,7 +421,7 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
         error_log( 'PressHub AI [openai] API error: Invalid response from OpenAI.' );
-        return new WP_Error( 'api_error', 'Invalid response from OpenAI.' );
+        return new WP_Error( 'api_error', __( 'Invalid response from OpenAI.', 'presshub-ai-editor' ) );
     }
 
     private function call_anthropic( $sys_prompt, $user_prompt, $files, $temperature = null ) {
@@ -439,7 +439,7 @@ class PressHub_AI_API_Client {
                     ]
                 ];
             } else {
-                return new WP_Error( 'file_error', 'Anthropic only supports PDF document uploads. Audio/Video not supported.' );
+                return new WP_Error( 'file_error', __( 'Anthropic only supports PDF document uploads. Audio/Video not supported.', 'presshub-ai-editor' ) );
             }
         }
         
@@ -482,7 +482,7 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
         error_log( 'PressHub AI [anthropic] API error: Invalid response from Anthropic.' );
-        return new WP_Error( 'api_error', 'Invalid response from Anthropic.' );
+        return new WP_Error( 'api_error', __( 'Invalid response from Anthropic.', 'presshub-ai-editor' ) );
     }
 
     private function call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
@@ -547,6 +547,6 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
         error_log( 'PressHub AI [gemini] API error: Invalid response from Gemini.' );
-        return new WP_Error( 'api_error', 'Invalid response from Gemini.' );
+        return new WP_Error( 'api_error', __( 'Invalid response from Gemini.', 'presshub-ai-editor' ) );
     }
 }

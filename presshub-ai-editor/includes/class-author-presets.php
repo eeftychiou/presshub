@@ -44,7 +44,7 @@ class PressHub_AI_Author_Presets {
             ? (int) ( $_GET['user_id'] ?? 0 )
             : (int) get_current_user_id();
 
-        wp_enqueue_script( PressHub_AI_Admin_Presets::SCRIPT_HANDLE, PRESSHUB_AI_URL . 'assets/presets.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
+        wp_enqueue_script( PressHub_AI_Admin_Presets::SCRIPT_HANDLE, PRESSHUB_AI_URL . 'assets/presets.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
         wp_localize_script( PressHub_AI_Admin_Presets::SCRIPT_HANDLE, 'presshubAI', PressHub_AI_Admin_Presets::localize_args( 'author', $viewed_user_id ) );
     }
 
@@ -102,7 +102,11 @@ class PressHub_AI_Author_Presets {
                 continue;
             }
             $seen[ $preset['slug'] ] = true;
-            $default_options[] = [ 'value' => $preset['slug'], 'label' => $preset['name'] . ' (default)' ];
+            $default_options[] = [
+                'value' => $preset['slug'],
+                /* translators: appended to a plugin-default preset label. */
+                'label' => $preset['name'] . __( ' (default)', 'presshub-ai-editor' ),
+            ];
         }
 
         // Copy source: every enabled plugin default.

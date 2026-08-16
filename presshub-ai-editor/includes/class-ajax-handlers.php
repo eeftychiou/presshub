@@ -19,6 +19,8 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_delete_preset', [ $this, 'delete_preset' ] );
         add_action( 'wp_ajax_presshub_ai_set_default_preset', [ $this, 'set_default_preset' ] );
         add_action( 'wp_ajax_presshub_ai_copy_default_preset', [ $this, 'copy_default_preset' ] );
+        // Org defaults (2026-08-15 design §9 Q3 / Antigravity A-6).
+        add_action( 'wp_ajax_presshub_ai_save_org_default', [ $this, 'save_org_default' ] );
     }
 
     /**
@@ -72,7 +74,7 @@ class PressHub_AI_Ajax_Handlers {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         // P6: the per-provider Test Connection buttons send the target
@@ -86,20 +88,20 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( $result->get_error_message() );
         }
 
-        wp_send_json_success( 'API Connection Successful!' );
+        wp_send_json_success( __( 'API Connection Successful!', 'presshub-ai-editor' ) );
     }
 
     public function generate_draft() {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         if ( isset( $_POST['post_id'] ) ) {
             $post_id = intval( $_POST['post_id'] );
             if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
-                wp_send_json_error( 'Permission denied.' );
+                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
             }
         }
 
@@ -114,10 +116,10 @@ class PressHub_AI_Ajax_Handlers {
         // Input length limits: guard the AI endpoints against oversized
         // payloads that would waste tokens / cost money.
         if ( strlen( $sources ) > 20000 ) {
-            wp_send_json_error( 'Sources exceed the 20,000 character limit.' );
+            wp_send_json_error( __( 'Sources exceed the 20,000 character limit.', 'presshub-ai-editor' ) );
         }
         if ( strlen( $instructions ) > 5000 ) {
-            wp_send_json_error( 'Instructions exceed the 5,000 character limit.' );
+            wp_send_json_error( __( 'Instructions exceed the 5,000 character limit.', 'presshub-ai-editor' ) );
         }
 
         // Enforce the rate limit BEFORE touching any file: a blocked
@@ -148,10 +150,10 @@ class PressHub_AI_Ajax_Handlers {
                     ];
                     $filetype = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'] );
                     if ( ! in_array( strtolower( (string) ( $filetype['ext'] ?? '' ) ), $allowed_extensions, true ) ) {
-                        wp_send_json_error( 'Unsupported file type. Allowed: PDF, DOCX, MP3, MP4, WAV, M4A.' );
+                        wp_send_json_error( __( 'Unsupported file type. Allowed: PDF, DOCX, MP3, MP4, WAV, M4A.', 'presshub-ai-editor' ) );
                     }
                     if ( (int) $file['size'] > $max_file_size ) {
-                        wp_send_json_error( 'File exceeds the 50 MB size limit.' );
+                        wp_send_json_error( __( 'File exceeds the 50 MB size limit.', 'presshub-ai-editor' ) );
                     }
                     $valid_files[] = $file;
                 }
@@ -184,17 +186,17 @@ class PressHub_AI_Ajax_Handlers {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         $content = isset( $_POST['content'] ) ? wp_kses_post( wp_unslash( $_POST['content'] ) ) : '';
         if ( strlen( $content ) > 100000 ) {
-            wp_send_json_error( 'Content exceeds the 100,000 character limit.' );
+            wp_send_json_error( __( 'Content exceeds the 100,000 character limit.', 'presshub-ai-editor' ) );
         }
         $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
 
         if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         $this->enforce_rate_limit();
@@ -226,17 +228,17 @@ class PressHub_AI_Ajax_Handlers {
     public function handle_chat_routing() {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         $prompt = isset( $_POST['prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) : '';
         if ( strlen( $prompt ) > 5000 ) {
-            wp_send_json_error( 'Prompt exceeds the 5,000 character limit.' );
+            wp_send_json_error( __( 'Prompt exceeds the 5,000 character limit.', 'presshub-ai-editor' ) );
         }
         $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
 
         if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         // Gate paid media generation (Imagen / Cloud TTS) to admins only.
@@ -245,7 +247,7 @@ class PressHub_AI_Ajax_Handlers {
         // explicit configuration of the project + keys.
         $pre_intent = isset( $_POST['intent'] ) ? sanitize_text_field( wp_unslash( $_POST['intent'] ) ) : '';
         if ( in_array( $pre_intent, [ 'image', 'report' ], true ) && ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         // Per-user rate limit for the AI-costly chat + research paths.
@@ -262,7 +264,7 @@ class PressHub_AI_Ajax_Handlers {
         // paid call. (Belt-and-suspenders in case the client somehow
         // bypasses the pre_intent hint above.)
         if ( in_array( $intent, [ 'image', 'report' ], true ) && ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         if ( 'chat' === $intent ) {
@@ -276,7 +278,7 @@ class PressHub_AI_Ajax_Handlers {
             // prompt; use string concatenation (or the composed filter)
             // to affect the preset-augmented prompt.
             $preset_slug = sanitize_text_field( wp_unslash( $_POST['instruction_preset_id'] ?? '' ) );
-            $sys = apply_filters( 'presshub_ai_chat_system_prompt', 'You are a helpful AI journalist assistant.' );
+            $sys = apply_filters( 'presshub_ai_chat_system_prompt', __( 'You are a helpful AI journalist assistant.', 'presshub-ai-editor' ) );
             $preset = PressHub_AI_Preset_Resolver::resolve_for_user( get_current_user_id(), 'chat', $preset_slug );
             if ( $preset !== null ) {
                 $sys .= "\n\n" . $preset;
@@ -291,13 +293,18 @@ class PressHub_AI_Ajax_Handlers {
         } elseif ( 'research' === $intent ) {
             $research_id = wp_insert_post( [
                 'post_type' => 'presshub_research',
-                'post_title' => 'Research for post #' . $post_id . ': ' . wp_html_excerpt( $prompt, 50, '...' ),
+                'post_title' => sprintf(
+                    /* translators: 1: associated post id, 2: truncated user prompt. */
+                    __( 'Research for post #%1$d: %2$s', 'presshub-ai-editor' ),
+                    (int) $post_id,
+                    wp_html_excerpt( $prompt, 50, '...' )
+                ),
                 // Low-16: insert as 'pending' directly — no publish-then-
                 // revert dance through the editorial workflow guard.
                 'post_status' => 'pending'
             ] );
             if ( ! $research_id || is_wp_error( $research_id ) ) {
-                $error_msg = is_wp_error( $research_id ) ? $research_id->get_error_message() : 'Failed to create research post.';
+                $error_msg = is_wp_error( $research_id ) ? $research_id->get_error_message() : __( 'Failed to create research post.', 'presshub-ai-editor' );
                 wp_send_json_error( $error_msg );
             }
             update_post_meta( $research_id, '_research_status', 'pending' );
@@ -329,18 +336,18 @@ class PressHub_AI_Ajax_Handlers {
     public function check_research_status() {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
-        
+
         $research_id = isset( $_POST['research_id'] ) ? intval( $_POST['research_id'] ) : 0;
         if ( ! current_user_can( 'edit_post', $research_id ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
-        
+
         $post = get_post( $research_id );
-        
+
         if ( ! $post || 'presshub_research' !== $post->post_type ) {
-            wp_send_json_error( 'Invalid research post ID.' );
+            wp_send_json_error( __( 'Invalid research post ID.', 'presshub-ai-editor' ) );
         }
         
         $status = get_post_meta( $research_id, '_research_status', true );
@@ -403,14 +410,18 @@ class PressHub_AI_Ajax_Handlers {
      *   own:          all of the author's presets (incl. disabled rows),
      *   defaults:     enabled plugin-default presets minus the slugs the
      *                 author has disabled,
-     *   default_slug: the author's default preset slug ('' when unset).
+     *   default_slug: the author's default preset slug ('' when unset),
+     *   org:          { taxonomy: term slug => preset slug map,
+     *                  role: role => preset slug map } — admin-curated
+     *                 org defaults (2026-08-15 design §9 Q3), so the UI
+     *                 can display the current assignments.
      * }
      */
     public function list_presets() {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         $user_id  = (int) get_current_user_id();
@@ -428,6 +439,10 @@ class PressHub_AI_Ajax_Handlers {
             'own'          => PressHub_AI_Preset_Store::get_author_presets( $user_id ),
             'defaults'     => $defaults,
             'default_slug' => PressHub_AI_Preset_Store::get_author_default_slug( $user_id ),
+            'org'          => [
+                'taxonomy' => PressHub_AI_Preset_Store::get_taxonomy_presets(),
+                'role'     => PressHub_AI_Preset_Store::get_role_presets(),
+            ],
         ] );
     }
 
@@ -451,10 +466,10 @@ class PressHub_AI_Ajax_Handlers {
         $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : 'author';
         if ( 'plugin' === $scope ) {
             if ( ! current_user_can( 'manage_options' ) ) {
-                wp_send_json_error( 'Permission denied.' );
+                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
             }
         } elseif ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         $slug            = isset( $_POST['slug'] ) ? sanitize_text_field( wp_unslash( $_POST['slug'] ) ) : '';
@@ -462,13 +477,13 @@ class PressHub_AI_Ajax_Handlers {
         $instruction_text = isset( $_POST['instruction_text'] ) ? sanitize_textarea_field( wp_unslash( $_POST['instruction_text'] ) ) : '';
 
         if ( ! preg_match( PressHub_AI_Preset_Sanitizer::SLUG_REGEX, $slug ) ) {
-            wp_send_json_error( 'Invalid preset slug. Use 1-40 lowercase letters, numbers, or hyphens.' );
+            wp_send_json_error( __( 'Invalid preset slug. Use 1-40 lowercase letters, numbers, or hyphens.', 'presshub-ai-editor' ) );
         }
         if ( strlen( $name ) > PressHub_AI_Preset_Sanitizer::MAX_NAME_LENGTH ) {
-            wp_send_json_error( 'Preset name exceeds the 80 character limit.' );
+            wp_send_json_error( __( 'Preset name exceeds the 80 character limit.', 'presshub-ai-editor' ) );
         }
         if ( strlen( $instruction_text ) > PressHub_AI_Preset_Sanitizer::MAX_INSTRUCTION_LEN ) {
-            wp_send_json_error( 'Preset instructions exceed the 4,000 character limit.' );
+            wp_send_json_error( __( 'Preset instructions exceed the 4,000 character limit.', 'presshub-ai-editor' ) );
         }
 
         $this->enforce_preset_throttle();
@@ -512,15 +527,15 @@ class PressHub_AI_Ajax_Handlers {
         $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : 'author';
         if ( 'plugin' === $scope ) {
             if ( ! current_user_can( 'manage_options' ) ) {
-                wp_send_json_error( 'Permission denied.' );
+                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
             }
         } elseif ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         $slug = isset( $_POST['slug'] ) ? sanitize_text_field( wp_unslash( $_POST['slug'] ) ) : '';
         if ( ! preg_match( PressHub_AI_Preset_Sanitizer::SLUG_REGEX, $slug ) ) {
-            wp_send_json_error( 'Invalid preset slug.' );
+            wp_send_json_error( __( 'Invalid preset slug.', 'presshub-ai-editor' ) );
         }
 
         $this->enforce_preset_throttle();
@@ -533,7 +548,7 @@ class PressHub_AI_Ajax_Handlers {
         );
 
         if ( ! $removed ) {
-            wp_send_json_error( 'Preset not found.' );
+            wp_send_json_error( __( 'Preset not found.', 'presshub-ai-editor' ) );
         }
 
         $this->record_preset_throttle();
@@ -553,7 +568,7 @@ class PressHub_AI_Ajax_Handlers {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         $slug    = isset( $_POST['slug'] ) ? sanitize_text_field( wp_unslash( $_POST['slug'] ) ) : '';
@@ -561,10 +576,10 @@ class PressHub_AI_Ajax_Handlers {
 
         if ( $slug !== '' ) {
             if ( ! preg_match( PressHub_AI_Preset_Sanitizer::SLUG_REGEX, $slug ) ) {
-                wp_send_json_error( 'Invalid preset slug.' );
+                wp_send_json_error( __( 'Invalid preset slug.', 'presshub-ai-editor' ) );
             }
             if ( ! $this->preset_slug_is_selectable( $user_id, $slug ) ) {
-                wp_send_json_error( 'Preset not found or not enabled.' );
+                wp_send_json_error( __( 'Preset not found or not enabled.', 'presshub-ai-editor' ) );
             }
         }
 
@@ -590,12 +605,12 @@ class PressHub_AI_Ajax_Handlers {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( 'Permission denied.' );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
         $slug = isset( $_POST['slug'] ) ? sanitize_text_field( wp_unslash( $_POST['slug'] ) ) : '';
         if ( ! preg_match( PressHub_AI_Preset_Sanitizer::SLUG_REGEX, $slug ) ) {
-            wp_send_json_error( 'Invalid preset slug.' );
+            wp_send_json_error( __( 'Invalid preset slug.', 'presshub-ai-editor' ) );
         }
 
         $this->enforce_preset_throttle();
@@ -608,6 +623,87 @@ class PressHub_AI_Ajax_Handlers {
 
         $this->record_preset_throttle();
         wp_send_json_success( [ 'slug' => $result['slug'], 'preset' => $result ] );
+    }
+
+    /**
+     * AJAX: presshub_ai_save_org_default — set or clear one admin-curated
+     * org default (2026-08-15 design §9 Q3 / Antigravity A-6).
+     *
+     * Admin-only (manage_options). POST params:
+     *   scope: 'taxonomy' | 'role',
+     *   key:   term slug (taxonomy scope) or role name (role scope),
+     *   value: preset slug | '__none__' (disable presets at this layer)
+     *          | '' (clear the assignment).
+     *
+     * Non-empty values must name an ENABLED plugin-default preset — the
+     * same selectability contract as set_default_preset, so an org
+     * default can never silently resolve to nothing. Shares the coarse
+     * preset throttle (60 mutations/min/user).
+     */
+    public function save_org_default() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : '';
+        $key   = isset( $_POST['key'] ) ? sanitize_text_field( wp_unslash( $_POST['key'] ) ) : '';
+        $value = isset( $_POST['value'] ) ? sanitize_text_field( wp_unslash( $_POST['value'] ) ) : '';
+
+        if ( 'taxonomy' !== $scope && 'role' !== $scope ) {
+            wp_send_json_error( __( 'Invalid scope.', 'presshub-ai-editor' ) );
+        }
+        if ( ! preg_match( PressHub_AI_Preset_Sanitizer::SLUG_REGEX, $key ) ) {
+            wp_send_json_error( __( 'Invalid key.', 'presshub-ai-editor' ) );
+        }
+        if ( $value !== '' && $value !== PressHub_AI_Preset_Store::ORG_NONE ) {
+            if ( ! preg_match( PressHub_AI_Preset_Sanitizer::SLUG_REGEX, $value ) ) {
+                wp_send_json_error( __( 'Invalid preset slug.', 'presshub-ai-editor' ) );
+            }
+            if ( ! $this->plugin_default_is_enabled( $value ) ) {
+                wp_send_json_error( __( 'Preset not found or not enabled.', 'presshub-ai-editor' ) );
+            }
+        }
+
+        $this->enforce_preset_throttle();
+
+        if ( 'taxonomy' === $scope ) {
+            $map = PressHub_AI_Preset_Store::get_taxonomy_presets();
+            if ( $value === '' ) {
+                unset( $map[ $key ] );
+            } else {
+                $map[ $key ] = $value;
+            }
+            $saved = PressHub_AI_Preset_Store::save_taxonomy_presets( $map );
+        } else {
+            $map = PressHub_AI_Preset_Store::get_role_presets();
+            if ( $value === '' ) {
+                unset( $map[ $key ] );
+            } else {
+                $map[ $key ] = $value;
+            }
+            $saved = PressHub_AI_Preset_Store::save_role_presets( $map );
+        }
+
+        $this->record_preset_throttle();
+        wp_send_json_success( [
+            'scope' => $scope,
+            'key'   => $key,
+            'value' => $saved[ $key ] ?? '',
+        ] );
+    }
+
+    /**
+     * Whether a slug names an enabled plugin-default preset.
+     */
+    private function plugin_default_is_enabled( string $slug ): bool {
+        foreach ( PressHub_AI_Preset_Store::get_plugin_defaults() as $preset ) {
+            if ( $preset['slug'] === $slug ) {
+                return (bool) $preset['enabled'];
+            }
+        }
+        return false;
     }
 
     /**

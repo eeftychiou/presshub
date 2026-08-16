@@ -168,6 +168,109 @@ class PresetStoreTest
             $failures[] = "Disabled defaults should keep only valid unique slugs. Got: " . var_export( $out, true );
         }
 
+        // ==================================================================
+        // Org defaults (2026-08-15 design §9 Q3 / Antigravity A-6):
+        // per-taxonomy + per-role maps in options.
+        // ==================================================================
+
+        // --- Taxonomy presets: empty default ---
+        self::reset();
+        $out = PressHub_AI_Preset_Store::get_taxonomy_presets();
+        if ( $out !== [] ) {
+            $failures[] = "get_taxonomy_presets() should return [] when unset. Got: " . var_export( $out, true );
+        }
+
+        // --- Taxonomy presets: save + read round-trip ---
+        self::reset();
+        $map = [ 'sports' => 'wire-style', 'politics' => 'fact-check' ];
+        $saved = PressHub_AI_Preset_Store::save_taxonomy_presets( $map );
+        if ( $saved !== $map ) {
+            $failures[] = "save_taxonomy_presets() should return the sanitized stored map. Got: " . var_export( $saved, true );
+        }
+        // P-1: preset options must never autoload.
+        $update_calls = $GLOBALS['UPDATE_OPTION_CALLS'] ?? [];
+        $last_update  = end( $update_calls );
+        if ( ! is_array( $last_update ) || $last_update[0] !== 'presshub_ai_taxonomy_presets' ) {
+            $failures[] = "save_taxonomy_presets() should write via update_option('presshub_ai_taxonomy_presets', ...). Got: " . var_export( $last_update, true );
+        } elseif ( $last_update[2] !== false ) {
+            $failures[] = "save_taxonomy_presets() must pass autoload=false (P-1). Got: " . var_export( $last_update[2], true );
+        }
+        $read = PressHub_AI_Preset_Store::get_taxonomy_presets();
+        if ( $read !== $map ) {
+            $failures[] = "Taxonomy presets round-trip failed. Got: " . var_export( $read, true );
+        }
+
+        // --- Taxonomy presets: writes are sanitized before storing ---
+        self::reset();
+        PressHub_AI_Preset_Store::save_taxonomy_presets( [
+            'Bad Key!' => 'wire-style', // illegal key dropped
+            'sports'   => 'Bad Slug',   // illegal value dropped
+            'clear-me' => '',           // '' means cleared -> dropped
+            'off'      => '__none__',   // disable sentinel kept
+        ] );
+        $stored = $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] ?? null;
+        if ( $stored !== [ 'off' => '__none__' ] ) {
+            $failures[] = "Dirty taxonomy map should be sanitized before storing. Got: " . var_export( $stored, true );
+        }
+
+        // --- Taxonomy presets: reads are sanitized (defense in depth) ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [
+            'Bad Key' => 'wire-style',
+            'sports'  => 'Bad Value',
+            'ok'      => 'fact-check',
+        ];
+        $read = PressHub_AI_Preset_Store::get_taxonomy_presets();
+        if ( $read !== [ 'ok' => 'fact-check' ] ) {
+            $failures[] = "Taxonomy presets read should sanitize bad entries. Got: " . var_export( $read, true );
+        }
+
+        // --- Role presets: empty default ---
+        self::reset();
+        $out = PressHub_AI_Preset_Store::get_role_presets();
+        if ( $out !== [] ) {
+            $failures[] = "get_role_presets() should return [] when unset. Got: " . var_export( $out, true );
+        }
+
+        // --- Role presets: save + read round-trip ---
+        self::reset();
+        $map = [ 'editor' => 'wire-style', 'author' => 'interview-focus' ];
+        $saved = PressHub_AI_Preset_Store::save_role_presets( $map );
+        if ( $saved !== $map ) {
+            $failures[] = "save_role_presets() should return the sanitized stored map. Got: " . var_export( $saved, true );
+        }
+        $update_calls = $GLOBALS['UPDATE_OPTION_CALLS'] ?? [];
+        $last_update  = end( $update_calls );
+        if ( ! is_array( $last_update ) || $last_update[0] !== 'presshub_ai_role_presets' ) {
+            $failures[] = "save_role_presets() should write via update_option('presshub_ai_role_presets', ...). Got: " . var_export( $last_update, true );
+        } elseif ( $last_update[2] !== false ) {
+            $failures[] = "save_role_presets() must pass autoload=false (P-1). Got: " . var_export( $last_update[2], true );
+        }
+        $read = PressHub_AI_Preset_Store::get_role_presets();
+        if ( $read !== $map ) {
+            $failures[] = "Role presets round-trip failed. Got: " . var_export( $read, true );
+        }
+
+        // --- Role presets: non-array option read as [] ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets'] = 'garbage';
+        $read = PressHub_AI_Preset_Store::get_role_presets();
+        if ( $read !== [] ) {
+            $failures[] = "get_role_presets() should return [] for a non-array option. Got: " . var_export( $read, true );
+        }
+
+        // --- Role presets: sanitization on write (bad value + bad key) ---
+        self::reset();
+        PressHub_AI_Preset_Store::save_role_presets( [
+            'editor'     => 'Bad_Slug', // illegal value dropped
+            'admin-role' => 'wire-style', // legal key, kept
+            'subscriber' => '__none__',
+        ] );
+        $stored = $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets'] ?? null;
+        if ( $stored !== [ 'admin-role' => 'wire-style', 'subscriber' => '__none__' ] ) {
+            $failures[] = "Dirty role map should be sanitized before storing. Got: " . var_export( $stored, true );
+        }
+
         // --- seed_plugin_defaults(): seeds exactly 3 curated presets when empty ---
         self::reset();
         PressHub_AI_Preset_Store::seed_plugin_defaults();

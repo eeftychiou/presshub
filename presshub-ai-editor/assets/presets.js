@@ -10,8 +10,12 @@
  * read from the section's data-user-id attribute. All mutations POST to
  * the presshub_ai_*_preset AJAX endpoints and reload the page on success.
  *
- * Depends on jQuery. Strings are translatable via presshubAI.i18n.
+ * Depends on jQuery. Strings are translatable via wp.i18n; for non-
+ * critical user-facing copy (alert fallback, prompts) the server-localized
+ * `i18n` payload still provides a last-ditch default.
  */
+/* global jQuery */
+const { __ } = wp.i18n;
 (function($) {
     'use strict';
 
@@ -38,11 +42,13 @@
             if (response && response.success) {
                 location.reload();
             } else {
-                alert((i18n.error_prefix || 'Error: ') +
-                    (response && response.data ? response.data : (i18n.unknown_error || 'Unknown error.')));
+                alert(
+                    (i18n.error_prefix || __('Error: ', 'presshub-ai-editor')) +
+                    (response && response.data ? response.data : (i18n.unknown_error || __('Unknown error.', 'presshub-ai-editor')))
+                );
             }
         }).fail(function() {
-            alert(i18n.connection_error || 'Server connection error.');
+            alert(i18n.connection_error || __('Server connection error.', 'presshub-ai-editor'));
         });
     }
 
@@ -60,7 +66,7 @@
                 var text = $('#presshub-ai-new-preset-text').val();
                 var slug = presshubPresetSlug(name);
                 if (!slug) {
-                    alert(i18n.slug_required || 'Name must contain at least one letter or number to generate a slug.');
+                    alert(i18n.slug_required || __('Name must contain at least one letter or number to generate a slug.', 'presshub-ai-editor'));
                     return;
                 }
                 presshubPostPreset({
@@ -75,7 +81,7 @@
 
             $('.presshub-preset-delete').on('click', function() {
                 var $row = $(this).closest('.presshub-preset-row');
-                if (!window.confirm(i18n.delete_confirm || 'Delete this preset?')) {
+                if (!window.confirm(i18n.delete_confirm || __('Delete this preset?', 'presshub-ai-editor'))) {
                     return;
                 }
                 presshubPostPreset({
@@ -143,7 +149,7 @@
                     var text = $('#presshub-ai-author-new-preset-text').val();
                     var slug = presshubPresetSlug(name);
                     if (!slug) {
-                        alert(i18n.slug_required || 'Name must contain at least one letter or number to generate a slug.');
+                        alert(i18n.slug_required || __('Name must contain at least one letter or number to generate a slug.', 'presshub-ai-editor'));
                         return;
                     }
                     presshubPostPreset({
@@ -159,7 +165,7 @@
 
                 $section.find('.presshub-preset-delete').on('click', function() {
                     var $row = $(this).closest('.presshub-preset-row');
-                    if (!window.confirm(i18n.delete_confirm || 'Delete this preset?')) {
+                    if (!window.confirm(i18n.delete_confirm || __('Delete this preset?', 'presshub-ai-editor'))) {
                         return;
                     }
                     presshubPostPreset({

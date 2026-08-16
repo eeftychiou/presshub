@@ -37,7 +37,7 @@ class PressHub_AI_Admin_Presets {
         if ( 'settings_page_presshub-ai-presets' !== $hook ) {
             return;
         }
-        wp_enqueue_script( self::SCRIPT_HANDLE, PRESSHUB_AI_URL . 'assets/presets.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
+        wp_enqueue_script( self::SCRIPT_HANDLE, PRESSHUB_AI_URL . 'assets/presets.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
         wp_localize_script( self::SCRIPT_HANDLE, 'presshubAI', self::localize_args( 'plugin' ) );
     }
 
@@ -96,6 +96,36 @@ class PressHub_AI_Admin_Presets {
         }
 
         $presets = PressHub_AI_Preset_Store::get_plugin_defaults();
+
+        // Org defaults (2026-08-15 design §9 Q3 / Antigravity A-6):
+        // per-category + per-role preset defaults, admin-curated. The
+        // selects below post to presshub_ai_save_org_default via
+        // assets/presets.js (data-scope / data-key attributes).
+        $taxonomy_presets = PressHub_AI_Preset_Store::get_taxonomy_presets();
+        $role_presets     = PressHub_AI_Preset_Store::get_role_presets();
+
+        $org_options = [];
+        foreach ( $presets as $preset ) {
+            if ( empty( $preset['enabled'] ) ) {
+                continue;
+            }
+            $org_options[] = [ 'value' => $preset['slug'], 'label' => $preset['name'] ];
+        }
+
+        $category_terms = get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] );
+        if ( ! is_array( $category_terms ) ) {
+            $category_terms = [];
+        }
+
+        // Standard WP roles. Roles with custom slugs are not configurable
+        // here (the org-default map sanitizer only accepts slug-safe keys).
+        $org_roles = [
+            'administrator' => __( 'Administrator', 'presshub-ai-editor' ),
+            'editor'        => __( 'Editor', 'presshub-ai-editor' ),
+            'author'        => __( 'Author', 'presshub-ai-editor' ),
+            'contributor'   => __( 'Contributor', 'presshub-ai-editor' ),
+            'subscriber'    => __( 'Subscriber', 'presshub-ai-editor' ),
+        ];
         ?>
         <div class="wrap">
             <h1><?php echo esc_html( __( 'PressHub AI — Instruction Presets', 'presshub-ai-editor' ) ); ?></h1>
@@ -173,8 +203,83 @@ class PressHub_AI_Admin_Presets {
                 </p>
                 <button type="submit" class="button button-primary"><?php echo esc_html( __( 'Add preset', 'presshub-ai-editor' ) ); ?></button>
             </form>
+
+            <h2><?php echo esc_html( __( 'Defaults by category & role', 'presshub-ai-editor' ) ); ?></h2>
+            <p class="description">
+                <?php echo esc_html( __( 'Assign a default preset per category or per role. A matching category default beats a role default, which beats an author default. Choose “— Disable presets —” to force no preset for that category or role.', 'presshub-ai-editor' ) ); ?>
+            </p>
+
+            <h3><?php echo esc_html( __( 'By category', 'presshub-ai-editor' ) ); ?></h3>
+            <table class="widefat striped" id="presshub-ai-org-taxonomy-table">
+                <thead>
+                    <tr>
+                        <th><?php echo esc_html( __( 'Category', 'presshub-ai-editor' ) ); ?></th>
+                        <th><?php echo esc_html( __( 'Default preset', 'presshub-ai-editor' ) ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php if ( empty( $category_terms ) ) : ?>
+                    <tr>
+                        <td colspan="2"><?php echo esc_html( __( 'No categories found.', 'presshub-ai-editor' ) ); ?></td>
+                    </tr>
+                <?php else : ?>
+                    <?php foreach ( $category_terms as $term ) : ?>
+                        <?php if ( ! is_object( $term ) || empty( $term->slug ) ) { continue; } ?>
+                        <tr>
+                            <td><?php echo esc_html( isset( $term->name ) ? $term->name : $term->slug ); ?></td>
+                            <td>
+                                <select class="presshub-org-default-select" data-scope="taxonomy" data-key="<?php echo esc_attr( $term->slug ); ?>">
+                                    <?php echo $this->org_default_options( $taxonomy_presets[ $term->slug ] ?? '', $org_options ); ?>
+                                </select>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+                </tbody>
+            </table>
+
+            <h3><?php echo esc_html( __( 'By role', 'presshub-ai-editor' ) ); ?></h3>
+            <table class="widefat striped" id="presshub-ai-org-role-table">
+                <thead>
+                    <tr>
+                        <th><?php echo esc_html( __( 'Role', 'presshub-ai-editor' ) ); ?></th>
+                        <th><?php echo esc_html( __( 'Default preset', 'presshub-ai-editor' ) ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ( $org_roles as $role => $label ) : ?>
+                    <tr>
+                        <td><?php echo esc_html( $label ); ?></td>
+                        <td>
+                            <select class="presshub-org-default-select" data-scope="role" data-key="<?php echo esc_attr( $role ); ?>">
+                                <?php echo $this->org_default_options( $role_presets[ $role ] ?? '', $org_options ); ?>
+                            </select>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
         <?php
+    }
+
+    /**
+     * Render the <option> list for an org-default <select>: no default,
+     * the disable sentinel, then every enabled plugin-default preset.
+     * The current assignment is marked selected ('' = none assigned).
+     *
+     * @param string $current Current stored value for this key.
+     * @param array  $options Enabled plugin-default options
+     *                        ([ 'value' => slug, 'label' => name ]).
+     * @return string
+     */
+    private function org_default_options( string $current, array $options ): string {
+        $out  = '<option value="">' . esc_html( __( '— No default —', 'presshub-ai-editor' ) ) . '</option>';
+        $out .= '<option value="' . esc_attr( PressHub_AI_Preset_Store::ORG_NONE ) . '"' . ( $current === PressHub_AI_Preset_Store::ORG_NONE ? ' selected="selected"' : '' ) . '>' . esc_html( __( '— Disable presets —', 'presshub-ai-editor' ) ) . '</option>';
+        foreach ( $options as $option ) {
+            $out .= '<option value="' . esc_attr( $option['value'] ) . '"' . ( $current === $option['value'] ? ' selected="selected"' : '' ) . '>' . esc_html( $option['label'] ) . '</option>';
+        }
+        return $out;
     }
 
     /**

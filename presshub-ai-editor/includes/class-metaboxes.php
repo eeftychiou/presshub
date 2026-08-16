@@ -12,8 +12,8 @@ class PressHub_AI_Metaboxes {
             return;
         }
         wp_enqueue_style( 'presshub-ai-admin-css', PRESSHUB_AI_URL . 'assets/admin.css', [], PRESSHUB_AI_VERSION );
-        wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
-        
+        wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
+
         wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
             'ajax_url' => admin_url( 'admin-ajax.php' ),
             'nonce'    => wp_create_nonce( 'presshub_ai_nonce' )
@@ -23,7 +23,7 @@ class PressHub_AI_Metaboxes {
     public function add_coauthor_metabox() {
         add_meta_box(
             'presshub_ai_coauthor',
-            'AI Co-Author & Editorial Review',
+            __( 'AI Co-Author & Editorial Review', 'presshub-ai-editor' ),
             [ $this, 'render_metabox' ],
             'post',
             'normal',
@@ -35,34 +35,37 @@ class PressHub_AI_Metaboxes {
         $scorecard = get_post_meta( $post->ID, '_presshub_ai_scorecard', true );
         ?>
         <div class="presshub-ai-container">
-            <h3>Multi-Modal Source Material</h3>
-            <p class="description">Attach research files (PDF, DOCX, MP3, MP4) or paste URLs/notes.</p>
+            <h3><?php echo esc_html__( 'Multi-Modal Source Material', 'presshub-ai-editor' ); ?></h3>
+            <p class="description"><?php echo esc_html__( 'Attach research files (PDF, DOCX, MP3, MP4) or paste URLs/notes.', 'presshub-ai-editor' ); ?></p>
             <input type="file" id="presshub-ai-files" multiple accept=".pdf,.docx,.mp3,.mp4,.wav,.m4a" style="margin-bottom: 10px; display: block;" />
-            <textarea id="presshub-ai-sources" rows="4" maxlength="20000" style="width:100%;" placeholder="Paste notes or URLs here..."></textarea>
-            
-            <h3>Journalist Instructions</h3>
-            <p class="description">What should the AI focus on in this draft?</p>
+            <textarea id="presshub-ai-sources" rows="4" maxlength="20000" style="width:100%;" placeholder="<?php echo esc_attr__( 'Paste notes or URLs here...', 'presshub-ai-editor' ); ?>"></textarea>
+
+            <h3><?php echo esc_html__( 'Journalist Instructions', 'presshub-ai-editor' ); ?></h3>
+            <p class="description"><?php echo esc_html__( 'What should the AI focus on in this draft?', 'presshub-ai-editor' ); ?></p>
             <textarea id="presshub-ai-instructions" rows="2" maxlength="5000" style="width:100%;"></textarea>
-            
+
             <?php $this->render_preset_selector(); ?>
-            
+
             <button type="button" id="presshub-ai-generate-draft" class="button button-primary" data-post-id="<?php echo esc_attr( $post->ID ); ?>" style="margin-top: 10px;">
-                Generate Initial Draft
+                <?php echo esc_html__( 'Generate Initial Draft', 'presshub-ai-editor' ); ?>
             </button>
             <span id="presshub-ai-draft-spinner" class="spinner"></span>
-            
+
             <hr />
-            
-            <h3>Editorial Scorecard</h3>
+
+            <h3><?php echo esc_html__( 'Editorial Scorecard', 'presshub-ai-editor' ); ?></h3>
             <button type="button" id="presshub-ai-run-review" class="button" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
-                Run AI Editorial Review
+                <?php echo esc_html__( 'Run AI Editorial Review', 'presshub-ai-editor' ); ?>
             </button>
             <span id="presshub-ai-review-spinner" class="spinner"></span>
-            
+
             <div id="presshub-ai-scorecard-results" style="margin-top: 15px;">
                 <?php if ( is_array( $scorecard ) && isset( $scorecard['score'] ) && is_numeric( $scorecard['score'] ) ) : ?>
                     <div class="scorecard-box">
-                        <strong>Score: <?php echo esc_html( $scorecard['score'] ); ?>/100</strong>
+                        <strong><?php
+                            /* translators: %s: numeric score 0-100. */
+                            echo esc_html( sprintf( __( 'Score: %s/100', 'presshub-ai-editor' ), $scorecard['score'] ) );
+                        ?></strong>
                         <?php if ( isset( $scorecard['feedback'] ) && is_string( $scorecard['feedback'] ) ) : ?>
                             <p><?php echo esc_html( $scorecard['feedback'] ); ?></p>
                         <?php endif; ?>
@@ -122,21 +125,25 @@ class PressHub_AI_Metaboxes {
                 continue;
             }
             $seen[ $preset['slug'] ] = true;
-            $options[] = [ 'value' => $preset['slug'], 'label' => $preset['name'] . ' (default)' ];
+            $options[] = [
+                'value' => $preset['slug'],
+                /* translators: appended to a plugin-default preset label. */
+                'label' => $preset['name'] . __( ' (default)', 'presshub-ai-editor' ),
+            ];
         }
 
         $selected = ( $default_slug !== '' && isset( $seen[ $default_slug ] ) )
             ? $default_slug
             : '__plugin_default__';
         ?>
-        <h3>Author Style Preset</h3>
+        <h3><?php echo esc_html__( 'Author Style Preset', 'presshub-ai-editor' ); ?></h3>
         <select id="presshub-ai-preset" name="instruction_preset_id" style="width:100%;">
-            <option value="__plugin_default__"<?php echo $selected === '__plugin_default__' ? ' selected="selected"' : ''; ?>>&mdash; Use my default &mdash;</option>
+            <option value="__plugin_default__"<?php echo $selected === '__plugin_default__' ? ' selected="selected"' : ''; ?>><?php echo esc_html__( '— Use my default —', 'presshub-ai-editor' ); ?></option>
             <?php foreach ( $options as $option ) : ?>
                 <option value="<?php echo esc_attr( $option['value'] ); ?>"<?php echo $selected === $option['value'] ? ' selected="selected"' : ''; ?>><?php echo esc_html( $option['label'] ); ?></option>
             <?php endforeach; ?>
         </select>
-        <p class="description">Pick a preset to influence the system prompt. The per-article instructions above still take precedence in the user prompt.</p>
+        <p class="description"><?php echo esc_html__( 'Pick a preset to influence the system prompt. The per-article instructions above still take precedence in the user prompt.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 }

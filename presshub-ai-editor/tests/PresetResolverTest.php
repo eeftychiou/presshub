@@ -264,6 +264,259 @@ class PresetResolverTest
             $failures[] = "Empty per-request slug should fall through to author default. Got: " . var_export( $r, true );
         }
 
+        // ==================================================================
+        // Org layers (2026-08-15 design §9 Q3 / Antigravity A-6):
+        // per-request > taxonomy > role > author default > plugin default.
+        // All 4-arg calls; the $context param is required to activate the
+        // taxonomy/role layers (3-arg calls stay on the old chain).
+        // ==================================================================
+
+        // --- Case 20: taxonomy default beats role + author defaults ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+            [ 'slug' => 'fact-check', 'name' => 'Fact', 'instruction_text' => 'FACT_TEXT', 'enabled' => true ],
+            [ 'slug' => 'interview', 'name' => 'Interview', 'instruction_text' => 'INTERVIEW_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style' ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets']     = [ 'editor' => 'fact-check' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'taxonomies' => [ 'sports' ], 'roles' => [ 'editor' ] ] );
+        if ( $r !== 'PLUGIN_TEXT' ) {
+            $failures[] = "Taxonomy default should beat role + author defaults. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 21: first matching term in context wins ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+            [ 'slug' => 'interview', 'name' => 'Interview', 'instruction_text' => 'INTERVIEW_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'uncategorized' => 'interview', 'sports' => 'wire-style' ];
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'taxonomies' => [ 'uncategorized', 'sports' ] ] );
+        if ( $r !== 'INTERVIEW_TEXT' ) {
+            $failures[] = "First matching term in taxonomies should win. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 22: role default beats author default (no taxonomy match) ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'fact-check', 'name' => 'Fact', 'instruction_text' => 'FACT_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style' ]; // post not in sports
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets']     = [ 'editor' => 'fact-check' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'taxonomies' => [ 'uncategorized' ], 'roles' => [ 'editor' ] ] );
+        if ( $r !== 'FACT_TEXT' ) {
+            $failures[] = "Role default should beat the author default. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 23: first matching role wins ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'fact-check', 'name' => 'Fact', 'instruction_text' => 'FACT_TEXT', 'enabled' => true ],
+            [ 'slug' => 'interview', 'name' => 'Interview', 'instruction_text' => 'INTERVIEW_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets'] = [ 'subscriber' => 'interview', 'editor' => 'fact-check' ];
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'roles' => [ 'subscriber', 'editor' ] ] );
+        if ( $r !== 'INTERVIEW_TEXT' ) {
+            $failures[] = "First matching role should win. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 24: org layers respect the author's disabled-defaults list ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+            [ 'slug' => 'interview', 'name' => 'Interview', 'instruction_text' => 'INTERVIEW_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style' ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets']     = [ 'editor' => 'interview' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_disabled_default_presets'] = [ 'wire-style' ];
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'taxonomies' => [ 'sports' ], 'roles' => [ 'editor' ] ] );
+        if ( $r !== 'INTERVIEW_TEXT' ) {
+            $failures[] = "Disabled-defaults list should block a taxonomy default and fall through to the role layer. Got: " . var_export( $r, true );
+        }
+        // Same, but the role default is also blocked -> author default applies.
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_disabled_default_presets'] = [ 'wire-style', 'interview' ];
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'taxonomies' => [ 'sports' ], 'roles' => [ 'editor' ] ] );
+        if ( $r !== 'AUTHOR_TEXT' ) {
+            $failures[] = "Disabled-defaults list should block both org layers and fall through to the author default. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 25: disabled (enabled=false) org-layer preset is skipped ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'ghost', 'name' => 'Ghost', 'instruction_text' => 'GHOST_TEXT', 'enabled' => false ],
+            [ 'slug' => 'interview', 'name' => 'Interview', 'instruction_text' => 'INTERVIEW_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'ghost' ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets']     = [ 'editor' => 'interview' ];
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'taxonomies' => [ 'sports' ], 'roles' => [ 'editor' ] ] );
+        if ( $r !== 'INTERVIEW_TEXT' ) {
+            $failures[] = "Disabled org-layer preset should be skipped in favour of the next layer. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 26: per-request slug still beats org layers ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+            [ 'slug' => 'interview', 'name' => 'Interview', 'instruction_text' => 'INTERVIEW_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style' ];
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', 'interview', [ 'taxonomies' => [ 'sports' ] ] );
+        if ( $r !== 'INTERVIEW_TEXT' ) {
+            $failures[] = "Per-request slug should beat the taxonomy default. Got: " . var_export( $r, true );
+        }
+        // Unknown per-request slug falls through to the taxonomy layer.
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', 'no-such-preset', [ 'taxonomies' => [ 'sports' ] ] );
+        if ( $r !== 'PLUGIN_TEXT' ) {
+            $failures[] = "Unknown per-request slug should fall through to the taxonomy default. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 27: per-request '__none__' disables everything incl. org layers ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', '__none__', [ 'taxonomies' => [ 'sports' ] ] );
+        if ( $r !== null ) {
+            $failures[] = "Per-request '__none__' should disable org layers too. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 28: taxonomy '__none__' disables the rest of the chain ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => '__none__' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'taxonomies' => [ 'sports' ] ] );
+        if ( $r !== null ) {
+            $failures[] = "Taxonomy '__none__' should disable the rest of the chain. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 29: role '__none__' disables the rest of the chain ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets'] = [ 'editor' => '__none__' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'roles' => [ 'editor' ] ] );
+        if ( $r !== null ) {
+            $failures[] = "Role '__none__' should disable the rest of the chain. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 30: empty context (4-arg, non-current user) = old behavior ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets'] = [ 'editor' => 'wire-style' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [] );
+        if ( $r !== 'AUTHOR_TEXT' ) {
+            $failures[] = "Empty context with a non-current user should behave exactly as before (author default). Got: " . var_export( $r, true );
+        }
+
+        // --- Case 31: 3-arg backward compat — role layer never applies,
+        //               even when the user IS the current user ---
+        self::reset();
+        $GLOBALS['CURRENT_USER_ID'] = 7;
+        $GLOBALS['CURRENT_USER_ROLES'] = [ 'editor' ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets'] = [ 'editor' => 'wire-style' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null );
+        if ( $r !== 'AUTHOR_TEXT' ) {
+            $failures[] = "3-arg call must skip the role layer even for the current user. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 32: current-user roles apply on a 4-arg call ---
+        self::reset();
+        $GLOBALS['CURRENT_USER_ID'] = 7;
+        $GLOBALS['CURRENT_USER_ROLES'] = [ 'editor' ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_role_presets'] = [ 'editor' => 'wire-style' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [] );
+        if ( $r !== 'PLUGIN_TEXT' ) {
+            $failures[] = "4-arg call for the current user should apply the wp_get_current_user role default. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 33: endpoint gating applies to org layers too ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style' ];
+        foreach ( [ 'scorecard', 'classify', 'audio', 'unknown-endpoint' ] as $endpoint ) {
+            $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, $endpoint, null, [ 'taxonomies' => [ 'sports' ] ] );
+            if ( $r !== null ) {
+                $failures[] = "Endpoint '{$endpoint}' must return null even with an org context. Got: " . var_export( $r, true );
+            }
+        }
+
+        // --- Case 34: missing user short-circuits even with org context ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style' ];
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 0, 'draft', null, [ 'taxonomies' => [ 'sports' ] ] );
+        if ( $r !== null ) {
+            $failures[] = "User id 0 should short-circuit to null even with an org context. Got: " . var_export( $r, true );
+        }
+
+        // --- Case 35: non-array context taxonomies/roles are ignored ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
+            [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'PLUGIN_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style' ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'my-style', 'name' => 'Mine', 'instruction_text' => 'AUTHOR_TEXT', 'enabled' => true ],
+        ];
+        $GLOBALS['USER_META_STORE'][7]['presshub_ai_default_preset_id'] = 'my-style';
+        $r = PressHub_AI_Preset_Resolver::resolve_for_user( 7, 'draft', null, [ 'taxonomies' => 'sports', 'roles' => 'editor' ] );
+        if ( $r !== 'AUTHOR_TEXT' ) {
+            $failures[] = "Non-array context taxonomies/roles should be ignored (author default applies). Got: " . var_export( $r, true );
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {
@@ -277,6 +530,8 @@ class PresetResolverTest
     private static function reset(): void {
         unset( $GLOBALS['OPTIONS_STORE'] );
         unset( $GLOBALS['USER_META_STORE'] );
+        unset( $GLOBALS['CURRENT_USER_ID'] );
+        unset( $GLOBALS['CURRENT_USER_ROLES'] );
     }
 }
 
