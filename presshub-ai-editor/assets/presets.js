@@ -15,9 +15,12 @@
  * `i18n` payload still provides a last-ditch default.
  */
 /* global jQuery */
-const { __ } = wp.i18n;
 (function($) {
     'use strict';
+    // __ is scoped inside this IIFE on purpose — a top-level const in a
+    // classic script would collide with other scripts declaring __
+    // ("Identifier '__' has already been declared").
+    const { __ } = wp.i18n;
 
     var cfg = window.presshubAI || {};
     var i18n = cfg.i18n || {};

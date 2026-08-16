@@ -19,10 +19,15 @@
  *     (LF-1 / F-02 + F-27).
  */
 /* global wp, jQuery, presshubAI, tinymce */
-const { __ } = wp.i18n;
 
 jQuery(document).ready(function($) {
     'use strict';
+    // NOTE: __ is scoped INSIDE this callback (function scope) on purpose.
+    // A top-level `const { __ } = wp.i18n` in a classic script would create
+    // a global binding that collides with any other script declaring __
+    // ("Identifier '__' has already been declared" — SyntaxError kills the
+    // whole file). Function scope is immune to that class of bug.
+    const { __ } = wp.i18n;
 
     // ------------------------------------------------------------------
     // Small helpers.

@@ -6,11 +6,19 @@
  * that the PHP enqueue wires in.
  */
 /* global wp, jQuery, presshubAI */
+(function () {
+    'use strict';
+    // The whole file is IIFE-wrapped: top-level consts (__ , el, etc.) stay
+    // function-scoped so they can never collide with other classic scripts
+    // on the page ("Identifier '__' has already been declared" kills the
+    // script), and `el` is aliased from createElement because wp.element.el
+    // was removed in WP 6.6+.
+
 const { __, sprintf } = wp.i18n;
 
 const { registerPlugin } = wp.plugins;
 const { PluginSidebar } = wp.editPost;
-const { el, useState, useEffect, useRef } = wp.element;
+const { createElement: el, useState, useEffect, useRef } = wp.element;
 const { Button, TextareaControl, Spinner } = wp.components;
 
 // Research status polling bounds: 40 attempts x 3s = 2 minutes max.
@@ -490,3 +498,4 @@ const AICoPilotSidebar = () => {
 };
 
 registerPlugin('presshub-ai-copilot', { render: AICoPilotSidebar });
+})();
