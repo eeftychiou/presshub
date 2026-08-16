@@ -434,6 +434,9 @@ class PressHub_AI_Ajax_Handlers {
     /**
      * AJAX: presshub_ai_save_preset — create or update one preset.
      *
+     * Thin wrapper (architect A-2): auth + sanitize input, then delegate
+     * quota/upsert semantics to PressHub_AI_Preset_Store::upsert().
+     *
      * POST params: scope ('author' default | 'plugin'), slug, name,
      * instruction_text, enabled ('1'/'0'; when omitted on an update the
      * existing enabled state is preserved, new presets default to enabled).
@@ -470,69 +473,34 @@ class PressHub_AI_Ajax_Handlers {
 
         $this->enforce_preset_throttle();
 
-        $user_id = 0;
-        if ( 'plugin' === $scope ) {
-            $list = PressHub_AI_Preset_Store::get_plugin_defaults();
-            $max  = 50;
-        } else {
-            $user_id = (int) get_current_user_id();
-            $list    = PressHub_AI_Preset_Store::get_author_presets( $user_id );
-            $max     = 25;
-        }
-
-        $exists      = false;
-        $prev_enabled = true;
-        foreach ( $list as $row ) {
-            if ( $row['slug'] === $slug ) {
-                $exists       = true;
-                $prev_enabled = $row['enabled'];
-                break;
-            }
-        }
-        if ( ! $exists && count( $list ) >= $max ) {
-            wp_send_json_error( "Preset limit reached ({$max} max)." );
-        }
-
-        $enabled = isset( $_POST['enabled'] )
-            ? (bool) $_POST['enabled']
-            : ( $exists ? $prev_enabled : true );
-
-        $clean = PressHub_AI_Preset_Sanitizer::sanitize_preset( [
+        $row = [
             'slug'             => $slug,
             'name'             => $name,
             'instruction_text' => $instruction_text,
-            'enabled'          => $enabled,
-        ] );
-        if ( $clean === null ) {
-            wp_send_json_error( 'Invalid preset data.' );
+        ];
+        if ( isset( $_POST['enabled'] ) ) {
+            $row['enabled'] = (bool) $_POST['enabled'];
         }
 
-        $rows    = [];
-        $updated = false;
-        foreach ( $list as $row ) {
-            if ( $row['slug'] === $slug ) {
-                $rows[]  = $clean;
-                $updated = true;
-            } else {
-                $rows[] = $row;
-            }
-        }
-        if ( ! $updated ) {
-            $rows[] = $clean;
-        }
+        $max = ( 'plugin' === $scope )
+            ? PressHub_AI_Preset_Store::PLUGIN_MAX_PRESETS
+            : PressHub_AI_Preset_Store::AUTHOR_MAX_PRESETS;
 
-        if ( 'plugin' === $scope ) {
-            PressHub_AI_Preset_Store::save_plugin_defaults( $rows );
-        } else {
-            PressHub_AI_Preset_Store::save_author_presets( $user_id, $rows );
+        $result = PressHub_AI_Preset_Store::upsert( $scope, (int) get_current_user_id(), $row, $max );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
         }
 
         $this->record_preset_throttle();
-        wp_send_json_success( $clean );
+        wp_send_json_success( $result );
     }
 
     /**
      * AJAX: presshub_ai_delete_preset.
+     *
+     * Thin wrapper (architect A-2): auth + sanitize input, then delegate
+     * to PressHub_AI_Preset_Store::remove().
      *
      * Author scope: soft delete — sets enabled=false but keeps the row so
      * existing selections don't break. Plugin scope (manage_options):
@@ -557,37 +525,15 @@ class PressHub_AI_Ajax_Handlers {
 
         $this->enforce_preset_throttle();
 
-        if ( 'plugin' === $scope ) {
-            $list  = PressHub_AI_Preset_Store::get_plugin_defaults();
-            $rows  = [];
-            $found = false;
-            foreach ( $list as $row ) {
-                if ( $row['slug'] === $slug ) {
-                    $found = true;
-                    continue;
-                }
-                $rows[] = $row;
-            }
-            if ( ! $found ) {
-                wp_send_json_error( 'Preset not found.' );
-            }
-            PressHub_AI_Preset_Store::save_plugin_defaults( $rows );
-        } else {
-            $user_id = (int) get_current_user_id();
-            $list    = PressHub_AI_Preset_Store::get_author_presets( $user_id );
-            $rows    = [];
-            $found   = false;
-            foreach ( $list as $row ) {
-                if ( $row['slug'] === $slug ) {
-                    $found          = true;
-                    $row['enabled'] = false;
-                }
-                $rows[] = $row;
-            }
-            if ( ! $found ) {
-                wp_send_json_error( 'Preset not found.' );
-            }
-            PressHub_AI_Preset_Store::save_author_presets( $user_id, $rows );
+        $removed = PressHub_AI_Preset_Store::remove(
+            $scope,
+            (int) get_current_user_id(),
+            $slug,
+            'plugin' === $scope
+        );
+
+        if ( ! $removed ) {
+            wp_send_json_error( 'Preset not found.' );
         }
 
         $this->record_preset_throttle();
@@ -632,6 +578,10 @@ class PressHub_AI_Ajax_Handlers {
      * AJAX: presshub_ai_copy_default_preset — copy a plugin-default preset
      * into the author's own library (copy-on-edit model, design §2.2).
      *
+     * Thin wrapper (architect A-2): auth + sanitize input, then delegate
+     * collision-suffix + quota semantics to
+     * PressHub_AI_Preset_Store::copy_default_to_author().
+     *
      * POST param: slug (must name an enabled plugin-default preset). On
      * slug collision in the author's library the copy is stored as
      * '<slug>-copy-<n>'. Enforces the 25-preset author quota.
@@ -648,49 +598,16 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( 'Invalid preset slug.' );
         }
 
-        $source = null;
-        foreach ( PressHub_AI_Preset_Store::get_plugin_defaults() as $preset ) {
-            if ( $preset['slug'] === $slug ) {
-                $source = $preset;
-                break;
-            }
-        }
-        if ( $source === null || ! $source['enabled'] ) {
-            wp_send_json_error( 'Plugin default preset not found.' );
-        }
-
         $this->enforce_preset_throttle();
 
-        $user_id = (int) get_current_user_id();
-        $list    = PressHub_AI_Preset_Store::get_author_presets( $user_id );
+        $result = PressHub_AI_Preset_Store::copy_default_to_author( (int) get_current_user_id(), $slug );
 
-        $new_slug = $slug;
-        $n        = 1;
-        while ( $this->list_has_slug( $list, $new_slug ) ) {
-            // Truncate the base so the '-copy-<n>' suffix keeps the slug
-            // within the 40-char limit even for maximal-length slugs.
-            $new_slug = substr( $slug, 0, 32 ) . '-copy-' . $n;
-            $n++;
-            if ( $n > 999 ) {
-                wp_send_json_error( 'Too many preset copies.' );
-            }
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
         }
-
-        if ( count( $list ) >= 25 ) {
-            wp_send_json_error( 'Preset limit reached (25 max).' );
-        }
-
-        $copy = [
-            'slug'             => $new_slug,
-            'name'             => $source['name'],
-            'instruction_text' => $source['instruction_text'],
-            'enabled'          => true,
-        ];
-        $list[] = $copy;
-        PressHub_AI_Preset_Store::save_author_presets( $user_id, $list );
 
         $this->record_preset_throttle();
-        wp_send_json_success( [ 'slug' => $new_slug, 'preset' => $copy ] );
+        wp_send_json_success( [ 'slug' => $result['slug'], 'preset' => $result ] );
     }
 
     /**
@@ -705,18 +622,6 @@ class PressHub_AI_Ajax_Handlers {
         $disabled = PressHub_AI_Preset_Store::get_disabled_defaults( $user_id );
         foreach ( PressHub_AI_Preset_Store::get_plugin_defaults() as $preset ) {
             if ( $preset['slug'] === $slug && $preset['enabled'] && ! in_array( $slug, $disabled, true ) ) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether a preset list contains the given slug.
-     */
-    private function list_has_slug( array $list, string $slug ): bool {
-        foreach ( $list as $row ) {
-            if ( $row['slug'] === $slug ) {
                 return true;
             }
         }

@@ -44,6 +44,12 @@ class PressHub_AI_Preset_Store {
         ],
     ];
 
+    // Per-scope library quotas (2026-08-15 design §6.1): 25 author
+    // presets, 50 plugin defaults. Single source of truth for both the
+    // Store methods and the thin AJAX handlers (architect A-2).
+    const AUTHOR_MAX_PRESETS = 25;
+    const PLUGIN_MAX_PRESETS = 50;
+
     /**
      * Read the plugin-default presets (sanitized).
      *
@@ -157,6 +163,194 @@ class PressHub_AI_Preset_Store {
         $clean = self::sanitize_slug_list( $slugs );
         update_user_meta( $user_id, self::META_DISABLED_DEFAULT_PRESETS, $clean );
         return $clean;
+    }
+
+    /**
+     * Create or update one preset row in the given scope's library.
+     *
+     * Central home for the quota + upsert-by-slug invariants that the AJAX
+     * handlers used to re-implement by hand (architect A-2/A-3):
+     *   - input is run through PressHub_AI_Preset_Sanitizer before storage;
+     *   - a full library (count($list) >= $max) rejects NEW slugs with a
+     *     WP_Error 'preset_limit' (updates of existing rows always pass);
+     *   - an update replaces the row in place — one row per slug, always;
+     *   - when 'enabled' is omitted, an existing row keeps its current
+     *     enabled state and a new row defaults to enabled=true.
+     *
+     * @param string $scope   'author' (user meta) or 'plugin' (option).
+     * @param int    $user_id Author id; ignored for plugin scope.
+     * @param array  $row     slug + name + instruction_text (+ optional enabled).
+     * @param int    $max     Quota for the scope (AUTHOR_MAX_PRESETS / PLUGIN_MAX_PRESETS).
+     * @return array|WP_Error The sanitized stored row, or WP_Error
+     *                        ('preset_limit' when full, 'invalid_preset' when
+     *                        the row cannot be sanitized).
+     */
+    public static function upsert( string $scope, int $user_id, array $row, int $max ) {
+        $list = self::read_list( $scope, $user_id );
+
+        $exists       = false;
+        $prev_enabled = true;
+        $slug         = isset( $row['slug'] ) ? (string) $row['slug'] : '';
+        foreach ( $list as $existing ) {
+            if ( $existing['slug'] === $slug ) {
+                $exists       = true;
+                $prev_enabled = $existing['enabled'];
+                break;
+            }
+        }
+
+        if ( ! $exists && count( $list ) >= $max ) {
+            return new WP_Error( 'preset_limit', sprintf( 'Preset limit reached (%d max).', $max ) );
+        }
+
+        if ( ! array_key_exists( 'enabled', $row ) ) {
+            $row['enabled'] = $exists ? $prev_enabled : true;
+        }
+
+        $clean = PressHub_AI_Preset_Sanitizer::sanitize_preset( $row );
+        if ( $clean === null ) {
+            return new WP_Error( 'invalid_preset', 'Invalid preset data.' );
+        }
+
+        $rows    = [];
+        $updated = false;
+        foreach ( $list as $existing ) {
+            if ( $existing['slug'] === $clean['slug'] ) {
+                $rows[]  = $clean;
+                $updated = true;
+            } else {
+                $rows[] = $existing;
+            }
+        }
+        if ( ! $updated ) {
+            $rows[] = $clean;
+        }
+
+        self::write_list( $scope, $user_id, $rows );
+        return $clean;
+    }
+
+    /**
+     * Remove one preset row from the given scope's library.
+     *
+     * Soft delete (recommended for author scope so existing selections
+     * keep resolving) sets enabled=false and keeps the row; hard delete
+     * drops the row entirely (plugin scope, manage_options only).
+     *
+     * @param string $scope   'author' (user meta) or 'plugin' (option).
+     * @param int    $user_id Author id; ignored for plugin scope.
+     * @param string $slug    The preset slug to remove.
+     * @param bool   $hard    true = hard delete, false = soft delete.
+     * @return bool True when the slug existed (and the library was
+     *              rewritten); false when the slug was not found.
+     */
+    public static function remove( string $scope, int $user_id, string $slug, bool $hard ): bool {
+        $list  = self::read_list( $scope, $user_id );
+        $rows  = [];
+        $found = false;
+
+        foreach ( $list as $row ) {
+            if ( $row['slug'] === $slug ) {
+                $found = true;
+                if ( ! $hard ) {
+                    $row['enabled'] = false;
+                    $rows[]         = $row;
+                }
+                continue;
+            }
+            $rows[] = $row;
+        }
+
+        if ( ! $found ) {
+            return false;
+        }
+
+        self::write_list( $scope, $user_id, $rows );
+        return true;
+    }
+
+    /**
+     * Copy a plugin-default preset into the author's own library
+     * (copy-on-edit model, design §2.2).
+     *
+     * On a slug collision the copy is stored as '<slug>-copy-<n>' (the
+     * base is truncated to 32 chars so the suffix always fits the 40-char
+     * slug limit). Enforces the author quota (AUTHOR_MAX_PRESETS).
+     *
+     * @param int    $user_id
+     * @param string $slug Source plugin-default slug.
+     * @return array|WP_Error The new row, or WP_Error ('preset_not_found'
+     *                        for an unknown/disabled source, 'preset_limit'
+     *                        when the author library is full,
+     *                        'too_many_copies' past the -copy-999 cap).
+     */
+    public static function copy_default_to_author( int $user_id, string $slug ) {
+        $source = null;
+        foreach ( self::get_plugin_defaults() as $preset ) {
+            if ( $preset['slug'] === $slug ) {
+                $source = $preset;
+                break;
+            }
+        }
+        if ( $source === null || ! $source['enabled'] ) {
+            return new WP_Error( 'preset_not_found', 'Plugin default preset not found.' );
+        }
+
+        $list     = self::get_author_presets( $user_id );
+        $new_slug = $slug;
+        $n        = 1;
+        while ( self::list_has_slug( $list, $new_slug ) ) {
+            $new_slug = substr( $slug, 0, 32 ) . '-copy-' . $n;
+            $n++;
+            if ( $n > 999 ) {
+                return new WP_Error( 'too_many_copies', 'Too many preset copies.' );
+            }
+        }
+
+        if ( count( $list ) >= self::AUTHOR_MAX_PRESETS ) {
+            return new WP_Error( 'preset_limit', sprintf( 'Preset limit reached (%d max).', self::AUTHOR_MAX_PRESETS ) );
+        }
+
+        $copy = [
+            'slug'             => $new_slug,
+            'name'             => $source['name'],
+            'instruction_text' => $source['instruction_text'],
+            'enabled'          => true,
+        ];
+
+        $list[] = $copy;
+        self::save_author_presets( $user_id, $list );
+        return $copy;
+    }
+
+    /**
+     * Read the whole preset list for a scope (sanitized).
+     */
+    private static function read_list( string $scope, int $user_id ): array {
+        return 'plugin' === $scope
+            ? self::get_plugin_defaults()
+            : self::get_author_presets( $user_id );
+    }
+
+    /**
+     * Sanitize and store the whole preset list for a scope.
+     */
+    private static function write_list( string $scope, int $user_id, array $rows ): array {
+        return 'plugin' === $scope
+            ? self::save_plugin_defaults( $rows )
+            : self::save_author_presets( $user_id, $rows );
+    }
+
+    /**
+     * Whether a preset list contains the given slug.
+     */
+    private static function list_has_slug( array $list, string $slug ): bool {
+        foreach ( $list as $row ) {
+            if ( $row['slug'] === $slug ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

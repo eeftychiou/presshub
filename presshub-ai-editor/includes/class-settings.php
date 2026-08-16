@@ -1,6 +1,8 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-provider-defaults.php';
+
 /**
  * PressHub AI Editor settings page (P1-P6 overhaul).
  *
@@ -61,30 +63,24 @@ class PressHub_AI_Settings {
     }
 
     // ------------------------------------------------------------------
-    // Defaults (shared with the API client via static accessors).
+    // Defaults (single source of truth: class-provider-defaults.php).
+    // Thin delegators keep the public static API stable for callers.
     // ------------------------------------------------------------------
 
     public static function default_model( $provider ): string {
-        switch ( $provider ) {
-            case 'anthropic':
-                return 'claude-3-5-sonnet-20240620';
-            case 'gemini':
-                return 'gemini-1.5-pro-latest';
-            default:
-                return 'gpt-4o';
-        }
+        return PressHub_AI_Provider_Defaults::default_model( $provider );
     }
 
     public static function default_temperature(): float {
-        return 0.7;
+        return PressHub_AI_Provider_Defaults::default_temperature();
     }
 
     public static function default_max_tokens(): int {
-        return 2000;
+        return PressHub_AI_Provider_Defaults::default_max_tokens();
     }
 
     public static function default_timeout( $provider ): int {
-        return 'openai' === $provider ? 60 : 90;
+        return PressHub_AI_Provider_Defaults::default_timeout( $provider );
     }
 
     // ------------------------------------------------------------------

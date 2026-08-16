@@ -1,6 +1,8 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-preset-ui.php';
+
 /**
  * Author profile section: "PressHub AI Presets".
  *
@@ -144,7 +146,7 @@ class PressHub_AI_Author_Presets {
                     <tr class="presshub-preset-row" data-slug="<?php echo esc_attr( $preset['slug'] ); ?>" data-text="<?php echo esc_attr( $preset['instruction_text'] ); ?>">
                         <td class="presshub-preset-name"><?php echo esc_html( $preset['name'] ); ?></td>
                         <td><code><?php echo esc_html( $preset['slug'] ); ?></code></td>
-                        <td class="presshub-preset-text"><?php echo esc_html( $this->excerpt( $preset['instruction_text'], 120 ) ); ?></td>
+                        <td class="presshub-preset-text"><?php echo esc_html( PressHub_AI_Preset_UI::excerpt( $preset['instruction_text'], 120 ) ); ?></td>
                         <td>
                             <button type="button" class="button presshub-preset-edit"<?php echo $control_state; ?>><?php echo esc_html( __( 'Edit', 'presshub-ai-editor' ) ); ?></button>
                             <button type="button" class="button presshub-preset-delete"<?php echo $control_state; ?>><?php echo esc_html( __( 'Delete', 'presshub-ai-editor' ) ); ?></button>
@@ -231,17 +233,6 @@ class PressHub_AI_Author_Presets {
             require_once __DIR__ . '/class-preset-sanitizer.php';
             require_once __DIR__ . '/class-preset-store.php';
         }
-    }
-
-    /**
-     * Plain-text excerpt for table cells (no WP formatting dependency).
-     */
-    private function excerpt( string $text, int $length = 120 ): string {
-        $text = trim( $text );
-        if ( strlen( $text ) <= $length ) {
-            return $text;
-        }
-        return substr( $text, 0, $length ) . '…';
     }
 }
 

@@ -19,6 +19,16 @@ class PressHub_AI_Workflow {
     }
 
     public function enforce_editorial_workflow( $new_status, $old_status, $post ) {
+        // The editorial gate only applies to regular posts (Antigravity
+        // C-5). Research posts and other CPTs are never routed through the
+        // publish gate — they are written by cron/headless flows where
+        // current_user_can() is unreliable (user 0), and reverting them
+        // would corrupt non-article content. Real WP always passes a full
+        // WP_Post here; bail defensively when post_type is missing.
+        if ( ! is_object( $post ) || ! isset( $post->post_type ) || 'post' !== $post->post_type ) {
+            return;
+        }
+
         // Bail out if we are already enforcing to prevent infinite recursion
         // when wp_update_post() fires transition_post_status again below.
         if ( self::$enforcing ) {

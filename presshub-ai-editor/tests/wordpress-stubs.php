@@ -100,13 +100,18 @@ if ( ! function_exists( 'wp_update_post' ) ) {
         ];
 
         // Recreate the transition_post_status re-fire so tests can observe
-        // the recursion hazard. In recursion-test mode, re-fire with the
-        // SAME publish->publish pair so the buggy handler re-enters; in
-        // normal mode re-fire with the natural publish->pending pair.
+        // the recursion hazard. The re-fired post carries the same
+        // post_type as the original (from POST_TYPES, defaulting to 'post')
+        // — real WP always passes a full WP_Post here, and the workflow's
+        // post_type guard (Antigravity C-5) must not mask recursion bugs.
+        $re_fired_post = (object) [
+            'ID'        => $post_id,
+            'post_type' => $GLOBALS['POST_TYPES'][ $post_id ] ?? 'post',
+        ];
         if ( ! empty( $GLOBALS['RECURSION_TEST_MODE'] ) ) {
-            do_action( 'transition_post_status', 'publish', $new_status, (object) [ 'ID' => $post_id ] );
+            do_action( 'transition_post_status', 'publish', $new_status, $re_fired_post );
         } else {
-            do_action( 'transition_post_status', $new_status, $old_status, (object) [ 'ID' => $post_id ] );
+            do_action( 'transition_post_status', $new_status, $old_status, $re_fired_post );
         }
         return $post_id;
     }

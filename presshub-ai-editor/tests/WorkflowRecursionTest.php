@@ -83,6 +83,21 @@ class WorkflowRecursionTest
             $failures[] = "High-score author should not be reverted (0 wp_update_post calls), got {$count}.";
         }
 
+        // Antigravity C-5: non-'post' post types (research CPT, headless /
+        // cron transitions) must never touch the editorial publish gate.
+        // An author publishing a presshub_research post with no scorecard
+        // must NOT trigger wp_update_post.
+        self::reset_world();
+        self::grant_author_caps();
+        $GLOBALS['POST_TYPES'][42] = 'presshub_research';
+        $workflow = new PressHub_AI_Workflow();
+        $post = (object) [ 'ID' => 42, 'post_type' => 'presshub_research' ];
+        $GLOBALS['POST_STATUSES'][42] = 'pending';
+        do_action( 'transition_post_status', 'publish', 'pending', $post );
+        if ( ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 ) !== 0 ) {
+            $failures[] = "CPT transitions must bypass the editorial gate (0 wp_update_post calls), got " . ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 ) . ".";
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {
@@ -98,6 +113,7 @@ class WorkflowRecursionTest
         $GLOBALS['OPTIONS_STORE'] = [];
         $GLOBALS['CURRENT_USER_CAPS'] = [];
         $GLOBALS['POST_STATUSES'] = [];
+        $GLOBALS['POST_TYPES'] = [];
         $GLOBALS['HOOK_INVOCATION_COUNT'] = 0;
         $GLOBALS['WP_UPDATE_POST_CALLS'] = 0;
         $GLOBALS['HOOK_INVOCATION_LOG'] = [];
@@ -123,7 +139,7 @@ class WorkflowRecursionTest
      */
     private static function simulate_unreviewed_publish(): int {
         $workflow = new PressHub_AI_Workflow();
-        $post = (object) [ 'ID' => 42 ];
+        $post = (object) [ 'ID' => 42, 'post_type' => 'post' ];
         $GLOBALS['POST_STATUSES'][42] = 'draft';
 
         // Fire the transition once. With a recursion guard in place, this
@@ -141,7 +157,7 @@ class WorkflowRecursionTest
      */
     private static function probe_guard_with_publish_to_publish(): int {
         $workflow = new PressHub_AI_Workflow();
-        $post = (object) [ 'ID' => 42 ];
+        $post = (object) [ 'ID' => 42, 'post_type' => 'post' ];
         $GLOBALS['POST_STATUSES'][42] = 'publish';
 
         // First call: author + no scorecard. new_status is 'publish'.
@@ -159,7 +175,7 @@ class WorkflowRecursionTest
      */
     private static function probe_reentry_publish_to_publish(): void {
         $GLOBALS['RECURSION_TEST_MODE'] = true;
-        $GLOBALS['RECURSION_PROBE_POST'] = (object) [ 'ID' => 42 ];
+        $GLOBALS['RECURSION_PROBE_POST'] = (object) [ 'ID' => 42, 'post_type' => 'post' ];
         $GLOBALS['POST_STATUSES'][42] = 'draft';
         new PressHub_AI_Workflow();
         // Fire publish transition for an author with no scorecard.

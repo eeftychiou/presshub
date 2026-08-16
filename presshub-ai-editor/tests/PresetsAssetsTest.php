@@ -164,6 +164,57 @@ class PresetsAssetsTest
             $failures[] = 'Viewing another profile should render the section read-only.';
         }
 
+        // --- Case 6: the shared excerpt helper (A-5 dedup) truncates long
+        //             preset text in both rendered pages ---
+        $long_text = 'Start with the most important information. Then add context and background, keeping sentences short. Finally, end with next steps and a call to action.';
+        if ( strlen( $long_text ) <= 120 ) {
+            $failures[] = 'Test fixture should exceed the 120-char excerpt length.';
+        }
+        $excerpt = PressHub_AI_Preset_UI::excerpt( $long_text, 120 );
+        if ( $excerpt !== substr( $long_text, 0, 120 ) . '…' ) {
+            $failures[] = 'PressHub_AI_Preset_UI::excerpt() should truncate with an ellipsis; got: ' . var_export( $excerpt, true );
+        }
+        if ( PressHub_AI_Preset_UI::excerpt( 'Short text' ) !== 'Short text' ) {
+            $failures[] = 'PressHub_AI_Preset_UI::excerpt() should return short text untouched.';
+        }
+        if ( PressHub_AI_Preset_UI::excerpt( '  padded  ' ) !== 'padded' ) {
+            $failures[] = 'PressHub_AI_Preset_UI::excerpt() should trim input.';
+        }
+
+        self::reset();
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['OPTIONS_STORE'][ PressHub_AI_Preset_Store::OPTION_DEFAULT_PRESETS ] = [
+            [ 'slug' => 'long-style', 'name' => 'Long', 'instruction_text' => $long_text, 'enabled' => true ],
+        ];
+        $admin = new PressHub_AI_Admin_Presets();
+        ob_start();
+        $admin->render_page();
+        $html = ob_get_clean();
+        if ( false === strpos( $html, substr( $long_text, 0, 120 ) . '…' ) ) {
+            $failures[] = 'Admin presets page should render the truncated excerpt of a long preset.';
+        }
+        // The full text legitimately lives in data-text + the hidden edit
+        // textarea, so scope the tail check to the excerpt cell itself.
+        if ( ! preg_match( '/class="presshub-preset-text">([^<]*)</', $html, $m ) || $m[1] !== substr( $long_text, 0, 120 ) . '…' ) {
+            $failures[] = 'Admin presets excerpt cell must contain only the truncated excerpt; got: ' . var_export( $m[1] ?? null, true );
+        }
+
+        self::reset();
+        $GLOBALS['CURRENT_USER_ID'] = 9;
+        $GLOBALS['USER_META_STORE'][9]['presshub_ai_author_presets'] = [
+            [ 'slug' => 'long-style', 'name' => 'Long', 'instruction_text' => $long_text, 'enabled' => true ],
+        ];
+        $author = new PressHub_AI_Author_Presets();
+        ob_start();
+        $author->render_presets_section( (object) [ 'ID' => 9 ] );
+        $html = ob_get_clean();
+        if ( false === strpos( $html, substr( $long_text, 0, 120 ) . '…' ) ) {
+            $failures[] = 'Author section should render the truncated excerpt of a long preset.';
+        }
+        if ( ! preg_match( '/class="presshub-preset-text">([^<]*)</', $html, $m ) || $m[1] !== substr( $long_text, 0, 120 ) . '…' ) {
+            $failures[] = 'Author presets excerpt cell must contain only the truncated excerpt; got: ' . var_export( $m[1] ?? null, true );
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {
@@ -181,6 +232,7 @@ class PresetsAssetsTest
         $GLOBALS['CURRENT_USER_CAPS'] = [];
         $GLOBALS['CURRENT_USER_ID']   = 0;
         $GLOBALS['OPTIONS_STORE']     = [];
+        $GLOBALS['USER_META_STORE']   = [];
     }
 }
 

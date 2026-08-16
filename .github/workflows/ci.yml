@@ -53,19 +53,9 @@ jobs:
       - name: Run PHP unit tests (TDD harness)
         run: |
           set -e
-          for t in tests/WorkflowRecursionTest.php tests/ImagenProjectIdTest.php \
-                   tests/SideloadMediaTest.php tests/ClassifyIntentProviderTest.php \
-                   tests/ChatRoutingAdminGateTest.php tests/RateLimiterTest.php \
-                   tests/AjaxIntegrationRateLimitTest.php tests/ResearchCleanupTest.php \
-                   tests/PromptFiltersTest.php tests/InputLimitsTest.php \
-                   tests/PresetSanitizerTest.php tests/PresetStoreTest.php \
-                   tests/PresetResolverTest.php tests/SettingsPageTest.php \
-                   tests/PerProviderConfigTest.php tests/SettingsSanitizeTest.php \
-                   tests/InstructionCompositionTest.php tests/AuthorInstructionsTest.php \
-                   tests/RunReviewStatusGuardTest.php tests/PresetThrottleTest.php \
-                   tests/UploadValidationTest.php tests/UninstallTest.php \
-                   tests/PresetsAssetsTest.php tests/MetaboxesRenderTest.php \
-                   tests/ResearchJobGuardTest.php; do
+          # Glob-discovery: every tests/*Test.php suite runs automatically,
+          # so a new harness can never be silently omitted from CI.
+          for t in tests/*Test.php; do
             echo "=== $t ==="
             php "$t"
           done

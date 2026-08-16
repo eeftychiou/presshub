@@ -1,6 +1,7 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-provider-defaults.php';
 require_once __DIR__ . '/class-preset-sanitizer.php';
 require_once __DIR__ . '/class-preset-store.php';
 require_once __DIR__ . '/class-preset-resolver.php';
@@ -22,32 +23,9 @@ class PressHub_AI_API_Client {
         // ACTIVE provider's options, with the legacy global model as a
         // fallback for sites that have not run the migration yet.
         $this->model = $this->resolve_model( $this->provider );
-        $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $this->provider, self::default_temperature() );
-        $this->max_tokens = (int) get_option( 'presshub_ai_max_tokens_' . $this->provider, self::default_max_tokens() );
-        $this->timeout = (int) get_option( 'presshub_ai_timeout_' . $this->provider, self::default_timeout( $this->provider ) );
-    }
-
-    private static function default_temperature(): float {
-        return 0.7;
-    }
-
-    private static function default_max_tokens(): int {
-        return 2000;
-    }
-
-    private static function default_timeout( $provider ): int {
-        return 'openai' === $provider ? 60 : 90;
-    }
-
-    private static function default_model( $provider ): string {
-        switch ( $provider ) {
-            case 'anthropic':
-                return 'claude-3-5-sonnet-20240620';
-            case 'gemini':
-                return 'gemini-1.5-pro-latest';
-            default:
-                return 'gpt-4o';
-        }
+        $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $this->provider, PressHub_AI_Provider_Defaults::default_temperature() );
+        $this->max_tokens = (int) get_option( 'presshub_ai_max_tokens_' . $this->provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
+        $this->timeout = (int) get_option( 'presshub_ai_timeout_' . $this->provider, PressHub_AI_Provider_Defaults::default_timeout( $this->provider ) );
     }
 
     /**
@@ -64,7 +42,7 @@ class PressHub_AI_API_Client {
             $model = (string) get_option( 'presshub_ai_model', '' );
         }
         if ( '' === $model ) {
-            $model = self::default_model( $provider );
+            $model = PressHub_AI_Provider_Defaults::default_model( $provider );
         }
         return preg_replace( '#^models/#', '', $model );
     }
@@ -88,9 +66,9 @@ class PressHub_AI_API_Client {
 
         $this->provider    = $provider;
         $this->model       = $this->resolve_model( $provider );
-        $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $provider, self::default_temperature() );
-        $this->max_tokens  = (int) get_option( 'presshub_ai_max_tokens_' . $provider, self::default_max_tokens() );
-        $this->timeout     = (int) get_option( 'presshub_ai_timeout_' . $provider, self::default_timeout( $provider ) );
+        $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $provider, PressHub_AI_Provider_Defaults::default_temperature() );
+        $this->max_tokens  = (int) get_option( 'presshub_ai_max_tokens_' . $provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
+        $this->timeout     = (int) get_option( 'presshub_ai_timeout_' . $provider, PressHub_AI_Provider_Defaults::default_timeout( $provider ) );
 
         $sys = 'You are a test bot.';
         $user = 'Reply with exactly the word "Hello" and nothing else.';
