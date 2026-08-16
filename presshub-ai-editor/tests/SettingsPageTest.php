@@ -112,6 +112,7 @@ class SettingsPageTest
             'presshub_ai_gcloud_project_id',
             'presshub_ai_imagen_region',
             'presshub_ai_fetch_urls',
+            'presshub_ai_debug_prompts',
             'presshub_ai_rate_limit_enabled',
             'presshub_ai_rate_limit_per_hour',
             'presshub_ai_rate_limit_window_seconds',

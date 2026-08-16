@@ -172,6 +172,19 @@ if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
     }
 }
 
+if ( ! function_exists( 'trailingslashit' ) ) {
+    function trailingslashit( $path ) {
+        return rtrim( (string) $path, '/\\' ) . '/';
+    }
+}
+
+if ( ! function_exists( 'wp_upload_dir' ) ) {
+    function wp_upload_dir() {
+        $basedir = $GLOBALS['UPLOAD_DIR'] ?? sys_get_temp_dir() . '/presshub-uploads';
+        return [ 'basedir' => $basedir, 'baseurl' => 'http://example.test/wp-content/uploads', 'path' => $basedir, 'url' => 'http://example.test/wp-content/uploads' ];
+    }
+}
+
 if ( ! function_exists( 'wp_json_encode' ) ) {
     function wp_json_encode( $data, $options = 0, $depth = 512 ) {
         return json_encode( $data, $options, $depth );

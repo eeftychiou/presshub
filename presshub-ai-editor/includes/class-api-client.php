@@ -8,27 +8,35 @@ require_once __DIR__ . '/class-preset-resolver.php';
 require_once __DIR__ . '/class-url-fetcher.php';
 
 /**
- * Optional prompt inspection: when the presshub_ai_debug_prompts filter
- * returns true, the exact composed SYSTEM and USER prompts are written to
- * the PHP error log (debug.log with WP_DEBUG_LOG) before every provider
- * call, and mirrored via the presshub_ai_prompt_log action so code can
- * hook it (e.g. audit storage).
+ * Optional prompt inspection: when the presshub_ai_debug_prompts option
+ * (Settings → General → "Log AI prompts") or the presshub_ai_debug_prompts
+ * filter (returns true) is active, the exact composed SYSTEM and USER
+ * prompts are appended to wp-content/uploads/presshub-ai-debug.log before
+ * every provider call, and mirrored via the presshub_ai_prompt_log action
+ * so code can hook it (e.g. audit storage).
  *
- * Usage: add_filter( 'presshub_ai_debug_prompts', '__return_true' );
+ * The uploads directory is used so the log is trivially findable via the
+ * host file manager and never blocked by wp-content permissions.
  *
- * Lives here (class-api-client.php) so any consumer of the API client —
- * including the standalone test harness — gets the function; it is also
- * loaded by the main plugin bootstrap.
- *
- * @since 1.2.3
+ * @since 1.2.3 (filter), 1.2.5 (settings toggle + uploads file)
  */
 if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
     function presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt ) {
-        if ( ! apply_filters( 'presshub_ai_debug_prompts', false ) ) {
+        $debug_enabled = apply_filters( 'presshub_ai_debug_prompts', get_option( 'presshub_ai_debug_prompts', '0' ) === '1' );
+        if ( ! $debug_enabled ) {
             return;
         }
-        error_log( '[PressHub AI] ' . $endpoint . ' — SYSTEM prompt:' . PHP_EOL . $sys_prompt );
-        error_log( '[PressHub AI] ' . $endpoint . ' — USER prompt:' . PHP_EOL . $user_prompt );
+        $uploads  = wp_upload_dir();
+        $log_file = trailingslashit( $uploads['basedir'] ) . 'presshub-ai-debug.log';
+        $stamp    = gmdate( 'Y-m-d H:i:s' );
+        $entry    = "[$stamp] [$endpoint] SYSTEM prompt:\n" . $sys_prompt
+            . "\n\n[$stamp] [$endpoint] USER prompt:\n" . $user_prompt
+            . "\n\n---\n";
+        // message_type 3 appends to a file directly (no WP filesystem API
+        // needed); @-silenced so a read-only uploads dir can't break the
+        // draft request.
+        // phpcs:ignore WordPress.PHP.NoSilencedErrors
+        @error_log( $entry, 3, $log_file );
         do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt );
     }
 }

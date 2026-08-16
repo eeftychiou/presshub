@@ -41,7 +41,7 @@ function pdl_check( $label, $condition ) {
     }
 }
 
-// --- Case 1: default (filter off) → nothing is logged ---------------------
+// --- Case 1: default (filter off, option off) → nothing is logged --------
 $GLOBALS['DO_ACTION_LOG'] = [];
 presshub_ai_log_prompts( 'draft', 'SYS', 'USER' );
 pdl_check( 'default: prompt_log action fired with debug off', empty( $GLOBALS['DO_ACTION_LOG'] ) );
@@ -117,4 +117,40 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PromptDebugLogTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PromptDebugLogTest: OK (11 checks)\n";
+
+// --- Case 4: settings option → file written to uploads (1.2.5) ------------
+$log_dir = sys_get_temp_dir() . '/presshub-pdl-' . getmypid();
+@mkdir( $log_dir, 0777, true );
+$GLOBALS['UPLOAD_DIR'] = $log_dir;
+$log_file = trailingslashit( $log_dir ) . 'presshub-ai-debug.log';
+@unlink( $log_file );
+
+$GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] = '1';
+presshub_ai_log_prompts( 'chat', 'SYS-OPT', 'USER-OPT' );
+pdl_check( 'option: log file created', file_exists( $log_file ) );
+if ( file_exists( $log_file ) ) {
+    $content = file_get_contents( $log_file );
+    pdl_check( 'option: system prompt in file', false !== strpos( $content, 'SYS-OPT' ) );
+    pdl_check( 'option: user prompt in file', false !== strpos( $content, 'USER-OPT' ) );
+    pdl_check( 'option: endpoint tag in file', false !== strpos( $content, '[chat]' ) );
+    pdl_check( 'option: SYSTEM header present', false !== strpos( $content, 'SYSTEM prompt:' ) );
+}
+
+// Option off → no new entry appended (filter from Case 2 removed first).
+unset( $GLOBALS['FILTERS']['presshub_ai_debug_prompts'] );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] = '0';
+presshub_ai_log_prompts( 'draft', 'SYS-OFF', 'USER-OFF' );
+if ( file_exists( $log_file ) ) {
+    $content = file_get_contents( $log_file );
+    pdl_check( 'option off: no entry appended', false === strpos( $content, 'SYS-OFF' ) );
+}
+
+@unlink( $log_file );
+@rmdir( $log_dir );
+unset( $GLOBALS['UPLOAD_DIR'], $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] );
+
+if ( $failures > 0 ) {
+    fwrite( STDERR, "PromptDebugLogTest: {$failures} failure(s)\n" );
+    exit( 1 );
+}
+echo "PromptDebugLogTest: OK (16 checks)\n";

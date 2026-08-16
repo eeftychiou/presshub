@@ -132,6 +132,13 @@ class PressHub_AI_Settings {
             'type'              => 'boolean',
         ] );
 
+        // Prompt inspection toggle (1.2.5): appends the exact SYSTEM/USER
+        // prompts to wp-content/uploads/presshub-ai-debug.log.
+        register_setting( 'presshub_ai_options', 'presshub_ai_debug_prompts', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_fetch_urls' ],
+            'type'              => 'boolean',
+        ] );
+
         // --- Providers ---
         register_setting( 'presshub_ai_options', 'presshub_ai_api_key', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_api_key' ],
@@ -226,6 +233,7 @@ class PressHub_AI_Settings {
         // --- P1: fields ---
         add_settings_field( 'presshub_ai_provider', __( 'AI Provider', 'presshub-ai-editor' ), [ $this, 'render_provider_field' ], 'presshub-ai', 'presshub_ai_general' );
         add_settings_field( 'presshub_ai_fetch_urls', __( 'Fetch source URLs', 'presshub-ai-editor' ), [ $this, 'render_fetch_urls_field' ], 'presshub-ai', 'presshub_ai_general' );
+        add_settings_field( 'presshub_ai_debug_prompts', __( 'Log AI prompts', 'presshub-ai-editor' ), [ $this, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_general' );
 
         add_settings_field( 'presshub_ai_api_key', __( 'API Key', 'presshub-ai-editor' ), [ $this, 'render_api_key_field' ], 'presshub-ai', 'presshub_ai_providers' );
         foreach ( self::PROVIDERS as $provider ) {
@@ -352,6 +360,21 @@ class PressHub_AI_Settings {
         <label for="presshub_ai_fetch_urls">
             <input type="checkbox" name="presshub_ai_fetch_urls" id="presshub_ai_fetch_urls" value="1" <?php echo $enabled ? 'checked="checked"' : ''; ?> />
             <?php echo esc_html__( 'Fetch and extract source URLs server-side before prompting (recommended — models cannot browse web pages).', 'presshub-ai-editor' ); ?>
+        </label>
+        <?php
+    }
+
+    /**
+     * 1.2.5: prompt inspection toggle. Writes the exact SYSTEM and USER
+     * prompts to wp-content/uploads/presshub-ai-debug.log (findable via
+     * the host file manager — no wp-config or PHP error log hunting).
+     */
+    public function render_debug_prompts_field() {
+        $enabled = get_option( 'presshub_ai_debug_prompts', '0' ) === '1';
+        ?>
+        <label for="presshub_ai_debug_prompts">
+            <input type="checkbox" name="presshub_ai_debug_prompts" id="presshub_ai_debug_prompts" value="1" <?php echo $enabled ? 'checked="checked"' : ''; ?> />
+            <?php echo esc_html__( 'Append every SYSTEM and USER prompt to wp-content/uploads/presshub-ai-debug.log (debugging only — disable in production).', 'presshub-ai-editor' ); ?>
         </label>
         <?php
     }
