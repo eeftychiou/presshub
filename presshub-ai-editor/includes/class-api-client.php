@@ -5,6 +5,7 @@ require_once __DIR__ . '/class-provider-defaults.php';
 require_once __DIR__ . '/class-preset-sanitizer.php';
 require_once __DIR__ . '/class-preset-store.php';
 require_once __DIR__ . '/class-preset-resolver.php';
+require_once __DIR__ . '/class-url-fetcher.php';
 
 /**
  * Optional prompt inspection: when the presshub_ai_debug_prompts filter
@@ -133,6 +134,12 @@ class PressHub_AI_API_Client {
         }
 
         $sys_prompt = apply_filters( 'presshub_ai_composed_system_prompt', $sys_prompt );
+
+        // URL sourcing (2026-08-16): models cannot browse URLs — fetch and
+        // extract each source URL server-side so the article text actually
+        // reaches the model (presshub_ai_fetch_urls option / filter).
+        $sources = PressHub_AI_URL_Fetcher::process_sources( $sources );
+
         $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions;
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 

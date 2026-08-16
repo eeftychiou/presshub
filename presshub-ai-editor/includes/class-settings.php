@@ -125,6 +125,13 @@ class PressHub_AI_Settings {
             'type'              => 'string',
         ] );
 
+        // Fetch source URLs server-side (2026-08-16): models cannot browse
+        // URLs, so the plugin fetches + extracts article text itself.
+        register_setting( 'presshub_ai_options', 'presshub_ai_fetch_urls', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_fetch_urls' ],
+            'type'              => 'boolean',
+        ] );
+
         // --- Providers ---
         register_setting( 'presshub_ai_options', 'presshub_ai_api_key', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_api_key' ],
@@ -218,6 +225,7 @@ class PressHub_AI_Settings {
 
         // --- P1: fields ---
         add_settings_field( 'presshub_ai_provider', __( 'AI Provider', 'presshub-ai-editor' ), [ $this, 'render_provider_field' ], 'presshub-ai', 'presshub_ai_general' );
+        add_settings_field( 'presshub_ai_fetch_urls', __( 'Fetch source URLs', 'presshub-ai-editor' ), [ $this, 'render_fetch_urls_field' ], 'presshub-ai', 'presshub_ai_general' );
 
         add_settings_field( 'presshub_ai_api_key', __( 'API Key', 'presshub-ai-editor' ), [ $this, 'render_api_key_field' ], 'presshub-ai', 'presshub_ai_providers' );
         foreach ( self::PROVIDERS as $provider ) {
@@ -330,6 +338,21 @@ class PressHub_AI_Settings {
             <option value="anthropic" <?php echo 'anthropic' === $provider ? 'selected="selected"' : ''; ?>><?php echo __( 'Anthropic', 'presshub-ai-editor' ); ?></option>
             <option value="gemini" <?php echo 'gemini' === $provider ? 'selected="selected"' : ''; ?>><?php echo __( 'Google Gemini', 'presshub-ai-editor' ); ?></option>
         </select>
+        <?php
+    }
+
+    /**
+     * 1.2.4: fetch source URLs server-side before prompting. Models cannot
+     * browse URLs, so each source URL in the draft request is fetched and
+     * its article text is injected into the prompt (class-url-fetcher.php).
+     */
+    public function render_fetch_urls_field() {
+        $enabled = get_option( 'presshub_ai_fetch_urls', '1' ) === '1';
+        ?>
+        <label for="presshub_ai_fetch_urls">
+            <input type="checkbox" name="presshub_ai_fetch_urls" id="presshub_ai_fetch_urls" value="1" <?php echo $enabled ? 'checked="checked"' : ''; ?> />
+            <?php echo esc_html__( 'Fetch and extract source URLs server-side before prompting (recommended — models cannot browse web pages).', 'presshub-ai-editor' ); ?>
+        </label>
         <?php
     }
 
@@ -529,6 +552,13 @@ class PressHub_AI_Settings {
     public static function sanitize_provider( $value ) {
         $value = self::sanitize_text( $value );
         return in_array( $value, self::PROVIDERS, true ) ? $value : 'openai';
+    }
+
+    /**
+     * 1.2.4: fetch-source-URLs toggle ('1'/'0' only).
+     */
+    public static function sanitize_fetch_urls( $value ) {
+        return '1' === $value || 1 === $value || 'on' === $value ? '1' : '0';
     }
 
     public static function sanitize_api_key( $value ) {
