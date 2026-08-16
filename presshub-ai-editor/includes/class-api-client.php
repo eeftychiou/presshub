@@ -6,6 +6,32 @@ require_once __DIR__ . '/class-preset-sanitizer.php';
 require_once __DIR__ . '/class-preset-store.php';
 require_once __DIR__ . '/class-preset-resolver.php';
 
+/**
+ * Optional prompt inspection: when the presshub_ai_debug_prompts filter
+ * returns true, the exact composed SYSTEM and USER prompts are written to
+ * the PHP error log (debug.log with WP_DEBUG_LOG) before every provider
+ * call, and mirrored via the presshub_ai_prompt_log action so code can
+ * hook it (e.g. audit storage).
+ *
+ * Usage: add_filter( 'presshub_ai_debug_prompts', '__return_true' );
+ *
+ * Lives here (class-api-client.php) so any consumer of the API client —
+ * including the standalone test harness — gets the function; it is also
+ * loaded by the main plugin bootstrap.
+ *
+ * @since 1.2.3
+ */
+if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
+    function presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt ) {
+        if ( ! apply_filters( 'presshub_ai_debug_prompts', false ) ) {
+            return;
+        }
+        error_log( '[PressHub AI] ' . $endpoint . ' — SYSTEM prompt:' . PHP_EOL . $sys_prompt );
+        error_log( '[PressHub AI] ' . $endpoint . ' — USER prompt:' . PHP_EOL . $user_prompt );
+        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt );
+    }
+}
+
 class PressHub_AI_API_Client {
     private $api_key;
     private $google_cloud_api_key;
@@ -110,6 +136,8 @@ class PressHub_AI_API_Client {
         $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions;
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 
+        presshub_ai_log_prompts( 'draft', $sys_prompt, $user_prompt );
+
         return $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
     }
 
@@ -121,6 +149,8 @@ class PressHub_AI_API_Client {
         $sys_prompt = __( 'You are an exacting news editor.', 'presshub-ai-editor' );
         $sys_prompt = apply_filters( 'presshub_ai_scorecard_system_prompt', $sys_prompt );
         $user_prompt = "Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).\n\nDraft:\n" . $content;
+
+        presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt );
 
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [] );
         

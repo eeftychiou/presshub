@@ -289,7 +289,7 @@ class PresetStoreTest
             $expected = [
                 'wire-style'      => [ 'name' => 'Wire service concise',    'instruction_text' => 'Use the inverted pyramid. Lead with the news; compress context into subsequent paragraphs.' ],
                 'interview-focus' => [ 'name' => 'Interview-driven',        'instruction_text' => 'Anchor every section in a direct quotation from the source notes.' ],
-                'fact-check'      => [ 'name' => 'Fact-check everything',   'instruction_text' => 'For every factual claim, add a parenthetical citing the source paragraph. Flag any unsourced claim.' ],
+                'fact-check'      => [ 'name' => 'Fact-check everything',   'instruction_text' => 'After drafting, verify every factual claim against the provided sources: add a parenthetical citing the source paragraph, and flag any claim the sources do not support as [UNSOURCED].' ],
             ];
             foreach ( $seeded as $row ) {
                 if ( ! isset( $expected[ $row['slug'] ] ) ) {

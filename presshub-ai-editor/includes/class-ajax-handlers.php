@@ -292,6 +292,9 @@ class PressHub_AI_Ajax_Handlers {
                 $sys .= "\n\n" . $preset;
             }
             $sys = apply_filters( 'presshub_ai_composed_chat_system_prompt', $sys );
+
+            presshub_ai_log_prompts( 'chat', $sys, $prompt );
+
             $result = $api->call_provider( $sys, $prompt, false, [] );
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );

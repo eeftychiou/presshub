@@ -52,7 +52,7 @@ class PressHub_AI_Preset_Store {
         [
             'slug'             => 'fact-check',
             'name'             => 'Fact-check everything',
-            'instruction_text' => 'For every factual claim, add a parenthetical citing the source paragraph. Flag any unsourced claim.',
+            'instruction_text' => 'After drafting, verify every factual claim against the provided sources: add a parenthetical citing the source paragraph, and flag any claim the sources do not support as [UNSOURCED].',
             'enabled'          => true,
         ],
     ];
