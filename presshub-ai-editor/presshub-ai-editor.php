@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 1.2.6
+ * Version: 1.2.7
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'PRESSHUB_AI_VERSION', '1.2.6' );
+define( 'PRESSHUB_AI_VERSION', '1.2.7' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -194,7 +194,7 @@ function presshub_ai_execute_research_job( $research_id ) {
     $user_prompt = "User prompt / request: " . $prompt . "\n\nAssociated Post Content Context:\n" . $post_content;
 
     $report = $api->call_provider( $sys_prompt, $user_prompt, false, [] );
-    presshub_ai_log_prompts( 'research', $sys_prompt, $user_prompt, is_wp_error( $report ) ? 'ERROR: ' . $report->get_error_message() : $report );
+    presshub_ai_log_prompts( 'research', $sys_prompt, $user_prompt, is_wp_error( $report ) ? 'ERROR: ' . $report->get_error_message() : $report, PressHub_AI_API_Client::current_request_meta() );
     
     if ( is_wp_error( $report ) ) {
         update_post_meta( $research_id, '_research_status', 'failed' );

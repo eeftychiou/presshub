@@ -293,7 +293,7 @@ class PressHub_AI_Ajax_Handlers {
             }
             $sys = apply_filters( 'presshub_ai_composed_chat_system_prompt', $sys );
             $result = $api->call_provider( $sys, $prompt, false, [] );
-            presshub_ai_log_prompts( 'chat', $sys, $prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result );
+            presshub_ai_log_prompts( 'chat', $sys, $prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, PressHub_AI_API_Client::current_request_meta() );
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );
             }

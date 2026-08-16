@@ -106,6 +106,9 @@ class PressHub_AI_URL_Fetcher {
         $text = preg_replace( '/\n{3,}/', "\n\n", $text );
         $text = trim( $text );
 
+        $text = self::strip_php_dump_noise( $text );
+        $text = self::cut_boilerplate( $text );
+
         // Truncate (mb-safe when available).
         if ( function_exists( 'mb_substr' ) ) {
             $text = mb_substr( $text, 0, self::MAX_CHARS_PER_URL );
@@ -116,6 +119,53 @@ class PressHub_AI_URL_Fetcher {
         // Scrub anything json_encode would reject later (invalid UTF-8).
         $clean = preg_replace( '/[^\x{0009}\x{000A}\x{000D}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', ' ', $text );
         return null === $clean ? preg_replace( '/[^\x20-\x7E]/', ' ', $text ) : trim( $clean );
+    }
+
+    /**
+     * Remove PHP var_dump / print_r debug output that some sites leak
+     * into their HTML (e.g. "array(1) {", "[0]=>", "int(453)" lines).
+     */
+    public static function strip_php_dump_noise( $text ): string {
+        $lines = preg_split( '/\r?\n/', (string) $text );
+        $out   = [];
+        $in_dump = false;
+        foreach ( $lines as $line ) {
+            $line = rtrim( $line );
+            if ( preg_match( '/^array\(\d+\)\s*\{$/', $line ) || preg_match( '/^(object|stdClass)\(/', $line ) ) {
+                $in_dump = true;
+                continue;
+            }
+            if ( $in_dump ) {
+                if ( preg_match( '/^\[\d+\]=>$/', $line ) || preg_match( '/^(int|string|float|bool|NULL|array)\(/', $line ) || '' === $line || '}' === $line ) {
+                    continue;
+                }
+                $in_dump = false;
+            }
+            $out[] = $line;
+        }
+        return implode( "\n", $out );
+    }
+
+    /**
+     * Cut the article text at the first common boilerplate marker
+     * (newsletter signup, comments, related stories, ads) that sites
+     * often nest inside their <article> container. English + Greek.
+     */
+    public static function cut_boilerplate( $text ): string {
+        $markers = [
+            'Εγγραφή στο Newsletter', 'ΣΧΟΛΙΑ', 'Προβολή σχολίων', 'ΣΧΕΤΙΚΑ ΝΕΑ',
+            'TOP STORIES', 'ΤΑ ΑΚΙΝΗΤΑ ΤΗΣ ΕΒΔΟΜΑΔΑΣ',
+            'Leave a comment', 'Comments', 'Related Articles', 'Related Stories',
+            'Subscribe to our newsletter', 'Newsletter', 'Recommended for you',
+        ];
+        foreach ( $markers as $marker ) {
+            $pos = function_exists( 'mb_strpos' ) ? mb_strpos( (string) $text, $marker ) : strpos( (string) $text, $marker );
+            if ( false !== $pos ) {
+                $cut = function_exists( 'mb_substr' ) ? mb_substr( (string) $text, 0, $pos ) : substr( (string) $text, 0, $pos );
+                return trim( $cut );
+            }
+        }
+        return (string) $text;
     }
 
     /**

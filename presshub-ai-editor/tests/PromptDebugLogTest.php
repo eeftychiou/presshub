@@ -147,6 +147,14 @@ if ( file_exists( $log_file ) ) {
     pdl_check( 'response: response body in file', false !== strpos( $content, 'FULL RESPONSE TEXT' ) );
 }
 
+// Meta/config line (1.2.7): a 5th arg appears as a CONFIG prefix.
+presshub_ai_log_prompts( 'draft', 'SYS-M', 'USER-M', 'RESP-M', 'provider=openai model=gpt-4o max_tokens=3000' );
+if ( file_exists( $log_file ) ) {
+    $content = file_get_contents( $log_file );
+    pdl_check( 'meta: CONFIG line present', false !== strpos( $content, 'CONFIG: provider=openai model=gpt-4o max_tokens=3000' ) );
+    pdl_check( 'meta: entry tagged draft', false !== strpos( $content, '[draft] CONFIG: provider=openai' ) );
+}
+
 // Errors are logged too.
 presshub_ai_log_prompts( 'draft', 'SYS-E', 'USER-E', 'ERROR: boom' );
 if ( file_exists( $log_file ) ) {
@@ -171,4 +179,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PromptDebugLogTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PromptDebugLogTest: OK (24 checks)\n";
+echo "PromptDebugLogTest: OK (26 checks)\n";

@@ -30,8 +30,11 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
      * @param string       $user_prompt Composed USER prompt.
      * @param string|null  $response   Provider text response, or an
      *                                 error string ('ERROR: ...') to log.
+     * @param string       $meta       Optional request config line
+     *                                 (e.g. "provider=openai model=gpt-4o
+     *                                 max_tokens=2000").
      */
-    function presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt, $response = null ) {
+    function presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt, $response = null, $meta = '' ) {
         $debug_enabled = apply_filters( 'presshub_ai_debug_prompts', get_option( 'presshub_ai_debug_prompts', '0' ) === '1' );
         if ( ! $debug_enabled ) {
             return;
@@ -39,7 +42,11 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
         $uploads  = wp_upload_dir();
         $log_file = trailingslashit( $uploads['basedir'] ) . 'presshub-ai-debug.log';
         $stamp    = gmdate( 'Y-m-d H:i:s' );
-        $entry    = "[$stamp] [$endpoint] SYSTEM prompt:\n" . $sys_prompt
+        $entry    = "[$stamp] [$endpoint]";
+        if ( '' !== $meta ) {
+            $entry .= ' CONFIG: ' . $meta;
+        }
+        $entry .= " SYSTEM prompt:\n" . $sys_prompt
             . "\n\n[$stamp] [$endpoint] USER prompt:\n" . $user_prompt;
         if ( null !== $response ) {
             $entry .= "\n\n[$stamp] [$endpoint] RESPONSE (" . strlen( (string) $response ) . " chars):\n" . $response;
@@ -50,12 +57,27 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
         // draft request.
         // phpcs:ignore WordPress.PHP.NoSilencedErrors
         @error_log( $entry, 3, $log_file );
-        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt, $response );
+        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt, $response, $meta );
     }
 }
 
 class PressHub_AI_API_Client {
     private $api_key;
+
+    /**
+     * Request-config line for the debug log: mirrors the constructor's
+     * option resolution (provider, model, max_tokens) so truncation is
+     * diagnosable at a glance (a saved max_tokens option overrides the
+     * provider default).
+     */
+    public static function current_request_meta(): string {
+        $provider   = (string) get_option( 'presshub_ai_provider', 'openai' );
+        $model      = (string) get_option( 'presshub_ai_model_' . $provider, '' );
+        $max_tokens = (int) get_option( 'presshub_ai_max_tokens_' . $provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
+        return 'provider=' . $provider
+            . ' model=' . ( '' !== $model ? $model : 'default' )
+            . ' max_tokens=' . $max_tokens;
+    }
     private $google_cloud_api_key;
     private $provider;
     private $model;
@@ -165,7 +187,7 @@ class PressHub_AI_API_Client {
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 
         $result = $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
-        presshub_ai_log_prompts( 'draft', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result );
+        presshub_ai_log_prompts( 'draft', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, self::current_request_meta() );
 
         return $result;
     }
@@ -180,7 +202,7 @@ class PressHub_AI_API_Client {
         $user_prompt = "Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).\n\nDraft:\n" . $content;
 
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [] );
-        presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result );
+        presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, self::current_request_meta() );
         
         if ( is_wp_error( $result ) ) return $result;
         

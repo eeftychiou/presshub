@@ -127,8 +127,21 @@ $joined = implode( ' ', $bodies );
 uf_check( 'draft: fetched content reached the model', false !== strpos( $joined, 'Fetched rebuttal source content' ) );
 uf_check( 'draft: source header in request', false !== strpos( $joined, 'Source article (fetched from' ) );
 
+// --- 8. extraction noise: php dump + boilerplate (1.2.7) ---------------------
+$dirty = "array(1) {\n[0]=>\nint(453)\n}\nMain article body text.\nΕγγραφή στο Newsletter\nΣΧΟΛΙΑ\nRelated junk";
+$clean = PressHub_AI_URL_Fetcher::strip_php_dump_noise( $dirty );
+uf_check( 'noise: var_dump header removed', false === strpos( $clean, 'array(1)' ) );
+uf_check( 'noise: var_dump value removed', false === strpos( $clean, 'int(453)' ) );
+uf_check( 'noise: body kept', false !== strpos( $clean, 'Main article body text.' ) );
+$cut = PressHub_AI_URL_Fetcher::cut_boilerplate( $clean );
+uf_check( 'boilerplate: cut before newsletter', false === strpos( $cut, 'Εγγραφή στο Newsletter' ) );
+uf_check( 'boilerplate: cut before comments', false === strpos( $cut, 'ΣΧΟΛΙΑ' ) );
+uf_check( 'boilerplate: body kept', false !== strpos( $cut, 'Main article body text.' ) );
+uf_check( 'boilerplate: english marker works', PressHub_AI_URL_Fetcher::cut_boilerplate( "Body text.\nComments\nmore" ) === 'Body text.' );
+uf_check( 'boilerplate: no marker → unchanged', PressHub_AI_URL_Fetcher::cut_boilerplate( 'Just body text.' ) === 'Just body text.' );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "UrlFetcherTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "UrlFetcherTest: OK (22 checks)\n";
+echo "UrlFetcherTest: OK (30 checks)\n";
