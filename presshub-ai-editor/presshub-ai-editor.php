@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 1.2.7
+ * Version: 1.2.8
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -17,7 +17,32 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'PRESSHUB_AI_VERSION', '1.2.7' );
+/**
+ * 1.2.8 migration: the default max_tokens rose 2000 -> 3000 -> 10000.
+ * A stored per-provider max_tokens option beats the default, so installs
+ * that saved settings while 2000 was the default would stay capped at
+ * 2000 forever. If a stored value equals the OLD default (2000) it was
+ * almost certainly never a deliberate choice — delete it so the new
+ * default applies. Custom values (anything else) are left untouched.
+ * Runs once; guarded by the presshub_ai_migrated_max_tokens flag.
+ */
+if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
+    function presshub_ai_migrate_max_tokens_defaults() {
+        if ( '1' === get_option( 'presshub_ai_migrated_max_tokens', '0' ) ) {
+            return;
+        }
+        foreach ( array( 'openai', 'anthropic', 'gemini' ) as $provider ) {
+            $option = 'presshub_ai_max_tokens_' . $provider;
+            if ( 2000 === (int) get_option( $option, 0 ) ) {
+                delete_option( $option );
+            }
+        }
+        update_option( 'presshub_ai_migrated_max_tokens', '1', false );
+    }
+}
+add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
+
+define( 'PRESSHUB_AI_VERSION', '1.2.8' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 

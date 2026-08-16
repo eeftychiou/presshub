@@ -69,6 +69,13 @@ if ( ! function_exists( 'update_option' ) ) {
     }
 }
 
+if ( ! function_exists( 'delete_option' ) ) {
+    function delete_option( $key ) {
+        unset( $GLOBALS['OPTIONS_STORE'][ $key ] );
+        return true;
+    }
+}
+
 if ( ! function_exists( 'current_user_can' ) ) {
     function current_user_can( $capability ) {
         $caps = $GLOBALS['CURRENT_USER_CAPS'] ?? [];
