@@ -20,7 +20,7 @@ class PressHub_AI_Provider_Defaults {
     ];
 
     const DEFAULT_TEMPERATURE = 0.7;
-    const DEFAULT_MAX_TOKENS   = 2000;
+    const DEFAULT_MAX_TOKENS   = 3000;
 
     /** OpenAI's endpoint is faster; everyone else gets 90s. */
     const DEFAULT_TIMEOUT_OPENAI = 60;

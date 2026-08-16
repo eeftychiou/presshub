@@ -21,7 +21,17 @@ require_once __DIR__ . '/class-url-fetcher.php';
  * @since 1.2.3 (filter), 1.2.5 (settings toggle + uploads file)
  */
 if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
-    function presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt ) {
+    /**
+     * Append the composed prompts (and, when $response is passed, the
+     * provider's response) to wp-content/uploads/presshub-ai-debug.log.
+     *
+     * @param string       $endpoint   draft|scorecard|chat|research
+     * @param string       $sys_prompt Composed SYSTEM prompt.
+     * @param string       $user_prompt Composed USER prompt.
+     * @param string|null  $response   Provider text response, or an
+     *                                 error string ('ERROR: ...') to log.
+     */
+    function presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt, $response = null ) {
         $debug_enabled = apply_filters( 'presshub_ai_debug_prompts', get_option( 'presshub_ai_debug_prompts', '0' ) === '1' );
         if ( ! $debug_enabled ) {
             return;
@@ -30,14 +40,17 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
         $log_file = trailingslashit( $uploads['basedir'] ) . 'presshub-ai-debug.log';
         $stamp    = gmdate( 'Y-m-d H:i:s' );
         $entry    = "[$stamp] [$endpoint] SYSTEM prompt:\n" . $sys_prompt
-            . "\n\n[$stamp] [$endpoint] USER prompt:\n" . $user_prompt
-            . "\n\n---\n";
+            . "\n\n[$stamp] [$endpoint] USER prompt:\n" . $user_prompt;
+        if ( null !== $response ) {
+            $entry .= "\n\n[$stamp] [$endpoint] RESPONSE (" . strlen( (string) $response ) . " chars):\n" . $response;
+        }
+        $entry .= "\n\n---\n";
         // message_type 3 appends to a file directly (no WP filesystem API
         // needed); @-silenced so a read-only uploads dir can't break the
         // draft request.
         // phpcs:ignore WordPress.PHP.NoSilencedErrors
         @error_log( $entry, 3, $log_file );
-        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt );
+        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt, $response );
     }
 }
 
@@ -151,9 +164,10 @@ class PressHub_AI_API_Client {
         $user_prompt = "Write a news article draft based on the following sources.\n\nSources:\n" . $sources . "\n\nInstructions:\n" . $instructions;
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 
-        presshub_ai_log_prompts( 'draft', $sys_prompt, $user_prompt );
+        $result = $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
+        presshub_ai_log_prompts( 'draft', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result );
 
-        return $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
+        return $result;
     }
 
     public function generate_scorecard( $content ) {
@@ -165,9 +179,8 @@ class PressHub_AI_API_Client {
         $sys_prompt = apply_filters( 'presshub_ai_scorecard_system_prompt', $sys_prompt );
         $user_prompt = "Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).\n\nDraft:\n" . $content;
 
-        presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt );
-
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [] );
+        presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result );
         
         if ( is_wp_error( $result ) ) return $result;
         

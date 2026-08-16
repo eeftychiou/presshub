@@ -134,6 +134,24 @@ if ( file_exists( $log_file ) ) {
     pdl_check( 'option: user prompt in file', false !== strpos( $content, 'USER-OPT' ) );
     pdl_check( 'option: endpoint tag in file', false !== strpos( $content, '[chat]' ) );
     pdl_check( 'option: SYSTEM header present', false !== strpos( $content, 'SYSTEM prompt:' ) );
+    pdl_check( 'option: no RESPONSE section without response arg', false === strpos( $content, 'RESPONSE (' ) );
+}
+
+// Response logging: passing the 4th arg appends a RESPONSE section with
+// the exact text and a char count.
+presshub_ai_log_prompts( 'draft', 'SYS-R', 'USER-R', 'FULL RESPONSE TEXT' );
+if ( file_exists( $log_file ) ) {
+    $content = file_get_contents( $log_file );
+    pdl_check( 'response: RESPONSE header present', false !== strpos( $content, 'RESPONSE (' ) );
+    pdl_check( 'response: char count present', false !== strpos( $content, 'RESPONSE (18 chars)' ) );
+    pdl_check( 'response: response body in file', false !== strpos( $content, 'FULL RESPONSE TEXT' ) );
+}
+
+// Errors are logged too.
+presshub_ai_log_prompts( 'draft', 'SYS-E', 'USER-E', 'ERROR: boom' );
+if ( file_exists( $log_file ) ) {
+    $content = file_get_contents( $log_file );
+    pdl_check( 'response: error string logged', false !== strpos( $content, 'ERROR: boom' ) );
 }
 
 // Option off → no new entry appended (filter from Case 2 removed first).
@@ -153,4 +171,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PromptDebugLogTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PromptDebugLogTest: OK (16 checks)\n";
+echo "PromptDebugLogTest: OK (24 checks)\n";
