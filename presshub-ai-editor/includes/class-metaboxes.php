@@ -36,11 +36,12 @@ class PressHub_AI_Metaboxes {
         ?>
         <div class="presshub-ai-container">
             <h3><?php echo esc_html__( 'Multi-Modal Source Material', 'presshub-ai-editor' ); ?></h3>
-            <p class="description"><?php echo esc_html__( 'Attach research files (PDF, DOCX, MP3, MP4) or paste URLs/notes.', 'presshub-ai-editor' ); ?></p>
+            <label for="presshub-ai-files"><?php echo esc_html__( 'Attach research files (PDF, DOCX, MP3, MP4, WAV, M4A)', 'presshub-ai-editor' ); ?></label>
             <input type="file" id="presshub-ai-files" multiple accept=".pdf,.docx,.mp3,.mp4,.wav,.m4a" style="margin-bottom: 10px; display: block;" />
+            <label for="presshub-ai-sources"><?php echo esc_html__( 'Or paste URLs / notes', 'presshub-ai-editor' ); ?></label>
             <textarea id="presshub-ai-sources" rows="4" maxlength="20000" style="width:100%;" placeholder="<?php echo esc_attr__( 'Paste notes or URLs here...', 'presshub-ai-editor' ); ?>"></textarea>
 
-            <h3><?php echo esc_html__( 'Journalist Instructions', 'presshub-ai-editor' ); ?></h3>
+            <h3><label for="presshub-ai-instructions"><?php echo esc_html__( 'Journalist Instructions', 'presshub-ai-editor' ); ?></label></h3>
             <p class="description"><?php echo esc_html__( 'What should the AI focus on in this draft?', 'presshub-ai-editor' ); ?></p>
             <textarea id="presshub-ai-instructions" rows="2" maxlength="5000" style="width:100%;"></textarea>
 
@@ -49,7 +50,7 @@ class PressHub_AI_Metaboxes {
             <button type="button" id="presshub-ai-generate-draft" class="button button-primary" data-post-id="<?php echo esc_attr( $post->ID ); ?>" style="margin-top: 10px;">
                 <?php echo esc_html__( 'Generate Initial Draft', 'presshub-ai-editor' ); ?>
             </button>
-            <span id="presshub-ai-draft-spinner" class="spinner"></span>
+            <span id="presshub-ai-draft-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
 
             <hr />
 
@@ -57,14 +58,21 @@ class PressHub_AI_Metaboxes {
             <button type="button" id="presshub-ai-run-review" class="button" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
                 <?php echo esc_html__( 'Run AI Editorial Review', 'presshub-ai-editor' ); ?>
             </button>
-            <span id="presshub-ai-review-spinner" class="spinner"></span>
+            <span id="presshub-ai-review-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
 
             <div id="presshub-ai-scorecard-results" style="margin-top: 15px;">
                 <?php if ( is_array( $scorecard ) && isset( $scorecard['score'] ) && is_numeric( $scorecard['score'] ) ) : ?>
-                    <div class="scorecard-box">
+                    <?php
+                    // ME-4 / F-23: color-coded tone classes mirror the
+                    // admin.js renderer (red < 50, yellow 50-79, green >= 80).
+                    $score = (int) $scorecard['score'];
+                    $tone  = $score < 50 ? 'presshub-score-low' : ( $score < 80 ? 'presshub-score-mid' : 'presshub-score-high' );
+                    ?>
+                    <div class="scorecard-box <?php echo esc_attr( $tone ); ?>">
+                        <span class="presshub-score-badge" aria-hidden="true"><?php echo esc_html( $score . '/100' ); ?></span>
                         <strong><?php
                             /* translators: %s: numeric score 0-100. */
-                            echo esc_html( sprintf( __( 'Score: %s/100', 'presshub-ai-editor' ), $scorecard['score'] ) );
+                            echo esc_html( sprintf( __( 'Score: %s/100', 'presshub-ai-editor' ), $score ) );
                         ?></strong>
                         <?php if ( isset( $scorecard['feedback'] ) && is_string( $scorecard['feedback'] ) ) : ?>
                             <p><?php echo esc_html( $scorecard['feedback'] ); ?></p>
@@ -104,15 +112,22 @@ class PressHub_AI_Metaboxes {
 
         $options = [];
         $seen    = [];
+        // slug => bare display name, used to render the effective default
+        // in the label (ME-7 / F-05).
+        $name_map = [];
 
         foreach ( $author_presets as $preset ) {
             if ( empty( $preset['enabled'] ) ) {
                 continue;
             }
             $seen[ $preset['slug'] ] = true;
+            $name_map[ $preset['slug'] ] = $preset['name'];
             $options[] = [ 'value' => $preset['slug'], 'label' => $preset['name'] ];
         }
 
+        // First enabled plugin default the author hasn't disabled — the
+        // fallback that applies when no author default slug is set.
+        $first_plugin_default_name = '';
         foreach ( $plugin_defaults as $preset ) {
             if ( empty( $preset['enabled'] ) ) {
                 continue;
@@ -125,6 +140,10 @@ class PressHub_AI_Metaboxes {
                 continue;
             }
             $seen[ $preset['slug'] ] = true;
+            if ( $first_plugin_default_name === '' ) {
+                $first_plugin_default_name = $preset['name'];
+            }
+            $name_map[ $preset['slug'] ] = $preset['name'];
             $options[] = [
                 'value' => $preset['slug'],
                 /* translators: appended to a plugin-default preset label. */
@@ -135,8 +154,25 @@ class PressHub_AI_Metaboxes {
         $selected = ( $default_slug !== '' && isset( $seen[ $default_slug ] ) )
             ? $default_slug
             : '__plugin_default__';
+
+        // The name of the preset that applies when the journalist does not
+        // pick one explicitly: the author's default when set, else the
+        // first enabled plugin default (mirrors the resolver's fallback).
+        $default_name = '';
+        if ( $default_slug !== '' && isset( $name_map[ $default_slug ] ) ) {
+            $default_name = $name_map[ $default_slug ];
+        } elseif ( $first_plugin_default_name !== '' ) {
+            $default_name = $first_plugin_default_name;
+        }
         ?>
-        <h3><?php echo esc_html__( 'Author Style Preset', 'presshub-ai-editor' ); ?></h3>
+        <h3><label for="presshub-ai-preset"><?php
+            if ( $default_name !== '' ) {
+                /* translators: %s: display name of the effective default preset. */
+                echo esc_html( sprintf( __( 'Author Style Preset (default: %s)', 'presshub-ai-editor' ), $default_name ) );
+            } else {
+                echo esc_html__( 'Author Style Preset', 'presshub-ai-editor' );
+            }
+        ?></label></h3>
         <select id="presshub-ai-preset" name="instruction_preset_id" style="width:100%;">
             <option value="__plugin_default__"<?php echo $selected === '__plugin_default__' ? ' selected="selected"' : ''; ?>><?php echo esc_html__( '— Use my default —', 'presshub-ai-editor' ); ?></option>
             <?php foreach ( $options as $option ) : ?>

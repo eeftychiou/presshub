@@ -36,6 +36,7 @@ class PressHub_AI_Settings {
 
     public function enqueue_scripts( $hook ) {
         if ( 'settings_page_presshub-ai' === $hook ) {
+            wp_enqueue_style( 'presshub-ai-admin-css', PRESSHUB_AI_URL . 'assets/admin.css', [], PRESSHUB_AI_VERSION );
             wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
             wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
                 'ajax_url' => admin_url( 'admin-ajax.php' ),
@@ -270,7 +271,7 @@ class PressHub_AI_Settings {
             <button type="button" class="button presshub-ai-test-api" data-provider="openai"><?php echo __( 'Test OpenAI', 'presshub-ai-editor' ); ?></button>
             <button type="button" class="button presshub-ai-test-api" data-provider="anthropic"><?php echo __( 'Test Anthropic', 'presshub-ai-editor' ); ?></button>
             <button type="button" class="button presshub-ai-test-api" data-provider="gemini"><?php echo __( 'Test Gemini', 'presshub-ai-editor' ); ?></button>
-            <span id="presshub-ai-test-spinner" class="spinner"></span>
+            <span id="presshub-ai-test-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
             <div id="presshub-ai-test-result" style="margin-top: 10px; font-weight: bold;"></div>
         </div>
         <?php

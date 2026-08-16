@@ -37,6 +37,11 @@ class RunReviewStatusGuardTest
         if ( ( $GLOBALS['POST_STATUSES'][42] ?? null ) !== 'publish' ) {
             $failures[] = 'published post status must remain publish; got: ' . var_export( $GLOBALS['POST_STATUSES'][42] ?? null, true );
         }
+        // ME-8 / F-29: the response must report the post status after review.
+        $last = $GLOBALS['JSON_RESPONSES'][0]['data'] ?? null;
+        if ( ( $last['status_after'] ?? 'missing' ) !== 'publish' ) {
+            $failures[] = 'status_after should be "publish" for a published post; got: ' . var_export( $last['status_after'] ?? null, true );
+        }
 
         // --- Case 2: draft post + score >= 80 -> wp_update_post('pending') ---
         self::reset();
@@ -54,6 +59,10 @@ class RunReviewStatusGuardTest
         if ( ( $GLOBALS['POST_STATUSES'][43] ?? null ) !== 'pending' ) {
             $failures[] = 'post 43 should now be pending; got: ' . var_export( $GLOBALS['POST_STATUSES'][43] ?? null, true );
         }
+        $last = $GLOBALS['JSON_RESPONSES'][0]['data'] ?? null;
+        if ( ( $last['status_after'] ?? 'missing' ) !== 'pending' ) {
+            $failures[] = 'status_after should be "pending" after a draft -> pending transition; got: ' . var_export( $last['status_after'] ?? null, true );
+        }
 
         // --- Case 3: published post + score < 80 -> no wp_update_post ---
         self::reset();
@@ -64,6 +73,10 @@ class RunReviewStatusGuardTest
         if ( ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 ) !== 0 ) {
             $failures[] = 'run_review must not touch the post when score < 80; calls=' . ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 );
         }
+        $last = $GLOBALS['JSON_RESPONSES'][0]['data'] ?? null;
+        if ( ( $last['status_after'] ?? 'missing' ) !== 'publish' ) {
+            $failures[] = 'status_after should stay "publish" when score < 80; got: ' . var_export( $last['status_after'] ?? null, true );
+        }
 
         // --- Case 4: missing post (get_post null) -> no crash, no update ---
         self::reset();
@@ -71,6 +84,19 @@ class RunReviewStatusGuardTest
         self::drive_review( '{"score":88,"feedback":"ok"}' );
         if ( ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 ) !== 0 ) {
             $failures[] = 'run_review must not wp_update_post for a missing post; calls=' . ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 );
+        }
+        $last = $GLOBALS['JSON_RESPONSES'][0]['data'] ?? null;
+        if ( ! array_key_exists( 'status_after', $last ?? [] ) || $last['status_after'] !== null ) {
+            $failures[] = 'status_after should be null when no post exists; got: ' . var_export( $last['status_after'] ?? 'missing key', true );
+        }
+
+        // --- Case 5: no post_id -> status_after stays null ---
+        self::reset();
+        $_POST = [ 'content' => 'draft copy', 'nonce' => 'valid' ];
+        self::drive_review( '{"score":81,"feedback":"ok"}' );
+        $last = $GLOBALS['JSON_RESPONSES'][0]['data'] ?? null;
+        if ( ! is_array( $last ) || ! array_key_exists( 'status_after', $last ) || $last['status_after'] !== null ) {
+            $failures[] = 'status_after should be null when no post_id is sent; got: ' . var_export( $last, true );
         }
 
         if ( $failures ) {

@@ -207,22 +207,30 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( $scorecard->get_error_message() );
         }
 
+        $status_after = null;
         if ( $post_id ) {
             update_post_meta( $post_id, '_presshub_ai_scorecard', $scorecard );
 
-            if ( isset( $scorecard['score'] ) && intval( $scorecard['score'] ) >= 80 ) {
+            $post = get_post( $post_id );
+            if ( $post ) {
+                $status_after = $post->post_status;
+
                 // High-1 guard: run_review() must never demote an
                 // already-published post. Only non-published posts are
                 // transitioned to 'pending' for editorial review.
-                $post = get_post( $post_id );
-                if ( $post && 'publish' !== $post->post_status ) {
+                if ( isset( $scorecard['score'] ) && intval( $scorecard['score'] ) >= 80
+                    && 'publish' !== $post->post_status ) {
                     wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
+                    $status_after = 'pending';
                 }
             }
         }
 
         $this->record_rate_limit();
-        wp_send_json_success( $scorecard );
+        // ME-8 / F-29: report the post status after the review so the UI
+        // can tell the journalist what happened ('pending' = moved to
+        // editorial review, 'publish' = left alone, null = no post).
+        wp_send_json_success( array_merge( $scorecard, [ 'status_after' => $status_after ] ) );
     }
 
     public function handle_chat_routing() {

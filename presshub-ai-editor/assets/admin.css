@@ -2,13 +2,160 @@
     margin-top: 15px;
     margin-bottom: 5px;
 }
+
+/* Accessible labels (QW-2 / F-13). */
+.presshub-ai-container label {
+    display: block;
+    margin: 8px 0 4px;
+    font-weight: 600;
+}
+
+/* ------------------------------------------------------------------
+ * Inline notices (ME-1 / F-01): WP-styled .notice injected next to the
+ * metabox/button. Replaces the old alert() dialogs.
+ * ------------------------------------------------------------------ */
+.presshub-ai-container .presshub-ai-notice {
+    margin: 0 0 12px;
+}
+.presshub-ai-container .presshub-ai-notice p {
+    margin: 0.5em 0;
+}
+#presshub-ai-test-result .presshub-ai-notice {
+    margin: 10px 0 0;
+}
+
+/* Test-connection result states (QW-5 / F-25). */
+.presshub-test-ok {
+    color: #00a32a;
+}
+.presshub-test-fail {
+    color: #d63638;
+}
+
+/* ------------------------------------------------------------------
+ * Scorecard (ME-4 / F-23): the "Score: X/100" text stays the primary
+ * indicator; the border + badge add color-coded hierarchy. Red < 50,
+ * yellow 50-79, green >= 80. Both JS (admin.js) and PHP (metabox
+ * server-side render) emit these classes.
+ * ------------------------------------------------------------------ */
 .presshub-ai-container .scorecard-box {
     background: #f0f0f1;
     border-left: 4px solid #2271b1;
     padding: 12px;
     margin-top: 10px;
 }
+.presshub-ai-container .scorecard-box.presshub-score-high {
+    border-left-color: #00a32a;
+}
+.presshub-ai-container .scorecard-box.presshub-score-mid {
+    border-left-color: #dba617;
+}
+.presshub-ai-container .scorecard-box.presshub-score-low {
+    border-left-color: #d63638;
+}
+.presshub-score-badge {
+    display: inline-block;
+    background: #f0f0f1;
+    border-radius: 3px;
+    padding: 2px 8px;
+    margin-right: 8px;
+    font-weight: 600;
+    font-size: 13px;
+}
+.presshub-score-high .presshub-score-badge {
+    background: #00a32a;
+    color: #fff;
+}
+.presshub-score-mid .presshub-score-badge {
+    background: #dba617;
+    color: #fff;
+}
+.presshub-score-low .presshub-score-badge {
+    background: #d63638;
+    color: #fff;
+}
 
+/* ------------------------------------------------------------------
+ * Draft preview/diff modal (LF-1 / F-02 + F-27).
+ * ------------------------------------------------------------------ */
+.presshub-modal-backdrop {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 100000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+.presshub-modal-backdrop.is-open {
+    display: flex;
+}
+.presshub-modal {
+    background: #fff;
+    max-width: 720px;
+    width: 92%;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    border-radius: 4px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+.presshub-modal h2 {
+    margin: 0;
+    padding: 16px 24px;
+    border-bottom: 1px solid #dcdcde;
+    font-size: 16px;
+}
+.presshub-modal .presshub-modal-desc {
+    padding: 8px 24px 0;
+    margin: 0;
+}
+.presshub-diff {
+    margin: 12px 24px;
+    padding: 12px;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    overflow: auto;
+    max-height: 45vh;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+    line-height: 1.6;
+}
+.presshub-diff p {
+    margin: 0 0 8px;
+}
+.presshub-diff p:last-child {
+    margin-bottom: 0;
+}
+.presshub-diff ins {
+    background: #cfe8cf;
+    color: #1a7f1a;
+    text-decoration: none;
+}
+.presshub-diff del {
+    background: #f1c6c6;
+    color: #b32d2e;
+    text-decoration: line-through;
+}
+.presshub-modal-actions {
+    padding: 12px 24px 16px;
+    border-top: 1px solid #dcdcde;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.presshub-modal-actions .presshub-modal-cancel {
+    margin-left: auto;
+}
+body.presshub-modal-open {
+    overflow: hidden;
+}
+
+/* Sidebar (sibling-owned markup; shared file keeps its rules). */
 .presshub-sidebar-container {
     display: flex;
     flex-direction: column;
