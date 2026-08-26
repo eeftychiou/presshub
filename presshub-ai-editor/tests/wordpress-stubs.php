@@ -198,6 +198,19 @@ if ( ! function_exists( 'wp_json_encode' ) ) {
     }
 }
 
+if ( ! function_exists( 'wp_mkdir_p' ) ) {
+    function wp_mkdir_p( $target ) {
+        if ( is_dir( $target ) ) return true;
+        return @mkdir( $target, 0777, true );
+    }
+}
+
+if ( ! function_exists( 'esc_url_raw' ) ) {
+    function esc_url_raw( $url ) {
+        return filter_var( $url, FILTER_SANITIZE_URL ) ?: (string) $url;
+    }
+}
+
 if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
     function wp_remote_retrieve_body( $response ) {
         if ( is_array( $response ) ) return $response['body'] ?? '';
