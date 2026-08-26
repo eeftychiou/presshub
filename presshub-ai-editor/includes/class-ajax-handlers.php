@@ -1046,7 +1046,6 @@ class PressHub_AI_Ajax_Handlers {
      * AJAX handler: save all PressHub AI settings cleanly and securely.
      */
     public function save_settings(): void {
-        wp_send_json_success( [ 'message' => 'DEBUG: Reached top of save_settings!' ] );
         try {
             check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
@@ -1128,10 +1127,12 @@ class PressHub_AI_Ajax_Handlers {
                 'presshub_ai_briefing_podcast_prompt'     => [ 'PressHub_AI_Settings', 'sanitize_briefing_prompt' ],
             ];
 
+            $saved_count = 0;
             foreach ( $options_map as $option => $sanitizer ) {
                 if ( isset( $post_data[ $option ] ) ) {
                     $clean = call_user_func( $sanitizer, $post_data[ $option ] );
                     update_option( $option, $clean );
+                    $saved_count++;
                 } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
                     update_option( $option, 0 );
                 }
@@ -1142,7 +1143,7 @@ class PressHub_AI_Ajax_Handlers {
             $saved_github = (string) get_option( 'presshub_ai_github_token', '' );
 
             wp_send_json_success( [
-                'message' => __( 'Settings saved successfully.', 'presshub-ai-editor' ),
+                'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
                 'masks'   => [
                     'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                     'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
