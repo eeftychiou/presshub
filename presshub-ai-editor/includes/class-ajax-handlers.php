@@ -1075,8 +1075,6 @@ class PressHub_AI_Ajax_Handlers {
                 }
             }
 
-            wp_send_json_success( [ 'message' => 'Step 6 reached: payload parsed (' . count( $post_data ) . ' fields)' ] );
-
             require_once __DIR__ . '/class-settings.php';
 
             $options_map = [
@@ -1130,13 +1128,16 @@ class PressHub_AI_Ajax_Handlers {
             ];
 
             $saved_count = 0;
+            $processed = [];
             foreach ( $options_map as $option => $sanitizer ) {
                 if ( isset( $post_data[ $option ] ) ) {
                     $clean = call_user_func( $sanitizer, $post_data[ $option ] );
                     update_option( $option, $clean );
                     $saved_count++;
+                    $processed[] = $option;
                 } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
                     update_option( $option, 0 );
+                    $processed[] = $option . '=0';
                 }
             }
 
@@ -1145,7 +1146,7 @@ class PressHub_AI_Ajax_Handlers {
             $saved_github = (string) get_option( 'presshub_ai_github_token', '' );
 
             wp_send_json_success( [
-                'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
+                'message' => sprintf( 'Settings saved successfully! Processed %d options: %s', count( $processed ), implode( ', ', $processed ) ),
                 'masks'   => [
                     'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                     'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
