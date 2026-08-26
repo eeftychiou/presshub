@@ -1038,7 +1038,12 @@ class PressHub_AI_Ajax_Handlers {
             }
 
             $post_data = $_POST;
-            if ( isset( $_POST['settings'] ) && is_string( $_POST['settings'] ) ) {
+            if ( isset( $_POST['payload'] ) && is_string( $_POST['payload'] ) ) {
+                $decoded = json_decode( wp_unslash( $_POST['payload'] ), true );
+                if ( is_array( $decoded ) ) {
+                    $post_data = array_merge( $post_data, $decoded );
+                }
+            } elseif ( isset( $_POST['settings'] ) && is_string( $_POST['settings'] ) ) {
                 parse_str( $_POST['settings'], $parsed );
                 if ( is_array( $parsed ) ) {
                     $post_data = array_merge( $post_data, $parsed );

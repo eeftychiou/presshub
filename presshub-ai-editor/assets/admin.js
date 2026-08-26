@@ -758,13 +758,10 @@ jQuery(document).ready(function($) {
         $spinner.addClass('is-active');
 
         var serializedArray = $form.serializeArray();
-        var dataObj = {
-            action: 'presshub_ai_save_settings',
-            nonce: presshubAI.nonce
-        };
+        var settingsPayload = {};
         $.each(serializedArray, function(i, field) {
-            if (field.name !== 'action' && field.name !== 'option_page' && field.name !== '_wp_http_referer') {
-                dataObj[field.name] = field.value;
+            if (field.name !== 'action' && field.name !== 'option_page' && field.name !== '_wp_http_referer' && field.name !== '_wpnonce') {
+                settingsPayload[field.name] = field.value;
             }
         });
 
@@ -772,7 +769,11 @@ jQuery(document).ready(function($) {
             url: presshubAI.ajax_url,
             type: 'POST',
             dataType: 'json',
-            data: dataObj
+            data: {
+                action: 'presshub_ai_save_settings',
+                nonce: presshubAI.nonce,
+                payload: JSON.stringify(settingsPayload)
+            }
         }).done(function(res) {
             $btn.prop('disabled', false);
             $spinner.removeClass('is-active');
