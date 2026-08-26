@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -42,7 +42,7 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
 
-define( 'PRESSHUB_AI_VERSION', '1.3.0' );
+define( 'PRESSHUB_AI_VERSION', '1.3.1' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -276,9 +276,23 @@ function presshub_ai_execute_research_job( $research_id ) {
 
 add_action( 'presshub_daily_news_harvest', 'presshub_ai_execute_harvest_cron' );
 add_action( 'presshub_daily_news_generate', 'presshub_ai_execute_generation_cron' );
-add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_schedule_briefing_crons' );
-add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_schedule_briefing_crons' );
+add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
+add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 register_activation_hook( __FILE__, 'presshub_ai_schedule_briefing_crons' );
+
+/**
+ * Handle updates to briefing time options: only reschedule when value changed.
+ *
+ * @param mixed $old_value Previous option value.
+ * @param mixed $value     New option value.
+ * @param mixed $option    Option name.
+ */
+function presshub_ai_on_briefing_time_updated( $old_value = null, $value = null, $option = null ) {
+    if ( null !== $old_value && null !== $value && $old_value === $value ) {
+        return;
+    }
+    presshub_ai_schedule_briefing_crons();
+}
 
 /**
  * Calculate the next timestamp for a given HH:MM time string.
@@ -298,14 +312,28 @@ function presshub_ai_get_cron_timestamp( $time_str, $now = null ) {
     $hours   = (int) $matches[1];
     $minutes = (int) $matches[2];
 
-    $today_date = date( 'Y-m-d', $now );
-    $target     = strtotime( sprintf( '%s %02d:%02d:00', $today_date, $hours, $minutes ) );
-
-    if ( $target <= $now ) {
-        $target += 86400; // DAY_IN_SECONDS
+    if ( function_exists( 'wp_timezone' ) ) {
+        $tz = wp_timezone();
+    } else {
+        $tz = new DateTimeZone( 'UTC' );
     }
 
-    return $target;
+    try {
+        $today = new DateTime( sprintf( 'today %02d:%02d:00', $hours, $minutes ), $tz );
+        $target = $today->getTimestamp();
+        if ( $target <= $now ) {
+            $today->modify( '+1 day' );
+            $target = $today->getTimestamp();
+        }
+        return $target;
+    } catch ( Exception $e ) {
+        $today_date = date( 'Y-m-d', $now );
+        $target     = strtotime( sprintf( '%s %02d:%02d:00', $today_date, $hours, $minutes ) );
+        if ( $target <= $now ) {
+            $target += 86400; // DAY_IN_SECONDS
+        }
+        return $target;
+    }
 }
 
 /**

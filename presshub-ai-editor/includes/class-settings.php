@@ -690,14 +690,14 @@ class PressHub_AI_Settings {
     }
 
     public function render_briefing_sources_field() {
-        $option = 'presshub_ai_briefing_sources';
-        $sources = get_option( $option, implode( "\n", self::default_briefing_sources() ) );
+        $option  = 'presshub_ai_briefing_sources';
+        $sources = get_option( $option, '' );
         if ( is_array( $sources ) ) {
             $sources = implode( "\n", $sources );
         }
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code"><?php echo esc_textarea( (string) $sources ); ?></textarea>
-        <p class="description"><?php echo __( 'Enter one Greek news homepage or RSS/article URL per line.', 'presshub-ai-editor' ); ?></p>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="5" class="large-text code" placeholder="https://news.in.gr&#10;https://www.kathimerini.gr"><?php echo esc_textarea( (string) $sources ); ?></textarea>
+        <p class="description"><?php echo __( 'Enter one Greek news homepage or RSS/article URL per line. Leave empty to use default outlets.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -855,7 +855,7 @@ class PressHub_AI_Settings {
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
             <option value="0" <?php echo 0 === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'None (Default Category)', 'presshub-ai-editor' ); ?></option>
-            <?php if ( is_array( $terms ) ) : ?>
+            <?php if ( ! is_wp_error( $terms ) && is_array( $terms ) ) : ?>
                 <?php foreach ( $terms as $term ) : ?>
                     <?php if ( is_object( $term ) && isset( $term->term_id ) ) : ?>
                         <option value="<?php echo (int) $term->term_id; ?>" <?php echo $selected === (int) $term->term_id ? 'selected="selected"' : ''; ?>>
@@ -876,7 +876,7 @@ class PressHub_AI_Settings {
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
             <option value="0" <?php echo 0 === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'None (Default Category)', 'presshub-ai-editor' ); ?></option>
-            <?php if ( is_array( $terms ) ) : ?>
+            <?php if ( ! is_wp_error( $terms ) && is_array( $terms ) ) : ?>
                 <?php foreach ( $terms as $term ) : ?>
                     <?php if ( is_object( $term ) && isset( $term->term_id ) ) : ?>
                         <option value="<?php echo (int) $term->term_id; ?>" <?php echo $selected === (int) $term->term_id ? 'selected="selected"' : ''; ?>>
@@ -921,15 +921,18 @@ class PressHub_AI_Settings {
         $default = class_exists( 'PressHub_AI_News_Curator' )
             ? ( new PressHub_AI_News_Curator() )->get_default_curation_prompt()
             : '';
-        $value   = (string) get_option( $option, $default );
+        $value   = (string) get_option( $option, '' );
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="10" class="large-text code"><?php echo esc_textarea( $value ); ?></textarea>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use standard Greek editorial curation prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
         <p>
-            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
-                <?php echo __( 'Reset to Default', 'presshub-ai-editor' ); ?>
+            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="">
+                <?php echo __( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
+            </button>
+            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
+                <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
             </button>
         </p>
-        <p class="description"><?php echo __( 'Base system prompt for Greek text story curation. Supports placeholders: {date}, {sources_list}, {articles_count}, {articles_context}.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Custom system prompt for Greek text story curation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_count}, {articles_context}.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -938,15 +941,18 @@ class PressHub_AI_Settings {
         $default = class_exists( 'PressHub_AI_Podcast_Producer' )
             ? ( new PressHub_AI_Podcast_Producer() )->get_default_dialogue_prompt()
             : '';
-        $value   = (string) get_option( $option, $default );
+        $value   = (string) get_option( $option, '' );
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="10" class="large-text code"><?php echo esc_textarea( $value ); ?></textarea>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use standard Greek conversational podcast prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
         <p>
-            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
-                <?php echo __( 'Reset to Default', 'presshub-ai-editor' ); ?>
+            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="">
+                <?php echo __( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
+            </button>
+            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
+                <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
             </button>
         </p>
-        <p class="description"><?php echo __( 'Base system prompt for Greek podcast dialogue generation. Supports placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}, {host1_name}, {host2_name}.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Custom system prompt for Greek podcast dialogue generation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}, {host1_name}, {host2_name}.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

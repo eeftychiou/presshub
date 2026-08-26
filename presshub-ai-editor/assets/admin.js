@@ -651,13 +651,21 @@ jQuery(document).ready(function($) {
     updateReviewButton();
 
     // ------------------------------------------------------------------
-    // Reset Prompt to Default (Settings Page).
+    // Reset / Load Prompt Template (Settings Page).
     // ------------------------------------------------------------------
     $(document).on('click', '.presshub-reset-prompt', function(e) {
         e.preventDefault();
         var targetId = $(this).data('target');
+        if (targetId) {
+            $('#' + targetId).val('');
+        }
+    });
+
+    $(document).on('click', '.presshub-show-default-prompt', function(e) {
+        e.preventDefault();
+        var targetId = $(this).data('target');
         var defaultPrompt = $(this).data('default');
-        if (targetId && defaultPrompt !== undefined) {
+        if (targetId && defaultPrompt) {
             $('#' + targetId).val(defaultPrompt);
         }
     });
