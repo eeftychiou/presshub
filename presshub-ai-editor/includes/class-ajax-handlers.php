@@ -21,6 +21,14 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_copy_default_preset', [ $this, 'copy_default_preset' ] );
         // Org defaults (2026-08-15 design §9 Q3 / Antigravity A-6).
         add_action( 'wp_ajax_presshub_ai_save_org_default', [ $this, 'save_org_default' ] );
+        // Daily News Briefing & AI Podcast AJAX endpoints (Task 6).
+        add_action( 'wp_ajax_presshub_ai_briefing_get_status', [ $this, 'briefing_get_status' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_run_harvest', [ $this, 'briefing_run_harvest' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_run_curation', [ $this, 'briefing_run_curation' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_run_script', [ $this, 'briefing_run_script' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_save_script', [ $this, 'briefing_save_script' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_generate_audio', [ $this, 'briefing_generate_audio' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
     }
 
     /**
@@ -731,5 +739,288 @@ class PressHub_AI_Ajax_Handlers {
             }
         }
         return false;
+    }
+
+    // ------------------------------------------------------------------
+    // Daily News Briefing & AI Podcast — AJAX Handlers (Task 6)
+    // ------------------------------------------------------------------
+
+    /**
+     * Capability required for Daily Briefing Hub actions.
+     */
+    private function briefing_capability(): string {
+        return (string) apply_filters( 'presshub_ai_briefing_cap', 'edit_posts' );
+    }
+
+    /**
+     * AJAX: presshub_ai_briefing_get_status — returns status for all 4 pipeline stages.
+     */
+    public function briefing_get_status() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        require_once __DIR__ . '/class-briefing-admin.php';
+        $admin  = new PressHub_AI_Briefing_Admin();
+        $status = $admin->get_briefing_status( $date );
+
+        wp_send_json_success( $status );
+    }
+
+    /**
+     * AJAX: presshub_ai_briefing_run_harvest — triggers morning Greek news scraping.
+     */
+    public function briefing_run_harvest() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        require_once __DIR__ . '/class-news-harvester.php';
+        require_once __DIR__ . '/class-settings.php';
+
+        $raw_sources = get_option( 'presshub_ai_briefing_sources', '' );
+        if ( is_array( $raw_sources ) ) {
+            $sources = $raw_sources;
+        } else {
+            $sources = preg_split( '/[\r\n,]+/', (string) $raw_sources );
+        }
+        $sources = array_values( array_filter( array_map( 'trim', (array) $sources ) ) );
+
+        if ( empty( $sources ) && class_exists( 'PressHub_AI_Settings' ) ) {
+            $sources = PressHub_AI_Settings::default_briefing_sources();
+        }
+
+        $harvester = new PressHub_AI_News_Harvester();
+        $result    = $harvester->harvest_all( $sources, $date );
+
+        wp_send_json_success( $result );
+    }
+
+    /**
+     * AJAX: presshub_ai_briefing_run_curation — triggers text story curation agent.
+     */
+    public function briefing_run_curation() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        $preset_id = isset( $_POST['preset_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preset_id'] ) ) : (string) get_option( 'presshub_ai_briefing_text_preset', '' );
+
+        $this->enforce_rate_limit();
+
+        require_once __DIR__ . '/class-news-curator.php';
+        $curator = new PressHub_AI_News_Curator();
+        $result  = $curator->generate_story( $date, null, $preset_id );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        $this->record_rate_limit();
+        wp_send_json_success( $result );
+    }
+
+    /**
+     * AJAX: presshub_ai_briefing_run_script — triggers podcast dialogue script generation.
+     */
+    public function briefing_run_script() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        $preset_id = isset( $_POST['preset_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preset_id'] ) ) : (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
+        $duration  = isset( $_POST['duration'] ) ? sanitize_text_field( wp_unslash( $_POST['duration'] ) ) : (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
+
+        $this->enforce_rate_limit();
+
+        require_once __DIR__ . '/class-podcast-producer.php';
+        $producer = new PressHub_AI_Podcast_Producer();
+        $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        $this->record_rate_limit();
+        wp_send_json_success( $result );
+    }
+
+    /**
+     * AJAX: presshub_ai_briefing_save_script — saves edited podcast script text.
+     */
+    public function briefing_save_script() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        $script = isset( $_POST['script'] ) ? sanitize_textarea_field( wp_unslash( $_POST['script'] ) ) : '';
+        if ( empty( trim( $script ) ) ) {
+            wp_send_json_error( __( 'Script cannot be empty.', 'presshub-ai-editor' ) );
+        }
+
+        require_once __DIR__ . '/class-podcast-producer.php';
+        $producer = new PressHub_AI_Podcast_Producer();
+        $saved    = $producer->save_script( $date, $script );
+
+        if ( ! $saved ) {
+            wp_send_json_error( __( 'Failed to save podcast script to disk.', 'presshub-ai-editor' ) );
+        }
+
+        $turns = $producer->parse_script_turns( $script );
+
+        wp_send_json_success( [
+            'saved'       => true,
+            'date'        => $date,
+            'turns_count' => count( $turns ),
+        ] );
+    }
+
+    /**
+     * AJAX: presshub_ai_briefing_generate_audio — synthesizes podcast audio using Google Cloud TTS.
+     */
+    public function briefing_generate_audio() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        $script = isset( $_POST['script'] ) ? sanitize_textarea_field( wp_unslash( $_POST['script'] ) ) : '';
+
+        require_once __DIR__ . '/class-audio-synthesizer.php';
+        $synthesizer = new PressHub_AI_Audio_Synthesizer();
+        $result      = $synthesizer->synthesize_podcast( $date, $script );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        wp_send_json_success( $result );
+    }
+
+    /**
+     * AJAX: presshub_ai_briefing_upload — merges uploaded documents or pasted notes into daily pool.
+     */
+    public function briefing_upload() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        $source  = isset( $_POST['source'] ) ? sanitize_text_field( wp_unslash( $_POST['source'] ) ) : __( 'Manual Upload', 'presshub-ai-editor' );
+        $title   = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
+        $content = isset( $_POST['content'] ) ? sanitize_textarea_field( wp_unslash( $_POST['content'] ) ) : '';
+        $url     = isset( $_POST['url'] ) ? esc_url_raw( wp_unslash( $_POST['url'] ) ) : '';
+
+        $articles_to_merge = [];
+
+        // 1. Text notes if present
+        if ( ! empty( trim( $content ) ) || ! empty( trim( $title ) ) ) {
+            $articles_to_merge[] = [
+                'title'   => ! empty( trim( $title ) ) ? $title : __( 'Χειροκίνητη Σημείωση', 'presshub-ai-editor' ),
+                'content' => $content,
+                'source'  => ! empty( trim( $source ) ) ? $source : __( 'Manual Upload', 'presshub-ai-editor' ),
+                'url'     => $url,
+            ];
+        }
+
+        // 2. Uploaded files (PDF, DOCX, TXT)
+        if ( ! empty( $_FILES['files'] ) && is_array( $_FILES['files']['name'] ) ) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            $files = $_FILES['files'];
+            $allowed_extensions = [ 'pdf', 'docx', 'txt' ];
+            $max_file_size      = 25 * 1024 * 1024; // 25 MB
+
+            foreach ( $files['name'] as $key => $filename ) {
+                if ( empty( $filename ) ) {
+                    continue;
+                }
+                $file = [
+                    'name'     => $files['name'][ $key ],
+                    'type'     => $files['type'][ $key ],
+                    'tmp_name' => $files['tmp_name'][ $key ],
+                    'error'    => $files['error'][ $key ],
+                    'size'     => $files['size'][ $key ],
+                ];
+
+                $filetype = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'] );
+                $ext      = strtolower( (string) ( $filetype['ext'] ?? pathinfo( $filename, PATHINFO_EXTENSION ) ) );
+                if ( ! in_array( $ext, $allowed_extensions, true ) ) {
+                    wp_send_json_error( sprintf( __( 'Unsupported file type "%s". Allowed: PDF, DOCX, TXT.', 'presshub-ai-editor' ), $ext ) );
+                }
+                if ( (int) $file['size'] > $max_file_size ) {
+                    wp_send_json_error( __( 'File exceeds the 25 MB limit.', 'presshub-ai-editor' ) );
+                }
+
+                $file_title = pathinfo( $filename, PATHINFO_FILENAME );
+                $extracted_text = '';
+                if ( 'txt' === $ext && file_exists( $file['tmp_name'] ) ) {
+                    $extracted_text = (string) @file_get_contents( $file['tmp_name'] );
+                }
+
+                $articles_to_merge[] = [
+                    'title'   => $file_title,
+                    'content' => $extracted_text ?: sprintf( __( 'Attached file: %s', 'presshub-ai-editor' ), $filename ),
+                    'source'  => ! empty( trim( $source ) ) ? $source : __( 'Manual Upload', 'presshub-ai-editor' ),
+                    'url'     => '',
+                ];
+            }
+        }
+
+        if ( empty( $articles_to_merge ) ) {
+            wp_send_json_error( __( 'No article content or files provided.', 'presshub-ai-editor' ) );
+        }
+
+        require_once __DIR__ . '/class-news-harvester.php';
+        $harvester = new PressHub_AI_News_Harvester();
+        $result    = $harvester->handle_manual_upload( $articles_to_merge, $date );
+
+        wp_send_json_success( $result );
     }
 }

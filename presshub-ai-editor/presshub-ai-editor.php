@@ -62,6 +62,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-news-harvester.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 
 /**
  * Auto-update hardening: force the canonical plugin folder name during
@@ -131,6 +132,7 @@ function presshub_ai_init() {
     new PressHub_AI_Metaboxes();
     new PressHub_AI_Ajax_Handlers();
     new PressHub_AI_Workflow();
+    new PressHub_AI_Briefing_Admin();
     PressHub_AI_Research_Cleanup::register();
 }
 add_action( 'plugins_loaded', 'presshub_ai_init' );

@@ -220,6 +220,12 @@ if ( ! function_exists( 'esc_url_raw' ) ) {
     }
 }
 
+if ( ! function_exists( 'esc_url' ) ) {
+    function esc_url( $url ) {
+        return htmlspecialchars( (string) esc_url_raw( $url ), ENT_QUOTES, 'UTF-8' );
+    }
+}
+
 if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
     function wp_remote_retrieve_body( $response ) {
         if ( is_array( $response ) ) return $response['body'] ?? '';
@@ -743,3 +749,88 @@ if ( ! defined( 'PRESSHUB_TEST_ERROR_LOG' ) ) {
     define( 'PRESSHUB_TEST_ERROR_LOG', sys_get_temp_dir() . '/presshub-test-error.log' );
     ini_set( 'error_log', PRESSHUB_TEST_ERROR_LOG );
 }
+
+if ( ! function_exists( 'add_submenu_page' ) ) {
+    function add_submenu_page( $parent_slug, $page_title, $menu_title, $capability, $menu_slug, $callback = '', $position = null ) {
+        $GLOBALS['SUBMENU_PAGES'][ $parent_slug ][] = [
+            'page_title' => $page_title,
+            'menu_title' => $menu_title,
+            'capability' => $capability,
+            'menu_slug'  => $menu_slug,
+            'callback'   => $callback,
+            'position'   => $position,
+        ];
+        return 'settings_page_' . $menu_slug;
+    }
+}
+
+if ( ! function_exists( 'add_menu_page' ) ) {
+    function add_menu_page( $page_title, $menu_title, $capability, $menu_slug, $callback = '', $icon_url = '', $position = null ) {
+        $GLOBALS['MENU_PAGES'][] = [
+            'page_title' => $page_title,
+            'menu_title' => $menu_title,
+            'capability' => $capability,
+            'menu_slug'  => $menu_slug,
+            'callback'   => $callback,
+            'icon_url'   => $icon_url,
+            'position'   => $position,
+        ];
+        return 'toplevel_page_' . $menu_slug;
+    }
+}
+
+if ( ! function_exists( 'add_options_page' ) ) {
+    function add_options_page( $page_title, $menu_title, $capability, $menu_slug, $callback = '', $position = null ) {
+        return add_submenu_page( 'options-general.php', $page_title, $menu_title, $capability, $menu_slug, $callback, $position );
+    }
+}
+
+if ( ! function_exists( 'wp_enqueue_script' ) ) {
+    function wp_enqueue_script( $handle, $src = '', $deps = [], $ver = false, $in_footer = false ) {
+        $GLOBALS['ENQUEUED_SCRIPTS'][ $handle ] = [
+            'src'       => $src,
+            'deps'      => $deps,
+            'ver'       => $ver,
+            'in_footer' => $in_footer,
+        ];
+    }
+}
+
+if ( ! function_exists( 'wp_enqueue_style' ) ) {
+    function wp_enqueue_style( $handle, $src = '', $deps = [], $ver = false, $media = 'all' ) {
+        $GLOBALS['ENQUEUED_STYLES'][ $handle ] = [
+            'src'   => $src,
+            'deps'  => $deps,
+            'ver'   => $ver,
+            'media' => $media,
+        ];
+    }
+}
+
+if ( ! function_exists( 'wp_localize_script' ) ) {
+    function wp_localize_script( $handle, $object_name, $data ) {
+        $GLOBALS['LOCALIZED_SCRIPTS'][ $handle ] = [
+            'object_name' => $object_name,
+            'data'        => $data,
+        ];
+    }
+}
+
+if ( ! function_exists( 'wp_create_nonce' ) ) {
+    function wp_create_nonce( $action = -1 ) {
+        return 'test-nonce';
+    }
+}
+
+if ( ! function_exists( 'get_edit_post_link' ) ) {
+    function get_edit_post_link( $post_id = 0, $context = 'display' ) {
+        return 'http://example.test/wp-admin/post.php?post=' . (int) $post_id . '&action=edit';
+    }
+}
+
+if ( ! function_exists( 'get_permalink' ) ) {
+    function get_permalink( $post = 0, $leavename = false ) {
+        $id = is_object( $post ) ? (int) $post->ID : (int) $post;
+        return 'http://example.test/?p=' . $id;
+    }
+}

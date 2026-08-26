@@ -1,0 +1,336 @@
+/**
+ * PressHub AI — Daily News Briefing & AI Podcast Dashboard Styles
+ */
+
+.presshub-briefing-hub-wrap {
+    max-width: 1200px;
+    margin: 20px 20px 40px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+/* Header */
+.presshub-hub-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.presshub-hub-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.presshub-hub-title-group h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    padding: 0;
+    color: #1d2327;
+}
+
+.presshub-date-badge {
+    display: inline-block;
+    background: #f0f0f1;
+    color: #2c3338;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.presshub-hub-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.presshub-date-input {
+    padding: 4px 8px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* Notices & Alerts */
+.presshub-notices-container {
+    margin-bottom: 15px;
+}
+
+.presshub-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.presshub-alert-warning {
+    background: #fff8e5;
+    border-left: 4px solid #dba617;
+    color: #614700;
+}
+
+.presshub-alert-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.presshub-alert-content p {
+    margin: 4px 0;
+}
+
+.presshub-alert-action-text {
+    margin-top: 8px !important;
+}
+
+.presshub-blocked-badge {
+    display: inline-block;
+    background: #e5a700;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-right: 4px;
+}
+
+/* 4-Stage Pipeline Grid */
+.presshub-pipeline-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px;
+    margin-bottom: 25px;
+}
+
+.presshub-milestone-card {
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.presshub-milestone-card:hover {
+    box-shadow: 0 4px 10px rgba(0,0,0,0.07);
+}
+
+.presshub-milestone-card.card-complete {
+    border-top: 4px solid #46b450;
+}
+
+.presshub-milestone-card.card-pending {
+    border-top: 4px solid #8c8f94;
+}
+
+.presshub-card-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.presshub-milestone-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.step-num {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: 22px;
+    height: 22px;
+    background: #2271b1;
+    color: #ffffff;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.presshub-milestone-step h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.presshub-status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-success {
+    background: #edfaef;
+    color: #1a7f37;
+    border: 1px solid #c3e6cb;
+}
+
+.badge-secondary {
+    background: #f0f0f1;
+    color: #646970;
+    border: 1px solid #dcdcde;
+}
+
+.presshub-card-body {
+    padding: 14px 16px;
+    flex-grow: 1;
+}
+
+.card-metric {
+    font-size: 14px;
+    color: #2c3338;
+    margin: 0 0 6px 0;
+}
+
+.card-subtext {
+    font-size: 12px;
+    color: #646970;
+    margin: 0;
+}
+
+.card-title-preview {
+    font-size: 13px;
+    color: #1d2327;
+    margin: 0 0 6px 0;
+    line-height: 1.4;
+}
+
+.card-empty-desc {
+    font-size: 12px;
+    color: #8c8f94;
+    font-style: italic;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.presshub-audio-player {
+    width: 100%;
+    margin-bottom: 8px;
+    height: 36px;
+}
+
+.presshub-card-footer {
+    padding: 10px 16px;
+    background: #f6f7f7;
+    border-top: 1px solid #f0f0f1;
+    border-radius: 0 0 6px 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Sections Containers */
+.presshub-section-container {
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.presshub-section-header {
+    margin-bottom: 16px;
+    border-bottom: 1px solid #f0f0f1;
+    padding-bottom: 12px;
+}
+
+.presshub-section-header h2 {
+    margin: 0 0 4px 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.presshub-section-header .description {
+    margin: 0;
+    color: #646970;
+}
+
+/* Script Editor */
+.presshub-script-textarea {
+    width: 100%;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 12px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    background: #fafafa;
+    color: #1d2327;
+    box-sizing: border-box;
+    resize: vertical;
+}
+
+.presshub-script-textarea:focus {
+    background: #ffffff;
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+}
+
+.presshub-editor-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.presshub-save-status {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Manual Upload Form */
+.presshub-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 14px;
+}
+
+.presshub-form-col {
+    flex: 1;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.presshub-form-col-full {
+    flex: 1 1 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.presshub-form-col label,
+.presshub-form-col-full label {
+    font-size: 13px;
+    color: #2c3338;
+}
+
+.presshub-form-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
