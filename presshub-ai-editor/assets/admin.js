@@ -757,23 +757,29 @@ jQuery(document).ready(function($) {
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
 
-        var formData = $form.serialize();
+        var serializedArray = $form.serializeArray();
+        var dataObj = {
+            action: 'presshub_ai_save_settings',
+            nonce: presshubAI.nonce
+        };
+        $.each(serializedArray, function(i, field) {
+            if (field.name !== 'action' && field.name !== 'option_page' && field.name !== '_wp_http_referer') {
+                dataObj[field.name] = field.value;
+            }
+        });
 
         $.ajax({
             url: presshubAI.ajax_url,
             type: 'POST',
             dataType: 'json',
-            data: {
-                action: 'presshub_ai_save_settings',
-                nonce: presshubAI.nonce,
-                settings: formData
-            }
+            data: dataObj
         }).done(function(res) {
             $btn.prop('disabled', false);
             $spinner.removeClass('is-active');
 
             if (res && res.success) {
-                var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(res.data.message || __('Settings saved successfully.', 'presshub-ai-editor')) + '</p></div>';
+                var successMsg = (res.data && res.data.message) ? res.data.message : 'Settings saved successfully.';
+                var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(successMsg) + '</p></div>';
                 $('#presshub-ai-settings-tabs').before(noticeHtml);
 
                 if (res.data && res.data.masks) {
@@ -788,14 +794,15 @@ jQuery(document).ready(function($) {
                     }
                 }
             } else {
-                var err = (res && res.data && res.data.message) ? res.data.message : __('Failed to save settings.', 'presshub-ai-editor');
+                var err = (res && res.data && res.data.message) ? res.data.message : 'Failed to save settings.';
                 var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(err) + '</p></div>';
                 $('#presshub-ai-settings-tabs').before(errHtml);
             }
         }).fail(function(xhr, status, error) {
             $btn.prop('disabled', false);
             $spinner.removeClass('is-active');
-            var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(__('Server error while saving: ', 'presshub-ai-editor') + (error || status)) + '</p></div>';
+            var errorDetail = (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) ? xhr.responseJSON.data.message : (error || status);
+            var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc('Error while saving (' + (xhr.status || 0) + '): ' + errorDetail) + '</p></div>';
             $('#presshub-ai-settings-tabs').before(errHtml);
         });
     });

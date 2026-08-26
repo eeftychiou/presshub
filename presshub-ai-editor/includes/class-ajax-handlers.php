@@ -1032,14 +1032,17 @@ class PressHub_AI_Ajax_Handlers {
     public function save_settings(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub AI settings.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $post_data = $_POST;
         if ( isset( $_POST['settings'] ) && is_string( $_POST['settings'] ) ) {
             parse_str( $_POST['settings'], $parsed );
-            $post_data = array_merge( $post_data, $parsed );
+            if ( is_array( $parsed ) ) {
+                $post_data = array_merge( $post_data, $parsed );
+            }
         }
 
         require_once __DIR__ . '/class-settings.php';
