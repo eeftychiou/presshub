@@ -238,3 +238,38 @@ body.presshub-modal-open {
     max-height: 150px;
     overflow-y: auto;
 }
+
+/* ------------------------------------------------------------------
+ * Settings Page Tabs & Sections Layout
+ * ------------------------------------------------------------------ */
+.presshub-ai-settings-wrap .nav-tab-wrapper {
+    border-bottom: 1px solid #c3c4c7;
+    margin-bottom: 20px;
+}
+
+.presshub-ai-settings-wrap .nav-tab {
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 16px;
+    cursor: pointer;
+}
+
+.presshub-tab-pane {
+    animation: presshubFadeIn 0.15s ease-in-out;
+}
+
+.presshub-tab-pane h2 {
+    margin-top: 10px;
+    margin-bottom: 8px;
+    font-size: 18px;
+}
+
+.presshub-settings-submit-wrap {
+    padding-top: 15px;
+    border-top: 1px solid #e0e0e0;
+}
+
+@keyframes presshubFadeIn {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+}

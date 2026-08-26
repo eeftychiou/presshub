@@ -406,23 +406,38 @@ class PressHub_AI_Settings {
             settings_errors();
         }
         ?>
-        <div class="wrap">
+        <div class="wrap presshub-ai-settings-wrap">
             <h1><?php echo __( 'PressHub AI Settings', 'presshub-ai-editor' ); ?></h1>
+
+            <nav class="nav-tab-wrapper wp-clearfix" id="presshub-ai-settings-tabs" style="margin-bottom: 20px;">
+                <a href="#general" class="nav-tab nav-tab-active" data-tab="general"><?php echo __( 'General & Models', 'presshub-ai-editor' ); ?></a>
+                <a href="#media" class="nav-tab" data-tab="media"><?php echo __( 'Media & Voice (Google Cloud)', 'presshub-ai-editor' ); ?></a>
+                <a href="#briefing" class="nav-tab" data-tab="briefing"><?php echo __( 'Daily Briefing & AI Podcast', 'presshub-ai-editor' ); ?></a>
+                <a href="#rate_limits" class="nav-tab" data-tab="rate_limits"><?php echo __( 'Rate Limits & Retention', 'presshub-ai-editor' ); ?></a>
+                <a href="#diagnostics" class="nav-tab" data-tab="diagnostics"><?php echo __( 'Connection Diagnostics', 'presshub-ai-editor' ); ?></a>
+            </nav>
+
             <form method="post" action="options.php" id="presshub-ai-settings-form">
                 <?php settings_fields( 'presshub_ai_options' ); ?>
                 <?php do_settings_sections( 'presshub-ai' ); ?>
-                <?php if ( function_exists( 'submit_button' ) ) { submit_button(); } ?>
+                <div class="presshub-settings-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
+                    <?php if ( function_exists( 'submit_button' ) ) { submit_button( __( 'Save Changes', 'presshub-ai-editor' ), 'primary', 'submit', false ); } ?>
+                    <span id="presshub-ai-save-spinner" class="spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                </div>
             </form>
 
-            <hr />
-            <h2><?php echo __( 'Test Connection', 'presshub-ai-editor' ); ?></h2>
-            <p><?php echo __( 'Save your settings first, then verify each provider separately. Each test uses its own rate-limit budget so testing never burns your AI allowance.', 'presshub-ai-editor' ); ?></p>
-            <button type="button" id="presshub-ai-test-api" class="button presshub-ai-test-api" data-provider=""><?php echo __( 'Test Active Provider', 'presshub-ai-editor' ); ?></button>
-            <button type="button" class="button presshub-ai-test-api" data-provider="openai"><?php echo __( 'Test OpenAI', 'presshub-ai-editor' ); ?></button>
-            <button type="button" class="button presshub-ai-test-api" data-provider="anthropic"><?php echo __( 'Test Anthropic', 'presshub-ai-editor' ); ?></button>
-            <button type="button" class="button presshub-ai-test-api" data-provider="gemini"><?php echo __( 'Test Gemini', 'presshub-ai-editor' ); ?></button>
-            <span id="presshub-ai-test-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
-            <div id="presshub-ai-test-result" style="margin-top: 10px; font-weight: bold;"></div>
+            <div id="presshub-tab-pane-diagnostics" class="presshub-tab-pane" style="display: none;">
+                <h2><?php echo __( 'Test Connection', 'presshub-ai-editor' ); ?></h2>
+                <p><?php echo __( 'Save your settings first, then verify each provider separately. Each test uses its own rate-limit budget so testing never burns your AI allowance.', 'presshub-ai-editor' ); ?></p>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <button type="button" id="presshub-ai-test-api" class="button presshub-ai-test-api" data-provider=""><?php echo __( 'Test Active Provider', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button presshub-ai-test-api" data-provider="openai"><?php echo __( 'Test OpenAI', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button presshub-ai-test-api" data-provider="anthropic"><?php echo __( 'Test Anthropic', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button presshub-ai-test-api" data-provider="gemini"><?php echo __( 'Test Gemini', 'presshub-ai-editor' ); ?></button>
+                    <span id="presshub-ai-test-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
+                </div>
+                <div id="presshub-ai-test-result" style="margin-top: 15px; font-weight: bold;"></div>
+            </div>
         </div>
         <?php
     }

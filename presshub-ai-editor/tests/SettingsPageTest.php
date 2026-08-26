@@ -355,6 +355,37 @@ class SettingsPageTest
             $failures[] = 'render_research_retention_days_field() should render the option with the 30-day default; got: ' . $html;
         }
 
+        // --- Case 10: save_settings AJAX handler ---
+        require_once __DIR__ . '/../includes/class-ajax-handlers.php';
+        self::reset_world();
+        $GLOBALS['NONCE_VALID'] = true;
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $_POST = [
+            'nonce'                 => 'valid_nonce',
+            'presshub_ai_provider'  => 'gemini',
+            'presshub_ai_fetch_urls'=> '1',
+            'presshub_ai_model_gemini' => 'gemini-2.0-flash',
+            'presshub_ai_max_tokens_gemini' => '12000',
+        ];
+
+        $ajax = new PressHub_AI_Ajax_Handlers();
+        $thrown = false;
+        try {
+            $ajax->save_settings();
+        } catch ( Throwable $e ) {
+            $thrown = true;
+        }
+
+        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] ?? '' ) !== 'gemini' ) {
+            $failures[] = 'save_settings AJAX should update presshub_ai_provider to gemini; got: ' . var_export( $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] ?? null, true );
+        }
+        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini'] ?? '' ) !== 'gemini-2.0-flash' ) {
+            $failures[] = 'save_settings AJAX should update presshub_ai_model_gemini; got: ' . var_export( $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini'] ?? null, true );
+        }
+        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_gemini'] ?? 0 ) !== 12000 ) {
+            $failures[] = 'save_settings AJAX should update presshub_ai_max_tokens_gemini; got: ' . var_export( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_gemini'] ?? null, true );
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {
