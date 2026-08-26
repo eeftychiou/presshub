@@ -59,6 +59,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-preset-resolver.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-admin-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-author-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-harvester.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 
 /**
  * Auto-update hardening: force the canonical plugin folder name during

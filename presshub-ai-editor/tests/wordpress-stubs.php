@@ -372,6 +372,12 @@ if ( ! function_exists( 'wp_insert_post' ) ) {
     function wp_insert_post( $postarr, $wp_error = false ) {
         $id = $GLOBALS['WP_INSERT_POST_COUNTER'] = ( $GLOBALS['WP_INSERT_POST_COUNTER'] ?? 100 ) + 1;
         $GLOBALS['WP_INSERTED_POSTS'][] = $postarr;
+        $GLOBALS['POSTS_STORE'][ $id ] = array_merge( [ 'ID' => $id ], $postarr );
+        if ( ! empty( $postarr['meta_input'] ) && is_array( $postarr['meta_input'] ) ) {
+            foreach ( $postarr['meta_input'] as $k => $v ) {
+                $GLOBALS['POST_META_STORE'][ $id ][ $k ] = $v;
+            }
+        }
         return $id;
     }
 }
@@ -474,6 +480,13 @@ if ( ! function_exists( '__' ) ) {
      */
     function __( $text, $domain = null ) {
         return $text;
+    }
+}
+
+if ( ! function_exists( 'date_i18n' ) ) {
+    function date_i18n( $format, $timestamp_with_offset = false, $gmt = false ) {
+        $timestamp = ( false === $timestamp_with_offset ) ? time() : $timestamp_with_offset;
+        return date( $format, $timestamp );
     }
 }
 

@@ -42,7 +42,7 @@ class PressHub_AI_Preset_Resolver {
 
     // Endpoints that may receive preset composition. Everything else
     // (scorecard, classify, audio, unknown) fails closed to null.
-    const PRESET_ENDPOINTS = [ 'draft', 'chat', 'research' ];
+    const PRESET_ENDPOINTS = [ 'draft', 'chat', 'research', 'curation' ];
 
     /**
      * Resolve which instruction text applies for a user + optional
