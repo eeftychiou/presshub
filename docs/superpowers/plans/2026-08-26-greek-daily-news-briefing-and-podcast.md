@@ -218,25 +218,25 @@
 - Create: `presshub-workflow/src/briefing.ts`
 - Create: `presshub-workflow/tests/briefing.test.ts`
 
-- [ ] **Step 1: Write TypeScript test in `briefing.test.ts`**
+- [x] **Step 1: Write TypeScript test in `briefing.test.ts`**
   Cover:
   - Dialogue speaker parsing and verification.
   - Duration-to-word budget calculation.
   - Briefing workflow data transformations.
 
-- [ ] **Step 2: Run `npm test` in `presshub-workflow` to verify RED state**
+- [x] **Step 2: Run `npm test` in `presshub-workflow` to verify RED state**
   Expected: FAIL (`briefing.ts` not implemented).
 
-- [ ] **Step 3: Implement `briefing.ts`**
+- [x] **Step 3: Implement `briefing.ts`**
   - Implement `parseDialogueScript(rawText)`
   - Implement `calculateDurationBudget(durationMinutes)`
   - Implement `formatBriefingPayload(articles, options)`
 
-- [ ] **Step 4: Run `npm test` in `presshub-workflow` to verify GREEN state**
+- [x] **Step 4: Run `npm test` in `presshub-workflow` to verify GREEN state**
   Run `npm test` and verify 100% test pass rate across all suites.
 
-- [ ] **Step 5: Run complete test suite across PHP and TypeScript**
+- [x] **Step 5: Run complete test suite across PHP and TypeScript**
   Confirm all tests pass without errors or warnings.
 
-- [ ] **Step 6: Final Commit & Push**
+- [x] **Step 6: Final Commit & Push**
   Commit all files and push to `https://github.com/eeftychiou/presshub.git`.
