@@ -562,8 +562,8 @@ class PressHub_AI_Settings {
         $option   = 'presshub_ai_max_tokens_' . $provider;
         $value    = (int) get_option( $option, self::default_max_tokens() );
         ?>
-        <input type="number" min="1" max="8192" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Maximum tokens per response (1-8192). Default 2000.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="1" max="32768" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Maximum tokens per response (1-32768). Default 10000.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -1054,7 +1054,7 @@ class PressHub_AI_Settings {
 
     public static function sanitize_max_tokens( $value ) {
         $n = (int) wp_unslash( $value );
-        return max( 1, min( 8192, $n ) );
+        return max( 1, min( 32768, $n ) );
     }
 
     public static function sanitize_timeout( $value ) {

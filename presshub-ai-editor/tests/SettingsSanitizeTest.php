@@ -98,7 +98,7 @@ class SettingsSanitizeTest
             $failures[] = "temperature 2 (upper bound) should pass through.";
         }
 
-        // --- Case 7: max_tokens int clamp [1, 8192] ---
+        // --- Case 7: max_tokens int clamp [1, 32768] ---
         self::reset_options();
         if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '500' ) !== 500 ) {
             $failures[] = 'max_tokens 500 should pass through.';
@@ -106,8 +106,8 @@ class SettingsSanitizeTest
         if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '0' ) !== 1 ) {
             $failures[] = 'max_tokens 0 should clamp to 1.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '99999' ) !== 8192 ) {
-            $failures[] = 'max_tokens 99999 should clamp to 8192.';
+        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '99999' ) !== 32768 ) {
+            $failures[] = 'max_tokens 99999 should clamp to 32768.';
         }
         if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', 'abc' ) !== 1 ) {
             $failures[] = 'non-numeric max_tokens should clamp to 1.';
