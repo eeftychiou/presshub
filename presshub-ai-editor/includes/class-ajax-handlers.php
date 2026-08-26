@@ -1022,7 +1022,6 @@ class PressHub_AI_Ajax_Handlers {
         require_once __DIR__ . '/class-news-harvester.php';
         $harvester = new PressHub_AI_News_Harvester();
         $result    = $harvester->handle_manual_upload( $articles_to_merge, $date );
-
         wp_send_json_success( $result );
     }
 
@@ -1030,93 +1029,99 @@ class PressHub_AI_Ajax_Handlers {
      * AJAX handler: save all PressHub AI settings cleanly and securely.
      */
     public function save_settings(): void {
-        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        try {
+            check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
-        if ( ! current_user_can( $cap ) ) {
-            wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub AI settings.', 'presshub-ai-editor' ) ], 403 );
-        }
-
-        $post_data = $_POST;
-        if ( isset( $_POST['settings'] ) && is_string( $_POST['settings'] ) ) {
-            parse_str( $_POST['settings'], $parsed );
-            if ( is_array( $parsed ) ) {
-                $post_data = array_merge( $post_data, $parsed );
+            $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+            if ( ! current_user_can( $cap ) ) {
+                wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub AI settings.', 'presshub-ai-editor' ) ], 403 );
             }
-        }
 
-        require_once __DIR__ . '/class-settings.php';
-
-        $options_map = [
-            'presshub_ai_provider'                    => [ 'PressHub_AI_Settings', 'sanitize_provider' ],
-            'presshub_ai_fetch_urls'                  => [ 'PressHub_AI_Settings', 'sanitize_fetch_urls' ],
-            'presshub_ai_debug_prompts'               => [ 'PressHub_AI_Settings', 'sanitize_fetch_urls' ],
-            'presshub_ai_api_key'                     => [ 'PressHub_AI_Settings', 'sanitize_api_key' ],
-            'presshub_ai_remove_api_key'              => [ 'PressHub_AI_Settings', 'sanitize_remove_api_key' ],
-            'presshub_ai_remove_google_cloud_api_key' => [ 'PressHub_AI_Settings', 'sanitize_remove_google_cloud_api_key' ],
-            'presshub_ai_remove_github_token'         => [ 'PressHub_AI_Settings', 'sanitize_remove_github_token' ],
-            'presshub_ai_model_openai'                => function( $v ) { return PressHub_AI_Settings::sanitize_model( $v, 'openai' ); },
-            'presshub_ai_temperature_openai'          => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
-            'presshub_ai_max_tokens_openai'           => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
-            'presshub_ai_timeout_openai'              => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
-            'presshub_ai_model_anthropic'             => function( $v ) { return PressHub_AI_Settings::sanitize_model( $v, 'anthropic' ); },
-            'presshub_ai_temperature_anthropic'       => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
-            'presshub_ai_max_tokens_anthropic'        => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
-            'presshub_ai_timeout_anthropic'           => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
-            'presshub_ai_model_gemini'                => function( $v ) { return PressHub_AI_Settings::sanitize_model( $v, 'gemini' ); },
-            'presshub_ai_temperature_gemini'          => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
-            'presshub_ai_max_tokens_gemini'           => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
-            'presshub_ai_timeout_gemini'              => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
-            'presshub_ai_openai_org'                  => [ 'PressHub_AI_Settings', 'sanitize_openai_org' ],
-            'presshub_ai_anthropic_version'           => [ 'PressHub_AI_Settings', 'sanitize_anthropic_version' ],
-            'presshub_ai_github_token'                => [ 'PressHub_AI_Settings', 'sanitize_github_token' ],
-            'presshub_ai_google_cloud_api_key'        => [ 'PressHub_AI_Settings', 'sanitize_google_cloud_api_key' ],
-            'presshub_ai_gcloud_project_id'           => [ 'PressHub_AI_Settings', 'sanitize_gcloud_project_id' ],
-            'presshub_ai_imagen_region'               => [ 'PressHub_AI_Settings', 'sanitize_imagen_region' ],
-            'presshub_ai_rate_limit_enabled'          => [ 'PressHub_AI_Settings', 'sanitize_boolean' ],
-            'presshub_ai_rate_limit_per_hour'         => [ 'PressHub_AI_Settings', 'sanitize_rate_limit_per_hour' ],
-            'presshub_ai_rate_limit_window_seconds'   => [ 'PressHub_AI_Settings', 'sanitize_rate_limit_window_seconds' ],
-            'presshub_ai_research_retention_days'     => [ 'PressHub_AI_Settings', 'sanitize_research_retention_days' ],
-            'presshub_ai_briefing_sources'            => [ 'PressHub_AI_Settings', 'sanitize_briefing_sources' ],
-            'presshub_ai_briefing_harvest_time'       => [ 'PressHub_AI_Settings', 'sanitize_harvest_time' ],
-            'presshub_ai_briefing_generation_time'    => [ 'PressHub_AI_Settings', 'sanitize_generation_time' ],
-            'presshub_ai_briefing_text_preset'        => [ 'PressHub_AI_Settings', 'sanitize_preset_slug' ],
-            'presshub_ai_briefing_podcast_preset'     => [ 'PressHub_AI_Settings', 'sanitize_preset_slug' ],
-            'presshub_ai_briefing_target_duration'    => [ 'PressHub_AI_Settings', 'sanitize_briefing_duration' ],
-            'presshub_ai_briefing_host_female'        => [ 'PressHub_AI_Settings', 'sanitize_briefing_host_female' ],
-            'presshub_ai_briefing_host_male'          => [ 'PressHub_AI_Settings', 'sanitize_briefing_host_male' ],
-            'presshub_ai_briefing_voice_female'       => [ 'PressHub_AI_Settings', 'sanitize_voice_female' ],
-            'presshub_ai_briefing_voice_male'         => [ 'PressHub_AI_Settings', 'sanitize_voice_male' ],
-            'presshub_ai_briefing_voice_speed'        => [ 'PressHub_AI_Settings', 'sanitize_voice_speed' ],
-            'presshub_ai_briefing_voice_pitch'        => [ 'PressHub_AI_Settings', 'sanitize_voice_pitch' ],
-            'presshub_ai_briefing_text_category'      => [ 'PressHub_AI_Settings', 'sanitize_category_id' ],
-            'presshub_ai_briefing_podcast_category'   => [ 'PressHub_AI_Settings', 'sanitize_category_id' ],
-            'presshub_ai_briefing_text_status'        => [ 'PressHub_AI_Settings', 'sanitize_briefing_status' ],
-            'presshub_ai_briefing_podcast_status'     => [ 'PressHub_AI_Settings', 'sanitize_briefing_status' ],
-            'presshub_ai_briefing_text_prompt'        => [ 'PressHub_AI_Settings', 'sanitize_briefing_prompt' ],
-            'presshub_ai_briefing_podcast_prompt'     => [ 'PressHub_AI_Settings', 'sanitize_briefing_prompt' ],
-        ];
-
-        foreach ( $options_map as $option => $sanitizer ) {
-            if ( isset( $post_data[ $option ] ) ) {
-                $clean = call_user_func( $sanitizer, $post_data[ $option ] );
-                update_option( $option, $clean );
-            } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
-                update_option( $option, 0 );
+            $post_data = $_POST;
+            if ( isset( $_POST['settings'] ) && is_string( $_POST['settings'] ) ) {
+                parse_str( $_POST['settings'], $parsed );
+                if ( is_array( $parsed ) ) {
+                    $post_data = array_merge( $post_data, $parsed );
+                }
             }
+
+            require_once __DIR__ . '/class-settings.php';
+
+            $options_map = [
+                'presshub_ai_provider'                    => [ 'PressHub_AI_Settings', 'sanitize_provider' ],
+                'presshub_ai_fetch_urls'                  => [ 'PressHub_AI_Settings', 'sanitize_fetch_urls' ],
+                'presshub_ai_debug_prompts'               => [ 'PressHub_AI_Settings', 'sanitize_fetch_urls' ],
+                'presshub_ai_api_key'                     => [ 'PressHub_AI_Settings', 'sanitize_api_key' ],
+                'presshub_ai_remove_api_key'              => [ 'PressHub_AI_Settings', 'sanitize_remove_api_key' ],
+                'presshub_ai_remove_google_cloud_api_key' => [ 'PressHub_AI_Settings', 'sanitize_remove_google_cloud_api_key' ],
+                'presshub_ai_remove_github_token'         => [ 'PressHub_AI_Settings', 'sanitize_remove_github_token' ],
+                'presshub_ai_model_openai'                => function( $v ) { return PressHub_AI_Settings::sanitize_model( $v, 'openai' ); },
+                'presshub_ai_temperature_openai'          => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
+                'presshub_ai_max_tokens_openai'           => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
+                'presshub_ai_timeout_openai'              => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
+                'presshub_ai_model_anthropic'             => function( $v ) { return PressHub_AI_Settings::sanitize_model( $v, 'anthropic' ); },
+                'presshub_ai_temperature_anthropic'       => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
+                'presshub_ai_max_tokens_anthropic'        => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
+                'presshub_ai_timeout_anthropic'           => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
+                'presshub_ai_model_gemini'                => function( $v ) { return PressHub_AI_Settings::sanitize_model( $v, 'gemini' ); },
+                'presshub_ai_temperature_gemini'          => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
+                'presshub_ai_max_tokens_gemini'           => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
+                'presshub_ai_timeout_gemini'              => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
+                'presshub_ai_openai_org'                  => [ 'PressHub_AI_Settings', 'sanitize_openai_org' ],
+                'presshub_ai_anthropic_version'           => [ 'PressHub_AI_Settings', 'sanitize_anthropic_version' ],
+                'presshub_ai_github_token'                => [ 'PressHub_AI_Settings', 'sanitize_github_token' ],
+                'presshub_ai_google_cloud_api_key'        => [ 'PressHub_AI_Settings', 'sanitize_google_cloud_api_key' ],
+                'presshub_ai_gcloud_project_id'           => [ 'PressHub_AI_Settings', 'sanitize_gcloud_project_id' ],
+                'presshub_ai_imagen_region'               => [ 'PressHub_AI_Settings', 'sanitize_imagen_region' ],
+                'presshub_ai_rate_limit_enabled'          => [ 'PressHub_AI_Settings', 'sanitize_boolean' ],
+                'presshub_ai_rate_limit_per_hour'         => [ 'PressHub_AI_Settings', 'sanitize_rate_limit_per_hour' ],
+                'presshub_ai_rate_limit_window_seconds'   => [ 'PressHub_AI_Settings', 'sanitize_rate_limit_window_seconds' ],
+                'presshub_ai_research_retention_days'     => [ 'PressHub_AI_Settings', 'sanitize_research_retention_days' ],
+                'presshub_ai_briefing_sources'            => [ 'PressHub_AI_Settings', 'sanitize_briefing_sources' ],
+                'presshub_ai_briefing_harvest_time'       => [ 'PressHub_AI_Settings', 'sanitize_harvest_time' ],
+                'presshub_ai_briefing_generation_time'    => [ 'PressHub_AI_Settings', 'sanitize_generation_time' ],
+                'presshub_ai_briefing_text_preset'        => [ 'PressHub_AI_Settings', 'sanitize_preset_slug' ],
+                'presshub_ai_briefing_podcast_preset'     => [ 'PressHub_AI_Settings', 'sanitize_preset_slug' ],
+                'presshub_ai_briefing_target_duration'    => [ 'PressHub_AI_Settings', 'sanitize_briefing_duration' ],
+                'presshub_ai_briefing_host_female'        => [ 'PressHub_AI_Settings', 'sanitize_briefing_host_female' ],
+                'presshub_ai_briefing_host_male'          => [ 'PressHub_AI_Settings', 'sanitize_briefing_host_male' ],
+                'presshub_ai_briefing_voice_female'       => [ 'PressHub_AI_Settings', 'sanitize_voice_female' ],
+                'presshub_ai_briefing_voice_male'         => [ 'PressHub_AI_Settings', 'sanitize_voice_male' ],
+                'presshub_ai_briefing_voice_speed'        => [ 'PressHub_AI_Settings', 'sanitize_voice_speed' ],
+                'presshub_ai_briefing_voice_pitch'        => [ 'PressHub_AI_Settings', 'sanitize_voice_pitch' ],
+                'presshub_ai_briefing_text_category'      => [ 'PressHub_AI_Settings', 'sanitize_category_id' ],
+                'presshub_ai_briefing_podcast_category'   => [ 'PressHub_AI_Settings', 'sanitize_category_id' ],
+                'presshub_ai_briefing_text_status'        => [ 'PressHub_AI_Settings', 'sanitize_briefing_status' ],
+                'presshub_ai_briefing_podcast_status'     => [ 'PressHub_AI_Settings', 'sanitize_briefing_status' ],
+                'presshub_ai_briefing_text_prompt'        => [ 'PressHub_AI_Settings', 'sanitize_briefing_prompt' ],
+                'presshub_ai_briefing_podcast_prompt'     => [ 'PressHub_AI_Settings', 'sanitize_briefing_prompt' ],
+            ];
+
+            foreach ( $options_map as $option => $sanitizer ) {
+                if ( isset( $post_data[ $option ] ) ) {
+                    $clean = call_user_func( $sanitizer, $post_data[ $option ] );
+                    update_option( $option, $clean );
+                } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
+                    update_option( $option, 0 );
+                }
+            }
+
+            $saved_key    = (string) get_option( 'presshub_ai_api_key', '' );
+            $saved_gcloud = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
+            $saved_github = (string) get_option( 'presshub_ai_github_token', '' );
+
+            wp_send_json_success( [
+                'message' => __( 'Settings saved successfully.', 'presshub-ai-editor' ),
+                'masks'   => [
+                    'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
+                    'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
+                    'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
+                ],
+            ] );
+        } catch ( Throwable $t ) {
+            wp_send_json_error( [
+                'message' => 'Error saving settings: ' . $t->getMessage() . ' (' . basename( $t->getFile() ) . ':' . $t->getLine() . ')'
+            ], 500 );
         }
-
-        $saved_key    = (string) get_option( 'presshub_ai_api_key', '' );
-        $saved_gcloud = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-        $saved_github = (string) get_option( 'presshub_ai_github_token', '' );
-
-        wp_send_json_success( [
-            'message' => __( 'Settings saved successfully.', 'presshub-ai-editor' ),
-            'masks'   => [
-                'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
-                'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
-                'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
-            ],
-        ] );
     }
 }
