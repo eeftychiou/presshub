@@ -1046,6 +1046,7 @@ class PressHub_AI_Ajax_Handlers {
      * AJAX handler: save all PressHub AI settings cleanly and securely.
      */
     public function save_settings(): void {
+        wp_send_json_success( [ 'message' => 'DEBUG: Reached top of save_settings!' ] );
         try {
             check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
