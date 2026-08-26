@@ -289,52 +289,77 @@
             setButtonLoading($btn, true, null, i18n.saving_script || 'Saving script...');
             $('#script-save-status').text('');
 
+            var scriptB64 = '';
+            try {
+                scriptB64 = window.btoa(unescape(encodeURIComponent(scriptText)));
+            } catch (e) {
+                scriptB64 = '';
+            }
+
+            var ajaxData = {
+                action: 'presshub_ai_briefing_save_script',
+                nonce: nonce,
+                date: currentDate
+            };
+            if (scriptB64) {
+                ajaxData.script_b64 = scriptB64;
+            } else {
+                ajaxData.script = scriptText;
+            }
+
             $.ajax({
                 url: ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'presshub_ai_briefing_save_script',
-                    nonce: nonce,
-                    date: currentDate,
-                    script: scriptText
-                },
+                data: ajaxData,
                 success: function(response) {
                     setButtonLoading($btn, false);
                     if (response.success) {
-                        $('#script-save-status').text('Saved! (' + (response.data.turns_count || 0) + ' turns parsed)').css('color', '#46b450');
-                        showNotice('success', 'Podcast dialogue script saved successfully.');
+                        $('#script-save-status').text('Saved ' + (response.data.turns_count || 0) + ' turns').show().delay(3000).fadeOut();
+                        showNotice('success', 'Podcast script saved successfully!');
                         fetchStatus(currentDate);
                     } else {
-                        $('#script-save-status').text('Save error').css('color', '#dc3232');
                         showNotice('error', response.data || 'Failed to save script.');
                     }
                 },
                 error: function(xhr, status, error) {
                     setButtonLoading($btn, false);
-                    showNotice('error', 'Save script network error: ' + error);
+                    showNotice('error', 'Save script error: ' + error);
                 }
             });
         });
 
         // -------------------------------------------------------------------------
-        // Event: Synthesize Audio Podcast
+        // Event: Generate Audio from Script
         // -------------------------------------------------------------------------
-        $('#btn-synthesize-audio').on('click', function(e) {
+        $('#btn-generate-audio').on('click', function(e) {
             e.preventDefault();
             var $btn = $(this);
             var scriptText = $('#presshub-briefing-script-editor').val();
 
-            setButtonLoading($btn, true, null, i18n.synthesizing_audio || 'Synthesizing audio...');
+            setButtonLoading($btn, true, null, i18n.generating_audio || 'Synthesizing voice audio...');
+
+            var scriptB64 = '';
+            try {
+                scriptB64 = window.btoa(unescape(encodeURIComponent(scriptText)));
+            } catch (e) {
+                scriptB64 = '';
+            }
+
+            var ajaxData = {
+                action: 'presshub_ai_briefing_generate_audio',
+                nonce: nonce,
+                date: currentDate
+            };
+            if (scriptB64) {
+                ajaxData.script_b64 = scriptB64;
+            } else {
+                ajaxData.script = scriptText;
+            }
 
             $.ajax({
                 url: ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'presshub_ai_briefing_generate_audio',
-                    nonce: nonce,
-                    date: currentDate,
-                    script: scriptText
-                },
+                data: ajaxData,
                 success: function(response) {
                     setButtonLoading($btn, false);
                     if (response.success) {

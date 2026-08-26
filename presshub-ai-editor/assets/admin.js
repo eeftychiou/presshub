@@ -765,15 +765,30 @@ jQuery(document).ready(function($) {
             }
         });
 
+        var jsonString = JSON.stringify(settingsPayload);
+        var base64Payload = '';
+        try {
+            base64Payload = window.btoa(unescape(encodeURIComponent(jsonString)));
+        } catch (e) {
+            base64Payload = '';
+        }
+
+        var ajaxData = {
+            action: 'presshub_ai_save_settings',
+            nonce: presshubAI.nonce
+        };
+
+        if (base64Payload) {
+            ajaxData.payload_b64 = base64Payload;
+        } else {
+            ajaxData.payload = jsonString;
+        }
+
         $.ajax({
             url: presshubAI.ajax_url,
             type: 'POST',
             dataType: 'json',
-            data: {
-                action: 'presshub_ai_save_settings',
-                nonce: presshubAI.nonce,
-                payload: JSON.stringify(settingsPayload)
-            }
+            data: ajaxData
         }).done(function(res) {
             $btn.prop('disabled', false);
             $spinner.removeClass('is-active');

@@ -890,7 +890,16 @@ class PressHub_AI_Ajax_Handlers {
             $date = gmdate( 'Y-m-d' );
         }
 
-        $script = isset( $_POST['script'] ) ? sanitize_textarea_field( wp_unslash( $_POST['script'] ) ) : '';
+        $script = '';
+        if ( isset( $_POST['script_b64'] ) && is_string( $_POST['script_b64'] ) ) {
+            $raw_script = base64_decode( sanitize_text_field( wp_unslash( $_POST['script_b64'] ) ) );
+            if ( false !== $raw_script ) {
+                $script = (string) $raw_script;
+            }
+        } elseif ( isset( $_POST['script'] ) ) {
+            $script = sanitize_textarea_field( wp_unslash( $_POST['script'] ) );
+        }
+
         if ( empty( trim( $script ) ) ) {
             wp_send_json_error( __( 'Script cannot be empty.', 'presshub-ai-editor' ) );
         }
@@ -927,7 +936,15 @@ class PressHub_AI_Ajax_Handlers {
             $date = gmdate( 'Y-m-d' );
         }
 
-        $script = isset( $_POST['script'] ) ? sanitize_textarea_field( wp_unslash( $_POST['script'] ) ) : '';
+        $script = '';
+        if ( isset( $_POST['script_b64'] ) && is_string( $_POST['script_b64'] ) ) {
+            $raw_script = base64_decode( sanitize_text_field( wp_unslash( $_POST['script_b64'] ) ) );
+            if ( false !== $raw_script ) {
+                $script = (string) $raw_script;
+            }
+        } elseif ( isset( $_POST['script'] ) ) {
+            $script = sanitize_textarea_field( wp_unslash( $_POST['script'] ) );
+        }
 
         require_once __DIR__ . '/class-audio-synthesizer.php';
         $synthesizer = new PressHub_AI_Audio_Synthesizer();
@@ -1038,7 +1055,15 @@ class PressHub_AI_Ajax_Handlers {
             }
 
             $post_data = $_POST;
-            if ( isset( $_POST['payload'] ) && is_string( $_POST['payload'] ) ) {
+            if ( isset( $_POST['payload_b64'] ) && is_string( $_POST['payload_b64'] ) ) {
+                $raw_json = base64_decode( sanitize_text_field( wp_unslash( $_POST['payload_b64'] ) ) );
+                if ( false !== $raw_json ) {
+                    $decoded = json_decode( $raw_json, true );
+                    if ( is_array( $decoded ) ) {
+                        $post_data = array_merge( $post_data, $decoded );
+                    }
+                }
+            } elseif ( isset( $_POST['payload'] ) && is_string( $_POST['payload'] ) ) {
                 $decoded = json_decode( wp_unslash( $_POST['payload'] ), true );
                 if ( is_array( $decoded ) ) {
                     $post_data = array_merge( $post_data, $decoded );
