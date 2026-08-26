@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 1.3.4
+ * Version: 1.3.5
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -42,7 +42,7 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
 
-define( 'PRESSHUB_AI_VERSION', '1.3.4' );
+define( 'PRESSHUB_AI_VERSION', '1.3.5' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -319,14 +319,15 @@ function presshub_ai_get_cron_timestamp( $time_str, $now = null ) {
     }
 
     try {
-        $today = new DateTime( sprintf( 'today %02d:%02d:00', $hours, $minutes ), $tz );
+        $today = new DateTime( 'now', $tz );
+        $today->setTime( $hours, $minutes, 0 );
         $target = $today->getTimestamp();
         if ( $target <= $now ) {
             $today->modify( '+1 day' );
             $target = $today->getTimestamp();
         }
         return $target;
-    } catch ( Exception $e ) {
+    } catch ( Throwable $e ) {
         $today_date = date( 'Y-m-d', $now );
         $target     = strtotime( sprintf( '%s %02d:%02d:00', $today_date, $hours, $minutes ) );
         if ( $target <= $now ) {
