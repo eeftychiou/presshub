@@ -111,7 +111,8 @@ class UninstallTest
         }
 
         // --- Case 2: uninstall.php guard refuses to run without WP_UNINSTALL_PLUGIN ---
-        $out = shell_exec( 'php -r ' . escapeshellarg( 'require ' . var_export( __DIR__ . '/../uninstall.php', true ) . '; echo "REACHED";' ) );
+        $php_bin = defined( 'PHP_BINARY' ) && PHP_BINARY ? PHP_BINARY : 'php';
+        $out = shell_exec( escapeshellcmd( $php_bin ) . ' -r ' . escapeshellarg( 'require ' . var_export( __DIR__ . '/../uninstall.php', true ) . '; echo "REACHED";' ) );
         if ( false !== strpos( (string) $out, 'REACHED' ) ) {
             $failures[] = 'uninstall.php must exit unless WP_UNINSTALL_PLUGIN is defined.';
         }

@@ -450,6 +450,66 @@ class PressHub_AI_API_Client {
     }
 
     /**
+     * Synthesize speech using Google Cloud Text-to-Speech API with explicit voice model, rate, and pitch.
+     *
+     * @param string $text        Text to synthesize.
+     * @param string $voice_model Google Cloud TTS voice name (e.g. 'el-GR-Neural2-A', 'el-GR-Neural2-B').
+     * @param float  $speed       Speaking rate / speed (default 1.0, range 0.25 to 4.0).
+     * @param float  $pitch       Voice pitch adjustment in semitones (default 0.0, range -20.0 to 20.0).
+     * @return string|WP_Error   Raw binary MP3 data string or WP_Error on failure.
+     */
+    public function synthesize_speech_with_options( $text, $voice_model = 'el-GR-Neural2-A', $speed = 1.0, $pitch = 0.0 ) {
+        if ( empty( $this->google_cloud_api_key ) ) {
+            return new WP_Error( 'no_gc_key', __( 'Google Cloud API key is missing.', 'presshub-ai-editor' ) );
+        }
+
+        $lang_code = 'el-GR';
+        if ( preg_match( '/^([a-z]{2,3}-[A-Z]{2})/i', $voice_model, $m ) ) {
+            $lang_code = $m[1];
+        }
+
+        $url = 'https://texttospeech.googleapis.com/v1/text:synthesize';
+        $body = [
+            'input'       => [ 'text' => $text ],
+            'voice'       => [
+                'languageCode' => $lang_code,
+                'name'         => $voice_model,
+            ],
+            'audioConfig' => [
+                'audioEncoding' => 'MP3',
+                'speakingRate'  => (float) $speed,
+                'pitch'         => (float) $pitch,
+            ],
+        ];
+
+        $response = wp_remote_post( $url, [
+            'headers' => [
+                'Content-Type'   => 'application/json',
+                'x-goog-api-key' => $this->google_cloud_api_key,
+            ],
+            'body'    => wp_json_encode( $body ),
+            'timeout' => 60,
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            error_log( 'PressHub AI [tts] API error: ' . $response->get_error_message() );
+            return $response;
+        }
+
+        $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( isset( $res_body['error']['message'] ) ) {
+            error_log( 'PressHub AI [tts] API error: ' . $res_body['error']['message'] );
+            return new WP_Error( 'tts_api_error', $res_body['error']['message'] );
+        }
+
+        if ( isset( $res_body['audioContent'] ) ) {
+            return base64_decode( $res_body['audioContent'] );
+        }
+
+        return new WP_Error( 'tts_empty_response', __( 'Empty or invalid audio content returned from Google Cloud TTS.', 'presshub-ai-editor' ) );
+    }
+
+    /**
      * @param float|null $temperature Explicit temperature override (used to
      *                                lock classify_intent / audio scripts to
      *                                0.0); null uses the provider's configured
