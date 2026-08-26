@@ -1056,7 +1056,7 @@ class PressHub_AI_Ajax_Handlers {
 
             $post_data = $_POST;
             if ( isset( $_POST['payload_b64'] ) && is_string( $_POST['payload_b64'] ) ) {
-                $raw_json = base64_decode( sanitize_text_field( wp_unslash( $_POST['payload_b64'] ) ) );
+                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) );
                 if ( false !== $raw_json ) {
                     $decoded = json_decode( $raw_json, true );
                     if ( is_array( $decoded ) ) {
@@ -1080,7 +1080,7 @@ class PressHub_AI_Ajax_Handlers {
             $options_map = [
                 'presshub_ai_provider'                    => [ 'PressHub_AI_Settings', 'sanitize_provider' ],
                 'presshub_ai_fetch_urls'                  => [ 'PressHub_AI_Settings', 'sanitize_fetch_urls' ],
-                'presshub_ai_debug_prompts'               => [ 'PressHub_AI_Settings', 'sanitize_fetch_urls' ],
+                'presshub_ai_debug_prompts'               => [ 'PressHub_AI_Settings', 'sanitize_boolean' ],
                 'presshub_ai_api_key'                     => [ 'PressHub_AI_Settings', 'sanitize_api_key' ],
                 'presshub_ai_remove_api_key'              => [ 'PressHub_AI_Settings', 'sanitize_remove_api_key' ],
                 'presshub_ai_remove_google_cloud_api_key' => [ 'PressHub_AI_Settings', 'sanitize_remove_google_cloud_api_key' ],

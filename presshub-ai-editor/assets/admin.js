@@ -768,7 +768,16 @@ jQuery(document).ready(function($) {
         var jsonString = JSON.stringify(settingsPayload);
         var base64Payload = '';
         try {
-            base64Payload = window.btoa(unescape(encodeURIComponent(jsonString)));
+            if (typeof TextEncoder !== 'undefined') {
+                var u8 = new TextEncoder().encode(jsonString);
+                var binStr = '';
+                for (var b = 0; b < u8.length; b++) {
+                    binStr += String.fromCharCode(u8[b]);
+                }
+                base64Payload = window.btoa(binStr);
+            } else {
+                base64Payload = window.btoa(unescape(encodeURIComponent(jsonString)));
+            }
         } catch (e) {
             base64Payload = '';
         }
@@ -817,7 +826,15 @@ jQuery(document).ready(function($) {
         }).fail(function(xhr, status, error) {
             $btn.prop('disabled', false);
             $spinner.removeClass('is-active');
-            var errorDetail = (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) ? xhr.responseJSON.data.message : (error || status);
+            var errorDetail = '';
+            if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                errorDetail = xhr.responseJSON.data.message;
+            } else if (xhr.responseText) {
+                var stripped = xhr.responseText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                errorDetail = stripped.substring(0, 400);
+            } else {
+                errorDetail = error || status || 'Unknown error';
+            }
             var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc('Error while saving (' + (xhr.status || 0) + '): ' + errorDetail) + '</p></div>';
             $('#presshub-ai-settings-tabs').before(errHtml);
         });
