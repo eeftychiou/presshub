@@ -1075,6 +1075,8 @@ class PressHub_AI_Ajax_Handlers {
                 }
             }
 
+            wp_send_json_success( [ 'message' => 'Step 6 reached: payload parsed (' . count( $post_data ) . ' fields)' ] );
+
             require_once __DIR__ . '/class-settings.php';
 
             $options_map = [
