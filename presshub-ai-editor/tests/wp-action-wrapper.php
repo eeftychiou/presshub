@@ -8,8 +8,9 @@
 
 if ( ! function_exists( 'add_action' ) ) {
     function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
+        $GLOBALS['ACTIONS'][ $hook ][] = $callback;
         if ( 'transition_post_status' === $hook ) {
             $GLOBALS['TRANSITION_HANDLERS'][] = $callback;
         }
     }
-}
+}

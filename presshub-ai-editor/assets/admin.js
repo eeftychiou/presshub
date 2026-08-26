@@ -649,4 +649,17 @@ jQuery(document).ready(function($) {
 
     updateGenerateButton();
     updateReviewButton();
+
+    // ------------------------------------------------------------------
+    // Reset Prompt to Default (Settings Page).
+    // ------------------------------------------------------------------
+    $(document).on('click', '.presshub-reset-prompt', function(e) {
+        e.preventDefault();
+        var targetId = $(this).data('target');
+        var defaultPrompt = $(this).data('default');
+        if (targetId && defaultPrompt !== undefined) {
+            $('#' + targetId).val(defaultPrompt);
+        }
+    });
 });
+

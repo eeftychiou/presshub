@@ -32,7 +32,7 @@ class SettingsPageTest
         $settings->register_settings();
         $sections    = $GLOBALS['SECTIONS']['presshub-ai'] ?? [];
         $section_ids = array_column( $sections, 'id' );
-        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits' ];
+        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_briefing' ];
         if ( $section_ids !== $expected ) {
             $failures[] = 'Sections should be registered in order ' . implode( ', ', $expected ) . '; got: ' . implode( ', ', $section_ids );
         }
@@ -88,6 +88,32 @@ class SettingsPageTest
             }
         }
 
+        $briefing = array_column( $fields['presshub_ai_briefing'] ?? [], 'id' );
+        foreach ( [
+            'presshub_ai_briefing_sources',
+            'presshub_ai_briefing_harvest_time',
+            'presshub_ai_briefing_generation_time',
+            'presshub_ai_briefing_text_preset',
+            'presshub_ai_briefing_podcast_preset',
+            'presshub_ai_briefing_target_duration',
+            'presshub_ai_briefing_host_female',
+            'presshub_ai_briefing_host_male',
+            'presshub_ai_briefing_voice_female',
+            'presshub_ai_briefing_voice_male',
+            'presshub_ai_briefing_voice_speed',
+            'presshub_ai_briefing_voice_pitch',
+            'presshub_ai_briefing_text_category',
+            'presshub_ai_briefing_podcast_category',
+            'presshub_ai_briefing_text_status',
+            'presshub_ai_briefing_podcast_status',
+            'presshub_ai_briefing_text_prompt',
+            'presshub_ai_briefing_podcast_prompt',
+        ] as $field ) {
+            if ( ! in_array( $field, $briefing, true ) ) {
+                $failures[] = "{$field} should be registered in presshub_ai_briefing; got: " . implode( ', ', $briefing );
+            }
+        }
+
         // --- Case 3: every registered option has a callable sanitize callback ---
         $registered = $GLOBALS['REGISTERED_SETTINGS'] ?? [];
         $expected_options = [
@@ -120,7 +146,26 @@ class SettingsPageTest
             'presshub_ai_remove_api_key',
             'presshub_ai_remove_google_cloud_api_key',
             'presshub_ai_remove_github_token',
+            'presshub_ai_briefing_sources',
+            'presshub_ai_briefing_harvest_time',
+            'presshub_ai_briefing_generation_time',
+            'presshub_ai_briefing_text_preset',
+            'presshub_ai_briefing_podcast_preset',
+            'presshub_ai_briefing_target_duration',
+            'presshub_ai_briefing_host_female',
+            'presshub_ai_briefing_host_male',
+            'presshub_ai_briefing_voice_female',
+            'presshub_ai_briefing_voice_male',
+            'presshub_ai_briefing_voice_speed',
+            'presshub_ai_briefing_voice_pitch',
+            'presshub_ai_briefing_text_category',
+            'presshub_ai_briefing_podcast_category',
+            'presshub_ai_briefing_text_status',
+            'presshub_ai_briefing_podcast_status',
+            'presshub_ai_briefing_text_prompt',
+            'presshub_ai_briefing_podcast_prompt',
         ];
+
         $missing = array_diff( $expected_options, $registered );
         $extra   = array_diff( $registered, $expected_options );
         if ( $missing || $extra ) {

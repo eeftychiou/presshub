@@ -84,6 +84,45 @@ class PressHub_AI_Settings {
         return PressHub_AI_Provider_Defaults::default_timeout( $provider );
     }
 
+    public static function default_briefing_sources(): array {
+        return [
+            'https://www.kathimerini.gr',
+            'https://www.tovima.gr',
+            'https://www.naftemporiki.gr',
+            'https://www.in.gr',
+            'https://www.news247.gr',
+        ];
+    }
+
+    public static function default_briefing_harvest_time(): string {
+        return '06:30';
+    }
+
+    public static function default_briefing_generation_time(): string {
+        return '07:15';
+    }
+
+    public static function default_briefing_target_duration(): string {
+        return '5_min';
+    }
+
+    public static function default_briefing_host_female(): string {
+        return 'Μαρία';
+    }
+
+    public static function default_briefing_host_male(): string {
+        return 'Νίκος';
+    }
+
+    public static function default_briefing_voice_female(): string {
+        return 'el-GR-Neural2-A';
+    }
+
+    public static function default_briefing_voice_male(): string {
+        return 'el-GR-Neural2-B';
+    }
+
+
     // ------------------------------------------------------------------
     // P2: legacy model migration (idempotent).
     // ------------------------------------------------------------------
@@ -224,11 +263,86 @@ class PressHub_AI_Settings {
             'type'              => 'integer',
         ] );
 
+        // --- Daily Briefing & AI Podcast ---
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_sources', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_sources' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_harvest_time', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_harvest_time' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_generation_time', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_generation_time' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_preset', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_preset_slug' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_preset', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_preset_slug' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_target_duration', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_duration' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_host_female', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_host_female' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_host_male', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_host_male' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_female', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_voice_female' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_male', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_voice_male' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_speed', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_voice_speed' ],
+            'type'              => 'number',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_pitch', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_voice_pitch' ],
+            'type'              => 'number',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_category', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_category_id' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_category', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_category_id' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_status', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_status' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_status', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_status' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_prompt', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'type'              => 'string',
+        ] );
+
         // --- P1: sections ---
         add_settings_section( 'presshub_ai_general', __( 'General', 'presshub-ai-editor' ), [ $this, 'render_general_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_providers', __( 'Providers', 'presshub-ai-editor' ), [ $this, 'render_providers_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_media', __( 'Media (Google Cloud)', 'presshub-ai-editor' ), [ $this, 'render_media_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_rate_limits', __( 'Rate Limits', 'presshub-ai-editor' ), [ $this, 'render_rate_limits_section' ], 'presshub-ai' );
+        add_settings_section( 'presshub_ai_briefing', __( 'Daily Briefing & AI Podcast', 'presshub-ai-editor' ), [ $this, 'render_briefing_section' ], 'presshub-ai' );
 
         // --- P1: fields ---
         add_settings_field( 'presshub_ai_provider', __( 'AI Provider', 'presshub-ai-editor' ), [ $this, 'render_provider_field' ], 'presshub-ai', 'presshub_ai_general' );
@@ -255,7 +369,27 @@ class PressHub_AI_Settings {
         add_settings_field( 'presshub_ai_rate_limit_per_hour', __( 'Requests per Window', 'presshub-ai-editor' ), [ $this, 'render_rate_limit_per_hour_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
         add_settings_field( 'presshub_ai_rate_limit_window_seconds', __( 'Window Length (seconds)', 'presshub-ai-editor' ), [ $this, 'render_rate_limit_window_seconds_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
         add_settings_field( 'presshub_ai_research_retention_days', __( 'Research Log Retention (days)', 'presshub-ai-editor' ), [ $this, 'render_research_retention_days_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
+
+        add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $this, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_text_preset', __( 'Text Story Preset', 'presshub-ai-editor' ), [ $this, 'render_briefing_text_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_preset', __( 'Podcast Dialogue Preset', 'presshub-ai-editor' ), [ $this, 'render_briefing_podcast_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_target_duration', __( 'Target Podcast Duration', 'presshub-ai-editor' ), [ $this, 'render_briefing_target_duration_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_host_female', __( 'Female Host Name', 'presshub-ai-editor' ), [ $this, 'render_briefing_host_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_host_male', __( 'Male Host Name', 'presshub-ai-editor' ), [ $this, 'render_briefing_host_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_voice_female', __( 'Female Voice Model (TTS)', 'presshub-ai-editor' ), [ $this, 'render_briefing_voice_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_voice_male', __( 'Male Voice Model (TTS)', 'presshub-ai-editor' ), [ $this, 'render_briefing_voice_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_voice_speed', __( 'Voice Speaking Rate / Speed', 'presshub-ai-editor' ), [ $this, 'render_briefing_voice_speed_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_voice_pitch', __( 'Voice Pitch Tuning', 'presshub-ai-editor' ), [ $this, 'render_briefing_voice_pitch_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_text_category', __( 'Text Briefing Category', 'presshub-ai-editor' ), [ $this, 'render_briefing_text_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_category', __( 'Podcast Category', 'presshub-ai-editor' ), [ $this, 'render_briefing_podcast_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_text_status', __( 'Text Briefing Post Status', 'presshub-ai-editor' ), [ $this, 'render_briefing_text_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_status', __( 'Podcast Post Status', 'presshub-ai-editor' ), [ $this, 'render_briefing_podcast_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_text_prompt', __( 'Text Story System Prompt', 'presshub-ai-editor' ), [ $this, 'render_briefing_text_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_prompt', __( 'Podcast Dialogue System Prompt', 'presshub-ai-editor' ), [ $this, 'render_briefing_podcast_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
     }
+
 
     // ------------------------------------------------------------------
     // P3: page render + P1 help tab.
@@ -551,6 +685,272 @@ class PressHub_AI_Settings {
         <?php
     }
 
+    public function render_briefing_section() {
+        echo '<p>' . __( 'Automated morning Greek news briefing text curation and multi-voice conversational podcast generation.', 'presshub-ai-editor' ) . '</p>';
+    }
+
+    public function render_briefing_sources_field() {
+        $option = 'presshub_ai_briefing_sources';
+        $sources = get_option( $option, implode( "\n", self::default_briefing_sources() ) );
+        if ( is_array( $sources ) ) {
+            $sources = implode( "\n", $sources );
+        }
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code"><?php echo esc_textarea( (string) $sources ); ?></textarea>
+        <p class="description"><?php echo __( 'Enter one Greek news homepage or RSS/article URL per line.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_harvest_time_field() {
+        $option = 'presshub_ai_briefing_harvest_time';
+        $value  = (string) get_option( $option, self::default_briefing_harvest_time() );
+        ?>
+        <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo __( 'Time when morning Greek news sources are scraped and snapshot saved. Default 06:30.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_generation_time_field() {
+        $option = 'presshub_ai_briefing_generation_time';
+        $value  = (string) get_option( $option, self::default_briefing_generation_time() );
+        ?>
+        <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo __( 'Time when text story curation and podcast synthesis are triggered. Default 07:15.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_text_preset_field() {
+        $option   = 'presshub_ai_briefing_text_preset';
+        $selected = (string) get_option( $option, '' );
+        $presets  = class_exists( 'PressHub_AI_Preset_Store' ) ? PressHub_AI_Preset_Store::get_plugin_defaults() : [];
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="" <?php echo '' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Standard Editorial (Default)', 'presshub-ai-editor' ); ?></option>
+            <?php foreach ( $presets as $preset ) : ?>
+                <?php if ( ! empty( $preset['enabled'] ) ) : ?>
+                    <option value="<?php echo self::esc_attr_safe( $preset['slug'] ); ?>" <?php echo $selected === $preset['slug'] ? 'selected="selected"' : ''; ?>>
+                        <?php echo self::esc_html_safe( $preset['name'] ); ?> (<?php echo self::esc_html_safe( $preset['slug'] ); ?>)
+                    </option>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo __( 'Instruction preset applied to the morning text briefing curation agent.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_preset_field() {
+        $option   = 'presshub_ai_briefing_podcast_preset';
+        $selected = (string) get_option( $option, '' );
+        $presets  = class_exists( 'PressHub_AI_Preset_Store' ) ? PressHub_AI_Preset_Store::get_plugin_defaults() : [];
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="" <?php echo '' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Standard Conversational (Default)', 'presshub-ai-editor' ); ?></option>
+            <?php foreach ( $presets as $preset ) : ?>
+                <?php if ( ! empty( $preset['enabled'] ) ) : ?>
+                    <option value="<?php echo self::esc_attr_safe( $preset['slug'] ); ?>" <?php echo $selected === $preset['slug'] ? 'selected="selected"' : ''; ?>>
+                        <?php echo self::esc_html_safe( $preset['name'] ); ?> (<?php echo self::esc_html_safe( $preset['slug'] ); ?>)
+                    </option>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo __( 'Instruction preset applied to the podcast producer dialogue agent.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_target_duration_field() {
+        $option   = 'presshub_ai_briefing_target_duration';
+        $selected = (string) get_option( $option, self::default_briefing_target_duration() );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="3_min" <?php echo '3_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( '3 Minutes (~450 words, 6-8 dialogue turns)', 'presshub-ai-editor' ); ?></option>
+            <option value="5_min" <?php echo '5_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( '5 Minutes (~750 words, 12-15 dialogue turns)', 'presshub-ai-editor' ); ?></option>
+            <option value="10_min" <?php echo '10_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( '10 Minutes (~1500 words, 20+ dialogue turns)', 'presshub-ai-editor' ); ?></option>
+        </select>
+        <p class="description"><?php echo __( 'Target duration and word budget pacing for daily podcast synthesis.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_host_female_field() {
+        $option = 'presshub_ai_briefing_host_female';
+        $value  = (string) get_option( $option, self::default_briefing_host_female() );
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo __( 'Name of the lead female presenter (e.g. Μαρία). Default Μαρία.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_host_male_field() {
+        $option = 'presshub_ai_briefing_host_male';
+        $value  = (string) get_option( $option, self::default_briefing_host_male() );
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo __( 'Name of the co-host / male commentator (e.g. Νίκος). Default Νίκος.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_voice_female_field() {
+        $option   = 'presshub_ai_briefing_voice_female';
+        $selected = (string) get_option( $option, self::default_briefing_voice_female() );
+        $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
+        $voices = $synthesizer ? ( $synthesizer->get_available_voices()['female'] ?? [] ) : [
+            'el-GR-Neural2-A'  => [ 'name' => 'el-GR-Neural2-A', 'label' => 'Greek Female (Neural2-A)' ],
+            'el-GR-Wavenet-A'  => [ 'name' => 'el-GR-Wavenet-A', 'label' => 'Greek Female (Wavenet-A)' ],
+            'el-GR-Standard-A' => [ 'name' => 'el-GR-Standard-A', 'label' => 'Greek Female (Standard-A)' ],
+        ];
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php foreach ( $voices as $key => $v ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo __( 'Google Cloud TTS voice model used for the female host.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_voice_male_field() {
+        $option   = 'presshub_ai_briefing_voice_male';
+        $selected = (string) get_option( $option, self::default_briefing_voice_male() );
+        $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
+        $voices = $synthesizer ? ( $synthesizer->get_available_voices()['male'] ?? [] ) : [
+            'el-GR-Neural2-B'  => [ 'name' => 'el-GR-Neural2-B', 'label' => 'Greek Male (Neural2-B)' ],
+            'el-GR-Wavenet-B'  => [ 'name' => 'el-GR-Wavenet-B', 'label' => 'Greek Male (Wavenet-B)' ],
+            'el-GR-Standard-B' => [ 'name' => 'el-GR-Standard-B', 'label' => 'Greek Male (Standard-B)' ],
+        ];
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php foreach ( $voices as $key => $v ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo __( 'Google Cloud TTS voice model used for the male host.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_voice_speed_field() {
+        $option = 'presshub_ai_briefing_voice_speed';
+        $value  = (float) get_option( $option, 1.0 );
+        ?>
+        <input type="number" min="0.85" max="1.25" step="0.05" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Speaking rate multiplier (0.85 to 1.25). Default 1.00.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_voice_pitch_field() {
+        $option = 'presshub_ai_briefing_voice_pitch';
+        $value  = (float) get_option( $option, 0.0 );
+        ?>
+        <input type="number" min="-4.0" max="4.0" step="0.5" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Voice pitch adjustment (-4.0 to 4.0 semitones). Default 0.0.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_text_category_field() {
+        $option   = 'presshub_ai_briefing_text_category';
+        $selected = (int) get_option( $option, 0 );
+        $terms    = function_exists( 'get_terms' ) ? get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] ) : [];
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="0" <?php echo 0 === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'None (Default Category)', 'presshub-ai-editor' ); ?></option>
+            <?php if ( is_array( $terms ) ) : ?>
+                <?php foreach ( $terms as $term ) : ?>
+                    <?php if ( is_object( $term ) && isset( $term->term_id ) ) : ?>
+                        <option value="<?php echo (int) $term->term_id; ?>" <?php echo $selected === (int) $term->term_id ? 'selected="selected"' : ''; ?>>
+                            <?php echo self::esc_html_safe( $term->name ); ?>
+                        </option>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </select>
+        <p class="description"><?php echo __( 'WordPress post category assigned to text briefing posts.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_category_field() {
+        $option   = 'presshub_ai_briefing_podcast_category';
+        $selected = (int) get_option( $option, 0 );
+        $terms    = function_exists( 'get_terms' ) ? get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] ) : [];
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="0" <?php echo 0 === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'None (Default Category)', 'presshub-ai-editor' ); ?></option>
+            <?php if ( is_array( $terms ) ) : ?>
+                <?php foreach ( $terms as $term ) : ?>
+                    <?php if ( is_object( $term ) && isset( $term->term_id ) ) : ?>
+                        <option value="<?php echo (int) $term->term_id; ?>" <?php echo $selected === (int) $term->term_id ? 'selected="selected"' : ''; ?>>
+                            <?php echo self::esc_html_safe( $term->name ); ?>
+                        </option>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </select>
+        <p class="description"><?php echo __( 'WordPress post category assigned to synthesized podcast posts.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_text_status_field() {
+        $option   = 'presshub_ai_briefing_text_status';
+        $selected = (string) get_option( $option, 'pending' );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="pending" <?php echo 'pending' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Pending Review', 'presshub-ai-editor' ); ?></option>
+            <option value="draft" <?php echo 'draft' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Draft', 'presshub-ai-editor' ); ?></option>
+            <option value="publish" <?php echo 'publish' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Publish Immediately', 'presshub-ai-editor' ); ?></option>
+        </select>
+        <p class="description"><?php echo __( 'Default status for newly generated morning text briefing posts.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_status_field() {
+        $option   = 'presshub_ai_briefing_podcast_status';
+        $selected = (string) get_option( $option, 'pending' );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="pending" <?php echo 'pending' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Pending Review', 'presshub-ai-editor' ); ?></option>
+            <option value="draft" <?php echo 'draft' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Draft', 'presshub-ai-editor' ); ?></option>
+            <option value="publish" <?php echo 'publish' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Publish Immediately', 'presshub-ai-editor' ); ?></option>
+        </select>
+        <p class="description"><?php echo __( 'Default status for newly generated podcast posts.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_text_prompt_field() {
+        $option  = 'presshub_ai_briefing_text_prompt';
+        $default = class_exists( 'PressHub_AI_News_Curator' )
+            ? ( new PressHub_AI_News_Curator() )->get_default_curation_prompt()
+            : '';
+        $value   = (string) get_option( $option, $default );
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="10" class="large-text code"><?php echo esc_textarea( $value ); ?></textarea>
+        <p>
+            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
+                <?php echo __( 'Reset to Default', 'presshub-ai-editor' ); ?>
+            </button>
+        </p>
+        <p class="description"><?php echo __( 'Base system prompt for Greek text story curation. Supports placeholders: {date}, {sources_list}, {articles_count}, {articles_context}.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_prompt_field() {
+        $option  = 'presshub_ai_briefing_podcast_prompt';
+        $default = class_exists( 'PressHub_AI_Podcast_Producer' )
+            ? ( new PressHub_AI_Podcast_Producer() )->get_default_dialogue_prompt()
+            : '';
+        $value   = (string) get_option( $option, $default );
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="10" class="large-text code"><?php echo esc_textarea( $value ); ?></textarea>
+        <p>
+            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
+                <?php echo __( 'Reset to Default', 'presshub-ai-editor' ); ?>
+            </button>
+        </p>
+        <p class="description"><?php echo __( 'Base system prompt for Greek podcast dialogue generation. Supports placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}, {host1_name}, {host2_name}.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+
     // ------------------------------------------------------------------
     // P4 helpers.
     // ------------------------------------------------------------------
@@ -688,6 +1088,116 @@ class PressHub_AI_Settings {
         return substr( self::sanitize_text( $value ), 0, 50 );
     }
 
+    public static function sanitize_briefing_sources( $value ) {
+        $value = wp_unslash( $value );
+        $is_array = is_array( $value );
+        $items = $is_array ? $value : preg_split( '/[\r\n,]+/', (string) $value );
+        $clean = [];
+        foreach ( (array) $items as $item ) {
+            if ( ! is_string( $item ) ) {
+                continue;
+            }
+            $item = trim( strip_tags( $item ) );
+            if ( '' === $item ) {
+                continue;
+            }
+            if ( preg_match( '/^https?:\/\/[^\s]+$/i', $item ) ) {
+                $clean[] = $item;
+            }
+        }
+        $clean = array_values( array_unique( $clean ) );
+        return $is_array ? $clean : implode( "\n", $clean );
+    }
+
+    public static function sanitize_harvest_time( $value ) {
+        return self::sanitize_time_format( $value, self::default_briefing_harvest_time() );
+    }
+
+    public static function sanitize_generation_time( $value ) {
+        return self::sanitize_time_format( $value, self::default_briefing_generation_time() );
+    }
+
+    private static function sanitize_time_format( $value, $default = '06:30' ): string {
+        $value = trim( (string) wp_unslash( $value ) );
+        if ( preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', $value, $matches ) ) {
+            return sprintf( '%02d:%02d', (int) $matches[1], (int) $matches[2] );
+        }
+        return $default;
+    }
+
+    public static function sanitize_preset_slug( $value ): string {
+        $value = self::sanitize_slug( $value );
+        return substr( $value, 0, 50 );
+    }
+
+    public static function sanitize_briefing_duration( $value ): string {
+        $clean = strtolower( trim( (string) wp_unslash( $value ) ) );
+        if ( in_array( $clean, [ '3_min', '5_min', '10_min' ], true ) ) {
+            return $clean;
+        }
+        return self::default_briefing_target_duration();
+    }
+
+    public static function sanitize_briefing_host_female( $value ): string {
+        $clean = self::sanitize_text( $value );
+        return '' !== $clean ? substr( $clean, 0, 50 ) : self::default_briefing_host_female();
+    }
+
+    public static function sanitize_briefing_host_male( $value ): string {
+        $clean = self::sanitize_text( $value );
+        return '' !== $clean ? substr( $clean, 0, 50 ) : self::default_briefing_host_male();
+    }
+
+    public static function sanitize_voice_female( $value ): string {
+        $allowed = [ 'el-GR-Neural2-A', 'el-GR-Wavenet-A', 'el-GR-Standard-A' ];
+        $value = trim( (string) wp_unslash( $value ) );
+        return in_array( $value, $allowed, true ) ? $value : self::default_briefing_voice_female();
+    }
+
+    public static function sanitize_voice_male( $value ): string {
+        $allowed = [ 'el-GR-Neural2-B', 'el-GR-Wavenet-B', 'el-GR-Standard-B' ];
+        $value = trim( (string) wp_unslash( $value ) );
+        return in_array( $value, $allowed, true ) ? $value : self::default_briefing_voice_male();
+    }
+
+    public static function sanitize_voice_speed( $value ): float {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 1.0;
+        }
+        $speed = (float) $value;
+        return round( max( 0.85, min( 1.25, $speed ) ), 2 );
+    }
+
+    public static function sanitize_voice_pitch( $value ): float {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 0.0;
+        }
+        $pitch = (float) $value;
+        return round( max( -4.0, min( 4.0, $pitch ) ), 1 );
+    }
+
+    public static function sanitize_briefing_status( $value ): string {
+        $allowed = [ 'pending', 'publish', 'draft' ];
+        $value = strtolower( trim( (string) wp_unslash( $value ) ) );
+        return in_array( $value, $allowed, true ) ? $value : 'pending';
+    }
+
+    public static function sanitize_category_id( $value ): int {
+        $n = (int) wp_unslash( $value );
+        return max( 0, $n );
+    }
+
+    public static function sanitize_briefing_prompt( $value ): string {
+        $value = wp_unslash( $value );
+        if ( ! is_string( $value ) ) {
+            return '';
+        }
+        return substr( trim( $value ), 0, 10000 );
+    }
+
+
     /**
      * Shared secret sanitizer: strips tags/newlines, caps length, and —
      * critically — preserves the saved value when the post is empty or is
@@ -744,10 +1254,12 @@ class PressHub_AI_Settings {
      */
     private static function sanitize_slug( $value ) {
         $value = wp_unslash( $value );
-        $value = strtolower( (string) $value );
+        $value = wp_strip_all_tags( (string) $value );
+        $value = strtolower( trim( $value ) );
         $value = preg_replace( '/[^a-z0-9\-_]/', '', $value );
         return substr( $value, 0, 100 );
     }
+
 
     // ------------------------------------------------------------------
     // Escaping helpers: prefer the WP functions when present, fall back to

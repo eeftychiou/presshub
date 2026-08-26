@@ -63,8 +63,13 @@ if ( ! function_exists( 'update_option' ) ) {
      * can assert autoload flags (P-1: preset options must not autoload).
      */
     function update_option( $key, $value, $autoload = null ) {
+        $old_value = $GLOBALS['OPTIONS_STORE'][ $key ] ?? false;
         $GLOBALS['OPTIONS_STORE'][ $key ] = $value;
         $GLOBALS['UPDATE_OPTION_CALLS'][] = [ $key, $value, $autoload ];
+        if ( function_exists( 'do_action' ) ) {
+            do_action( 'update_option_' . $key, $old_value, $value, $key );
+            do_action( 'update_option', $key, $old_value, $value );
+        }
         return true;
     }
 }
@@ -127,16 +132,20 @@ if ( ! function_exists( 'wp_update_post' ) ) {
 if ( ! function_exists( 'do_action' ) ) {
     function do_action( $hook, ...$args ) {
         $GLOBALS['DO_ACTION_LOG'][] = [ 'hook' => $hook, 'args' => $args ];
-        // transition_post_status handlers are registered via add_action(); the
-        // shim above ignores arguments, so we explicitly invoke them here.
         if ( 'transition_post_status' === $hook && isset( $GLOBALS['TRANSITION_HANDLERS'] ) ) {
             foreach ( $GLOBALS['TRANSITION_HANDLERS'] as $cb ) {
                 $GLOBALS['HOOK_INVOCATION_COUNT']++;
                 call_user_func_array( $cb, $args );
             }
+        } elseif ( isset( $GLOBALS['ACTIONS'][ $hook ] ) ) {
+            foreach ( $GLOBALS['ACTIONS'][ $hook ] as $cb ) {
+                call_user_func_array( $cb, $args );
+            }
         }
     }
 }
+
+
 
 if ( ! function_exists( 'wp_remote_post' ) ) {
     /**
@@ -682,6 +691,49 @@ if ( ! function_exists( 'sanitize_text_field' ) ) {
         return trim( (string) $str );
     }
 }
+
+if ( ! function_exists( 'wp_clear_scheduled_hook' ) ) {
+    function wp_clear_scheduled_hook( $hook, $args = [] ) {
+        $GLOBALS['CLEARED_HOOKS'][] = [ 'hook' => $hook, 'args' => $args ];
+        if ( isset( $GLOBALS['RECURRING_EVENTS'] ) ) {
+            $GLOBALS['RECURRING_EVENTS'] = array_values( array_filter(
+                $GLOBALS['RECURRING_EVENTS'],
+                function ( $e ) use ( $hook ) {
+                    return ( $e['hook'] ?? '' ) !== $hook;
+                }
+            ) );
+        }
+        if ( isset( $GLOBALS['NEXT_SCHEDULED'][ $hook ] ) ) {
+            unset( $GLOBALS['NEXT_SCHEDULED'][ $hook ] );
+        }
+        return true;
+    }
+}
+
+if ( ! function_exists( 'register_activation_hook' ) ) {
+    function register_activation_hook( $file, $callback ) {
+        $GLOBALS['ACTIVATION_HOOKS'][] = [ 'file' => $file, 'callback' => $callback ];
+    }
+}
+
+if ( ! function_exists( 'register_deactivation_hook' ) ) {
+    function register_deactivation_hook( $file, $callback ) {
+        $GLOBALS['DEACTIVATION_HOOKS'][] = [ 'file' => $file, 'callback' => $callback ];
+    }
+}
+
+if ( ! function_exists( 'plugin_dir_path' ) ) {
+    function plugin_dir_path( $file ) {
+        return dirname( $file ) . '/';
+    }
+}
+
+if ( ! function_exists( 'plugin_dir_url' ) ) {
+    function plugin_dir_url( $file ) {
+        return 'http://example.test/wp-content/plugins/presshub-ai-editor/';
+    }
+}
+
 
 // D-3: the API client logs provider errors via error_log(). error_log is
 // a PHP built-in (cannot be stubbed), so redirect the log target to a

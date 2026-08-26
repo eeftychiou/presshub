@@ -98,8 +98,11 @@ add_filter(
 function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_ai_cleanup_research' );
     wp_clear_scheduled_hook( 'presshub_ai_do_research' );
+    wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
+    wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
 }
 register_deactivation_hook( __FILE__, 'presshub_ai_deactivate' );
+
 
 // Initialize GitHub Update Checker
 // PRESSHUB_AI_SKIP_UPDATE_CHECKER lets hosts (and the unit-test harness)
@@ -262,4 +265,117 @@ function presshub_ai_execute_research_job( $research_id ) {
 
     update_post_meta( $research_id, '_research_status', 'completed' );
 }
+
+/**
+ * ----------------------------------------------------------------------
+ * Daily News Briefing & AI Podcast WP-Cron Scheduling & Execution
+ * ----------------------------------------------------------------------
+ */
+
+add_action( 'presshub_daily_news_harvest', 'presshub_ai_execute_harvest_cron' );
+add_action( 'presshub_daily_news_generate', 'presshub_ai_execute_generation_cron' );
+add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_schedule_briefing_crons' );
+add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_schedule_briefing_crons' );
+register_activation_hook( __FILE__, 'presshub_ai_schedule_briefing_crons' );
+
+/**
+ * Calculate the next timestamp for a given HH:MM time string.
+ *
+ * @param string   $time_str Time in HH:MM format.
+ * @param int|null $now      Optional reference timestamp (defaults to current time).
+ * @return int Unix timestamp for the next occurrence.
+ */
+function presshub_ai_get_cron_timestamp( $time_str, $now = null ) {
+    if ( null === $now ) {
+        $now = $GLOBALS['TIME_NOW'] ?? time();
+    }
+    if ( ! preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', trim( (string) $time_str ), $matches ) ) {
+        $time_str = '06:30';
+        $matches  = [ $time_str, '06', '30' ];
+    }
+    $hours   = (int) $matches[1];
+    $minutes = (int) $matches[2];
+
+    $today_date = date( 'Y-m-d', $now );
+    $target     = strtotime( sprintf( '%s %02d:%02d:00', $today_date, $hours, $minutes ) );
+
+    if ( $target <= $now ) {
+        $target += 86400; // DAY_IN_SECONDS
+    }
+
+    return $target;
+}
+
+/**
+ * Schedule or re-schedule the daily morning news harvest and generation cron events.
+ */
+function presshub_ai_schedule_briefing_crons() {
+    $harvest_time    = (string) get_option( 'presshub_ai_briefing_harvest_time', '06:30' );
+    $generation_time = (string) get_option( 'presshub_ai_briefing_generation_time', '07:15' );
+
+    wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
+    wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
+
+    $harvest_timestamp    = presshub_ai_get_cron_timestamp( $harvest_time );
+    $generation_timestamp = presshub_ai_get_cron_timestamp( $generation_time );
+
+    wp_schedule_event( $harvest_timestamp, 'daily', 'presshub_daily_news_harvest' );
+    wp_schedule_event( $generation_timestamp, 'daily', 'presshub_daily_news_generate' );
+}
+
+/**
+ * Execute the automated Greek news harvest cron.
+ *
+ * @return array Harvest payload.
+ */
+function presshub_ai_execute_harvest_cron() {
+    $harvester   = new PressHub_AI_News_Harvester();
+    $raw_sources = get_option( 'presshub_ai_briefing_sources', '' );
+    if ( is_array( $raw_sources ) ) {
+        $sources = $raw_sources;
+    } else {
+        $sources = preg_split( '/[\r\n,]+/', (string) $raw_sources );
+    }
+    $sources = array_values( array_filter( array_map( 'trim', (array) $sources ) ) );
+
+    if ( empty( $sources ) && class_exists( 'PressHub_AI_Settings' ) ) {
+        $sources = PressHub_AI_Settings::default_briefing_sources();
+    }
+
+    return $harvester->harvest_all( $sources );
+}
+
+/**
+ * Execute the automated news briefing generation cron (Text Story + Podcast Dialogue + Audio Synthesis).
+ *
+ * @return array Generated results payload.
+ */
+function presshub_ai_execute_generation_cron() {
+    $date = gmdate( 'Y-m-d' );
+    $results = [
+        'curation'  => null,
+        'podcast'   => null,
+        'synthesis' => null,
+    ];
+
+    // 1. Text story curation
+    $curator = new PressHub_AI_News_Curator();
+    $preset_text = (string) get_option( 'presshub_ai_briefing_text_preset', '' );
+    $results['curation'] = $curator->generate_story( $date, null, $preset_text );
+
+    // 2. Podcast dialogue script generation
+    $producer = new PressHub_AI_Podcast_Producer();
+    $preset_podcast = (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
+    $duration = (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
+    $results['podcast'] = $producer->generate_dialogue_script( $date, null, $preset_podcast, $duration );
+
+    // 3. Audio podcast synthesis
+    if ( ! is_wp_error( $results['podcast'] ) ) {
+        $synthesizer = new PressHub_AI_Audio_Synthesizer();
+        $results['synthesis'] = $synthesizer->synthesize_podcast( $date );
+    }
+
+    return $results;
+}
+
 
