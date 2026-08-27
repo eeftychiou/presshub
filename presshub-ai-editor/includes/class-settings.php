@@ -766,7 +766,11 @@ class PressHub_AI_Settings {
     }
 
     public function render_briefing_section() {
+        global $wpdb;
+        $db_row = $wpdb->get_row( "SELECT option_value, autoload FROM $wpdb->options WHERE option_name = 'presshub_ai_briefing_sources'" );
+        $opt_val = get_option( 'presshub_ai_briefing_sources', 'NOT_FOUND' );
         echo '<p>' . __( 'Automated morning Greek news briefing text curation and multi-voice conversational podcast generation.', 'presshub-ai-editor' ) . '</p>';
+        echo '<div id="presshub-diag-sources" style="font-size:11px; color:#888; background:#f0f0f0; padding:6px; margin:5px 0; border: 1px solid #ccc;">[DB Raw: ' . esc_html( var_export( $db_row, true ) ) . ' | get_option: ' . esc_html( var_export( $opt_val, true ) ) . ']</div>';
     }
 
     public function render_briefing_sources_field() {
