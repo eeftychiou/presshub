@@ -583,7 +583,12 @@ class PressHub_AI_API_Client {
 
         // 1. Try Gemini Interactions API (Standard for Gemini 3.1 & 2.5 TTS)
         $interactions_url = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-        $tts_models       = [ 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts' ];
+        $configured_model = (string) get_option( 'presshub_ai_briefing_tts_model', 'gemini-3.1-flash-tts-preview' );
+        $tts_models       = array_values( array_unique( array_filter( [
+            $configured_model,
+            'gemini-3.1-flash-tts-preview',
+            'gemini-2.5-flash-preview-tts',
+        ] ) ) );
         $audio_base64     = null;
         $mime_type        = 'audio/pcm;rate=24000';
         $last_error       = '';

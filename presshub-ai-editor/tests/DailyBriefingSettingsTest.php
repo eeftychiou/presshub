@@ -52,6 +52,7 @@ class DailyBriefingSettingsTest
         $expected_fields = [
             'presshub_ai_briefing_sources',
             'presshub_ai_briefing_tts_engine',
+            'presshub_ai_briefing_tts_model',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
             'presshub_ai_briefing_text_preset',

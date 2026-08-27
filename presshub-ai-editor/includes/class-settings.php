@@ -118,6 +118,10 @@ class PressHub_AI_Settings {
         return 'gemini';
     }
 
+    public static function default_briefing_tts_model(): string {
+        return 'gemini-3.1-flash-tts-preview';
+    }
+
     public static function default_briefing_voice_female(): string {
         return 'Aoede';
     }
@@ -385,6 +389,7 @@ class PressHub_AI_Settings {
 
         add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $this, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_engine', __( 'Voice Synthesis Engine', 'presshub-ai-editor' ), [ $this, 'render_briefing_tts_engine_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_model', __( 'Voice Generation AI Model', 'presshub-ai-editor' ), [ $this, 'render_briefing_tts_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_preset', __( 'Text Story Preset', 'presshub-ai-editor' ), [ $this, 'render_briefing_text_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -880,6 +885,17 @@ class PressHub_AI_Settings {
         <?php
     }
 
+    public function render_briefing_tts_model_field() {
+        $option = 'presshub_ai_briefing_tts_model';
+        $value  = (string) get_option( $option, self::default_briefing_tts_model() );
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="gemini-3.1-flash-tts-preview" />
+        <p class="description">
+            <?php echo esc_html__( 'Model ID used for speech synthesis (e.g. gemini-3.1-flash-tts-preview, gemini-2.5-flash-preview-tts, or custom endpoint).', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
     public function render_briefing_host_female_field() {
         $option = 'presshub_ai_briefing_host_female';
         $value  = (string) get_option( $option, self::default_briefing_host_female() );
@@ -1287,6 +1303,11 @@ class PressHub_AI_Settings {
     public static function sanitize_briefing_tts_engine( $value ): string {
         $clean = is_string( $value ) ? sanitize_text_field( trim( $value ) ) : '';
         return in_array( $clean, [ 'gemini', 'google_cloud' ], true ) ? $clean : self::default_briefing_tts_engine();
+    }
+
+    public static function sanitize_briefing_tts_model( $value ): string {
+        $clean = self::sanitize_text( $value );
+        return '' !== $clean ? substr( $clean, 0, 100 ) : self::default_briefing_tts_model();
     }
 
     public static function sanitize_voice_female( $value ): string {

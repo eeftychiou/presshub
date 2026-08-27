@@ -1115,6 +1115,8 @@ class PressHub_AI_Ajax_Handlers {
                 'presshub_ai_research_retention_days'     => [ 'PressHub_AI_Settings', 'sanitize_research_retention_days' ],
                 'presshub_ai_log_level'                   => [ 'PressHub_AI_Settings', 'sanitize_log_level' ],
                 'presshub_ai_briefing_sources'            => [ 'PressHub_AI_Settings', 'sanitize_briefing_sources' ],
+                'presshub_ai_briefing_tts_engine'         => [ 'PressHub_AI_Settings', 'sanitize_briefing_tts_engine' ],
+                'presshub_ai_briefing_tts_model'          => [ 'PressHub_AI_Settings', 'sanitize_briefing_tts_model' ],
                 'presshub_ai_briefing_harvest_time'       => [ 'PressHub_AI_Settings', 'sanitize_harvest_time' ],
                 'presshub_ai_briefing_generation_time'    => [ 'PressHub_AI_Settings', 'sanitize_generation_time' ],
                 'presshub_ai_briefing_text_preset'        => [ 'PressHub_AI_Settings', 'sanitize_preset_slug' ],
