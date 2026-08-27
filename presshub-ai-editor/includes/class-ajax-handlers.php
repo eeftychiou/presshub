@@ -1161,21 +1161,19 @@ class PressHub_AI_Ajax_Handlers {
                         continue;
                     }
 
-                    // Handle standard options (only update if modified)
+                    // Handle standard options
                     if ( isset( $post_data[ $option ] ) ) {
                         $clean = call_user_func( $sanitizer, $post_data[ $option ] );
-                        $current_val = get_option( $option, null );
-                        if ( null === $current_val || (string) $current_val !== (string) $clean ) {
-                            update_option( $option, $clean );
-                            $saved_count++;
-                            $processed[] = $option;
+                        update_option( $option, $clean );
+                        $saved_count++;
+                        $processed[] = $option;
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::debug( sprintf( 'Saved option %s: length %d', $option, is_string( $clean ) ? strlen( $clean ) : 1 ) );
                         }
                     } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
-                        if ( 0 !== (int) get_option( $option, 0 ) ) {
-                            update_option( $option, 0 );
-                            $saved_count++;
-                            $processed[] = $option . '=0';
-                        }
+                        update_option( $option, 0 );
+                        $saved_count++;
+                        $processed[] = $option . '=0';
                     }
                 } catch ( Throwable $opt_err ) {
                     if ( class_exists( 'PressHub_AI_Logger' ) ) {
