@@ -119,7 +119,7 @@ class PressHub_AI_Settings {
     }
 
     public static function default_briefing_voice_male(): string {
-        return 'el-GR-Wavenet-B';
+        return 'el-GR-Chirp3-HD-Achird';
     }
 
 
@@ -876,8 +876,10 @@ class PressHub_AI_Settings {
         $selected = (string) get_option( $option, self::default_briefing_voice_female() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $voices = $synthesizer ? ( $synthesizer->get_available_voices()['female'] ?? [] ) : [
-            'el-GR-Wavenet-A'  => [ 'name' => 'el-GR-Wavenet-A', 'label' => 'Greek Female (Wavenet-A)' ],
-            'el-GR-Standard-A' => [ 'name' => 'el-GR-Standard-A', 'label' => 'Greek Female (Standard-A)' ],
+            'el-GR-Wavenet-A'          => [ 'name' => 'el-GR-Wavenet-A', 'label' => 'Greek Female (Wavenet-A)' ],
+            'el-GR-Chirp3-HD-Aoede'    => [ 'name' => 'el-GR-Chirp3-HD-Aoede', 'label' => 'Greek Female (Chirp 3 HD Aoede)' ],
+            'el-GR-Chirp3-HD-Achernar' => [ 'name' => 'el-GR-Chirp3-HD-Achernar', 'label' => 'Greek Female (Chirp 3 HD Achernar)' ],
+            'el-GR-Standard-A'         => [ 'name' => 'el-GR-Standard-A', 'label' => 'Greek Female (Standard-A)' ],
         ];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
@@ -896,8 +898,10 @@ class PressHub_AI_Settings {
         $selected = (string) get_option( $option, self::default_briefing_voice_male() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $voices = $synthesizer ? ( $synthesizer->get_available_voices()['male'] ?? [] ) : [
-            'el-GR-Wavenet-B'  => [ 'name' => 'el-GR-Wavenet-B', 'label' => 'Greek Male (Wavenet-B)' ],
-            'el-GR-Standard-B' => [ 'name' => 'el-GR-Standard-B', 'label' => 'Greek Male (Standard-B)' ],
+            'el-GR-Chirp3-HD-Achird'   => [ 'name' => 'el-GR-Chirp3-HD-Achird', 'label' => 'Greek Male (Chirp 3 HD Achird)' ],
+            'el-GR-Chirp3-HD-Algenib'  => [ 'name' => 'el-GR-Chirp3-HD-Algenib', 'label' => 'Greek Male (Chirp 3 HD Algenib)' ],
+            'el-GR-Chirp3-HD-Algieba'  => [ 'name' => 'el-GR-Chirp3-HD-Algieba', 'label' => 'Greek Male (Chirp 3 HD Algieba)' ],
+            'el-GR-Chirp3-HD-Alnilam'  => [ 'name' => 'el-GR-Chirp3-HD-Alnilam', 'label' => 'Greek Male (Chirp 3 HD Alnilam)' ],
         ];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
@@ -1244,7 +1248,13 @@ class PressHub_AI_Settings {
     }
 
     public static function sanitize_voice_female( $value ): string {
-        $allowed = [ 'el-GR-Wavenet-A', 'el-GR-Standard-A', 'el-GR-Neural2-A' ];
+        $allowed = [
+            'el-GR-Wavenet-A',
+            'el-GR-Chirp3-HD-Aoede',
+            'el-GR-Chirp3-HD-Achernar',
+            'el-GR-Standard-A',
+            'el-GR-Neural2-A',
+        ];
         $value = trim( (string) wp_unslash( $value ) );
         if ( 'el-GR-Neural2-A' === $value ) {
             return 'el-GR-Wavenet-A';
@@ -1253,10 +1263,18 @@ class PressHub_AI_Settings {
     }
 
     public static function sanitize_voice_male( $value ): string {
-        $allowed = [ 'el-GR-Wavenet-B', 'el-GR-Standard-B', 'el-GR-Neural2-B' ];
+        $allowed = [
+            'el-GR-Chirp3-HD-Achird',
+            'el-GR-Chirp3-HD-Algenib',
+            'el-GR-Chirp3-HD-Algieba',
+            'el-GR-Chirp3-HD-Alnilam',
+            'el-GR-Wavenet-B',
+            'el-GR-Standard-B',
+            'el-GR-Neural2-B',
+        ];
         $value = trim( (string) wp_unslash( $value ) );
-        if ( 'el-GR-Neural2-B' === $value ) {
-            return 'el-GR-Wavenet-B';
+        if ( in_array( $value, [ 'el-GR-Neural2-B', 'el-GR-Wavenet-B', 'el-GR-Standard-B' ], true ) ) {
+            return 'el-GR-Chirp3-HD-Achird';
         }
         return in_array( $value, $allowed, true ) ? $value : self::default_briefing_voice_male();
     }

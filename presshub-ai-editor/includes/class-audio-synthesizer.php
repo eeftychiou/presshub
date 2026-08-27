@@ -47,13 +47,25 @@ class PressHub_AI_Audio_Synthesizer {
     public function get_available_voices(): array {
         return [
             'female' => [
-                'el-GR-Wavenet-A'  => [
+                'el-GR-Wavenet-A'          => [
                     'name'   => 'el-GR-Wavenet-A',
                     'label'  => __( 'Greek Female (Wavenet-A)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
                     'type'   => 'Wavenet',
                 ],
-                'el-GR-Standard-A' => [
+                'el-GR-Chirp3-HD-Aoede'    => [
+                    'name'   => 'el-GR-Chirp3-HD-Aoede',
+                    'label'  => __( 'Greek Female (Chirp 3 HD Aoede)', 'presshub-ai-editor' ),
+                    'gender' => 'FEMALE',
+                    'type'   => 'Chirp3-HD',
+                ],
+                'el-GR-Chirp3-HD-Achernar' => [
+                    'name'   => 'el-GR-Chirp3-HD-Achernar',
+                    'label'  => __( 'Greek Female (Chirp 3 HD Achernar)', 'presshub-ai-editor' ),
+                    'gender' => 'FEMALE',
+                    'type'   => 'Chirp3-HD',
+                ],
+                'el-GR-Standard-A'         => [
                     'name'   => 'el-GR-Standard-A',
                     'label'  => __( 'Greek Female (Standard-A)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
@@ -61,17 +73,29 @@ class PressHub_AI_Audio_Synthesizer {
                 ],
             ],
             'male' => [
-                'el-GR-Wavenet-B'  => [
-                    'name'   => 'el-GR-Wavenet-B',
-                    'label'  => __( 'Greek Male (Wavenet-B)', 'presshub-ai-editor' ),
+                'el-GR-Chirp3-HD-Achird'   => [
+                    'name'   => 'el-GR-Chirp3-HD-Achird',
+                    'label'  => __( 'Greek Male (Chirp 3 HD Achird)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Wavenet',
+                    'type'   => 'Chirp3-HD',
                 ],
-                'el-GR-Standard-B' => [
-                    'name'   => 'el-GR-Standard-B',
-                    'label'  => __( 'Greek Male (Standard-B)', 'presshub-ai-editor' ),
+                'el-GR-Chirp3-HD-Algenib'  => [
+                    'name'   => 'el-GR-Chirp3-HD-Algenib',
+                    'label'  => __( 'Greek Male (Chirp 3 HD Algenib)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Standard',
+                    'type'   => 'Chirp3-HD',
+                ],
+                'el-GR-Chirp3-HD-Algieba'  => [
+                    'name'   => 'el-GR-Chirp3-HD-Algieba',
+                    'label'  => __( 'Greek Male (Chirp 3 HD Algieba)', 'presshub-ai-editor' ),
+                    'gender' => 'MALE',
+                    'type'   => 'Chirp3-HD',
+                ],
+                'el-GR-Chirp3-HD-Alnilam'  => [
+                    'name'   => 'el-GR-Chirp3-HD-Alnilam',
+                    'label'  => __( 'Greek Male (Chirp 3 HD Alnilam)', 'presshub-ai-editor' ),
+                    'gender' => 'MALE',
+                    'type'   => 'Chirp3-HD',
                 ],
             ],
         ];
@@ -81,7 +105,7 @@ class PressHub_AI_Audio_Synthesizer {
      * Get the configured voice model for a given speaker identifier.
      *
      * @param string $speaker Speaker identifier ('female', 'male', 'host1', 'host2', or speaker name).
-     * @return string Voice model name (e.g. 'el-GR-Wavenet-A').
+     * @return string Voice model name (e.g. 'el-GR-Wavenet-A', 'el-GR-Chirp3-HD-Achird').
      */
     public function get_voice_for_speaker( string $speaker ): string {
         $clean = trim( $speaker );
@@ -102,9 +126,10 @@ class PressHub_AI_Audio_Synthesizer {
             return trim( $voice );
         }
 
-        $default_male = 'el-GR-Wavenet-B';
+        $default_male = 'el-GR-Chirp3-HD-Achird';
         $voice = (string) get_option( self::OPTION_VOICE_MALE, $default_male );
-        if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) ) {
+        // Legacy Greek WaveNet/Standard B models were female voices in Google Cloud TTS. Migrate them to true male Chirp3 voice.
+        if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) || 'el-GR-Wavenet-B' === $voice || 'el-GR-Standard-B' === $voice ) {
             $voice = $default_male;
         }
         return trim( $voice );

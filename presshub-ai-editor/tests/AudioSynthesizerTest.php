@@ -50,14 +50,14 @@ $voices = $synthesizer->get_available_voices();
 
 as_check( 'voices: returns array with female and male sections', is_array( $voices ) && isset( $voices['female'], $voices['male'] ) );
 as_check( 'voices: female voices contains el-GR-Wavenet-A', isset( $voices['female']['el-GR-Wavenet-A'] ) );
-as_check( 'voices: female voices contains el-GR-Standard-A', isset( $voices['female']['el-GR-Standard-A'] ) );
-as_check( 'voices: male voices contains el-GR-Wavenet-B', isset( $voices['male']['el-GR-Wavenet-B'] ) );
-as_check( 'voices: male voices contains el-GR-Standard-B', isset( $voices['male']['el-GR-Standard-B'] ) );
+as_check( 'voices: female voices contains el-GR-Chirp3-HD-Aoede', isset( $voices['female']['el-GR-Chirp3-HD-Aoede'] ) );
+as_check( 'voices: male voices contains el-GR-Chirp3-HD-Achird', isset( $voices['male']['el-GR-Chirp3-HD-Achird'] ) );
+as_check( 'voices: male voices contains el-GR-Chirp3-HD-Algenib', isset( $voices['male']['el-GR-Chirp3-HD-Algenib'] ) );
 
-$sample_voice = $voices['female']['el-GR-Wavenet-A'];
-as_check( 'voices: metadata contains name', ( $sample_voice['name'] ?? '' ) === 'el-GR-Wavenet-A' );
-as_check( 'voices: metadata contains gender', ( $sample_voice['gender'] ?? '' ) === 'FEMALE' );
-as_check( 'voices: metadata contains type Wavenet', ( $sample_voice['type'] ?? '' ) === 'Wavenet' );
+$sample_voice = $voices['male']['el-GR-Chirp3-HD-Achird'];
+as_check( 'voices: metadata contains name', ( $sample_voice['name'] ?? '' ) === 'el-GR-Chirp3-HD-Achird' );
+as_check( 'voices: metadata contains gender', ( $sample_voice['gender'] ?? '' ) === 'MALE' );
+as_check( 'voices: metadata contains type Chirp3-HD', ( $sample_voice['type'] ?? '' ) === 'Chirp3-HD' );
 
 
 // =========================================================================
@@ -68,18 +68,18 @@ $GLOBALS['OPTIONS_STORE'] = [];
 
 // Test 2a: Defaults
 as_check( 'speaker_mapping: default female voice is el-GR-Wavenet-A', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Wavenet-A' );
-as_check( 'speaker_mapping: default male voice is el-GR-Wavenet-B', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Wavenet-B' );
+as_check( 'speaker_mapping: default male voice is el-GR-Chirp3-HD-Achird', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Chirp3-HD-Achird' );
 as_check( 'speaker_mapping: Μαρία maps to female voice', $synthesizer->get_voice_for_speaker( 'Μαρία' ) === 'el-GR-Wavenet-A' );
-as_check( 'speaker_mapping: Νίκος maps to male voice', $synthesizer->get_voice_for_speaker( 'Νίκος' ) === 'el-GR-Wavenet-B' );
+as_check( 'speaker_mapping: Νίκος maps to male voice', $synthesizer->get_voice_for_speaker( 'Νίκος' ) === 'el-GR-Chirp3-HD-Achird' );
 
 // Test 2b: Custom configured voice models in options
-$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'el-GR-Standard-A';
-$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male'] = 'el-GR-Standard-B';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'el-GR-Chirp3-HD-Aoede';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male'] = 'el-GR-Chirp3-HD-Algenib';
 
-as_check( 'speaker_mapping: option overrides female voice', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Standard-A' );
-as_check( 'speaker_mapping: option overrides male voice', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Standard-B' );
-as_check( 'speaker_mapping: host1 alias maps to configured female voice', $synthesizer->get_voice_for_speaker( 'host1' ) === 'el-GR-Standard-A' );
-as_check( 'speaker_mapping: host2 alias maps to configured male voice', $synthesizer->get_voice_for_speaker( 'host2' ) === 'el-GR-Standard-B' );
+as_check( 'speaker_mapping: option overrides female voice', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Chirp3-HD-Aoede' );
+as_check( 'speaker_mapping: option overrides male voice', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Chirp3-HD-Algenib' );
+as_check( 'speaker_mapping: host1 alias maps to configured female voice', $synthesizer->get_voice_for_speaker( 'host1' ) === 'el-GR-Chirp3-HD-Aoede' );
+as_check( 'speaker_mapping: host2 alias maps to configured male voice', $synthesizer->get_voice_for_speaker( 'host2' ) === 'el-GR-Chirp3-HD-Algenib' );
 
 
 // =========================================================================
@@ -254,13 +254,13 @@ as_check( 'e2e: audio_url contains attachment URL', false !== strpos( $result_e2
 as_check( 'e2e: turns count is 2', ( $result_e2e['turns_count'] ?? 0 ) === 2 );
 as_check( 'e2e: synthesized 2 turns via API client', count( $mock_tts->synthesized_calls ) === 2 );
 as_check( 'e2e: turn 0 called with female voice', ( $mock_tts->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Wavenet-A' );
-as_check( 'e2e: turn 1 called with male voice', ( $mock_tts->synthesized_calls[1]['voice_model'] ?? '' ) === 'el-GR-Wavenet-B' );
+as_check( 'e2e: turn 1 called with male voice', ( $mock_tts->synthesized_calls[1]['voice_model'] ?? '' ) === 'el-GR-Chirp3-HD-Achird' );
 
 // Test 7b: Custom script argument
 $mock_tts_custom = new Mock_Audio_API_Client();
 $custom_script = "[Νίκος]: Μόνο ο Νίκος μιλάει εδώ.";
 $result_custom = $synthesizer->synthesize_podcast( $test_date_e2e, $custom_script, $mock_tts_custom );
-as_check( 'e2e: custom script overrides stored script', count( $mock_tts_custom->synthesized_calls ) === 1 && ( $mock_tts_custom->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Wavenet-B' );
+as_check( 'e2e: custom script overrides stored script', count( $mock_tts_custom->synthesized_calls ) === 1 && ( $mock_tts_custom->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Chirp3-HD-Achird' );
 
 // Test 7c: Missing script returns WP_Error
 $err_no_script = $synthesizer->synthesize_podcast( '1980-01-01', '', $mock_tts );

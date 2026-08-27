@@ -477,17 +477,22 @@ class PressHub_AI_API_Client {
         }
 
         $url = 'https://texttospeech.googleapis.com/v1/text:synthesize';
+        $is_chirp = ( false !== stripos( $voice_model, 'Chirp' ) );
+        $audio_config = [
+            'audioEncoding' => 'MP3',
+        ];
+        if ( ! $is_chirp ) {
+            $audio_config['speakingRate'] = (float) $speed;
+            $audio_config['pitch']        = (float) $pitch;
+        }
+
         $body = [
             'input'       => [ 'text' => $text ],
             'voice'       => [
                 'languageCode' => $lang_code,
                 'name'         => $voice_model,
             ],
-            'audioConfig' => [
-                'audioEncoding' => 'MP3',
-                'speakingRate'  => (float) $speed,
-                'pitch'         => (float) $pitch,
-            ],
+            'audioConfig' => $audio_config,
         ];
 
         $referer = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';

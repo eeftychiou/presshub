@@ -155,11 +155,11 @@ class DailyBriefingSettingsTest
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_female', 'en-US-Neural2-A' ) !== 'el-GR-Wavenet-A' ) {
             $failures[] = 'invalid female voice should fall back to el-GR-Wavenet-A.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'el-GR-Standard-B' ) !== 'el-GR-Standard-B' ) {
-            $failures[] = 'male voice el-GR-Standard-B should pass through.';
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'el-GR-Chirp3-HD-Achird' ) !== 'el-GR-Chirp3-HD-Achird' ) {
+            $failures[] = 'male voice el-GR-Chirp3-HD-Achird should pass through.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'unknown' ) !== 'el-GR-Wavenet-B' ) {
-            $failures[] = 'invalid male voice should fall back to el-GR-Wavenet-B.';
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'unknown' ) !== 'el-GR-Chirp3-HD-Achird' ) {
+            $failures[] = 'invalid male voice should fall back to el-GR-Chirp3-HD-Achird.';
         }
 
         // --- Case 7: Sanitization of voice speed & pitch clamps ---
