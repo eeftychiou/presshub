@@ -579,70 +579,108 @@ class PressHub_AI_API_Client {
             $voice_name = 'Aoede';
         }
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' . urlencode( $this->gemini_api_key );
-
         $prompt_instruction = "You are a professional Greek podcast narrator and voice actor. Read the following text aloud with natural, expressive conversational inflection, clear Greek pronunciation, and authentic rhythm. Read ONLY the text verbatim, word for word. Do not add introductory remarks, concluding greetings, or conversational commentary:\n\n" . trim( $text );
 
-        $body = [
-            'contents' => [
-                [
-                    'role'  => 'user',
-                    'parts' => [
-                        [ 'text' => $prompt_instruction ],
+        // 1. Try Gemini Interactions API (Standard for Gemini 3.1 & 2.5 TTS)
+        $interactions_url = 'https://generativelanguage.googleapis.com/v1beta/interactions?key=' . urlencode( $this->gemini_api_key );
+        $tts_models       = [ 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts' ];
+        $audio_base64     = null;
+        $mime_type        = 'audio/pcm;rate=24000';
+        $last_error       = '';
+
+        foreach ( $tts_models as $model ) {
+            $body = [
+                'model'             => $model,
+                'input'             => $prompt_instruction,
+                'response_format'   => [ 'type' => 'audio' ],
+                'generation_config' => [
+                    'speech_config' => [
+                        [ 'voice' => $voice_name ],
                     ],
                 ],
-            ],
-            'generationConfig' => [
-                'responseModalities' => [ 'AUDIO' ],
-                'speechConfig'       => [
-                    'voiceConfig' => [
-                        'prebuiltVoiceConfig' => [
-                            'voiceName' => $voice_name,
-                        ],
-                    ],
+            ];
+
+            $response = wp_remote_post( $interactions_url, [
+                'headers' => [
+                    'Content-Type' => 'application/json',
                 ],
-            ],
-        ];
+                'body'    => wp_json_encode( $body ),
+                'timeout' => 90,
+            ] );
 
-        $response = wp_remote_post( $url, [
-            'headers' => [
-                'Content-Type' => 'application/json',
-            ],
-            'body'    => wp_json_encode( $body ),
-            'timeout' => 90,
-        ] );
+            if ( is_wp_error( $response ) ) {
+                $last_error = $response->get_error_message();
+                continue;
+            }
 
-        if ( is_wp_error( $response ) ) {
-            error_log( 'PressHub AI [gemini-audio] API error: ' . $response->get_error_message() );
-            return $response;
-        }
+            $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+            if ( isset( $res_body['error']['message'] ) ) {
+                $last_error = $res_body['error']['message'];
+                continue;
+            }
 
-        $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
-
-        if ( isset( $res_body['error']['message'] ) ) {
-            error_log( 'PressHub AI [gemini-audio] API error: ' . $res_body['error']['message'] );
-            return new WP_Error( 'gemini_audio_error', $res_body['error']['message'] );
-        }
-
-        $candidates = $res_body['candidates'] ?? [];
-        if ( empty( $candidates ) ) {
-            return new WP_Error( 'empty_candidates', __( 'Gemini returned no audio response candidates.', 'presshub-ai-editor' ) );
-        }
-
-        $parts = $candidates[0]['content']['parts'] ?? [];
-        $audio_base64 = null;
-        $mime_type    = '';
-
-        foreach ( $parts as $part ) {
-            if ( isset( $part['inlineData']['data'] ) ) {
-                $audio_base64 = $part['inlineData']['data'];
-                $mime_type    = $part['inlineData']['mimeType'] ?? '';
+            if ( ! empty( $res_body['output_audio']['data'] ) ) {
+                $audio_base64 = $res_body['output_audio']['data'];
+                $mime_type    = $res_body['output_audio']['mimeType'] ?? $mime_type;
+                break;
+            } elseif ( ! empty( $res_body['interaction']['output_audio']['data'] ) ) {
+                $audio_base64 = $res_body['interaction']['output_audio']['data'];
+                $mime_type    = $res_body['interaction']['output_audio']['mimeType'] ?? $mime_type;
                 break;
             }
         }
 
+        // 2. Fallback to generateContent API if Interactions API did not return audio
         if ( empty( $audio_base64 ) ) {
-            return new WP_Error( 'no_audio_data', __( 'No audio payload received from Gemini Audio generation.', 'presshub-ai-editor' ) );
+            $generate_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . urlencode( $this->gemini_api_key );
+            $gen_body     = [
+                'contents' => [
+                    [
+                        'role'  => 'user',
+                        'parts' => [
+                            [ 'text' => $prompt_instruction ],
+                        ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'responseModalities' => [ 'AUDIO' ],
+                    'speechConfig'       => [
+                        'voiceConfig' => [
+                            'prebuiltVoiceConfig' => [
+                                'voiceName' => $voice_name,
+                            ],
+                        ],
+                    ],
+                ],
+            ];
+
+            $gen_res = wp_remote_post( $generate_url, [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                ],
+                'body'    => wp_json_encode( $gen_body ),
+                'timeout' => 90,
+            ] );
+
+            if ( ! is_wp_error( $gen_res ) ) {
+                $res_body = json_decode( wp_remote_retrieve_body( $gen_res ), true );
+                if ( isset( $res_body['candidates'][0]['content']['parts'] ) ) {
+                    foreach ( $res_body['candidates'][0]['content']['parts'] as $part ) {
+                        if ( isset( $part['inlineData']['data'] ) ) {
+                            $audio_base64 = $part['inlineData']['data'];
+                            $mime_type    = $part['inlineData']['mimeType'] ?? $mime_type;
+                            break;
+                        }
+                    }
+                }
+                if ( empty( $audio_base64 ) && isset( $res_body['error']['message'] ) ) {
+                    $last_error = $res_body['error']['message'];
+                }
+            }
+        }
+
+        if ( empty( $audio_base64 ) ) {
+            return new WP_Error( 'gemini_audio_error', $last_error ?: __( 'No audio payload received from Gemini Speech generation.', 'presshub-ai-editor' ) );
         }
 
         $raw_audio = base64_decode( $audio_base64 );
@@ -656,7 +694,7 @@ class PressHub_AI_API_Client {
             $sample_rate = (int) $m[1];
         }
 
-        if ( false !== stripos( $mime_type, 'pcm' ) ) {
+        if ( false !== stripos( $mime_type, 'pcm' ) || true ) {
             return $as_wav ? self::pcm_to_wav( $raw_audio, $sample_rate ) : $raw_audio;
         }
 
