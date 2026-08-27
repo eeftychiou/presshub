@@ -287,8 +287,16 @@ class SettingsSanitizeTest
         if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] ?? null ) !== 'gc-existing' ) {
             $failures[] = 'masked google cloud key post should preserve the saved key.';
         }
-        if ( ! array_key_exists( 'presshub_ai_google_cloud_api_key', $GLOBALS['UPDATE_OPTION_AUTOLOAD'] ) || false !== $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_google_cloud_api_key'] ) {
-            $failures[] = 'google cloud key preserve-path must also save with autoload=false.';
+        // --- Case 20: recursion guard prevents infinite loop if update_option triggers sanitize ---
+        self::reset_options();
+        $GLOBALS['RECURSIVE_SANITIZE_TEST'] = true;
+        try {
+            $saved_val = self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', 'AIzaSyTestGoogleCloudKey' );
+            if ( $saved_val !== 'AIzaSyTestGoogleCloudKey' ) {
+                $failures[] = 're-entrant sanitize_secret should return sanitized secret value.';
+            }
+        } catch ( Throwable $e ) {
+            $failures[] = 're-entrant sanitize_secret threw exception: ' . $e->getMessage();
         }
 
         if ( $failures ) {

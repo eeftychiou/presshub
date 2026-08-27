@@ -1306,29 +1306,47 @@ class PressHub_AI_Settings {
      * along on every request. The Settings API's own update_option call
      * afterwards keeps the existing autoload value, so the flag sticks.
      */
+    /**
+     * Re-entrancy guard for sanitize_secret to prevent infinite recursion when
+     * update_option() triggers the registered sanitize_option filter.
+     *
+     * @var array<string, bool>
+     */
+    private static $sanitizing_secrets = [];
+
     private static function sanitize_secret( $value, $option_name ) {
-        $value = wp_unslash( $value );
-        if ( ! is_string( $value ) ) {
-            $value = '';
+        if ( ! empty( self::$sanitizing_secrets[ $option_name ] ) ) {
+            return $value;
         }
-        $value    = trim( $value );
-        $existing = (string) get_option( $option_name, '' );
 
-        if ( '' === $value || false !== strpos( $value, '••••' ) ) {
-            $final = $existing;
-        } else {
-            $value = wp_strip_all_tags( $value );
-            $value = preg_replace( '/[\r\n\t]+/', ' ', $value );
-            $value = trim( $value );
-            if ( strlen( $value ) > 512 ) {
-                $value = substr( $value, 0, 512 );
+        self::$sanitizing_secrets[ $option_name ] = true;
+
+        try {
+            $value = wp_unslash( $value );
+            if ( ! is_string( $value ) ) {
+                $value = '';
             }
-            $final = $value;
+            $value    = trim( $value );
+            $existing = (string) get_option( $option_name, '' );
+
+            if ( '' === $value || false !== strpos( $value, '••••' ) ) {
+                $final = $existing;
+            } else {
+                $value = wp_strip_all_tags( $value );
+                $value = preg_replace( '/[\r\n\t]+/', ' ', $value );
+                $value = trim( $value );
+                if ( strlen( $value ) > 512 ) {
+                    $value = substr( $value, 0, 512 );
+                }
+                $final = $value;
+            }
+
+            update_option( $option_name, $final, false );
+
+            return $final;
+        } finally {
+            unset( self::$sanitizing_secrets[ $option_name ] );
         }
-
-        update_option( $option_name, $final, false );
-
-        return $final;
     }
 
     /**

@@ -1156,6 +1156,9 @@ class PressHub_AI_Ajax_Handlers {
                                 $clean = call_user_func( $sanitizer, $raw_secret );
                                 $saved_count++;
                                 $processed[] = $option;
+                                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                                    PressHub_AI_Logger::debug( sprintf( 'Saved secret option %s: length %d', $option, strlen( (string) $clean ) ) );
+                                }
                             }
                         }
                         continue;
