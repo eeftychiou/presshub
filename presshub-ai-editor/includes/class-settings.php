@@ -737,6 +737,9 @@ class PressHub_AI_Settings {
 
     public function render_briefing_sources_field() {
         $option  = 'presshub_ai_briefing_sources';
+        if ( function_exists( 'wp_cache_delete' ) ) {
+            wp_cache_delete( $option, 'options' );
+        }
         $sources = get_option( $option, '' );
         if ( is_array( $sources ) ) {
             $sources = implode( "\n", $sources );

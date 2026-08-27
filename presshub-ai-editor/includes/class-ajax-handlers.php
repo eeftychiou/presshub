@@ -1185,6 +1185,14 @@ class PressHub_AI_Ajax_Handlers {
                 }
             }
 
+            if ( function_exists( 'wp_cache_delete' ) ) {
+                wp_cache_delete( 'alloptions', 'options' );
+                wp_cache_delete( 'notoptions', 'options' );
+                foreach ( array_keys( $options_map ) as $opt_key ) {
+                    wp_cache_delete( $opt_key, 'options' );
+                }
+            }
+
             $saved_key    = (string) get_option( 'presshub_ai_api_key', '' );
             $saved_gcloud = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             $saved_github = (string) get_option( 'presshub_ai_github_token', '' );
