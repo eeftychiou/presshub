@@ -581,11 +581,12 @@ class PressHub_AI_API_Client {
 
         $prompt_instruction = "You are a professional Greek podcast narrator and voice actor. Read the following text aloud with natural, expressive conversational inflection, clear Greek pronunciation, and authentic rhythm. Read ONLY the text verbatim, word for word. Do not add introductory remarks, concluding greetings, or conversational commentary:\n\n" . trim( $text );
 
-        // 1. Try Gemini Interactions API (Standard for Gemini 3.1 & 2.5 TTS)
-        $interactions_url = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-        $configured_model = (string) get_option( 'presshub_ai_briefing_tts_model', 'gemini-3.1-flash-tts-preview' );
+        // Try Gemini Speech generation via generateContent (Standard Google AI Studio API) and interactions
+        $configured_model = (string) get_option( 'presshub_ai_briefing_tts_model', 'gemini-2.0-flash' );
         $tts_models       = array_values( array_unique( array_filter( [
             $configured_model,
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-exp',
             'gemini-3.1-flash-tts-preview',
             'gemini-2.5-flash-preview-tts',
         ] ) ) );
@@ -594,54 +595,9 @@ class PressHub_AI_API_Client {
         $last_error       = '';
 
         foreach ( $tts_models as $model ) {
-            $body = [
-                'model'             => $model,
-                'input'             => $prompt_instruction,
-                'response_format'   => [ 'type' => 'audio' ],
-                'generation_config' => [
-                    'speech_config' => [
-                        [ 'voice' => $voice_name ],
-                    ],
-                ],
-            ];
-
-            $response = wp_remote_post( $interactions_url, [
-                'headers' => [
-                    'Content-Type'   => 'application/json',
-                    'x-goog-api-key' => $this->gemini_api_key,
-                ],
-                'body'    => wp_json_encode( $body ),
-                'timeout' => 90,
-            ] );
-
-            if ( is_wp_error( $response ) ) {
-                $last_error = $response->get_error_message();
-                error_log( 'PressHub AI [gemini-interactions] model ' . $model . ' error: ' . $last_error );
-                continue;
-            }
-
-            $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
-            if ( isset( $res_body['error']['message'] ) ) {
-                $last_error = $res_body['error']['message'];
-                error_log( 'PressHub AI [gemini-interactions] model ' . $model . ' error: ' . $last_error );
-                continue;
-            }
-
-            if ( ! empty( $res_body['output_audio']['data'] ) ) {
-                $audio_base64 = $res_body['output_audio']['data'];
-                $mime_type    = $res_body['output_audio']['mimeType'] ?? $mime_type;
-                break;
-            } elseif ( ! empty( $res_body['interaction']['output_audio']['data'] ) ) {
-                $audio_base64 = $res_body['interaction']['output_audio']['data'];
-                $mime_type    = $res_body['interaction']['output_audio']['mimeType'] ?? $mime_type;
-                break;
-            }
-        }
-
-        // 2. Fallback to generateContent API if Interactions API did not return audio
-        if ( empty( $audio_base64 ) ) {
-            $generate_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . urlencode( $this->gemini_api_key );
-            $gen_body     = [
+            // 1. Try standard generateContent API with AUDIO response modality
+            $gen_url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $this->gemini_api_key );
+            $gen_body = [
                 'contents' => [
                     [
                         'role'  => 'user',
@@ -662,9 +618,10 @@ class PressHub_AI_API_Client {
                 ],
             ];
 
-            $gen_res = wp_remote_post( $generate_url, [
+            $gen_res = wp_remote_post( $gen_url, [
                 'headers' => [
-                    'Content-Type' => 'application/json',
+                    'Content-Type'   => 'application/json',
+                    'x-goog-api-key' => $this->gemini_api_key,
                 ],
                 'body'    => wp_json_encode( $gen_body ),
                 'timeout' => 90,
@@ -674,15 +631,61 @@ class PressHub_AI_API_Client {
                 $res_body = json_decode( wp_remote_retrieve_body( $gen_res ), true );
                 if ( isset( $res_body['candidates'][0]['content']['parts'] ) ) {
                     foreach ( $res_body['candidates'][0]['content']['parts'] as $part ) {
-                        if ( isset( $part['inlineData']['data'] ) ) {
+                        if ( ! empty( $part['inlineData']['data'] ) ) {
                             $audio_base64 = $part['inlineData']['data'];
                             $mime_type    = $part['inlineData']['mimeType'] ?? $mime_type;
-                            break;
+                            break 2;
+                        } elseif ( ! empty( $part['inline_data']['data'] ) ) {
+                            $audio_base64 = $part['inline_data']['data'];
+                            $mime_type    = $part['inline_data']['mime_type'] ?? $mime_type;
+                            break 2;
                         }
                     }
                 }
-                if ( empty( $audio_base64 ) && isset( $res_body['error']['message'] ) ) {
+                if ( isset( $res_body['error']['message'] ) ) {
                     $last_error = $res_body['error']['message'];
+                    error_log( 'PressHub AI [gemini-generateContent] model ' . $model . ' error: ' . $last_error );
+                }
+            } else {
+                $last_error = $gen_res->get_error_message();
+            }
+
+            // 2. Try Interactions API endpoint
+            $interactions_url = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+            $int_body         = [
+                'model'             => $model,
+                'input'             => $prompt_instruction,
+                'response_format'   => [ 'type' => 'audio' ],
+                'generation_config' => [
+                    'speech_config' => [
+                        [ 'voice' => $voice_name ],
+                    ],
+                ],
+            ];
+
+            $int_res = wp_remote_post( $interactions_url, [
+                'headers' => [
+                    'Content-Type'   => 'application/json',
+                    'x-goog-api-key' => $this->gemini_api_key,
+                ],
+                'body'    => wp_json_encode( $int_body ),
+                'timeout' => 90,
+            ] );
+
+            if ( ! is_wp_error( $int_res ) ) {
+                $res_body = json_decode( wp_remote_retrieve_body( $int_res ), true );
+                if ( ! empty( $res_body['output_audio']['data'] ) ) {
+                    $audio_base64 = $res_body['output_audio']['data'];
+                    $mime_type    = $res_body['output_audio']['mimeType'] ?? $mime_type;
+                    break;
+                } elseif ( ! empty( $res_body['interaction']['output_audio']['data'] ) ) {
+                    $audio_base64 = $res_body['interaction']['output_audio']['data'];
+                    $mime_type    = $res_body['interaction']['output_audio']['mimeType'] ?? $mime_type;
+                    break;
+                }
+                if ( isset( $res_body['error']['message'] ) ) {
+                    $last_error = $res_body['error']['message'];
+                    error_log( 'PressHub AI [gemini-interactions] model ' . $model . ' error: ' . $last_error );
                 }
             }
         }

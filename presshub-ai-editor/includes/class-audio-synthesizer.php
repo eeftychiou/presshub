@@ -359,22 +359,7 @@ class PressHub_AI_Audio_Synthesizer {
             $voice_model = 'Aoede';
         }
 
-        $res = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true );
-        if ( is_wp_error( $res ) ) {
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::warning( 'Gemini speech synthesis failed (' . $res->get_error_message() . '), falling back to Google Cloud TTS.' );
-            }
-            $fallback_voice = ( false !== stripos( $voice_model, 'Fenrir' ) || false !== stripos( $voice_model, 'Puck' ) || false !== stripos( $voice_model, 'Charon' ) || false !== stripos( $voice_model, 'Zephyr' ) || false !== stripos( $voice_model, 'Orus' ) )
-                ? 'el-GR-Chirp3-HD-Achird'
-                : 'el-GR-Wavenet-A';
-
-            $cloud_res = $api_client->synthesize_speech_with_options( $text, $fallback_voice, $speed, $pitch );
-            if ( ! is_wp_error( $cloud_res ) ) {
-                return $cloud_res;
-            }
-        }
-
-        return $res;
+        return $api_client->synthesize_speech_via_gemini( $text, $voice_model, true );
     }
 
     /**
