@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 1.4.4
+ * Version: 1.4.5
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -42,7 +42,7 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
 
-define( 'PRESSHUB_AI_VERSION', '1.4.4' );
+define( 'PRESSHUB_AI_VERSION', '1.4.5' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -289,9 +289,11 @@ register_activation_hook( __FILE__, 'presshub_ai_schedule_briefing_crons' );
  * @param mixed $option    Option name.
  */
 function presshub_ai_on_briefing_time_updated( $old_value = null, $value = null, $option = null ) {
-    if ( null !== $old_value && null !== $value && $old_value === $value ) {
+    if ( null !== $old_value && null !== $value && (string) $old_value === (string) $value ) {
         return;
     }
+    wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
+    wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
     presshub_ai_schedule_briefing_crons();
 }
 
@@ -356,7 +358,9 @@ function presshub_ai_schedule_briefing_crons() {
         wp_schedule_event( $harvest_timestamp, 'daily', 'presshub_daily_news_harvest' );
         wp_schedule_event( $generation_timestamp, 'daily', 'presshub_daily_news_generate' );
     } catch ( Throwable $t ) {
-        // Safe fail-silent for cron scheduling
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::warning( 'Cron scheduling error: ' . $t->getMessage() );
+        }
     }
 }
 

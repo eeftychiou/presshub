@@ -1137,16 +1137,50 @@ class PressHub_AI_Ajax_Handlers {
             $saved_count = 0;
             $processed = [];
             foreach ( $options_map as $option => $sanitizer ) {
-                if ( isset( $post_data[ $option ] ) ) {
-                    $clean = call_user_func( $sanitizer, $post_data[ $option ] );
-                    update_option( $option, $clean );
-                    $saved_count++;
-                    $processed[] = $option;
-                    PressHub_AI_Logger::debug( 'Updated option: ' . $option, [ 'value_length' => is_string( $clean ) ? strlen( $clean ) : 1 ] );
-                } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
-                    update_option( $option, 0 );
-                    $processed[] = $option . '=0';
-                    PressHub_AI_Logger::debug( 'Unchecked option reset to 0: ' . $option );
+                try {
+                    // Handle removal flags
+                    if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token' ], true ) ) {
+                        if ( isset( $post_data[ $option ] ) && ! empty( $post_data[ $option ] ) ) {
+                            call_user_func( $sanitizer, $post_data[ $option ] );
+                            $saved_count++;
+                            $processed[] = $option;
+                        }
+                        continue;
+                    }
+
+                    // Handle secret keys (skip if empty or masked placeholder)
+                    if ( in_array( $option, [ 'presshub_ai_api_key', 'presshub_ai_google_cloud_api_key', 'presshub_ai_github_token' ], true ) ) {
+                        if ( isset( $post_data[ $option ] ) ) {
+                            $raw_secret = trim( (string) wp_unslash( $post_data[ $option ] ) );
+                            if ( '' !== $raw_secret && false === strpos( $raw_secret, '••••' ) ) {
+                                $clean = call_user_func( $sanitizer, $raw_secret );
+                                $saved_count++;
+                                $processed[] = $option;
+                            }
+                        }
+                        continue;
+                    }
+
+                    // Handle standard options (only update if modified)
+                    if ( isset( $post_data[ $option ] ) ) {
+                        $clean = call_user_func( $sanitizer, $post_data[ $option ] );
+                        $current_val = get_option( $option, null );
+                        if ( null === $current_val || (string) $current_val !== (string) $clean ) {
+                            update_option( $option, $clean );
+                            $saved_count++;
+                            $processed[] = $option;
+                        }
+                    } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
+                        if ( 0 !== (int) get_option( $option, 0 ) ) {
+                            update_option( $option, 0 );
+                            $saved_count++;
+                            $processed[] = $option . '=0';
+                        }
+                    }
+                } catch ( Throwable $opt_err ) {
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::warning( sprintf( 'Error updating option %s: %s', $option, $opt_err->getMessage() ) );
+                    }
                 }
             }
 
@@ -1154,10 +1188,12 @@ class PressHub_AI_Ajax_Handlers {
             $saved_gcloud = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             $saved_github = (string) get_option( 'presshub_ai_github_token', '' );
 
-            PressHub_AI_Logger::info( sprintf( 'Settings successfully saved (%d options updated)', $saved_count ), [
-                'user_id'   => get_current_user_id(),
-                'processed' => $processed,
-            ] );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( sprintf( 'Settings successfully saved (%d options updated)', $saved_count ), [
+                    'user_id'   => get_current_user_id(),
+                    'processed' => $processed,
+                ] );
+            }
 
             wp_send_json_success( [
                 'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
