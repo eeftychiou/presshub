@@ -31,6 +31,9 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
         // AJAX Settings Save
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
+        // Diagnostic Logs Endpoints
+        add_action( 'wp_ajax_presshub_ai_get_logs', [ $this, 'get_logs' ] );
+        add_action( 'wp_ajax_presshub_ai_clear_logs', [ $this, 'clear_logs' ] );
     }
 
     /**
@@ -1076,6 +1079,9 @@ class PressHub_AI_Ajax_Handlers {
             }
 
             require_once __DIR__ . '/class-settings.php';
+            require_once __DIR__ . '/class-logger.php';
+
+            PressHub_AI_Logger::debug( 'AJAX save_settings request received', [ 'raw_keys' => array_keys( $post_data ) ] );
 
             $options_map = [
                 'presshub_ai_provider'                    => [ 'PressHub_AI_Settings', 'sanitize_provider' ],
@@ -1107,6 +1113,7 @@ class PressHub_AI_Ajax_Handlers {
                 'presshub_ai_rate_limit_per_hour'         => [ 'PressHub_AI_Settings', 'sanitize_rate_limit_per_hour' ],
                 'presshub_ai_rate_limit_window_seconds'   => [ 'PressHub_AI_Settings', 'sanitize_rate_limit_window_seconds' ],
                 'presshub_ai_research_retention_days'     => [ 'PressHub_AI_Settings', 'sanitize_research_retention_days' ],
+                'presshub_ai_log_level'                   => [ 'PressHub_AI_Settings', 'sanitize_log_level' ],
                 'presshub_ai_briefing_sources'            => [ 'PressHub_AI_Settings', 'sanitize_briefing_sources' ],
                 'presshub_ai_briefing_harvest_time'       => [ 'PressHub_AI_Settings', 'sanitize_harvest_time' ],
                 'presshub_ai_briefing_generation_time'    => [ 'PressHub_AI_Settings', 'sanitize_generation_time' ],
@@ -1135,9 +1142,11 @@ class PressHub_AI_Ajax_Handlers {
                     update_option( $option, $clean );
                     $saved_count++;
                     $processed[] = $option;
+                    PressHub_AI_Logger::debug( 'Updated option: ' . $option, [ 'value_length' => is_string( $clean ) ? strlen( $clean ) : 1 ] );
                 } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
                     update_option( $option, 0 );
                     $processed[] = $option . '=0';
+                    PressHub_AI_Logger::debug( 'Unchecked option reset to 0: ' . $option );
                 }
             }
 
@@ -1145,8 +1154,13 @@ class PressHub_AI_Ajax_Handlers {
             $saved_gcloud = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             $saved_github = (string) get_option( 'presshub_ai_github_token', '' );
 
+            PressHub_AI_Logger::info( sprintf( 'Settings successfully saved (%d options updated)', $saved_count ), [
+                'user_id'   => get_current_user_id(),
+                'processed' => $processed,
+            ] );
+
             wp_send_json_success( [
-                'message' => sprintf( 'Settings saved successfully! Processed %d options: %s', count( $processed ), implode( ', ', $processed ) ),
+                'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
                 'masks'   => [
                     'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                     'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
@@ -1154,9 +1168,57 @@ class PressHub_AI_Ajax_Handlers {
                 ],
             ] );
         } catch ( Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Exception in save_settings: ' . $t->getMessage(), [
+                    'file' => basename( $t->getFile() ),
+                    'line' => $t->getLine(),
+                ] );
+            }
             wp_send_json_error( [
                 'message' => 'Error saving settings: ' . $t->getMessage() . ' (' . basename( $t->getFile() ) . ':' . $t->getLine() . ')'
             ], 500 );
         }
+    }
+
+    /**
+     * AJAX endpoint to retrieve diagnostic log entries.
+     */
+    public function get_logs(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Insufficient permissions.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-logger.php';
+        $logs = PressHub_AI_Logger::get_recent_logs( 200 );
+        $file = PressHub_AI_Logger::get_log_file_path();
+        $size = file_exists( $file ) ? filesize( $file ) : 0;
+
+        wp_send_json_success( [
+            'logs'       => $logs,
+            'file'       => $file,
+            'size_bytes' => $size,
+            'level'      => PressHub_AI_Logger::get_configured_level(),
+        ] );
+    }
+
+    /**
+     * AJAX endpoint to clear the diagnostic log file.
+     */
+    public function clear_logs(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Insufficient permissions.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-logger.php';
+        PressHub_AI_Logger::clear_log();
+        PressHub_AI_Logger::info( 'Diagnostic log file cleared by user ' . get_current_user_id() );
+
+        wp_send_json_success( [
+            'message' => __( 'Log file cleared successfully.', 'presshub-ai-editor' ),
+        ] );
     }
 }

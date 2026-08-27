@@ -718,6 +718,7 @@ jQuery(document).ready(function($) {
 
             if (tabKey === 'diagnostics') {
                 $form.find('.presshub-settings-submit-wrap').hide();
+                loadDiagnosticLogs();
             } else {
                 $form.find('.presshub-settings-submit-wrap').show();
             }
@@ -837,6 +838,88 @@ jQuery(document).ready(function($) {
             }
             var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc('Error while saving (' + (xhr.status || 0) + '): ' + errorDetail) + '</p></div>';
             $('#presshub-ai-settings-tabs').before(errHtml);
+        });
+    });
+
+    // ------------------------------------------------------------------
+    // Diagnostic Log Viewer Handlers.
+    // ------------------------------------------------------------------
+    function loadDiagnosticLogs() {
+        var $viewer  = $('#presshub-ai-log-viewer');
+        var $spinner = $('#presshub-ai-log-spinner');
+        var $status  = $('#presshub-ai-log-status');
+
+        if (!$viewer.length) {
+            return;
+        }
+
+        $spinner.addClass('is-active');
+        $status.text('Loading logs...');
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_get_logs',
+                nonce: presshubAI.nonce
+            }
+        }).done(function(res) {
+            $spinner.removeClass('is-active');
+            if (res && res.success && res.data) {
+                var content = res.data.logs || '(No log entries recorded yet)';
+                $viewer.val(content);
+                $viewer.scrollTop($viewer[0].scrollHeight);
+                var sizeKb = (res.data.size_bytes / 1024).toFixed(1);
+                $status.text('Level: ' + res.data.level + ' | File: ' + sizeKb + ' KB | Loaded: ' + new Date().toLocaleTimeString());
+            } else {
+                var err = (res && res.data && res.data.message) ? res.data.message : 'Failed to retrieve logs.';
+                $status.text('Error: ' + err);
+            }
+        }).fail(function(xhr, status, error) {
+            $spinner.removeClass('is-active');
+            $status.text('Error loading logs (' + (xhr.status || 0) + ')');
+        });
+    }
+
+    $(document).on('click', '#presshub-ai-refresh-logs', function(e) {
+        e.preventDefault();
+        loadDiagnosticLogs();
+    });
+
+    $(document).on('click', '#presshub-ai-clear-logs', function(e) {
+        e.preventDefault();
+        if (!confirm('Are you sure you want to clear the diagnostic log file?')) {
+            return;
+        }
+
+        var $spinner = $('#presshub-ai-log-spinner');
+        var $status  = $('#presshub-ai-log-status');
+        var $viewer  = $('#presshub-ai-log-viewer');
+
+        $spinner.addClass('is-active');
+        $status.text('Clearing logs...');
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_clear_logs',
+                nonce: presshubAI.nonce
+            }
+        }).done(function(res) {
+            $spinner.removeClass('is-active');
+            if (res && res.success) {
+                $viewer.val('');
+                $status.text('Log file cleared.');
+            } else {
+                var err = (res && res.data && res.data.message) ? res.data.message : 'Failed to clear logs.';
+                $status.text('Error: ' + err);
+            }
+        }).fail(function(xhr, status, error) {
+            $spinner.removeClass('is-active');
+            $status.text('Error clearing logs (' + (xhr.status || 0) + ')');
         });
     });
 });

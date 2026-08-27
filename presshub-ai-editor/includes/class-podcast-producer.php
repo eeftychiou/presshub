@@ -470,16 +470,26 @@ class PressHub_AI_Podcast_Producer {
         }
 
         if ( is_wp_error( $response ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast script AI generation error: ' . $response->get_error_message() );
+            }
             return $response;
         }
 
         // 4. Parse turns
         $turns = $this->parse_script_turns( $response );
         if ( empty( $turns ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( 'Failed parsing dialogue turns from AI script: ' . substr( $response, 0, 300 ) );
+            }
             return new WP_Error(
                 'invalid_dialogue_format',
                 __( 'Failed to parse dialogue turns from generated podcast script.', 'presshub-ai-editor' )
             );
+        }
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'Generated podcast script for %s: %d turns parsed', $date, count( $turns ) ) );
         }
 
         // 5. Persist script to daily briefing directory

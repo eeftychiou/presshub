@@ -143,6 +143,7 @@ class SettingsPageTest
             'presshub_ai_rate_limit_per_hour',
             'presshub_ai_rate_limit_window_seconds',
             'presshub_ai_research_retention_days',
+            'presshub_ai_log_level',
             'presshub_ai_remove_api_key',
             'presshub_ai_remove_google_cloud_api_key',
             'presshub_ai_remove_github_token',

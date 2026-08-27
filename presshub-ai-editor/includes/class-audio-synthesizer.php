@@ -427,10 +427,17 @@ class PressHub_AI_Audio_Synthesizer {
         $turns = $producer->parse_script_turns( $script );
 
         if ( empty( $turns ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( 'Could not parse turns for audio synthesis on date ' . $date );
+            }
             return new WP_Error(
                 'invalid_script',
                 __( 'Could not parse any speaker turns from the podcast script.', 'presshub-ai-editor' )
             );
+        }
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'Synthesizing podcast audio for %s (%d turns)', $date, count( $turns ) ) );
         }
 
         // 3. Get voice options (speed, pitch)
@@ -442,7 +449,7 @@ class PressHub_AI_Audio_Synthesizer {
 
         // 4. Synthesize each turn
         $audio_buffers = [];
-        foreach ( $turns as $turn ) {
+        foreach ( $turns as $index => $turn ) {
             $speaker     = $turn['speaker'] ?? 'female';
             $voice_model = $this->get_voice_for_speaker( $speaker );
             $text        = $turn['text'] ?? '';
@@ -451,8 +458,15 @@ class PressHub_AI_Audio_Synthesizer {
                 continue;
             }
 
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::debug( sprintf( 'Synthesizing turn %d (%s, voice: %s, chars: %d)', $index + 1, $speaker, $voice_model, mb_strlen( $text ) ) );
+            }
+
             $turn_audio = $this->synthesize_turn( $text, $voice_model, $speed, $pitch, $api_client );
             if ( is_wp_error( $turn_audio ) ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( sprintf( 'Turn %d synthesis error: %s', $index + 1, $turn_audio->get_error_message() ) );
+                }
                 return $turn_audio;
             }
 

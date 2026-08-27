@@ -262,6 +262,10 @@ class PressHub_AI_Settings {
             'sanitize_callback' => [ __CLASS__, 'sanitize_research_retention_days' ],
             'type'              => 'integer',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_log_level', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_log_level' ],
+            'type'              => 'string',
+        ] );
 
         // --- Daily Briefing & AI Podcast ---
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_sources', [
@@ -369,6 +373,7 @@ class PressHub_AI_Settings {
         add_settings_field( 'presshub_ai_rate_limit_per_hour', __( 'Requests per Window', 'presshub-ai-editor' ), [ $this, 'render_rate_limit_per_hour_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
         add_settings_field( 'presshub_ai_rate_limit_window_seconds', __( 'Window Length (seconds)', 'presshub-ai-editor' ), [ $this, 'render_rate_limit_window_seconds_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
         add_settings_field( 'presshub_ai_research_retention_days', __( 'Research Log Retention (days)', 'presshub-ai-editor' ), [ $this, 'render_research_retention_days_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
+        add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $this, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
 
         add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $this, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -437,6 +442,17 @@ class PressHub_AI_Settings {
                     <span id="presshub-ai-test-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
                 </div>
                 <div id="presshub-ai-test-result" style="margin-top: 15px; font-weight: bold;"></div>
+
+                <hr style="margin: 25px 0;">
+                <h2><?php echo __( 'Diagnostic Logs', 'presshub-ai-editor' ); ?></h2>
+                <p><?php echo __( 'View recent internal diagnostic logs for debugging scraping, API calls, prompt hydration, and background jobs.', 'presshub-ai-editor' ); ?></p>
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+                    <button type="button" id="presshub-ai-refresh-logs" class="button button-secondary"><?php echo __( 'Refresh Logs', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" id="presshub-ai-clear-logs" class="button button-secondary"><?php echo __( 'Clear Logs', 'presshub-ai-editor' ); ?></button>
+                    <span id="presshub-ai-log-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
+                    <span id="presshub-ai-log-status" style="margin-left: 10px; color: #666;"></span>
+                </div>
+                <textarea id="presshub-ai-log-viewer" rows="16" class="large-text code" readonly="readonly" style="font-size: 12px; background: #1e1e1e; color: #d4d4d4; font-family: monospace;" placeholder="<?php echo esc_attr__( 'Click "Refresh Logs" to load diagnostic entries...', 'presshub-ai-editor' ); ?>"></textarea>
             </div>
         </div>
         <?php
@@ -697,6 +713,21 @@ class PressHub_AI_Settings {
         ?>
         <input type="number" min="1" max="3650" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <p class="description"><?php echo __( 'How long completed or failed research logs are kept before the daily cleanup deletes them. Defaults to 30 days.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_log_level_field() {
+        $option   = 'presshub_ai_log_level';
+        $selected = class_exists( 'PressHub_AI_Logger' ) ? PressHub_AI_Logger::get_configured_level() : 'INFO';
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="DEBUG" <?php echo 'DEBUG' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'DEBUG (Verbose: all API payloads, scheduling, turns & HTTP)', 'presshub-ai-editor' ); ?></option>
+            <option value="INFO" <?php echo 'INFO' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'INFO (Standard: milestones, settings updates, jobs)', 'presshub-ai-editor' ); ?></option>
+            <option value="WARNING" <?php echo 'WARNING' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'WARNING (Only warnings & failures)', 'presshub-ai-editor' ); ?></option>
+            <option value="ERROR" <?php echo 'ERROR' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'ERROR (Only critical failures)', 'presshub-ai-editor' ); ?></option>
+            <option value="OFF" <?php echo 'OFF' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'OFF (Disable file logging)', 'presshub-ai-editor' ); ?></option>
+        </select>
+        <p class="description"><?php echo __( 'Control verbosity of the internal diagnostic log file (stored at wp-content/uploads/presshub-ai/presshub-debug.log).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -1099,6 +1130,14 @@ class PressHub_AI_Settings {
     public static function sanitize_imagen_region( $value ) {
         $clean = self::sanitize_slug( $value );
         return '' === $clean ? 'us-central1' : $clean;
+    }
+
+    public static function sanitize_log_level( $value ): string {
+        $value = strtoupper( trim( (string) wp_unslash( $value ) ) );
+        if ( in_array( $value, [ 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'OFF' ], true ) ) {
+            return $value;
+        }
+        return 'INFO';
     }
 
     public static function sanitize_openai_org( $value ) {

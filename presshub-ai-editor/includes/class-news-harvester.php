@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * PressHub_AI_News_Harvester — Morning Greek News Harvester & Cloudflare Fallback Engine.
  *
@@ -228,6 +228,10 @@ class PressHub_AI_News_Harvester {
 
         $source_urls = array_values( array_unique( array_filter( array_map( 'trim', $source_urls ) ) ) );
 
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'Starting news harvest for %s (%d sources)', $date, count( $source_urls ) ), [ 'sources' => $source_urls ] );
+        }
+
         $payload = [
             'date'            => $date,
             'harvested_at'    => gmdate( 'c' ),
@@ -249,12 +253,18 @@ class PressHub_AI_News_Harvester {
 
             if ( is_wp_error( $response ) || $this->is_cloudflare_or_blocked( $response ) ) {
                 $payload['blocked_sources'][] = $source_url;
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Source blocked or Cloudflare challenge detected: ' . $source_url );
+                }
                 continue;
             }
 
             $body = wp_remote_retrieve_body( $response );
             if ( empty( $body ) ) {
                 $payload['blocked_sources'][] = $source_url;
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Source returned empty body: ' . $source_url );
+                }
                 continue;
             }
 
@@ -295,6 +305,11 @@ class PressHub_AI_News_Harvester {
         }
 
         $this->save_snapshot( $date, $payload );
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'News harvest completed for %s: %d articles collected, %d blocked', $date, count( $payload['articles'] ), count( $payload['blocked_sources'] ) ) );
+        }
+
         return $payload;
     }
 

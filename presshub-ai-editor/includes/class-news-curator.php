@@ -330,7 +330,14 @@ class PressHub_AI_News_Curator {
         }
 
         if ( is_wp_error( $response ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Text curation AI generation error: ' . $response->get_error_message() );
+            }
             return $response;
+        }
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'Text curation AI generated successfully for %s (%d chars)', $date, strlen( $response ) ) );
         }
 
         // 4. Convert Markdown to HTML
@@ -341,7 +348,14 @@ class PressHub_AI_News_Curator {
         $post_id  = $this->create_wordpress_post( $html_content, $date, $headline );
 
         if ( is_wp_error( $post_id ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Failed creating post for text curation: ' . $post_id->get_error_message() );
+            }
             return $post_id;
+        }
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'Created daily briefing text post #%d for %s ("%s")', $post_id, $date, $headline ) );
         }
 
         return [
