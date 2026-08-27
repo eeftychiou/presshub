@@ -49,17 +49,15 @@ $synthesizer = new PressHub_AI_Audio_Synthesizer();
 $voices = $synthesizer->get_available_voices();
 
 as_check( 'voices: returns array with female and male sections', is_array( $voices ) && isset( $voices['female'], $voices['male'] ) );
-as_check( 'voices: female voices contains el-GR-Neural2-A', isset( $voices['female']['el-GR-Neural2-A'] ) );
 as_check( 'voices: female voices contains el-GR-Wavenet-A', isset( $voices['female']['el-GR-Wavenet-A'] ) );
 as_check( 'voices: female voices contains el-GR-Standard-A', isset( $voices['female']['el-GR-Standard-A'] ) );
-as_check( 'voices: male voices contains el-GR-Neural2-B', isset( $voices['male']['el-GR-Neural2-B'] ) );
 as_check( 'voices: male voices contains el-GR-Wavenet-B', isset( $voices['male']['el-GR-Wavenet-B'] ) );
 as_check( 'voices: male voices contains el-GR-Standard-B', isset( $voices['male']['el-GR-Standard-B'] ) );
 
-$sample_voice = $voices['female']['el-GR-Neural2-A'];
-as_check( 'voices: metadata contains name', ( $sample_voice['name'] ?? '' ) === 'el-GR-Neural2-A' );
+$sample_voice = $voices['female']['el-GR-Wavenet-A'];
+as_check( 'voices: metadata contains name', ( $sample_voice['name'] ?? '' ) === 'el-GR-Wavenet-A' );
 as_check( 'voices: metadata contains gender', ( $sample_voice['gender'] ?? '' ) === 'FEMALE' );
-as_check( 'voices: metadata contains type Neural2', ( $sample_voice['type'] ?? '' ) === 'Neural2' );
+as_check( 'voices: metadata contains type Wavenet', ( $sample_voice['type'] ?? '' ) === 'Wavenet' );
 
 
 // =========================================================================
@@ -69,19 +67,19 @@ as_check( 'voices: metadata contains type Neural2', ( $sample_voice['type'] ?? '
 $GLOBALS['OPTIONS_STORE'] = [];
 
 // Test 2a: Defaults
-as_check( 'speaker_mapping: default female voice is el-GR-Neural2-A', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Neural2-A' );
-as_check( 'speaker_mapping: default male voice is el-GR-Neural2-B', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Neural2-B' );
-as_check( 'speaker_mapping: Μαρία maps to female voice', $synthesizer->get_voice_for_speaker( 'Μαρία' ) === 'el-GR-Neural2-A' );
-as_check( 'speaker_mapping: Νίκος maps to male voice', $synthesizer->get_voice_for_speaker( 'Νίκος' ) === 'el-GR-Neural2-B' );
+as_check( 'speaker_mapping: default female voice is el-GR-Wavenet-A', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Wavenet-A' );
+as_check( 'speaker_mapping: default male voice is el-GR-Wavenet-B', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Wavenet-B' );
+as_check( 'speaker_mapping: Μαρία maps to female voice', $synthesizer->get_voice_for_speaker( 'Μαρία' ) === 'el-GR-Wavenet-A' );
+as_check( 'speaker_mapping: Νίκος maps to male voice', $synthesizer->get_voice_for_speaker( 'Νίκος' ) === 'el-GR-Wavenet-B' );
 
 // Test 2b: Custom configured voice models in options
-$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'el-GR-Wavenet-A';
-$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male'] = 'el-GR-Wavenet-B';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'el-GR-Standard-A';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male'] = 'el-GR-Standard-B';
 
-as_check( 'speaker_mapping: option overrides female voice', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Wavenet-A' );
-as_check( 'speaker_mapping: option overrides male voice', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Wavenet-B' );
-as_check( 'speaker_mapping: host1 alias maps to configured female voice', $synthesizer->get_voice_for_speaker( 'host1' ) === 'el-GR-Wavenet-A' );
-as_check( 'speaker_mapping: host2 alias maps to configured male voice', $synthesizer->get_voice_for_speaker( 'host2' ) === 'el-GR-Wavenet-B' );
+as_check( 'speaker_mapping: option overrides female voice', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Standard-A' );
+as_check( 'speaker_mapping: option overrides male voice', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Standard-B' );
+as_check( 'speaker_mapping: host1 alias maps to configured female voice', $synthesizer->get_voice_for_speaker( 'host1' ) === 'el-GR-Standard-A' );
+as_check( 'speaker_mapping: host2 alias maps to configured male voice', $synthesizer->get_voice_for_speaker( 'host2' ) === 'el-GR-Standard-B' );
 
 
 // =========================================================================
@@ -158,7 +156,7 @@ $GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) {
     return null;
 };
 
-$tts_result = $api_client->synthesize_speech_with_options( 'Καλημέρα σας!', 'el-GR-Neural2-A', 1.05, 0.5 );
+$tts_result = $api_client->synthesize_speech_with_options( 'Καλημέρα σας!', 'el-GR-Wavenet-A', 1.05, 0.5 );
 as_check( 'api_client: returns decoded binary MP3 string on success', is_string( $tts_result ) && strlen( $tts_result ) === 417 );
 
 $last_req = end( $GLOBALS['CAPTURED_REQUESTS'] );
@@ -168,7 +166,7 @@ $req_body = json_decode( $last_req[1]['body'], true );
 as_check( 'api_client: target endpoint is texttospeech.googleapis.com', false !== strpos( $req_url, 'texttospeech.googleapis.com' ) );
 as_check( 'api_client: x-goog-api-key header passed', ( $last_req[1]['headers']['x-goog-api-key'] ?? '' ) === 'test-gcloud-key' );
 as_check( 'api_client: request body contains input text', ( $req_body['input']['text'] ?? '' ) === 'Καλημέρα σας!' );
-as_check( 'api_client: request body voice name is el-GR-Neural2-A', ( $req_body['voice']['name'] ?? '' ) === 'el-GR-Neural2-A' );
+as_check( 'api_client: request body voice name is el-GR-Wavenet-A', ( $req_body['voice']['name'] ?? '' ) === 'el-GR-Wavenet-A' );
 as_check( 'api_client: request body voice languageCode is el-GR', ( $req_body['voice']['languageCode'] ?? '' ) === 'el-GR' );
 as_check( 'api_client: request body speakingRate is 1.05', ( $req_body['audioConfig']['speakingRate'] ?? 0 ) == 1.05 );
 as_check( 'api_client: request body pitch is 0.5', ( $req_body['audioConfig']['pitch'] ?? 0 ) == 0.5 );
@@ -233,7 +231,7 @@ $producer->save_script( $test_date_e2e, $script_content );
 class Mock_Audio_API_Client extends PressHub_AI_API_Client {
     public $synthesized_calls = [];
     public function __construct() {}
-    public function synthesize_speech_with_options( $text, $voice_model = 'el-GR-Neural2-A', $speed = 1.0, $pitch = 0.0 ) {
+    public function synthesize_speech_with_options( $text, $voice_model = 'el-GR-Wavenet-A', $speed = 1.0, $pitch = 0.0 ) {
         $this->synthesized_calls[] = [
             'text'        => $text,
             'voice_model' => $voice_model,
@@ -255,14 +253,14 @@ as_check( 'e2e: attachment_id is 95', ( $result_e2e['attachment_id'] ?? 0 ) === 
 as_check( 'e2e: audio_url contains attachment URL', false !== strpos( $result_e2e['audio_url'] ?? '', 'attachment_id=95' ) );
 as_check( 'e2e: turns count is 2', ( $result_e2e['turns_count'] ?? 0 ) === 2 );
 as_check( 'e2e: synthesized 2 turns via API client', count( $mock_tts->synthesized_calls ) === 2 );
-as_check( 'e2e: turn 0 called with female voice', ( $mock_tts->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Neural2-A' );
-as_check( 'e2e: turn 1 called with male voice', ( $mock_tts->synthesized_calls[1]['voice_model'] ?? '' ) === 'el-GR-Neural2-B' );
+as_check( 'e2e: turn 0 called with female voice', ( $mock_tts->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Wavenet-A' );
+as_check( 'e2e: turn 1 called with male voice', ( $mock_tts->synthesized_calls[1]['voice_model'] ?? '' ) === 'el-GR-Wavenet-B' );
 
 // Test 7b: Custom script argument
 $mock_tts_custom = new Mock_Audio_API_Client();
 $custom_script = "[Νίκος]: Μόνο ο Νίκος μιλάει εδώ.";
 $result_custom = $synthesizer->synthesize_podcast( $test_date_e2e, $custom_script, $mock_tts_custom );
-as_check( 'e2e: custom script overrides stored script', count( $mock_tts_custom->synthesized_calls ) === 1 && ( $mock_tts_custom->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Neural2-B' );
+as_check( 'e2e: custom script overrides stored script', count( $mock_tts_custom->synthesized_calls ) === 1 && ( $mock_tts_custom->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Wavenet-B' );
 
 // Test 7c: Missing script returns WP_Error
 $err_no_script = $synthesizer->synthesize_podcast( '1980-01-01', '', $mock_tts );

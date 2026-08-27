@@ -462,9 +462,13 @@ class PressHub_AI_API_Client {
      * @param float  $pitch       Voice pitch adjustment in semitones (default 0.0, range -20.0 to 20.0).
      * @return string|WP_Error   Raw binary MP3 data string or WP_Error on failure.
      */
-    public function synthesize_speech_with_options( $text, $voice_model = 'el-GR-Neural2-A', $speed = 1.0, $pitch = 0.0 ) {
+    public function synthesize_speech_with_options( $text, $voice_model = 'el-GR-Wavenet-A', $speed = 1.0, $pitch = 0.0 ) {
         if ( empty( $this->google_cloud_api_key ) ) {
             return new WP_Error( 'no_gc_key', __( 'Google Cloud API key is missing.', 'presshub-ai-editor' ) );
+        }
+
+        if ( empty( $voice_model ) || false !== strpos( $voice_model, 'Neural2' ) ) {
+            $voice_model = 'el-GR-Wavenet-A';
         }
 
         $lang_code = 'el-GR';

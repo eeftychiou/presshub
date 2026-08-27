@@ -115,11 +115,11 @@ class PressHub_AI_Settings {
     }
 
     public static function default_briefing_voice_female(): string {
-        return 'el-GR-Neural2-A';
+        return 'el-GR-Wavenet-A';
     }
 
     public static function default_briefing_voice_male(): string {
-        return 'el-GR-Neural2-B';
+        return 'el-GR-Wavenet-B';
     }
 
 
@@ -876,7 +876,6 @@ class PressHub_AI_Settings {
         $selected = (string) get_option( $option, self::default_briefing_voice_female() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $voices = $synthesizer ? ( $synthesizer->get_available_voices()['female'] ?? [] ) : [
-            'el-GR-Neural2-A'  => [ 'name' => 'el-GR-Neural2-A', 'label' => 'Greek Female (Neural2-A)' ],
             'el-GR-Wavenet-A'  => [ 'name' => 'el-GR-Wavenet-A', 'label' => 'Greek Female (Wavenet-A)' ],
             'el-GR-Standard-A' => [ 'name' => 'el-GR-Standard-A', 'label' => 'Greek Female (Standard-A)' ],
         ];
@@ -897,7 +896,6 @@ class PressHub_AI_Settings {
         $selected = (string) get_option( $option, self::default_briefing_voice_male() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $voices = $synthesizer ? ( $synthesizer->get_available_voices()['male'] ?? [] ) : [
-            'el-GR-Neural2-B'  => [ 'name' => 'el-GR-Neural2-B', 'label' => 'Greek Male (Neural2-B)' ],
             'el-GR-Wavenet-B'  => [ 'name' => 'el-GR-Wavenet-B', 'label' => 'Greek Male (Wavenet-B)' ],
             'el-GR-Standard-B' => [ 'name' => 'el-GR-Standard-B', 'label' => 'Greek Male (Standard-B)' ],
         ];
@@ -1246,14 +1244,20 @@ class PressHub_AI_Settings {
     }
 
     public static function sanitize_voice_female( $value ): string {
-        $allowed = [ 'el-GR-Neural2-A', 'el-GR-Wavenet-A', 'el-GR-Standard-A' ];
+        $allowed = [ 'el-GR-Wavenet-A', 'el-GR-Standard-A', 'el-GR-Neural2-A' ];
         $value = trim( (string) wp_unslash( $value ) );
+        if ( 'el-GR-Neural2-A' === $value ) {
+            return 'el-GR-Wavenet-A';
+        }
         return in_array( $value, $allowed, true ) ? $value : self::default_briefing_voice_female();
     }
 
     public static function sanitize_voice_male( $value ): string {
-        $allowed = [ 'el-GR-Neural2-B', 'el-GR-Wavenet-B', 'el-GR-Standard-B' ];
+        $allowed = [ 'el-GR-Wavenet-B', 'el-GR-Standard-B', 'el-GR-Neural2-B' ];
         $value = trim( (string) wp_unslash( $value ) );
+        if ( 'el-GR-Neural2-B' === $value ) {
+            return 'el-GR-Wavenet-B';
+        }
         return in_array( $value, $allowed, true ) ? $value : self::default_briefing_voice_male();
     }
 

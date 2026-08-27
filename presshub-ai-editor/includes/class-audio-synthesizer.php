@@ -47,12 +47,6 @@ class PressHub_AI_Audio_Synthesizer {
     public function get_available_voices(): array {
         return [
             'female' => [
-                'el-GR-Neural2-A'  => [
-                    'name'   => 'el-GR-Neural2-A',
-                    'label'  => __( 'Greek Female (Neural2-A)', 'presshub-ai-editor' ),
-                    'gender' => 'FEMALE',
-                    'type'   => 'Neural2',
-                ],
                 'el-GR-Wavenet-A'  => [
                     'name'   => 'el-GR-Wavenet-A',
                     'label'  => __( 'Greek Female (Wavenet-A)', 'presshub-ai-editor' ),
@@ -67,12 +61,6 @@ class PressHub_AI_Audio_Synthesizer {
                 ],
             ],
             'male' => [
-                'el-GR-Neural2-B'  => [
-                    'name'   => 'el-GR-Neural2-B',
-                    'label'  => __( 'Greek Male (Neural2-B)', 'presshub-ai-editor' ),
-                    'gender' => 'MALE',
-                    'type'   => 'Neural2',
-                ],
                 'el-GR-Wavenet-B'  => [
                     'name'   => 'el-GR-Wavenet-B',
                     'label'  => __( 'Greek Male (Wavenet-B)', 'presshub-ai-editor' ),
@@ -93,7 +81,7 @@ class PressHub_AI_Audio_Synthesizer {
      * Get the configured voice model for a given speaker identifier.
      *
      * @param string $speaker Speaker identifier ('female', 'male', 'host1', 'host2', or speaker name).
-     * @return string Voice model name (e.g. 'el-GR-Neural2-A').
+     * @return string Voice model name (e.g. 'el-GR-Wavenet-A').
      */
     public function get_voice_for_speaker( string $speaker ): string {
         $clean = trim( $speaker );
@@ -106,14 +94,20 @@ class PressHub_AI_Audio_Synthesizer {
             || false !== stripos( $clean, 'maria' )
             || false !== stripos( $clean, 'female' )
         ) {
-            $default_female = 'el-GR-Neural2-A';
+            $default_female = 'el-GR-Wavenet-A';
             $voice = (string) get_option( self::OPTION_VOICE_FEMALE, $default_female );
-            return ! empty( trim( $voice ) ) ? trim( $voice ) : $default_female;
+            if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) ) {
+                $voice = $default_female;
+            }
+            return trim( $voice );
         }
 
-        $default_male = 'el-GR-Neural2-B';
+        $default_male = 'el-GR-Wavenet-B';
         $voice = (string) get_option( self::OPTION_VOICE_MALE, $default_male );
-        return ! empty( trim( $voice ) ) ? trim( $voice ) : $default_male;
+        if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) ) {
+            $voice = $default_male;
+        }
+        return trim( $voice );
     }
 
     /**
