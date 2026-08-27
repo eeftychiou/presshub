@@ -423,8 +423,28 @@ class PressHub_AI_Settings {
             </nav>
 
             <form method="post" action="options.php" id="presshub-ai-settings-form">
-                <?php settings_fields( 'presshub_ai_options' ); ?>
-                <?php do_settings_sections( 'presshub-ai' ); ?>
+                <?php
+                settings_fields( 'presshub_ai_options' );
+                $GLOBALS['RENDERED_SECTIONS']['presshub-ai'] = true;
+                ?>
+
+                <div id="presshub-tab-pane-general" class="presshub-tab-pane">
+                    <?php $this->render_section_with_fields( 'presshub_ai_general', __( 'General', 'presshub-ai-editor' ) ); ?>
+                    <?php $this->render_section_with_fields( 'presshub_ai_providers', __( 'Providers', 'presshub-ai-editor' ) ); ?>
+                </div>
+
+                <div id="presshub-tab-pane-media" class="presshub-tab-pane" style="display: none;">
+                    <?php $this->render_section_with_fields( 'presshub_ai_media', __( 'Media (Google Cloud)', 'presshub-ai-editor' ) ); ?>
+                </div>
+
+                <div id="presshub-tab-pane-briefing" class="presshub-tab-pane" style="display: none;">
+                    <?php $this->render_section_with_fields( 'presshub_ai_briefing', __( 'Daily Briefing & AI Podcast', 'presshub-ai-editor' ) ); ?>
+                </div>
+
+                <div id="presshub-tab-pane-rate_limits" class="presshub-tab-pane" style="display: none;">
+                    <?php $this->render_section_with_fields( 'presshub_ai_rate_limits', __( 'Rate Limits & Retention', 'presshub-ai-editor' ) ); ?>
+                </div>
+
                 <div class="presshub-settings-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                     <?php if ( function_exists( 'submit_button' ) ) { submit_button( __( 'Save Changes', 'presshub-ai-editor' ), 'primary', 'submit', false ); } ?>
                     <span id="presshub-ai-save-spinner" class="spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
@@ -480,8 +500,22 @@ class PressHub_AI_Settings {
     }
 
     // ------------------------------------------------------------------
-    // Section descriptions.
+    // Section descriptions & renderers.
     // ------------------------------------------------------------------
+
+    public function render_section_with_fields( string $section_id, string $title ) {
+        echo '<h2 id="wp-settings-section-' . esc_attr( $section_id ) . '">' . esc_html( $title ) . '</h2>';
+        $callback_suffix = str_replace( 'presshub_ai_', '', $section_id );
+        $callback = [ $this, 'render_' . $callback_suffix . '_section' ];
+        if ( is_callable( $callback ) ) {
+            call_user_func( $callback );
+        }
+        echo '<table class="form-table" role="presentation"><tbody>';
+        if ( function_exists( 'do_settings_fields' ) ) {
+            do_settings_fields( 'presshub-ai', $section_id );
+        }
+        echo '</tbody></table>';
+    }
 
     public function render_general_section() {
         echo '<p>' . __( 'Choose which AI provider powers drafts, scorecards, chat and research.', 'presshub-ai-editor' ) . '</p>';

@@ -681,34 +681,6 @@ jQuery(document).ready(function($) {
 
         var $form = $('#presshub-ai-settings-form');
 
-        function getSectionElements(sectionId) {
-            var $h2 = $form.find('h2[id*="' + sectionId + '"]');
-            if (!$h2.length) {
-                return $();
-            }
-            return $h2.add($h2.nextUntil('h2, .presshub-settings-submit-wrap'));
-        }
-
-        if (!$('#presshub-tab-pane-general').length) {
-            var $generalElements   = getSectionElements('presshub_ai_general').add(getSectionElements('presshub_ai_providers'));
-            var $mediaElements     = getSectionElements('presshub_ai_media');
-            var $briefingElements  = getSectionElements('presshub_ai_briefing');
-            var $rateLimitElements = getSectionElements('presshub_ai_rate_limits');
-
-            if ($generalElements.length) {
-                $('<div id="presshub-tab-pane-general" class="presshub-tab-pane"></div>').insertBefore($generalElements.first()).append($generalElements);
-            }
-            if ($mediaElements.length) {
-                $('<div id="presshub-tab-pane-media" class="presshub-tab-pane" style="display:none;"></div>').insertBefore($mediaElements.first()).append($mediaElements);
-            }
-            if ($briefingElements.length) {
-                $('<div id="presshub-tab-pane-briefing" class="presshub-tab-pane" style="display:none;"></div>').insertBefore($briefingElements.first()).append($briefingElements);
-            }
-            if ($rateLimitElements.length) {
-                $('<div id="presshub-tab-pane-rate_limits" class="presshub-tab-pane" style="display:none;"></div>').insertBefore($rateLimitElements.first()).append($rateLimitElements);
-            }
-        }
-
         function switchTab(tabKey) {
             $tabs.find('.nav-tab').removeClass('nav-tab-active');
             $tabs.find('.nav-tab[data-tab="' + tabKey + '"]').addClass('nav-tab-active');
