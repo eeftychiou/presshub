@@ -758,11 +758,23 @@ jQuery(document).ready(function($) {
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
 
-        var serializedArray = $form.serializeArray();
         var settingsPayload = {};
-        $.each(serializedArray, function(i, field) {
-            if (field.name !== 'action' && field.name !== 'option_page' && field.name !== '_wp_http_referer' && field.name !== '_wpnonce') {
-                settingsPayload[field.name] = field.value;
+        $form.find('input, select, textarea').each(function() {
+            var $el = $(this);
+            var name = $el.attr('name');
+            if (!name || name === 'action' || name === 'option_page' || name === '_wp_http_referer' || name === '_wpnonce') {
+                return;
+            }
+            if ($el.is(':checkbox')) {
+                if ($el.is(':checked')) {
+                    settingsPayload[name] = $el.val() || '1';
+                }
+            } else if ($el.is(':radio')) {
+                if ($el.is(':checked')) {
+                    settingsPayload[name] = $el.val();
+                }
+            } else {
+                settingsPayload[name] = $el.val();
             }
         });
 

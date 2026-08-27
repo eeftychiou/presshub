@@ -1169,6 +1169,9 @@ class PressHub_AI_Ajax_Handlers {
                         $processed[] = $option;
                         if ( class_exists( 'PressHub_AI_Logger' ) ) {
                             PressHub_AI_Logger::debug( sprintf( 'Saved option %s: length %d', $option, is_string( $clean ) ? strlen( $clean ) : 1 ) );
+                            if ( 'presshub_ai_briefing_sources' === $option ) {
+                                PressHub_AI_Logger::info( 'Saved briefing sources: ' . var_export( $clean, true ) );
+                            }
                         }
                     } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
                         update_option( $option, 0 );
