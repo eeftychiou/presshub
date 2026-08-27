@@ -582,7 +582,7 @@ class PressHub_AI_API_Client {
         $prompt_instruction = "You are a professional Greek podcast narrator and voice actor. Read the following text aloud with natural, expressive conversational inflection, clear Greek pronunciation, and authentic rhythm. Read ONLY the text verbatim, word for word. Do not add introductory remarks, concluding greetings, or conversational commentary:\n\n" . trim( $text );
 
         // 1. Try Gemini Interactions API (Standard for Gemini 3.1 & 2.5 TTS)
-        $interactions_url = 'https://generativelanguage.googleapis.com/v1beta/interactions?key=' . urlencode( $this->gemini_api_key );
+        $interactions_url = 'https://generativelanguage.googleapis.com/v1beta/interactions';
         $tts_models       = [ 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts' ];
         $audio_base64     = null;
         $mime_type        = 'audio/pcm;rate=24000';
@@ -602,7 +602,8 @@ class PressHub_AI_API_Client {
 
             $response = wp_remote_post( $interactions_url, [
                 'headers' => [
-                    'Content-Type' => 'application/json',
+                    'Content-Type'   => 'application/json',
+                    'x-goog-api-key' => $this->gemini_api_key,
                 ],
                 'body'    => wp_json_encode( $body ),
                 'timeout' => 90,
@@ -610,12 +611,14 @@ class PressHub_AI_API_Client {
 
             if ( is_wp_error( $response ) ) {
                 $last_error = $response->get_error_message();
+                error_log( 'PressHub AI [gemini-interactions] model ' . $model . ' error: ' . $last_error );
                 continue;
             }
 
             $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
             if ( isset( $res_body['error']['message'] ) ) {
                 $last_error = $res_body['error']['message'];
+                error_log( 'PressHub AI [gemini-interactions] model ' . $model . ' error: ' . $last_error );
                 continue;
             }
 
