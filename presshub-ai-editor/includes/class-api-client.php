@@ -579,7 +579,7 @@ class PressHub_AI_API_Client {
             $voice_name = 'Aoede';
         }
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . urlencode( $this->gemini_api_key );
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . urlencode( $this->gemini_api_key );
 
         $prompt_instruction = "You are a professional Greek podcast narrator and voice actor. Read the following text aloud with natural, expressive conversational inflection, clear Greek pronunciation, and authentic rhythm. Read ONLY the text verbatim, word for word. Do not add introductory remarks, concluding greetings, or conversational commentary:\n\n" . trim( $text );
 
