@@ -52,6 +52,7 @@ class DailyBriefingSettingsTest
         $expected_fields = [
             'presshub_ai_briefing_sources',
             'presshub_ai_briefing_tts_engine',
+            'presshub_ai_briefing_tts_api_key',
             'presshub_ai_briefing_tts_model',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
@@ -298,6 +299,25 @@ class DailyBriefingSettingsTest
         }
         if ( ! function_exists( 'presshub_ai_execute_generation_cron' ) ) {
             $failures[] = 'presshub_ai_execute_generation_cron function must exist.';
+        }
+
+        // --- Case 14: Sanitization of speech generation API key & remove key flag ---
+        self::reset_options();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_api_key'] = 'AIzaSyExistingKey1234';
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '' ) !== 'AIzaSyExistingKey1234' ) {
+            $failures[] = 'empty briefing tts api key post should preserve existing key.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '••••1234' ) !== 'AIzaSyExistingKey1234' ) {
+            $failures[] = 'masked briefing tts api key post should preserve existing key.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '<script>AIzaSyNewKey5678</script>' ) !== 'AIzaSyNewKey5678' ) {
+            $failures[] = 'briefing tts api key should strip HTML tags.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_remove_briefing_tts_api_key', '1' ) !== 0 ) {
+            $failures[] = 'remove briefing tts api key flag should sanitize to 0.';
+        }
+        if ( array_key_exists( 'presshub_ai_briefing_tts_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'checking remove briefing tts api key should delete the option.';
         }
 
         if ( $failures ) {

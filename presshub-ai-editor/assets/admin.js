@@ -808,6 +808,9 @@ jQuery(document).ready(function($) {
                     if (res.data.masks.github_token) {
                         $('#presshub_ai_github_token').attr('placeholder', res.data.masks.github_token);
                     }
+                    if (res.data.masks.briefing_tts_key) {
+                        $('#presshub_ai_briefing_tts_api_key').attr('placeholder', res.data.masks.briefing_tts_key);
+                    }
                 }
             } else {
                 var err = (res && res.data && res.data.message) ? res.data.message : 'Failed to save settings.';

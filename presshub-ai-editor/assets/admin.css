@@ -214,12 +214,152 @@ body.presshub-modal-open {
     margin-top: 8px;
 }
 
-.research-card, .image-card, .report-card {
+.research-card, .image-card, .report-card, .revision-card {
     background: #fff;
     border: 1px solid #dcdcdc;
     padding: 12px;
     border-radius: 6px;
     width: 100%;
+}
+
+.revision-card {
+    border-left: 4px solid #2271b1;
+}
+
+.revision-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.revision-card .presshub-badge {
+    background: #f0f0f1;
+    color: #3c434a;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+.revision-explanation {
+    font-size: 12px;
+    color: #3c434a;
+    margin: 8px 0 10px;
+    line-height: 1.4;
+}
+
+.revision-global-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    align-items: center;
+}
+
+.revision-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.revision-item {
+    background: #f9f9f9;
+    border: 1px solid #e2e4e7;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.revision-item.accepted {
+    background: #f0fdf4;
+    border-color: #86efac;
+}
+
+.revision-item.denied {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    opacity: 0.75;
+}
+
+.revision-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.badge-accepted {
+    color: #15803d;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.badge-denied {
+    color: #b91c1c;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.diff-chunk {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.diff-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: #646970;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.diff-original {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+    border-radius: 3px;
+    padding: 6px 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    text-decoration: line-through;
+}
+
+.diff-revised-input {
+    width: 100%;
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    border-radius: 3px;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    line-height: 1.4;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.diff-revised-input:focus {
+    border-color: #2271b1;
+    background: #fff;
+    color: #1e1e1e;
+    outline: none;
+}
+
+.diff-revised-input:disabled {
+    background: #f0fdf4;
+    color: #15803d;
+    cursor: default;
+}
+
+.revision-item-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
 }
 
 .card-header {

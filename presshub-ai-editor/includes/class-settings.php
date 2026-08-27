@@ -276,8 +276,20 @@ class PressHub_AI_Settings {
         ] );
 
         // --- Daily Briefing & AI Podcast ---
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_api_key', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_api_key' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_remove_briefing_tts_api_key', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_remove_briefing_tts_api_key' ],
+            'type'              => 'boolean',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_engine', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_engine' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_model', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_model' ],
             'type'              => 'string',
         ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_sources', [
@@ -389,6 +401,7 @@ class PressHub_AI_Settings {
 
         add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $this, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_engine', __( 'Voice Synthesis Engine', 'presshub-ai-editor' ), [ $this, 'render_briefing_tts_engine_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_api_key', __( 'Speech Generation API Key (Google AI Studio / Gemini)', 'presshub-ai-editor' ), [ $this, 'render_briefing_tts_api_key_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_model', __( 'Voice Generation AI Model', 'presshub-ai-editor' ), [ $this, 'render_briefing_tts_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -885,6 +898,21 @@ class PressHub_AI_Settings {
         <?php
     }
 
+    public function render_briefing_tts_api_key_field() {
+        $saved = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+        $mask  = self::mask_key( $saved );
+        ?>
+        <input type="password" name="presshub_ai_briefing_tts_api_key" id="presshub_ai_briefing_tts_api_key" value="<?php echo self::esc_attr_safe( $mask ); ?>" placeholder="<?php echo self::esc_attr_safe( $mask ); ?>" class="regular-text" autocomplete="off" />
+        <p class="description"><?php echo __( 'Dedicated Gemini / Google AI Studio API key used specifically for speech generation and podcast audio synthesis. If left empty, falls back to your main Gemini API key from the Providers tab.', 'presshub-ai-editor' ); ?></p>
+        <?php if ( '' !== $mask ) : ?>
+            <label>
+                <input type="checkbox" name="presshub_ai_remove_briefing_tts_api_key" id="presshub_ai_remove_briefing_tts_api_key" value="1" />
+                <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
+            </label>
+        <?php endif; ?>
+        <?php
+    }
+
     public function render_briefing_tts_model_field() {
         $option = 'presshub_ai_briefing_tts_model';
         $value  = (string) get_option( $option, self::default_briefing_tts_model() );
@@ -1140,6 +1168,10 @@ class PressHub_AI_Settings {
         return self::sanitize_secret( $value, 'presshub_ai_github_token' );
     }
 
+    public static function sanitize_briefing_tts_api_key( $value ) {
+        return self::sanitize_secret( $value, 'presshub_ai_briefing_tts_api_key' );
+    }
+
     /**
      * "Remove stored key" checkbox sanitizers: posting 1 deletes the
      * secret option outright (the only UI path that can clear a key, since
@@ -1156,6 +1188,10 @@ class PressHub_AI_Settings {
 
     public static function sanitize_remove_github_token( $value ) {
         return self::sanitize_remove_key( $value, 'presshub_ai_github_token' );
+    }
+
+    public static function sanitize_remove_briefing_tts_api_key( $value ) {
+        return self::sanitize_remove_key( $value, 'presshub_ai_briefing_tts_api_key' );
     }
 
     private static function sanitize_remove_key( $value, $option_name ) {

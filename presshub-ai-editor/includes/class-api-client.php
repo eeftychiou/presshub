@@ -81,6 +81,7 @@ class PressHub_AI_API_Client {
     }
     private $google_cloud_api_key;
     private $gemini_api_key;
+    private $briefing_tts_api_key;
     private $provider;
     private $model;
     private $temperature;
@@ -97,6 +98,12 @@ class PressHub_AI_API_Client {
             $gemini_key = (string) get_option( 'presshub_ai_api_key', '' );
         }
         $this->gemini_api_key = $gemini_key;
+
+        $briefing_tts_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+        if ( empty( $briefing_tts_key ) ) {
+            $briefing_tts_key = $this->gemini_api_key;
+        }
+        $this->briefing_tts_api_key = $briefing_tts_key;
         // Per-provider config (P2): the model/tuning are read from the
         // ACTIVE provider's options, with the legacy global model as a
         // fallback for sites that have not run the migration yet.
@@ -571,7 +578,12 @@ class PressHub_AI_API_Client {
      * @return string|WP_Error Binary audio data or WP_Error on failure.
      */
     public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Aoede', bool $as_wav = true ) {
-        if ( empty( $this->gemini_api_key ) ) {
+        $tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+        if ( empty( $tts_api_key ) ) {
+            $tts_api_key = ! empty( $this->briefing_tts_api_key ) ? $this->briefing_tts_api_key : $this->gemini_api_key;
+        }
+
+        if ( empty( $tts_api_key ) ) {
             return new WP_Error( 'no_gemini_key', __( 'Google AI Studio Gemini API key is missing.', 'presshub-ai-editor' ) );
         }
 
@@ -596,7 +608,7 @@ class PressHub_AI_API_Client {
 
         foreach ( $tts_models as $model ) {
             // 1. Try standard generateContent API with AUDIO response modality
-            $gen_url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $this->gemini_api_key );
+            $gen_url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
             $gen_body = [
                 'contents' => [
                     [
@@ -621,7 +633,7 @@ class PressHub_AI_API_Client {
             $gen_res = wp_remote_post( $gen_url, [
                 'headers' => [
                     'Content-Type'   => 'application/json',
-                    'x-goog-api-key' => $this->gemini_api_key,
+                    'x-goog-api-key' => $tts_api_key,
                 ],
                 'body'    => wp_json_encode( $gen_body ),
                 'timeout' => 90,
@@ -666,7 +678,7 @@ class PressHub_AI_API_Client {
             $int_res = wp_remote_post( $interactions_url, [
                 'headers' => [
                     'Content-Type'   => 'application/json',
-                    'x-goog-api-key' => $this->gemini_api_key,
+                    'x-goog-api-key' => $tts_api_key,
                 ],
                 'body'    => wp_json_encode( $int_body ),
                 'timeout' => 90,

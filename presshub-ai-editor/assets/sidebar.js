@@ -163,18 +163,45 @@ const AICoPilotSidebar = () => {
 
         const currentPostId = getCurrentPostId();
 
+        let articleContent = '';
+        let articleTitle = '';
+        try {
+            if (wp.data && wp.data.select('core/editor')) {
+                articleContent = wp.data.select('core/editor').getEditedPostContent() || '';
+                articleTitle = wp.data.select('core/editor').getEditedPostAttribute('title') || '';
+            }
+        } catch (e) {
+            articleContent = '';
+            articleTitle = '';
+        }
+
         jQuery.post(presshubAI.ajax_url, {
             action: 'presshub_ai_chat',
             nonce: presshubAI.nonce,
             prompt: trimmed,
             post_id: currentPostId,
+            article_content: articleContent,
+            article_title: articleTitle,
             instruction_preset_id: getSelectedPreset()
         }, (response) => {
             setLoading(false);
             if (response.success) {
                 const data = response.data;
                 if (data.type === 'chat') {
-                    setMessages(prev => [...prev, { role: 'ai', type: 'text', content: data.content }]);
+                    if (Array.isArray(data.revisions) && data.revisions.length > 0) {
+                        setMessages(prev => [...prev, {
+                            role: 'ai',
+                            type: 'revision',
+                            content: data.content,
+                            revisions: data.revisions.map(r => ({
+                                ...r,
+                                status: 'pending',
+                                editedRevised: r.revised
+                            }))
+                        }]);
+                    } else {
+                        setMessages(prev => [...prev, { role: 'ai', type: 'text', content: data.content }]);
+                    }
                 } else if (data.type === 'research') {
                     const researchMsg = {
                         role: 'ai',
@@ -364,6 +391,118 @@ const AICoPilotSidebar = () => {
         researchIntervalsRef.current.push(interval);
     };
 
+    const applyReplacementInEditor = (originalText, revisedText) => {
+        try {
+            if (!wp.data || !wp.data.select('core/editor') || !wp.data.dispatch('core/editor')) {
+                return false;
+            }
+            const currentContent = wp.data.select('core/editor').getEditedPostContent() || '';
+            if (originalText && currentContent.includes(originalText)) {
+                const updated = currentContent.replace(originalText, revisedText);
+                wp.data.dispatch('core/editor').editPost({ content: updated });
+                return true;
+            }
+
+            // Block-level replacement fallback:
+            const blocks = wp.data.select('core/editor').getBlocks() || [];
+            let replaced = false;
+            const newBlocks = blocks.map(b => {
+                const rawHtml = wp.blocks.serialize([b]);
+                if (originalText && rawHtml.includes(originalText)) {
+                    const updatedHtml = rawHtml.replace(originalText, revisedText);
+                    const parsed = wp.blocks.parse(updatedHtml);
+                    if (parsed && parsed.length > 0) {
+                        replaced = true;
+                        return parsed[0];
+                    }
+                }
+                return b;
+            });
+
+            if (replaced) {
+                wp.data.dispatch('core/editor').resetBlocks(newBlocks);
+                return true;
+            }
+
+            // If exact match not found (e.g. slight formatting diff), append to content
+            if (currentContent) {
+                wp.data.dispatch('core/editor').editPost({ content: currentContent + '\n\n' + revisedText });
+                return true;
+            }
+        } catch (err) {
+            console.error('PressHub AI: Error applying revision', err);
+        }
+        return false;
+    };
+
+    const updateRevisionDraft = (msgIndex, revId, newDraftText) => {
+        setMessages(prev => prev.map((m, i) => {
+            if (i !== msgIndex || !m.revisions) return m;
+            return {
+                ...m,
+                revisions: m.revisions.map(r => r.id === revId ? { ...r, editedRevised: newDraftText } : r)
+            };
+        }));
+    };
+
+    const applySingleRevision = (msgIndex, revId) => {
+        const msg = messages[msgIndex];
+        if (!msg || !msg.revisions) return;
+        const rev = msg.revisions.find(r => r.id === revId);
+        if (!rev) return;
+
+        const revisedText = rev.editedRevised !== undefined ? rev.editedRevised : rev.revised;
+        applyReplacementInEditor(rev.original, revisedText);
+
+        setMessages(prev => prev.map((m, i) => {
+            if (i !== msgIndex || !m.revisions) return m;
+            return {
+                ...m,
+                revisions: m.revisions.map(r => r.id === revId ? { ...r, status: 'accepted' } : r)
+            };
+        }));
+    };
+
+    const denySingleRevision = (msgIndex, revId) => {
+        setMessages(prev => prev.map((m, i) => {
+            if (i !== msgIndex || !m.revisions) return m;
+            return {
+                ...m,
+                revisions: m.revisions.map(r => r.id === revId ? { ...r, status: 'denied' } : r)
+            };
+        }));
+    };
+
+    const acceptAllRevisions = (msgIndex) => {
+        const msg = messages[msgIndex];
+        if (!msg || !msg.revisions) return;
+
+        msg.revisions.forEach(rev => {
+            if (rev.status === 'pending') {
+                const revisedText = rev.editedRevised !== undefined ? rev.editedRevised : rev.revised;
+                applyReplacementInEditor(rev.original, revisedText);
+            }
+        });
+
+        setMessages(prev => prev.map((m, i) => {
+            if (i !== msgIndex || !m.revisions) return m;
+            return {
+                ...m,
+                revisions: m.revisions.map(r => r.status === 'pending' ? { ...r, status: 'accepted' } : r)
+            };
+        }));
+    };
+
+    const denyAllRevisions = (msgIndex) => {
+        setMessages(prev => prev.map((m, i) => {
+            if (i !== msgIndex || !m.revisions) return m;
+            return {
+                ...m,
+                revisions: m.revisions.map(r => r.status === 'pending' ? { ...r, status: 'denied' } : r)
+            };
+        }));
+    };
+
     const insertBlock = (blockType, attributes) => {
         const block = wp.blocks.createBlock(blockType, attributes);
         const currentBlocks = wp.data.select('core/editor').getBlocks();
@@ -387,6 +526,74 @@ const AICoPilotSidebar = () => {
                     isDestructive: true,
                     onClick: () => retryLast(msg)
                 }, __('Retry', 'presshub-ai-editor'))
+            );
+        } else if (msg.type === 'revision') {
+            const pendingCount = (msg.revisions || []).filter(r => r.status === 'pending').length;
+            const totalCount = (msg.revisions || []).length;
+            return el('div', { key: index, className: bubbleClass + ' revision-card' },
+                el('div', { className: 'card-header' },
+                    el('span', {}, '📝 ' + __('Proposed Article Revisions', 'presshub-ai-editor')),
+                    el('span', { className: 'presshub-badge' }, sprintf(__('%d of %d pending', 'presshub-ai-editor'), pendingCount, totalCount))
+                ),
+                msg.content && el('div', { className: 'revision-explanation' }, msg.content),
+                el('div', { className: 'revision-global-actions' },
+                    el(Button, {
+                        isPrimary: true,
+                        isSmall: true,
+                        disabled: pendingCount === 0,
+                        onClick: () => acceptAllRevisions(index)
+                    }, '✓ ' + __('Accept All Changes', 'presshub-ai-editor')),
+                    el(Button, {
+                        isDestructive: true,
+                        isLink: true,
+                        isSmall: true,
+                        disabled: pendingCount === 0,
+                        onClick: () => denyAllRevisions(index)
+                    }, '✕ ' + __('Deny All', 'presshub-ai-editor'))
+                ),
+                el('div', { className: 'revision-list' },
+                    (msg.revisions || []).map((rev) => {
+                        const isPending = rev.status === 'pending';
+                        const isAccepted = rev.status === 'accepted';
+                        const isDenied = rev.status === 'denied';
+                        return el('div', { key: rev.id, className: 'revision-item ' + rev.status },
+                            el('div', { className: 'revision-item-header' },
+                                el('strong', {}, rev.summary || sprintf(__('Change #%d', 'presshub-ai-editor'), rev.id)),
+                                isAccepted && el('span', { className: 'badge-accepted' }, '✓ ' + __('Accepted', 'presshub-ai-editor')),
+                                isDenied && el('span', { className: 'badge-denied' }, '✕ ' + __('Denied', 'presshub-ai-editor'))
+                            ),
+                            el('div', { className: 'diff-chunk' },
+                                el('div', { className: 'diff-original-wrapper' },
+                                    el('span', { className: 'diff-label' }, __('Original Text:', 'presshub-ai-editor')),
+                                    el('div', { className: 'diff-original' }, rev.original)
+                                ),
+                                el('div', { className: 'diff-revised-wrapper' },
+                                    el('span', { className: 'diff-label' }, __('Proposed Revision (Editable):', 'presshub-ai-editor')),
+                                    el('textarea', {
+                                        className: 'diff-revised-input',
+                                        rows: 3,
+                                        disabled: !isPending,
+                                        value: rev.editedRevised !== undefined ? rev.editedRevised : rev.revised,
+                                        onChange: (e) => updateRevisionDraft(index, rev.id, e.target.value)
+                                    })
+                                )
+                            ),
+                            isPending && el('div', { className: 'revision-item-actions' },
+                                el(Button, {
+                                    isSecondary: true,
+                                    isSmall: true,
+                                    onClick: () => applySingleRevision(index, rev.id)
+                                }, '✓ ' + __('Accept', 'presshub-ai-editor')),
+                                el(Button, {
+                                    isDestructive: true,
+                                    isLink: true,
+                                    isSmall: true,
+                                    onClick: () => denySingleRevision(index, rev.id)
+                                }, '✕ ' + __('Deny', 'presshub-ai-editor'))
+                            )
+                        );
+                    })
+                )
             );
         } else if (msg.type === 'research') {
             // Completed syntheses render collapsed with a toggle that

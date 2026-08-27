@@ -253,14 +253,20 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $prompt = isset( $_POST['prompt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) : '';
-        if ( strlen( $prompt ) > 5000 ) {
-            wp_send_json_error( __( 'Prompt exceeds the 5,000 character limit.', 'presshub-ai-editor' ) );
+        if ( strlen( $prompt ) > 100000 ) {
+            wp_send_json_error( __( 'Prompt exceeds the 100,000 character limit.', 'presshub-ai-editor' ) );
         }
         $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
 
         if ( $post_id && ! current_user_can( 'edit_post', $post_id ) ) {
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
+
+        $article_content = isset( $_POST['article_content'] ) ? (string) wp_unslash( $_POST['article_content'] ) : '';
+        if ( strlen( $article_content ) > 200000 ) {
+            $article_content = substr( $article_content, 0, 200000 );
+        }
+        $article_title = isset( $_POST['article_title'] ) ? sanitize_text_field( wp_unslash( $_POST['article_title'] ) ) : '';
 
         // Gate paid media generation (Imagen / Cloud TTS) to admins only.
         // Authors can still use chat + research. This prevents a low-priv
@@ -304,6 +310,31 @@ class PressHub_AI_Ajax_Handlers {
             if ( $preset !== null ) {
                 $sys .= "\n\n" . $preset;
             }
+
+            // Hydrate article context and editorial revision guidelines if article text is present
+            if ( '' !== trim( $article_content ) || '' !== trim( $article_title ) ) {
+                $sys .= "\n\n" . __( '--- CURRENT ARTICLE CONTEXT ---', 'presshub-ai-editor' );
+                if ( '' !== trim( $article_title ) ) {
+                    $sys .= "\n" . sprintf( __( 'Article Title: %s', 'presshub-ai-editor' ), $article_title );
+                }
+                if ( '' !== trim( $article_content ) ) {
+                    $sys .= "\n" . __( 'Article Content:', 'presshub-ai-editor' ) . "\n" . $article_content;
+                }
+                $sys .= "\n\n" . __( 'EDITORIAL & REVISION INSTRUCTIONS:
+When the user asks you to revise, edit, rewrite, improve, or address editor comments/feedback on the article:
+1. Provide a concise, clear editorial explanation of your recommendations in conversational markdown.
+2. For each specific section or sentence you propose revising in the article, output a structured revision block using this EXACT format:
+<<<REVISION
+ORIGINAL:
+[exact original snippet or paragraph from the current article to be replaced]
+REVISED:
+[the improved revised text addressing the feedback]
+SUMMARY:
+[brief title or summary of the change, e.g. "Addressed Editor note on lead paragraph conciseness"]
+REVISION>>>
+You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct changes are made across the article.', 'presshub-ai-editor' );
+            }
+
             $sys = apply_filters( 'presshub_ai_composed_chat_system_prompt', $sys );
             $result = $api->call_provider( $sys, $prompt, false, [] );
             presshub_ai_log_prompts( 'chat', $sys, $prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, PressHub_AI_API_Client::current_request_meta() );
@@ -311,7 +342,29 @@ class PressHub_AI_Ajax_Handlers {
                 wp_send_json_error( $result->get_error_message() );
             }
             $this->record_rate_limit();
-            wp_send_json_success( [ 'type' => 'chat', 'content' => $result ] );
+
+            $revisions = [];
+            $pattern   = '/<<<REVISION\s*\nORIGINAL:\s*\n(.*?)\nREVISED:\s*\n(.*?)\nSUMMARY:\s*\n(.*?)\nREVISION>>>/s';
+            if ( is_string( $result ) && preg_match_all( $pattern, $result, $matches, PREG_SET_ORDER ) ) {
+                $rev_id = 1;
+                foreach ( $matches as $m ) {
+                    $revisions[] = [
+                        'id'       => $rev_id++,
+                        'original' => trim( $m[1] ),
+                        'revised'  => trim( $m[2] ),
+                        'summary'  => trim( $m[3] ),
+                    ];
+                }
+                $cleaned_content = trim( preg_replace( $pattern, '', $result ) );
+            } else {
+                $cleaned_content = is_string( $result ) ? $result : '';
+            }
+
+            wp_send_json_success( [
+                'type'      => 'chat',
+                'content'   => $cleaned_content,
+                'revisions' => $revisions,
+            ] );
         } elseif ( 'research' === $intent ) {
             $research_id = wp_insert_post( [
                 'post_type' => 'presshub_research',
@@ -1114,6 +1167,8 @@ class PressHub_AI_Ajax_Handlers {
                 'presshub_ai_rate_limit_window_seconds'   => [ 'PressHub_AI_Settings', 'sanitize_rate_limit_window_seconds' ],
                 'presshub_ai_research_retention_days'     => [ 'PressHub_AI_Settings', 'sanitize_research_retention_days' ],
                 'presshub_ai_log_level'                   => [ 'PressHub_AI_Settings', 'sanitize_log_level' ],
+                'presshub_ai_briefing_tts_api_key'        => [ 'PressHub_AI_Settings', 'sanitize_briefing_tts_api_key' ],
+                'presshub_ai_remove_briefing_tts_api_key' => [ 'PressHub_AI_Settings', 'sanitize_remove_briefing_tts_api_key' ],
                 'presshub_ai_briefing_sources'            => [ 'PressHub_AI_Settings', 'sanitize_briefing_sources' ],
                 'presshub_ai_briefing_tts_engine'         => [ 'PressHub_AI_Settings', 'sanitize_briefing_tts_engine' ],
                 'presshub_ai_briefing_tts_model'          => [ 'PressHub_AI_Settings', 'sanitize_briefing_tts_model' ],
@@ -1141,7 +1196,7 @@ class PressHub_AI_Ajax_Handlers {
             foreach ( $options_map as $option => $sanitizer ) {
                 try {
                     // Handle removal flags
-                    if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token' ], true ) ) {
+                    if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token', 'presshub_ai_remove_briefing_tts_api_key' ], true ) ) {
                         if ( isset( $post_data[ $option ] ) && ! empty( $post_data[ $option ] ) ) {
                             call_user_func( $sanitizer, $post_data[ $option ] );
                             $saved_count++;
@@ -1151,7 +1206,7 @@ class PressHub_AI_Ajax_Handlers {
                     }
 
                     // Handle secret keys (skip if empty or masked placeholder)
-                    if ( in_array( $option, [ 'presshub_ai_api_key', 'presshub_ai_google_cloud_api_key', 'presshub_ai_github_token' ], true ) ) {
+                    if ( in_array( $option, [ 'presshub_ai_api_key', 'presshub_ai_google_cloud_api_key', 'presshub_ai_github_token', 'presshub_ai_briefing_tts_api_key' ], true ) ) {
                         if ( isset( $post_data[ $option ] ) ) {
                             $raw_secret = trim( (string) wp_unslash( $post_data[ $option ] ) );
                             if ( '' !== $raw_secret && false === strpos( $raw_secret, '••••' ) ) {
@@ -1198,9 +1253,10 @@ class PressHub_AI_Ajax_Handlers {
                 }
             }
 
-            $saved_key    = (string) get_option( 'presshub_ai_api_key', '' );
-            $saved_gcloud = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-            $saved_github = (string) get_option( 'presshub_ai_github_token', '' );
+            $saved_key          = (string) get_option( 'presshub_ai_api_key', '' );
+            $saved_gcloud       = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
+            $saved_github       = (string) get_option( 'presshub_ai_github_token', '' );
+            $saved_briefing_tts = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
 
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::info( sprintf( 'Settings successfully saved (%d options updated)', $saved_count ), [
@@ -1216,6 +1272,7 @@ class PressHub_AI_Ajax_Handlers {
                     'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                     'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
                     'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
+                    'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
                 ],
             ] );
         } catch ( Throwable $t ) {

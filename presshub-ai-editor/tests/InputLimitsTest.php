@@ -48,13 +48,13 @@ class InputLimitsTest
 
         // --- Case 4: oversized chat prompt is rejected ---
         self::reset();
-        $_POST = [ 'prompt' => str_repeat( 'd', 5001 ), 'post_id' => 0 ];
+        $_POST = [ 'prompt' => str_repeat( 'd', 100001 ), 'post_id' => 0 ];
         $msg = self::expect_json_error( function () {
             $h = new PressHub_AI_Ajax_Handlers();
             $h->handle_chat_routing();
         } );
-        if ( false === strpos( $msg, '5,000' ) ) {
-            $failures[] = "Oversized chat prompt not rejected with 5,000 limit. Got: {$msg}";
+        if ( false === strpos( $msg, '100,000' ) ) {
+            $failures[] = "Oversized chat prompt not rejected with 100,000 limit. Got: {$msg}";
         }
 
         // --- Case 5: research response includes scheduled_at AND the
