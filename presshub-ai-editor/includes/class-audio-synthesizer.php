@@ -21,6 +21,9 @@ require_once __DIR__ . '/class-markdown.php';
 
 class PressHub_AI_Audio_Synthesizer {
 
+    /** Option key for audio synthesis engine ('gemini' or 'google_cloud'). */
+    const OPTION_ENGINE = 'presshub_ai_briefing_tts_engine';
+
     /** Option key for female voice model. */
     const OPTION_VOICE_FEMALE = 'presshub_ai_briefing_voice_female';
 
@@ -40,62 +43,113 @@ class PressHub_AI_Audio_Synthesizer {
     const OPTION_STATUS = 'presshub_ai_briefing_podcast_status';
 
     /**
-     * Get list of available Google Cloud TTS Greek voice models grouped by gender.
+     * Get list of available Greek voice models grouped by gender for the active engine.
      *
+     * @param string $engine Optional engine override ('gemini' or 'google_cloud').
      * @return array Grouped voice models directory with metadata.
      */
-    public function get_available_voices(): array {
+    public function get_available_voices( string $engine = '' ): array {
+        if ( empty( $engine ) ) {
+            $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
+        }
+
+        if ( 'google_cloud' === $engine ) {
+            return [
+                'female' => [
+                    'el-GR-Wavenet-A'          => [
+                        'name'   => 'el-GR-Wavenet-A',
+                        'label'  => __( 'Greek Female (Wavenet-A)', 'presshub-ai-editor' ),
+                        'gender' => 'FEMALE',
+                        'type'   => 'Wavenet',
+                    ],
+                    'el-GR-Standard-A'         => [
+                        'name'   => 'el-GR-Standard-A',
+                        'label'  => __( 'Greek Female (Standard-A)', 'presshub-ai-editor' ),
+                        'gender' => 'FEMALE',
+                        'type'   => 'Standard',
+                    ],
+                ],
+                'male' => [
+                    'el-GR-Chirp3-HD-Achird'   => [
+                        'name'   => 'el-GR-Chirp3-HD-Achird',
+                        'label'  => __( 'Greek Male (Chirp 3 HD Achird)', 'presshub-ai-editor' ),
+                        'gender' => 'MALE',
+                        'type'   => 'Chirp3-HD',
+                    ],
+                    'el-GR-Chirp3-HD-Algenib'  => [
+                        'name'   => 'el-GR-Chirp3-HD-Algenib',
+                        'label'  => __( 'Greek Male (Chirp 3 HD Algenib)', 'presshub-ai-editor' ),
+                        'gender' => 'MALE',
+                        'type'   => 'Chirp3-HD',
+                    ],
+                ],
+            ];
+        }
+
+        // Default: Google AI Studio Gemini 2.0 Natural Voices
         return [
             'female' => [
-                'el-GR-Wavenet-A'          => [
-                    'name'   => 'el-GR-Wavenet-A',
-                    'label'  => __( 'Greek Female (Wavenet-A)', 'presshub-ai-editor' ),
+                'Aoede'      => [
+                    'name'   => 'Aoede',
+                    'label'  => __( 'Aoede (Expressive & Natural - Recommended)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
-                    'type'   => 'Wavenet',
+                    'type'   => 'Gemini-2.0',
                 ],
-                'el-GR-Chirp3-HD-Aoede'    => [
-                    'name'   => 'el-GR-Chirp3-HD-Aoede',
-                    'label'  => __( 'Greek Female (Chirp 3 HD Aoede)', 'presshub-ai-editor' ),
+                'Kore'       => [
+                    'name'   => 'Kore',
+                    'label'  => __( 'Kore (Calm & Clear)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
-                    'type'   => 'Chirp3-HD',
+                    'type'   => 'Gemini-2.0',
                 ],
-                'el-GR-Chirp3-HD-Achernar' => [
-                    'name'   => 'el-GR-Chirp3-HD-Achernar',
-                    'label'  => __( 'Greek Female (Chirp 3 HD Achernar)', 'presshub-ai-editor' ),
+                'Leda'       => [
+                    'name'   => 'Leda',
+                    'label'  => __( 'Leda (Warm & Professional)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
-                    'type'   => 'Chirp3-HD',
+                    'type'   => 'Gemini-2.0',
                 ],
-                'el-GR-Standard-A'         => [
-                    'name'   => 'el-GR-Standard-A',
-                    'label'  => __( 'Greek Female (Standard-A)', 'presshub-ai-editor' ),
+                'Callirrhoe' => [
+                    'name'   => 'Callirrhoe',
+                    'label'  => __( 'Callirrhoe (Dynamic & Engaging)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
-                    'type'   => 'Standard',
+                    'type'   => 'Gemini-2.0',
+                ],
+                'Autonoe'    => [
+                    'name'   => 'Autonoe',
+                    'label'  => __( 'Autonoe (Conversational)', 'presshub-ai-editor' ),
+                    'gender' => 'FEMALE',
+                    'type'   => 'Gemini-2.0',
                 ],
             ],
             'male' => [
-                'el-GR-Chirp3-HD-Achird'   => [
-                    'name'   => 'el-GR-Chirp3-HD-Achird',
-                    'label'  => __( 'Greek Male (Chirp 3 HD Achird)', 'presshub-ai-editor' ),
+                'Fenrir'     => [
+                    'name'   => 'Fenrir',
+                    'label'  => __( 'Fenrir (Deep, Warm & Authoritative - Recommended)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Chirp3-HD',
+                    'type'   => 'Gemini-2.0',
                 ],
-                'el-GR-Chirp3-HD-Algenib'  => [
-                    'name'   => 'el-GR-Chirp3-HD-Algenib',
-                    'label'  => __( 'Greek Male (Chirp 3 HD Algenib)', 'presshub-ai-editor' ),
+                'Puck'       => [
+                    'name'   => 'Puck',
+                    'label'  => __( 'Puck (Energetic & Friendly)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Chirp3-HD',
+                    'type'   => 'Gemini-2.0',
                 ],
-                'el-GR-Chirp3-HD-Algieba'  => [
-                    'name'   => 'el-GR-Chirp3-HD-Algieba',
-                    'label'  => __( 'Greek Male (Chirp 3 HD Algieba)', 'presshub-ai-editor' ),
+                'Charon'     => [
+                    'name'   => 'Charon',
+                    'label'  => __( 'Charon (Deep & Calm Resonance)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Chirp3-HD',
+                    'type'   => 'Gemini-2.0',
                 ],
-                'el-GR-Chirp3-HD-Alnilam'  => [
-                    'name'   => 'el-GR-Chirp3-HD-Alnilam',
-                    'label'  => __( 'Greek Male (Chirp 3 HD Alnilam)', 'presshub-ai-editor' ),
+                'Zephyr'     => [
+                    'name'   => 'Zephyr',
+                    'label'  => __( 'Zephyr (Modern & Crisp)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Chirp3-HD',
+                    'type'   => 'Gemini-2.0',
+                ],
+                'Orus'       => [
+                    'name'   => 'Orus',
+                    'label'  => __( 'Orus (Confident & Articulate)', 'presshub-ai-editor' ),
+                    'gender' => 'MALE',
+                    'type'   => 'Gemini-2.0',
                 ],
             ],
         ];
@@ -105,20 +159,23 @@ class PressHub_AI_Audio_Synthesizer {
      * Get the configured voice model for a given speaker identifier.
      *
      * @param string $speaker Speaker identifier ('female', 'male', 'host1', 'host2', or speaker name).
-     * @return string Voice model name (e.g. 'el-GR-Wavenet-A', 'el-GR-Chirp3-HD-Achird').
+     * @return string Voice model name (e.g. 'Aoede', 'Fenrir', 'el-GR-Wavenet-A').
      */
     public function get_voice_for_speaker( string $speaker ): string {
         $clean = trim( $speaker );
+        $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
 
-        if (
+        $is_female = (
             'female' === $clean
             || 'host1' === $clean
             || 'host 1' === $clean
             || ( function_exists( 'mb_stripos' ) && false !== mb_stripos( $clean, 'μαρία' ) )
             || false !== stripos( $clean, 'maria' )
             || false !== stripos( $clean, 'female' )
-        ) {
-            $default_female = 'el-GR-Wavenet-A';
+        );
+
+        if ( $is_female ) {
+            $default_female = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-A' : 'Aoede';
             $voice = (string) get_option( self::OPTION_VOICE_FEMALE, $default_female );
             if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) ) {
                 $voice = $default_female;
@@ -126,9 +183,8 @@ class PressHub_AI_Audio_Synthesizer {
             return trim( $voice );
         }
 
-        $default_male = 'el-GR-Chirp3-HD-Achird';
+        $default_male = ( 'google_cloud' === $engine ) ? 'el-GR-Chirp3-HD-Achird' : 'Fenrir';
         $voice = (string) get_option( self::OPTION_VOICE_MALE, $default_male );
-        // Legacy Greek WaveNet/Standard B models were female voices in Google Cloud TTS. Migrate them to true male Chirp3 voice.
         if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) || 'el-GR-Wavenet-B' === $voice || 'el-GR-Standard-B' === $voice ) {
             $voice = $default_male;
         }
@@ -230,37 +286,106 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
-     * Synthesize a single speaker turn using Google Cloud TTS.
+     * Stitch multiple WAV/PCM audio buffers together with silent intervals.
+     *
+     * @param array $wav_or_pcm_buffers List of WAV or raw PCM binary buffers.
+     * @param int   $pause_ms           Pause duration in milliseconds between turns (default 400).
+     * @param int   $sample_rate        Sample rate in Hz (default 24000).
+     * @return string Valid RIFF/WAV binary data.
+     */
+    public function stitch_wav_chunks( array $wav_or_pcm_buffers, int $pause_ms = 400, int $sample_rate = 24000 ): string {
+        if ( empty( $wav_or_pcm_buffers ) ) {
+            return '';
+        }
+
+        $raw_pcm_chunks = [];
+        foreach ( $wav_or_pcm_buffers as $buffer ) {
+            if ( ! is_string( $buffer ) || '' === $buffer ) {
+                continue;
+            }
+            // If it is a WAV container (starts with RIFF), extract PCM payload (strip header)
+            if ( strlen( $buffer ) >= 44 && 'RIFF' === substr( $buffer, 0, 4 ) && 'WAVE' === substr( $buffer, 8, 4 ) ) {
+                $pos = strpos( $buffer, 'data' );
+                if ( false !== $pos && strlen( $buffer ) >= $pos + 8 ) {
+                    $data_size = unpack( 'V', substr( $buffer, $pos + 4, 4 ) )[1] ?? 0;
+                    $pcm = substr( $buffer, $pos + 8, $data_size > 0 ? $data_size : null );
+                    $raw_pcm_chunks[] = $pcm;
+                } else {
+                    $raw_pcm_chunks[] = substr( $buffer, 44 );
+                }
+            } else {
+                $raw_pcm_chunks[] = $buffer;
+            }
+        }
+
+        if ( empty( $raw_pcm_chunks ) ) {
+            return '';
+        }
+
+        // Generate silence PCM frames (zero bytes: 48 bytes per ms at 24kHz 16-bit mono)
+        $bytes_per_ms = (int) ( $sample_rate * 2 / 1000 );
+        $silence_bytes = str_repeat( "\x00", max( 0, $pause_ms * $bytes_per_ms ) );
+
+        $combined_pcm = implode( $silence_bytes, $raw_pcm_chunks );
+        return PressHub_AI_API_Client::pcm_to_wav( $combined_pcm, $sample_rate );
+    }
+
+    /**
+     * Synthesize a single speaker turn using the configured engine (Gemini or Google Cloud TTS).
      *
      * @param string                       $text        Turn text.
-     * @param string                       $voice_model Google Cloud TTS voice model.
+     * @param string                       $voice_model Voice model name.
      * @param float                        $speed       Speaking rate (default 1.0).
      * @param float                        $pitch       Voice pitch (default 0.0).
      * @param PressHub_AI_API_Client|null $api_client  Optional API client.
-     * @return string|WP_Error Binary MP3 string or WP_Error on failure.
+     * @return string|WP_Error Binary audio string or WP_Error on failure.
      */
     public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null ) {
         if ( null === $api_client ) {
             $api_client = new PressHub_AI_API_Client();
         }
 
-        if ( empty( $voice_model ) ) {
-            $voice_model = 'el-GR-Neural2-A';
+        $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
+        $is_google_cloud_voice = ( 0 === strpos( $voice_model, 'el-GR' ) );
+
+        if ( 'google_cloud' === $engine || $is_google_cloud_voice ) {
+            if ( empty( $voice_model ) ) {
+                $voice_model = 'el-GR-Wavenet-A';
+            }
+            return $api_client->synthesize_speech_with_options( $text, $voice_model, $speed, $pitch );
         }
 
-        return $api_client->synthesize_speech_with_options( $text, $voice_model, $speed, $pitch );
+        if ( empty( $voice_model ) ) {
+            $voice_model = 'Aoede';
+        }
+
+        return $api_client->synthesize_speech_via_gemini( $text, $voice_model, true );
     }
 
     /**
      * Sideload binary audio data into WordPress Media Library.
      *
-     * @param string $filename    Target filename (e.g. 'podcast-2026-08-26.mp3').
-     * @param string $binary_data Binary MP3 bytes.
+     * @param string $filename    Target filename (e.g. 'podcast-2026-08-26.mp3' or 'podcast-2026-08-26.wav').
+     * @param string $binary_data Binary audio bytes.
      * @param int    $post_id     Optional parent post ID.
      * @param string $title       Attachment title.
      * @return array|WP_Error Array with ['id' => int, 'url' => string] or WP_Error.
      */
     public function sideload_audio_file( string $filename, string $binary_data, int $post_id = 0, string $title = '' ) {
+        // Auto-detect extension from binary header
+        $is_wav = ( strlen( $binary_data ) >= 4 && 'RIFF' === substr( $binary_data, 0, 4 ) );
+        if ( $is_wav ) {
+            if ( preg_match( '/\.mp3$/i', $filename ) ) {
+                $filename = preg_replace( '/\.mp3$/i', '.wav', $filename );
+            } elseif ( ! preg_match( '/\.wav$/i', $filename ) ) {
+                $filename .= '.wav';
+            }
+        } else {
+            if ( ! preg_match( '/\.mp3$/i', $filename ) ) {
+                $filename .= '.mp3';
+            }
+        }
+
         $filepath = trailingslashit( get_temp_dir() ) . $filename;
         file_put_contents( $filepath, $binary_data );
 
@@ -500,8 +625,15 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         // 5. Stitch chunks
-        $stitched_mp3 = $this->stitch_audio_chunks( $audio_buffers );
-        if ( '' === $stitched_mp3 ) {
+        $is_wav = false;
+        if ( ! empty( $audio_buffers[0] ) && ( strlen( $audio_buffers[0] ) >= 4 && 'RIFF' === substr( $audio_buffers[0], 0, 4 ) ) ) {
+            $is_wav = true;
+        } elseif ( 'gemini' === get_option( self::OPTION_ENGINE, 'gemini' ) ) {
+            $is_wav = true;
+        }
+
+        $stitched_audio = $is_wav ? $this->stitch_wav_chunks( $audio_buffers ) : $this->stitch_audio_chunks( $audio_buffers );
+        if ( '' === $stitched_audio ) {
             return new WP_Error(
                 'stitching_failed',
                 __( 'Failed to stitch synthesized audio chunks.', 'presshub-ai-editor' )
@@ -518,13 +650,14 @@ class PressHub_AI_Audio_Synthesizer {
                 @mkdir( $snapshot_dir, 0755, true );
             }
         }
-        $mp3_local_path = trailingslashit( $snapshot_dir ) . 'podcast.mp3';
-        @file_put_contents( $mp3_local_path, $stitched_mp3 );
+        $ext = ( strlen( $stitched_audio ) >= 4 && 'RIFF' === substr( $stitched_audio, 0, 4 ) ) ? '.wav' : '.mp3';
+        $local_audio_path = trailingslashit( $snapshot_dir ) . 'podcast' . $ext;
+        @file_put_contents( $local_audio_path, $stitched_audio );
 
         // 7. Sideload to Media Library
-        $filename = sprintf( 'podcast-briefing-%s-%s.mp3', $date, uniqid() );
-        $title    = sprintf( 'Greek News Briefing Podcast - %s', $date );
-        $media    = $this->sideload_audio_file( $filename, $stitched_mp3, 0, $title );
+        $filename = sprintf( 'podcast-briefing-%s-%s%s', $date, uniqid(), $ext );
+        $title    = sprintf( __( 'PressHub Daily Briefing Podcast (%s)', 'presshub-ai-editor' ), $date );
+        $media    = $this->sideload_audio_file( $filename, $stitched_audio, 0, $title );
 
         if ( is_wp_error( $media ) ) {
             return $media;
@@ -546,7 +679,7 @@ class PressHub_AI_Audio_Synthesizer {
             'audio_url'     => $audio_url,
             'date'          => $date,
             'turns_count'   => count( $turns ),
-            'audio_size'    => strlen( $stitched_mp3 ),
+            'audio_size'    => strlen( $stitched_audio ),
         ];
     }
 }

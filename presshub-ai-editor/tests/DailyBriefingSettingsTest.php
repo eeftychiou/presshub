@@ -51,6 +51,7 @@ class DailyBriefingSettingsTest
         $field_ids = array_column( $fields, 'id' );
         $expected_fields = [
             'presshub_ai_briefing_sources',
+            'presshub_ai_briefing_tts_engine',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
             'presshub_ai_briefing_text_preset',
@@ -101,8 +102,18 @@ class DailyBriefingSettingsTest
             $failures[] = 'presshub_ai_briefing_sources array input should return clean array of 2 unique URLs; got: ' . var_export( $sanitized_arr, true );
         }
 
-        // --- Case 3: Sanitization of harvest_time & generation_time ---
+        // --- Case 3: Sanitization of harvest_time & generation_time & tts_engine ---
         self::reset_options();
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_engine', 'gemini' ) !== 'gemini' ) {
+            $failures[] = 'tts_engine gemini should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_engine', 'google_cloud' ) !== 'google_cloud' ) {
+            $failures[] = 'tts_engine google_cloud should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_engine', 'invalid-engine' ) !== 'gemini' ) {
+            $failures[] = 'invalid tts_engine should fall back to gemini.';
+        }
+
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_harvest_time', '06:30' ) !== '06:30' ) {
             $failures[] = 'harvest_time 06:30 should pass through.';
         }
@@ -147,19 +158,25 @@ class DailyBriefingSettingsTest
             $failures[] = 'invalid duration 60_min should fall back to 5_min.';
         }
 
-        // --- Case 6: Sanitization of Greek voice models ---
+        // --- Case 6: Sanitization of Greek voice models (Gemini + Google Cloud) ---
         self::reset_options();
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_female', 'Aoede' ) !== 'Aoede' ) {
+            $failures[] = 'female voice Aoede should pass through.';
+        }
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_female', 'el-GR-Wavenet-A' ) !== 'el-GR-Wavenet-A' ) {
             $failures[] = 'female voice el-GR-Wavenet-A should pass through.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_female', 'en-US-Neural2-A' ) !== 'el-GR-Wavenet-A' ) {
-            $failures[] = 'invalid female voice should fall back to el-GR-Wavenet-A.';
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_female', 'en-US-Neural2-A' ) !== 'Aoede' ) {
+            $failures[] = 'invalid female voice should fall back to Aoede.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'Fenrir' ) !== 'Fenrir' ) {
+            $failures[] = 'male voice Fenrir should pass through.';
         }
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'el-GR-Chirp3-HD-Achird' ) !== 'el-GR-Chirp3-HD-Achird' ) {
             $failures[] = 'male voice el-GR-Chirp3-HD-Achird should pass through.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'unknown' ) !== 'el-GR-Chirp3-HD-Achird' ) {
-            $failures[] = 'invalid male voice should fall back to el-GR-Chirp3-HD-Achird.';
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'unknown' ) !== 'Fenrir' ) {
+            $failures[] = 'invalid male voice should fall back to Fenrir.';
         }
 
         // --- Case 7: Sanitization of voice speed & pitch clamps ---

@@ -114,12 +114,16 @@ class PressHub_AI_Settings {
         return 'Νίκος';
     }
 
+    public static function default_briefing_tts_engine(): string {
+        return 'gemini';
+    }
+
     public static function default_briefing_voice_female(): string {
-        return 'el-GR-Wavenet-A';
+        return 'Aoede';
     }
 
     public static function default_briefing_voice_male(): string {
-        return 'el-GR-Chirp3-HD-Achird';
+        return 'Fenrir';
     }
 
 
@@ -268,6 +272,10 @@ class PressHub_AI_Settings {
         ] );
 
         // --- Daily Briefing & AI Podcast ---
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_engine', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_engine' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_sources', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_sources' ],
             'type'              => 'string',
@@ -376,6 +384,7 @@ class PressHub_AI_Settings {
         add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $this, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
 
         add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $this, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_engine', __( 'Voice Synthesis Engine', 'presshub-ai-editor' ), [ $this, 'render_briefing_tts_engine_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $this, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_preset', __( 'Text Story Preset', 'presshub-ai-editor' ), [ $this, 'render_briefing_text_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -853,6 +862,24 @@ class PressHub_AI_Settings {
         <?php
     }
 
+    public function render_briefing_tts_engine_field() {
+        $option = 'presshub_ai_briefing_tts_engine';
+        $value  = (string) get_option( $option, self::default_briefing_tts_engine() );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="gemini" <?php echo 'gemini' === $value ? 'selected="selected"' : ''; ?>>
+                <?php echo esc_html__( 'Google AI Studio (Gemini 2.0 Flash Natural Voices) — Recommended', 'presshub-ai-editor' ); ?>
+            </option>
+            <option value="google_cloud" <?php echo 'google_cloud' === $value ? 'selected="selected"' : ''; ?>>
+                <?php echo esc_html__( 'Google Cloud Text-to-Speech (Legacy TTS)', 'presshub-ai-editor' ); ?>
+            </option>
+        </select>
+        <p class="description">
+            <?php echo esc_html__( 'Google AI Studio produces natural, expressive Greek conversational speech using your existing Gemini API key. No separate TTS configuration needed.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
     public function render_briefing_host_female_field() {
         $option = 'presshub_ai_briefing_host_female';
         $value  = (string) get_option( $option, self::default_briefing_host_female() );
@@ -875,21 +902,26 @@ class PressHub_AI_Settings {
         $option   = 'presshub_ai_briefing_voice_female';
         $selected = (string) get_option( $option, self::default_briefing_voice_female() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
-        $voices = $synthesizer ? ( $synthesizer->get_available_voices()['female'] ?? [] ) : [
-            'el-GR-Wavenet-A'          => [ 'name' => 'el-GR-Wavenet-A', 'label' => 'Greek Female (Wavenet-A)' ],
-            'el-GR-Chirp3-HD-Aoede'    => [ 'name' => 'el-GR-Chirp3-HD-Aoede', 'label' => 'Greek Female (Chirp 3 HD Aoede)' ],
-            'el-GR-Chirp3-HD-Achernar' => [ 'name' => 'el-GR-Chirp3-HD-Achernar', 'label' => 'Greek Female (Chirp 3 HD Achernar)' ],
-            'el-GR-Standard-A'         => [ 'name' => 'el-GR-Standard-A', 'label' => 'Greek Female (Standard-A)' ],
-        ];
+        $gemini_voices = $synthesizer ? ( $synthesizer->get_available_voices( 'gemini' )['female'] ?? [] ) : [];
+        $gc_voices     = $synthesizer ? ( $synthesizer->get_available_voices( 'google_cloud' )['female'] ?? [] ) : [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php foreach ( $voices as $key => $v ) : ?>
-                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
-                    <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
-                </option>
-            <?php endforeach; ?>
+            <optgroup label="<?php echo esc_attr__( 'Google AI Studio (Gemini Natural Voices)', 'presshub-ai-editor' ); ?>">
+                <?php foreach ( $gemini_voices as $key => $v ) : ?>
+                    <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                        <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </optgroup>
+            <optgroup label="<?php echo esc_attr__( 'Google Cloud TTS Voices', 'presshub-ai-editor' ); ?>">
+                <?php foreach ( $gc_voices as $key => $v ) : ?>
+                    <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                        <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </optgroup>
         </select>
-        <p class="description"><?php echo __( 'Google Cloud TTS voice model used for the female host.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Voice model used for the female host (Μαρία).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -897,21 +929,26 @@ class PressHub_AI_Settings {
         $option   = 'presshub_ai_briefing_voice_male';
         $selected = (string) get_option( $option, self::default_briefing_voice_male() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
-        $voices = $synthesizer ? ( $synthesizer->get_available_voices()['male'] ?? [] ) : [
-            'el-GR-Chirp3-HD-Achird'   => [ 'name' => 'el-GR-Chirp3-HD-Achird', 'label' => 'Greek Male (Chirp 3 HD Achird)' ],
-            'el-GR-Chirp3-HD-Algenib'  => [ 'name' => 'el-GR-Chirp3-HD-Algenib', 'label' => 'Greek Male (Chirp 3 HD Algenib)' ],
-            'el-GR-Chirp3-HD-Algieba'  => [ 'name' => 'el-GR-Chirp3-HD-Algieba', 'label' => 'Greek Male (Chirp 3 HD Algieba)' ],
-            'el-GR-Chirp3-HD-Alnilam'  => [ 'name' => 'el-GR-Chirp3-HD-Alnilam', 'label' => 'Greek Male (Chirp 3 HD Alnilam)' ],
-        ];
+        $gemini_voices = $synthesizer ? ( $synthesizer->get_available_voices( 'gemini' )['male'] ?? [] ) : [];
+        $gc_voices     = $synthesizer ? ( $synthesizer->get_available_voices( 'google_cloud' )['male'] ?? [] ) : [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php foreach ( $voices as $key => $v ) : ?>
-                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
-                    <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
-                </option>
-            <?php endforeach; ?>
+            <optgroup label="<?php echo esc_attr__( 'Google AI Studio (Gemini Natural Voices)', 'presshub-ai-editor' ); ?>">
+                <?php foreach ( $gemini_voices as $key => $v ) : ?>
+                    <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                        <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </optgroup>
+            <optgroup label="<?php echo esc_attr__( 'Google Cloud TTS Voices', 'presshub-ai-editor' ); ?>">
+                <?php foreach ( $gc_voices as $key => $v ) : ?>
+                    <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                        <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </optgroup>
         </select>
-        <p class="description"><?php echo __( 'Google Cloud TTS voice model used for the male host.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Voice model used for the male host (Νίκος).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -1247,8 +1284,18 @@ class PressHub_AI_Settings {
         return '' !== $clean ? substr( $clean, 0, 50 ) : self::default_briefing_host_male();
     }
 
+    public static function sanitize_briefing_tts_engine( $value ): string {
+        $clean = is_string( $value ) ? sanitize_text_field( trim( $value ) ) : '';
+        return in_array( $clean, [ 'gemini', 'google_cloud' ], true ) ? $clean : self::default_briefing_tts_engine();
+    }
+
     public static function sanitize_voice_female( $value ): string {
         $allowed = [
+            'Aoede',
+            'Kore',
+            'Leda',
+            'Callirrhoe',
+            'Autonoe',
             'el-GR-Wavenet-A',
             'el-GR-Chirp3-HD-Aoede',
             'el-GR-Chirp3-HD-Achernar',
@@ -1264,6 +1311,11 @@ class PressHub_AI_Settings {
 
     public static function sanitize_voice_male( $value ): string {
         $allowed = [
+            'Fenrir',
+            'Puck',
+            'Charon',
+            'Zephyr',
+            'Orus',
             'el-GR-Chirp3-HD-Achird',
             'el-GR-Chirp3-HD-Algenib',
             'el-GR-Chirp3-HD-Algieba',

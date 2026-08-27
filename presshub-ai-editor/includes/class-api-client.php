@@ -80,6 +80,7 @@ class PressHub_AI_API_Client {
             . ' max_tokens=' . $max_tokens;
     }
     private $google_cloud_api_key;
+    private $gemini_api_key;
     private $provider;
     private $model;
     private $temperature;
@@ -90,6 +91,12 @@ class PressHub_AI_API_Client {
         $this->api_key = get_option( 'presshub_ai_api_key' );
         $this->google_cloud_api_key = get_option( 'presshub_ai_google_cloud_api_key' );
         $this->provider = get_option( 'presshub_ai_provider', 'openai' );
+
+        $gemini_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
+        if ( empty( $gemini_key ) ) {
+            $gemini_key = (string) get_option( 'presshub_ai_api_key', '' );
+        }
+        $this->gemini_api_key = $gemini_key;
         // Per-provider config (P2): the model/tuning are read from the
         // ACTIVE provider's options, with the legacy global model as a
         // fallback for sites that have not run the migration yet.
@@ -522,6 +529,138 @@ class PressHub_AI_API_Client {
         }
 
         return new WP_Error( 'tts_empty_response', __( 'Empty or invalid audio content returned from Google Cloud TTS.', 'presshub-ai-editor' ) );
+    }
+
+    /**
+     * Wrap raw PCM audio data into a valid 16-bit mono RIFF/WAV container.
+     *
+     * @param string $pcm_data        Raw binary PCM buffer.
+     * @param int    $sample_rate     Sample rate in Hz (default 24000).
+     * @param int    $channels        Number of channels (default 1).
+     * @param int    $bits_per_sample Bits per sample (default 16).
+     * @return string Binary WAV data.
+     */
+    public static function pcm_to_wav( string $pcm_data, int $sample_rate = 24000, int $channels = 1, int $bits_per_sample = 16 ): string {
+        $data_len = strlen( $pcm_data );
+        $byte_rate = (int) ( $sample_rate * $channels * ( $bits_per_sample / 8 ) );
+        $block_align = (int) ( $channels * ( $bits_per_sample / 8 ) );
+
+        $header = 'RIFF'
+            . pack( 'V', 36 + $data_len )
+            . 'WAVE'
+            . 'fmt '
+            . pack( 'V', 16 )               // Subchunk1Size (16 for PCM)
+            . pack( 'v', 1 )                // AudioFormat (1 = PCM)
+            . pack( 'v', $channels )        // NumChannels
+            . pack( 'V', $sample_rate )     // SampleRate
+            . pack( 'V', $byte_rate )       // ByteRate
+            . pack( 'v', $block_align )     // BlockAlign
+            . pack( 'v', $bits_per_sample ) // BitsPerSample
+            . 'data'
+            . pack( 'V', $data_len );
+
+        return $header . $pcm_data;
+    }
+
+    /**
+     * Synthesize natural conversational speech using Google AI Studio (Gemini 2.0 Flash Audio).
+     *
+     * @param string $text       Spoken turn dialogue text.
+     * @param string $voice_name Gemini prebuilt voice name (e.g. 'Aoede', 'Fenrir', 'Puck', 'Kore', 'Charon').
+     * @param bool   $as_wav     Whether to return complete WAV container (default true) or raw PCM.
+     * @return string|WP_Error Binary audio data or WP_Error on failure.
+     */
+    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Aoede', bool $as_wav = true ) {
+        if ( empty( $this->gemini_api_key ) ) {
+            return new WP_Error( 'no_gemini_key', __( 'Google AI Studio Gemini API key is missing.', 'presshub-ai-editor' ) );
+        }
+
+        if ( empty( trim( $voice_name ) ) ) {
+            $voice_name = 'Aoede';
+        }
+
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . urlencode( $this->gemini_api_key );
+
+        $prompt_instruction = "You are a professional Greek podcast narrator and voice actor. Read the following text aloud with natural, expressive conversational inflection, clear Greek pronunciation, and authentic rhythm. Read ONLY the text verbatim, word for word. Do not add introductory remarks, concluding greetings, or conversational commentary:\n\n" . trim( $text );
+
+        $body = [
+            'contents' => [
+                [
+                    'role'  => 'user',
+                    'parts' => [
+                        [ 'text' => $prompt_instruction ],
+                    ],
+                ],
+            ],
+            'generationConfig' => [
+                'responseModalities' => [ 'AUDIO' ],
+                'speechConfig'       => [
+                    'voiceConfig' => [
+                        'prebuiltVoiceConfig' => [
+                            'voiceName' => $voice_name,
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $response = wp_remote_post( $url, [
+            'headers' => [
+                'Content-Type' => 'application/json',
+            ],
+            'body'    => wp_json_encode( $body ),
+            'timeout' => 90,
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            error_log( 'PressHub AI [gemini-audio] API error: ' . $response->get_error_message() );
+            return $response;
+        }
+
+        $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        if ( isset( $res_body['error']['message'] ) ) {
+            error_log( 'PressHub AI [gemini-audio] API error: ' . $res_body['error']['message'] );
+            return new WP_Error( 'gemini_audio_error', $res_body['error']['message'] );
+        }
+
+        $candidates = $res_body['candidates'] ?? [];
+        if ( empty( $candidates ) ) {
+            return new WP_Error( 'empty_candidates', __( 'Gemini returned no audio response candidates.', 'presshub-ai-editor' ) );
+        }
+
+        $parts = $candidates[0]['content']['parts'] ?? [];
+        $audio_base64 = null;
+        $mime_type    = '';
+
+        foreach ( $parts as $part ) {
+            if ( isset( $part['inlineData']['data'] ) ) {
+                $audio_base64 = $part['inlineData']['data'];
+                $mime_type    = $part['inlineData']['mimeType'] ?? '';
+                break;
+            }
+        }
+
+        if ( empty( $audio_base64 ) ) {
+            return new WP_Error( 'no_audio_data', __( 'No audio payload received from Gemini Audio generation.', 'presshub-ai-editor' ) );
+        }
+
+        $raw_audio = base64_decode( $audio_base64 );
+        if ( false === $raw_audio || '' === $raw_audio ) {
+            return new WP_Error( 'decode_failed', __( 'Failed to decode base64 audio from Gemini.', 'presshub-ai-editor' ) );
+        }
+
+        // If it is PCM data, extract sample rate or default to 24000
+        $sample_rate = 24000;
+        if ( preg_match( '/rate=(\d+)/i', $mime_type, $m ) ) {
+            $sample_rate = (int) $m[1];
+        }
+
+        if ( false !== stripos( $mime_type, 'pcm' ) ) {
+            return $as_wav ? self::pcm_to_wav( $raw_audio, $sample_rate ) : $raw_audio;
+        }
+
+        return $raw_audio;
     }
 
     /**

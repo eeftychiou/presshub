@@ -455,7 +455,7 @@ class DailyBriefingAdminTest
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'test-gcloud-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key'] = 'test-gemini-key';
         $_POST['date']   = $test_date;
         $_POST['script'] = "[Μαρία]: Καλημέρα!\n[Νίκος]: Καλημέρα!";
 
@@ -463,7 +463,20 @@ class DailyBriefingAdminTest
             return [
                 'response' => [ 'code' => 200 ],
                 'body'     => json_encode( [
-                    'audioContent' => base64_encode( "\xFF\xFB\x90\xC4\x00\x03\xC0\x00\x01\xA4" . str_repeat( "\x55", 407 ) ),
+                    'candidates' => [
+                        [
+                            'content' => [
+                                'parts' => [
+                                    [
+                                        'inlineData' => [
+                                            'mimeType' => 'audio/pcm;rate=24000',
+                                            'data'     => base64_encode( str_repeat( "\x11\x22", 2400 ) ),
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
                 ] ),
             ];
         };

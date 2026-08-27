@@ -43,21 +43,24 @@ $GLOBALS['UPLOAD_DIR'] = $test_upload_dir;
 $synthesizer = new PressHub_AI_Audio_Synthesizer();
 
 // =========================================================================
-// 1. Available Greek Voice Models Directory
+// 1. Available Voice Models Directory (Gemini 2.0 Natural & Google Cloud)
 // =========================================================================
 
-$voices = $synthesizer->get_available_voices();
+$gemini_voices = $synthesizer->get_available_voices( 'gemini' );
+as_check( 'voices: returns array with female and male sections', is_array( $gemini_voices ) && isset( $gemini_voices['female'], $gemini_voices['male'] ) );
+as_check( 'voices: female voices contains Aoede', isset( $gemini_voices['female']['Aoede'] ) );
+as_check( 'voices: female voices contains Kore', isset( $gemini_voices['female']['Kore'] ) );
+as_check( 'voices: male voices contains Fenrir', isset( $gemini_voices['male']['Fenrir'] ) );
+as_check( 'voices: male voices contains Puck', isset( $gemini_voices['male']['Puck'] ) );
 
-as_check( 'voices: returns array with female and male sections', is_array( $voices ) && isset( $voices['female'], $voices['male'] ) );
-as_check( 'voices: female voices contains el-GR-Wavenet-A', isset( $voices['female']['el-GR-Wavenet-A'] ) );
-as_check( 'voices: female voices contains el-GR-Chirp3-HD-Aoede', isset( $voices['female']['el-GR-Chirp3-HD-Aoede'] ) );
-as_check( 'voices: male voices contains el-GR-Chirp3-HD-Achird', isset( $voices['male']['el-GR-Chirp3-HD-Achird'] ) );
-as_check( 'voices: male voices contains el-GR-Chirp3-HD-Algenib', isset( $voices['male']['el-GR-Chirp3-HD-Algenib'] ) );
+$sample_voice = $gemini_voices['male']['Fenrir'];
+as_check( 'voices: metadata contains name Fenrir', ( $sample_voice['name'] ?? '' ) === 'Fenrir' );
+as_check( 'voices: metadata contains gender MALE', ( $sample_voice['gender'] ?? '' ) === 'MALE' );
+as_check( 'voices: metadata contains type Gemini-2.0', ( $sample_voice['type'] ?? '' ) === 'Gemini-2.0' );
 
-$sample_voice = $voices['male']['el-GR-Chirp3-HD-Achird'];
-as_check( 'voices: metadata contains name', ( $sample_voice['name'] ?? '' ) === 'el-GR-Chirp3-HD-Achird' );
-as_check( 'voices: metadata contains gender', ( $sample_voice['gender'] ?? '' ) === 'MALE' );
-as_check( 'voices: metadata contains type Chirp3-HD', ( $sample_voice['type'] ?? '' ) === 'Chirp3-HD' );
+$gc_voices = $synthesizer->get_available_voices( 'google_cloud' );
+as_check( 'voices: google cloud contains el-GR-Wavenet-A', isset( $gc_voices['female']['el-GR-Wavenet-A'] ) );
+as_check( 'voices: google cloud contains el-GR-Chirp3-HD-Achird', isset( $gc_voices['male']['el-GR-Chirp3-HD-Achird'] ) );
 
 
 // =========================================================================
@@ -66,20 +69,30 @@ as_check( 'voices: metadata contains type Chirp3-HD', ( $sample_voice['type'] ??
 
 $GLOBALS['OPTIONS_STORE'] = [];
 
-// Test 2a: Defaults
-as_check( 'speaker_mapping: default female voice is el-GR-Wavenet-A', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Wavenet-A' );
-as_check( 'speaker_mapping: default male voice is el-GR-Chirp3-HD-Achird', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Chirp3-HD-Achird' );
-as_check( 'speaker_mapping: Μαρία maps to female voice', $synthesizer->get_voice_for_speaker( 'Μαρία' ) === 'el-GR-Wavenet-A' );
-as_check( 'speaker_mapping: Νίκος maps to male voice', $synthesizer->get_voice_for_speaker( 'Νίκος' ) === 'el-GR-Chirp3-HD-Achird' );
+// Test 2a: Defaults (Gemini Engine default)
+as_check( 'speaker_mapping: default female voice is Aoede', $synthesizer->get_voice_for_speaker( 'female' ) === 'Aoede' );
+as_check( 'speaker_mapping: default male voice is Fenrir', $synthesizer->get_voice_for_speaker( 'male' ) === 'Fenrir' );
+as_check( 'speaker_mapping: Μαρία maps to female voice Aoede', $synthesizer->get_voice_for_speaker( 'Μαρία' ) === 'Aoede' );
+as_check( 'speaker_mapping: Νίκος maps to male voice Fenrir', $synthesizer->get_voice_for_speaker( 'Νίκος' ) === 'Fenrir' );
 
 // Test 2b: Custom configured voice models in options
-$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'el-GR-Chirp3-HD-Aoede';
-$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male'] = 'el-GR-Chirp3-HD-Algenib';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'Kore';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male'] = 'Puck';
 
-as_check( 'speaker_mapping: option overrides female voice', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Chirp3-HD-Aoede' );
-as_check( 'speaker_mapping: option overrides male voice', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Chirp3-HD-Algenib' );
-as_check( 'speaker_mapping: host1 alias maps to configured female voice', $synthesizer->get_voice_for_speaker( 'host1' ) === 'el-GR-Chirp3-HD-Aoede' );
-as_check( 'speaker_mapping: host2 alias maps to configured male voice', $synthesizer->get_voice_for_speaker( 'host2' ) === 'el-GR-Chirp3-HD-Algenib' );
+as_check( 'speaker_mapping: option overrides female voice to Kore', $synthesizer->get_voice_for_speaker( 'female' ) === 'Kore' );
+as_check( 'speaker_mapping: option overrides male voice to Puck', $synthesizer->get_voice_for_speaker( 'male' ) === 'Puck' );
+as_check( 'speaker_mapping: host1 alias maps to configured female voice', $synthesizer->get_voice_for_speaker( 'host1' ) === 'Kore' );
+as_check( 'speaker_mapping: host2 alias maps to configured male voice', $synthesizer->get_voice_for_speaker( 'host2' ) === 'Puck' );
+
+// Test 2c: Google Cloud Engine Mode
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_engine'] = 'google_cloud';
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] );
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male'] );
+as_check( 'speaker_mapping: gc engine default female is el-GR-Wavenet-A', $synthesizer->get_voice_for_speaker( 'female' ) === 'el-GR-Wavenet-A' );
+as_check( 'speaker_mapping: gc engine default male is el-GR-Chirp3-HD-Achird', $synthesizer->get_voice_for_speaker( 'male' ) === 'el-GR-Chirp3-HD-Achird' );
+
+// Reset engine to gemini default
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_engine'] = 'gemini';
 
 
 // =========================================================================
@@ -123,6 +136,21 @@ as_check( 'stitch: single chunk preserves audio frame without ID3 header', $sing
 $stitched_two = $synthesizer->stitch_audio_chunks( [ $chunk_1, $chunk_2 ], 400 );
 $expected_pause = $synthesizer->generate_silent_mp3_frame( 400 );
 as_check( 'stitch: two chunks concatenated with pause in between and tags stripped', $stitched_two === ( $frame_a . $expected_pause . $frame_b ) );
+
+// Test 4d: PCM to WAV header generation
+$dummy_pcm = str_repeat( "\x11\x22", 12000 ); // 0.5s at 24kHz 16-bit mono
+$wav_output = PressHub_AI_API_Client::pcm_to_wav( $dummy_pcm, 24000 );
+as_check( 'pcm_to_wav: starts with RIFF header', 'RIFF' === substr( $wav_output, 0, 4 ) );
+as_check( 'pcm_to_wav: contains WAVE format', 'WAVE' === substr( $wav_output, 8, 4 ) );
+as_check( 'pcm_to_wav: total length is 44 bytes header + PCM size', strlen( $wav_output ) === 44 + strlen( $dummy_pcm ) );
+
+// Test 4e: WAV chunk stitching with silent intervals
+$wav_chunk_1 = PressHub_AI_API_Client::pcm_to_wav( str_repeat( "\xAA\xAA", 480 ), 24000 ); // 20ms
+$wav_chunk_2 = PressHub_AI_API_Client::pcm_to_wav( str_repeat( "\xBB\xBB", 480 ), 24000 ); // 20ms
+$stitched_wav = $synthesizer->stitch_wav_chunks( [ $wav_chunk_1, $wav_chunk_2 ], 100, 24000 ); // 100ms pause
+as_check( 'stitch_wav: returns valid RIFF container', 'RIFF' === substr( $stitched_wav, 0, 4 ) );
+// Expected size: 44 (header) + 960 (chunk 1) + 4800 (100ms silence at 48 bytes/ms) + 960 (chunk 2) = 6764
+as_check( 'stitch_wav: stitched size includes pause silence bytes', strlen( $stitched_wav ) === ( 44 + 960 + 4800 + 960 ) );
 
 
 // =========================================================================
@@ -231,8 +259,18 @@ $producer->save_script( $test_date_e2e, $script_content );
 class Mock_Audio_API_Client extends PressHub_AI_API_Client {
     public $synthesized_calls = [];
     public function __construct() {}
+    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Aoede', bool $as_wav = true ) {
+        $this->synthesized_calls[] = [
+            'engine'     => 'gemini',
+            'text'       => $text,
+            'voice_name' => $voice_name,
+        ];
+        $fake_pcm = str_repeat( "\x12\x34", 1200 ); // 100ms at 24kHz
+        return $as_wav ? self::pcm_to_wav( $fake_pcm, 24000 ) : $fake_pcm;
+    }
     public function synthesize_speech_with_options( $text, $voice_model = 'el-GR-Wavenet-A', $speed = 1.0, $pitch = 0.0 ) {
         $this->synthesized_calls[] = [
+            'engine'      => 'google_cloud',
             'text'        => $text,
             'voice_model' => $voice_model,
             'speed'       => $speed,
@@ -253,14 +291,14 @@ as_check( 'e2e: attachment_id is 95', ( $result_e2e['attachment_id'] ?? 0 ) === 
 as_check( 'e2e: audio_url contains attachment URL', false !== strpos( $result_e2e['audio_url'] ?? '', 'attachment_id=95' ) );
 as_check( 'e2e: turns count is 2', ( $result_e2e['turns_count'] ?? 0 ) === 2 );
 as_check( 'e2e: synthesized 2 turns via API client', count( $mock_tts->synthesized_calls ) === 2 );
-as_check( 'e2e: turn 0 called with female voice', ( $mock_tts->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Wavenet-A' );
-as_check( 'e2e: turn 1 called with male voice', ( $mock_tts->synthesized_calls[1]['voice_model'] ?? '' ) === 'el-GR-Chirp3-HD-Achird' );
+as_check( 'e2e: turn 0 called with female voice Aoede', ( $mock_tts->synthesized_calls[0]['voice_name'] ?? '' ) === 'Aoede' );
+as_check( 'e2e: turn 1 called with male voice Fenrir', ( $mock_tts->synthesized_calls[1]['voice_name'] ?? '' ) === 'Fenrir' );
 
 // Test 7b: Custom script argument
 $mock_tts_custom = new Mock_Audio_API_Client();
 $custom_script = "[Νίκος]: Μόνο ο Νίκος μιλάει εδώ.";
 $result_custom = $synthesizer->synthesize_podcast( $test_date_e2e, $custom_script, $mock_tts_custom );
-as_check( 'e2e: custom script overrides stored script', count( $mock_tts_custom->synthesized_calls ) === 1 && ( $mock_tts_custom->synthesized_calls[0]['voice_model'] ?? '' ) === 'el-GR-Chirp3-HD-Achird' );
+as_check( 'e2e: custom script overrides stored script', count( $mock_tts_custom->synthesized_calls ) === 1 && ( $mock_tts_custom->synthesized_calls[0]['voice_name'] ?? '' ) === 'Fenrir' );
 
 // Test 7c: Missing script returns WP_Error
 $err_no_script = $synthesizer->synthesize_podcast( '1980-01-01', '', $mock_tts );

@@ -91,6 +91,7 @@ class SettingsPageTest
         $briefing = array_column( $fields['presshub_ai_briefing'] ?? [], 'id' );
         foreach ( [
             'presshub_ai_briefing_sources',
+            'presshub_ai_briefing_tts_engine',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
             'presshub_ai_briefing_text_preset',
@@ -147,6 +148,7 @@ class SettingsPageTest
             'presshub_ai_remove_api_key',
             'presshub_ai_remove_google_cloud_api_key',
             'presshub_ai_remove_github_token',
+            'presshub_ai_briefing_tts_engine',
             'presshub_ai_briefing_sources',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
