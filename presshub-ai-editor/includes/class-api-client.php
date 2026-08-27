@@ -325,10 +325,12 @@ class PressHub_AI_API_Client {
             ]
         ];
 
+        $referer = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';
         $response = wp_remote_post( $url, [
             'headers' => [
                 'Content-Type'   => 'application/json',
                 'x-goog-api-key' => $this->google_cloud_api_key,
+                'Referer'        => $referer,
             ],
             'body' => wp_json_encode( $body ),
             'timeout' => 60
@@ -401,10 +403,12 @@ class PressHub_AI_API_Client {
             ]
         ];
 
+        $referer = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';
         $response = wp_remote_post( $url, [
             'headers' => [
                 'Content-Type'   => 'application/json',
                 'x-goog-api-key' => $this->google_cloud_api_key,
+                'Referer'        => $referer,
             ],
             'body' => wp_json_encode( $body ),
             'timeout' => 60
@@ -482,10 +486,12 @@ class PressHub_AI_API_Client {
             ],
         ];
 
+        $referer = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';
         $response = wp_remote_post( $url, [
             'headers' => [
                 'Content-Type'   => 'application/json',
                 'x-goog-api-key' => $this->google_cloud_api_key,
+                'Referer'        => $referer,
             ],
             'body'    => wp_json_encode( $body ),
             'timeout' => 60,
@@ -672,10 +678,12 @@ class PressHub_AI_API_Client {
             $body['generationConfig']['responseMimeType'] = 'application/json';
         }
 
+        $referer = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';
         $response = wp_remote_post( $url, [
             'headers' => [
                 'Content-Type'   => 'application/json',
                 'x-goog-api-key' => $this->api_key,
+                'Referer'        => $referer,
             ],
             'body' => wp_json_encode( $body ),
             'timeout' => $this->timeout
