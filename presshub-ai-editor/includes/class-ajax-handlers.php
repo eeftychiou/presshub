@@ -1206,6 +1206,7 @@ class PressHub_AI_Ajax_Handlers {
 
             wp_send_json_success( [
                 'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
+                'sources' => (string) get_option( 'presshub_ai_briefing_sources', '' ),
                 'masks'   => [
                     'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                     'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),

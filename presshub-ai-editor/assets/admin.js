@@ -789,6 +789,12 @@ jQuery(document).ready(function($) {
 
             if (res && res.success) {
                 var successMsg = (res.data && res.data.message) ? res.data.message : 'Settings saved successfully.';
+                if (res.data && res.data.sources !== undefined) {
+                    $('#presshub_ai_briefing_sources').val(res.data.sources);
+                    if (res.data.sources.length > 0) {
+                        successMsg += ' [Sources: ' + res.data.sources.split('\n').length + ' URLs]';
+                    }
+                }
                 var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(successMsg) + '</p></div>';
                 $('#presshub-ai-settings-tabs').before(noticeHtml);
 
@@ -852,8 +858,10 @@ jQuery(document).ready(function($) {
             $spinner.removeClass('is-active');
             if (res && res.success && res.data) {
                 var content = res.data.logs || '(No log entries recorded yet)';
-                $viewer.val(content);
-                $viewer.scrollTop($viewer[0].scrollHeight);
+                $viewer.val(content).text(content);
+                if ($viewer[0]) {
+                    $viewer.scrollTop($viewer[0].scrollHeight);
+                }
                 var sizeKb = (res.data.size_bytes / 1024).toFixed(1);
                 $status.text('Level: ' + res.data.level + ' | File: ' + sizeKb + ' KB | Loaded: ' + new Date().toLocaleTimeString());
             } else {
