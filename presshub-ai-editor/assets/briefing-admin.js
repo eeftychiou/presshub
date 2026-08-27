@@ -331,7 +331,7 @@
         // -------------------------------------------------------------------------
         // Event: Generate Audio from Script
         // -------------------------------------------------------------------------
-        $('#btn-generate-audio').on('click', function(e) {
+        $('#btn-synthesize-audio, #btn-generate-audio').on('click', function(e) {
             e.preventDefault();
             var $btn = $(this);
             var scriptText = $('#presshub-briefing-script-editor').val();
