@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Test PressHub_AI_Logger
  *

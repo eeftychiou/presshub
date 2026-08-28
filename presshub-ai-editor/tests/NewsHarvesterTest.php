@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * NewsHarvesterTest — Unit tests for PressHub_AI_News_Harvester.
  *

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * TDD Unit Tests for Chat Revision Protocol and Article Context Injection.
  */
