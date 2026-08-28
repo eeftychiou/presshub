@@ -25,6 +25,25 @@ require_once __DIR__ . '/class-provider-store.php';
 
 class PressHub_AI_Settings_Render {
 
+    /**
+     * Capability gate, mirrored from the facade so render_settings_page() can
+     * call $this->settings_cap() without depending on the facade.
+     * Filterable for sites that delegate settings to a custom role.
+     */
+    public function settings_cap(): string {
+        return (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+    }
+
+    /**
+     * Slug sanitizer, mirrored from the facade so render_providers_grid() can
+     * call self::sanitize_slug() without depending on the facade.
+     */
+    public static function sanitize_slug( $value ): string {
+        $value = (string) $value;
+        $value = strtolower( trim( $value ) );
+        return preg_replace( '/[^a-z0-9_\-]/', '', $value );
+    }
+
     public function render_settings_page() {
         if ( ! current_user_can( $this->settings_cap() ) ) {
             wp_die( __( 'You do not have permission to view PressHub AI settings.', 'presshub-ai-editor' ) );
@@ -991,17 +1010,17 @@ class PressHub_AI_Settings_Render {
     public function render_model_field( $args = [] ) {
         $provider = $args['provider'] ?? 'openai';
         $option   = 'presshub_ai_model_' . $provider;
-        $value    = (string) get_option( $option, self::default_model( $provider ) );
+        $value    = (string) get_option( $option, PressHub_AI_Settings_Migration::default_model( $provider ) );
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo __( 'Default:', 'presshub-ai-editor' ); ?> <code><?php echo self::esc_html_safe( self::default_model( $provider ) ); ?></code></p>
+        <p class="description"><?php echo __( 'Default:', 'presshub-ai-editor' ); ?> <code><?php echo self::esc_html_safe( PressHub_AI_Settings_Migration::default_model( $provider ) ); ?></code></p>
         <?php
     }
 
     public function render_temperature_field( $args = [] ) {
         $provider = $args['provider'] ?? 'openai';
         $option   = 'presshub_ai_temperature_' . $provider;
-        $value    = get_option( $option, self::default_temperature() );
+        $value    = get_option( $option, PressHub_AI_Settings_Migration::default_temperature() );
         ?>
         <input type="number" min="0" max="2" step="0.1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <p class="description"><?php echo __( 'Sampling temperature (0-2). Default 0.7. Intent classification and audio scripts are locked to 0.0 for determinism.', 'presshub-ai-editor' ); ?></p>
@@ -1011,7 +1030,7 @@ class PressHub_AI_Settings_Render {
     public function render_max_tokens_field( $args = [] ) {
         $provider = $args['provider'] ?? 'openai';
         $option   = 'presshub_ai_max_tokens_' . $provider;
-        $value    = (int) get_option( $option, self::default_max_tokens() );
+        $value    = (int) get_option( $option, PressHub_AI_Settings_Migration::default_max_tokens() );
         ?>
         <input type="number" min="1" max="32768" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <p class="description"><?php echo __( 'Maximum tokens per response (1-32768). Default 10000.', 'presshub-ai-editor' ); ?></p>
@@ -1021,10 +1040,10 @@ class PressHub_AI_Settings_Render {
     public function render_timeout_field( $args = [] ) {
         $provider = $args['provider'] ?? 'openai';
         $option   = 'presshub_ai_timeout_' . $provider;
-        $value    = (int) get_option( $option, self::default_timeout( $provider ) );
+        $value    = (int) get_option( $option, PressHub_AI_Settings_Migration::default_timeout( $provider ) );
         ?>
         <input type="number" min="5" max="300" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Request timeout in seconds (5-300). Default', 'presshub-ai-editor' ); ?> <?php echo (int) self::default_timeout( $provider ); ?>.</p>
+        <p class="description"><?php echo __( 'Request timeout in seconds (5-300). Default', 'presshub-ai-editor' ); ?> <?php echo (int) PressHub_AI_Settings_Migration::default_timeout( $provider ); ?>.</p>
         <?php
     }
 
@@ -1172,7 +1191,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_harvest_time_field() {
         $option = 'presshub_ai_briefing_harvest_time';
-        $value  = (string) get_option( $option, self::default_briefing_harvest_time() );
+        $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_harvest_time() );
         ?>
         <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
         <p class="description"><?php echo __( 'Time when morning Greek news sources are scraped and snapshot saved. Default 06:30.', 'presshub-ai-editor' ); ?></p>
@@ -1181,7 +1200,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_generation_time_field() {
         $option = 'presshub_ai_briefing_generation_time';
-        $value  = (string) get_option( $option, self::default_briefing_generation_time() );
+        $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_generation_time() );
         ?>
         <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
         <p class="description"><?php echo __( 'Time when text story curation and podcast synthesis are triggered. Default 07:15.', 'presshub-ai-editor' ); ?></p>
@@ -1228,7 +1247,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_target_duration_field() {
         $option   = 'presshub_ai_briefing_target_duration';
-        $selected = (string) get_option( $option, self::default_briefing_target_duration() );
+        $selected = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_target_duration() );
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
             <option value="3_min" <?php echo '3_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( '3 Minutes (~450 words, 6-8 dialogue turns)', 'presshub-ai-editor' ); ?></option>
@@ -1241,7 +1260,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_tts_engine_field() {
         $option = 'presshub_ai_briefing_tts_engine';
-        $value  = (string) get_option( $option, self::default_briefing_tts_engine() );
+        $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_tts_engine() );
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
             <option value="gemini" <?php echo 'gemini' === $value ? 'selected="selected"' : ''; ?>>
@@ -1274,7 +1293,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_tts_model_field() {
         $option = 'presshub_ai_briefing_tts_model';
-        $value  = (string) get_option( $option, self::default_briefing_tts_model() );
+        $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_tts_model() );
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="gemini-3.1-flash-tts-preview" />
         <p class="description">
@@ -1285,7 +1304,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_host_female_field() {
         $option = 'presshub_ai_briefing_host_female';
-        $value  = (string) get_option( $option, self::default_briefing_host_female() );
+        $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_host_female() );
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
         <p class="description"><?php echo __( 'Name of the lead female presenter (e.g. Μαρία). Default Μαρία.', 'presshub-ai-editor' ); ?></p>
@@ -1294,7 +1313,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_host_male_field() {
         $option = 'presshub_ai_briefing_host_male';
-        $value  = (string) get_option( $option, self::default_briefing_host_male() );
+        $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_host_male() );
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
         <p class="description"><?php echo __( 'Name of the co-host / male commentator (e.g. Νίκος). Default Νίκος.', 'presshub-ai-editor' ); ?></p>
@@ -1303,7 +1322,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_voice_female_field() {
         $option   = 'presshub_ai_briefing_voice_female';
-        $selected = (string) get_option( $option, self::default_briefing_voice_female() );
+        $selected = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_voice_female() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $gemini_voices = $synthesizer ? ( $synthesizer->get_available_voices( 'gemini' )['female'] ?? [] ) : [];
         ?>
@@ -1320,7 +1339,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_voice_male_field() {
         $option   = 'presshub_ai_briefing_voice_male';
-        $selected = (string) get_option( $option, self::default_briefing_voice_male() );
+        $selected = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_voice_male() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $gemini_voices = $synthesizer ? ( $synthesizer->get_available_voices( 'gemini' )['male'] ?? [] ) : [];
         ?>
@@ -1355,7 +1374,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_tts_style_field() {
         $option      = 'presshub_ai_briefing_tts_style';
-        $selected    = (string) get_option( $option, self::default_briefing_tts_style() );
+        $selected    = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_tts_style() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $styles      = $synthesizer ? $synthesizer->get_available_styles() : [];
         if ( empty( $styles ) ) {
@@ -1387,7 +1406,7 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_tts_custom_style_field() {
         $option = 'presshub_ai_briefing_tts_custom_style';
-        $value  = (string) get_option( $option, self::default_briefing_tts_custom_style() );
+        $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_tts_custom_style() );
         ?>
         <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="3" class="large-text" placeholder="<?php echo esc_attr__( 'e.g. Say in an energetic, radio-broadcaster style with rapid pace and enthusiasm in Greek:', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
         <p class="description"><?php echo __( 'Custom prompt prefix prepended before spoken text when Style is set to "Custom Prompt Instruction".', 'presshub-ai-editor' ); ?></p>
