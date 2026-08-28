@@ -1244,6 +1244,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_sources'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_sources' ],
                 'presshub_ai_briefing_tts_engine'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_engine' ],
                 'presshub_ai_briefing_tts_model'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_model' ],
+                'presshub_ai_briefing_tts_style'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_style' ],
+                'presshub_ai_briefing_tts_custom_style'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_custom_style' ],
                 'presshub_ai_briefing_harvest_time'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_harvest_time' ],
                 'presshub_ai_briefing_generation_time'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_generation_time' ],
                 'presshub_ai_briefing_text_preset'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_preset_slug' ],

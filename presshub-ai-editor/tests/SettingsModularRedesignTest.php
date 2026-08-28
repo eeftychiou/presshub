@@ -340,6 +340,53 @@ class SettingsModularRedesignTest
             }
             exit( 1 );
         }
+
+        // -------------------------------------------------------------
+        // Case 12: TTS style fields (logosAI) save via AJAX whitelist
+        // Regression: in v1.9.7 the field was rendered but missing from
+        // $options_map, so save_settings() silently dropped its value.
+        // -------------------------------------------------------------
+        self::reset_world();
+        $_POST['payload'] = json_encode( [
+            'presshub_ai_briefing_tts_style'        => 'storyteller',
+            'presshub_ai_briefing_tts_custom_style' => 'Narrate like an old Greek fisherman recounting a myth',
+        ] );
+        unset( $_POST['payload_b64'] );
+
+        $save_res = self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->save_settings();
+        } );
+
+        if ( empty( $save_res['success'] ) ) {
+            $failures[] = 'save_settings with tts_style/custom_style should succeed; got: ' . json_encode( $save_res );
+        }
+        if ( get_option( 'presshub_ai_briefing_tts_style' ) !== 'storyteller' ) {
+            $failures[] = "presshub_ai_briefing_tts_style was not saved as 'storyteller'; got: " . var_export( get_option( 'presshub_ai_briefing_tts_style' ), true );
+        }
+        if ( get_option( 'presshub_ai_briefing_tts_custom_style' ) !== 'Narrate like an old Greek fisherman recounting a myth' ) {
+            $failures[] = 'presshub_ai_briefing_tts_custom_style was not saved verbatim; got: ' . var_export( get_option( 'presshub_ai_briefing_tts_custom_style' ), true );
+        }
+
+        // Also verify the sanitizer rejects invalid values (returns default).
+        self::reset_world();
+        $_POST['payload'] = json_encode( [
+            'presshub_ai_briefing_tts_style' => '__not_a_real_style__',
+        ] );
+        unset( $_POST['payload_b64'] );
+        self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->save_settings();
+        } );
+        if ( get_option( 'presshub_ai_briefing_tts_style' ) === '__not_a_real_style__' ) {
+            $failures[] = 'sanitize_briefing_tts_style should reject invalid values; got: ' . var_export( get_option( 'presshub_ai_briefing_tts_style' ), true );
+        }
+
+        if ( $failures ) {
+            fwrite( STDERR, "FAIL\n" );
+            foreach ( $failures as $f ) {
+                fwrite( STDERR, "  - {$f}\n" );
+            }
+            exit( 1 );
+        }
         echo "OK\n";
     }
 
