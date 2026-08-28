@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PressHub AI Co-Pilot 1.1.0\n"
 "Report-Msgid-Bugs-To: https://github.com/eeftychiou/presshub/issues\n"
-"POT-Creation-Date: 2026-08-16 06:38+0000\n"
+"POT-Creation-Date: 2026-08-28 10:53+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -13,722 +13,2218 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: presshub-ai-editor\n"
 
-#: includes/class-metaboxes.php:125
-#: includes/class-author-presets.php:82
+#: assets/sidebar.js:526
+msgid "%d of %d pending"
+msgstr ""
+
+#: includes\class-author-presets.php:82
+#: includes\class-metaboxes.php:144
 msgid "(default)"
 msgstr ""
 
-#: includes/class-metaboxes.php:26
+#: includes\class-settings-render.php:556
+msgid "-- Select Template Preset (Auto-fills defaults) --"
+msgstr ""
+
+#: includes\class-settings-render.php:235
+msgid "-- Use Active Gemini Provider --"
+msgstr ""
+
+#: includes\class-settings-render.php:134
+#: includes\class-settings-render.php:200
+#: includes\class-settings-render.php:310
+msgid "-- Use Active Provider Default --"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:313
+msgid "--- CURRENT ARTICLE CONTEXT ---"
+msgstr ""
+
+#: includes\class-settings-render.php:126
+msgid "1. Text Story Curator Settings"
+msgstr ""
+
+#: includes\class-settings-render.php:1201
+msgid "10 Minutes (~1500 words, 20+ dialogue turns)"
+msgstr ""
+
+#: includes\class-podcast-producer.php:46
+msgid "10 λεπτά (~1500 λέξεις, 20+ διάλογοι)"
+msgstr ""
+
+#: includes\class-settings-render.php:192
+msgid "2. AI Podcast Producer & Audio Synthesis Settings"
+msgstr ""
+
+#: includes\class-settings-render.php:1199
+msgid "3 Minutes (~450 words, 6-8 dialogue turns)"
+msgstr ""
+
+#: includes\class-podcast-producer.php:37
+msgid "3 λεπτά (~450 λέξεις, 6-8 διάλογοι)"
+msgstr ""
+
+#: includes\class-settings-render.php:1200
+msgid "5 Minutes (~750 words, 12-15 dialogue turns)"
+msgstr ""
+
+#: includes\class-podcast-producer.php:55
+msgid "5 λεπτά (~750 λέξεις, 12-15 διάλογοι)"
+msgstr ""
+
+#: includes\class-metaboxes.php:26
+#: includes\class-settings-render.php:61
 msgid "AI Co-Author & Editorial Review"
 msgstr ""
 
-#: assets/sidebar.js:265
+#: includes\class-settings-render.php:41
+msgid "AI Co-Author & Review"
+msgstr ""
+
+#: assets/sidebar.js:654
 msgid "AI Co-Pilot"
 msgstr ""
 
-#: assets/sidebar.js:254
+#: includes\class-settings-render.php:43
+msgid "AI Copilot & Assistant"
+msgstr ""
+
+#: includes\class-settings-render.php:300
+msgid "AI Copilot & Research Assistant"
+msgstr ""
+
+#: assets/sidebar.js:643
 msgid "AI Generated Audio Report"
 msgstr ""
 
-#: assets/sidebar.js:239
+#: assets/sidebar.js:628
 msgid "AI Generated Illustration"
 msgstr ""
 
-#: includes/class-settings.php:195
+#: includes\class-settings-storage.php:334
 msgid "AI Provider"
 msgstr ""
 
-#: presshub-ai-editor.php:67
+#: includes\class-settings-render.php:136
+msgid "AI Provider responsible for filtering and summarizing morning news into article drafts."
+msgstr ""
+
+#: includes\class-settings-render.php:202
+msgid "AI Provider responsible for writing conversational podcast scripts."
+msgstr ""
+
+#: includes\class-settings-render.php:40
+msgid "AI Providers"
+msgstr ""
+
+#: presshub-ai-editor.php:148
 msgid "AI Research Log"
 msgstr ""
 
-#: presshub-ai-editor.php:66
+#: presshub-ai-editor.php:147
 msgid "AI Research Logs"
 msgstr ""
 
-#: includes/class-ajax-handlers.php:78
+#: assets/sidebar.js:619
+msgid "AI-generated image"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:101
+#: includes\class-ajax-handlers.php:1395
 msgid "API Connection Successful!"
 msgstr ""
 
-#: includes/class-settings.php:197
+#: includes\class-settings-storage.php:338
 msgid "API Key"
 msgstr ""
 
-#: includes/class-api-client.php:51
-#: includes/class-api-client.php:67
-#: includes/class-api-client.php:105
+#: includes\class-settings-render.php:585
+msgid "API Key / Secret Token:"
+msgstr ""
+
+#: includes\class-settings-render.php:658
+msgid "API executions"
+msgstr ""
+
+#: includes\class-api-client.php:438
+#: includes\class-api-client.php:458
+#: includes\class-api-client.php:514
 msgid "API key is missing."
 msgstr ""
 
-#: includes/class-admin-presets.php:119
-#: includes/class-author-presets.php:114
+#: assets/sidebar.js:576
+msgid "Accept"
+msgstr ""
+
+#: assets/sidebar.js:535
+msgid "Accept All Changes"
+msgstr ""
+
+#: assets/sidebar.js:552
+msgid "Accepted"
+msgstr ""
+
+#: includes\class-settings-render.php:748
+msgid "Action"
+msgstr ""
+
+#: includes\class-settings-render.php:694
+#: includes\class-settings-render.php:801
+msgid "Action:"
+msgstr ""
+
+#: includes\class-admin-presets.php:119
+#: includes\class-author-presets.php:114
 msgid "Actions"
 msgstr ""
 
-#: includes/class-admin-presets.php:164
-#: includes/class-admin-presets.php:179
-#: includes/class-author-presets.php:156
-#: includes/class-author-presets.php:171
+#: includes\class-settings-render.php:489
+msgid "Active"
+msgstr ""
+
+#: includes\class-settings-render.php:67
+msgid "Active Co-Author Provider"
+msgstr ""
+
+#: includes\class-settings-render.php:306
+msgid "Active Copilot Provider"
+msgstr ""
+
+#: includes\class-settings-render.php:546
+msgid "Add / Edit AI Provider"
+msgstr ""
+
+#: assets/admin.js:751
+msgid "Add New AI Provider"
+msgstr ""
+
+#: includes\class-settings-render.php:458
+msgid "Add Provider"
+msgstr ""
+
+#: includes\class-admin-presets.php:164
+#: includes\class-admin-presets.php:179
+#: includes\class-author-presets.php:156
+#: includes\class-author-presets.php:171
 msgid "Add preset"
 msgstr ""
 
-#: includes/class-admin-presets.php:98
+#: includes\class-settings-render.php:834
+msgid "Additional Metadata:"
+msgstr ""
+
+#: includes\class-admin-presets.php:98
 msgid "Administrator"
 msgstr ""
 
-#: includes/class-settings.php:301
+#: includes\class-settings-render.php:45
+msgid "Advanced & System"
+msgstr ""
+
+#: includes\class-settings-render.php:696
+msgid "All Actions"
+msgstr ""
+
+#: includes\class-settings-render.php:711
+msgid "All Providers"
+msgstr ""
+
+#: includes\class-settings-render.php:726
+msgid "All Statuses"
+msgstr ""
+
+#: includes\class-settings-render.php:690
+msgid "All Time"
+msgstr ""
+
+#: includes\class-settings-render.php:910
 msgid "Anthropic"
 msgstr ""
 
-#: includes/class-settings.php:206
+#: includes\class-settings-storage.php:347
 msgid "Anthropic API Version"
 msgstr ""
 
-#: includes/class-api-client.php:398
+#: includes\class-api-client.php:1240
 msgid "Anthropic only supports PDF document uploads. Audio/Video not supported."
 msgstr ""
 
-#: includes/class-author-presets.php:176
+#: includes\class-audio-synthesizer.php:116
+msgid "Aoede / Αοιδή (Expressive & Melodic)"
+msgstr ""
+
+#: includes\class-author-presets.php:176
 msgid "Applied automatically when no preset is picked in the post editor."
 msgstr ""
 
-#: assets/sidebar.js:276
+#: assets/admin.js:1199
+msgid "Are you sure you want to delete ALL token usage and activity logs? This action cannot be undone."
+msgstr ""
+
+#: assets/admin.js:916
+msgid "Are you sure you want to delete the provider:"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:318
+msgid "Article Content:"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:315
+msgid "Article Title: %s"
+msgstr ""
+
+#: assets/sidebar.js:677
 msgid "Ask Co-Pilot or request research/image/audio..."
 msgstr ""
 
-#: includes/class-admin-presets.php:184
+#: includes\class-admin-presets.php:184
 msgid "Assign a default preset per category or per role. A matching category default beats a role default, which beats an author default. Choose “— Disable presets —” to force no preset for that category or role."
 msgstr ""
 
-#: includes/class-admin-presets.php:100
+#: includes\class-ajax-handlers.php:1041
+msgid "Attached file: %s"
+msgstr ""
+
+#: includes\class-admin-presets.php:100
 msgid "Author"
 msgstr ""
 
-#: includes/class-admin-presets.php:187
+#: includes\class-metaboxes.php:165
+msgid "Author Style Preset (default: %s)"
+msgstr ""
+
+#: includes\class-settings-render.php:1120
+msgid "Automated morning Greek news briefing text curation and multi-voice conversational podcast generation."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:134
+msgid "Autonoe / Αυτονόη (Conversational)"
+msgstr ""
+
+#: includes\class-settings-render.php:596
+msgid "Available Models (comma-separated):"
+msgstr ""
+
+#: includes\class-settings-render.php:580
+msgid "Base URL / Endpoint:"
+msgstr ""
+
+#: includes\class-settings-render.php:501
+msgid "Base URL:"
+msgstr ""
+
+#: includes\class-settings-render.php:701
+msgid "Briefing Curation"
+msgstr ""
+
+#: includes\class-settings-storage.php:365
+msgid "Briefing Generation Time (HH:MM)"
+msgstr ""
+
+#: includes\class-admin-presets.php:187
 msgid "By category"
 msgstr ""
 
-#: includes/class-admin-presets.php:216
+#: includes\class-admin-presets.php:216
 msgid "By role"
 msgstr ""
 
-#: includes/class-admin-presets.php:155
-#: includes/class-author-presets.php:147
+#: includes\class-audio-synthesizer.php:128
+msgid "Callirrhoe / Καλλιρρόη (Dynamic & Engaging)"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:68
+#: includes\class-settings-render.php:1332
+msgid "Calm & Soothing (Ήρεμο & Γαλήνιο)"
+msgstr ""
+
+#: includes\class-admin-presets.php:155
+#: includes\class-author-presets.php:147
+#: includes\class-settings-render.php:636
+#: assets/admin.js:245
 msgid "Cancel"
 msgstr ""
 
-#: includes/class-settings.php:289
+#: includes\class-settings-render.php:898
 msgid "Cap the AI endpoints so a single user cannot rack up unbounded API costs. Disabled by default — opt-in only."
 msgstr ""
 
-#: includes/class-admin-presets.php:191
+#: includes\class-admin-presets.php:191
 msgid "Category"
 msgstr ""
 
-#: includes/class-settings.php:277
+#: assets/sidebar.js:551
+msgid "Change #%d"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:154
+msgid "Charon / Χάρων (Deep Baritone & Solemn Gravitas)"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:58
+#: includes\class-settings-render.php:1330
+msgid "Cheerful & Bright (Χαρούμενο & Φωτεινό)"
+msgstr ""
+
+#: includes\class-settings-render.php:882
 msgid "Choose which AI provider powers drafts, scorecards, chat and research."
 msgstr ""
 
-#: assets/sidebar.js:281
+#: assets/sidebar.js:691
 msgid "Clear"
 msgstr ""
 
-#: assets/sidebar.js:104
+#: includes\class-settings-render.php:1440
+#: includes\class-settings-render.php:1460
+msgid "Clear / Reset Custom Prompt"
+msgstr ""
+
+#: includes\class-settings-render.php:383
+#: includes\class-settings-render.php:738
+msgid "Clear Logs"
+msgstr ""
+
+#: assets/sidebar.js:686
+msgid "Clear the entire conversation?"
+msgstr ""
+
+#: includes\class-settings-render.php:839
+msgid "Close"
+msgstr ""
+
+#: includes\class-settings-render.php:697
+msgid "Co-Author Draft"
+msgstr ""
+
+#: includes\class-settings-render.php:890
+msgid "Configure GitHub Personal Access Token for private repository plugin updates and release tracking."
+msgstr ""
+
+#: includes\class-settings-render.php:124
+msgid "Configure automated morning Greek news scraping, AI text story curation, and multi-host conversational podcast production."
+msgstr ""
+
+#: includes\class-settings-render.php:62
+msgid "Configure the AI engine, default model, and drafting behavior for draft generation and article reviews."
+msgstr ""
+
+#: includes\class-settings-render.php:301
+msgid "Configure the AI provider, model, and parameters that power the interactive sidebar Copilot and autonomous research agents."
+msgstr ""
+
+#: includes\class-settings-render.php:453
+msgid "Configured AI Providers"
+msgstr ""
+
+#: includes\class-settings-render.php:367
+msgid "Connection Testing & Verification"
+msgstr ""
+
+#: assets/sidebar.js:235
 msgid "Connection failed."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:181
+#: includes\class-ajax-handlers.php:204
 msgid "Content exceeds the 100,000 character limit."
 msgstr ""
 
-#: includes/class-admin-presets.php:101
+#: includes\class-admin-presets.php:101
 msgid "Contributor"
 msgstr ""
 
-#: includes/class-author-presets.php:188
+#: includes\class-settings-render.php:1115
+msgid "Control verbosity of the internal diagnostic log file (stored at wp-content/uploads/presshub-ai/presshub-debug.log)."
+msgstr ""
+
+#: includes\class-settings-render.php:699
+msgid "Copilot Chat"
+msgstr ""
+
+#: includes\class-settings-render.php:700
+msgid "Copilot Research"
+msgstr ""
+
+#: includes\class-settings-render.php:827
+msgid "Copy Error"
+msgstr ""
+
+#: includes\class-author-presets.php:188
 msgid "Copy a plugin-default preset into your own library so you can edit it."
 msgstr ""
 
-#: includes/class-author-presets.php:186
+#: includes\class-author-presets.php:186
 msgid "Copy from plugin defaults"
 msgstr ""
 
-#: includes/class-author-presets.php:198
+#: includes\class-author-presets.php:198
 msgid "Copy to my presets"
 msgstr ""
 
-#: includes/class-admin-presets.php:192
-#: includes/class-admin-presets.php:221
-#: includes/class-author-presets.php:174
+#: includes\class-audio-synthesizer.php:533
+msgid "Could not parse any speaker turns from the podcast script."
+msgstr ""
+
+#: includes\class-settings-render.php:97
+msgid "Creativity tuning for story drafting (0.0 to 2.0). Scorecards use deterministic 0.0."
+msgstr ""
+
+#: includes\class-settings-render.php:510
+msgid "Credentials:"
+msgstr ""
+
+#: includes\class-settings-render.php:130
+msgid "Curator AI Provider"
+msgstr ""
+
+#: includes\class-settings-render.php:140
+msgid "Curator Model Override"
+msgstr ""
+
+#: includes\class-settings-render.php:183
+msgid "Curator System Prompt"
+msgstr ""
+
+#: includes\class-settings-render.php:617
+msgid "Custom HTTP Headers (JSON optional):"
+msgstr ""
+
+#: includes\class-settings-render.php:77
+#: includes\class-settings-render.php:316
+msgid "Custom Model Override"
+msgstr ""
+
+#: includes\class-api-client.php:1050
+msgid "Custom OpenAI endpoints do not support direct PDF/Audio uploads natively in this integration. Please select Google Gemini for multi-modal files."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:98
+#: includes\class-settings-render.php:1338
+msgid "Custom Prompt Instruction (Προσαρμοσμένη Οδηγία)"
+msgstr ""
+
+#: includes\class-settings-render.php:247
+#: includes\class-settings-storage.php:376
+msgid "Custom Speaking Style Prompt"
+msgstr ""
+
+#: includes\class-api-client.php:1067
+msgid "Custom endpoint base URL is missing."
+msgstr ""
+
+#: includes\class-settings-render.php:1358
+msgid "Custom prompt prefix prepended before spoken text when Style is set to \"Custom Prompt Instruction\"."
+msgstr ""
+
+#: includes\class-settings-render.php:1466
+msgid "Custom system prompt for Greek podcast dialogue generation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}, {host1_name}, {host2_name}."
+msgstr ""
+
+#: includes\class-settings-render.php:1446
+msgid "Custom system prompt for Greek text story curation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_count}, {articles_context}."
+msgstr ""
+
+#: includes\class-settings-render.php:1109
+msgid "DEBUG (Verbose: all API payloads, scheduling, turns & HTTP)"
+msgstr ""
+
+#: includes\class-settings-storage.php:330
+msgid "Daily Briefing & AI Podcast"
+msgstr ""
+
+#: includes\class-settings-render.php:123
+msgid "Daily Briefing & AI Podcast Hub"
+msgstr ""
+
+#: includes\class-briefing-admin.php:34
+#: includes\class-settings-render.php:42
+msgid "Daily Briefing Hub"
+msgstr ""
+
+#: includes\class-settings-render.php:747
+msgid "Date / Time"
+msgstr ""
+
+#: includes\class-settings-render.php:684
+msgid "Date Range:"
+msgstr ""
+
+#: includes\class-settings-render.php:1230
+msgid "Dedicated Gemini / Google AI Studio API key used specifically for speech generation and podcast audio synthesis. If left empty, falls back to your main Gemini API key from the Providers tab."
+msgstr ""
+
+#: assets/sidebar.js:270
+msgid "Deep-research this topic: %s"
+msgstr ""
+
+#: assets/sidebar.js:271
+msgid "Deep-research this topic: [describe your topic]"
+msgstr ""
+
+#: includes\class-settings-render.php:496
+#: includes\class-settings-render.php:592
+msgid "Default Model:"
+msgstr ""
+
+#: includes\class-admin-presets.php:192
+#: includes\class-admin-presets.php:221
+#: includes\class-author-presets.php:174
 msgid "Default preset"
 msgstr ""
 
-#: includes/class-settings.php:331
+#: includes\class-settings-render.php:1413
+msgid "Default status for newly generated morning text briefing posts."
+msgstr ""
+
+#: includes\class-settings-render.php:1426
+msgid "Default status for newly generated podcast posts."
+msgstr ""
+
+#: includes\class-settings-render.php:962
 msgid "Default:"
 msgstr ""
 
-#: includes/class-admin-presets.php:182
+#: includes\class-admin-presets.php:182
 msgid "Defaults by category & role"
 msgstr ""
 
-#: includes/class-admin-presets.php:138
-#: includes/class-author-presets.php:130
+#: includes\class-admin-presets.php:138
+#: includes\class-author-presets.php:130
+#: includes\class-settings-render.php:525
 msgid "Delete"
 msgstr ""
 
-#: includes/class-admin-presets.php:39
-#: assets/presets.js:69
-#: assets/presets.js:153
+#: includes\class-admin-presets.php:39
+#: assets/presets.js:72
+#: assets/presets.js:156
 msgid "Delete this preset?"
 msgstr ""
 
-#: assets/admin.js:92
-msgid "Draft generated successfully!"
+#: assets/sidebar.js:553
+msgid "Denied"
 msgstr ""
 
-#: includes/class-admin-presets.php:137
-#: includes/class-author-presets.php:129
+#: assets/sidebar.js:582
+msgid "Deny"
+msgstr ""
+
+#: assets/sidebar.js:542
+msgid "Deny All"
+msgstr ""
+
+#: includes\class-settings-render.php:754
+#: assets/admin.js:1110
+msgid "Details"
+msgstr ""
+
+#: includes\class-settings-storage.php:358
+msgid "Diagnostic Log Level"
+msgstr ""
+
+#: includes\class-settings-render.php:416
+msgid "Disabled"
+msgstr ""
+
+#: assets/admin.js:242
+msgid "Discard draft"
+msgstr ""
+
+#: assets/admin.js:103
+msgid "Dismiss this notice."
+msgstr ""
+
+#: includes\class-settings-render.php:566
+msgid "Display Name:"
+msgstr ""
+
+#: includes\class-settings-render.php:1410
+#: includes\class-settings-render.php:1423
+msgid "Draft"
+msgstr ""
+
+#: assets/sidebar.js:274
+msgid "Draft an article section about: %s"
+msgstr ""
+
+#: assets/sidebar.js:275
+msgid "Draft an article section about: [your topic]"
+msgstr ""
+
+#: assets/admin.js:340
+msgid "Draft discarded — nothing was inserted."
+msgstr ""
+
+#: assets/admin.js:373
+msgid "Draft inserted into the editor."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:73
+#: includes\class-settings-render.php:1333
+msgid "Dramatic & Intense (Δραματικό & Έντονο)"
+msgstr ""
+
+#: includes\class-settings-render.php:813
+msgid "Duration:"
+msgstr ""
+
+#: includes\class-settings-render.php:1112
+msgid "ERROR (Only critical failures)"
+msgstr ""
+
+#: includes\class-admin-presets.php:137
+#: includes\class-author-presets.php:129
+#: includes\class-settings-render.php:521
 msgid "Edit"
 msgstr ""
 
-#: includes/class-admin-presets.php:99
+#: assets/admin.js:734
+msgid "Edit AI Provider:"
+msgstr ""
+
+#: includes\class-admin-presets.php:99
 msgid "Editor"
 msgstr ""
 
-#: includes/class-settings.php:213
+#: includes\class-settings-render.php:698
+msgid "Editorial Scorecard"
+msgstr ""
+
+#: includes\class-api-client.php:799
+msgid "Empty or invalid audio content returned from Google Cloud TTS."
+msgstr ""
+
+#: includes\class-settings-storage.php:354
 msgid "Enable Per-User Rate Limit"
 msgstr ""
 
-#: includes/class-admin-presets.php:118
+#: includes\class-settings-render.php:624
+msgid "Enable this provider for module assignment"
+msgstr ""
+
+#: includes\class-admin-presets.php:118
 msgid "Enabled"
 msgstr ""
 
-#: includes/class-admin-presets.php:36
-#: assets/admin.js:39
-#: assets/admin.js:94
-#: assets/admin.js:135
-#: assets/sidebar.js:96
-#: assets/presets.js:31
+#: includes\class-audio-synthesizer.php:93
+#: includes\class-settings-render.php:1337
+msgid "Energetic & Dynamic (Δυναμικό & Ενθουσιώδες)"
+msgstr ""
+
+#: assets/admin.js:748
+#: assets/admin.js:758
+msgid "Enter API Key"
+msgstr ""
+
+#: includes\class-settings-render.php:1134
+msgid "Enter one Greek news homepage or RSS/article URL per line. Leave empty to use default outlets."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:83
+#: includes\class-settings-render.php:1335
+msgid "Epic & Classical (Επικό & Αρχαιοπρεπές)"
+msgstr ""
+
+#: includes\class-settings-render.php:728
+#: assets/admin.js:1096
+#: assets/admin.js:1240
+msgid "Error"
+msgstr ""
+
+#: assets/admin.js:1111
+msgid "Error Details"
+msgstr ""
+
+#: includes\class-settings-render.php:824
+msgid "Error Message / Diagnostics:"
+msgstr ""
+
+#: assets/admin.js:1224
+msgid "Error clearing logs:"
+msgstr ""
+
+#: assets/admin.js:945
+msgid "Error deleting provider:"
+msgstr ""
+
+#: assets/admin.js:1142
+msgid "Error fetching token logs:"
+msgstr ""
+
+#: assets/admin.js:906
+msgid "Error saving provider:"
+msgstr ""
+
+#: includes\class-settings-render.php:678
+msgid "Error-free runs"
+msgstr ""
+
+#: includes\class-admin-presets.php:36
+#: assets/admin.js:459
+#: assets/admin.js:526
+#: assets/admin.js:595
+#: assets/sidebar.js:226
+#: assets/presets.js:34
 msgid "Error:"
 msgstr ""
 
-#: includes/class-ajax-handlers.php:294
+#: includes\class-settings-render.php:737
+msgid "Export CSV"
+msgstr ""
+
+#: assets/admin.js:1219
+msgid "Failed to clear logs."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1525
+msgid "Failed to clear token logs."
+msgstr ""
+
+#: includes\class-news-curator.php:324
+msgid "Failed to create briefing post."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:485
+msgid "Failed to create podcast post."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:379
 msgid "Failed to create research post."
 msgstr ""
 
-#: includes/class-api-client.php:124
+#: includes\class-api-client.php:1004
+msgid "Failed to decode base64 audio from Gemini."
+msgstr ""
+
+#: assets/admin.js:940
+msgid "Failed to delete provider."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:573
+msgid "Failed to generate synthesized audio stream."
+msgstr ""
+
+#: includes\class-podcast-producer.php:486
+msgid "Failed to parse dialogue turns from generated podcast script."
+msgstr ""
+
+#: includes\class-api-client.php:534
 msgid "Failed to parse scorecard JSON."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:143
+#: includes\class-ajax-handlers.php:929
+msgid "Failed to save podcast script to disk."
+msgstr ""
+
+#: assets/admin.js:900
+msgid "Failed to save provider."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1311
+msgid "Failed to save provider:"
+msgstr ""
+
+#: includes\class-settings-render.php:219
+#: includes\class-settings-storage.php:369
+msgid "Female Host Name"
+msgstr ""
+
+#: includes\class-settings-storage.php:371
+msgid "Female Voice Model (TTS)"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:142
+msgid "Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)"
+msgstr ""
+
+#: includes\class-settings-storage.php:335
+msgid "Fetch source URLs"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1030
+msgid "File exceeds the 25 MB limit."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:166
 msgid "File exceeds the 50 MB size limit."
 msgstr ""
 
-#: includes/class-settings.php:189
+#: includes\class-settings-render.php:736
+msgid "Filter"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:48
+#: includes\class-settings-render.php:1328
+msgid "Formal & Broadcast (Επίσημο & Επαγγελματικό)"
+msgstr ""
+
+#: includes\class-settings-storage.php:326
 msgid "General"
 msgstr ""
 
-#: includes/class-settings.php:388
+#: assets/sidebar.js:278
+msgid "Generate an image of: %s"
+msgstr ""
+
+#: assets/sidebar.js:279
+msgid "Generate an image of: [your subject]"
+msgstr ""
+
+#: assets/admin.js:503
+msgid "Generating draft…"
+msgstr ""
+
+#: includes\class-settings-render.php:159
+msgid "Generation Trigger Time"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:88
+#: includes\class-settings-render.php:1336
+msgid "Gentle Whisper (Ψίθυρος)"
+msgstr ""
+
+#: includes\class-settings-render.php:1019
 msgid "GitHub Personal Access Token (PAT). Only required if the GitHub repository is private to enable automatic updates."
 msgstr ""
 
-#: includes/class-settings.php:207
+#: includes\class-settings-storage.php:348
 msgid "GitHub Token (optional)"
 msgstr ""
 
-#: includes/class-settings.php:209
+#: includes\class-api-client.php:863
+msgid "Google AI Studio Gemini API key is missing. Please configure your Gemini Provider in the AI Providers tab or enter a Speech API Key in Briefing Settings."
+msgstr ""
+
+#: includes\class-settings-storage.php:350
 msgid "Google Cloud API Key (Imagen/TTS)"
 msgstr ""
 
-#: includes/class-api-client.php:184
-#: includes/class-api-client.php:252
+#: includes\class-api-client.php:595
+#: includes\class-api-client.php:665
+#: includes\class-api-client.php:742
 msgid "Google Cloud API key is missing."
 msgstr ""
 
-#: includes/class-settings.php:210
+#: includes\class-settings-storage.php:351
 msgid "Google Cloud Project ID (Imagen)"
 msgstr ""
 
-#: includes/class-settings.php:285
+#: includes\class-settings-render.php:894
 msgid "Google Cloud credentials used for Imagen image generation and Text-to-Speech."
 msgstr ""
 
-#: includes/class-settings.php:418
+#: includes\class-settings-render.php:1049
 msgid "Google Cloud project ID used in the Vertex AI Imagen endpoint URL. Defaults to presshub-ai."
 msgstr ""
 
-#: includes/class-settings.php:302
+#: includes\class-settings-render.php:911
 msgid "Google Gemini"
 msgstr ""
 
-#: assets/sidebar.js:18
+#: includes\class-settings-render.php:344
+msgid "HTTP timeout for chat and research calls. Default 300s."
+msgstr ""
+
+#: includes\class-settings-render.php:105
+msgid "HTTP timeout for draft generation requests. Default 300s."
+msgstr ""
+
+#: includes\class-settings-render.php:673
+msgid "Harvested from sources"
+msgstr ""
+
+#: assets/sidebar.js:28
 msgid "Hello! I am your AI Co-Pilot. I can chat, conduct in-depth research, generate images, or summarize media. How can I help you draft your article today?"
 msgstr ""
 
-#: includes/class-settings.php:469
+#: includes\class-settings-render.php:1100
 msgid "How long completed or failed research logs are kept before the daily cleanup deletes them. Defaults to 30 days."
 msgstr ""
 
-#: includes/class-settings.php:211
+#: includes\class-settings-render.php:1110
+msgid "INFO (Standard: milestones, settings updates, jobs)"
+msgstr ""
+
+#: includes\class-settings-storage.php:352
 msgid "Imagen Region"
 msgstr ""
 
-#: assets/sidebar.js:73
+#: assets/sidebar.js:201
 msgid "Initiating deep research task... Please wait."
 msgstr ""
 
-#: assets/sidebar.js:257
+#: assets/sidebar.js:646
 msgid "Insert Audio Block"
 msgstr ""
 
-#: assets/sidebar.js:242
+#: assets/sidebar.js:631
 msgid "Insert Image Block"
 msgstr ""
 
-#: assets/sidebar.js:226
+#: assets/sidebar.js:611
 msgid "Insert Research Into Article"
 msgstr ""
 
-#: includes/class-admin-presets.php:117
-#: includes/class-admin-presets.php:149
-#: includes/class-admin-presets.php:172
-#: includes/class-author-presets.php:113
-#: includes/class-author-presets.php:141
-#: includes/class-author-presets.php:164
+#: assets/admin.js:239
+msgid "Insert draft"
+msgstr ""
+
+#: includes\class-settings-render.php:1171
+msgid "Instruction preset applied to the morning text briefing curation agent."
+msgstr ""
+
+#: includes\class-settings-render.php:1190
+msgid "Instruction preset applied to the podcast producer dialogue agent."
+msgstr ""
+
+#: includes\class-admin-presets.php:117
+#: includes\class-admin-presets.php:149
+#: includes\class-admin-presets.php:172
+#: includes\class-author-presets.php:113
+#: includes\class-author-presets.php:141
+#: includes\class-author-presets.php:164
 msgid "Instruction text"
 msgstr ""
 
-#: includes/class-ajax-handlers.php:109
+#: includes\class-ajax-handlers.php:132
 msgid "Instructions exceed the 5,000 character limit."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:568
+#: includes\class-ajax-handlers.php:1065
+msgid "Insufficient permissions to manage PressHub AI settings."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1536
+#: includes\class-ajax-handlers.php:1557
+msgid "Insufficient permissions."
+msgstr ""
+
+#: includes\class-settings-render.php:379
+msgid "Internal Diagnostic Log Viewer"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:653
 msgid "Invalid key."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:481
-#: includes/class-ajax-handlers.php:514
-#: includes/class-ajax-handlers.php:537
-#: includes/class-ajax-handlers.php:572
+#: includes\class-ajax-handlers.php:566
+#: includes\class-ajax-handlers.php:599
+#: includes\class-ajax-handlers.php:622
+#: includes\class-ajax-handlers.php:657
 msgid "Invalid preset slug."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:432
+#: includes\class-ajax-handlers.php:517
 msgid "Invalid preset slug. Use 1-40 lowercase letters, numbers, or hyphens."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:337
+#: includes\class-ajax-handlers.php:1378
+msgid "Invalid provider configuration supplied."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1300
+msgid "Invalid provider data received."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:422
 msgid "Invalid research post ID."
 msgstr ""
 
-#: includes/class-api-client.php:441
+#: includes\class-api-client.php:1302
 msgid "Invalid response from Anthropic."
 msgstr ""
 
-#: includes/class-api-client.php:506
+#: includes\class-api-client.php:1397
 msgid "Invalid response from Gemini."
 msgstr ""
 
-#: includes/class-api-client.php:380
+#: includes\class-api-client.php:1222
 msgid "Invalid response from OpenAI."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:565
+#: includes\class-api-client.php:1155
+msgid "Invalid response from custom endpoint."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:650
 msgid "Invalid scope."
 msgstr ""
 
-#: includes/class-settings.php:457
+#: includes\class-audio-synthesizer.php:110
+msgid "Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)"
+msgstr ""
+
+#: includes\class-settings-render.php:688
+msgid "Last 30 Days"
+msgstr ""
+
+#: includes\class-settings-render.php:687
+msgid "Last 7 Days"
+msgstr ""
+
+#: includes\class-settings-render.php:689
+msgid "Last 90 Days"
+msgstr ""
+
+#: includes\class-settings-render.php:752
+msgid "Latency"
+msgstr ""
+
+#: includes\class-settings-render.php:253
+msgid "Lead Host Voice Persona (Female)"
+msgstr ""
+
+#: includes\class-settings-render.php:1457
+msgid "Leave empty to use standard Greek conversational podcast prompt..."
+msgstr ""
+
+#: includes\class-settings-render.php:1437
+msgid "Leave empty to use standard Greek editorial curation prompt..."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:122
+msgid "Leda / Λήδα (Warm & Professional)"
+msgstr ""
+
+#: includes\class-settings-render.php:1088
 msgid "Length of the rolling window in seconds. Defaults to 3600 (1 hour)."
 msgstr ""
 
-#: includes/class-settings.php:202
+#: includes\class-settings-render.php:1443
+#: includes\class-settings-render.php:1463
+msgid "Load Default Template for Editing"
+msgstr ""
+
+#: includes\class-settings-render.php:758
+msgid "Loading token usage logs..."
+msgstr ""
+
+#: includes\class-settings-storage.php:336
+msgid "Log AI prompts"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1565
+msgid "Log file cleared successfully."
+msgstr ""
+
+#: includes\class-settings-render.php:225
+#: includes\class-settings-storage.php:370
+msgid "Male Host Name"
+msgstr ""
+
+#: includes\class-settings-storage.php:372
+msgid "Male Voice Model (TTS)"
+msgstr ""
+
+#: includes\class-settings-render.php:454
+msgid "Manage standard AI engines (OpenAI, Anthropic, Gemini, Google Cloud TTS, Groq, Mistral, DeepSeek, Local Ollama) and custom OpenAI-compatible endpoints."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:988
+#: includes\class-ajax-handlers.php:1000
+#: includes\class-ajax-handlers.php:1042
+#: includes\class-news-harvester.php:362
+msgid "Manual Upload"
+msgstr ""
+
+#: includes\class-settings-render.php:85
+#: includes\class-settings-render.php:324
+msgid "Max Completion Tokens"
+msgstr ""
+
+#: includes\class-settings-storage.php:343
 msgid "Max Tokens (%s)"
 msgstr ""
 
-#: includes/class-settings.php:448
+#: includes\class-settings-render.php:607
+msgid "Max Tokens:"
+msgstr ""
+
+#: includes\class-settings-render.php:1079
 msgid "Maximum number of AI actions (draft, review, chat, research) a single user may make within the window. Defaults to 30."
 msgstr ""
 
-#: includes/class-settings.php:351
-msgid "Maximum tokens per response (1-8192). Default 2000."
+#: includes\class-settings-render.php:328
+msgid "Maximum output tokens for Copilot conversational turns (1 - 32768). Default 10000."
 msgstr ""
 
-#: includes/class-settings.php:191
+#: includes\class-settings-render.php:89
+msgid "Maximum output tokens for generated drafts (1 - 32768). Default 10000."
+msgstr ""
+
+#: includes\class-settings-render.php:982
+msgid "Maximum tokens per response (1-32768). Default 10000."
+msgstr ""
+
+#: includes\class-settings-render.php:361
+msgid "Media & Vision Credentials (Google Cloud)"
+msgstr ""
+
+#: includes\class-settings-storage.php:328
 msgid "Media (Google Cloud)"
 msgstr ""
 
-#: includes/class-settings.php:200
+#: includes\class-settings-render.php:750
+msgid "Model"
+msgstr ""
+
+#: includes\class-settings-storage.php:341
 msgid "Model (%s)"
 msgstr ""
 
-#: includes/class-author-presets.php:107
+#: includes\class-settings-render.php:809
+msgid "Model:"
+msgstr ""
+
+#: includes\class-settings-render.php:652
+msgid "Monitor live token usage, Text-to-Speech character volumes, news crawling metrics, API latencies, and success rates."
+msgstr ""
+
+#: includes\class-settings-render.php:153
+msgid "Morning Harvest Time"
+msgstr ""
+
+#: includes\class-settings-storage.php:364
+msgid "Morning Harvest Time (HH:MM)"
+msgstr ""
+
+#: includes\class-author-presets.php:107
 msgid "My presets"
 msgstr ""
 
-#: includes/class-admin-presets.php:115
-#: includes/class-admin-presets.php:144
-#: includes/class-admin-presets.php:167
-#: includes/class-author-presets.php:111
-#: includes/class-author-presets.php:136
-#: includes/class-author-presets.php:159
+#: includes\class-admin-presets.php:115
+#: includes\class-admin-presets.php:144
+#: includes\class-admin-presets.php:167
+#: includes\class-author-presets.php:111
+#: includes\class-author-presets.php:136
+#: includes\class-author-presets.php:159
 msgid "Name"
 msgstr ""
 
-#: includes/class-admin-presets.php:35
-#: assets/presets.js:54
-#: assets/presets.js:137
+#: includes\class-admin-presets.php:35
+#: assets/presets.js:57
+#: assets/presets.js:140
 msgid "Name must contain at least one letter or number to generate a slug."
 msgstr ""
 
-#: includes/class-author-presets.php:99
+#: includes\class-settings-render.php:1265
+msgid "Name of the co-host / male commentator (e.g. Νίκος). Default Νίκος."
+msgstr ""
+
+#: includes\class-settings-render.php:1256
+msgid "Name of the lead female presenter (e.g. Μαρία). Default Μαρία."
+msgstr ""
+
+#: includes\class-author-presets.php:99
 msgid "Named instruction presets are appended to the fixed editorial system prompt for your AI drafts — they cannot replace it."
 msgstr ""
 
-#: assets/sidebar.js:195
+#: includes\class-audio-synthesizer.php:53
+#: includes\class-settings-render.php:1329
+msgid "Natural & Warm (Φυσικό & Φιλικό)"
+msgstr ""
+
+#: assets/sidebar.js:375
 msgid "Network polling error."
 msgstr ""
 
-#: includes/class-admin-presets.php:198
+#: includes\class-settings-render.php:704
+msgid "News Harvester"
+msgstr ""
+
+#: includes\class-settings-render.php:147
+#: includes\class-settings-storage.php:360
+msgid "News Source URLs"
+msgstr ""
+
+#: includes\class-settings-render.php:768
+msgid "Next"
+msgstr ""
+
+#: includes\class-settings-render.php:465
+msgid "No AI providers configured yet. Click \"Add Provider\" above to create one."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1049
+msgid "No article content or files provided."
+msgstr ""
+
+#: includes\class-api-client.php:992
+msgid "No audio payload received from Gemini Speech model."
+msgstr ""
+
+#: includes\class-admin-presets.php:198
 msgid "No categories found."
 msgstr ""
 
-#: includes/class-author-presets.php:191
+#: includes\class-news-curator.php:349
+#: includes\class-podcast-producer.php:431
+msgid "No harvested articles found for date: %s"
+msgstr ""
+
+#: includes\class-author-presets.php:191
 msgid "No plugin defaults available."
 msgstr ""
 
-#: includes/class-admin-presets.php:125
-#: includes/class-author-presets.php:120
+#: includes\class-audio-synthesizer.php:517
+msgid "No podcast script found for date: %s. Please generate a script first."
+msgstr ""
+
+#: includes\class-admin-presets.php:125
+#: includes\class-author-presets.php:120
 msgid "No presets yet. Add one below."
 msgstr ""
 
-#: includes/class-settings.php:300
+#: assets/admin.js:1089
+msgid "No token activity logs found matching the selected filters."
+msgstr ""
+
+#: includes\class-settings-render.php:1368
+#: includes\class-settings-render.php:1389
+msgid "None (Default Category)"
+msgstr ""
+
+#: includes\class-settings-render.php:511
+msgid "Not required"
+msgstr ""
+
+#: includes\class-settings-render.php:1113
+msgid "OFF (Disable file logging)"
+msgstr ""
+
+#: includes\class-settings-render.php:909
 msgid "OpenAI"
 msgstr ""
 
-#: includes/class-settings.php:205
+#: includes\class-settings-storage.php:346
 msgid "OpenAI Organization ID (optional)"
 msgstr ""
 
-#: includes/class-api-client.php:337
+#: includes\class-api-client.php:1160
 msgid "OpenAI chat completions do not support direct PDF/Audio uploads natively in this basic integration. Please select Google Gemini for multi-modal files."
 msgstr ""
 
-#: includes/class-settings.php:370
+#: includes\class-settings-render.php:81
+msgid "Optional specific model identifier for Co-Author (e.g. gpt-4o, claude-3-5-sonnet-20241022)."
+msgstr ""
+
+#: includes\class-settings-render.php:320
+msgid "Optional specific model identifier for Copilot chat (e.g. gpt-4o, gemini-2.0-flash)."
+msgstr ""
+
+#: includes\class-settings-render.php:1001
 msgid "Optional. Sent as the OpenAI-Organization header. Only needed for multi-org accounts."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:64
-#: includes/class-ajax-handlers.php:85
-#: includes/class-ajax-handlers.php:91
-#: includes/class-ajax-handlers.php:176
-#: includes/class-ajax-handlers.php:186
-#: includes/class-ajax-handlers.php:218
-#: includes/class-ajax-handlers.php:228
-#: includes/class-ajax-handlers.php:237
-#: includes/class-ajax-handlers.php:254
-#: includes/class-ajax-handlers.php:326
-#: includes/class-ajax-handlers.php:331
-#: includes/class-ajax-handlers.php:389
-#: includes/class-ajax-handlers.php:421
-#: includes/class-ajax-handlers.php:424
-#: includes/class-ajax-handlers.php:473
-#: includes/class-ajax-handlers.php:476
-#: includes/class-ajax-handlers.php:506
-#: includes/class-ajax-handlers.php:532
-#: includes/class-ajax-handlers.php:557
+#: assets/sidebar.js:557
+msgid "Original Text:"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:166
+msgid "Orus / Ώρος (Confident & Articulate)"
+msgstr ""
+
+#: includes\class-settings-render.php:1409
+#: includes\class-settings-render.php:1422
+msgid "Pending Review"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:87
+#: includes\class-ajax-handlers.php:108
+#: includes\class-ajax-handlers.php:114
+#: includes\class-ajax-handlers.php:199
+#: includes\class-ajax-handlers.php:209
+#: includes\class-ajax-handlers.php:249
+#: includes\class-ajax-handlers.php:259
+#: includes\class-ajax-handlers.php:274
+#: includes\class-ajax-handlers.php:291
+#: includes\class-ajax-handlers.php:411
+#: includes\class-ajax-handlers.php:416
+#: includes\class-ajax-handlers.php:474
+#: includes\class-ajax-handlers.php:506
+#: includes\class-ajax-handlers.php:509
+#: includes\class-ajax-handlers.php:558
+#: includes\class-ajax-handlers.php:561
+#: includes\class-ajax-handlers.php:591
+#: includes\class-ajax-handlers.php:617
+#: includes\class-ajax-handlers.php:642
+#: includes\class-ajax-handlers.php:732
+#: includes\class-ajax-handlers.php:752
+#: includes\class-ajax-handlers.php:786
+#: includes\class-ajax-handlers.php:841
+#: includes\class-ajax-handlers.php:902
+#: includes\class-ajax-handlers.php:946
+#: includes\class-ajax-handlers.php:980
+#: includes\class-ajax-handlers.php:1275
+#: includes\class-ajax-handlers.php:1327
+#: includes\class-ajax-handlers.php:1353
+#: includes\class-ajax-handlers.php:1406
+#: includes\class-ajax-handlers.php:1458
+#: includes\class-ajax-handlers.php:1518
 msgid "Permission denied."
 msgstr ""
 
-#: includes/class-admin-presets.php:111
+#: includes\class-settings-render.php:358
+#: includes\class-settings-storage.php:331
+msgid "Plugin Updates & GitHub Integration"
+msgstr ""
+
+#: includes\class-admin-presets.php:111
 msgid "Plugin defaults"
 msgstr ""
 
-#: includes/class-admin-presets.php:108
+#: includes\class-admin-presets.php:108
 msgid "Plugin-default presets are available to every author as a starting point. Presets are appended to a fixed editorial system prompt — they cannot replace it."
 msgstr ""
 
-#: assets/sidebar.js:183
+#: includes\class-settings-render.php:703
+msgid "Podcast Audio Synthesis"
+msgstr ""
+
+#: includes\class-settings-render.php:271
+#: includes\class-settings-storage.php:378
+msgid "Podcast Category"
+msgstr ""
+
+#: includes\class-settings-render.php:283
+#: includes\class-settings-storage.php:367
+msgid "Podcast Dialogue Preset"
+msgstr ""
+
+#: includes\class-settings-storage.php:382
+msgid "Podcast Dialogue System Prompt"
+msgstr ""
+
+#: includes\class-settings-render.php:277
+#: includes\class-settings-storage.php:380
+msgid "Podcast Post Status"
+msgstr ""
+
+#: includes\class-settings-render.php:702
+msgid "Podcast Script"
+msgstr ""
+
+#: includes\class-settings-render.php:289
+msgid "Podcast System Prompt"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:78
+#: includes\class-settings-render.php:1334
+msgid "Poetic & Lyrical (Ποιητικό & Λυρικό)"
+msgstr ""
+
+#: assets/sidebar.js:363
 msgid "Polling error:"
 msgstr ""
 
-#: includes/class-ajax-handlers.php:438
+#: assets/admin.js:581
+msgid "Post moved to Pending review (score: %s/100)."
+msgstr ""
+
+#: assets/admin.js:588
+msgid "Post remains published."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:523
 msgid "Preset instructions exceed the 4,000 character limit."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:435
+#: includes\class-ajax-handlers.php:520
 msgid "Preset name exceeds the 80 character limit."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:517
-#: includes/class-ajax-handlers.php:575
+#: includes\class-ajax-handlers.php:602
+#: includes\class-ajax-handlers.php:660
 msgid "Preset not found or not enabled."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:494
+#: includes\class-ajax-handlers.php:579
 msgid "Preset not found."
 msgstr ""
 
-#: includes/class-author-presets.php:103
+#: includes\class-author-presets.php:103
 msgid "Presets are managed by each author from their own profile, so the controls below are read-only here."
 msgstr ""
 
-#: includes/class-settings.php:39
+#: includes\class-settings.php:54
 msgid "PressHub AI"
 msgstr ""
 
-#: includes/class-settings.php:259
+#: includes\class-settings-render.php:850
 msgid "PressHub AI Help"
 msgstr ""
 
-#: includes/class-admin-presets.php:53
-#: includes/class-author-presets.php:96
+#: includes\class-admin-presets.php:53
+#: includes\class-author-presets.php:96
 msgid "PressHub AI Presets"
 msgstr ""
 
-#: includes/class-settings.php:38
-#: includes/class-settings.php:235
+#: includes\class-settings-render.php:37
+#: includes\class-settings.php:53
 msgid "PressHub AI Settings"
 msgstr ""
 
-#: includes/class-settings.php:260
+#: includes\class-settings-render.php:851
 msgid "PressHub AI settings: choose a provider under General, then configure the per-provider model and tuning under Providers. Keys are shown masked — only the last 4 characters are displayed; leave a key field empty to keep the saved key. Media (Google Cloud) configures Imagen/TTS. Rate Limits caps per-user AI costs."
 msgstr ""
 
-#: includes/class-admin-presets.php:52
-#: includes/class-admin-presets.php:106
+#: includes\class-briefing-admin.php:33
+msgid "PressHub AI — Daily Briefing Hub"
+msgstr ""
+
+#: includes\class-admin-presets.php:52
+#: includes\class-admin-presets.php:106
 msgid "PressHub AI — Instruction Presets"
 msgstr ""
 
-#: includes/class-ajax-handlers.php:223
-msgid "Prompt exceeds the 5,000 character limit."
+#: includes\class-audio-synthesizer.php:593
+msgid "PressHub Daily Briefing Podcast (%s)"
 msgstr ""
 
-#: includes/class-settings.php:190
+#: assets/admin.js:231
+msgid "Preview AI draft"
+msgstr ""
+
+#: includes\class-settings-render.php:766
+msgid "Previous"
+msgstr ""
+
+#: includes\class-settings-render.php:663
+msgid "Prompt & completions"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:254
+msgid "Prompt exceeds the 100,000 character limit."
+msgstr ""
+
+#: assets/sidebar.js:525
+msgid "Proposed Article Revisions"
+msgstr ""
+
+#: assets/sidebar.js:561
+msgid "Proposed Revision (Editable):"
+msgstr ""
+
+#: includes\class-settings-render.php:749
+msgid "Provider"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1316
+msgid "Provider \"%s\" saved successfully."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1334
+msgid "Provider ID is required."
+msgstr ""
+
+#: includes\class-settings-render.php:554
+msgid "Provider Preset Template:"
+msgstr ""
+
+#: includes\class-settings-render.php:570
+msgid "Provider Type:"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1343
+msgid "Provider deleted successfully."
+msgstr ""
+
+#: assets/admin.js:857
+msgid "Provider name is required."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1339
+msgid "Provider not found or could not be deleted."
+msgstr ""
+
+#: assets/admin.js:894
+msgid "Provider saved."
+msgstr ""
+
+#: includes\class-settings-render.php:709
+#: includes\class-settings-render.php:805
+msgid "Provider:"
+msgstr ""
+
+#: includes\class-settings-storage.php:327
 msgid "Providers"
 msgstr ""
 
-#: includes/class-settings.php:192
+#: includes\class-settings-render.php:1411
+#: includes\class-settings-render.php:1424
+msgid "Publish Immediately"
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:148
+msgid "Puck / Πουκ (Lively, Youthful & Expressive)"
+msgstr ""
+
+#: includes\class-settings-storage.php:329
 msgid "Rate Limits"
 msgstr ""
 
-#: includes/class-rate-limiter.php:52
+#: includes\class-settings-render.php:364
+msgid "Rate Limits, Research Retention & Logging"
+msgstr ""
+
+#: includes\class-rate-limiter.php:52
 msgid "Rate limit reached (%1$d requests). Try again in %2$d seconds."
 msgstr ""
 
-#: includes/class-settings.php:317
-#: includes/class-settings.php:392
-#: includes/class-settings.php:407
+#: includes\class-settings-render.php:382
+msgid "Refresh Logs"
+msgstr ""
+
+#: includes\class-settings-render.php:948
+#: includes\class-settings-render.php:1023
+#: includes\class-settings-render.php:1038
+#: includes\class-settings-render.php:1234
 msgid "Remove stored key"
 msgstr ""
 
-#: includes/class-settings.php:361
+#: includes\class-settings-render.php:787
+msgid "Request Log & Error Details"
+msgstr ""
+
+#: includes\class-settings-render.php:101
+#: includes\class-settings-render.php:340
+msgid "Request Timeout (seconds)"
+msgstr ""
+
+#: assets/admin.js:467
+#: assets/admin.js:537
+#: assets/admin.js:605
+msgid "Request failed — check your connection."
+msgstr ""
+
+#: includes\class-settings-render.php:992
 msgid "Request timeout in seconds (5-300). Default"
 msgstr ""
 
-#: includes/class-settings.php:214
+#: includes\class-settings-storage.php:355
 msgid "Requests per Window"
 msgstr ""
 
-#: includes/class-settings.php:403
+#: includes\class-settings-render.php:1034
 msgid "Required for Google Cloud Imagen and Text-to-Speech integration."
 msgstr ""
 
-#: includes/class-settings.php:216
+#: includes\class-settings-storage.php:357
 msgid "Research Log Retention (days)"
 msgstr ""
 
-#: assets/sidebar.js:161
+#: assets/sidebar.js:341
 msgid "Research failed:"
 msgstr ""
 
-#: includes/class-ajax-handlers.php:285
+#: includes\class-ajax-handlers.php:370
 msgid "Research for post #%1$d: %2$s"
 msgstr ""
 
-#: assets/sidebar.js:127
+#: assets/sidebar.js:307
 msgid "Research timed out after %d attempts. The job may still be running — check back later or re-run the request."
 msgstr ""
 
-#: assets/admin.js:133
-msgid "Review completed. Status updated."
+#: assets/sidebar.js:518
+msgid "Retry"
 msgstr ""
 
-#: includes/class-admin-presets.php:220
+#: assets/admin.js:423
+msgid "Review completed."
+msgstr ""
+
+#: assets/admin.js:234
+msgid "Review what the AI wrote before inserting it. Green text is added, red strikethrough text would be replaced. Nothing is inserted until you choose Insert draft."
+msgstr ""
+
+#: includes\class-admin-presets.php:220
 msgid "Role"
 msgstr ""
 
-#: includes/class-settings.php:341
+#: assets/admin.js:561
+msgid "Running review…"
+msgstr ""
+
+#: includes\class-settings-render.php:93
+#: includes\class-settings-render.php:332
+msgid "Sampling Temperature"
+msgstr ""
+
+#: includes\class-settings-render.php:972
 msgid "Sampling temperature (0-2). Default 0.7. Intent classification and audio scripts are locked to 0.0 for determinism."
 msgstr ""
 
-#: includes/class-admin-presets.php:154
-#: includes/class-author-presets.php:146
+#: includes\class-settings-render.php:336
+msgid "Sampling temperature for assistant chat (0.0 to 2.0). Default 0.7."
+msgstr ""
+
+#: includes\class-admin-presets.php:154
+#: includes\class-author-presets.php:146
 msgid "Save"
 msgstr ""
 
-#: includes/class-author-presets.php:184
+#: includes\class-settings-render.php:391
+msgid "Save Changes"
+msgstr ""
+
+#: includes\class-settings-render.php:637
+msgid "Save Provider"
+msgstr ""
+
+#: includes\class-author-presets.php:184
 msgid "Save default"
 msgstr ""
 
-#: includes/class-settings.php:244
-msgid "Save your settings first, then verify each provider separately. Each test uses its own rate-limit budget so testing never burns your AI allowance."
-msgstr ""
-
-#: includes/class-settings.php:314
+#: includes\class-settings-render.php:945
 msgid "Saved key ends in"
 msgstr ""
 
-#: includes/class-metaboxes.php:67
-#: assets/admin.js:129
+#: includes\class-metaboxes.php:75
+#: assets/admin.js:409
 msgid "Score: %s/100"
 msgstr ""
 
-#: assets/sidebar.js:280
+#: includes\class-settings-render.php:671
+msgid "Scraped Articles"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:921
+msgid "Script cannot be empty."
+msgstr ""
+
+#: includes\class-settings-render.php:196
+msgid "Scriptwriter AI Provider"
+msgstr ""
+
+#: includes\class-settings-render.php:206
+msgid "Scriptwriter Model Override"
+msgstr ""
+
+#: includes\class-settings-render.php:732
+msgid "Search:"
+msgstr ""
+
+#: includes\class-settings-render.php:259
+msgid "Secondary Host Voice Persona (Male)"
+msgstr ""
+
+#: includes\class-settings-render.php:1349
+msgid "Select emotional tone and delivery cadence for Gemini audio speech synthesis (logosAI system)."
+msgstr ""
+
+#: includes\class-settings-render.php:73
+msgid "Select which AI provider powers drafting and scorecard evaluation in the editor metabox."
+msgstr ""
+
+#: includes\class-settings-render.php:237
+msgid "Select which AI provider powers neural speech generation (Google Gemini / AI Studio configured in the AI Providers tab)."
+msgstr ""
+
+#: includes\class-settings-render.php:312
+msgid "Select which AI provider powers sidebar chat and background deep-research tasks."
+msgstr ""
+
+#: includes\class-settings-render.php:561
+msgid "Selecting a preset template automatically sets the base URL, default model and tuning parameters."
+msgstr ""
+
+#: assets/sidebar.js:681
 msgid "Send"
 msgstr ""
 
-#: includes/class-admin-presets.php:38
-#: assets/admin.js:100
-#: assets/presets.js:36
+#: includes\class-admin-presets.php:38
+#: assets/presets.js:39
 msgid "Server connection error."
 msgstr ""
 
-#: assets/admin.js:45
-msgid "Server error occurred."
+#: includes\class-ajax-handlers.php:1259
+msgid "Settings saved successfully (%d options updated)."
 msgstr ""
 
-#: includes/class-admin-presets.php:116
-#: includes/class-author-presets.php:112
+#: assets/sidebar.js:604
+msgid "Show less"
+msgstr ""
+
+#: assets/admin.js:1135
+msgid "Showing %d - %d of %d entries"
+msgstr ""
+
+#: includes\class-settings-render.php:764
+msgid "Showing 0 items"
+msgstr ""
+
+#: includes\class-admin-presets.php:116
+#: includes\class-author-presets.php:112
 msgid "Slug"
 msgstr ""
 
-#: includes/class-ajax-handlers.php:106
+#: includes\class-settings-render.php:109
+msgid "Source Processing & Debugging"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:129
 msgid "Sources exceed the 20,000 character limit."
 msgstr ""
 
-#: assets/sidebar.js:171
+#: includes\class-settings-storage.php:375
+msgid "Speaking Delivery Style"
+msgstr ""
+
+#: includes\class-settings-render.php:241
+msgid "Speaking Delivery Style (logosAI)"
+msgstr ""
+
+#: includes\class-settings-render.php:265
+msgid "Speaking Rate / Speed"
+msgstr ""
+
+#: includes\class-settings-render.php:1308
+msgid "Speaking rate multiplier (0.85 to 1.25). Default 1.00."
+msgstr ""
+
+#: includes\class-settings-render.php:231
+msgid "Speech AI Provider (logosAI)"
+msgstr ""
+
+#: includes\class-api-client.php:447
+msgid "Speech API Connection Successful! (Audio generated)"
+msgstr ""
+
+#: includes\class-settings-storage.php:362
+msgid "Speech Generation API Key (Google AI Studio / Gemini)"
+msgstr ""
+
+#: includes\class-settings-render.php:1181
+msgid "Standard Conversational (Default)"
+msgstr ""
+
+#: includes\class-settings-render.php:1162
+msgid "Standard Editorial (Default)"
+msgstr ""
+
+#: includes\class-settings-render.php:753
+msgid "Status"
+msgstr ""
+
+#: includes\class-settings-render.php:724
+#: includes\class-settings-render.php:797
+#: assets/sidebar.js:351
 msgid "Status:"
 msgstr ""
 
-#: includes/class-admin-presets.php:102
+#: includes\class-settings-render.php:587
+msgid "Stored securely with autoload disabled. Leave blank when editing to keep current secret."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:63
+#: includes\class-settings-render.php:1331
+msgid "Storyteller & Narrative (Αφήγηση & Παραμύθι)"
+msgstr ""
+
+#: includes\class-admin-presets.php:102
 msgid "Subscriber"
 msgstr ""
 
-#: assets/admin.js:36
+#: includes\class-settings-render.php:727
+#: assets/admin.js:1095
+#: assets/admin.js:1239
+msgid "Success"
+msgstr ""
+
+#: includes\class-settings-render.php:676
+msgid "Success Rate"
+msgstr ""
+
+#: assets/admin.js:455
 msgid "Success! API is working."
 msgstr ""
 
-#: includes/class-settings.php:201
+#: includes\class-settings-render.php:666
+msgid "TTS Characters"
+msgstr ""
+
+#: includes\class-settings-render.php:213
+#: includes\class-settings-storage.php:368
+msgid "Target Podcast Duration"
+msgstr ""
+
+#: includes\class-settings-render.php:1203
+msgid "Target duration and word budget pacing for daily podcast synthesis."
+msgstr ""
+
+#: includes\class-settings-storage.php:342
 msgid "Temperature (%s)"
 msgstr ""
 
-#: includes/class-settings.php:245
+#: includes\class-settings-render.php:603
+msgid "Temperature (0.0 - 2.0):"
+msgstr ""
+
+#: includes\class-settings-render.php:370
 msgid "Test Active Provider"
 msgstr ""
 
-#: includes/class-settings.php:247
+#: includes\class-settings-render.php:372
 msgid "Test Anthropic"
 msgstr ""
 
-#: includes/class-settings.php:243
+#: includes\class-settings-render.php:518
+#: includes\class-settings-render.php:633
+#: includes\class-settings-render.php:705
 msgid "Test Connection"
 msgstr ""
 
-#: includes/class-settings.php:248
+#: includes\class-settings-render.php:373
 msgid "Test Gemini"
 msgstr ""
 
-#: includes/class-settings.php:246
+#: includes\class-settings-render.php:371
 msgid "Test OpenAI"
 msgstr ""
 
-#: includes/class-admin-presets.php:177
-#: includes/class-author-presets.php:169
+#: assets/admin.js:439
+msgid "Testing connection…"
+msgstr ""
+
+#: includes\class-settings-render.php:165
+#: includes\class-settings-storage.php:377
+msgid "Text Briefing Category"
+msgstr ""
+
+#: includes\class-settings-storage.php:379
+msgid "Text Briefing Post Status"
+msgstr ""
+
+#: includes\class-settings-render.php:177
+msgid "Text Instruction Preset"
+msgstr ""
+
+#: includes\class-settings-render.php:171
+msgid "Text Post Status"
+msgstr ""
+
+#: includes\class-settings-storage.php:366
+msgid "Text Story Preset"
+msgstr ""
+
+#: includes\class-settings-storage.php:381
+msgid "Text Story System Prompt"
+msgstr ""
+
+#: assets/admin.js:303
+msgid "The AI returned an empty draft."
+msgstr ""
+
+#: assets/admin.js:311
+msgid "The draft is too large to diff in the browser — previewing the raw text instead."
+msgstr ""
+
+#: includes\class-admin-presets.php:177
+#: includes\class-author-presets.php:169
 msgid "The slug is generated automatically from the name (e.g. \"Concise wire style\" → \"concise-wire-style\")."
 msgstr ""
 
-#: includes/class-settings.php:438
+#: includes\class-settings-render.php:1069
 msgid "Throttle AI actions when a user exceeds the configured budget"
 msgstr ""
 
-#: includes/class-settings.php:203
+#: includes\class-settings-render.php:1143
+msgid "Time when morning Greek news sources are scraped and snapshot saved. Default 06:30."
+msgstr ""
+
+#: includes\class-settings-render.php:1152
+msgid "Time when text story curation and podcast synthesis are triggered. Default 07:15."
+msgstr ""
+
+#: includes\class-settings-storage.php:344
 msgid "Timeout (%s)"
 msgstr ""
 
-#: includes/class-admin-presets.php:37
-#: assets/presets.js:32
+#: includes\class-settings-render.php:611
+msgid "Timeout (seconds):"
+msgstr ""
+
+#: includes\class-settings-render.php:793
+msgid "Timestamp:"
+msgstr ""
+
+#: includes\class-settings-render.php:686
+msgid "Today"
+msgstr ""
+
+#: includes\class-settings-render.php:651
+msgid "Token & Activity Analytics Dashboard"
+msgstr ""
+
+#: includes\class-settings-render.php:44
+msgid "Token & Usage Logs"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:1528
+msgid "Token logs cleared successfully."
+msgstr ""
+
+#: includes\class-settings-render.php:751
+msgid "Tokens / Metrics"
+msgstr ""
+
+#: includes\class-settings-render.php:817
+msgid "Tokens / Metrics:"
+msgstr ""
+
+#: includes\class-settings-render.php:656
+msgid "Total Requests"
+msgstr ""
+
+#: includes\class-settings-render.php:661
+msgid "Total Tokens"
+msgstr ""
+
+#: includes\class-settings-render.php:506
+msgid "Tuning:"
+msgstr ""
+
+#: includes\class-briefing-admin.php:480
+msgid "Unknown"
+msgstr ""
+
+#: includes\class-admin-presets.php:37
+#: assets/presets.js:35
 msgid "Unknown error."
 msgstr ""
 
-#: includes/class-ajax-handlers.php:140
+#: includes\class-ajax-handlers.php:1027
+msgid "Unsupported file type \"%s\". Allowed: PDF, DOCX, TXT."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:163
 msgid "Unsupported file type. Allowed: PDF, DOCX, MP3, MP4, WAV, M4A."
 msgstr ""
 
-#: includes/class-settings.php:320
+#: includes\class-briefing-admin.php:479
+msgid "Untitled"
+msgstr ""
+
+#: includes\class-settings-render.php:951
 msgid "Used for the active AI provider (OpenAI, Anthropic or Gemini)."
 msgstr ""
 
-#: includes/class-settings.php:427
+#: includes\class-settings-render.php:368
+msgid "Verify connectivity with any configured provider. Each test uses its own rate-limit budget and logs activity in the Token Logger dashboard."
+msgstr ""
+
+#: includes\class-settings-render.php:1058
 msgid "Vertex AI region for Imagen. Default us-central1. European tenants may use e.g. europe-west4 for data residency."
 msgstr ""
 
-#: includes/class-settings.php:215
+#: includes\class-settings-render.php:380
+msgid "View recent internal diagnostic logs for debugging scraping, API calls, prompt hydration, and background jobs."
+msgstr ""
+
+#: includes\class-settings-storage.php:363
+msgid "Voice Generation AI Model"
+msgstr ""
+
+#: includes\class-settings-storage.php:374
+msgid "Voice Pitch Tuning"
+msgstr ""
+
+#: includes\class-settings-storage.php:373
+msgid "Voice Speaking Rate / Speed"
+msgstr ""
+
+#: includes\class-settings-storage.php:361
+msgid "Voice Synthesis Engine"
+msgstr ""
+
+#: includes\class-settings-render.php:668
+msgid "Voice audio synthesized"
+msgstr ""
+
+#: includes\class-settings-render.php:1299
+msgid "Voice model used for the co-host / commentator (Νίκος). Default: Fenrir / Φένριρ."
+msgstr ""
+
+#: includes\class-settings-render.php:1282
+msgid "Voice model used for the lead presenter (Μαρία). Default: Kore / Κόρη."
+msgstr ""
+
+#: includes\class-settings-render.php:1317
+msgid "Voice pitch adjustment (-4.0 to 4.0 semitones). Default 0.0."
+msgstr ""
+
+#: includes\class-settings-render.php:1111
+msgid "WARNING (Only warnings & failures)"
+msgstr ""
+
+#: includes\class-settings-storage.php:356
 msgid "Window Length (seconds)"
 msgstr ""
 
-#: includes/class-ajax-handlers.php:268
+#: includes\class-settings-render.php:1400
+msgid "WordPress post category assigned to synthesized podcast posts."
+msgstr ""
+
+#: includes\class-settings-render.php:1379
+msgid "WordPress post category assigned to text briefing posts."
+msgstr ""
+
+#: includes\class-ajax-handlers.php:305
 msgid "You are a helpful AI journalist assistant."
 msgstr ""
 
-#: includes/class-api-client.php:70
+#: includes\class-api-client.php:461
 msgid "You are a professional AI journalist."
 msgstr ""
 
-#: includes/class-api-client.php:257
+#: includes\class-api-client.php:670
 msgid "You are a professional news radio narrator. Convert the user's prompt or media notes into a short 4-5 sentence radio report script. Output ONLY the speech script and nothing else."
 msgstr ""
 
-#: presshub-ai-editor.php:118
+#: presshub-ai-editor.php:199
 msgid "You are a senior investigative research assistant. Your task is to perform an in-depth topic synthesis and research synthesis.\nUse the provided instructions and the current post draft context to compile a comprehensive, well-structured, and objective research report in clean HTML format. Use headings, lists, and quotes where appropriate. DO NOT output code block wrappers (like ```html). Only output the raw HTML."
 msgstr ""
 
-#: includes/class-api-client.php:108
+#: includes\class-api-client.php:517
 msgid "You are an exacting news editor."
 msgstr ""
 
-#: includes/class-api-client.php:128
+#: includes\class-api-client.php:539
 msgid "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else."
 msgstr ""
 
-#: includes/class-admin-presets.php:62
+#: includes\class-briefing-admin.php:200
+msgid "You do not have permission to access the Daily Briefing Hub."
+msgstr ""
+
+#: includes\class-admin-presets.php:62
 msgid "You do not have permission to access this page."
 msgstr ""
 
-#: includes/class-settings.php:225
+#: includes\class-settings-render.php:27
 msgid "You do not have permission to view PressHub AI settings."
 msgstr ""
 
-#: includes/class-settings.php:379
+#: includes\class-audio-synthesizer.php:160
+msgid "Zephyr / Ζέφυρος (Calm, Gentle & Melodious)"
+msgstr ""
+
+#: includes\class-settings-render.php:1010
 msgid "anthropic-version header. Default 2023-06-01."
 msgstr ""
 
-#: includes/class-admin-presets.php:244
+#: includes\class-news-curator.php:58
+#: includes\class-podcast-producer.php:102
+msgid "Άγνωστη πηγή"
+msgstr ""
+
+#: includes\class-briefing-admin.php:73
+msgid "Αποθήκευση σεναρίου..."
+msgstr ""
+
+#: includes\class-audio-synthesizer.php:457
+msgid "Απομαγνητοφώνηση / Διάλογος"
+msgstr ""
+
+#: includes\class-news-curator.php:51
+#: includes\class-podcast-producer.php:95
+msgid "Δεν υπάρχουν διαθέσιμα άρθρα."
+msgstr ""
+
+#: includes\class-briefing-admin.php:72
+msgid "Δημιουργία διαλόγου podcast..."
+msgstr ""
+
+#: includes\class-news-harvester.php:316
+msgid "Είδηση"
+msgstr ""
+
+#: includes\class-briefing-admin.php:78
+msgid "Εκτέλεση ανάκτησης ειδήσεων τώρα; Θα σαρωθούν οι διαμορφωμένες πηγές."
+msgstr ""
+
+#: includes\class-briefing-admin.php:79
+msgid "Εκτέλεση σύνθεσης ήχου podcast τώρα μέσω Google Cloud TTS;"
+msgstr ""
+
+#: includes\class-briefing-admin.php:75
+msgid "Επεξεργασία χειροκίνητων σημειώσεων..."
+msgstr ""
+
+#: includes\class-briefing-admin.php:76
+msgid "Η λειτουργία ολοκληρώθηκε επιτυχώς!"
+msgstr ""
+
+#: includes\class-news-curator.php:45
+#: includes\class-podcast-producer.php:89
+msgid "Καμία πηγή"
+msgstr ""
+
+#: includes\class-briefing-admin.php:77
+msgid "Παρουσιάστηκε σφάλμα κατά την επεξεργασία."
+msgstr ""
+
+#: includes\class-briefing-admin.php:70
+msgid "Συλλογή ειδήσεων σε εξέλιξη..."
+msgstr ""
+
+#: includes\class-briefing-admin.php:74
+msgid "Σύνθεση φωνών & podcast..."
+msgstr ""
+
+#: includes\class-news-curator.php:266
+msgid "Σύνοψη Ειδήσεων"
+msgstr ""
+
+#: includes\class-briefing-admin.php:71
+msgid "Σύνταξη κειμένου ενημέρωσης..."
+msgstr ""
+
+#: includes\class-news-harvester.php:360
+msgid "Χειροκίνητη Καταχώρηση"
+msgstr ""
+
+#: includes\class-ajax-handlers.php:998
+msgid "Χειροκίνητη Σημείωση"
+msgstr ""
+
+#: includes\class-news-curator.php:57
+#: includes\class-podcast-producer.php:101
+msgid "Χωρίς τίτλο"
+msgstr ""
+
+#: includes\class-admin-presets.php:244
 msgid "— Disable presets —"
 msgstr ""
 
-#: includes/class-admin-presets.php:243
-#: includes/class-author-presets.php:179
+#: includes\class-admin-presets.php:243
+#: includes\class-author-presets.php:179
 msgid "— No default —"
 msgstr ""
 
-#: assets/sidebar.js:246
+#: assets/sidebar.js:658
+msgid "✍️ Draft"
+msgstr ""
+
+#: assets/admin.js:1313
+#: assets/admin.js:1315
+msgid "✓ Copied!"
+msgstr ""
+
+#: assets/sidebar.js:635
 msgid "🎙️ AI Radio Audio Report"
 msgstr ""
 
-#: assets/sidebar.js:231
+#: assets/sidebar.js:616
 msgid "🎨 Generated Image"
 msgstr ""
 
-#: assets/sidebar.js:218
+#: assets/sidebar.js:659
+msgid "🎨 Image"
+msgstr ""
+
+#: assets/sidebar.js:595
 msgid "🔍 Deep Research Synthesis"
+msgstr ""
+
+#: assets/sidebar.js:657
+msgid "🔍 Research"
 msgstr ""
