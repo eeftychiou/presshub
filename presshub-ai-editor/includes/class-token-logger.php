@@ -228,7 +228,21 @@ class PressHub_AI_Token_Logger {
 
         $table_name = self::get_table_name();
 
-        $data['created_at'] = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+        $row = [
+            'created_at'        => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
+            'action_trigger'    => (string) ( $data['action_trigger'] ?? '' ),
+            'provider'          => (string) ( $data['provider'] ?? '' ),
+            'model'             => (string) ( $data['model'] ?? '' ),
+            'prompt_tokens'     => (int) ( $data['prompt_tokens'] ?? 0 ),
+            'completion_tokens' => (int) ( $data['completion_tokens'] ?? 0 ),
+            'total_tokens'      => (int) ( $data['total_tokens'] ?? 0 ),
+            'metric_units'      => (int) ( $data['metric_units'] ?? 0 ),
+            'duration_ms'       => (int) ( $data['duration_ms'] ?? 0 ),
+            'status'            => 'error' === strtolower( (string) ( $data['status'] ?? 'success' ) ) ? 'error' : 'success',
+            'user_id'           => (int) ( $data['user_id'] ?? 0 ),
+            'error_message'     => $data['error_message'] ?? null,
+            'metadata'          => $data['metadata'] ?? null,
+        ];
 
         $format = [
             '%s', // created_at
@@ -246,7 +260,7 @@ class PressHub_AI_Token_Logger {
             '%s', // metadata
         ];
 
-        $result = $wpdb->insert( $table_name, $data, $format );
+        $result = $wpdb->insert( $table_name, $row, $format );
         if ( false === $result || empty( $wpdb->insert_id ) ) {
             return null;
         }
