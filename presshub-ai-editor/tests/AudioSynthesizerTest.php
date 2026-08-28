@@ -56,7 +56,15 @@ as_check( 'voices: male voices contains Puck', isset( $gemini_voices['male']['Pu
 $sample_voice = $gemini_voices['male']['Fenrir'];
 as_check( 'voices: metadata contains name Fenrir', ( $sample_voice['name'] ?? '' ) === 'Fenrir' );
 as_check( 'voices: metadata contains gender MALE', ( $sample_voice['gender'] ?? '' ) === 'MALE' );
-as_check( 'voices: metadata contains type Gemini-2.0', ( $sample_voice['type'] ?? '' ) === 'Gemini-2.0' );
+as_check( 'voices: metadata contains type Gemini-Neural', ( $sample_voice['type'] ?? '' ) === 'Gemini-Neural' );
+
+// Check available delivery styles (logosAI)
+$styles = $synthesizer->get_available_styles();
+as_check( 'styles: returns 11 delivery styles', count( $styles ) === 11 );
+as_check( 'styles: contains formal style', isset( $styles['formal'] ) );
+as_check( 'styles: contains storyteller style', isset( $styles['storyteller'] ) );
+as_check( 'styles: contains dramatic style', isset( $styles['dramatic'] ) );
+as_check( 'styles: contains custom style', isset( $styles['custom'] ) );
 
 $gc_voices = $synthesizer->get_available_voices( 'google_cloud' );
 as_check( 'voices: google cloud contains el-GR-Wavenet-A', isset( $gc_voices['female']['el-GR-Wavenet-A'] ) );
@@ -70,9 +78,9 @@ as_check( 'voices: google cloud contains el-GR-Chirp3-HD-Achird', isset( $gc_voi
 $GLOBALS['OPTIONS_STORE'] = [];
 
 // Test 2a: Defaults (Gemini Engine default)
-as_check( 'speaker_mapping: default female voice is Aoede', $synthesizer->get_voice_for_speaker( 'female' ) === 'Aoede' );
+as_check( 'speaker_mapping: default female voice is Kore', $synthesizer->get_voice_for_speaker( 'female' ) === 'Kore' );
 as_check( 'speaker_mapping: default male voice is Fenrir', $synthesizer->get_voice_for_speaker( 'male' ) === 'Fenrir' );
-as_check( 'speaker_mapping: Μαρία maps to female voice Aoede', $synthesizer->get_voice_for_speaker( 'Μαρία' ) === 'Aoede' );
+as_check( 'speaker_mapping: Μαρία maps to female voice Kore', $synthesizer->get_voice_for_speaker( 'Μαρία' ) === 'Kore' );
 as_check( 'speaker_mapping: Νίκος maps to male voice Fenrir', $synthesizer->get_voice_for_speaker( 'Νίκος' ) === 'Fenrir' );
 
 // Test 2b: Custom configured voice models in options
@@ -259,11 +267,12 @@ $producer->save_script( $test_date_e2e, $script_content );
 class Mock_Audio_API_Client extends PressHub_AI_API_Client {
     public $synthesized_calls = [];
     public function __construct() {}
-    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Aoede', bool $as_wav = true ) {
+    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal' ) {
         $this->synthesized_calls[] = [
             'engine'     => 'gemini',
             'text'       => $text,
             'voice_name' => $voice_name,
+            'style'      => $style,
         ];
         $fake_pcm = str_repeat( "\x12\x34", 1200 ); // 100ms at 24kHz
         return $as_wav ? self::pcm_to_wav( $fake_pcm, 24000 ) : $fake_pcm;
@@ -290,15 +299,15 @@ as_check( 'e2e: post_id created', isset( $result_e2e['post_id'] ) && $result_e2e
 as_check( 'e2e: attachment_id is 95', ( $result_e2e['attachment_id'] ?? 0 ) === 95 );
 as_check( 'e2e: audio_url contains attachment URL', false !== strpos( $result_e2e['audio_url'] ?? '', 'attachment_id=95' ) );
 as_check( 'e2e: turns count is 2', ( $result_e2e['turns_count'] ?? 0 ) === 2 );
-as_check( 'e2e: synthesized 2 turns via API client', count( $mock_tts->synthesized_calls ) === 2 );
-as_check( 'e2e: turn 0 called with female voice Aoede', ( $mock_tts->synthesized_calls[0]['voice_name'] ?? '' ) === 'Aoede' );
-as_check( 'e2e: turn 1 called with male voice Fenrir', ( $mock_tts->synthesized_calls[1]['voice_name'] ?? '' ) === 'Fenrir' );
+as_check( 'e2e: synthesized single pass via Gemini API client', count( $mock_tts->synthesized_calls ) === 1 );
+as_check( 'e2e: single pass called with female voice Kore', ( $mock_tts->synthesized_calls[0]['voice_name'] ?? '' ) === 'Kore' );
+as_check( 'e2e: single pass called with script text', false !== strpos( $mock_tts->synthesized_calls[0]['text'] ?? '', 'Μαρία' ) );
 
 // Test 7b: Custom script argument
 $mock_tts_custom = new Mock_Audio_API_Client();
 $custom_script = "[Νίκος]: Μόνο ο Νίκος μιλάει εδώ.";
 $result_custom = $synthesizer->synthesize_podcast( $test_date_e2e, $custom_script, $mock_tts_custom );
-as_check( 'e2e: custom script overrides stored script', count( $mock_tts_custom->synthesized_calls ) === 1 && ( $mock_tts_custom->synthesized_calls[0]['voice_name'] ?? '' ) === 'Fenrir' );
+as_check( 'e2e: custom script overrides stored script', count( $mock_tts_custom->synthesized_calls ) === 1 && false !== strpos( $mock_tts_custom->synthesized_calls[0]['text'] ?? '', 'Μόνο ο Νίκος' ) );
 
 // Test 7c: Missing script returns WP_Error
 $err_no_script = $synthesizer->synthesize_podcast( '1980-01-01', '', $mock_tts );

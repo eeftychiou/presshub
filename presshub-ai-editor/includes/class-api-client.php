@@ -912,14 +912,15 @@ class PressHub_AI_API_Client {
     }
 
     /**
-     * Synthesize natural conversational speech using Google AI Studio (Gemini 2.0 Flash Audio).
+     * Synthesize natural Greek speech using Google AI Studio Gemini Flash Audio (logosAI replication).
      *
-     * @param string $text       Spoken turn dialogue text.
-     * @param string $voice_name Gemini prebuilt voice name (e.g. 'Aoede', 'Fenrir', 'Puck', 'Kore', 'Charon').
-     * @param bool   $as_wav     Whether to return complete WAV container (default true) or raw PCM.
+     * @param string $text        Spoken dialogue or turn text.
+     * @param string $voice_name  Gemini prebuilt voice name ('Kore', 'Fenrir', 'Puck', 'Charon', 'Zephyr', 'Aoede', etc.).
+     * @param bool   $as_wav      Whether to return complete WAV container (default true) or raw PCM.
+     * @param string $style       Delivery style ('formal', 'natural', 'cheerful', 'storyteller', 'calm', etc.) or custom instruction.
      * @return string|WP_Error Binary audio data or WP_Error on failure.
      */
-    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Aoede', bool $as_wav = true ) {
+    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal' ) {
         $tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
         if ( empty( $tts_api_key ) ) {
             $tts_api_key = ! empty( $this->briefing_tts_api_key ) ? $this->briefing_tts_api_key : $this->gemini_api_key;
@@ -930,33 +931,48 @@ class PressHub_AI_API_Client {
         }
 
         if ( empty( trim( $voice_name ) ) ) {
-            $voice_name = 'Aoede';
+            $voice_name = 'Kore';
         }
 
-        $prompt_instruction = "You are a professional Greek podcast narrator and voice actor. Read the following text aloud with natural, expressive conversational inflection, clear Greek pronunciation, and authentic rhythm. Read ONLY the text verbatim, word for word. Do not add introductory remarks, concluding greetings, or conversational commentary:\n\n" . trim( $text );
+        $style_instructions = [
+            'natural'     => 'Say naturally and clearly in Greek with warm human cadence:',
+            'formal'      => 'Say in a professional, authoritative, articulate Greek news broadcast tone:',
+            'cheerful'    => 'Say cheerfully, enthusiastically, and with a bright uplifting smile in Greek:',
+            'storyteller' => 'Say like an engaging, captivating storyteller with theatrical pacing and expressive pauses in Greek:',
+            'calm'        => 'Say in a peaceful, gentle, soothing, and relaxing tone in Greek:',
+            'dramatic'    => 'Say with intense dramatic emotion, resonant weight, and vivid inflection in Greek:',
+            'poetic'      => 'Say with deep lyrical emotion, soft melodic rhythm, and poetic sensitivity in Greek:',
+            'epic'        => 'Say in a grand, legendary, classical ancient oratorical style in Greek:',
+            'whisper'     => 'Say in a soft, intimate, gentle quiet whisper in Greek:',
+            'energetic'   => 'Say with high energy, vibrant excitement, and dynamic rhythm in Greek:',
+        ];
 
-        // Try Gemini Speech generation via generateContent (Standard Google AI Studio API) and interactions
-        $configured_model = (string) get_option( 'presshub_ai_briefing_tts_model', 'gemini-2.0-flash' );
+        $instruction = $style_instructions[ $style ] ?? ( ! empty( $style ) && strlen( $style ) > 15 ? $style : $style_instructions['formal'] );
+        $clean_text  = trim( $text );
+        $prompt_text = $instruction . "\n\"" . $clean_text . "\"";
+
+        // Try Gemini Speech generation prioritizing logosAI 3.1 Flash TTS model
+        $configured_model = (string) get_option( 'presshub_ai_briefing_tts_model', 'gemini-3.1-flash-tts-preview' );
         $tts_models       = array_values( array_unique( array_filter( [
             $configured_model,
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-exp',
             'gemini-3.1-flash-tts-preview',
             'gemini-2.5-flash-preview-tts',
+            'gemini-2.0-flash-exp',
+            'gemini-2.0-flash',
         ] ) ) );
         $audio_base64     = null;
         $mime_type        = 'audio/pcm;rate=24000';
         $last_error       = '';
 
         foreach ( $tts_models as $model ) {
-            // 1. Try standard generateContent API with AUDIO response modality
+            // Standard generateContent API with AUDIO response modality
             $gen_url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
             $gen_body = [
                 'contents' => [
                     [
                         'role'  => 'user',
                         'parts' => [
-                            [ 'text' => $prompt_instruction ],
+                            [ 'text' => $prompt_text ],
                         ],
                     ],
                 ],
@@ -1003,45 +1019,6 @@ class PressHub_AI_API_Client {
             } else {
                 $last_error = $gen_res->get_error_message();
             }
-
-            // 2. Try Interactions API endpoint
-            $interactions_url = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-            $int_body         = [
-                'model'             => $model,
-                'input'             => $prompt_instruction,
-                'response_format'   => [ 'type' => 'audio' ],
-                'generation_config' => [
-                    'speech_config' => [
-                        [ 'voice' => $voice_name ],
-                    ],
-                ],
-            ];
-
-            $int_res = wp_remote_post( $interactions_url, [
-                'headers' => [
-                    'Content-Type'   => 'application/json',
-                    'x-goog-api-key' => $tts_api_key,
-                ],
-                'body'    => wp_json_encode( $int_body ),
-                'timeout' => 90,
-            ] );
-
-            if ( ! is_wp_error( $int_res ) ) {
-                $res_body = json_decode( wp_remote_retrieve_body( $int_res ), true );
-                if ( ! empty( $res_body['output_audio']['data'] ) ) {
-                    $audio_base64 = $res_body['output_audio']['data'];
-                    $mime_type    = $res_body['output_audio']['mimeType'] ?? $mime_type;
-                    break;
-                } elseif ( ! empty( $res_body['interaction']['output_audio']['data'] ) ) {
-                    $audio_base64 = $res_body['interaction']['output_audio']['data'];
-                    $mime_type    = $res_body['interaction']['output_audio']['mimeType'] ?? $mime_type;
-                    break;
-                }
-                if ( isset( $res_body['error']['message'] ) ) {
-                    $last_error = $res_body['error']['message'];
-                    error_log( 'PressHub AI [gemini-interactions] model ' . $model . ' error: ' . $last_error );
-                }
-            }
         }
 
         if ( empty( $audio_base64 ) ) {
@@ -1059,11 +1036,7 @@ class PressHub_AI_API_Client {
             $sample_rate = (int) $m[1];
         }
 
-        if ( false !== stripos( $mime_type, 'pcm' ) || true ) {
-            return $as_wav ? self::pcm_to_wav( $raw_audio, $sample_rate ) : $raw_audio;
-        }
-
-        return $raw_audio;
+        return $as_wav ? self::pcm_to_wav( $raw_audio, $sample_rate ) : $raw_audio;
     }
 
     /**

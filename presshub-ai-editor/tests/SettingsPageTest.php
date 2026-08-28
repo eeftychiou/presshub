@@ -32,7 +32,7 @@ class SettingsPageTest
         $settings->register_settings();
         $sections    = $GLOBALS['SECTIONS']['presshub-ai'] ?? [];
         $section_ids = array_column( $sections, 'id' );
-        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_briefing' ];
+        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_briefing', 'presshub_ai_github' ];
         if ( $section_ids !== $expected ) {
             $failures[] = 'Sections should be registered in order ' . implode( ', ', $expected ) . '; got: ' . implode( ', ', $section_ids );
         }
@@ -67,11 +67,15 @@ class SettingsPageTest
             'presshub_ai_timeout_gemini',
             'presshub_ai_openai_org',
             'presshub_ai_anthropic_version',
-            'presshub_ai_github_token',
         ] as $field ) {
             if ( ! in_array( $field, $providers, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_providers; got: " . implode( ', ', $providers );
             }
+        }
+
+        $github = array_column( $fields['presshub_ai_github'] ?? [], 'id' );
+        if ( ! in_array( 'presshub_ai_github_token', $github, true ) ) {
+            $failures[] = 'presshub_ai_github_token should be registered in presshub_ai_github; got: ' . implode( ', ', $github );
         }
 
         $media = array_column( $fields['presshub_ai_media'] ?? [], 'id' );
@@ -103,6 +107,8 @@ class SettingsPageTest
             'presshub_ai_briefing_voice_male',
             'presshub_ai_briefing_voice_speed',
             'presshub_ai_briefing_voice_pitch',
+            'presshub_ai_briefing_tts_style',
+            'presshub_ai_briefing_tts_custom_style',
             'presshub_ai_briefing_text_category',
             'presshub_ai_briefing_podcast_category',
             'presshub_ai_briefing_text_status',
@@ -164,6 +170,8 @@ class SettingsPageTest
             'presshub_ai_briefing_voice_male',
             'presshub_ai_briefing_voice_speed',
             'presshub_ai_briefing_voice_pitch',
+            'presshub_ai_briefing_tts_style',
+            'presshub_ai_briefing_tts_custom_style',
             'presshub_ai_briefing_text_category',
             'presshub_ai_briefing_podcast_category',
             'presshub_ai_briefing_text_status',

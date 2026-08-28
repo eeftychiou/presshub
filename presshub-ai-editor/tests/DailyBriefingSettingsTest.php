@@ -65,6 +65,8 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_voice_male',
             'presshub_ai_briefing_voice_speed',
             'presshub_ai_briefing_voice_pitch',
+            'presshub_ai_briefing_tts_style',
+            'presshub_ai_briefing_tts_custom_style',
             'presshub_ai_briefing_text_category',
             'presshub_ai_briefing_podcast_category',
             'presshub_ai_briefing_text_status',
@@ -201,6 +203,18 @@ class DailyBriefingSettingsTest
         }
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_pitch', '8.5' ) !== 4.0 ) {
             $failures[] = 'pitch 8.5 (above max 4.0) should clamp to 4.0; got: ' . self::sanitize( $cbs, 'presshub_ai_briefing_voice_pitch', '8.5' );
+        }
+
+        // --- Case 7b: Sanitization of delivery style & custom style prompt ---
+        self::reset_options();
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_style', 'storyteller' ) !== 'storyteller' ) {
+            $failures[] = 'storyteller style should be accepted.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_style', 'unknown_style' ) !== 'formal' ) {
+            $failures[] = 'invalid style should fall back to formal default.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_custom_style', '  Custom speaking prompt  ' ) !== 'Custom speaking prompt' ) {
+            $failures[] = 'custom style prompt should be trimmed.';
         }
 
         // --- Case 8: Sanitization of post status & category ---

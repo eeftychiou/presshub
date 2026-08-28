@@ -1093,7 +1093,8 @@ jQuery(document).ready(function($) {
                 } else {
                     var rowsHtml = '';
                     items.forEach(function(item) {
-                        var statusBadge = item.status === 'success'
+                        var isSuccess   = (item.status === 'success');
+                        var statusBadge = isSuccess
                             ? '<span class="presshub-status-pill pill-active">' + presshubEsc(__('Success', 'presshub-ai-editor')) + '</span>'
                             : '<span class="presshub-status-pill pill-inactive">' + presshubEsc(__('Error', 'presshub-ai-editor')) + '</span>';
 
@@ -1106,8 +1107,12 @@ jQuery(document).ready(function($) {
                             metricDisplay = '-';
                         }
 
-                        var duration = item.duration_ms ? formatNumber(item.duration_ms) + ' ms' : '-';
-                        var errTooltip = item.error_message ? presshubEsc(item.error_message) : '';
+                        var duration   = item.duration_ms ? formatNumber(item.duration_ms) + ' ms' : '-';
+                        var errTooltip = item.error_message ? presshubEsc(item.error_message) : presshubEsc(__('Failed', 'presshub-ai-editor'));
+
+                        var iconHtml = isSuccess
+                            ? '<span class="dashicons dashicons-yes" title="' + presshubEsc(__('Completed successfully', 'presshub-ai-editor')) + '" style="color: #00a32a;"></span>'
+                            : '<span class="dashicons dashicons-warning" title="' + errTooltip + '" style="color: #d63638; cursor:help;"></span>';
 
                         rowsHtml += '<tr>' +
                             '<td>' + presshubEsc(item.created_at || '') + '</td>' +
@@ -1117,7 +1122,7 @@ jQuery(document).ready(function($) {
                             '<td>' + metricDisplay + '</td>' +
                             '<td>' + presshubEsc(duration) + '</td>' +
                             '<td>' + statusBadge + '</td>' +
-                            '<td>' + (errTooltip ? '<span class="dashicons dashicons-warning" title="' + errTooltip + '" style="color: #d63638; cursor:help;"></span>' : '<span class="dashicons dashicons-yes" style="color: #00a32a;"></span>') + '</td>' +
+                            '<td>' + iconHtml + '</td>' +
                             '</tr>';
                     });
                     $tbody.html(rowsHtml);
@@ -1339,6 +1344,14 @@ jQuery(document).ready(function($) {
             var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc('Error while saving (' + (xhr.status || 0) + '): ' + errorDetail) + '</p></div>';
             $('#presshub-ai-settings-tabs').before(errHtml);
         });
+    });
+
+    $(document).on('change', '#presshub_ai_briefing_tts_style', function() {
+        if ($(this).val() === 'custom') {
+            $('#presshub-custom-tts-style-row').show();
+        } else {
+            $('#presshub-custom-tts-style-row').hide();
+        }
     });
 
     // ------------------------------------------------------------------

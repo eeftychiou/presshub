@@ -135,6 +135,14 @@ class PressHub_AI_Settings {
         return 'Fenrir';
     }
 
+    public static function default_briefing_tts_style(): string {
+        return 'formal';
+    }
+
+    public static function default_briefing_tts_custom_style(): string {
+        return '';
+    }
+
 
     // ------------------------------------------------------------------
     // P2: legacy model migration (idempotent).
@@ -345,6 +353,14 @@ class PressHub_AI_Settings {
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_pitch' ],
             'type'              => 'number',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_style', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_style' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_custom_style', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_custom_style' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_category', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_category_id' ],
             'type'              => 'integer',
@@ -461,6 +477,7 @@ class PressHub_AI_Settings {
         add_settings_section( 'presshub_ai_media', __( 'Media (Google Cloud)', 'presshub-ai-editor' ), [ $this, 'render_media_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_rate_limits', __( 'Rate Limits', 'presshub-ai-editor' ), [ $this, 'render_rate_limits_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_briefing', __( 'Daily Briefing & AI Podcast', 'presshub-ai-editor' ), [ $this, 'render_briefing_section' ], 'presshub-ai' );
+        add_settings_section( 'presshub_ai_github', __( 'Plugin Updates & GitHub Integration', 'presshub-ai-editor' ), [ $this, 'render_github_section' ], 'presshub-ai' );
 
         // --- P1: fields ---
         add_settings_field( 'presshub_ai_provider', __( 'AI Provider', 'presshub-ai-editor' ), [ $this, 'render_provider_field' ], 'presshub-ai', 'presshub_ai_general' );
@@ -477,7 +494,7 @@ class PressHub_AI_Settings {
         }
         add_settings_field( 'presshub_ai_openai_org', __( 'OpenAI Organization ID (optional)', 'presshub-ai-editor' ), [ $this, 'render_openai_org_field' ], 'presshub-ai', 'presshub_ai_providers' );
         add_settings_field( 'presshub_ai_anthropic_version', __( 'Anthropic API Version', 'presshub-ai-editor' ), [ $this, 'render_anthropic_version_field' ], 'presshub-ai', 'presshub_ai_providers' );
-        add_settings_field( 'presshub_ai_github_token', __( 'GitHub Token (optional)', 'presshub-ai-editor' ), [ $this, 'render_github_token_field' ], 'presshub-ai', 'presshub_ai_providers' );
+        add_settings_field( 'presshub_ai_github_token', __( 'GitHub Token (optional)', 'presshub-ai-editor' ), [ $this, 'render_github_token_field' ], 'presshub-ai', 'presshub_ai_github' );
 
         add_settings_field( 'presshub_ai_google_cloud_api_key', __( 'Google Cloud API Key (Imagen/TTS)', 'presshub-ai-editor' ), [ $this, 'render_google_cloud_api_key_field' ], 'presshub-ai', 'presshub_ai_media' );
         add_settings_field( 'presshub_ai_gcloud_project_id', __( 'Google Cloud Project ID (Imagen)', 'presshub-ai-editor' ), [ $this, 'render_gcloud_project_id_field' ], 'presshub-ai', 'presshub_ai_media' );
@@ -504,6 +521,8 @@ class PressHub_AI_Settings {
         add_settings_field( 'presshub_ai_briefing_voice_male', __( 'Male Voice Model (TTS)', 'presshub-ai-editor' ), [ $this, 'render_briefing_voice_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_speed', __( 'Voice Speaking Rate / Speed', 'presshub-ai-editor' ), [ $this, 'render_briefing_voice_speed_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_pitch', __( 'Voice Pitch Tuning', 'presshub-ai-editor' ), [ $this, 'render_briefing_voice_pitch_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_style', __( 'Speaking Delivery Style', 'presshub-ai-editor' ), [ $this, 'render_briefing_tts_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_custom_style', __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ), [ $this, 'render_briefing_tts_custom_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_category', __( 'Text Briefing Category', 'presshub-ai-editor' ), [ $this, 'render_briefing_text_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_category', __( 'Podcast Category', 'presshub-ai-editor' ), [ $this, 'render_briefing_podcast_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_status', __( 'Text Briefing Post Status', 'presshub-ai-editor' ), [ $this, 'render_briefing_text_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -611,10 +630,6 @@ class PressHub_AI_Settings {
                             </tr>
                         </tbody>
                     </table>
-
-                    <hr style="margin: 25px 0;">
-                    <?php $this->render_section_with_fields( 'presshub_ai_general', __( 'Global & Legacy Provider Settings', 'presshub-ai-editor' ) ); ?>
-                    <?php $this->render_section_with_fields( 'presshub_ai_providers', __( 'Provider Specific Fallbacks & Extras', 'presshub-ai-editor' ) ); ?>
                 </div>
 
                 <!-- TAB 3: Daily Briefing Hub -->
@@ -769,6 +784,18 @@ class PressHub_AI_Settings {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo __( 'Speaking Delivery Style', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_style_field(); ?>
+                                </td>
+                            </tr>
+                            <tr id="presshub-custom-tts-style-row" style="<?php echo ( get_option( 'presshub_ai_briefing_tts_style', 'formal' ) === 'custom' ) ? '' : 'display: none;'; ?>">
+                                <th scope="row"><label for="presshub_ai_briefing_tts_custom_style"><?php echo __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_custom_style_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_category"><?php echo __( 'Podcast Category', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_category_field(); ?>
@@ -856,6 +883,9 @@ class PressHub_AI_Settings {
 
                 <!-- TAB 6: Advanced & System Settings -->
                 <div id="presshub-tab-pane-advanced" class="presshub-tab-pane" style="display: none;">
+                    <?php $this->render_section_with_fields( 'presshub_ai_github', __( 'Plugin Updates & GitHub Integration', 'presshub-ai-editor' ) ); ?>
+
+                    <hr style="margin: 25px 0;">
                     <?php $this->render_section_with_fields( 'presshub_ai_media', __( 'Media & Vision Credentials (Google Cloud)', 'presshub-ai-editor' ) ); ?>
                     
                     <hr style="margin: 25px 0;">
@@ -1298,6 +1328,10 @@ class PressHub_AI_Settings {
 
     public function render_providers_section() {
         echo '<p>' . __( 'Each provider keeps its own model and tuning so switching providers never reuses another provider\'s model name.', 'presshub-ai-editor' ) . '</p>';
+    }
+
+    public function render_github_section() {
+        echo '<p>' . __( 'Configure GitHub Personal Access Token for private repository plugin updates and release tracking.', 'presshub-ai-editor' ) . '</p>';
     }
 
     public function render_media_section() {
@@ -1762,6 +1796,47 @@ class PressHub_AI_Settings {
         <?php
     }
 
+    public function render_briefing_tts_style_field() {
+        $option      = 'presshub_ai_briefing_tts_style';
+        $selected    = (string) get_option( $option, self::default_briefing_tts_style() );
+        $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
+        $styles      = $synthesizer ? $synthesizer->get_available_styles() : [];
+        if ( empty( $styles ) ) {
+            $styles = [
+                'formal'      => [ 'label' => __( 'Formal & Broadcast (Επίσημο & Επαγγελματικό)', 'presshub-ai-editor' ) ],
+                'natural'     => [ 'label' => __( 'Natural & Warm (Φυσικό & Φιλικό)', 'presshub-ai-editor' ) ],
+                'cheerful'    => [ 'label' => __( 'Cheerful & Bright (Χαρούμενο & Φωτεινό)', 'presshub-ai-editor' ) ],
+                'storyteller' => [ 'label' => __( 'Storyteller & Narrative (Αφήγηση & Παραμύθι)', 'presshub-ai-editor' ) ],
+                'calm'        => [ 'label' => __( 'Calm & Soothing (Ήρεμο & Γαλήνιο)', 'presshub-ai-editor' ) ],
+                'dramatic'    => [ 'label' => __( 'Dramatic & Intense (Δραματικό & Έντονο)', 'presshub-ai-editor' ) ],
+                'poetic'      => [ 'label' => __( 'Poetic & Lyrical (Ποιητικό & Λυρικό)', 'presshub-ai-editor' ) ],
+                'epic'        => [ 'label' => __( 'Epic & Classical (Επικό & Αρχαιοπρεπές)', 'presshub-ai-editor' ) ],
+                'whisper'     => [ 'label' => __( 'Gentle Whisper (Ψίθυρος)', 'presshub-ai-editor' ) ],
+                'energetic'   => [ 'label' => __( 'Energetic & Dynamic (Δυναμικό & Ενθουσιώδες)', 'presshub-ai-editor' ) ],
+                'custom'      => [ 'label' => __( 'Custom Prompt Instruction (Προσαρμοσμένη Οδηγία)', 'presshub-ai-editor' ) ],
+            ];
+        }
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php foreach ( $styles as $key => $style ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo self::esc_html_safe( $style['label'] ?? ucfirst( $key ) ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo __( 'Select emotional tone and delivery cadence for Gemini audio speech synthesis (logosAI system).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_tts_custom_style_field() {
+        $option = 'presshub_ai_briefing_tts_custom_style';
+        $value  = (string) get_option( $option, self::default_briefing_tts_custom_style() );
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="3" class="large-text" placeholder="<?php echo esc_attr__( 'e.g. Say in an energetic, radio-broadcaster style with rapid pace and enthusiasm in Greek:', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <p class="description"><?php echo __( 'Custom prompt prefix prepended before spoken text when Style is set to "Custom Prompt Instruction".', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
     public function render_briefing_text_category_field() {
         $option   = 'presshub_ai_briefing_text_category';
         $selected = (int) get_option( $option, 0 );
@@ -2152,6 +2227,32 @@ class PressHub_AI_Settings {
         }
         $pitch = (float) $value;
         return round( max( -4.0, min( 4.0, $pitch ) ), 1 );
+    }
+
+    public static function sanitize_briefing_tts_style( $value ): string {
+        $allowed = [
+            'formal',
+            'natural',
+            'cheerful',
+            'storyteller',
+            'calm',
+            'dramatic',
+            'poetic',
+            'epic',
+            'whisper',
+            'energetic',
+            'custom',
+        ];
+        $value = strtolower( trim( (string) wp_unslash( $value ) ) );
+        return in_array( $value, $allowed, true ) ? $value : self::default_briefing_tts_style();
+    }
+
+    public static function sanitize_briefing_tts_custom_style( $value ): string {
+        $value = wp_unslash( $value );
+        if ( ! is_string( $value ) ) {
+            return '';
+        }
+        return substr( trim( $value ), 0, 2000 );
     }
 
     public static function sanitize_briefing_status( $value ): string {

@@ -31,6 +31,12 @@ class PressHub_AI_Audio_Synthesizer {
     /** Option key for male voice model. */
     const OPTION_VOICE_MALE = 'presshub_ai_briefing_voice_male';
 
+    /** Option key for speaking style / delivery. */
+    const OPTION_STYLE = 'presshub_ai_briefing_tts_style';
+
+    /** Option key for custom speaking style instruction. */
+    const OPTION_CUSTOM_STYLE = 'presshub_ai_briefing_tts_custom_style';
+
     /** Option key for speaking rate/speed. */
     const OPTION_VOICE_SPEED = 'presshub_ai_briefing_voice_speed';
 
@@ -42,6 +48,71 @@ class PressHub_AI_Audio_Synthesizer {
 
     /** Option key for podcast post status. */
     const OPTION_STATUS = 'presshub_ai_briefing_podcast_status';
+
+    /**
+     * Get list of delivery styles from logosAI.
+     *
+     * @return array Style dictionary.
+     */
+    public function get_available_styles(): array {
+        return [
+            'formal'      => [
+                'id'          => 'formal',
+                'label'       => __( 'Formal & Broadcast (Επίσημο & Επαγγελματικό)', 'presshub-ai-editor' ),
+                'instruction' => 'Say in a professional, authoritative, articulate Greek news broadcast tone:',
+            ],
+            'natural'     => [
+                'id'          => 'natural',
+                'label'       => __( 'Natural & Warm (Φυσικό & Φιλικό)', 'presshub-ai-editor' ),
+                'instruction' => 'Say naturally and clearly in Greek with warm human cadence:',
+            ],
+            'cheerful'    => [
+                'id'          => 'cheerful',
+                'label'       => __( 'Cheerful & Bright (Χαρούμενο & Φωτεινό)', 'presshub-ai-editor' ),
+                'instruction' => 'Say cheerfully, enthusiastically, and with a bright uplifting smile in Greek:',
+            ],
+            'storyteller' => [
+                'id'          => 'storyteller',
+                'label'       => __( 'Storyteller & Narrative (Αφήγηση & Παραμύθι)', 'presshub-ai-editor' ),
+                'instruction' => 'Say like an engaging, captivating storyteller with theatrical pacing and expressive pauses in Greek:',
+            ],
+            'calm'        => [
+                'id'          => 'calm',
+                'label'       => __( 'Calm & Soothing (Ήρεμο & Γαλήνιο)', 'presshub-ai-editor' ),
+                'instruction' => 'Say in a peaceful, gentle, soothing, and relaxing tone in Greek:',
+            ],
+            'dramatic'    => [
+                'id'          => 'dramatic',
+                'label'       => __( 'Dramatic & Intense (Δραματικό & Έντονο)', 'presshub-ai-editor' ),
+                'instruction' => 'Say with intense dramatic emotion, resonant weight, and vivid inflection in Greek:',
+            ],
+            'poetic'      => [
+                'id'          => 'poetic',
+                'label'       => __( 'Poetic & Lyrical (Ποιητικό & Λυρικό)', 'presshub-ai-editor' ),
+                'instruction' => 'Say with deep lyrical emotion, soft melodic rhythm, and poetic sensitivity in Greek:',
+            ],
+            'epic'        => [
+                'id'          => 'epic',
+                'label'       => __( 'Epic & Classical (Επικό & Αρχαιοπρεπές)', 'presshub-ai-editor' ),
+                'instruction' => 'Say in a grand, legendary, classical ancient oratorical style in Greek:',
+            ],
+            'whisper'     => [
+                'id'          => 'whisper',
+                'label'       => __( 'Gentle Whisper (Ψίθυρος)', 'presshub-ai-editor' ),
+                'instruction' => 'Say in a soft, intimate, gentle quiet whisper in Greek:',
+            ],
+            'energetic'   => [
+                'id'          => 'energetic',
+                'label'       => __( 'Energetic & Dynamic (Δυναμικό & Ενθουσιώδες)', 'presshub-ai-editor' ),
+                'instruction' => 'Say with high energy, vibrant excitement, and dynamic rhythm in Greek:',
+            ],
+            'custom'      => [
+                'id'          => 'custom',
+                'label'       => __( 'Custom Prompt Instruction (Προσαρμοσμένη Οδηγία)', 'presshub-ai-editor' ),
+                'instruction' => '',
+            ],
+        ];
+    }
 
     /**
      * Get list of available Greek voice models grouped by gender for the active engine.
@@ -87,70 +158,70 @@ class PressHub_AI_Audio_Synthesizer {
             ];
         }
 
-        // Default: Google AI Studio Gemini 2.0 Natural Voices
+        // Default: Google AI Studio Gemini 3.1/2.0 Neural Greek Voice Personas (logosAI)
         return [
             'female' => [
-                'Aoede'      => [
-                    'name'   => 'Aoede',
-                    'label'  => __( 'Aoede (Expressive & Natural - Recommended)', 'presshub-ai-editor' ),
-                    'gender' => 'FEMALE',
-                    'type'   => 'Gemini-2.0',
-                ],
                 'Kore'       => [
                     'name'   => 'Kore',
-                    'label'  => __( 'Kore (Calm & Clear)', 'presshub-ai-editor' ),
+                    'label'  => __( 'Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
-                    'type'   => 'Gemini-2.0',
+                    'type'   => 'Gemini-Neural',
+                ],
+                'Aoede'      => [
+                    'name'   => 'Aoede',
+                    'label'  => __( 'Aoede / Αοιδή (Expressive & Melodic)', 'presshub-ai-editor' ),
+                    'gender' => 'FEMALE',
+                    'type'   => 'Gemini-Neural',
                 ],
                 'Leda'       => [
                     'name'   => 'Leda',
-                    'label'  => __( 'Leda (Warm & Professional)', 'presshub-ai-editor' ),
+                    'label'  => __( 'Leda / Λήδα (Warm & Professional)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
-                    'type'   => 'Gemini-2.0',
+                    'type'   => 'Gemini-Neural',
                 ],
                 'Callirrhoe' => [
                     'name'   => 'Callirrhoe',
-                    'label'  => __( 'Callirrhoe (Dynamic & Engaging)', 'presshub-ai-editor' ),
+                    'label'  => __( 'Callirrhoe / Καλλιρρόη (Dynamic & Engaging)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
-                    'type'   => 'Gemini-2.0',
+                    'type'   => 'Gemini-Neural',
                 ],
                 'Autonoe'    => [
                     'name'   => 'Autonoe',
-                    'label'  => __( 'Autonoe (Conversational)', 'presshub-ai-editor' ),
+                    'label'  => __( 'Autonoe / Αυτονόη (Conversational)', 'presshub-ai-editor' ),
                     'gender' => 'FEMALE',
-                    'type'   => 'Gemini-2.0',
+                    'type'   => 'Gemini-Neural',
                 ],
             ],
             'male' => [
                 'Fenrir'     => [
                     'name'   => 'Fenrir',
-                    'label'  => __( 'Fenrir (Deep, Warm & Authoritative - Recommended)', 'presshub-ai-editor' ),
+                    'label'  => __( 'Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Gemini-2.0',
+                    'type'   => 'Gemini-Neural',
                 ],
                 'Puck'       => [
                     'name'   => 'Puck',
-                    'label'  => __( 'Puck (Energetic & Friendly)', 'presshub-ai-editor' ),
+                    'label'  => __( 'Puck / Πουκ (Lively, Youthful & Expressive)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Gemini-2.0',
+                    'type'   => 'Gemini-Neural',
                 ],
                 'Charon'     => [
                     'name'   => 'Charon',
-                    'label'  => __( 'Charon (Deep & Calm Resonance)', 'presshub-ai-editor' ),
+                    'label'  => __( 'Charon / Χάρων (Deep Baritone & Solemn Gravitas)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Gemini-2.0',
+                    'type'   => 'Gemini-Neural',
                 ],
                 'Zephyr'     => [
                     'name'   => 'Zephyr',
-                    'label'  => __( 'Zephyr (Modern & Crisp)', 'presshub-ai-editor' ),
-                    'gender' => 'MALE',
-                    'type'   => 'Gemini-2.0',
+                    'label'  => __( 'Zephyr / Ζέφυρος (Calm, Gentle & Melodious)', 'presshub-ai-editor' ),
+                    'gender' => 'NEUTRAL',
+                    'type'   => 'Gemini-Neural',
                 ],
                 'Orus'       => [
                     'name'   => 'Orus',
-                    'label'  => __( 'Orus (Confident & Articulate)', 'presshub-ai-editor' ),
+                    'label'  => __( 'Orus / Ώρος (Confident & Articulate)', 'presshub-ai-editor' ),
                     'gender' => 'MALE',
-                    'type'   => 'Gemini-2.0',
+                    'type'   => 'Gemini-Neural',
                 ],
             ],
         ];
@@ -160,7 +231,7 @@ class PressHub_AI_Audio_Synthesizer {
      * Get the configured voice model for a given speaker identifier.
      *
      * @param string $speaker Speaker identifier ('female', 'male', 'host1', 'host2', or speaker name).
-     * @return string Voice model name (e.g. 'Aoede', 'Fenrir', 'el-GR-Wavenet-A').
+     * @return string Voice model name (e.g. 'Kore', 'Fenrir', 'Puck', 'el-GR-Wavenet-A').
      */
     public function get_voice_for_speaker( string $speaker ): string {
         $clean = trim( $speaker );
@@ -176,7 +247,7 @@ class PressHub_AI_Audio_Synthesizer {
         );
 
         if ( $is_female ) {
-            $default_female = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-A' : 'Aoede';
+            $default_female = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-A' : 'Kore';
             $voice = (string) get_option( self::OPTION_VOICE_FEMALE, $default_female );
             if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) ) {
                 $voice = $default_female;
@@ -339,9 +410,10 @@ class PressHub_AI_Audio_Synthesizer {
      * @param float                        $speed       Speaking rate (default 1.0).
      * @param float                        $pitch       Voice pitch (default 0.0).
      * @param PressHub_AI_API_Client|null $api_client  Optional API client.
+     * @param string                       $style       Delivery style instruction or preset.
      * @return string|WP_Error Binary audio string or WP_Error on failure.
      */
-    public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null ) {
+    public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null, string $style = 'formal' ) {
         if ( null === $api_client ) {
             $api_client = new PressHub_AI_API_Client();
         }
@@ -361,9 +433,12 @@ class PressHub_AI_Audio_Synthesizer {
         } else {
             $used_engine = 'gemini';
             if ( empty( $voice_model ) ) {
-                $voice_model = 'Aoede';
+                $voice_model = 'Kore';
             }
-            $result = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true );
+            if ( empty( $style ) ) {
+                $style = (string) get_option( self::OPTION_STYLE, 'formal' );
+            }
+            $result = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style );
         }
 
         $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
@@ -556,6 +631,9 @@ class PressHub_AI_Audio_Synthesizer {
     /**
      * Synthesize Greek daily news briefing podcast end-to-end.
      *
+     * In Gemini mode (logosAI replication), performs single-pass natural speech synthesis
+     * where the model fluidly acts and alternates speakers in one continuous stream.
+     *
      * @param string                       $date          Target briefing date (YYYY-MM-DD).
      * @param string                       $custom_script Optional script text override.
      * @param PressHub_AI_API_Client|null $api_client    Optional API client.
@@ -584,7 +662,7 @@ class PressHub_AI_Audio_Synthesizer {
             $script = $stored;
         }
 
-        // 2. Parse turns
+        // 2. Parse turns for metadata & metrics
         $producer = new PressHub_AI_Podcast_Producer();
         $turns = $producer->parse_script_turns( $script );
 
@@ -598,67 +676,83 @@ class PressHub_AI_Audio_Synthesizer {
             );
         }
 
+        $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
+        $stitched_audio = '';
+
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( sprintf( 'Synthesizing podcast audio for %s (%d turns)', $date, count( $turns ) ) );
+            PressHub_AI_Logger::info( sprintf( 'Synthesizing podcast audio for %s (%d turns, engine: %s)', $date, count( $turns ), $engine ) );
         }
 
-        // 3. Get voice options (speed, pitch)
-        $speed = (float) get_option( self::OPTION_VOICE_SPEED, 1.0 );
-        if ( $speed <= 0.0 ) {
-            $speed = 1.0;
-        }
-        $pitch = (float) get_option( self::OPTION_VOICE_PITCH, 0.0 );
+        // ------------------------------------------------------------------
+        // Single-Pass Gemini Synthesis (logosAI Natural Synthesis)
+        // ------------------------------------------------------------------
+        if ( 'gemini' === $engine ) {
+            $voice_model  = $this->get_voice_for_speaker( 'female' );
+            $style_key    = (string) get_option( self::OPTION_STYLE, 'formal' );
+            $custom_style = (string) get_option( self::OPTION_CUSTOM_STYLE, '' );
+            $used_style   = ( 'custom' === $style_key && ! empty( $custom_style ) ) ? $custom_style : $style_key;
 
-        // 4. Synthesize each turn
-        $audio_buffers = [];
-        foreach ( $turns as $index => $turn ) {
-            $speaker     = $turn['speaker'] ?? 'female';
-            $voice_model = $this->get_voice_for_speaker( $speaker );
-            $text        = $turn['text'] ?? '';
+            $start_time = microtime( true );
+            $gen_result = $api_client->synthesize_speech_via_gemini( $script, $voice_model, true, $used_style );
+            $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+            $char_count  = mb_strlen( $script );
 
-            if ( '' === trim( $text ) ) {
-                continue;
-            }
-
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::debug( sprintf( 'Synthesizing turn %d (%s, voice: %s, chars: %d)', $index + 1, $speaker, $voice_model, mb_strlen( $text ) ) );
-            }
-
-            $turn_audio = $this->synthesize_turn( $text, $voice_model, $speed, $pitch, $api_client );
-            if ( is_wp_error( $turn_audio ) ) {
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::error( sprintf( 'Turn %d synthesis error: %s', $index + 1, $turn_audio->get_error_message() ) );
+            if ( is_wp_error( $gen_result ) ) {
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $voice_model, $char_count, $duration_ms, 'error', $gen_result->get_error_message() );
                 }
-                return $turn_audio;
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( 'Single-pass podcast synthesis error: ' . $gen_result->get_error_message() );
+                }
+                return $gen_result;
             }
 
-            $audio_buffers[] = $turn_audio;
+            if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $voice_model, $char_count, $duration_ms, 'success', null );
+            }
+
+            $stitched_audio = $gen_result;
+        } else {
+            // Google Cloud TTS Turn-by-Turn fallback
+            $speed = (float) get_option( self::OPTION_VOICE_SPEED, 1.0 );
+            if ( $speed <= 0.0 ) {
+                $speed = 1.0;
+            }
+            $pitch = (float) get_option( self::OPTION_VOICE_PITCH, 0.0 );
+
+            $audio_buffers = [];
+            foreach ( $turns as $index => $turn ) {
+                $speaker     = $turn['speaker'] ?? 'female';
+                $voice_model = $this->get_voice_for_speaker( $speaker );
+                $text        = $turn['text'] ?? '';
+
+                if ( '' === trim( $text ) ) {
+                    continue;
+                }
+
+                $turn_audio = $this->synthesize_turn( $text, $voice_model, $speed, $pitch, $api_client );
+                if ( is_wp_error( $turn_audio ) ) {
+                    return $turn_audio;
+                }
+
+                $audio_buffers[] = $turn_audio;
+            }
+
+            if ( empty( $audio_buffers ) ) {
+                return new WP_Error( 'synthesis_failed', __( 'Failed to synthesize audio for any speaker turn.', 'presshub-ai-editor' ) );
+            }
+
+            $stitched_audio = $this->stitch_audio_chunks( $audio_buffers );
         }
 
-        if ( empty( $audio_buffers ) ) {
-            return new WP_Error(
-                'synthesis_failed',
-                __( 'Failed to synthesize audio for any speaker turn.', 'presshub-ai-editor' )
-            );
-        }
-
-        // 5. Stitch chunks
-        $is_wav = false;
-        if ( ! empty( $audio_buffers[0] ) && ( strlen( $audio_buffers[0] ) >= 4 && 'RIFF' === substr( $audio_buffers[0], 0, 4 ) ) ) {
-            $is_wav = true;
-        } elseif ( 'gemini' === get_option( self::OPTION_ENGINE, 'gemini' ) ) {
-            $is_wav = true;
-        }
-
-        $stitched_audio = $is_wav ? $this->stitch_wav_chunks( $audio_buffers ) : $this->stitch_audio_chunks( $audio_buffers );
-        if ( '' === $stitched_audio ) {
+        if ( empty( $stitched_audio ) ) {
             return new WP_Error(
                 'stitching_failed',
-                __( 'Failed to stitch synthesized audio chunks.', 'presshub-ai-editor' )
+                __( 'Failed to generate synthesized audio stream.', 'presshub-ai-editor' )
             );
         }
 
-        // 6. Save copy to daily briefing storage
+        // Save copy to daily briefing storage
         $harvester = new PressHub_AI_News_Harvester();
         $snapshot_dir = $harvester->get_snapshot_dir( $date );
         if ( ! is_dir( $snapshot_dir ) ) {
@@ -672,7 +766,7 @@ class PressHub_AI_Audio_Synthesizer {
         $local_audio_path = trailingslashit( $snapshot_dir ) . 'podcast' . $ext;
         @file_put_contents( $local_audio_path, $stitched_audio );
 
-        // 7. Sideload to Media Library
+        // Sideload to Media Library
         $filename = sprintf( 'podcast-briefing-%s-%s%s', $date, uniqid(), $ext );
         $title    = sprintf( __( 'PressHub Daily Briefing Podcast (%s)', 'presshub-ai-editor' ), $date );
         $media    = $this->sideload_audio_file( $filename, $stitched_audio, 0, $title );
@@ -684,7 +778,7 @@ class PressHub_AI_Audio_Synthesizer {
         $attachment_id = (int) $media['id'];
         $audio_url     = (string) $media['url'];
 
-        // 8. Create WordPress Podcast Post
+        // Create WordPress Podcast Post
         $post_id = $this->create_podcast_post( $audio_url, $attachment_id, $script, $date );
         if ( is_wp_error( $post_id ) ) {
             return $post_id;
