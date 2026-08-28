@@ -124,11 +124,11 @@ class PressHub_AI_Settings {
     }
 
     public static function default_briefing_tts_model(): string {
-        return 'gemini-2.0-flash';
+        return 'gemini-3.1-flash-tts-preview';
     }
 
     public static function default_briefing_voice_female(): string {
-        return 'Aoede';
+        return 'Kore';
     }
 
     public static function default_briefing_voice_male(): string {
@@ -1668,7 +1668,7 @@ class PressHub_AI_Settings {
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
             <option value="gemini" <?php echo 'gemini' === $value ? 'selected="selected"' : ''; ?>>
-                <?php echo esc_html__( 'Google AI Studio (Gemini 2.0 Flash Natural Voices) — Recommended', 'presshub-ai-editor' ); ?>
+                <?php echo esc_html__( 'Google AI Studio (Gemini Flash Neural Audio / logosAI) — Recommended', 'presshub-ai-editor' ); ?>
             </option>
             <option value="google_cloud" <?php echo 'google_cloud' === $value ? 'selected="selected"' : ''; ?>>
                 <?php echo esc_html__( 'Google Cloud Text-to-Speech (Legacy TTS)', 'presshub-ai-editor' ); ?>
@@ -1699,9 +1699,9 @@ class PressHub_AI_Settings {
         $option = 'presshub_ai_briefing_tts_model';
         $value  = (string) get_option( $option, self::default_briefing_tts_model() );
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="gemini-2.0-flash" />
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="gemini-3.1-flash-tts-preview" />
         <p class="description">
-            <?php echo esc_html__( 'Model ID used for speech synthesis (e.g. gemini-2.0-flash, gemini-2.0-flash-exp, gemini-3.1-flash-tts-preview, or custom endpoint).', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Model ID used for speech synthesis (e.g. gemini-3.1-flash-tts-preview, gemini-2.5-flash-preview-tts, gemini-2.0-flash-exp, gemini-2.0-flash, or custom endpoint).', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

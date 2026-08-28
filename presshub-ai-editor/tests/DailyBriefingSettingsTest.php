@@ -170,8 +170,8 @@ class DailyBriefingSettingsTest
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_female', 'el-GR-Wavenet-A' ) !== 'el-GR-Wavenet-A' ) {
             $failures[] = 'female voice el-GR-Wavenet-A should pass through.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_female', 'en-US-Neural2-A' ) !== 'Aoede' ) {
-            $failures[] = 'invalid female voice should fall back to Aoede.';
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_female', 'en-US-Neural2-A' ) !== 'Kore' ) {
+            $failures[] = 'invalid female voice should fall back to Kore.';
         }
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_male', 'Fenrir' ) !== 'Fenrir' ) {
             $failures[] = 'male voice Fenrir should pass through.';
