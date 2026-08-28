@@ -409,6 +409,285 @@ body.presshub-modal-open {
     border-top: 1px solid #e0e0e0;
 }
 
+/* ==========================================================================
+   AI Providers Manager & Card Grid (Task 6)
+   ========================================================================== */
+.presshub-providers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+    margin-top: 15px;
+    margin-bottom: 30px;
+}
+
+.presshub-provider-card {
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.presshub-provider-card:hover {
+    border-color: #2271b1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.presshub-provider-card.is-disabled {
+    opacity: 0.75;
+    background: #fbfbfb;
+    border-style: dashed;
+}
+
+.presshub-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+}
+
+.presshub-card-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.presshub-card-name {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.presshub-provider-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    width: fit-content;
+    background: #f0f0f1;
+    color: #50575e;
+}
+
+.presshub-badge-openai { background: #e6f4ea; color: #137333; }
+.presshub-badge-anthropic { background: #fce8e6; color: #c5221f; }
+.presshub-badge-gemini { background: #e8f0fe; color: #1a73e8; }
+.presshub-badge-groq { background: #feefe3; color: #b06000; }
+.presshub-badge-mistral { background: #fef7e0; color: #7f5c00; }
+.presshub-badge-deepseek { background: #f3e8fd; color: #7627bb; }
+.presshub-badge-ollama_local { background: #e0f2f1; color: #00796b; }
+.presshub-badge-google_cloud_tts { background: #e1f5fe; color: #0277bd; }
+
+.presshub-status-pill {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.presshub-status-pill.pill-active {
+    background: #d1e7dd;
+    color: #0f5132;
+}
+
+.presshub-status-pill.pill-inactive {
+    background: #f8d7da;
+    color: #842029;
+}
+
+.presshub-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    border-top: 1px solid #f0f0f1;
+    padding-top: 12px;
+}
+
+.presshub-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.presshub-meta-label {
+    color: #646970;
+    font-weight: 500;
+}
+
+.presshub-meta-val {
+    color: #2c3338;
+}
+
+.presshub-card-footer {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    border-top: 1px solid #f0f0f1;
+    padding-top: 14px;
+}
+
+.presshub-card-spinner {
+    float: none;
+    margin: 0;
+}
+
+/* ==========================================================================
+   Provider Modal Dialog
+   ========================================================================== */
+.presshub-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+
+.presshub-modal {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    width: 620px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    animation: presshubModalSlide 0.2s ease-out;
+}
+
+@keyframes presshubModalSlide {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+body.presshub-modal-open {
+    overflow: hidden;
+}
+
+/* ==========================================================================
+   Token & Usage Analytics Dashboard (Task 6)
+   ========================================================================== */
+.presshub-token-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+}
+
+.presshub-kpi-card {
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.presshub-kpi-card .kpi-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #646970;
+    margin-bottom: 6px;
+}
+
+.presshub-kpi-card .kpi-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1d2327;
+    line-height: 1.2;
+    margin-bottom: 4px;
+}
+
+.presshub-kpi-card .kpi-subtitle {
+    font-size: 11px;
+    color: #8c8f94;
+}
+
+.presshub-token-filters {
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    padding: 14px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 15px;
+}
+
+.presshub-token-filters .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.presshub-token-filters label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #50575e;
+    text-transform: uppercase;
+}
+
+.presshub-token-filters select,
+.presshub-token-filters input[type="text"] {
+    height: 32px;
+    font-size: 13px;
+    border-color: #8c8f94;
+    border-radius: 4px;
+}
+
+.presshub-table-responsive {
+    overflow-x: auto;
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+}
+
+.presshub-token-table {
+    margin: 0 !important;
+    border: none !important;
+}
+
+.presshub-token-table th {
+    font-weight: 600;
+    color: #1d2327;
+    background: #f6f7f7;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.presshub-token-table td {
+    vertical-align: middle;
+    font-size: 13px;
+}
+
+.presshub-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #f0f0f1;
+    color: #2c3338;
+}
+
 @keyframes presshubFadeIn {
     from { opacity: 0; transform: translateY(2px); }
     to { opacity: 1; transform: translateY(0); }

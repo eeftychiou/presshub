@@ -673,6 +673,8 @@ jQuery(document).ready(function($) {
     // ------------------------------------------------------------------
     // Settings Page Tabs Organization.
     // ------------------------------------------------------------------
+    // Settings Tabs Navigation with Modular Mapping & Dynamic Dashboards
+    // ------------------------------------------------------------------
     function initSettingsTabs() {
         var $tabs = $('#presshub-ai-settings-tabs');
         if (!$tabs.length) {
@@ -680,19 +682,35 @@ jQuery(document).ready(function($) {
         }
 
         var $form = $('#presshub-ai-settings-form');
+        var tabAliases = {
+            'general': 'coauthor',
+            'media': 'advanced',
+            'rate_limits': 'advanced',
+            'diagnostics': 'advanced'
+        };
 
         function switchTab(tabKey) {
+            if (tabAliases[tabKey]) {
+                tabKey = tabAliases[tabKey];
+            }
+
             $tabs.find('.nav-tab').removeClass('nav-tab-active');
             $tabs.find('.nav-tab[data-tab="' + tabKey + '"]').addClass('nav-tab-active');
 
             $('.presshub-tab-pane').hide();
             $('#presshub-tab-pane-' + tabKey).show();
 
-            if (tabKey === 'diagnostics') {
-                $form.find('.presshub-settings-submit-wrap').hide();
-                loadDiagnosticLogs();
+            // Form Submit Button visibility on different tabs
+            if (tabKey === 'providers' || tabKey === 'token_logs') {
+                $('#presshub-settings-submit-wrap').hide();
             } else {
-                $form.find('.presshub-settings-submit-wrap').show();
+                $('#presshub-settings-submit-wrap').show();
+            }
+
+            if (tabKey === 'token_logs') {
+                loadTokenLogs(1);
+            } else if (tabKey === 'advanced') {
+                loadDiagnosticLogs();
             }
 
             if (window.location.hash !== '#' + tabKey) {
@@ -709,12 +727,501 @@ jQuery(document).ready(function($) {
         });
 
         var initialHash = (window.location.hash || '').replace('#', '');
-        if (initialHash && $tabs.find('.nav-tab[data-tab="' + initialHash + '"]').length) {
-            switchTab(initialHash);
+        if (initialHash) {
+            var targetTab = tabAliases[initialHash] || initialHash;
+            if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length) {
+                switchTab(targetTab);
+            }
         }
     }
 
     initSettingsTabs();
+
+    // ------------------------------------------------------------------
+    // Dynamic AI Providers Manager Logic
+    // ------------------------------------------------------------------
+    var providerTemplates = (typeof presshubAI !== 'undefined' && presshubAI.provider_templates) ? presshubAI.provider_templates : {};
+    var configuredProviders = (typeof presshubAI !== 'undefined' && presshubAI.configured_providers) ? presshubAI.configured_providers : [];
+
+    function openProviderModal(providerData) {
+        var $modal = $('#presshub-provider-modal');
+        var $title = $('#presshub-provider-modal-title');
+        var $notice = $('#presshub-provider-form-notice');
+        $notice.empty();
+
+        if (providerData) {
+            $title.text(__('Edit AI Provider: ', 'presshub-ai-editor') + (providerData.name || providerData.id));
+            $('#provider-form-id').val(providerData.id || '');
+            $('#provider-form-name').val(providerData.name || '');
+            $('#provider-form-type').val(providerData.type || 'openai');
+            $('#provider-form-base-url').val(providerData.base_url || '');
+            $('#provider-form-default-model').val(providerData.default_model || '');
+            var avail = Array.isArray(providerData.available_models) ? providerData.available_models.join(', ') : (providerData.available_models || '');
+            $('#provider-form-available-models').val(avail);
+            $('#provider-form-temperature').val(providerData.temperature !== undefined ? providerData.temperature : 0.7);
+            $('#provider-form-max-tokens').val(providerData.max_tokens !== undefined ? providerData.max_tokens : 10000);
+            $('#provider-form-timeout').val(providerData.timeout !== undefined ? providerData.timeout : 300);
+            var headers = providerData.headers ? (typeof providerData.headers === 'object' ? JSON.stringify(providerData.headers) : providerData.headers) : '';
+            $('#provider-form-headers').val(headers);
+            $('#provider-form-enabled').prop('checked', !!providerData.enabled);
+            $('#provider-form-api-key').val('').attr('placeholder', providerData.api_key ? '••••••••' : __('Enter API Key', 'presshub-ai-editor'));
+            $('#provider-form-template').val('');
+        } else {
+            $title.text(__('Add New AI Provider', 'presshub-ai-editor'));
+            $('#presshub-provider-form')[0].reset();
+            $('#provider-form-id').val('');
+            $('#provider-form-enabled').prop('checked', true);
+            $('#provider-form-temperature').val('0.7');
+            $('#provider-form-max-tokens').val('10000');
+            $('#provider-form-timeout').val('300');
+            $('#provider-form-api-key').attr('placeholder', __('Enter API Key', 'presshub-ai-editor'));
+        }
+
+        $modal.show().addClass('is-open');
+        $('body').addClass('presshub-modal-open');
+    }
+
+    function closeProviderModal() {
+        var $modal = $('#presshub-provider-modal');
+        $modal.hide().removeClass('is-open');
+        $('body').removeClass('presshub-modal-open');
+    }
+
+    // Modal Trigger Buttons
+    $(document).on('click', '#presshub-add-provider-btn', function(e) {
+        e.preventDefault();
+        openProviderModal(null);
+    });
+
+    $(document).on('click', '.presshub-modal-close, .presshub-modal-cancel', function(e) {
+        e.preventDefault();
+        closeProviderModal();
+    });
+
+    $('#presshub-provider-modal').on('click', function(e) {
+        if ($(e.target).is('#presshub-provider-modal')) {
+            closeProviderModal();
+        }
+    });
+
+    $(document).on('keydown', function(e) {
+        if (e.key === 'Escape' && $('#presshub-provider-modal').is(':visible')) {
+            closeProviderModal();
+        }
+    });
+
+    // Preset Template Selection Auto-fill
+    $(document).on('change', '#provider-form-template', function() {
+        var tmplKey = $(this).val();
+        if (!tmplKey || !providerTemplates[tmplKey]) {
+            return;
+        }
+        var tmpl = providerTemplates[tmplKey];
+        var currentName = $('#provider-form-name').val().trim();
+        if (!currentName || Object.values(providerTemplates).some(function(t) { return t.name === currentName; })) {
+            $('#provider-form-name').val(tmpl.name);
+        }
+        $('#provider-form-type').val(tmpl.type || tmplKey);
+        $('#provider-form-base-url').val(tmpl.base_url || '');
+        $('#provider-form-default-model').val(tmpl.default_model || '');
+        var avail = Array.isArray(tmpl.available_models) ? tmpl.available_models.join(', ') : '';
+        $('#provider-form-available-models').val(avail);
+        $('#provider-form-temperature').val(tmpl.temperature !== undefined ? tmpl.temperature : 0.7);
+        $('#provider-form-max-tokens').val(tmpl.max_tokens !== undefined ? tmpl.max_tokens : 10000);
+        $('#provider-form-timeout').val(tmpl.timeout !== undefined ? tmpl.timeout : 300);
+    });
+
+    // Edit Provider Card Click
+    $(document).on('click', '.presshub-edit-provider-btn', function(e) {
+        e.preventDefault();
+        var providerId = $(this).data('provider-id');
+        var providerRecord = configuredProviders.find(function(p) { return p.id === providerId; });
+        if (!providerRecord) {
+            // Read from DOM card attributes if not found in memory
+            var $card = $(this).closest('.presshub-provider-card');
+            providerRecord = {
+                id: providerId,
+                name: $card.find('.presshub-card-name').text().trim(),
+                type: $card.data('provider-type') || 'openai',
+                enabled: $card.hasClass('is-enabled')
+            };
+        }
+        openProviderModal(providerRecord);
+    });
+
+    // Save Provider AJAX Handler
+    $(document).on('click', '#presshub-provider-form-save', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var $spinner = $('#presshub-provider-form-spinner');
+        var $notice = $('#presshub-provider-form-notice');
+
+        var name = $('#provider-form-name').val().trim();
+        if (!name) {
+            $notice.html('<div class="notice notice-error"><p>' + presshubEsc(__('Provider name is required.', 'presshub-ai-editor')) + '</p></div>');
+            return;
+        }
+
+        var providerData = {
+            id: $('#provider-form-id').val().trim(),
+            name: name,
+            type: $('#provider-form-type').val(),
+            base_url: $('#provider-form-base-url').val().trim(),
+            api_key: $('#provider-form-api-key').val().trim(),
+            default_model: $('#provider-form-default-model').val().trim(),
+            available_models: $('#provider-form-available-models').val().trim(),
+            temperature: parseFloat($('#provider-form-temperature').val()) || 0.7,
+            max_tokens: parseInt($('#provider-form-max-tokens').val(), 10) || 10000,
+            timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
+            headers: $('#provider-form-headers').val().trim(),
+            enabled: $('#provider-form-enabled').is(':checked') ? 1 : 0
+        };
+
+        $btn.prop('disabled', true);
+        $spinner.addClass('is-active');
+        $notice.empty();
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_save_provider',
+                nonce: presshubAI.nonce,
+                provider_data: JSON.stringify(providerData)
+            }
+        }).done(function(res) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+
+            if (res && res.success) {
+                $notice.html('<div class="notice notice-success"><p>' + presshubEsc(res.data.message || __('Provider saved.', 'presshub-ai-editor')) + '</p></div>');
+                setTimeout(function() {
+                    closeProviderModal();
+                    window.location.reload();
+                }, 750);
+            } else {
+                var msg = (res && res.data && res.data.message) ? res.data.message : __('Failed to save provider.', 'presshub-ai-editor');
+                $notice.html('<div class="notice notice-error"><p>' + presshubEsc(msg) + '</p></div>');
+            }
+        }).fail(function(xhr, status, error) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+            $notice.html('<div class="notice notice-error"><p>' + presshubEsc(__('Error saving provider: ', 'presshub-ai-editor') + (error || status)) + '</p></div>');
+        });
+    });
+
+    // Delete Provider AJAX Handler
+    $(document).on('click', '.presshub-delete-provider-btn', function(e) {
+        e.preventDefault();
+        var providerId = $(this).data('provider-id');
+        var providerName = $(this).data('provider-name') || providerId;
+
+        if (!confirm(__('Are you sure you want to delete the provider: ', 'presshub-ai-editor') + providerName + '?')) {
+            return;
+        }
+
+        var $card = $(this).closest('.presshub-provider-card');
+        var $spinner = $card.find('.presshub-card-spinner');
+        $spinner.addClass('is-active');
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_delete_provider',
+                nonce: presshubAI.nonce,
+                provider_id: providerId
+            }
+        }).done(function(res) {
+            $spinner.removeClass('is-active');
+            if (res && res.success) {
+                $card.fadeOut(300, function() {
+                    $(this).remove();
+                });
+            } else {
+                var msg = (res && res.data && res.data.message) ? res.data.message : __('Failed to delete provider.', 'presshub-ai-editor');
+                alert(msg);
+            }
+        }).fail(function(xhr, status, error) {
+            $spinner.removeClass('is-active');
+            alert(__('Error deleting provider: ', 'presshub-ai-editor') + (error || status));
+        });
+    });
+
+    // Test Connection Button in Card & Modal
+    $(document).on('click', '.presshub-test-provider-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var providerId = $btn.data('provider-id');
+        var $card = $btn.closest('.presshub-provider-card');
+        var $spinner = $card.find('.presshub-card-spinner');
+        var $result = $card.find('.presshub-card-test-result');
+
+        $btn.prop('disabled', true);
+        $spinner.addClass('is-active');
+        $result.hide().empty();
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_test_provider',
+                nonce: presshubAI.nonce,
+                provider_id: providerId
+            }
+        }).done(function(res) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+            if (res && res.success) {
+                var latency = res.data.latency_ms ? ' (' + res.data.latency_ms + ' ms)' : '';
+                $result.html('<span style="color: #00a32a; font-weight: 600;">✓ ' + presshubEsc(res.data.message || 'Connected') + latency + '</span>').fadeIn();
+            } else {
+                var msg = (res && res.data && res.data.message) ? res.data.message : 'Connection failed';
+                $result.html('<span style="color: #d63638; font-weight: 600;">✗ ' + presshubEsc(msg) + '</span>').fadeIn();
+            }
+        }).fail(function(xhr, status, error) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+            $result.html('<span style="color: #d63638; font-weight: 600;">✗ ' + presshubEsc(error || status || 'Error') + '</span>').fadeIn();
+        });
+    });
+
+    $(document).on('click', '#presshub-provider-form-test', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var $spinner = $('#presshub-provider-form-spinner');
+        var $notice = $('#presshub-provider-form-notice');
+
+        var providerData = {
+            id: $('#provider-form-id').val().trim(),
+            name: $('#provider-form-name').val().trim(),
+            type: $('#provider-form-type').val(),
+            base_url: $('#provider-form-base-url').val().trim(),
+            api_key: $('#provider-form-api-key').val().trim(),
+            default_model: $('#provider-form-default-model').val().trim(),
+            timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
+            headers: $('#provider-form-headers').val().trim()
+        };
+
+        $btn.prop('disabled', true);
+        $spinner.addClass('is-active');
+        $notice.empty();
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_test_provider',
+                nonce: presshubAI.nonce,
+                provider_data: JSON.stringify(providerData)
+            }
+        }).done(function(res) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+            if (res && res.success) {
+                var latency = res.data.latency_ms ? ' (' + res.data.latency_ms + ' ms)' : '';
+                $notice.html('<div class="notice notice-success"><p>✓ ' + presshubEsc(res.data.message || 'Connected') + latency + '</p></div>');
+            } else {
+                var msg = (res && res.data && res.data.message) ? res.data.message : 'Connection failed';
+                $notice.html('<div class="notice notice-error"><p>✗ ' + presshubEsc(msg) + '</p></div>');
+            }
+        }).fail(function(xhr, status, error) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+            $notice.html('<div class="notice notice-error"><p>✗ ' + presshubEsc(error || status || 'Error') + '</p></div>');
+        });
+    });
+
+    // ------------------------------------------------------------------
+    // Token & Activity Usage Analytics Dashboard Logic
+    // ------------------------------------------------------------------
+    var currentTokenPage = 1;
+
+    function formatNumber(num) {
+        return (num || 0).toLocaleString();
+    }
+
+    function loadTokenLogs(page) {
+        currentTokenPage = page || 1;
+        var $tbody   = $('#presshub-token-logs-tbody');
+        var $spinner = $('#token-logs-spinner');
+
+        var range     = $('#token-filter-range').val();
+        var action    = $('#token-filter-action').val();
+        var provider  = $('#token-filter-provider').val();
+        var status    = $('#token-filter-status').val();
+        var search    = $('#token-filter-search').val();
+
+        $spinner.addClass('is-active');
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_fetch_token_logs',
+                nonce: presshubAI.nonce,
+                page: currentTokenPage,
+                per_page: 20,
+                date_range: range,
+                action_filter: action,
+                provider: provider,
+                status: status,
+                search: search
+            }
+        }).done(function(res) {
+            $spinner.removeClass('is-active');
+            if (res && res.success && res.data) {
+                var summary = res.data.summary || {};
+                var logsData = res.data.logs || {};
+
+                // Update KPIs
+                $('#kpi-total-requests').text(formatNumber(summary.total_requests));
+                $('#kpi-total-tokens').text(formatNumber(summary.total_tokens));
+                $('#kpi-tts-chars').text(formatNumber(summary.tts_chars));
+                $('#kpi-scraped-articles').text(formatNumber(summary.scraped_articles));
+                $('#kpi-success-rate').text((summary.success_rate !== undefined ? summary.success_rate : 100) + '%');
+
+                // Render Table Rows
+                var items = logsData.items || [];
+                if (items.length === 0) {
+                    $tbody.html('<tr><td colspan="8" style="text-align:center; padding: 25px; color: #666;">' + presshubEsc(__('No token activity logs found matching the selected filters.', 'presshub-ai-editor')) + '</td></tr>');
+                } else {
+                    var rowsHtml = '';
+                    items.forEach(function(item) {
+                        var statusBadge = item.status === 'success'
+                            ? '<span class="presshub-status-pill pill-active">' + presshubEsc(__('Success', 'presshub-ai-editor')) + '</span>'
+                            : '<span class="presshub-status-pill pill-inactive">' + presshubEsc(__('Error', 'presshub-ai-editor')) + '</span>';
+
+                        var metricDisplay = '';
+                        if (item.total_tokens > 0) {
+                            metricDisplay = '<strong>' + formatNumber(item.total_tokens) + '</strong> tokens <span style="color:#666; font-size:11px;">(P: ' + formatNumber(item.prompt_tokens) + ' / C: ' + formatNumber(item.completion_tokens) + ')</span>';
+                        } else if (item.metric_units > 0) {
+                            metricDisplay = '<strong>' + formatNumber(item.metric_units) + '</strong> units';
+                        } else {
+                            metricDisplay = '-';
+                        }
+
+                        var duration = item.duration_ms ? formatNumber(item.duration_ms) + ' ms' : '-';
+                        var errTooltip = item.error_message ? presshubEsc(item.error_message) : '';
+
+                        rowsHtml += '<tr>' +
+                            '<td>' + presshubEsc(item.created_at || '') + '</td>' +
+                            '<td><span class="presshub-badge">' + presshubEsc(item.action_trigger || '') + '</span></td>' +
+                            '<td><strong>' + presshubEsc(item.provider || '') + '</strong></td>' +
+                            '<td><code style="font-size:11px;">' + presshubEsc(item.model || '') + '</code></td>' +
+                            '<td>' + metricDisplay + '</td>' +
+                            '<td>' + presshubEsc(duration) + '</td>' +
+                            '<td>' + statusBadge + '</td>' +
+                            '<td>' + (errTooltip ? '<span class="dashicons dashicons-warning" title="' + errTooltip + '" style="color: #d63638; cursor:help;"></span>' : '<span class="dashicons dashicons-yes" style="color: #00a32a;"></span>') + '</td>' +
+                            '</tr>';
+                    });
+                    $tbody.html(rowsHtml);
+                }
+
+                // Update Pagination Controls
+                var total = logsData.total || 0;
+                var pages = Math.max(1, logsData.pages || 1);
+                var pageNum = logsData.page || 1;
+                var perPage = logsData.per_page || 20;
+                var from = total > 0 ? ((pageNum - 1) * perPage) + 1 : 0;
+                var to = Math.min(total, pageNum * perPage);
+
+                $('#token-pagination-info').text(sprintf(__('Showing %d - %d of %d entries', 'presshub-ai-editor'), from, to, total));
+                $('#token-page-current').text(pageNum + ' / ' + pages);
+                $('#token-page-prev').prop('disabled', pageNum <= 1);
+                $('#token-page-next').prop('disabled', pageNum >= pages);
+            }
+        }).fail(function(xhr, status, error) {
+            $spinner.removeClass('is-active');
+            $tbody.html('<tr><td colspan="8" style="text-align:center; color:#d63638; padding:20px;">' + presshubEsc(__('Error fetching token logs: ', 'presshub-ai-editor') + (error || status)) + '</td></tr>');
+        });
+    }
+
+    // Token Filters & Pagination Events
+    $(document).on('change', '#token-filter-range, #token-filter-action, #token-filter-provider, #token-filter-status', function() {
+        loadTokenLogs(1);
+    });
+
+    $(document).on('click', '#token-filter-refresh', function(e) {
+        e.preventDefault();
+        loadTokenLogs(1);
+    });
+
+    $(document).on('keyup', '#token-filter-search', function(e) {
+        if (e.key === 'Enter') {
+            loadTokenLogs(1);
+        }
+    });
+
+    $(document).on('click', '#token-page-prev', function(e) {
+        e.preventDefault();
+        if (currentTokenPage > 1) {
+            loadTokenLogs(currentTokenPage - 1);
+        }
+    });
+
+    $(document).on('click', '#token-page-next', function(e) {
+        e.preventDefault();
+        loadTokenLogs(currentTokenPage + 1);
+    });
+
+    // Export CSV Trigger
+    $(document).on('click', '#token-export-csv', function(e) {
+        e.preventDefault();
+        var range     = $('#token-filter-range').val();
+        var action    = $('#token-filter-action').val();
+        var provider  = $('#token-filter-provider').val();
+        var status    = $('#token-filter-status').val();
+        var search    = $('#token-filter-search').val();
+
+        var params = $.param({
+            action: 'presshub_ai_export_token_csv',
+            nonce: presshubAI.nonce,
+            date_range: range,
+            action_filter: action,
+            provider: provider,
+            status: status,
+            search: search
+        });
+
+        window.location.href = presshubAI.ajax_url + '?' + params;
+    });
+
+    // Clear Logs Trigger
+    $(document).on('click', '#token-clear-logs', function(e) {
+        e.preventDefault();
+        if (!confirm(__('Are you sure you want to delete ALL token usage and activity logs? This action cannot be undone.', 'presshub-ai-editor'))) {
+            return;
+        }
+
+        var $spinner = $('#token-logs-spinner');
+        $spinner.addClass('is-active');
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_clear_token_logs',
+                nonce: presshubAI.nonce
+            }
+        }).done(function(res) {
+            $spinner.removeClass('is-active');
+            if (res && res.success) {
+                loadTokenLogs(1);
+            } else {
+                alert((res && res.data && res.data.message) ? res.data.message : __('Failed to clear logs.', 'presshub-ai-editor'));
+            }
+        }).fail(function(xhr, status, error) {
+            $spinner.removeClass('is-active');
+            alert(__('Error clearing logs: ', 'presshub-ai-editor') + (error || status));
+        });
+    });
 
     // ------------------------------------------------------------------
     // Settings Page AJAX Save Handler.

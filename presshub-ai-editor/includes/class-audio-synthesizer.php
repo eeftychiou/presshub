@@ -18,6 +18,7 @@ require_once __DIR__ . '/class-api-client.php';
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-podcast-producer.php';
 require_once __DIR__ . '/class-markdown.php';
+require_once __DIR__ . '/class-token-logger.php';
 
 class PressHub_AI_Audio_Synthesizer {
 
@@ -348,18 +349,35 @@ class PressHub_AI_Audio_Synthesizer {
         $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
         $is_google_cloud_voice = ( 0 === strpos( $voice_model, 'el-GR' ) );
 
+        $start_time = microtime( true );
+        $used_engine = 'gemini';
+
         if ( 'google_cloud' === $engine || $is_google_cloud_voice ) {
+            $used_engine = 'google_cloud';
             if ( empty( $voice_model ) ) {
                 $voice_model = 'el-GR-Wavenet-A';
             }
-            return $api_client->synthesize_speech_with_options( $text, $voice_model, $speed, $pitch );
+            $result = $api_client->synthesize_speech_with_options( $text, $voice_model, $speed, $pitch );
+        } else {
+            $used_engine = 'gemini';
+            if ( empty( $voice_model ) ) {
+                $voice_model = 'Aoede';
+            }
+            $result = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true );
         }
 
-        if ( empty( $voice_model ) ) {
-            $voice_model = 'Aoede';
+        $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+        $char_count  = mb_strlen( $text );
+
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            if ( is_wp_error( $result ) ) {
+                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', $used_engine, $voice_model, $char_count, $duration_ms, 'error', $result->get_error_message() );
+            } else {
+                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', $used_engine, $voice_model, $char_count, $duration_ms, 'success', null );
+            }
         }
 
-        return $api_client->synthesize_speech_via_gemini( $text, $voice_model, true );
+        return $result;
     }
 
     /**

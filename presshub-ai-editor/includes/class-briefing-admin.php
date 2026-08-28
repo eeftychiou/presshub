@@ -305,6 +305,61 @@ class PressHub_AI_Briefing_Admin {
                         <?php if ( ! empty( $status['harvested_at'] ) ) : ?>
                             <p class="card-subtext"><?php echo sprintf( esc_html__( 'Scraped: %s', 'presshub-ai-editor' ), esc_html( $status['harvested_at'] ) ); ?></p>
                         <?php endif; ?>
+
+                        <div class="presshub-articles-container" id="presshub-articles-container" style="<?php echo empty( $status['articles'] ) ? 'display:none;' : ''; ?>">
+                            <div class="presshub-articles-toolbar">
+                                <div class="presshub-toolbar-buttons">
+                                    <button type="button" class="button button-small" id="btn-select-all-articles">
+                                        <?php echo esc_html__( 'Select All', 'presshub-ai-editor' ); ?>
+                                    </button>
+                                    <button type="button" class="button button-small" id="btn-deselect-all-articles">
+                                        <?php echo esc_html__( 'Deselect All', 'presshub-ai-editor' ); ?>
+                                    </button>
+                                </div>
+                                <span id="presshub-selected-articles-count" class="presshub-selected-count-badge">
+                                    <?php
+                                    $total_articles = count( $status['articles'] );
+                                    printf(
+                                        /* translators: 1: selected count, 2: total count */
+                                        esc_html__( 'Selected: %1$d / %2$d', 'presshub-ai-editor' ),
+                                        $total_articles,
+                                        $total_articles
+                                    );
+                                    ?>
+                                </span>
+                            </div>
+                            <div class="presshub-articles-scroll-box">
+                                <table class="wp-list-table widefat striped presshub-article-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="check-column"><input type="checkbox" id="presshub-select-all-checkbox" checked /></th>
+                                            <th class="column-source"><?php echo esc_html__( 'Source', 'presshub-ai-editor' ); ?></th>
+                                            <th class="column-title"><?php echo esc_html__( 'Article Title', 'presshub-ai-editor' ); ?></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="presshub-articles-table-body">
+                                        <?php if ( ! empty( $status['articles'] ) ) : ?>
+                                            <?php foreach ( $status['articles'] as $index => $article ) : ?>
+                                                <tr>
+                                                    <td class="check-column">
+                                                        <input type="checkbox" class="presshub-article-checkbox" value="<?php echo esc_attr( $index ); ?>" checked />
+                                                    </td>
+                                                    <td class="column-source">
+                                                        <span class="presshub-article-source-pill"><?php echo esc_html( $article['source'] ?? __( 'Unknown', 'presshub-ai-editor' ) ); ?></span>
+                                                    </td>
+                                                    <td class="column-title">
+                                                        <strong><?php echo esc_html( $article['title'] ?? __( 'Untitled', 'presshub-ai-editor' ) ); ?></strong>
+                                                        <?php if ( ! empty( $article['url'] ) ) : ?>
+                                                            <a href="<?php echo esc_url( $article['url'] ); ?>" target="_blank" rel="noopener noreferrer" class="presshub-article-external-link">↗</a>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                     <div class="presshub-card-footer">
                         <button type="button" class="button button-secondary" id="btn-run-scrape">
@@ -363,6 +418,20 @@ class PressHub_AI_Briefing_Admin {
                             <strong><span id="script-words-count"><?php echo (int) $status['script_word_count']; ?></span></strong> <?php echo esc_html__( 'words', 'presshub-ai-editor' ); ?>
                         </p>
                         <p class="card-subtext"><?php echo esc_html__( 'Dual-host dialogue formatted with speaker tags for multi-voice synthesis.', 'presshub-ai-editor' ); ?></p>
+
+                        <div class="presshub-context-mode-group">
+                            <fieldset>
+                                <legend class="screen-reader-text"><?php echo esc_html__( 'Podcast Context Source', 'presshub-ai-editor' ); ?></legend>
+                                <label class="presshub-radio-label">
+                                    <input type="radio" name="presshub_podcast_context_mode" value="curated_briefing" <?php echo ( $status['text_created'] || empty( $status['articles'] ) ) ? 'checked="checked"' : ''; ?>>
+                                    <span><?php echo esc_html__( 'Χρήση Σημερινού Άρθρου Πρωινής Ενημέρωσης (Curated Briefing)', 'presshub-ai-editor' ); ?></span>
+                                </label>
+                                <label class="presshub-radio-label">
+                                    <input type="radio" name="presshub_podcast_context_mode" value="harvested_articles" <?php echo ( ! $status['text_created'] && ! empty( $status['articles'] ) ) ? 'checked="checked"' : ''; ?>>
+                                    <span><?php echo esc_html__( 'Χρήση Επιλεγμένων Άρθρων Ειδήσεων (Selected Articles)', 'presshub-ai-editor' ); ?></span>
+                                </label>
+                            </fieldset>
+                        </div>
                     </div>
                     <div class="presshub-card-footer">
                         <button type="button" class="button button-secondary" id="btn-run-script">

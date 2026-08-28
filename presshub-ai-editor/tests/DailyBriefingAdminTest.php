@@ -160,6 +160,19 @@ class DailyBriefingAdminTest
             'milestone-curation',
             'milestone-script',
             'milestone-audio',
+            'presshub-articles-container',
+            'presshub-articles-toolbar',
+            'btn-select-all-articles',
+            'btn-deselect-all-articles',
+            'presshub-selected-articles-count',
+            'presshub-articles-scroll-box',
+            'presshub-article-table',
+            'presshub-article-checkbox',
+            'presshub-article-source-pill',
+            'presshub-context-mode-group',
+            'presshub_podcast_context_mode',
+            'curated_briefing',
+            'harvested_articles',
             'presshub-briefing-script-editor',
             'presshub-briefing-manual-upload',
             'btn-run-scrape',
@@ -267,7 +280,9 @@ class DailyBriefingAdminTest
             'briefing_get_status',
             'briefing_run_harvest',
             'briefing_run_curation',
+            'briefing_curate_text',
             'briefing_run_script',
+            'briefing_generate_podcast',
             'briefing_save_script',
             'briefing_generate_audio',
             'briefing_upload',
@@ -414,10 +429,12 @@ class DailyBriefingAdminTest
         ] );
 
         $GLOBALS['CAPTURE_FILTER'] = function( $result, $args ) {
+            $content = "# Σημαντικές Εξελίξεις\n\n## Πολιτική\nΑνάλυση γεγονότων...";
             return [
                 'response' => [ 'code' => 200 ],
                 'body'     => json_encode( [
-                    'choices' => [ [ 'message' => [ 'content' => "# Σημαντικές Εξελίξεις\n\n## Πολιτική\nΑνάλυση γεγονότων..." ] ] ],
+                    'choices'    => [ [ 'message' => [ 'content' => $content ] ] ],
+                    'candidates' => [ [ 'content' => [ 'parts' => [ [ 'text' => $content ] ] ] ] ],
                 ] ),
             ];
         };
@@ -436,10 +453,12 @@ class DailyBriefingAdminTest
         $_POST['date'] = $test_date;
 
         $GLOBALS['CAPTURE_FILTER'] = function( $result, $args ) {
+            $content = "[Μαρία]: Καλημέρα!\n[Νίκος]: Καλημέρα Μαρία!";
             return [
                 'response' => [ 'code' => 200 ],
                 'body'     => json_encode( [
-                    'choices' => [ [ 'message' => [ 'content' => "[Μαρία]: Καλημέρα!\n[Νίκος]: Καλημέρα Μαρία!" ] ] ],
+                    'choices'    => [ [ 'message' => [ 'content' => $content ] ] ],
+                    'candidates' => [ [ 'content' => [ 'parts' => [ [ 'text' => $content ] ] ] ] ],
                 ] ),
             ];
         };
@@ -487,6 +506,115 @@ class DailyBriefingAdminTest
         }
 
         // =========================================================================
+        // Case 13: AJAX Endpoint Execution - presshub_ai_briefing_curate_text with selected_articles
+        // =========================================================================
+        self::reset_world();
+        $GLOBALS['NONCE_VALID'] = true;
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $_POST['date'] = $test_date;
+        $_POST['selected_articles'] = [ 0, 2 ];
+
+        $harvester = new PressHub_AI_News_Harvester();
+        $harvester->save_snapshot( $test_date, [
+            'date'     => $test_date,
+            'articles' => [
+                [ 'id' => 101, 'title' => 'Άρθρο 1', 'content' => 'Κείμενο 1', 'source' => 'kathimerini.gr' ],
+                [ 'id' => 102, 'title' => 'Άρθρο 2', 'content' => 'Κείμενο 2', 'source' => 'tovima.gr' ],
+                [ 'id' => 103, 'title' => 'Άρθρο 3', 'content' => 'Κείμενο 3', 'source' => 'in.gr' ],
+            ],
+        ] );
+
+        $GLOBALS['CAPTURE_FILTER'] = function( $result, $args ) {
+            $content = "# Επιλεγμένες Ειδήσεις\n\n## Σύνοψη\nΣύνοψη επιλεγμένων ειδήσεων...";
+            return [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [
+                    'choices'    => [ [ 'message' => [ 'content' => $content ] ] ],
+                    'candidates' => [ [ 'content' => [ 'parts' => [ [ 'text' => $content ] ] ] ] ],
+                ] ),
+            ];
+        };
+
+        $response = self::execute_ajax( [ $ajax_handlers, 'briefing_curate_text' ] );
+        if ( ! $response['success'] || empty( $response['data']['post_id'] ) ) {
+            $failures[] = 'briefing_curate_text AJAX should succeed with selected_articles array; got: ' . json_encode( $response );
+        } elseif ( ( $response['data']['articles_count'] ?? 0 ) !== 2 ) {
+            $failures[] = 'briefing_curate_text should have filtered down to 2 selected articles; got count: ' . ( $response['data']['articles_count'] ?? 'null' );
+        }
+
+        // Test comma-separated string format
+        self::reset_world();
+        $GLOBALS['NONCE_VALID'] = true;
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $_POST['date'] = $test_date;
+        $_POST['selected_articles'] = '1';
+
+        $harvester->save_snapshot( $test_date, [
+            'date'     => $test_date,
+            'articles' => [
+                [ 'id' => 101, 'title' => 'Άρθρο 1', 'content' => 'Κείμενο 1', 'source' => 'kathimerini.gr' ],
+                [ 'id' => 102, 'title' => 'Άρθρο 2', 'content' => 'Κείμενο 2', 'source' => 'tovima.gr' ],
+                [ 'id' => 103, 'title' => 'Άρθρο 3', 'content' => 'Κείμενο 3', 'source' => 'in.gr' ],
+            ],
+        ] );
+
+        $GLOBALS['CAPTURE_FILTER'] = function( $result, $args ) {
+            $content = "# Επιλεγμένη Είδηση\n\n## Σύνοψη\nΣύνοψη...";
+            return [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [
+                    'choices'    => [ [ 'message' => [ 'content' => $content ] ] ],
+                    'candidates' => [ [ 'content' => [ 'parts' => [ [ 'text' => $content ] ] ] ] ],
+                ] ),
+            ];
+        };
+
+        $response = self::execute_ajax( [ $ajax_handlers, 'briefing_run_curation' ] );
+        if ( ! $response['success'] || ( $response['data']['articles_count'] ?? 0 ) !== 1 ) {
+            $failures[] = 'briefing_run_curation should support comma-separated selected_articles; got: ' . json_encode( $response );
+        }
+
+        // =========================================================================
+        // Case 14: AJAX Endpoint Execution - presshub_ai_briefing_generate_podcast with context_mode & selected_articles
+        // =========================================================================
+        self::reset_world();
+        $GLOBALS['NONCE_VALID'] = true;
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $_POST['date']              = $test_date;
+        $_POST['context_mode']       = 'harvested_articles';
+        $_POST['selected_articles'] = [ 0 ];
+
+        $harvester->save_snapshot( $test_date, [
+            'date'     => $test_date,
+            'articles' => [
+                [ 'id' => 201, 'title' => 'Ειδικό Θέμα 1', 'content' => 'Μοναδικό Περιεχόμενο 1', 'source' => 'kathimerini.gr' ],
+                [ 'id' => 202, 'title' => 'Ειδικό Θέμα 2', 'content' => 'Μοναδικό Περιεχόμενο 2', 'source' => 'tovima.gr' ],
+            ],
+        ] );
+
+        $captured_prompt = '';
+        $GLOBALS['CAPTURE_FILTER'] = function( $result, $args ) use ( &$captured_prompt ) {
+            $body = json_decode( $args['body'] ?? '{}', true );
+            $captured_prompt = json_encode( $body );
+            $content = "[Μαρία]: Καλημέρα!\n[Νίκος]: Καλημέρα Μαρία!";
+            return [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [
+                    'choices'    => [ [ 'message' => [ 'content' => $content ] ] ],
+                    'candidates' => [ [ 'content' => [ 'parts' => [ [ 'text' => $content ] ] ] ] ],
+                ] ),
+            ];
+        };
+
+        $response = self::execute_ajax( [ $ajax_handlers, 'briefing_generate_podcast' ] );
+        if ( ! $response['success'] || empty( $response['data']['turns_count'] ) || $response['data']['turns_count'] !== 2 ) {
+            $failures[] = 'briefing_generate_podcast AJAX should succeed with context_mode & selected_articles; got: ' . json_encode( $response );
+        }
+        if ( false !== strpos( $captured_prompt, 'Μοναδικό Περιεχόμενο 2' ) ) {
+            $failures[] = 'Podcast dialogue prompt should not include unselected Article 2; captured: ' . $captured_prompt;
+        }
+
+        // =========================================================================
         // Summary & Verdict
         // =========================================================================
         if ( $failures ) {
@@ -497,7 +625,7 @@ class DailyBriefingAdminTest
             exit( 1 );
         }
 
-        echo "DailyBriefingAdminTest: OK (50+ checks)\n";
+        echo "DailyBriefingAdminTest: OK (60+ checks)\n";
     }
 
     private static function execute_ajax( callable $callback ): array {

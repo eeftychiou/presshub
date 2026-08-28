@@ -35,6 +35,26 @@ if ( ! defined( 'HOOK_INVOCATION_COUNT' ) ) {
 
 
 
+if ( ! function_exists( 'checked' ) ) {
+    function checked( $checked, $current = true, $echo = true ) {
+        $result = ( (string) $checked === (string) $current ) ? " checked='checked'" : '';
+        if ( $echo ) {
+            echo $result;
+        }
+        return $result;
+    }
+}
+
+if ( ! function_exists( 'selected' ) ) {
+    function selected( $selected, $current = true, $echo = true ) {
+        $result = ( (string) $selected === (string) $current ) ? " selected='selected'" : '';
+        if ( $echo ) {
+            echo $result;
+        }
+        return $result;
+    }
+}
+
 if ( ! function_exists( 'get_post_meta' ) ) {
     function get_post_meta( $post_id, $key, $single = false ) {
         $store = $GLOBALS['POST_META_STORE'] ?? [];
@@ -223,6 +243,20 @@ if ( ! function_exists( 'esc_url_raw' ) ) {
 if ( ! function_exists( 'esc_url' ) ) {
     function esc_url( $url ) {
         return htmlspecialchars( (string) esc_url_raw( $url ), ENT_QUOTES, 'UTF-8' );
+    }
+}
+
+if ( ! function_exists( 'sanitize_html_class' ) ) {
+    function sanitize_html_class( $class, $fallback = '' ) {
+        $sanitized = preg_replace( '|%[a-fA-F0-9][a-fA-F0-9]|', '', (string) $class );
+        $sanitized = preg_replace( '/[^A-Za-z0-9_-]/', '', $sanitized );
+        return '' === $sanitized ? $fallback : $sanitized;
+    }
+}
+
+if ( ! function_exists( 'number_format_i18n' ) ) {
+    function number_format_i18n( $number, $decimals = 0 ) {
+        return number_format( (float) $number, (int) $decimals );
     }
 }
 
@@ -694,7 +728,14 @@ if ( ! function_exists( 'wp_die' ) ) {
 
 if ( ! function_exists( 'sanitize_text_field' ) ) {
     function sanitize_text_field( $str ) {
-        return trim( (string) $str );
+        return trim( strip_tags( (string) $str ) );
+    }
+}
+
+if ( ! function_exists( 'sanitize_key' ) ) {
+    function sanitize_key( $key ) {
+        $key = strtolower( (string) $key );
+        return preg_replace( '/[^a-z0-9_\-]/', '', $key );
     }
 }
 
@@ -833,4 +874,249 @@ if ( ! function_exists( 'get_permalink' ) ) {
         $id = is_object( $post ) ? (int) $post->ID : (int) $post;
         return 'http://example.test/?p=' . $id;
     }
+}
+
+if ( ! defined( 'ARRAY_A' ) ) {
+    define( 'ARRAY_A', 'ARRAY_A' );
+}
+if ( ! defined( 'OBJECT' ) ) {
+    define( 'OBJECT', 'OBJECT' );
+}
+if ( ! defined( 'DAY_IN_SECONDS' ) ) {
+    define( 'DAY_IN_SECONDS', 86400 );
+}
+if ( ! defined( 'HOUR_IN_SECONDS' ) ) {
+    define( 'HOUR_IN_SECONDS', 3600 );
+}
+if ( ! defined( 'MINUTE_IN_SECONDS' ) ) {
+    define( 'MINUTE_IN_SECONDS', 60 );
+}
+
+if ( ! function_exists( 'current_time' ) ) {
+    function current_time( $type, $gmt = 0 ) {
+        return 'mysql' === $type ? ( $GLOBALS['CURRENT_TEST_TIME'] ?? gmdate( 'Y-m-d H:i:s' ) ) : time();
+    }
+}
+
+if ( ! function_exists( 'get_current_user_id' ) ) {
+    function get_current_user_id() {
+        return $GLOBALS['CURRENT_USER_ID'] ?? 1;
+    }
+}
+
+if ( ! function_exists( 'dbDelta' ) ) {
+    function dbDelta( $queries = '', $execute = true ) {
+        global $wpdb;
+        $GLOBALS['DBDELTA_QUERIES'][] = $queries;
+        if ( is_object( $wpdb ) && method_exists( $wpdb, 'query' ) && is_string( $queries ) ) {
+            $wpdb->query( $queries );
+        }
+        return [ 'table_created' ];
+    }
+}
+
+if ( ! function_exists( 'wp_next_scheduled' ) ) {
+    function wp_next_scheduled( $hook, $args = [] ) {
+        return $GLOBALS['NEXT_SCHEDULED'][ $hook ] ?? false;
+    }
+}
+
+if ( ! function_exists( 'wp_schedule_event' ) ) {
+    function wp_schedule_event( $timestamp, $recurrence, $hook, $args = [] ) {
+        $GLOBALS['SCHEDULED_CRONS'][] = [
+            'timestamp'  => $timestamp,
+            'recurrence' => $recurrence,
+            'hook'       => $hook,
+            'args'       => $args,
+        ];
+        $GLOBALS['NEXT_SCHEDULED'][ $hook ] = $timestamp;
+        return true;
+    }
+}
+
+if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
+    class PressHub_Test_WPDB {
+        public $prefix = 'wp_';
+        public $usermeta = 'wp_usermeta';
+        public $insert_id = 0;
+        public $queries = [];
+        public $tables = [];
+        public $auto_increments = [];
+
+        public function get_charset_collate() {
+            return 'DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci';
+        }
+
+        public function esc_like( $text ) {
+            return addcslashes( (string) $text, '_%\\' );
+        }
+
+        public function prepare( $query, ...$args ) {
+            if ( isset( $args[0] ) && is_array( $args[0] ) && 1 === count( $args ) ) {
+                $args = $args[0];
+            }
+            foreach ( $args as $arg ) {
+                if ( is_int( $arg ) || is_float( $arg ) ) {
+                    $query = preg_replace( '/%[df]/', (string) $arg, $query, 1 );
+                } else {
+                    $escaped = "'" . addslashes( (string) $arg ) . "'";
+                    $query = preg_replace( '/%s/', $escaped, $query, 1 );
+                }
+            }
+            return $query;
+        }
+
+        public function insert( $table, $data, $format = null ) {
+            $this->queries[] = [ 'insert', $table, $data ];
+            if ( ! isset( $this->tables[ $table ] ) ) {
+                $this->tables[ $table ] = [];
+            }
+            if ( ! isset( $this->auto_increments[ $table ] ) ) {
+                $this->auto_increments[ $table ] = 0;
+            }
+            $this->auto_increments[ $table ]++;
+            $this->insert_id = $this->auto_increments[ $table ];
+            $row = $data;
+            if ( ! isset( $row['id'] ) || empty( $row['id'] ) ) {
+                $row['id'] = $this->insert_id;
+            }
+            $this->tables[ $table ][] = $row;
+            return 1;
+        }
+
+        public function query( $sql ) {
+            $this->queries[] = $sql;
+            if ( preg_match( '/CREATE TABLE (?:IF NOT EXISTS )?`?([a-zA-Z0-9_]+)`?/i', $sql, $m ) ) {
+                $tbl = $m[1];
+                if ( ! isset( $this->tables[ $tbl ] ) ) {
+                    $this->tables[ $tbl ] = [];
+                    $this->auto_increments[ $tbl ] = 0;
+                }
+                return true;
+            }
+            if ( preg_match( '/TRUNCATE (?:TABLE )?`?([a-zA-Z0-9_]+)`?/i', $sql, $m ) ) {
+                $tbl = $m[1];
+                $this->tables[ $tbl ] = [];
+                $this->auto_increments[ $tbl ] = 0;
+                return true;
+            }
+            if ( preg_match( '/DELETE FROM `?([a-zA-Z0-9_]+)`?(?: WHERE (.*))?/i', $sql, $m ) ) {
+                $tbl = $m[1];
+                $where = $m[2] ?? '';
+                if ( empty( $where ) ) {
+                    $count = count( $this->tables[ $tbl ] ?? [] );
+                    $this->tables[ $tbl ] = [];
+                    return $count;
+                }
+                if ( preg_match( "/created_at < '([^']+)'/i", $where, $wm ) ) {
+                    $cutoff = $wm[1];
+                    $before = count( $this->tables[ $tbl ] ?? [] );
+                    $this->tables[ $tbl ] = array_values( array_filter( $this->tables[ $tbl ] ?? [], function( $r ) use ( $cutoff ) {
+                        return ( $r['created_at'] ?? '' ) >= $cutoff;
+                    } ) );
+                    return $before - count( $this->tables[ $tbl ] );
+                }
+                return 1;
+            }
+            return 1;
+        }
+
+        public function get_var( $sql ) {
+            $this->queries[] = $sql;
+            if ( preg_match( '/SELECT COUNT\(\*\) FROM `?([a-zA-Z0-9_]+)`?(?: WHERE (.*))?/i', $sql, $m ) ) {
+                $tbl = $m[1];
+                $where = $m[2] ?? '';
+                $rows = $this->filter_rows( $tbl, $where );
+                return count( $rows );
+            }
+            $results = $this->get_results( $sql, ARRAY_A );
+            if ( ! empty( $results ) && is_array( $results[0] ) ) {
+                return reset( $results[0] );
+            }
+            return null;
+        }
+
+        public function get_row( $sql, $output = OBJECT ) {
+            $results = $this->get_results( $sql, $output );
+            return ! empty( $results ) ? $results[0] : null;
+        }
+
+        public function get_results( $sql, $output = OBJECT ) {
+            $this->queries[] = $sql;
+            if ( preg_match( '/SELECT \* FROM `?([a-zA-Z0-9_]+)`?(?: WHERE (.*?))?(?: ORDER BY ([a-zA-Z0-9_]+) (ASC|DESC))?(?: LIMIT (\d+)(?: OFFSET (\d+))?)?$/i', $sql, $m ) ) {
+                $tbl     = $m[1];
+                $where   = $m[2] ?? '';
+                $orderby = $m[3] ?? '';
+                $order   = strtoupper( $m[4] ?? 'ASC' );
+                $limit   = isset( $m[5] ) && '' !== $m[5] ? (int) $m[5] : null;
+                $offset  = isset( $m[6] ) && '' !== $m[6] ? (int) $m[6] : 0;
+
+                $rows = $this->filter_rows( $tbl, $where );
+
+                if ( ! empty( $orderby ) ) {
+                    usort( $rows, function( $a, $b ) use ( $orderby, $order ) {
+                        $va = $a[ $orderby ] ?? '';
+                        $vb = $b[ $orderby ] ?? '';
+                        if ( $va == $vb ) return 0;
+                        if ( 'DESC' === $order ) {
+                            return ( $va < $vb ) ? 1 : -1;
+                        }
+                        return ( $va > $vb ) ? 1 : -1;
+                    } );
+                }
+
+                if ( null !== $limit ) {
+                    $rows = array_slice( $rows, $offset, $limit );
+                }
+
+                if ( OBJECT === $output ) {
+                    return array_map( function( $r ) { return (object) $r; }, $rows );
+                }
+                return $rows;
+            }
+
+            return [];
+        }
+
+        private function filter_rows( string $tbl, string $where ): array {
+            $rows = $this->tables[ $tbl ] ?? [];
+            if ( empty( $where ) || '1=1' === trim( $where ) ) {
+                return $rows;
+            }
+
+            return array_values( array_filter( $rows, function( $row ) use ( $where ) {
+                if ( preg_match( "/action_trigger = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['action_trigger'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/provider = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['provider'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/status = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['status'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/created_at >= '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['created_at'] ?? '' ) < $m[1] ) return false;
+                }
+                if ( preg_match( "/created_at <= '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['created_at'] ?? '' ) > $m[1] ) return false;
+                }
+                if ( preg_match( "/(?:model|action_trigger|provider|error_message|metadata) LIKE '%([^%]+)%'/", $where, $m ) ) {
+                    $term = stripslashes( $m[1] );
+                    $matched = false;
+                    foreach ( [ 'model', 'action_trigger', 'provider', 'error_message', 'metadata' ] as $col ) {
+                        if ( false !== stripos( (string) ( $row[ $col ] ?? '' ), $term ) ) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                    if ( ! $matched ) return false;
+                }
+                return true;
+            } ) );
+        }
+    }
+}
+
+if ( ! isset( $GLOBALS['wpdb'] ) || ! is_object( $GLOBALS['wpdb'] ) ) {
+    $GLOBALS['wpdb'] = new PressHub_Test_WPDB();
 }

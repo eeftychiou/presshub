@@ -14,6 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-token-logger.php';
+
 class PressHub_AI_News_Harvester {
 
     /** Maximum links to crawl per homepage to respect time budgets. */
@@ -225,7 +227,7 @@ class PressHub_AI_News_Harvester {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
-
+        $start_time  = microtime( true );
         $source_urls = array_values( array_unique( array_filter( array_map( 'trim', $source_urls ) ) ) );
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -248,10 +250,21 @@ class PressHub_AI_News_Harvester {
             $response = wp_remote_get( $source_url, [
                 'timeout'     => self::REQUEST_TIMEOUT,
                 'user-agent'  => self::USER_AGENT,
-                'redirection' => 5,
+                'redirection' => 3,
             ] );
 
-            if ( is_wp_error( $response ) || $this->is_cloudflare_or_blocked( $response ) ) {
+            if ( is_wp_error( $response ) ) {
+                $payload['blocked_sources'][] = $source_url;
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Source request error: ' . $source_url . ' - ' . $response->get_error_message() );
+                }
+                continue;
+            }
+
+            $code = wp_remote_retrieve_response_code( $response );
+            $html = (string) wp_remote_retrieve_body( $response );
+
+            if ( $this->is_cloudflare_or_blocked( $response ) ) {
                 $payload['blocked_sources'][] = $source_url;
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::warning( 'Source blocked or Cloudflare challenge detected: ' . $source_url );
@@ -259,26 +272,12 @@ class PressHub_AI_News_Harvester {
                 continue;
             }
 
-            $body = wp_remote_retrieve_body( $response );
-            if ( empty( $body ) ) {
-                $payload['blocked_sources'][] = $source_url;
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::warning( 'Source returned empty body: ' . $source_url );
-                }
-                continue;
-            }
+            // Extract article URLs
+            $article_urls = $this->extract_article_links_from_html( $html, $source_url );
+            $source_host  = (string) parse_url( $source_url, PHP_URL_HOST ) ?: $source_url;
+            $links_to_crawl = array_slice( $article_urls, 0, self::MAX_LINKS_PER_SOURCE );
 
-            $extracted_links = $this->extract_article_links_from_html( $body, $source_url );
-            if ( empty( $extracted_links ) ) {
-                // If the source URL itself is directly an article or single post
-                if ( preg_match( '#<article[^>]*>#i', $body ) ) {
-                    $extracted_links = [ $source_url ];
-                }
-            }
-
-            $source_host = parse_url( $source_url, PHP_URL_HOST ) ?: $source_url;
-            $links_to_crawl = array_slice( $extracted_links, 0, self::MAX_LINKS_PER_SOURCE );
-
+            // Scrape each discovered article
             foreach ( $links_to_crawl as $article_url ) {
                 if ( in_array( $article_url, $seen_urls, true ) ) {
                     continue;
@@ -289,8 +288,8 @@ class PressHub_AI_News_Harvester {
                     continue;
                 }
 
-                // Cross-outlet deduplication by title similarity / URL
-                $norm_title = mb_strtolower( trim( preg_replace( '/[^\p{L}\p{N}]+/u', ' ', $article_data['title'] ) ) );
+                // Title deduplication check
+                $norm_title = mb_strtolower( trim( (string) ( $article_data['title'] ?? '' ) ) );
                 if ( '' !== $norm_title && in_array( $norm_title, $seen_titles, true ) ) {
                     continue;
                 }
@@ -305,6 +304,20 @@ class PressHub_AI_News_Harvester {
         }
 
         $this->save_snapshot( $date, $payload );
+
+        $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            PressHub_AI_Token_Logger::log_scrape_request(
+                'scrape_harvest',
+                count( $source_urls ),
+                count( $payload['articles'] ),
+                $duration_ms,
+                'success',
+                null,
+                [ 'blocked_sources' => count( $payload['blocked_sources'] ), 'date' => $date ]
+            );
+        }
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info( sprintf( 'News harvest completed for %s: %d articles collected, %d blocked', $date, count( $payload['articles'] ), count( $payload['blocked_sources'] ) ) );

@@ -1,0 +1,254 @@
+﻿<?php
+/**
+ * TDD tests for Task 6: Settings UI Redesign: Dynamic Providers Manager, Modular Tabs & Token Viewer.
+ */
+
+require_once __DIR__ . '/wordpress-stubs.php';
+require_once __DIR__ . '/wp-action-wrapper.php';
+require_once __DIR__ . '/../includes/class-provider-defaults.php';
+require_once __DIR__ . '/../includes/class-provider-store.php';
+require_once __DIR__ . '/../includes/class-token-logger.php';
+require_once __DIR__ . '/../includes/class-api-client.php';
+require_once __DIR__ . '/../includes/class-ajax-handlers.php';
+require_once __DIR__ . '/../includes/class-settings.php';
+
+class SettingsModularRedesignTest
+{
+    public static function run(): void {
+        $failures = [];
+
+        // -------------------------------------------------------------
+        // Case 1: Modular Settings Registration & Sanitization
+        // -------------------------------------------------------------
+        self::reset_world();
+        $settings = new PressHub_AI_Settings();
+        $settings->register_settings();
+
+        $registered = $GLOBALS['REGISTERED_SETTINGS'] ?? [];
+        $modular_keys = [
+            'presshub_ai_coauthor_provider',
+            'presshub_ai_coauthor_model',
+            'presshub_ai_coauthor_temperature',
+            'presshub_ai_coauthor_max_tokens',
+            'presshub_ai_coauthor_timeout',
+            'presshub_ai_copilot_provider',
+            'presshub_ai_copilot_model',
+            'presshub_ai_copilot_temperature',
+            'presshub_ai_copilot_max_tokens',
+            'presshub_ai_copilot_timeout',
+            'presshub_ai_briefing_text_provider',
+            'presshub_ai_briefing_text_model',
+            'presshub_ai_briefing_text_temperature',
+            'presshub_ai_briefing_text_max_tokens',
+            'presshub_ai_briefing_text_timeout',
+            'presshub_ai_briefing_podcast_provider',
+            'presshub_ai_briefing_podcast_model',
+            'presshub_ai_briefing_podcast_temperature',
+            'presshub_ai_briefing_podcast_max_tokens',
+            'presshub_ai_briefing_podcast_timeout',
+        ];
+
+        foreach ( $modular_keys as $key ) {
+            if ( ! in_array( $key, $registered, true ) ) {
+                $failures[] = "Modular setting {$key} is not registered.";
+            }
+            if ( empty( $GLOBALS['SANITIZE_CALLBACKS'][ $key ] ) ) {
+                $failures[] = "Modular setting {$key} has no sanitize callback.";
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Case 2: Render Settings Page output contains all 6 tabs
+        // -------------------------------------------------------------
+        self::reset_world();
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        ob_start();
+        $settings->render_settings_page();
+        $html = ob_get_clean();
+
+        $expected_panes = [
+            'presshub-tab-pane-providers',
+            'presshub-tab-pane-coauthor',
+            'presshub-tab-pane-briefing',
+            'presshub-tab-pane-copilot',
+            'presshub-tab-pane-token_logs',
+            'presshub-tab-pane-advanced',
+        ];
+
+        foreach ( $expected_panes as $pane_id ) {
+            if ( false === strpos( $html, 'id="' . $pane_id . '"' ) ) {
+                $failures[] = "Settings page HTML missing pane: {$pane_id}";
+            }
+        }
+
+        if ( false === strpos( $html, 'id="presshub-provider-modal"' ) ) {
+            $failures[] = "Settings page HTML missing provider modal dialog.";
+        }
+
+        // -------------------------------------------------------------
+        // Case 3: AJAX Save Provider Endpoint
+        // -------------------------------------------------------------
+        self::reset_world();
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['NONCE_VALID'] = true;
+        $_REQUEST['_ajax_nonce'] = wp_create_nonce( 'presshub_ai_nonce' );
+        $_POST['nonce']          = wp_create_nonce( 'presshub_ai_nonce' );
+
+        $ajax = new PressHub_AI_Ajax_Handlers();
+
+        $new_provider = [
+            'name'          => 'Unit Test Provider',
+            'type'          => 'groq',
+            'base_url'      => 'https://api.groq.com/openai/v1',
+            'api_key'       => 'gsk_test_key_123',
+            'default_model' => 'llama-3.3-70b-versatile',
+            'timeout'       => 120,
+        ];
+        $_POST['provider_data'] = json_encode( $new_provider );
+
+        $res = self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->save_provider();
+        } );
+
+        if ( empty( $res['success'] ) || empty( $res['data']['provider']['id'] ) ) {
+            $failures[] = 'save_provider should succeed and return provider array with id; got: ' . json_encode( $res );
+        }
+
+        $saved_id = $res['data']['provider']['id'] ?? '';
+        $stored = PressHub_AI_Provider_Store::get( $saved_id );
+        if ( ! $stored || $stored['name'] !== 'Unit Test Provider' ) {
+            $failures[] = "Provider {$saved_id} was not properly stored in Provider Store.";
+        }
+
+        // -------------------------------------------------------------
+        // Case 4: AJAX Test Provider Endpoint
+        // -------------------------------------------------------------
+        $_POST['provider_id'] = $saved_id;
+        unset( $_POST['provider_data'] );
+
+        $test_res = self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->test_provider();
+        } );
+
+        if ( ! isset( $test_res['data']['latency_ms'] ) ) {
+            $failures[] = 'test_provider response must include latency_ms; got: ' . json_encode( $test_res );
+        }
+
+        // -------------------------------------------------------------
+        // Case 5: AJAX Delete Provider Endpoint
+        // -------------------------------------------------------------
+        $_POST['provider_id'] = $saved_id;
+        $del_res = self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->delete_provider();
+        } );
+
+        if ( empty( $del_res['success'] ) ) {
+            $failures[] = 'delete_provider should succeed; got: ' . json_encode( $del_res );
+        }
+
+        if ( PressHub_AI_Provider_Store::get( $saved_id ) !== null ) {
+            $failures[] = "Provider {$saved_id} should be deleted from Provider Store.";
+        }
+
+        // -------------------------------------------------------------
+        // Case 6: AJAX Fetch Token Logs & Analytics
+        // -------------------------------------------------------------
+        // Seed log entry
+        PressHub_AI_Token_Logger::log_llm_request(
+            'unit_test_action',
+            'openai',
+            'gpt-4o',
+            500,
+            200,
+            450,
+            'success'
+        );
+
+        $_POST['page'] = 1;
+        $_POST['per_page'] = 10;
+        $_POST['date_range'] = 'all';
+
+        $logs_res = self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->fetch_token_logs();
+        } );
+
+        if ( empty( $logs_res['success'] ) || empty( $logs_res['data']['logs']['items'] ) || empty( $logs_res['data']['summary'] ) ) {
+            $failures[] = 'fetch_token_logs should return logs items and summary object; got: ' . json_encode( $logs_res );
+        }
+
+        // -------------------------------------------------------------
+        // Case 7: AJAX Clear Token Logs
+        // -------------------------------------------------------------
+        $clear_res = self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->clear_token_logs();
+        } );
+
+        if ( empty( $clear_res['success'] ) ) {
+            $failures[] = 'clear_token_logs should succeed; got: ' . json_encode( $clear_res );
+        }
+
+        // -------------------------------------------------------------
+        // Case 8: Modular options in AJAX save_settings
+        // -------------------------------------------------------------
+        $_POST['payload'] = json_encode( [
+            'presshub_ai_coauthor_provider' => 'groq',
+            'presshub_ai_coauthor_model'    => 'llama-3.3-70b-versatile',
+            'presshub_ai_copilot_provider'  => 'gemini',
+            'presshub_ai_copilot_model'     => 'gemini-2.0-flash',
+            'presshub_ai_briefing_text_provider' => 'anthropic',
+            'presshub_ai_briefing_podcast_provider' => 'openai',
+        ] );
+        unset( $_POST['payload_b64'] );
+
+        $save_set_res = self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->save_settings();
+        } );
+
+        if ( empty( $save_set_res['success'] ) ) {
+            $failures[] = 'save_settings with modular keys should succeed; got: ' . json_encode( $save_set_res );
+        }
+
+        if ( get_option( 'presshub_ai_coauthor_provider' ) !== 'groq' ) {
+            $failures[] = "presshub_ai_coauthor_provider was not saved as 'groq'.";
+        }
+        if ( get_option( 'presshub_ai_copilot_model' ) !== 'gemini-2.0-flash' ) {
+            $failures[] = "presshub_ai_copilot_model was not saved as 'gemini-2.0-flash'.";
+        }
+
+        if ( $failures ) {
+            fwrite( STDERR, "FAIL\n" );
+            foreach ( $failures as $f ) {
+                fwrite( STDERR, "  - {$f}\n" );
+            }
+            exit( 1 );
+        }
+        echo "OK\n";
+    }
+
+    private static function reset_world(): void {
+        $GLOBALS['OPTIONS_STORE'] = [];
+        $GLOBALS['REGISTERED_SETTINGS'] = [];
+        $GLOBALS['SANITIZE_CALLBACKS'] = [];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['JSON_RESPONSES'] = [];
+        $GLOBALS['NONCE_VALID'] = true;
+        $_POST = [];
+        $_REQUEST = [];
+    }
+
+    private static function catch_ajax_response( callable $fn ): array {
+        $before_count = count( $GLOBALS['JSON_RESPONSES'] ?? [] );
+        try {
+            $fn();
+        } catch ( Throwable $e ) {
+            // caught
+        }
+        $after = $GLOBALS['JSON_RESPONSES'] ?? [];
+        if ( count( $after ) > $before_count ) {
+            return end( $after );
+        }
+        return [ 'raw' => '' ];
+    }
+}
+
+SettingsModularRedesignTest::run();

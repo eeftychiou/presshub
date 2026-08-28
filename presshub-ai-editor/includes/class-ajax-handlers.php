@@ -25,12 +25,22 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_briefing_get_status', [ $this, 'briefing_get_status' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_run_harvest', [ $this, 'briefing_run_harvest' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_run_curation', [ $this, 'briefing_run_curation' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_curate_text', [ $this, 'briefing_run_curation' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_run_script', [ $this, 'briefing_run_script' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_generate_podcast', [ $this, 'briefing_run_script' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_save_script', [ $this, 'briefing_save_script' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_generate_audio', [ $this, 'briefing_generate_audio' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
         // AJAX Settings Save
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
+        // Dynamic AI Providers Manager AJAX endpoints (Task 6).
+        add_action( 'wp_ajax_presshub_ai_save_provider', [ $this, 'save_provider' ] );
+        add_action( 'wp_ajax_presshub_ai_delete_provider', [ $this, 'delete_provider' ] );
+        add_action( 'wp_ajax_presshub_ai_test_provider', [ $this, 'test_provider' ] );
+        // Token & Usage Analytics AJAX endpoints (Task 6).
+        add_action( 'wp_ajax_presshub_ai_fetch_token_logs', [ $this, 'fetch_token_logs' ] );
+        add_action( 'wp_ajax_presshub_ai_export_token_csv', [ $this, 'export_token_csv' ] );
+        add_action( 'wp_ajax_presshub_ai_clear_token_logs', [ $this, 'clear_token_logs' ] );
         // Diagnostic Logs Endpoints
         add_action( 'wp_ajax_presshub_ai_get_logs', [ $this, 'get_logs' ] );
         add_action( 'wp_ajax_presshub_ai_clear_logs', [ $this, 'clear_logs' ] );
@@ -885,11 +895,32 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $preset_id = isset( $_POST['preset_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preset_id'] ) ) : (string) get_option( 'presshub_ai_briefing_text_preset', '' );
 
+        $selected_articles = [];
+        if ( isset( $_POST['selected_articles'] ) ) {
+            if ( is_array( $_POST['selected_articles'] ) ) {
+                foreach ( $_POST['selected_articles'] as $item ) {
+                    if ( is_numeric( $item ) ) {
+                        $selected_articles[] = (int) $item;
+                    } elseif ( is_string( $item ) && '' !== trim( $item ) ) {
+                        $selected_articles[] = sanitize_text_field( wp_unslash( $item ) );
+                    }
+                }
+            } elseif ( is_string( $_POST['selected_articles'] ) && '' !== trim( $_POST['selected_articles'] ) ) {
+                $raw_items = explode( ',', sanitize_text_field( wp_unslash( $_POST['selected_articles'] ) ) );
+                foreach ( $raw_items as $item ) {
+                    $item = trim( $item );
+                    if ( '' !== $item ) {
+                        $selected_articles[] = is_numeric( $item ) ? (int) $item : $item;
+                    }
+                }
+            }
+        }
+
         $this->enforce_rate_limit();
 
         require_once __DIR__ . '/class-news-curator.php';
         $curator = new PressHub_AI_News_Curator();
-        $result  = $curator->generate_story( $date, null, $preset_id );
+        $result  = $curator->generate_briefing( $date, null, $preset_id, $selected_articles );
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );
@@ -897,6 +928,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $this->record_rate_limit();
         wp_send_json_success( $result );
+    }
+
+    /**
+     * Alias for briefing_run_curation().
+     */
+    public function briefing_curate_text() {
+        return $this->briefing_run_curation();
     }
 
     /**
@@ -917,11 +955,37 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $preset_id = isset( $_POST['preset_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preset_id'] ) ) : (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
         $duration  = isset( $_POST['duration'] ) ? sanitize_text_field( wp_unslash( $_POST['duration'] ) ) : (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
 
+        $context_mode = isset( $_POST['context_mode'] ) ? sanitize_text_field( wp_unslash( $_POST['context_mode'] ) ) : 'curated_briefing';
+        if ( ! in_array( $context_mode, [ 'curated_briefing', 'harvested_articles' ], true ) ) {
+            $context_mode = 'curated_briefing';
+        }
+
+        $selected_articles = [];
+        if ( isset( $_POST['selected_articles'] ) ) {
+            if ( is_array( $_POST['selected_articles'] ) ) {
+                foreach ( $_POST['selected_articles'] as $item ) {
+                    if ( is_numeric( $item ) ) {
+                        $selected_articles[] = (int) $item;
+                    } elseif ( is_string( $item ) && '' !== trim( $item ) ) {
+                        $selected_articles[] = sanitize_text_field( wp_unslash( $item ) );
+                    }
+                }
+            } elseif ( is_string( $_POST['selected_articles'] ) && '' !== trim( $_POST['selected_articles'] ) ) {
+                $raw_items = explode( ',', sanitize_text_field( wp_unslash( $_POST['selected_articles'] ) ) );
+                foreach ( $raw_items as $item ) {
+                    $item = trim( $item );
+                    if ( '' !== $item ) {
+                        $selected_articles[] = is_numeric( $item ) ? (int) $item : $item;
+                    }
+                }
+            }
+        }
+
         $this->enforce_rate_limit();
 
         require_once __DIR__ . '/class-podcast-producer.php';
         $producer = new PressHub_AI_Podcast_Producer();
-        $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration );
+        $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration, $context_mode, $selected_articles );
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );
@@ -929,6 +993,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $this->record_rate_limit();
         wp_send_json_success( $result );
+    }
+
+    /**
+     * Alias for briefing_run_script().
+     */
+    public function briefing_generate_podcast() {
+        return $this->briefing_run_script();
     }
 
     /**
@@ -1189,6 +1260,27 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_podcast_status'     => [ 'PressHub_AI_Settings', 'sanitize_briefing_status' ],
                 'presshub_ai_briefing_text_prompt'        => [ 'PressHub_AI_Settings', 'sanitize_briefing_prompt' ],
                 'presshub_ai_briefing_podcast_prompt'     => [ 'PressHub_AI_Settings', 'sanitize_briefing_prompt' ],
+                // Modular Provider & Model Options (Task 6)
+                'presshub_ai_coauthor_provider'           => [ 'PressHub_AI_Settings', 'sanitize_provider_id' ],
+                'presshub_ai_coauthor_model'              => [ 'PressHub_AI_Settings', 'sanitize_model_string' ],
+                'presshub_ai_coauthor_temperature'        => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
+                'presshub_ai_coauthor_max_tokens'         => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
+                'presshub_ai_coauthor_timeout'            => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
+                'presshub_ai_copilot_provider'            => [ 'PressHub_AI_Settings', 'sanitize_provider_id' ],
+                'presshub_ai_copilot_model'               => [ 'PressHub_AI_Settings', 'sanitize_model_string' ],
+                'presshub_ai_copilot_temperature'         => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
+                'presshub_ai_copilot_max_tokens'          => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
+                'presshub_ai_copilot_timeout'             => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
+                'presshub_ai_briefing_text_provider'      => [ 'PressHub_AI_Settings', 'sanitize_provider_id' ],
+                'presshub_ai_briefing_text_model'         => [ 'PressHub_AI_Settings', 'sanitize_model_string' ],
+                'presshub_ai_briefing_text_temperature'   => [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
+                'presshub_ai_briefing_text_max_tokens'    => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
+                'presshub_ai_briefing_text_timeout'       => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
+                'presshub_ai_briefing_podcast_provider'   => [ 'PressHub_AI_Settings', 'sanitize_provider_id' ],
+                'presshub_ai_briefing_podcast_model'      => [ 'PressHub_AI_Settings', 'sanitize_model_string' ],
+                'presshub_ai_briefing_podcast_temperature'=> [ 'PressHub_AI_Settings', 'sanitize_temperature' ],
+                'presshub_ai_briefing_podcast_max_tokens' => [ 'PressHub_AI_Settings', 'sanitize_max_tokens' ],
+                'presshub_ai_briefing_podcast_timeout'    => [ 'PressHub_AI_Settings', 'sanitize_timeout' ],
             ];
 
             $saved_count = 0;
@@ -1264,18 +1356,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                     'processed' => $processed,
                 ] );
             }
-
-            wp_send_json_success( [
-                'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
-                'sources' => (string) get_option( 'presshub_ai_briefing_sources', '' ),
-                'masks'   => [
-                    'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
-                    'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
-                    'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
-                    'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
-                ],
-            ] );
         } catch ( Throwable $t ) {
+            if ( $t instanceof RuntimeException && 0 === strpos( $t->getMessage(), 'wp_send_json' ) ) {
+                throw $t;
+            }
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error( 'Exception in save_settings: ' . $t->getMessage(), [
                     'file' => basename( $t->getFile() ),
@@ -1286,6 +1370,283 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'message' => 'Error saving settings: ' . $t->getMessage() . ' (' . basename( $t->getFile() ) . ':' . $t->getLine() . ')'
             ], 500 );
         }
+
+        wp_send_json_success( [
+            'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
+            'sources' => (string) get_option( 'presshub_ai_briefing_sources', '' ),
+            'masks'   => [
+                'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
+                'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
+                'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
+                'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
+            ],
+        ] );
+    }
+
+    /**
+     * AJAX endpoint to save or update an AI provider record.
+     */
+    public function save_provider(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-provider-store.php';
+
+        $data = [];
+        if ( isset( $_POST['provider_data'] ) ) {
+            if ( is_array( $_POST['provider_data'] ) ) {
+                $data = $_POST['provider_data'];
+            } else {
+                $decoded = json_decode( wp_unslash( (string) $_POST['provider_data'] ), true );
+                if ( is_array( $decoded ) ) {
+                    $data = $decoded;
+                }
+            }
+        } elseif ( ! empty( $_POST['payload'] ) ) {
+            $decoded = json_decode( wp_unslash( (string) $_POST['payload'] ), true );
+            if ( is_array( $decoded ) ) {
+                $data = $decoded;
+            }
+        } else {
+            $data = $_POST;
+        }
+
+        if ( empty( $data ) || ! is_array( $data ) ) {
+            wp_send_json_error( [ 'message' => __( 'Invalid provider data received.', 'presshub-ai-editor' ) ] );
+        }
+
+        try {
+            $provider_id = PressHub_AI_Provider_Store::save_provider( $data );
+            $provider    = PressHub_AI_Provider_Store::get( $provider_id );
+        } catch ( Throwable $t ) {
+            if ( $t instanceof RuntimeException && 0 === strpos( $t->getMessage(), 'wp_send_json' ) ) {
+                throw $t;
+            }
+            wp_send_json_error( [
+                'message' => __( 'Failed to save provider: ', 'presshub-ai-editor' ) . $t->getMessage(),
+            ] );
+        }
+
+        wp_send_json_success( [
+            'message'  => sprintf( __( 'Provider "%s" saved successfully.', 'presshub-ai-editor' ), $provider['name'] ?? $provider_id ),
+            'id'       => $provider_id,
+            'provider' => $provider,
+        ] );
+    }
+
+    /**
+     * AJAX endpoint to delete a configured provider.
+     */
+    public function delete_provider(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-provider-store.php';
+
+        $provider_id = isset( $_POST['provider_id'] ) ? sanitize_text_field( wp_unslash( $_POST['provider_id'] ) ) : '';
+        if ( '' === $provider_id ) {
+            wp_send_json_error( [ 'message' => __( 'Provider ID is required.', 'presshub-ai-editor' ) ] );
+        }
+
+        $deleted = PressHub_AI_Provider_Store::delete_provider( $provider_id );
+        if ( ! $deleted ) {
+            wp_send_json_error( [ 'message' => __( 'Provider not found or could not be deleted.', 'presshub-ai-editor' ) ] );
+        }
+
+        wp_send_json_success( [
+            'message'     => __( 'Provider deleted successfully.', 'presshub-ai-editor' ),
+            'provider_id' => $provider_id,
+        ] );
+    }
+
+    /**
+     * AJAX endpoint to test connectivity with a configured provider or test data.
+     */
+    public function test_provider(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-provider-store.php';
+        require_once __DIR__ . '/class-api-client.php';
+
+        $start_time = microtime( true );
+        $api = new PressHub_AI_API_Client();
+
+        if ( ! empty( $_POST['provider_data'] ) ) {
+            $raw_data = is_array( $_POST['provider_data'] )
+                ? $_POST['provider_data']
+                : json_decode( wp_unslash( (string) $_POST['provider_data'] ), true );
+
+            if ( is_array( $raw_data ) ) {
+                $api->set_provider_config( $raw_data );
+                $result = $api->test_connection();
+            } else {
+                $result = new WP_Error( 'invalid_data', __( 'Invalid provider configuration supplied.', 'presshub-ai-editor' ) );
+            }
+        } else {
+            $provider_id = isset( $_POST['provider_id'] ) ? sanitize_text_field( wp_unslash( $_POST['provider_id'] ) ) : ( isset( $_POST['provider'] ) ? sanitize_text_field( wp_unslash( $_POST['provider'] ) ) : null );
+            $result = $api->test_connection( $provider_id );
+        }
+
+        $latency_ms = max( 1, (int) round( ( microtime( true ) - $start_time ) * 1000 ) );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( [
+                'message'    => $result->get_error_message(),
+                'latency_ms' => $latency_ms,
+            ] );
+        }
+
+        wp_send_json_success( [
+            'message'    => __( 'API Connection Successful!', 'presshub-ai-editor' ),
+            'response'   => is_string( $result ) ? $result : 'OK',
+            'latency_ms' => $latency_ms,
+        ] );
+    }
+
+    /**
+     * AJAX endpoint to query live token logs and aggregated KPI summary stats.
+     */
+    public function fetch_token_logs(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-token-logger.php';
+
+        $page        = max( 1, (int) ( $_REQUEST['page'] ?? 1 ) );
+        $per_page    = max( 1, min( 500, (int) ( $_REQUEST['per_page'] ?? 20 ) ) );
+        $action_filt = sanitize_text_field( wp_unslash( $_REQUEST['action_filter'] ?? ( $_REQUEST['action_trigger'] ?? '' ) ) );
+        $provider    = sanitize_text_field( wp_unslash( $_REQUEST['provider'] ?? '' ) );
+        $status      = sanitize_text_field( wp_unslash( $_REQUEST['status'] ?? '' ) );
+        $date_range  = sanitize_text_field( wp_unslash( $_REQUEST['date_range'] ?? '30d' ) );
+        $start_date  = sanitize_text_field( wp_unslash( $_REQUEST['start_date'] ?? '' ) );
+        $end_date    = sanitize_text_field( wp_unslash( $_REQUEST['end_date'] ?? '' ) );
+        $search      = sanitize_text_field( wp_unslash( $_REQUEST['search'] ?? '' ) );
+
+        if ( '' === $start_date && 'all' !== $date_range ) {
+            if ( 'today' === $date_range ) {
+                $start_date = gmdate( 'Y-m-d 00:00:00' );
+            } elseif ( '7d' === $date_range ) {
+                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
+            } elseif ( '90d' === $date_range ) {
+                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-90 days' ) );
+            } else {
+                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
+            }
+        }
+
+        $query_args = [
+            'page'       => $page,
+            'per_page'   => $per_page,
+            'action'     => $action_filt,
+            'provider'   => $provider,
+            'status'     => $status,
+            'start_date' => $start_date,
+            'end_date'   => $end_date,
+            'search'     => $search,
+        ];
+
+        $logs_result = PressHub_AI_Token_Logger::get_logs( $query_args );
+        $summary     = PressHub_AI_Token_Logger::get_summary_stats( $date_range ?: '30d' );
+
+        wp_send_json_success( [
+            'logs'    => $logs_result,
+            'summary' => $summary,
+        ] );
+    }
+
+    /**
+     * AJAX endpoint to export filtered token logs to CSV.
+     */
+    public function export_token_csv(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-token-logger.php';
+
+        $action_filt = sanitize_text_field( wp_unslash( $_REQUEST['action_filter'] ?? ( $_REQUEST['action_trigger'] ?? '' ) ) );
+        $provider    = sanitize_text_field( wp_unslash( $_REQUEST['provider'] ?? '' ) );
+        $status      = sanitize_text_field( wp_unslash( $_REQUEST['status'] ?? '' ) );
+        $date_range  = sanitize_text_field( wp_unslash( $_REQUEST['date_range'] ?? 'all' ) );
+        $start_date  = sanitize_text_field( wp_unslash( $_REQUEST['start_date'] ?? '' ) );
+        $end_date    = sanitize_text_field( wp_unslash( $_REQUEST['end_date'] ?? '' ) );
+        $search      = sanitize_text_field( wp_unslash( $_REQUEST['search'] ?? '' ) );
+
+        if ( '' === $start_date && 'all' !== $date_range ) {
+            if ( 'today' === $date_range ) {
+                $start_date = gmdate( 'Y-m-d 00:00:00' );
+            } elseif ( '7d' === $date_range ) {
+                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
+            } elseif ( '90d' === $date_range ) {
+                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-90 days' ) );
+            } else {
+                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
+            }
+        }
+
+        $query_args = [
+            'action'     => $action_filt,
+            'provider'   => $provider,
+            'status'     => $status,
+            'start_date' => $start_date,
+            'end_date'   => $end_date,
+            'search'     => $search,
+        ];
+
+        $csv = PressHub_AI_Token_Logger::export_csv( $query_args );
+        $filename = 'presshub-ai-token-logs-' . gmdate( 'Y-m-d' ) . '.csv';
+
+        if ( isset( $_REQUEST['format'] ) && 'json' === $_REQUEST['format'] ) {
+            wp_send_json_success( [
+                'csv'      => $csv,
+                'filename' => $filename,
+            ] );
+        }
+
+        if ( ! headers_sent() ) {
+            header( 'Content-Type: text/csv; charset=utf-8' );
+            header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+            header( 'Pragma: no-cache' );
+            header( 'Expires: 0' );
+        }
+
+        echo $csv;
+        exit;
+    }
+
+    /**
+     * AJAX endpoint to truncate/clear all token activity logs.
+     */
+    public function clear_token_logs(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-token-logger.php';
+        $cleared = PressHub_AI_Token_Logger::clear_all_logs();
+
+        if ( ! $cleared ) {
+            wp_send_json_error( [ 'message' => __( 'Failed to clear token logs.', 'presshub-ai-editor' ) ] );
+        }
+
+        wp_send_json_success( [ 'message' => __( 'Token logs cleared successfully.', 'presshub-ai-editor' ) ] );
     }
 
     /**

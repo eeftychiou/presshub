@@ -334,3 +334,140 @@
     gap: 12px;
     margin-top: 16px;
 }
+
+/* Harvested Articles Checklist & Toolbar (Step 1) */
+.presshub-articles-container {
+    margin-top: 12px;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    background: #ffffff;
+    overflow: hidden;
+}
+
+.presshub-articles-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f6f7f7;
+    border-bottom: 1px solid #dcdcde;
+}
+
+.presshub-toolbar-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.presshub-selected-count-badge {
+    font-size: 12px;
+    font-weight: 600;
+    color: #2271b1;
+    background: #e7f3fb;
+    padding: 3px 8px;
+    border-radius: 12px;
+    border: 1px solid #c2dbf1;
+}
+
+.presshub-articles-scroll-box {
+    max-height: 360px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.presshub-article-table {
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.presshub-article-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f0f0f1;
+    z-index: 1;
+    border-bottom: 1px solid #c3c4c7;
+}
+
+.presshub-article-table th.check-column,
+.presshub-article-table td.check-column {
+    width: 32px;
+    padding: 8px 0 8px 10px;
+    vertical-align: middle;
+}
+
+.presshub-article-table th.column-source,
+.presshub-article-table td.column-source {
+    width: 140px;
+    vertical-align: middle;
+}
+
+.presshub-article-table th.column-title,
+.presshub-article-table td.column-title {
+    vertical-align: middle;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.presshub-article-checkbox {
+    cursor: pointer;
+    margin: 0 !important;
+}
+
+.presshub-article-source-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 10px;
+    background: #f0f0f1;
+    color: #2c3338;
+    border: 1px solid #dcdcde;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    max-width: 120px;
+    overflow: hidden;
+}
+
+.presshub-article-external-link {
+    text-decoration: none;
+    color: #2271b1;
+    font-weight: bold;
+    margin-left: 4px;
+}
+
+.presshub-article-external-link:hover {
+    color: #135e96;
+}
+
+/* Context Mode Group (Step 3) */
+.presshub-context-mode-group {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #f9f9f9;
+    border: 1px solid #e2e4e7;
+    border-radius: 4px;
+}
+
+.presshub-context-mode-group fieldset {
+    margin: 0;
+    padding: 0;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.presshub-radio-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 13px;
+    color: #2c3338;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.presshub-radio-label input[type="radio"] {
+    margin-top: 2px;
+    flex-shrink: 0;
+}

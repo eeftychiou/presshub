@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 1.7.0
+ * Version: 1.8.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -42,11 +42,13 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
 
-define( 'PRESSHUB_AI_VERSION', '1.7.0' );
+define( 'PRESSHUB_AI_VERSION', '1.8.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
 // Include classes
+require_once PRESSHUB_AI_DIR . 'includes/class-provider-defaults.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-provider-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-metaboxes.php';
@@ -64,6 +66,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 
 /**
  * Auto-update hardening: force the canonical plugin folder name during
@@ -93,7 +96,21 @@ add_filter(
 );
 
 /**
- * Deactivation: clear both research crons so a deactivated plugin stops
+ * Activation: create custom database tables and schedule background crons.
+ */
+function presshub_ai_activate() {
+    PressHub_AI_Token_Logger::create_table();
+    if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
+        presshub_ai_schedule_briefing_crons();
+    }
+    if ( ! wp_next_scheduled( 'presshub_ai_prune_token_logs' ) ) {
+        wp_schedule_event( time(), 'daily', 'presshub_ai_prune_token_logs' );
+    }
+}
+register_activation_hook( __FILE__, 'presshub_ai_activate' );
+
+/**
+ * Deactivation: clear all scheduled crons so a deactivated plugin stops
  * scheduling work. Options, user metas and research posts are deliberately
  * kept on deactivation — uninstall.php removes them on full uninstall.
  */
@@ -102,8 +119,16 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_ai_do_research' );
     wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
     wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
+    wp_clear_scheduled_hook( 'presshub_ai_prune_token_logs' );
 }
 register_deactivation_hook( __FILE__, 'presshub_ai_deactivate' );
+
+// Prune token logs cron action
+add_action( 'presshub_ai_prune_token_logs', function() {
+    if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+        PressHub_AI_Token_Logger::prune_old_logs( 60 );
+    }
+} );
 
 
 // Initialize GitHub Update Checker
@@ -135,6 +160,15 @@ function presshub_ai_init() {
     new PressHub_AI_Workflow();
     new PressHub_AI_Briefing_Admin();
     PressHub_AI_Research_Cleanup::register();
+
+    if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+        if ( get_option( PressHub_AI_Token_Logger::DB_VERSION_OPTION ) !== PressHub_AI_Token_Logger::DB_VERSION ) {
+            PressHub_AI_Token_Logger::create_table();
+        }
+        if ( ! wp_next_scheduled( 'presshub_ai_prune_token_logs' ) ) {
+            wp_schedule_event( time(), 'daily', 'presshub_ai_prune_token_logs' );
+        }
+    }
 }
 add_action( 'plugins_loaded', 'presshub_ai_init' );
 

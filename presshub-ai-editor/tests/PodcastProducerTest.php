@@ -138,10 +138,10 @@ pp_check( 'preset: __none__ omits preset text', false === strpos( $prompts_none[
 
 
 // =========================================================================
-// 3. Prompt Hydration ({date}, {articles_context}, {sources_list}, {duration_text}, {word_budget}, {host1_name}, {host2_name})
+// 3. Prompt Hydration & Deduplication
 // =========================================================================
 
-$hydrated = $producer->build_dialogue_prompt( $sample_articles, '__none__', '3_min', '2026-08-26' );
+$hydrated = $producer->build_dialogue_prompt( $sample_articles, '__none__', '3_min', '2026-08-26', 'harvested_articles' );
 $sys_p = $hydrated['system_prompt'];
 $usr_p = $hydrated['user_prompt'];
 
@@ -151,7 +151,11 @@ pp_check( 'hydration: {word_budget} replaced with 450', false !== strpos( $sys_p
 pp_check( 'hydration: {host1_name} replaced with Μαρία', false !== strpos( $sys_p, 'Μαρία' ) && false === strpos( $sys_p, '{host1_name}' ) );
 pp_check( 'hydration: {host2_name} replaced with Νίκος', false !== strpos( $sys_p, 'Νίκος' ) && false === strpos( $sys_p, '{host2_name}' ) );
 pp_check( 'hydration: {sources_list} replaced with Kathimerini, In.gr', false !== strpos( $sys_p, 'Kathimerini, In.gr' ) && false === strpos( $sys_p, '{sources_list}' ) );
-pp_check( 'hydration: {articles_context} replaced with structured articles', false !== strpos( $sys_p, 'Νέο φορολογικό νομοσχέδιο' ) && false === strpos( $sys_p, '{articles_context}' ) );
+pp_check( 'deduplication: system_prompt does NOT contain raw articles context', false === strpos( $sys_p, 'Νέο φορολογικό νομοσχέδιο' ) && false === strpos( $sys_p, '{articles_context}' ) );
+
+// Verify custom template with {articles_context} still hydrates correctly via hydrate_prompt
+$custom_tpl = $producer->hydrate_prompt( "Custom: {articles_context}", '2026-08-26', $sample_articles );
+pp_check( 'hydration: custom template with {articles_context} hydrates articles', false !== strpos( $custom_tpl, 'Νέο φορολογικό νομοσχέδιο' ) );
 
 pp_check( 'hydration: user_prompt contains date', false !== strpos( $usr_p, '2026-08-26' ) );
 pp_check( 'hydration: user_prompt contains duration specs', false !== strpos( $usr_p, '3 λεπτά' ) );
@@ -267,8 +271,10 @@ pp_check( 'e2e: turns array has valid structure', isset( $gen_result['turns'][0]
 pp_check( 'e2e: word count is calculated', ( $gen_result['word_count'] ?? 0 ) > 10 );
 pp_check( 'e2e: script was saved to storage', $producer->get_script( $test_date_e2e ) === $gen_result['raw_script'] );
 
-// Test 7b: Error handling when no snapshot exists
-$err_no_snapshot = $producer->generate_dialogue_script( '1985-05-15', $mock_client );
+pp_check( 'e2e: context_mode returned in result payload', ( $gen_result['context_mode'] ?? '' ) === 'curated_briefing' );
+
+// Test 7b: Error handling when no snapshot exists and no briefing
+$err_no_snapshot = $producer->generate_dialogue_script( '1985-05-15', $mock_client, '', '', 'harvested_articles' );
 pp_check( 'e2e: returns WP_Error when snapshot missing', is_wp_error( $err_no_snapshot ) && 'no_articles' === $err_no_snapshot->get_error_code() );
 
 // Test 7c: Error handling when AI response is unparseable
@@ -281,6 +287,90 @@ class Mock_Bad_Dialogue_API_Client extends PressHub_AI_API_Client {
 $bad_client = new Mock_Bad_Dialogue_API_Client();
 $err_bad_format = $producer->generate_dialogue_script( $test_date_e2e, $bad_client );
 pp_check( 'e2e: returns WP_Error when response has no speaker turns', is_wp_error( $err_bad_format ) && 'invalid_dialogue_format' === $err_bad_format->get_error_code() );
+
+
+// =========================================================================
+// 8. Context Mode: 'curated_briefing' vs Fallback
+// =========================================================================
+
+$briefing_date = '2026-08-26';
+$mock_briefing_story = "# Πρωινή Ενημέρωση: Σημαντικές Εξελίξεις\n\nΣυνοπτική εικόνα των σημερινών γεγονότων.";
+
+// Test 8a: Explicit briefing_text passed in
+$curated_prompt = $producer->build_dialogue_prompt(
+    $sample_articles,
+    '__none__',
+    '5_min',
+    $briefing_date,
+    'curated_briefing',
+    [],
+    $mock_briefing_story
+);
+pp_check( 'curated_briefing: user_prompt contains curated briefing text', false !== strpos( $curated_prompt['user_prompt'], 'Σημαντικές Εξελίξεις' ) );
+pp_check( 'curated_briefing: user_prompt mentions Curated Morning Briefing', false !== strpos( $curated_prompt['user_prompt'], 'Curated Morning Briefing' ) );
+pp_check( 'curated_briefing: system_prompt does NOT contain raw articles', false === strpos( $curated_prompt['system_prompt'], 'Νέο φορολογικό νομοσχέδιο' ) );
+
+// Test 8b: Fetching briefing text via NewsCurator snapshot file
+$file_dir = $harvester->get_snapshot_dir( '2026-08-29' );
+if ( ! is_dir( $file_dir ) ) {
+    mkdir( $file_dir, 0777, true );
+}
+file_put_contents( trailingslashit( $file_dir ) . 'briefing-text.md', "# Briefing 29ης Αυγούστου\n\nΑυτόματο κείμενο ενημέρωσης." );
+
+$auto_curated_prompt = $producer->build_dialogue_prompt(
+    [],
+    '__none__',
+    '5_min',
+    '2026-08-29',
+    'curated_briefing'
+);
+pp_check( 'curated_briefing: auto-fetches briefing file from snapshot dir', false !== strpos( $auto_curated_prompt['user_prompt'], 'Briefing 29ης Αυγούστου' ) );
+
+// Test 8c: Fallback to harvested articles if briefing text does not exist
+$fallback_prompt = $producer->build_dialogue_prompt(
+    $sample_articles,
+    '__none__',
+    '5_min',
+    '2026-08-01', // Date with no briefing post or file
+    'curated_briefing'
+);
+pp_check( 'curated_briefing: falls back to harvested articles context when briefing absent', false !== strpos( $fallback_prompt['user_prompt'], 'Ψηφιακές υπηρεσίες υγείας' ) );
+
+
+// =========================================================================
+// 9. Context Mode: 'harvested_articles' & Selective Article Filtering
+// =========================================================================
+
+$multi_articles = [
+    [
+        'id'      => 'pod-1',
+        'title'   => 'Πρώτο Άρθρο Podcast',
+        'source'  => 'Kathimerini',
+        'url'     => 'https://kathimerini.gr/p1',
+        'content' => 'Κείμενο 1.',
+    ],
+    [
+        'id'      => 'pod-2',
+        'title'   => 'Δεύτερο Άρθρο Podcast',
+        'source'  => 'In.gr',
+        'url'     => 'https://in.gr/p2',
+        'content' => 'Κείμενο 2.',
+    ],
+];
+
+// Test 9a: Filter by ID in harvested_articles mode
+$filtered_pod_prompt = $producer->build_dialogue_prompt(
+    $multi_articles,
+    '__none__',
+    '5_min',
+    '2026-08-26',
+    'harvested_articles',
+    [ 'pod-2' ]
+);
+pp_check( 'harvested_articles: filtering includes only selected article in user_prompt', false !== strpos( $filtered_pod_prompt['user_prompt'], 'Δεύτερο Άρθρο Podcast' ) && false === strpos( $filtered_pod_prompt['user_prompt'], 'Πρώτο Άρθρο Podcast' ) );
+
+// Test 9b: System prompt has no raw article content (deduplication)
+pp_check( 'harvested_articles: system_prompt has no duplicate raw article context', false === strpos( $filtered_pod_prompt['system_prompt'], 'Κείμενο 2' ) );
 
 
 // Cleanup test uploads dir
@@ -300,4 +390,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PodcastProducerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PodcastProducerTest: OK (48 checks)\n";
+echo "PodcastProducerTest: OK (57 checks)\n";

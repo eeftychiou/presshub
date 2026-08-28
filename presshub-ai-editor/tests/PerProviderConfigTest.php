@@ -81,8 +81,8 @@ class PerProviderConfigTest
         if ( ( $body['temperature'] ?? null ) !== 0.3 ) {
             $failures[] = 'Anthropic body should carry temperature 0.3; got: ' . var_export( $body['temperature'] ?? null, true );
         }
-        if ( ( $req['args']['timeout'] ?? null ) !== 90 ) {
-            $failures[] = 'Anthropic default timeout should be 90; got: ' . var_export( $req['args']['timeout'] ?? null, true );
+        if ( ( $req['args']['timeout'] ?? null ) !== 300 ) {
+            $failures[] = 'Anthropic default timeout should be 300; got: ' . var_export( $req['args']['timeout'] ?? null, true );
         }
 
         // --- Case 3: Anthropic version header defaults to 2023-06-01 ---
@@ -130,15 +130,15 @@ class PerProviderConfigTest
             $failures[] = 'Gemini wp_remote_post timeout should be 45; got: ' . var_export( $req['args']['timeout'] ?? null, true );
         }
 
-        // --- Case 5: default timeouts per provider (openai 60, gemini 90) ---
+        // --- Case 5: default timeouts per provider (default 300s) ---
         self::reset_world();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']   = 'k';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']  = 'openai';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
         $client->generate_draft( 's', 'i' );
-        if ( ( self::last_request()['args']['timeout'] ?? null ) !== 60 ) {
-            $failures[] = 'OpenAI default timeout should be 60.';
+        if ( ( self::last_request()['args']['timeout'] ?? null ) !== 300 ) {
+            $failures[] = 'OpenAI default timeout should be 300.';
         }
 
         self::reset_world();
@@ -147,8 +147,8 @@ class PerProviderConfigTest
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
         $client->generate_draft( 's', 'i' );
-        if ( ( self::last_request()['args']['timeout'] ?? null ) !== 90 ) {
-            $failures[] = 'Gemini default timeout should be 90.';
+        if ( ( self::last_request()['args']['timeout'] ?? null ) !== 300 ) {
+            $failures[] = 'Gemini default timeout should be 300.';
         }
 
         // --- Case 6: classify_intent forces temperature 0.0 (OpenAI body) ---

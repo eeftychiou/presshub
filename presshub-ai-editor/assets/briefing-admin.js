@@ -56,12 +56,40 @@
         }
 
         // -------------------------------------------------------------------------
+        // Article Selection Helpers
+        // -------------------------------------------------------------------------
+        function getSelectedArticleIndices() {
+            var selected = [];
+            $('.presshub-article-checkbox:checked').each(function() {
+                var val = $(this).val();
+                if (val !== undefined && val !== '') {
+                    selected.push(parseInt(val, 10));
+                }
+            });
+            return selected;
+        }
+
+        function updateSelectedCountBadge() {
+            var total = $('.presshub-article-checkbox').length;
+            var selected = $('.presshub-article-checkbox:checked').length;
+            $('#presshub-selected-articles-count').text('Selected: ' + selected + ' / ' + total);
+
+            if (total > 0 && selected === total) {
+                $('#presshub-select-all-checkbox').prop('checked', true).prop('indeterminate', false);
+            } else if (selected === 0) {
+                $('#presshub-select-all-checkbox').prop('checked', false).prop('indeterminate', false);
+            } else {
+                $('#presshub-select-all-checkbox').prop('checked', false).prop('indeterminate', true);
+            }
+        }
+
+        // -------------------------------------------------------------------------
         // UI Refresh from Status Response
         // -------------------------------------------------------------------------
         function updateUIFromStatus(status) {
             if (!status) return;
 
-            // 1. Harvesting Status
+            // 1. Harvesting Status & Articles Table
             if (status.harvested) {
                 $('#milestone-harvest').removeClass('card-pending').addClass('card-complete');
                 $('#status-badge-harvest').removeClass('badge-secondary').addClass('badge-success').text('Harvested');
@@ -72,6 +100,32 @@
                 $('#btn-run-scrape').text('🔄 Run Scrape Now');
             }
             $('#count-harvested-articles').text(status.article_count || 0);
+
+            // Populate / Refresh harvested articles table
+            if (status.articles && Array.isArray(status.articles)) {
+                var $tbody = $('#presshub-articles-table-body');
+                if (status.articles.length > 0) {
+                    var rows = '';
+                    $.each(status.articles, function(idx, art) {
+                        var title = art.title || 'Untitled';
+                        var src = art.source || 'Unknown';
+                        var url = art.url || '';
+                        rows += '<tr>' +
+                            '<td class="check-column"><input type="checkbox" class="presshub-article-checkbox" value="' + idx + '" checked /></td>' +
+                            '<td class="column-source"><span class="presshub-article-source-pill">' + $('<div>').text(src).html() + '</span></td>' +
+                            '<td class="column-title"><strong>' + $('<div>').text(title).html() + '</strong>' +
+                            (url ? ' <a href="' + $('<div>').text(url).html() + '" target="_blank" rel="noopener noreferrer" class="presshub-article-external-link">↗</a>' : '') +
+                            '</td>' +
+                            '</tr>';
+                    });
+                    $tbody.html(rows);
+                    $('#presshub-articles-container').show();
+                } else {
+                    $tbody.empty();
+                    $('#presshub-articles-container').hide();
+                }
+                updateSelectedCountBadge();
+            }
 
             // Blocked sources banner
             if (status.blocked_sources && status.blocked_sources.length > 0) {
@@ -156,6 +210,31 @@
         }
 
         // -------------------------------------------------------------------------
+        // Event: Article Checkboxes and Select All / Deselect All
+        // -------------------------------------------------------------------------
+        $(document).on('change', '.presshub-article-checkbox', function() {
+            updateSelectedCountBadge();
+        });
+
+        $('#btn-select-all-articles').on('click', function(e) {
+            e.preventDefault();
+            $('.presshub-article-checkbox').prop('checked', true);
+            updateSelectedCountBadge();
+        });
+
+        $('#btn-deselect-all-articles').on('click', function(e) {
+            e.preventDefault();
+            $('.presshub-article-checkbox').prop('checked', false);
+            updateSelectedCountBadge();
+        });
+
+        $('#presshub-select-all-checkbox').on('change', function() {
+            var isChecked = $(this).is(':checked');
+            $('.presshub-article-checkbox').prop('checked', isChecked);
+            updateSelectedCountBadge();
+        });
+
+        // -------------------------------------------------------------------------
         // Event: Date Picker Change
         // -------------------------------------------------------------------------
         $('#presshub-date-picker').on('change', function() {
@@ -214,13 +293,16 @@
             var $btn = $(this);
             setButtonLoading($btn, true, null, i18n.curating || 'Curating story...');
 
+            var selectedArticles = getSelectedArticleIndices();
+
             $.ajax({
                 url: ajaxUrl,
                 type: 'POST',
                 data: {
                     action: 'presshub_ai_briefing_run_curation',
                     nonce: nonce,
-                    date: currentDate
+                    date: currentDate,
+                    selected_articles: selectedArticles
                 },
                 success: function(response) {
                     setButtonLoading($btn, false);
@@ -246,13 +328,18 @@
             var $btn = $(this);
             setButtonLoading($btn, true, null, i18n.generating_script || 'Generating script...');
 
+            var selectedArticles = getSelectedArticleIndices();
+            var contextMode = $('input[name="presshub_podcast_context_mode"]:checked').val() || 'curated_briefing';
+
             $.ajax({
                 url: ajaxUrl,
                 type: 'POST',
                 data: {
                     action: 'presshub_ai_briefing_run_script',
                     nonce: nonce,
-                    date: currentDate
+                    date: currentDate,
+                    context_mode: contextMode,
+                    selected_articles: selectedArticles
                 },
                 success: function(response) {
                     setButtonLoading($btn, false);
@@ -437,6 +524,8 @@
             setButtonLoading($btn, true, null, 'Running full pipeline...');
             showNotice('info', 'Starting end-to-end briefing pipeline execution...');
 
+            var selectedArticles = getSelectedArticleIndices();
+
             // Step 1: Harvest
             $.ajax({
                 url: ajaxUrl,
@@ -454,7 +543,12 @@
                     $.ajax({
                         url: ajaxUrl,
                         type: 'POST',
-                        data: { action: 'presshub_ai_briefing_run_curation', nonce: nonce, date: currentDate },
+                        data: {
+                            action: 'presshub_ai_briefing_run_curation',
+                            nonce: nonce,
+                            date: currentDate,
+                            selected_articles: selectedArticles
+                        },
                         success: function(res2) {
                             if (!res2.success) {
                                 setButtonLoading($btn, false);
@@ -464,10 +558,17 @@
                             showNotice('info', 'Step 2 Complete. Generating podcast script...');
 
                             // Step 3: Script
+                            var contextMode = $('input[name="presshub_podcast_context_mode"]:checked').val() || 'curated_briefing';
                             $.ajax({
                                 url: ajaxUrl,
                                 type: 'POST',
-                                data: { action: 'presshub_ai_briefing_run_script', nonce: nonce, date: currentDate },
+                                data: {
+                                    action: 'presshub_ai_briefing_run_script',
+                                    nonce: nonce,
+                                    date: currentDate,
+                                    context_mode: contextMode,
+                                    selected_articles: selectedArticles
+                                },
                                 success: function(res3) {
                                     if (!res3.success) {
                                         setButtonLoading($btn, false);

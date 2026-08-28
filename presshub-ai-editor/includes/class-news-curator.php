@@ -121,16 +121,124 @@ class PressHub_AI_News_Curator {
     }
 
     /**
-     * Build the system and user prompts for text curation, applying presets and filters.
+     * Retrieve the generated morning briefing content for a given date.
      *
-     * @param array  $articles  Harvested articles array.
-     * @param string $preset_id Optional preset slug override.
-     * @param string $date      Target briefing date (YYYY-MM-DD).
-     * @return array Associative array with 'system_prompt' and 'user_prompt'.
+     * Looks up briefing post by date using meta _presshub_briefing_date / _presshub_briefing_type = text
+     * or snapshot text file, and returns post_content/markdown.
+     *
+     * @param string $date Briefing date (YYYY-MM-DD).
+     * @return string|null Briefing content or null if not found.
      */
-    public function build_prompt( array $articles, string $preset_id = '', string $date = '' ): array {
+    public function get_briefing_content( string $date ): ?string {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
+        }
+
+        // 1. Query WordPress briefing posts by meta
+        if ( function_exists( 'get_posts' ) ) {
+            $posts = get_posts( [
+                'post_type'      => 'post',
+                'post_status'    => [ 'publish', 'pending', 'draft', 'future', 'private', 'any' ],
+                'posts_per_page' => 1,
+                'meta_query'     => [
+                    [
+                        'key'     => '_presshub_briefing_date',
+                        'value'   => $date,
+                        'compare' => '=',
+                    ],
+                    [
+                        'key'     => '_presshub_briefing_type',
+                        'value'   => 'text',
+                        'compare' => '=',
+                    ],
+                ],
+            ] );
+
+            if ( ! empty( $posts ) && is_array( $posts ) ) {
+                $post = $posts[0];
+                $content = is_object( $post ) ? ( $post->post_content ?? '' ) : ( $post['post_content'] ?? '' );
+                if ( '' !== trim( (string) $content ) ) {
+                    return (string) $content;
+                }
+            }
+        }
+
+        // In test stub environments or fallback, check POST_META_STORE
+        if ( ! empty( $GLOBALS['POST_META_STORE'] ) && is_array( $GLOBALS['POST_META_STORE'] ) ) {
+            foreach ( $GLOBALS['POST_META_STORE'] as $post_id => $meta ) {
+                if ( ( $meta['_presshub_briefing_date'] ?? '' ) === $date && ( $meta['_presshub_briefing_type'] ?? '' ) === 'text' ) {
+                    if ( function_exists( 'get_post' ) ) {
+                        $p = get_post( $post_id );
+                        if ( $p && ! empty( $p->post_content ) ) {
+                            return (string) $p->post_content;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Check snapshot storage directory for saved text briefing files
+        $harvester = new PressHub_AI_News_Harvester();
+        $dir       = $harvester->get_snapshot_dir( $date );
+        $candidates = [ 'briefing-text.md', 'briefing-text.txt', 'briefing.md', 'briefing.txt' ];
+
+        foreach ( $candidates as $file ) {
+            $path = trailingslashit( $dir ) . $file;
+            if ( file_exists( $path ) ) {
+                $content = @file_get_contents( $path );
+                if ( false !== $content && '' !== trim( $content ) ) {
+                    return $content;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Build the system and user prompts for text curation, applying presets and filters.
+     *
+     * @param array  $articles             Harvested articles array.
+     * @param string $preset_id            Optional preset slug override.
+     * @param string $date                 Target briefing date (YYYY-MM-DD).
+     * @param array  $selected_article_ids Optional list of selected article IDs to filter by.
+     * @return array Associative array with 'system_prompt' and 'user_prompt'.
+     */
+    public function build_prompt( array $articles, string $preset_id = '', string $date = '', array $selected_article_ids = [] ): array {
+        if ( empty( $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        // Filter articles if selected_article_ids is provided and non-empty
+        if ( ! empty( $selected_article_ids ) && is_array( $selected_article_ids ) ) {
+            $filtered = [];
+            foreach ( $articles as $idx => $article ) {
+                $id      = $article['id'] ?? null;
+                $url     = $article['url'] ?? null;
+                $str_idx = (string) $idx;
+
+                $matched = false;
+                foreach ( $selected_article_ids as $target_id ) {
+                    $target_str = (string) $target_id;
+                    if ( null !== $id && (string) $id === $target_str ) {
+                        $matched = true;
+                        break;
+                    }
+                    if ( null !== $url && (string) $url === $target_str ) {
+                        $matched = true;
+                        break;
+                    }
+                    if ( $str_idx === $target_str ) {
+                        $matched = true;
+                        break;
+                    }
+                }
+
+                if ( $matched ) {
+                    $filtered[] = $article;
+                }
+            }
+            $articles = array_values( $filtered );
         }
 
         // 1. Base curation prompt & filter
@@ -286,12 +394,13 @@ class PressHub_AI_News_Curator {
     /**
      * Generate daily briefing story from harvested snapshot, format to HTML, and create post.
      *
-     * @param string                       $date       Target date (YYYY-MM-DD).
-     * @param PressHub_AI_API_Client|null $api_client Optional API client instance.
-     * @param string                       $preset_id  Optional preset slug.
+     * @param string                       $date                 Target date (YYYY-MM-DD).
+     * @param PressHub_AI_API_Client|null $api_client           Optional API client instance.
+     * @param string                       $preset_id            Optional preset slug.
+     * @param array                        $selected_article_ids Optional list of selected article IDs to filter by.
      * @return array|WP_Error Result payload array or WP_Error on failure.
      */
-    public function generate_story( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '' ) {
+    public function generate_briefing( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', array $selected_article_ids = [] ) {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
@@ -309,12 +418,15 @@ class PressHub_AI_News_Curator {
 
         $articles = $snapshot['articles'];
 
-        // 2. Build prompts
-        $prompts = $this->build_prompt( $articles, $preset_id, $date );
+        // 2. Build prompts (with selected_article_ids filter)
+        $prompts = $this->build_prompt( $articles, $preset_id, $date, $selected_article_ids );
 
         // 3. Call AI provider
         if ( null === $api_client ) {
-            $api_client = new PressHub_AI_API_Client();
+            $api_client = new PressHub_AI_API_Client( 'briefing_text' );
+        }
+        if ( method_exists( $api_client, 'set_action' ) ) {
+            $api_client->set_action( 'briefing_curation' );
         }
 
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [] );
@@ -340,6 +452,17 @@ class PressHub_AI_News_Curator {
             PressHub_AI_Logger::info( sprintf( 'Text curation AI generated successfully for %s (%d chars)', $date, strlen( $response ) ) );
         }
 
+        // Save raw response to snapshot directory as briefing-text.md
+        $dir = $harvester->get_snapshot_dir( $date );
+        if ( ! is_dir( $dir ) ) {
+            if ( function_exists( 'wp_mkdir_p' ) ) {
+                wp_mkdir_p( $dir );
+            } else {
+                @mkdir( $dir, 0755, true );
+            }
+        }
+        @file_put_contents( trailingslashit( $dir ) . 'briefing-text.md', $response );
+
         // 4. Convert Markdown to HTML
         $html_content = PressHub_AI_Markdown::to_html( $response );
 
@@ -358,13 +481,43 @@ class PressHub_AI_News_Curator {
             PressHub_AI_Logger::info( sprintf( 'Created daily briefing text post #%d for %s ("%s")', $post_id, $date, $headline ) );
         }
 
+        $used_articles_count = count( $articles );
+        if ( ! empty( $selected_article_ids ) && is_array( $selected_article_ids ) ) {
+            $used_articles_count = 0;
+            foreach ( $articles as $idx => $art ) {
+                $id      = $art['id'] ?? null;
+                $url     = $art['url'] ?? null;
+                $str_idx = (string) $idx;
+                foreach ( $selected_article_ids as $target_id ) {
+                    $target_str = (string) $target_id;
+                    if ( ( null !== $id && (string) $id === $target_str ) || ( null !== $url && (string) $url === $target_str ) || $str_idx === $target_str ) {
+                        $used_articles_count++;
+                        break;
+                    }
+                }
+            }
+        }
+
         return [
             'post_id'        => $post_id,
             'date'           => $date,
             'headline'       => $headline,
             'html_content'   => $html_content,
             'raw_response'   => $response,
-            'articles_count' => count( $articles ),
+            'articles_count' => $used_articles_count,
         ];
+    }
+
+    /**
+     * Backward-compatible alias for generate_briefing().
+     *
+     * @param string                       $date                 Target date (YYYY-MM-DD).
+     * @param PressHub_AI_API_Client|null $api_client           Optional API client instance.
+     * @param string                       $preset_id            Optional preset slug.
+     * @param array                        $selected_article_ids Optional list of selected article IDs to filter by.
+     * @return array|WP_Error Result payload array or WP_Error on failure.
+     */
+    public function generate_story( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', array $selected_article_ids = [] ) {
+        return $this->generate_briefing( $date, $api_client, $preset_id, $selected_article_ids );
     }
 }

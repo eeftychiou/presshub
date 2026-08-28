@@ -267,6 +267,77 @@ nc_check( 'generate_story: articles_count is 1', ( $result['articles_count'] ?? 
 $err_result = $curator->generate_story( '1990-01-01', $mock_client );
 nc_check( 'generate_story: missing snapshot returns WP_Error', is_wp_error( $err_result ) && 'no_articles' === $err_result->get_error_code() );
 
+// =========================================================================
+// 7. Selective article filtering ($selected_article_ids)
+// =========================================================================
+
+$multi_articles = [
+    [
+        'id'      => 'art-1',
+        'title'   => 'Πρώτο Άρθρο: Οικονομία',
+        'source'  => 'Kathimerini',
+        'url'     => 'https://kathimerini.gr/1',
+        'content' => 'Περιεχόμενο πρώτου άρθρου.',
+    ],
+    [
+        'id'      => 'art-2',
+        'title'   => 'Δεύτερο Άρθρο: Τεχνολογία',
+        'source'  => 'In.gr',
+        'url'     => 'https://in.gr/2',
+        'content' => 'Περιεχόμενο δεύτερου άρθρου.',
+    ],
+    [
+        'id'      => 'art-3',
+        'title'   => 'Τρίτο Άρθρο: Αθλητισμός',
+        'source'  => 'Sport24',
+        'url'     => 'https://sport24.gr/3',
+        'content' => 'Περιεχόμενο τρίτου άρθρου.',
+    ],
+];
+
+// Test 7a: Filtering by explicit ID
+$filtered_prompt = $curator->build_prompt( $multi_articles, '__none__', '2026-08-26', [ 'art-2' ] );
+nc_check( 'filter_articles: only selected article appears in user prompt', false !== strpos( $filtered_prompt['user_prompt'], 'Δεύτερο Άρθρο' ) && false === strpos( $filtered_prompt['user_prompt'], 'Πρώτο Άρθρο' ) && false === strpos( $filtered_prompt['user_prompt'], 'Τρίτο Άρθρο' ) );
+nc_check( 'filter_articles: article count in user prompt is 1', false !== strpos( $filtered_prompt['user_prompt'], 'Αριθμός Άρθρων: 1' ) );
+
+// Test 7b: Filtering by index or URL
+$filtered_by_url = $curator->build_prompt( $multi_articles, '__none__', '2026-08-26', [ 'https://sport24.gr/3' ] );
+nc_check( 'filter_articles: filtering by URL matches correctly', false !== strpos( $filtered_by_url['user_prompt'], 'Τρίτο Άρθρο' ) && false === strpos( $filtered_by_url['user_prompt'], 'Πρώτο Άρθρο' ) );
+
+// Test 7c: Multiple selected IDs
+$filtered_multi = $curator->build_prompt( $multi_articles, '__none__', '2026-08-26', [ 'art-1', 'art-3' ] );
+nc_check( 'filter_articles: multi-selection includes both chosen articles', false !== strpos( $filtered_multi['user_prompt'], 'Πρώτο Άρθρο' ) && false !== strpos( $filtered_multi['user_prompt'], 'Τρίτο Άρθρο' ) && false === strpos( $filtered_multi['user_prompt'], 'Δεύτερο Άρθρο' ) );
+nc_check( 'filter_articles: multi-selection count is 2', false !== strpos( $filtered_multi['user_prompt'], 'Αριθμός Άρθρων: 2' ) );
+
+// Test 7d: Empty selected_article_ids retains all articles
+$unfiltered = $curator->build_prompt( $multi_articles, '__none__', '2026-08-26', [] );
+nc_check( 'filter_articles: empty selected list retains all 3 articles', false !== strpos( $unfiltered['user_prompt'], 'Αριθμός Άρθρων: 3' ) );
+
+
+// =========================================================================
+// 8. get_briefing_content() Lookup (Post & Snapshot File)
+// =========================================================================
+
+// Test 8a: Lookup from existing post created in step 5
+$retrieved_post_content = $curator->get_briefing_content( '2026-08-26' );
+nc_check( 'get_briefing_content: retrieves content from existing briefing post', null !== $retrieved_post_content && false !== strpos( $retrieved_post_content, 'Αναλυτικό κείμενο της πρωινής ενημέρωσης' ) );
+
+// Test 8b: Lookup from snapshot storage file
+$test_date_file = '2026-08-27';
+$file_dir = $harvester->get_snapshot_dir( $test_date_file );
+if ( ! is_dir( $file_dir ) ) {
+    mkdir( $file_dir, 0777, true );
+}
+file_put_contents( trailingslashit( $file_dir ) . 'briefing-text.md', "# Δοκιμαστικό Briefing 27ης Αυγούστου\n\nΠεριεχόμενο από snapshot file." );
+
+$retrieved_file_content = $curator->get_briefing_content( $test_date_file );
+nc_check( 'get_briefing_content: retrieves content from snapshot markdown file', null !== $retrieved_file_content && false !== strpos( $retrieved_file_content, 'Δοκιμαστικό Briefing 27ης Αυγούστου' ) );
+
+// Test 8c: Non-existent date returns null
+$null_content = $curator->get_briefing_content( '1980-01-01' );
+nc_check( 'get_briefing_content: non-existent date returns null', null === $null_content );
+
+
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
     $files = new RecursiveIteratorIterator(
@@ -284,4 +355,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "NewsCuratorTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "NewsCuratorTest: OK (30 checks)\n";
+echo "NewsCuratorTest: OK (38 checks)\n";

@@ -18,6 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 require_once __DIR__ . '/class-preset-store.php';
 require_once __DIR__ . '/class-preset-resolver.php';
 require_once __DIR__ . '/class-news-harvester.php';
+require_once __DIR__ . '/class-news-curator.php';
 require_once __DIR__ . '/class-api-client.php';
 
 class PressHub_AI_Podcast_Producer {
@@ -92,8 +93,7 @@ class PressHub_AI_Podcast_Producer {
             . "   - Ξεκινήστε με ένα θερμό και άμεσο καλωσόρισμα (αναφέροντας την ημερομηνία {date} και το PressHub Briefing) και κλείστε με έναν σύντομο αποχαιρετισμό.\n"
             . "   - Καλύψτε τα σημαντικότερα θέματα από τις πηγές: {sources_list}.\n"
             . "4. Δημοσιογραφική Ακρίβεια:\n"
-            . "   - Βασιστείτε αποκλειστικά στα παρεχόμενα άρθρα. Μην επινοείτε ψευδή γεγονότα.\n\n"
-            . "Συλλεχθέν Υλικό Ειδήσεων:\n{articles_context}";
+            . "   - Βασιστείτε αποκλειστικά στο παρεχόμενο υλικό ειδήσεων. Μην επινοείτε ψευδή γεγονότα.";
     }
 
     /**
@@ -158,7 +158,7 @@ class PressHub_AI_Podcast_Producer {
      * @param string $host2    Male host name.
      * @return string Hydrated text.
      */
-    public function hydrate_prompt( string $template, string $date, array $articles, string $duration = '', string $host1 = 'Μαρία', string $host2 = 'Νίκος' ): string {
+    public function hydrate_prompt( string $template, string $date, array $articles = [], string $duration = '', string $host1 = 'Μαρία', string $host2 = 'Νίκος' ): string {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
@@ -179,15 +179,18 @@ class PressHub_AI_Podcast_Producer {
     }
 
     /**
-     * Build the system and user prompts for podcast dialogue generation, applying presets and filters.
+     * Build the system and user prompts for podcast dialogue generation, applying presets, context modes and filters.
      *
-     * @param array  $articles  Harvested articles array.
-     * @param string $preset_id Optional preset slug override.
-     * @param string $duration  Target duration option ('3_min', '5_min', '10_min').
-     * @param string $date      Target briefing date (YYYY-MM-DD).
+     * @param array       $articles             Harvested articles array.
+     * @param string      $preset_id            Optional preset slug override.
+     * @param string      $duration             Target duration option ('3_min', '5_min', '10_min').
+     * @param string      $date                 Target briefing date (YYYY-MM-DD).
+     * @param string      $context_mode         Context mode ('curated_briefing' or 'harvested_articles').
+     * @param array       $selected_article_ids Optional list of selected article IDs to filter by.
+     * @param string|null $briefing_text        Optional explicit briefing text to use in 'curated_briefing' mode.
      * @return array Associative array with 'system_prompt' and 'user_prompt'.
      */
-    public function build_dialogue_prompt( array $articles, string $preset_id = '', string $duration = '', string $date = '' ): array {
+    public function build_dialogue_prompt( array $articles, string $preset_id = '', string $duration = '', string $date = '', string $context_mode = 'curated_briefing', array $selected_article_ids = [], ?string $briefing_text = null ): array {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
@@ -197,6 +200,38 @@ class PressHub_AI_Podcast_Producer {
         }
 
         $specs = $this->get_duration_specs( $duration );
+
+        // Filter articles if selected_article_ids is provided and non-empty
+        if ( ! empty( $selected_article_ids ) && is_array( $selected_article_ids ) ) {
+            $filtered = [];
+            foreach ( $articles as $idx => $article ) {
+                $id      = $article['id'] ?? null;
+                $url     = $article['url'] ?? null;
+                $str_idx = (string) $idx;
+
+                $matched = false;
+                foreach ( $selected_article_ids as $target_id ) {
+                    $target_str = (string) $target_id;
+                    if ( null !== $id && (string) $id === $target_str ) {
+                        $matched = true;
+                        break;
+                    }
+                    if ( null !== $url && (string) $url === $target_str ) {
+                        $matched = true;
+                        break;
+                    }
+                    if ( $str_idx === $target_str ) {
+                        $matched = true;
+                        break;
+                    }
+                }
+
+                if ( $matched ) {
+                    $filtered[] = $article;
+                }
+            }
+            $articles = array_values( $filtered );
+        }
 
         // Host names
         $host1 = (string) get_option( self::OPTION_HOST_FEMALE, 'Μαρία' );
@@ -211,7 +246,7 @@ class PressHub_AI_Podcast_Producer {
         }
         $host2 = apply_filters( 'presshub_ai_podcast_host2_name', $host2 );
 
-        // 1. Base dialogue prompt & filter
+        // 1. Base dialogue prompt & filter (system prompt defines persona, rules, speaker tags only)
         $base_prompt = $this->get_default_dialogue_prompt();
         $base_prompt = apply_filters( 'presshub_ai_podcast_producer_system_prompt', $base_prompt );
 
@@ -236,7 +271,32 @@ class PressHub_AI_Podcast_Producer {
         // 4. Filter composed system prompt
         $system_prompt = apply_filters( 'presshub_ai_composed_podcast_system_prompt', $system_prompt );
 
-        // 5. Build user prompt
+        // 5. Build user prompt based on context mode
+        if ( 'curated_briefing' === $context_mode ) {
+            if ( null === $briefing_text ) {
+                $curator = new PressHub_AI_News_Curator();
+                $briefing_text = $curator->get_briefing_content( $date );
+            }
+
+            if ( ! empty( $briefing_text ) && '' !== trim( $briefing_text ) ) {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\n\nΠαρακάτω ακολουθεί το συνταχθέν κείμενο της Πρωινής Ενημέρωσης (Curated Morning Briefing):\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες διάλογο podcast στα Ελληνικά με τους παρουσιαστές [%s] και [%s] βασισμένο στην παραπάνω πρωινή ενημέρωση.",
+                    $date,
+                    $specs['description'],
+                    $specs['target_words'],
+                    trim( $briefing_text ),
+                    $host1,
+                    $host2
+                );
+
+                return [
+                    'system_prompt' => $system_prompt,
+                    'user_prompt'   => $user_prompt,
+                ];
+            }
+        }
+
+        // Default / Fallback: 'harvested_articles' mode
         $sources = $this->get_sources_list( $articles );
         $context = $this->format_articles_context( $articles );
 
@@ -423,15 +483,17 @@ class PressHub_AI_Podcast_Producer {
     }
 
     /**
-     * Generate daily podcast dialogue script from harvested articles snapshot.
+     * Generate daily podcast dialogue script from harvested articles snapshot or curated briefing.
      *
-     * @param string                       $date       Target date (YYYY-MM-DD).
-     * @param PressHub_AI_API_Client|null $api_client Optional API client instance.
-     * @param string                       $preset_id  Optional preset slug override.
-     * @param string                       $duration   Optional duration option override ('3_min', '5_min', '10_min').
+     * @param string                       $date                 Target date (YYYY-MM-DD).
+     * @param PressHub_AI_API_Client|null $api_client           Optional API client instance.
+     * @param string                       $preset_id            Optional preset slug override.
+     * @param string                       $duration             Optional duration option override ('3_min', '5_min', '10_min').
+     * @param string                       $context_mode         Context mode ('curated_briefing' or 'harvested_articles').
+     * @param array                        $selected_article_ids Optional list of selected article IDs to filter by.
      * @return array|WP_Error Result payload array or WP_Error on failure.
      */
-    public function generate_dialogue_script( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', string $duration = '' ) {
+    public function generate_dialogue_script( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', string $duration = '', string $context_mode = 'curated_briefing', array $selected_article_ids = [] ) {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
@@ -439,22 +501,32 @@ class PressHub_AI_Podcast_Producer {
         // 1. Load snapshot from harvester
         $harvester = new PressHub_AI_News_Harvester();
         $snapshot  = $harvester->load_snapshot( $date );
+        $articles  = ( ! empty( $snapshot ) && ! empty( $snapshot['articles'] ) && is_array( $snapshot['articles'] ) ) ? $snapshot['articles'] : [];
 
-        if ( empty( $snapshot ) || empty( $snapshot['articles'] ) || ! is_array( $snapshot['articles'] ) ) {
-            return new WP_Error(
-                'no_articles',
-                sprintf( __( 'No harvested articles found for date: %s', 'presshub-ai-editor' ), $date )
-            );
+        if ( empty( $articles ) ) {
+            $briefing_content = null;
+            if ( 'curated_briefing' === $context_mode ) {
+                $curator = new PressHub_AI_News_Curator();
+                $briefing_content = $curator->get_briefing_content( $date );
+            }
+
+            if ( empty( $briefing_content ) ) {
+                return new WP_Error(
+                    'no_articles',
+                    sprintf( __( 'No harvested articles found for date: %s', 'presshub-ai-editor' ), $date )
+                );
+            }
         }
 
-        $articles = $snapshot['articles'];
-
-        // 2. Build prompts
-        $prompts = $this->build_dialogue_prompt( $articles, $preset_id, $duration, $date );
+        // 2. Build prompts (context mode, preset, duration, date, article filtering)
+        $prompts = $this->build_dialogue_prompt( $articles, $preset_id, $duration, $date, $context_mode, $selected_article_ids );
 
         // 3. Call AI provider
         if ( null === $api_client ) {
-            $api_client = new PressHub_AI_API_Client();
+            $api_client = new PressHub_AI_API_Client( 'briefing_podcast' );
+        }
+        if ( method_exists( $api_client, 'set_action' ) ) {
+            $api_client->set_action( 'podcast_script' );
         }
 
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [] );
@@ -477,7 +549,19 @@ class PressHub_AI_Podcast_Producer {
         }
 
         // 4. Parse turns
-        $turns = $this->parse_script_turns( $response );
+        $host1 = (string) get_option( self::OPTION_HOST_FEMALE, 'Μαρία' );
+        if ( empty( trim( $host1 ) ) ) {
+            $host1 = 'Μαρία';
+        }
+        $host1 = apply_filters( 'presshub_ai_podcast_host1_name', $host1 );
+
+        $host2 = (string) get_option( self::OPTION_HOST_MALE, 'Νίκος' );
+        if ( empty( trim( $host2 ) ) ) {
+            $host2 = 'Νίκος';
+        }
+        $host2 = apply_filters( 'presshub_ai_podcast_host2_name', $host2 );
+
+        $turns = $this->parse_script_turns( $response, $host1, $host2 );
         if ( empty( $turns ) ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::warning( 'Failed parsing dialogue turns from AI script: ' . substr( $response, 0, 300 ) );
@@ -505,6 +589,7 @@ class PressHub_AI_Podcast_Producer {
             'turns_count'  => count( $turns ),
             'word_count'   => $word_count,
             'duration'     => ! empty( $duration ) ? $duration : '5_min',
+            'context_mode' => $context_mode,
             'saved'        => true,
         ];
     }

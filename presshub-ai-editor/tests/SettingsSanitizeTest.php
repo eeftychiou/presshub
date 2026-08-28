@@ -299,6 +299,17 @@ class SettingsSanitizeTest
             $failures[] = 're-entrant sanitize_secret threw exception: ' . $e->getMessage();
         }
 
+        // --- Case 21: modular provider & model sanitizers ---
+        if ( self::sanitize( $cbs, 'presshub_ai_coauthor_provider', '  groq  ' ) !== 'groq' ) {
+            $failures[] = "provider id '  groq  ' should be trimmed to 'groq'.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_coauthor_model', 'models/gemini-2.0-flash' ) !== 'gemini-2.0-flash' ) {
+            $failures[] = "model 'models/gemini-2.0-flash' should have 'models/' prefix stripped.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_copilot_max_tokens', '15000' ) !== 15000 ) {
+            $failures[] = "copilot max tokens 15000 should pass through.";
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {

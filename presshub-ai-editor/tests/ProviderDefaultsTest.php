@@ -51,14 +51,11 @@ class ProviderDefaultsTest
             $failures[] = 'default_max_tokens() should be 10000; got: ' . var_export( PressHub_AI_Provider_Defaults::default_max_tokens(), true );
         }
 
-        // --- Case 3: timeout per provider (openai 60, others 90) ---
-        if ( PressHub_AI_Provider_Defaults::default_timeout( 'openai' ) !== 60 ) {
-            $failures[] = 'default_timeout(openai) should be 60; got: ' . var_export( PressHub_AI_Provider_Defaults::default_timeout( 'openai' ), true );
-        }
-        foreach ( [ 'anthropic', 'gemini', 'some-other' ] as $provider ) {
+        // --- Case 3: timeout per provider (default 300s) ---
+        foreach ( [ 'openai', 'anthropic', 'gemini', 'groq', 'some-other' ] as $provider ) {
             $got = PressHub_AI_Provider_Defaults::default_timeout( $provider );
-            if ( $got !== 90 ) {
-                $failures[] = "default_timeout({$provider}) should be 90; got: {$got}";
+            if ( $got !== 300 ) {
+                $failures[] = "default_timeout({$provider}) should be 300; got: {$got}";
             }
         }
 
@@ -113,6 +110,26 @@ class ProviderDefaultsTest
             }
             if ( $timeout !== PressHub_AI_Provider_Defaults::default_timeout( $provider ) ) {
                 $failures[] = "API client should resolve default timeout {$provider} = " . PressHub_AI_Provider_Defaults::default_timeout( $provider ) . "; got: " . var_export( $timeout, true );
+            }
+        }
+
+        // --- Case 6: Standard provider templates ---
+        $expected_types = [ 'openai', 'anthropic', 'gemini', 'google_cloud_tts', 'groq', 'mistral', 'deepseek', 'ollama_local', 'custom_openai' ];
+        $templates = PressHub_AI_Provider_Defaults::get_templates();
+        foreach ( $expected_types as $type ) {
+            if ( ! isset( $templates[ $type ] ) ) {
+                $failures[] = "Template for type '{$type}' is missing.";
+            } else {
+                $tmpl = $templates[ $type ];
+                if ( ( $tmpl['type'] ?? '' ) !== $type ) {
+                    $failures[] = "Template '{$type}' type property mismatch.";
+                }
+                if ( empty( $tmpl['name'] ) ) {
+                    $failures[] = "Template '{$type}' is missing a name.";
+                }
+                if ( ( $tmpl['timeout'] ?? 0 ) !== 300 ) {
+                    $failures[] = "Template '{$type}' timeout should be 300; got " . ( $tmpl['timeout'] ?? 0 );
+                }
             }
         }
 
