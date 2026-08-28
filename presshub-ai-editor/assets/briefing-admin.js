@@ -72,7 +72,9 @@
         function updateSelectedCountBadge() {
             var total = $('.presshub-article-checkbox').length;
             var selected = $('.presshub-article-checkbox:checked').length;
-            $('#presshub-selected-articles-count').text('Selected: ' + selected + ' / ' + total);
+            var text = 'Selected: ' + selected + ' / ' + total;
+            $('#presshub-selected-articles-count').text(text);
+            $('#presshub-inspector-count-badge').text(text);
 
             if (total > 0 && selected === total) {
                 $('#presshub-select-all-checkbox').prop('checked', true).prop('indeterminate', false);
@@ -101,28 +103,79 @@
             }
             $('#count-harvested-articles').text(status.article_count || 0);
 
-            // Populate / Refresh harvested articles table
+            // Populate / Refresh harvested articles inspector
             if (status.articles && Array.isArray(status.articles)) {
-                var $tbody = $('#presshub-articles-table-body');
+                var $inspectorList = $('#presshub-inspector-articles-list');
+                var $sourceFilter = $('#presshub-article-source-filter');
                 if (status.articles.length > 0) {
-                    var rows = '';
+                    var cardsHtml = '';
+                    var sourcesSet = {};
+
                     $.each(status.articles, function(idx, art) {
                         var title = art.title || 'Untitled';
                         var src = art.source || 'Unknown';
                         var url = art.url || '';
-                        rows += '<tr>' +
-                            '<td class="check-column"><input type="checkbox" class="presshub-article-checkbox" value="' + idx + '" checked /></td>' +
-                            '<td class="column-source"><span class="presshub-article-source-pill">' + $('<div>').text(src).html() + '</span></td>' +
-                            '<td class="column-title"><strong>' + $('<div>').text(title).html() + '</strong>' +
-                            (url ? ' <a href="' + $('<div>').text(url).html() + '" target="_blank" rel="noopener noreferrer" class="presshub-article-external-link">↗</a>' : '') +
-                            '</td>' +
-                            '</tr>';
+                        var content = art.content || '';
+                        var words = content ? content.trim().split(/\s+/).length : 0;
+                        var chars = content ? content.length : 0;
+                        sourcesSet[src] = true;
+
+                        var escTitle = $('<div>').text(title).html();
+                        var escSrc = $('<div>').text(src).html();
+                        var escUrl = $('<div>').text(url).html();
+                        var escContent = $('<div>').text(content).html().replace(/\n/g, '<br>');
+
+                        cardsHtml += '<div class="presshub-inspector-card" data-index="' + idx + '" data-source="' + $('<div>').text(src.toLowerCase()).html() + '" data-title="' + $('<div>').text(title.toLowerCase()).html() + '" data-text="' + $('<div>').text(content.toLowerCase().substring(0, 500)).html() + '">' +
+                            '<div class="presshub-inspector-card-header">' +
+                                '<div class="inspector-card-check">' +
+                                    '<input type="checkbox" class="presshub-article-checkbox" value="' + idx + '" checked="checked" id="inspector-check-' + idx + '" />' +
+                                '</div>' +
+                                '<div class="inspector-card-meta">' +
+                                    '<span class="presshub-article-source-pill">' + escSrc + '</span>' +
+                                    '<span class="presshub-article-words-pill">' + words + ' words</span>' +
+                                '</div>' +
+                                '<div class="inspector-card-title">' +
+                                    '<label for="inspector-check-' + idx + '"><strong>' + escTitle + '</strong></label>' +
+                                    (url ? ' <a href="' + escUrl + '" target="_blank" rel="noopener noreferrer" class="presshub-article-external-link" title="Open original source article">↗</a>' : '') +
+                                '</div>' +
+                                '<div class="inspector-card-toggle">' +
+                                    '<button type="button" class="button button-small presshub-toggle-text-btn" data-index="' + idx + '">' +
+                                        '📖 <span class="toggle-text-label">Read Text ▼</span>' +
+                                    '</button>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="presshub-inspector-card-drawer" id="inspector-drawer-' + idx + '" style="display:none;">' +
+                                '<div class="inspector-drawer-meta-bar">' +
+                                    '<div class="drawer-stats">' +
+                                        '<span><strong>Length:</strong> ' + words + ' words / ' + chars + ' characters</span>' +
+                                        (url ? ' <span class="drawer-url"><strong>URL:</strong> <a href="' + escUrl + '" target="_blank" rel="noopener noreferrer">' + escUrl + '</a></span>' : '') +
+                                    '</div>' +
+                                    '<button type="button" class="button button-small presshub-copy-article-btn" data-index="' + idx + '">📋 Copy Text</button>' +
+                                '</div>' +
+                                '<div class="inspector-drawer-content" id="inspector-content-' + idx + '">' +
+                                    (escContent ? '<p>' + escContent + '</p>' : '<p class="description"><em>No body text extracted for this article snapshot.</em></p>') +
+                                '</div>' +
+                            '</div>' +
+                        '</div>';
                     });
-                    $tbody.html(rows);
-                    $('#presshub-articles-container').show();
+
+                    $inspectorList.html(cardsHtml);
+
+                    // Rebuild source dropdown options
+                    var curSrcVal = $sourceFilter.val();
+                    var srcOptions = '<option value="">All News Sources</option>';
+                    Object.keys(sourcesSet).sort().forEach(function(s) {
+                        var selectedAttr = (s === curSrcVal) ? ' selected="selected"' : '';
+                        srcOptions += '<option value="' + $('<div>').text(s).html() + '"' + selectedAttr + '>' + $('<div>').text(s).html() + '</option>';
+                    });
+                    $sourceFilter.html(srcOptions);
+
+                    $('.presshub-articles-summary-box').show();
+                    $('#presshub-harvest-inspector-section').show();
                 } else {
-                    $tbody.empty();
-                    $('#presshub-articles-container').hide();
+                    $inspectorList.html('<p class="presshub-no-articles-msg" style="padding: 20px; text-align: center; color: #666;">No harvested articles found for today. Run news scraping above to populate the pool.</p>');
+                    $('.presshub-articles-summary-box').hide();
+                    $('#presshub-harvest-inspector-section').hide();
                 }
                 updateSelectedCountBadge();
             }
@@ -210,28 +263,127 @@
         }
 
         // -------------------------------------------------------------------------
-        // Event: Article Checkboxes and Select All / Deselect All
+        // Article Selection and Inspector Filter Engine
         // -------------------------------------------------------------------------
+        function filterInspectorArticles() {
+            var search = $.trim($('#presshub-article-search').val()).toLowerCase();
+            var source = $.trim($('#presshub-article-source-filter').val()).toLowerCase();
+            var selection = $('#presshub-article-selection-filter').val();
+
+            var visibleCount = 0;
+            $('.presshub-inspector-card').each(function() {
+                var $card = $(this);
+                var cardSource = ($card.data('source') || '').toString().toLowerCase();
+                var cardTitle = ($card.data('title') || '').toString().toLowerCase();
+                var cardText = ($card.data('text') || '').toString().toLowerCase();
+                var isChecked = $card.find('.presshub-article-checkbox').is(':checked');
+
+                var matchesSearch = !search || (cardTitle.indexOf(search) !== -1 || cardText.indexOf(search) !== -1 || cardSource.indexOf(search) !== -1);
+                var matchesSource = !source || (cardSource === source);
+                var matchesSelection = true;
+
+                if (selection === 'selected') {
+                    matchesSelection = isChecked;
+                } else if (selection === 'unselected') {
+                    matchesSelection = !isChecked;
+                }
+
+                if (matchesSearch && matchesSource && matchesSelection) {
+                    $card.show();
+                    visibleCount++;
+                } else {
+                    $card.hide();
+                }
+            });
+
+            var total = $('.presshub-article-checkbox').length;
+            var selected = $('.presshub-article-checkbox:checked').length;
+            $('#presshub-inspector-count-badge').text('Selected: ' + selected + ' / ' + total + (search || source || selection !== 'all' ? ' (Showing ' + visibleCount + ')' : ''));
+        }
+
+        $(document).on('input', '#presshub-article-search', filterInspectorArticles);
+        $(document).on('change', '#presshub-article-source-filter', filterInspectorArticles);
+        $(document).on('change', '#presshub-article-selection-filter', filterInspectorArticles);
+
         $(document).on('change', '.presshub-article-checkbox', function() {
             updateSelectedCountBadge();
+            if ($('#presshub-article-selection-filter').val() !== 'all') {
+                filterInspectorArticles();
+            }
         });
 
-        $('#btn-select-all-articles').on('click', function(e) {
+        // Inspector Select / Deselect All
+        $('#btn-inspector-select-all, #btn-select-all-articles').on('click', function(e) {
             e.preventDefault();
-            $('.presshub-article-checkbox').prop('checked', true);
+            $('.presshub-inspector-card:visible .presshub-article-checkbox, .presshub-article-checkbox').prop('checked', true);
             updateSelectedCountBadge();
         });
 
-        $('#btn-deselect-all-articles').on('click', function(e) {
+        $('#btn-inspector-deselect-all, #btn-deselect-all-articles').on('click', function(e) {
             e.preventDefault();
-            $('.presshub-article-checkbox').prop('checked', false);
+            $('.presshub-inspector-card:visible .presshub-article-checkbox, .presshub-article-checkbox').prop('checked', false);
             updateSelectedCountBadge();
         });
 
-        $('#presshub-select-all-checkbox').on('change', function() {
-            var isChecked = $(this).is(':checked');
-            $('.presshub-article-checkbox').prop('checked', isChecked);
-            updateSelectedCountBadge();
+        // Toggle individual article text drawer
+        $(document).on('click', '.presshub-toggle-text-btn', function(e) {
+            e.preventDefault();
+            var idx = $(this).data('index');
+            var $drawer = $('#inspector-drawer-' + idx);
+            var $btn = $(this);
+            var $label = $btn.find('.toggle-text-label');
+
+            if ($drawer.is(':visible')) {
+                $drawer.slideUp(180);
+                $label.text('Read Text ▼');
+            } else {
+                $drawer.slideDown(220);
+                $label.text('Hide Text ▲');
+            }
+        });
+
+        // Expand All / Collapse All Texts
+        $('#btn-inspector-expand-all').on('click', function(e) {
+            e.preventDefault();
+            $('.presshub-inspector-card:visible .presshub-inspector-card-drawer').slideDown(200);
+            $('.presshub-inspector-card:visible .toggle-text-label').text('Hide Text ▲');
+        });
+
+        $('#btn-inspector-collapse-all').on('click', function(e) {
+            e.preventDefault();
+            $('.presshub-inspector-card .presshub-inspector-card-drawer').slideUp(200);
+            $('.presshub-inspector-card .toggle-text-label').text('Read Text ▼');
+        });
+
+        // Copy Article Text to Clipboard
+        $(document).on('click', '.presshub-copy-article-btn', function(e) {
+            e.preventDefault();
+            var idx = $(this).data('index');
+            var $btn = $(this);
+            var text = $('#inspector-content-' + idx).text();
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    var orig = $btn.text();
+                    $btn.text('✅ Copied!');
+                    setTimeout(function() {
+                        $btn.text(orig);
+                    }, 2000);
+                });
+            } else {
+                showNotice('info', 'Text selected: use Ctrl+C to copy.');
+            }
+        });
+
+        // Smooth scroll to inspector
+        $('#btn-scroll-to-inspector').on('click', function(e) {
+            var target = $(this).attr('href');
+            if (target && $(target).length) {
+                e.preventDefault();
+                $('html, body').animate({
+                    scrollTop: $(target).offset().top - 40
+                }, 400);
+            }
         });
 
         // -------------------------------------------------------------------------

@@ -306,17 +306,9 @@ class PressHub_AI_Briefing_Admin {
                             <p class="card-subtext"><?php echo sprintf( esc_html__( 'Scraped: %s', 'presshub-ai-editor' ), esc_html( $status['harvested_at'] ) ); ?></p>
                         <?php endif; ?>
 
-                        <div class="presshub-articles-container" id="presshub-articles-container" style="<?php echo empty( $status['articles'] ) ? 'display:none;' : ''; ?>">
-                            <div class="presshub-articles-toolbar">
-                                <div class="presshub-toolbar-buttons">
-                                    <button type="button" class="button button-small" id="btn-select-all-articles">
-                                        <?php echo esc_html__( 'Select All', 'presshub-ai-editor' ); ?>
-                                    </button>
-                                    <button type="button" class="button button-small" id="btn-deselect-all-articles">
-                                        <?php echo esc_html__( 'Deselect All', 'presshub-ai-editor' ); ?>
-                                    </button>
-                                </div>
-                                <span id="presshub-selected-articles-count" class="presshub-selected-count-badge">
+                        <div class="presshub-articles-summary-box" style="<?php echo empty( $status['articles'] ) ? 'display:none;' : ''; ?>">
+                            <p style="margin: 8px 0;">
+                                <span id="presshub-selected-articles-count" class="presshub-selected-count-badge" style="font-size: 12px; display: inline-block;">
                                     <?php
                                     $total_articles = count( $status['articles'] );
                                     printf(
@@ -327,38 +319,10 @@ class PressHub_AI_Briefing_Admin {
                                     );
                                     ?>
                                 </span>
-                            </div>
-                            <div class="presshub-articles-scroll-box">
-                                <table class="wp-list-table widefat striped presshub-article-table">
-                                    <thead>
-                                        <tr>
-                                            <th class="check-column"><input type="checkbox" id="presshub-select-all-checkbox" checked /></th>
-                                            <th class="column-source"><?php echo esc_html__( 'Source', 'presshub-ai-editor' ); ?></th>
-                                            <th class="column-title"><?php echo esc_html__( 'Article Title', 'presshub-ai-editor' ); ?></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="presshub-articles-table-body">
-                                        <?php if ( ! empty( $status['articles'] ) ) : ?>
-                                            <?php foreach ( $status['articles'] as $index => $article ) : ?>
-                                                <tr>
-                                                    <td class="check-column">
-                                                        <input type="checkbox" class="presshub-article-checkbox" value="<?php echo esc_attr( $index ); ?>" checked />
-                                                    </td>
-                                                    <td class="column-source">
-                                                        <span class="presshub-article-source-pill"><?php echo esc_html( $article['source'] ?? __( 'Unknown', 'presshub-ai-editor' ) ); ?></span>
-                                                    </td>
-                                                    <td class="column-title">
-                                                        <strong><?php echo esc_html( $article['title'] ?? __( 'Untitled', 'presshub-ai-editor' ) ); ?></strong>
-                                                        <?php if ( ! empty( $article['url'] ) ) : ?>
-                                                            <a href="<?php echo esc_url( $article['url'] ); ?>" target="_blank" rel="noopener noreferrer" class="presshub-article-external-link">↗</a>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        <?php endif; ?>
-                                    </tbody>
-                                </table>
-                            </div>
+                            </p>
+                            <a href="#presshub-harvest-inspector-section" class="button button-primary button-small" id="btn-scroll-to-inspector" style="width: 100%; text-align: center; justify-content: center; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;">
+                                🔍 <?php echo esc_html__( 'Inspect Articles & Text', 'presshub-ai-editor' ); ?>
+                            </a>
                         </div>
                     </div>
                     <div class="presshub-card-footer">
@@ -472,6 +436,142 @@ class PressHub_AI_Briefing_Admin {
                 </div>
 
             </div>
+
+            <!-- Full News Harvesting Article Inspector & Reading Workspace -->
+            <section class="presshub-section-container presshub-harvest-inspector-section" id="presshub-harvest-inspector-section" style="<?php echo empty( $status['articles'] ) ? 'display:none;' : ''; ?>">
+                <div class="presshub-section-header">
+                    <div class="presshub-section-title-wrap">
+                        <h2>📰 <?php echo esc_html__( 'Harvested News Pool & Article Content Inspector', 'presshub-ai-editor' ); ?></h2>
+                        <p class="description">
+                            <?php echo esc_html__( 'Inspect full downloaded article texts, search/filter by keyword or news source, and select which stories feed the morning briefing and podcast.', 'presshub-ai-editor' ); ?>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="presshub-inspector-toolbar">
+                    <div class="presshub-inspector-filters">
+                        <div class="inspector-filter-group inspector-search">
+                            <label for="presshub-article-search" class="screen-reader-text"><?php echo esc_html__( 'Search Articles', 'presshub-ai-editor' ); ?></label>
+                            <input type="search" id="presshub-article-search" class="regular-text" placeholder="<?php echo esc_attr__( '🔍 Search headline, content, or source...', 'presshub-ai-editor' ); ?>" />
+                        </div>
+                        <div class="inspector-filter-group">
+                            <label for="presshub-article-source-filter" class="screen-reader-text"><?php echo esc_html__( 'Filter by Source', 'presshub-ai-editor' ); ?></label>
+                            <select id="presshub-article-source-filter">
+                                <option value=""><?php echo esc_html__( 'All News Sources', 'presshub-ai-editor' ); ?></option>
+                                <?php
+                                if ( ! empty( $status['articles'] ) ) {
+                                    $sources_list = array_unique( array_filter( array_column( $status['articles'], 'source' ) ) );
+                                    sort( $sources_list );
+                                    foreach ( $sources_list as $src_name ) {
+                                        echo '<option value="' . esc_attr( $src_name ) . '">' . esc_html( $src_name ) . '</option>';
+                                    }
+                                }
+                                ?>
+                            </select>
+                        </div>
+                        <div class="inspector-filter-group">
+                            <label for="presshub-article-selection-filter" class="screen-reader-text"><?php echo esc_html__( 'Filter by Selection', 'presshub-ai-editor' ); ?></label>
+                            <select id="presshub-article-selection-filter">
+                                <option value="all"><?php echo esc_html__( 'All Articles', 'presshub-ai-editor' ); ?></option>
+                                <option value="selected"><?php echo esc_html__( 'Selected Only', 'presshub-ai-editor' ); ?></option>
+                                <option value="unselected"><?php echo esc_html__( 'Excluded Only', 'presshub-ai-editor' ); ?></option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="presshub-inspector-actions">
+                        <button type="button" class="button button-secondary button-small" id="btn-inspector-select-all">
+                            <?php echo esc_html__( 'Select All', 'presshub-ai-editor' ); ?>
+                        </button>
+                        <button type="button" class="button button-secondary button-small" id="btn-inspector-deselect-all">
+                            <?php echo esc_html__( 'Deselect All', 'presshub-ai-editor' ); ?>
+                        </button>
+                        <button type="button" class="button button-secondary button-small" id="btn-inspector-expand-all">
+                            <?php echo esc_html__( 'Expand All Texts ▼', 'presshub-ai-editor' ); ?>
+                        </button>
+                        <button type="button" class="button button-secondary button-small" id="btn-inspector-collapse-all">
+                            <?php echo esc_html__( 'Collapse All Texts ▲', 'presshub-ai-editor' ); ?>
+                        </button>
+                        <span id="presshub-inspector-count-badge" class="presshub-selected-count-badge">
+                            <?php
+                            $total_articles = count( $status['articles'] );
+                            printf(
+                                /* translators: 1: selected count, 2: total count */
+                                esc_html__( 'Selected: %1$d / %2$d', 'presshub-ai-editor' ),
+                                $total_articles,
+                                $total_articles
+                            );
+                            ?>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="presshub-inspector-articles-list" id="presshub-inspector-articles-list">
+                    <?php if ( ! empty( $status['articles'] ) ) : ?>
+                        <?php foreach ( $status['articles'] as $index => $article ) :
+                            $art_title   = (string) ( $article['title'] ?? __( 'Untitled', 'presshub-ai-editor' ) );
+                            $art_source  = (string) ( $article['source'] ?? __( 'Unknown', 'presshub-ai-editor' ) );
+                            $art_url     = (string) ( $article['url'] ?? '' );
+                            $art_content = (string) ( $article['content'] ?? '' );
+                            $word_count  = str_word_count( strip_tags( $art_content ) );
+                            if ( 0 === $word_count && ! empty( $art_content ) ) {
+                                $word_count = count( preg_split( '/\s+/u', trim( strip_tags( $art_content ) ) ) );
+                            }
+                            $char_count  = mb_strlen( $art_content );
+                        ?>
+                            <div class="presshub-inspector-card" data-index="<?php echo esc_attr( $index ); ?>" data-source="<?php echo esc_attr( strtolower( $art_source ) ); ?>" data-title="<?php echo esc_attr( strtolower( $art_title ) ); ?>" data-text="<?php echo esc_attr( strtolower( mb_substr( strip_tags( $art_content ), 0, 500 ) ) ); ?>">
+                                <div class="presshub-inspector-card-header">
+                                    <div class="inspector-card-check">
+                                        <input type="checkbox" class="presshub-article-checkbox" value="<?php echo esc_attr( $index ); ?>" checked="checked" id="inspector-check-<?php echo esc_attr( $index ); ?>" />
+                                    </div>
+                                    <div class="inspector-card-meta">
+                                        <span class="presshub-article-source-pill"><?php echo esc_html( $art_source ); ?></span>
+                                        <span class="presshub-article-words-pill"><?php echo sprintf( esc_html__( '%d words', 'presshub-ai-editor' ), $word_count ); ?></span>
+                                    </div>
+                                    <div class="inspector-card-title">
+                                        <label for="inspector-check-<?php echo esc_attr( $index ); ?>">
+                                            <strong><?php echo esc_html( $art_title ); ?></strong>
+                                        </label>
+                                        <?php if ( ! empty( $art_url ) ) : ?>
+                                            <a href="<?php echo esc_url( $art_url ); ?>" target="_blank" rel="noopener noreferrer" class="presshub-article-external-link" title="<?php echo esc_attr__( 'Open original source article', 'presshub-ai-editor' ); ?>">↗</a>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="inspector-card-toggle">
+                                        <button type="button" class="button button-small presshub-toggle-text-btn" data-index="<?php echo esc_attr( $index ); ?>">
+                                            📖 <span class="toggle-text-label"><?php echo esc_html__( 'Read Text ▼', 'presshub-ai-editor' ); ?></span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="presshub-inspector-card-drawer" id="inspector-drawer-<?php echo esc_attr( $index ); ?>" style="display: none;">
+                                    <div class="inspector-drawer-meta-bar">
+                                        <div class="drawer-stats">
+                                            <span><strong><?php echo esc_html__( 'Length:', 'presshub-ai-editor' ); ?></strong> <?php echo sprintf( esc_html__( '%1$d words / %2$d characters', 'presshub-ai-editor' ), $word_count, $char_count ); ?></span>
+                                            <?php if ( ! empty( $art_url ) ) : ?>
+                                                <span class="drawer-url"><strong><?php echo esc_html__( 'URL:', 'presshub-ai-editor' ); ?></strong> <a href="<?php echo esc_url( $art_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $art_url ); ?></a></span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <button type="button" class="button button-small presshub-copy-article-btn" data-index="<?php echo esc_attr( $index ); ?>">
+                                            📋 <?php echo esc_html__( 'Copy Text', 'presshub-ai-editor' ); ?>
+                                        </button>
+                                    </div>
+                                    <div class="inspector-drawer-content" id="inspector-content-<?php echo esc_attr( $index ); ?>">
+                                        <?php if ( ! empty( $art_content ) ) : ?>
+                                            <?php echo function_exists( 'wpautop' ) ? wp_kses_post( wpautop( esc_html( $art_content ) ) ) : nl2br( esc_html( $art_content ) ); ?>
+                                        <?php else : ?>
+                                            <p class="description"><em><?php echo esc_html__( 'No body text extracted for this article snapshot.', 'presshub-ai-editor' ); ?></em></p>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else : ?>
+                        <p class="presshub-no-articles-msg" style="padding: 20px; text-align: center; color: #666;">
+                            <?php echo esc_html__( 'No harvested articles found for today. Run news scraping above to populate the pool.', 'presshub-ai-editor' ); ?>
+                        </p>
+                    <?php endif; ?>
+                </div>
+            </section>
 
             <!-- Interactive Script Editor Section -->
             <section class="presshub-section-container presshub-script-editor-section">
