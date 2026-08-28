@@ -50,6 +50,14 @@ define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-defaults.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-logger.php';
+// Concern #2 split: load settings modules in parallel with the
+// legacy facade. Cutover happens in T5; until then the
+// `PressHub_AI_Settings` facade retains its full sanitise_*/render_*
+// surface (PHP allows both an old class and a new, differently-named
+// class to coexist in the same runtime).
+require_once PRESSHUB_AI_DIR . 'includes/class-settings-storage.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-settings-render.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-settings-migration.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-metaboxes.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
