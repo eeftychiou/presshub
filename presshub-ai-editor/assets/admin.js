@@ -957,11 +957,11 @@ jQuery(document).ready(function($) {
                 });
             } else {
                 var msg = (res && res.data && res.data.message) ? res.data.message : __('Failed to delete provider.', 'presshub-ai-editor');
-                alert(msg);
+                showNotice(msg, 'error', $(this));
             }
         }).fail(function(xhr, status, error) {
             $spinner.removeClass('is-active');
-            alert(__('Error deleting provider: ', 'presshub-ai-editor') + (error || status));
+            showNotice(__('Error deleting provider: ', 'presshub-ai-editor') + (error || status), 'error', $(this));
         });
     });
 
@@ -1235,11 +1235,12 @@ jQuery(document).ready(function($) {
             if (res && res.success) {
                 loadTokenLogs(1);
             } else {
-                alert((res && res.data && res.data.message) ? res.data.message : __('Failed to clear logs.', 'presshub-ai-editor'));
+                var msg = (res && res.data && res.data.message) ? res.data.message : __('Failed to clear logs.', 'presshub-ai-editor');
+                showNotice(msg, 'error', $(this));
             }
         }).fail(function(xhr, status, error) {
             $spinner.removeClass('is-active');
-            alert(__('Error clearing logs: ', 'presshub-ai-editor') + (error || status));
+            showNotice(__('Error clearing logs: ', 'presshub-ai-editor') + (error || status), 'error', $(this));
         });
     });
 
