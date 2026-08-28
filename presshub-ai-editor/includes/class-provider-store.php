@@ -42,6 +42,9 @@ class PressHub_AI_Provider_Store {
             if ( ! is_array( $item ) ) {
                 continue;
             }
+            if ( ( $item['type'] ?? '' ) === 'google_cloud_tts' ) {
+                continue;
+            }
             $clean = self::sanitize_provider( $item );
             if ( null === $clean ) {
                 continue;
@@ -257,24 +260,7 @@ class PressHub_AI_Provider_Store {
             'is_system'        => true,
         ];
 
-        // 4. Google Cloud TTS
-        $providers[] = [
-            'id'               => 'google-cloud-tts-default',
-            'type'             => 'google_cloud_tts',
-            'name'             => 'Google Cloud TTS',
-            'api_key'          => $legacy_tts_key,
-            'base_url'         => $templates['google_cloud_tts']['base_url'],
-            'default_model'    => (string) get_option( 'presshub_ai_briefing_tts_model', $templates['google_cloud_tts']['default_model'] ),
-            'available_models' => $templates['google_cloud_tts']['available_models'],
-            'timeout'          => 300,
-            'temperature'      => 0.7,
-            'max_tokens'       => 10000,
-            'headers'          => [],
-            'enabled'          => true,
-            'is_system'        => true,
-        ];
-
-        // 5. Groq
+        // 4. Groq
         $providers[] = [
             'id'               => 'groq-default',
             'type'             => 'groq',

@@ -90,20 +90,20 @@ class APIClientModularTest
             'enabled'       => true,
         ] );
         PressHub_AI_Provider_Store::save_provider( [
-            'id'            => 'tts-gcloud',
-            'type'          => 'google_cloud_tts',
-            'name'          => 'Google Cloud TTS Engine',
-            'base_url'      => 'https://texttospeech.googleapis.com/v1',
-            'api_key'       => 'gc-tts-key-999',
-            'default_model' => 'el-GR-Wavenet-A',
+            'id'            => 'tts-gemini',
+            'type'          => 'gemini',
+            'name'          => 'Google Gemini Speech',
+            'base_url'      => 'https://generativelanguage.googleapis.com/v1beta',
+            'api_key'       => 'gemini-tts-key-999',
+            'default_model' => 'gemini-3.1-flash-tts-preview',
             'enabled'       => true,
         ] );
 
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_provider'] = 'groq-main';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_provider'] = 'groq-main';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_copilot_provider'] = 'groq-main';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_engine'] = 'tts-gcloud';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = 'el-GR-Neural2-B';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_tts_provider'] = 'tts-gemini';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = 'gemini-3.1-flash-tts-preview';
 
         $text_cfg = PressHub_AI_API_Client::resolve_module_config( 'briefing_text' );
         if ( $text_cfg['provider'] !== 'groq-main' || $text_cfg['type'] !== 'groq' ) {
@@ -121,7 +121,7 @@ class APIClientModularTest
         }
 
         $tts_cfg = PressHub_AI_API_Client::resolve_module_config( 'tts' );
-        if ( $tts_cfg['provider'] !== 'tts-gcloud' || $tts_cfg['type'] !== 'google_cloud_tts' || $tts_cfg['model'] !== 'el-GR-Neural2-B' ) {
+        if ( $tts_cfg['provider'] !== 'tts-gemini' || $tts_cfg['type'] !== 'gemini' || $tts_cfg['model'] !== 'gemini-3.1-flash-tts-preview' ) {
             $failures[] = "tts resolution failed. Got: " . var_export( $tts_cfg, true );
         }
 

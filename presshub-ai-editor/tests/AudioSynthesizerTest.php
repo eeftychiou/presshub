@@ -66,10 +66,6 @@ as_check( 'styles: contains storyteller style', isset( $styles['storyteller'] ) 
 as_check( 'styles: contains dramatic style', isset( $styles['dramatic'] ) );
 as_check( 'styles: contains custom style', isset( $styles['custom'] ) );
 
-$gc_voices = $synthesizer->get_available_voices( 'google_cloud' );
-as_check( 'voices: google cloud contains el-GR-Wavenet-A', isset( $gc_voices['female']['el-GR-Wavenet-A'] ) );
-as_check( 'voices: google cloud contains el-GR-Chirp3-HD-Achird', isset( $gc_voices['male']['el-GR-Chirp3-HD-Achird'] ) );
-
 
 // =========================================================================
 // 2. Speaker Turn Mapping to Voice Models & Options

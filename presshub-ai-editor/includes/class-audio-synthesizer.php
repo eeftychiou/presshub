@@ -115,50 +115,12 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
-     * Get list of available Greek voice models grouped by gender for the active engine.
+     * Get available Greek voice models for audio synthesis (logosAI personas).
      *
-     * @param string $engine Optional engine override ('gemini' or 'google_cloud').
+     * @param string $engine Optional engine parameter (kept for backwards compatibility).
      * @return array Grouped voice models directory with metadata.
      */
     public function get_available_voices( string $engine = '' ): array {
-        if ( empty( $engine ) ) {
-            $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
-        }
-
-        if ( 'google_cloud' === $engine ) {
-            return [
-                'female' => [
-                    'el-GR-Wavenet-A'          => [
-                        'name'   => 'el-GR-Wavenet-A',
-                        'label'  => __( 'Greek Female (Wavenet-A)', 'presshub-ai-editor' ),
-                        'gender' => 'FEMALE',
-                        'type'   => 'Wavenet',
-                    ],
-                    'el-GR-Standard-A'         => [
-                        'name'   => 'el-GR-Standard-A',
-                        'label'  => __( 'Greek Female (Standard-A)', 'presshub-ai-editor' ),
-                        'gender' => 'FEMALE',
-                        'type'   => 'Standard',
-                    ],
-                ],
-                'male' => [
-                    'el-GR-Chirp3-HD-Achird'   => [
-                        'name'   => 'el-GR-Chirp3-HD-Achird',
-                        'label'  => __( 'Greek Male (Chirp 3 HD Achird)', 'presshub-ai-editor' ),
-                        'gender' => 'MALE',
-                        'type'   => 'Chirp3-HD',
-                    ],
-                    'el-GR-Chirp3-HD-Algenib'  => [
-                        'name'   => 'el-GR-Chirp3-HD-Algenib',
-                        'label'  => __( 'Greek Male (Chirp 3 HD Algenib)', 'presshub-ai-editor' ),
-                        'gender' => 'MALE',
-                        'type'   => 'Chirp3-HD',
-                    ],
-                ],
-            ];
-        }
-
-        // Default: Google AI Studio Gemini 3.1/2.0 Neural Greek Voice Personas (logosAI)
         return [
             'female' => [
                 'Kore'       => [
@@ -418,37 +380,23 @@ class PressHub_AI_Audio_Synthesizer {
             $api_client = new PressHub_AI_API_Client();
         }
 
-        $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
-        $is_google_cloud_voice = ( 0 === strpos( $voice_model, 'el-GR' ) );
-
-        $start_time = microtime( true );
-        $used_engine = 'gemini';
-
-        if ( 'google_cloud' === $engine || $is_google_cloud_voice ) {
-            $used_engine = 'google_cloud';
-            if ( empty( $voice_model ) ) {
-                $voice_model = 'el-GR-Wavenet-A';
-            }
-            $result = $api_client->synthesize_speech_with_options( $text, $voice_model, $speed, $pitch );
-        } else {
-            $used_engine = 'gemini';
-            if ( empty( $voice_model ) ) {
-                $voice_model = 'Kore';
-            }
-            if ( empty( $style ) ) {
-                $style = (string) get_option( self::OPTION_STYLE, 'formal' );
-            }
-            $result = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style );
+        if ( empty( $voice_model ) ) {
+            $voice_model = 'Kore';
+        }
+        if ( empty( $style ) ) {
+            $style = (string) get_option( self::OPTION_STYLE, 'formal' );
         }
 
+        $start_time = microtime( true );
+        $result     = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style );
         $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         $char_count  = mb_strlen( $text );
 
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
             if ( is_wp_error( $result ) ) {
-                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', $used_engine, $voice_model, $char_count, $duration_ms, 'error', $result->get_error_message() );
+                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $voice_model, $char_count, $duration_ms, 'error', $result->get_error_message() );
             } else {
-                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', $used_engine, $voice_model, $char_count, $duration_ms, 'success', null );
+                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $voice_model, $char_count, $duration_ms, 'success', null );
             }
         }
 
@@ -679,71 +627,35 @@ class PressHub_AI_Audio_Synthesizer {
         $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
         $stitched_audio = '';
 
+        $voice_model  = $this->get_voice_for_speaker( 'female' );
+        $style_key    = (string) get_option( self::OPTION_STYLE, 'formal' );
+        $custom_style = (string) get_option( self::OPTION_CUSTOM_STYLE, '' );
+        $used_style   = ( 'custom' === $style_key && ! empty( $custom_style ) ) ? $custom_style : $style_key;
+
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( sprintf( 'Synthesizing podcast audio for %s (%d turns, engine: %s)', $date, count( $turns ), $engine ) );
+            PressHub_AI_Logger::info( sprintf( '[LogosAI Synthesizer] Synthesizing podcast audio for %s (%d turns, voice: %s, style: %s)', $date, count( $turns ), $voice_model, $used_style ) );
         }
 
-        // ------------------------------------------------------------------
-        // Single-Pass Gemini Synthesis (logosAI Natural Synthesis)
-        // ------------------------------------------------------------------
-        if ( 'gemini' === $engine ) {
-            $voice_model  = $this->get_voice_for_speaker( 'female' );
-            $style_key    = (string) get_option( self::OPTION_STYLE, 'formal' );
-            $custom_style = (string) get_option( self::OPTION_CUSTOM_STYLE, '' );
-            $used_style   = ( 'custom' === $style_key && ! empty( $custom_style ) ) ? $custom_style : $style_key;
+        $start_time = microtime( true );
+        $gen_result = $api_client->synthesize_speech_via_gemini( $script, $voice_model, true, $used_style );
+        $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+        $char_count  = mb_strlen( $script );
 
-            $start_time = microtime( true );
-            $gen_result = $api_client->synthesize_speech_via_gemini( $script, $voice_model, true, $used_style );
-            $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
-            $char_count  = mb_strlen( $script );
-
-            if ( is_wp_error( $gen_result ) ) {
-                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                    PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $voice_model, $char_count, $duration_ms, 'error', $gen_result->get_error_message() );
-                }
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::error( 'Single-pass podcast synthesis error: ' . $gen_result->get_error_message() );
-                }
-                return $gen_result;
-            }
-
+        if ( is_wp_error( $gen_result ) ) {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $voice_model, $char_count, $duration_ms, 'success', null );
+                PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $voice_model, $char_count, $duration_ms, 'error', $gen_result->get_error_message() );
             }
-
-            $stitched_audio = $gen_result;
-        } else {
-            // Google Cloud TTS Turn-by-Turn fallback
-            $speed = (float) get_option( self::OPTION_VOICE_SPEED, 1.0 );
-            if ( $speed <= 0.0 ) {
-                $speed = 1.0;
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( '[LogosAI Synthesizer] Single-pass podcast synthesis error: ' . $gen_result->get_error_message() );
             }
-            $pitch = (float) get_option( self::OPTION_VOICE_PITCH, 0.0 );
-
-            $audio_buffers = [];
-            foreach ( $turns as $index => $turn ) {
-                $speaker     = $turn['speaker'] ?? 'female';
-                $voice_model = $this->get_voice_for_speaker( $speaker );
-                $text        = $turn['text'] ?? '';
-
-                if ( '' === trim( $text ) ) {
-                    continue;
-                }
-
-                $turn_audio = $this->synthesize_turn( $text, $voice_model, $speed, $pitch, $api_client );
-                if ( is_wp_error( $turn_audio ) ) {
-                    return $turn_audio;
-                }
-
-                $audio_buffers[] = $turn_audio;
-            }
-
-            if ( empty( $audio_buffers ) ) {
-                return new WP_Error( 'synthesis_failed', __( 'Failed to synthesize audio for any speaker turn.', 'presshub-ai-editor' ) );
-            }
-
-            $stitched_audio = $this->stitch_audio_chunks( $audio_buffers );
+            return $gen_result;
         }
+
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $voice_model, $char_count, $duration_ms, 'success', null );
+        }
+
+        $stitched_audio = $gen_result;
 
         if ( empty( $stitched_audio ) ) {
             return new WP_Error(

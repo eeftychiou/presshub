@@ -114,7 +114,7 @@ class ProviderDefaultsTest
         }
 
         // --- Case 6: Standard provider templates ---
-        $expected_types = [ 'openai', 'anthropic', 'gemini', 'google_cloud_tts', 'groq', 'mistral', 'deepseek', 'ollama_local', 'custom_openai' ];
+        $expected_types = [ 'openai', 'anthropic', 'gemini', 'groq', 'mistral', 'deepseek', 'ollama_local', 'custom_openai' ];
         $templates = PressHub_AI_Provider_Defaults::get_templates();
         foreach ( $expected_types as $type ) {
             if ( ! isset( $templates[ $type ] ) ) {

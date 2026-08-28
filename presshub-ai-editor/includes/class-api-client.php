@@ -117,8 +117,11 @@ class PressHub_AI_API_Client {
 
         // 1. Get module-configured provider ID or engine
         $provider_id = '';
-        if ( 'tts' === $module ) {
-            $provider_id = (string) get_option( 'presshub_ai_briefing_tts_engine', '' );
+        if ( 'tts' === $module || 'podcast_tts' === $module ) {
+            $provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
+            if ( '' === $provider_id ) {
+                $provider_id = (string) get_option( 'presshub_ai_briefing_tts_engine', '' );
+            }
             if ( '' === $provider_id ) {
                 $provider_id = (string) get_option( 'presshub_ai_briefing_tts_provider', '' );
             }
@@ -921,19 +924,49 @@ class PressHub_AI_API_Client {
      * @return string|WP_Error Binary audio data or WP_Error on failure.
      */
     public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal' ) {
-        $tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+        // 1. Resolve Provider and API Key from Provider Store or dedicated option
+        $tts_provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
+        $provider_record = null;
+
+        if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            if ( ! empty( $tts_provider_id ) ) {
+                $provider_record = PressHub_AI_Provider_Store::get( $tts_provider_id );
+            }
+            if ( null === $provider_record ) {
+                $all_providers = PressHub_AI_Provider_Store::get_all( true );
+                foreach ( $all_providers as $p ) {
+                    if ( ( $p['type'] ?? '' ) === 'gemini' ) {
+                        $provider_record = $p;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $tts_api_key = '';
+        if ( ! empty( $provider_record['api_key'] ) ) {
+            $tts_api_key = $provider_record['api_key'];
+        }
+        if ( empty( $tts_api_key ) ) {
+            $tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+        }
         if ( empty( $tts_api_key ) ) {
             $tts_api_key = ! empty( $this->briefing_tts_api_key ) ? $this->briefing_tts_api_key : $this->gemini_api_key;
         }
 
         if ( empty( $tts_api_key ) ) {
-            return new WP_Error( 'no_gemini_key', __( 'Google AI Studio Gemini API key is missing.', 'presshub-ai-editor' ) );
+            $err_msg = __( 'Google AI Studio Gemini API key is missing. Please configure your Gemini Provider in the AI Providers tab or enter a Speech API Key in Briefing Settings.', 'presshub-ai-editor' );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( '[LogosAI Speech] ' . $err_msg );
+            }
+            return new WP_Error( 'no_gemini_key', $err_msg );
         }
 
         if ( empty( trim( $voice_name ) ) ) {
             $voice_name = 'Kore';
         }
 
+        // 2. Build logosAI prompt instruction
         $style_instructions = [
             'natural'     => 'Say naturally and clearly in Greek with warm human cadence:',
             'formal'      => 'Say in a professional, authoritative, articulate Greek news broadcast tone:',
@@ -951,21 +984,34 @@ class PressHub_AI_API_Client {
         $clean_text  = trim( $text );
         $prompt_text = $instruction . "\n\"" . $clean_text . "\"";
 
-        // Try Gemini Speech generation prioritizing logosAI 3.1 Flash TTS model
-        $configured_model = (string) get_option( 'presshub_ai_briefing_tts_model', 'gemini-3.1-flash-tts-preview' );
-        $tts_models       = array_values( array_unique( array_filter( [
+        // 3. Resolve Model cascade
+        $configured_model = (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+        if ( empty( $configured_model ) && ! empty( $provider_record['default_model'] ) ) {
+            $configured_model = $provider_record['default_model'];
+        }
+        if ( empty( $configured_model ) || 'journey' === $configured_model ) {
+            $configured_model = 'gemini-3.1-flash-tts-preview';
+        }
+
+        $tts_models = array_values( array_unique( array_filter( [
             $configured_model,
             'gemini-3.1-flash-tts-preview',
             'gemini-2.5-flash-preview-tts',
             'gemini-2.0-flash-exp',
             'gemini-2.0-flash',
         ] ) ) );
-        $audio_base64     = null;
-        $mime_type        = 'audio/pcm;rate=24000';
-        $last_error       = '';
+
+        $audio_base64  = null;
+        $mime_type     = 'audio/pcm;rate=24000';
+        $last_error    = '';
+        $used_model    = '';
+        $start_time    = microtime( true );
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Initiating TTS: target_model="%s", voice="%s", style="%s", chars=%d', $configured_model, $voice_name, $style, mb_strlen( $clean_text ) ) );
+        }
 
         foreach ( $tts_models as $model ) {
-            // Standard generateContent API with AUDIO response modality
             $gen_url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
             $gen_body = [
                 'contents' => [
@@ -988,46 +1034,70 @@ class PressHub_AI_API_Client {
                 ],
             ];
 
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::debug( sprintf( '[LogosAI Speech] POST %s with model "%s"', 'generateContent', $model ) );
+            }
+
             $gen_res = wp_remote_post( $gen_url, [
                 'headers' => [
                     'Content-Type'   => 'application/json',
                     'x-goog-api-key' => $tts_api_key,
+                    'User-Agent'     => 'aistudio-build',
                 ],
                 'body'    => wp_json_encode( $gen_body ),
                 'timeout' => 90,
             ] );
 
             if ( ! is_wp_error( $gen_res ) ) {
+                $code     = wp_remote_retrieve_response_code( $gen_res );
                 $res_body = json_decode( wp_remote_retrieve_body( $gen_res ), true );
-                if ( isset( $res_body['candidates'][0]['content']['parts'] ) ) {
+
+                if ( 200 === $code && isset( $res_body['candidates'][0]['content']['parts'] ) ) {
                     foreach ( $res_body['candidates'][0]['content']['parts'] as $part ) {
                         if ( ! empty( $part['inlineData']['data'] ) ) {
                             $audio_base64 = $part['inlineData']['data'];
                             $mime_type    = $part['inlineData']['mimeType'] ?? $mime_type;
+                            $used_model   = $model;
                             break 2;
                         } elseif ( ! empty( $part['inline_data']['data'] ) ) {
                             $audio_base64 = $part['inline_data']['data'];
                             $mime_type    = $part['inline_data']['mime_type'] ?? $mime_type;
+                            $used_model   = $model;
                             break 2;
                         }
                     }
                 }
+
                 if ( isset( $res_body['error']['message'] ) ) {
                     $last_error = $res_body['error']['message'];
-                    error_log( 'PressHub AI [gemini-generateContent] model ' . $model . ' error: ' . $last_error );
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::warning( sprintf( '[LogosAI Speech] Model "%s" HTTP %d error: %s', $model, $code, $last_error ) );
+                    }
                 }
             } else {
                 $last_error = $gen_res->get_error_message();
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( '[LogosAI Speech] Model "%s" connection error: %s', $model, $last_error ) );
+                }
             }
         }
 
         if ( empty( $audio_base64 ) ) {
-            return new WP_Error( 'gemini_audio_error', $last_error ?: __( 'No audio payload received from Gemini Speech generation.', 'presshub-ai-editor' ) );
+            $err_msg = $last_error ?: __( 'No audio payload received from Gemini Speech model.', 'presshub-ai-editor' );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( sprintf( '[LogosAI Speech] Synthesis failed for all models: %s', $err_msg ) );
+            }
+            return new WP_Error( 'gemini_audio_error', $err_msg );
         }
 
         $raw_audio = base64_decode( $audio_base64 );
         if ( false === $raw_audio || '' === $raw_audio ) {
             return new WP_Error( 'decode_failed', __( 'Failed to decode base64 audio from Gemini.', 'presshub-ai-editor' ) );
+        }
+
+        $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Success with model "%s" in %d ms (raw audio: %d bytes)', $used_model, $duration_ms, strlen( $raw_audio ) ) );
         }
 
         // If it is PCM data, extract sample rate or default to 24000

@@ -742,49 +742,23 @@ class PressHub_AI_Settings {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_engine"><?php echo __( 'Voice Synthesis Engine', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_tts_provider"><?php echo __( 'Speech AI Provider (logosAI)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $this->render_briefing_tts_engine_field(); ?>
+                                    <?php $cur_tts_prov = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' ); ?>
+                                    <select name="presshub_ai_briefing_podcast_tts_provider" id="presshub_ai_briefing_podcast_tts_provider" class="regular-text">
+                                        <?php echo self::get_active_providers_options( $cur_tts_prov, __( '-- Use Active Gemini Provider --', 'presshub-ai-editor' ) ); ?>
+                                    </select>
+                                    <p class="description"><?php echo __( 'Select which AI provider powers neural speech generation (Google Gemini / AI Studio configured in the AI Providers tab).', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_api_key"><?php echo __( 'Speech API Key (Google AI Studio / Gemini)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_tts_api_key_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_model"><?php echo __( 'Voice AI Model', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_model"><?php echo __( 'Speech AI Model', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_model_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo __( 'Female Voice Model (TTS)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_voice_female_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_voice_male"><?php echo __( 'Male Voice Model (TTS)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_voice_male_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_voice_speed"><?php echo __( 'Voice Speaking Rate / Speed', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_voice_speed_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_voice_pitch"><?php echo __( 'Voice Pitch Tuning', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_voice_pitch_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo __( 'Speaking Delivery Style', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo __( 'Speaking Delivery Style (logosAI)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_style_field(); ?>
                                 </td>
@@ -793,6 +767,24 @@ class PressHub_AI_Settings {
                                 <th scope="row"><label for="presshub_ai_briefing_tts_custom_style"><?php echo __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_custom_style_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo __( 'Lead Host Voice Persona (Female)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_voice_female_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_male"><?php echo __( 'Secondary Host Voice Persona (Male)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_voice_male_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_speed"><?php echo __( 'Speaking Rate / Speed', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_voice_speed_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1729,25 +1721,15 @@ class PressHub_AI_Settings {
         $selected = (string) get_option( $option, self::default_briefing_voice_female() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $gemini_voices = $synthesizer ? ( $synthesizer->get_available_voices( 'gemini' )['female'] ?? [] ) : [];
-        $gc_voices     = $synthesizer ? ( $synthesizer->get_available_voices( 'google_cloud' )['female'] ?? [] ) : [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <optgroup label="<?php echo esc_attr__( 'Google AI Studio (Gemini Natural Voices)', 'presshub-ai-editor' ); ?>">
-                <?php foreach ( $gemini_voices as $key => $v ) : ?>
-                    <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
-                        <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
-                    </option>
-                <?php endforeach; ?>
-            </optgroup>
-            <optgroup label="<?php echo esc_attr__( 'Google Cloud TTS Voices', 'presshub-ai-editor' ); ?>">
-                <?php foreach ( $gc_voices as $key => $v ) : ?>
-                    <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
-                        <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
-                    </option>
-                <?php endforeach; ?>
-            </optgroup>
+            <?php foreach ( $gemini_voices as $key => $v ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                </option>
+            <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo __( 'Voice model used for the female host (Μαρία).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Voice model used for the lead presenter (Μαρία). Default: Kore / Κόρη.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -1756,25 +1738,15 @@ class PressHub_AI_Settings {
         $selected = (string) get_option( $option, self::default_briefing_voice_male() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
         $gemini_voices = $synthesizer ? ( $synthesizer->get_available_voices( 'gemini' )['male'] ?? [] ) : [];
-        $gc_voices     = $synthesizer ? ( $synthesizer->get_available_voices( 'google_cloud' )['male'] ?? [] ) : [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <optgroup label="<?php echo esc_attr__( 'Google AI Studio (Gemini Natural Voices)', 'presshub-ai-editor' ); ?>">
-                <?php foreach ( $gemini_voices as $key => $v ) : ?>
-                    <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
-                        <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
-                    </option>
-                <?php endforeach; ?>
-            </optgroup>
-            <optgroup label="<?php echo esc_attr__( 'Google Cloud TTS Voices', 'presshub-ai-editor' ); ?>">
-                <?php foreach ( $gc_voices as $key => $v ) : ?>
-                    <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
-                        <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
-                    </option>
-                <?php endforeach; ?>
-            </optgroup>
+            <?php foreach ( $gemini_voices as $key => $v ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                </option>
+            <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo __( 'Voice model used for the male host (Νίκος).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Voice model used for the co-host / commentator (Νίκος). Default: Fenrir / Φένριρ.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

@@ -37,8 +37,8 @@ class ProviderStoreTest {
         PressHub_AI_Provider_Store::migrate_legacy_options();
 
         $migrated = PressHub_AI_Provider_Store::get_all( false );
-        if ( count( $migrated ) < 8 ) {
-            $failures[] = "Migration should seed at least 8 standard providers. Got: " . count( $migrated );
+        if ( count( $migrated ) < 7 ) {
+            $failures[] = "Migration should seed at least 7 standard providers. Got: " . count( $migrated );
         }
 
         // Check OpenAI migrated record
@@ -58,12 +58,6 @@ class ProviderStoreTest {
             if ( $openai['timeout'] !== 300 ) {
                 $failures[] = "OpenAI timeout should default to 300. Got: " . $openai['timeout'];
             }
-        }
-
-        // Check Google Cloud TTS migrated record
-        $tts = PressHub_AI_Provider_Store::get( 'google-cloud-tts-default' );
-        if ( ! $tts || $tts['api_key'] !== 'gcloud-key-999' ) {
-            $failures[] = "Google Cloud TTS API key was not migrated properly. Got: " . var_export( $tts, true );
         }
 
         // Autoload check (P-1)
