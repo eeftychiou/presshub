@@ -1294,6 +1294,81 @@ class PressHub_AI_Settings {
             </div>
         </div>
         <?php
+        $this->render_log_details_modal();
+    }
+
+    /**
+     * Alias for render_token_logs_tab.
+     */
+    public function render_token_usage_tab(): void {
+        $this->render_token_logs_tab();
+    }
+
+    /**
+     * Render the Request Log & Error Details modal.
+     */
+    public function render_log_details_modal(): void {
+        ?>
+        <div id="presshub-log-details-modal" class="presshub-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="presshub-log-details-modal-title" style="display:none;">
+            <div class="presshub-modal" style="max-width: 650px; width: 95%;">
+                <div class="presshub-modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid #dcdcde;">
+                    <h2 id="presshub-log-details-modal-title" style="margin:0; font-size: 16px;"><?php echo __( 'Request Log & Error Details', 'presshub-ai-editor' ); ?></h2>
+                    <button type="button" class="presshub-modal-close" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;" aria-label="<?php echo esc_attr__( 'Close', 'presshub-ai-editor' ); ?>">&times;</button>
+                </div>
+                <div class="presshub-modal-body" style="padding: 20px; max-height: 70vh; overflow-y: auto;">
+                    <div class="presshub-log-info-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; font-size: 13px;">
+                        <div>
+                            <strong><?php echo __( 'Timestamp:', 'presshub-ai-editor' ); ?></strong>
+                            <div id="log-detail-timestamp" style="color: #555; margin-top: 2px;">-</div>
+                        </div>
+                        <div>
+                            <strong><?php echo __( 'Status:', 'presshub-ai-editor' ); ?></strong>
+                            <div id="log-detail-status" style="margin-top: 2px;">-</div>
+                        </div>
+                        <div>
+                            <strong><?php echo __( 'Action:', 'presshub-ai-editor' ); ?></strong>
+                            <div id="log-detail-action" style="color: #555; margin-top: 2px;">-</div>
+                        </div>
+                        <div>
+                            <strong><?php echo __( 'Provider:', 'presshub-ai-editor' ); ?></strong>
+                            <div id="log-detail-provider" style="color: #555; margin-top: 2px;">-</div>
+                        </div>
+                        <div>
+                            <strong><?php echo __( 'Model:', 'presshub-ai-editor' ); ?></strong>
+                            <div id="log-detail-model" style="color: #555; margin-top: 2px;"><code style="font-size: 12px;">-</code></div>
+                        </div>
+                        <div>
+                            <strong><?php echo __( 'Duration:', 'presshub-ai-editor' ); ?></strong>
+                            <div id="log-detail-duration" style="color: #555; margin-top: 2px;">-</div>
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <strong><?php echo __( 'Tokens / Metrics:', 'presshub-ai-editor' ); ?></strong>
+                            <div id="log-detail-metrics" style="color: #555; margin-top: 2px;">-</div>
+                        </div>
+                    </div>
+
+                    <div id="presshub-log-error-container" style="display: none; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <strong style="color: #d63638;"><?php echo __( 'Error Message / Diagnostics:', 'presshub-ai-editor' ); ?></strong>
+                            <button type="button" class="button button-small" id="presshub-copy-log-error" style="display: inline-flex; align-items: center; gap: 4px;">
+                                <span class="dashicons dashicons-clipboard" style="font-size: 14px; width: 14px; height: 14px;"></span>
+                                <span class="copy-btn-text"><?php echo __( 'Copy Error', 'presshub-ai-editor' ); ?></span>
+                            </button>
+                        </div>
+                        <pre id="log-detail-error" style="background: #fcf0f1; border: 1px solid #f5c6cb; color: #721c24; padding: 10px; border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow-y: auto; margin: 0;"></pre>
+                    </div>
+
+                    <div id="presshub-log-metadata-container" style="display: none; margin-bottom: 10px;">
+                        <strong><?php echo __( 'Additional Metadata:', 'presshub-ai-editor' ); ?></strong>
+                        <pre id="log-detail-metadata" style="background: #f6f7f7; border: 1px solid #dcdcde; color: #333; padding: 10px; border-radius: 4px; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow-y: auto; margin-top: 6px;"></pre>
+                    </div>
+                </div>
+                <div class="presshub-modal-footer" style="padding: 12px 20px; border-top: 1px solid #dcdcde; display: flex; justify-content: flex-end;">
+                    <button type="button" class="button button-secondary presshub-modal-close"><?php echo __( 'Close', 'presshub-ai-editor' ); ?></button>
+                </div>
+            </div>
+        </div>
+        <?php
     }
 
     /**

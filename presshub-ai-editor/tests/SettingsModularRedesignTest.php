@@ -85,6 +85,22 @@ class SettingsModularRedesignTest
             $failures[] = "Settings page HTML missing provider modal dialog.";
         }
 
+        if ( false === strpos( $html, 'id="presshub-log-details-modal"' ) ) {
+            $failures[] = "Settings page HTML missing log details modal dialog (#presshub-log-details-modal).";
+        }
+        if ( false === strpos( $html, 'id="presshub-log-error-container"' ) ) {
+            $failures[] = "Settings page HTML missing #presshub-log-error-container.";
+        }
+        if ( false === strpos( $html, 'id="log-detail-error"' ) ) {
+            $failures[] = "Settings page HTML missing #log-detail-error.";
+        }
+        if ( false === strpos( $html, 'id="presshub-copy-log-error"' ) ) {
+            $failures[] = "Settings page HTML missing #presshub-copy-log-error.";
+        }
+        if ( false === strpos( $html, 'id="presshub-log-metadata-container"' ) ) {
+            $failures[] = "Settings page HTML missing #presshub-log-metadata-container.";
+        }
+
         // -------------------------------------------------------------
         // Case 3: AJAX Save Provider Endpoint
         // -------------------------------------------------------------

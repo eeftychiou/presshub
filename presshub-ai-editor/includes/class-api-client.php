@@ -1127,9 +1127,13 @@ class PressHub_AI_API_Client {
         }
 
         if ( empty( $audio_base64 ) ) {
+            $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
             $err_msg = $last_error ?: __( 'No audio payload received from Gemini Speech model.', 'presshub-ai-editor' );
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error( sprintf( '[LogosAI Speech] Synthesis failed for all models: %s', $err_msg ) );
+            }
+            if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                PressHub_AI_Token_Logger::log_tts_request( $this->get_action() ?: 'briefing_podcast', 'gemini', $configured_model, mb_strlen( $clean_text ), $duration_ms, 'error', $err_msg );
             }
             return new WP_Error( 'gemini_audio_error', $err_msg );
         }
@@ -1142,6 +1146,9 @@ class PressHub_AI_API_Client {
         $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Success with model "%s" in %d ms (raw audio: %d bytes)', $used_model, $duration_ms, strlen( $raw_audio ) ) );
+        }
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            PressHub_AI_Token_Logger::log_tts_request( $this->get_action() ?: 'briefing_podcast', 'gemini', $used_model ?: $configured_model, mb_strlen( $clean_text ), $duration_ms, 'success', null );
         }
 
         // If it is PCM data, extract sample rate or default to 24000

@@ -17,6 +17,7 @@
 require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/../includes/class-provider-defaults.php';
 require_once __DIR__ . '/../includes/class-provider-store.php';
+require_once __DIR__ . '/../includes/class-token-logger.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 
 class APIClientModularTest
@@ -482,6 +483,71 @@ class APIClientModularTest
         $voice_name_sent = $captured_test_body['generationConfig']['speechConfig']['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '';
         if ( 'Kore' !== $voice_name_sent ) {
             $failures[] = "test_connection() for TTS provider must configure Kore voice; got: " . var_export( $voice_name_sent, true );
+        }
+
+        // ==================================================================
+        // 17. Gemini TTS Token Logging (Success & Error paths)
+        // ==================================================================
+        global $wpdb;
+        $wpdb->tables['wp_presshub_ai_token_logs'] = [];
+
+        // 17a: Success logging
+        $sample_text = 'Hello, this is a test of speech synthesis token logging.';
+        $success_pcm = str_repeat( "\x00\x01", 1200 );
+        $GLOBALS['CAPTURE_FILTER'] = function( $url, $args ) use ( $success_pcm ) {
+            return [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [
+                    'candidates' => [
+                        [
+                            'content' => [
+                                'parts' => [
+                                    [
+                                        'inlineData' => [
+                                            'mimeType' => 'audio/pcm;rate=24000',
+                                            'data'     => base64_encode( $success_pcm ),
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ] )
+            ];
+        };
+
+        $tts_client->set_action( 'podcast_audio' );
+        $synth_res = $tts_client->synthesize_speech_via_gemini( $sample_text, 'Kore', 'gemini-3.1-flash-tts-preview', 'news', false );
+        if ( is_wp_error( $synth_res ) ) {
+            $failures[] = "synthesize_speech_via_gemini() failed unexpectedly: " . $synth_res->get_error_message();
+        }
+
+        $logs = $wpdb->tables['wp_presshub_ai_token_logs'] ?? [];
+        $last_log = end( $logs );
+        if ( ! $last_log || $last_log['action_trigger'] !== 'podcast_audio' || $last_log['status'] !== 'success' || (int) $last_log['metric_units'] !== mb_strlen( $sample_text ) || $last_log['provider'] !== 'gemini' ) {
+            $failures[] = "synthesize_speech_via_gemini() success was not properly logged in token logs table; got: " . json_encode( $last_log );
+        }
+
+        // 17b: Failure logging
+        $GLOBALS['CAPTURE_FILTER'] = function( $url, $args ) {
+            return [
+                'response' => [ 'code' => 400 ],
+                'body'     => json_encode( [
+                    'error' => [ 'message' => 'API Key expired or invalid' ]
+                ] )
+            ];
+        };
+
+        $tts_client->set_action( 'custom_test' );
+        $err_synth_res = $tts_client->synthesize_speech_via_gemini( $sample_text, 'Kore', 'gemini-3.1-flash-tts-preview', 'news', false );
+        if ( ! is_wp_error( $err_synth_res ) ) {
+            $failures[] = "synthesize_speech_via_gemini() should return WP_Error on 400 failure.";
+        }
+
+        $logs = $wpdb->tables['wp_presshub_ai_token_logs'] ?? [];
+        $last_err_log = end( $logs );
+        if ( ! $last_err_log || $last_err_log['action_trigger'] !== 'custom_test' || $last_err_log['status'] !== 'error' || false === strpos( (string) $last_err_log['error_message'], 'API Key expired' ) || (int) $last_err_log['metric_units'] !== mb_strlen( $sample_text ) ) {
+            $failures[] = "synthesize_speech_via_gemini() failure was not properly logged in token logs table; got: " . json_encode( $last_err_log );
         }
 
         // ==================================================================
