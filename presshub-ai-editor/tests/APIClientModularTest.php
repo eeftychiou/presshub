@@ -367,6 +367,104 @@ class APIClientModularTest
         }
 
         // ==================================================================
+        // 11. TTS and Podcast TTS model resolution cascade
+        // ==================================================================
+        self::reset_world();
+        PressHub_AI_Provider_Store::save_provider( [
+            'id'            => 'tts-gemini-custom',
+            'type'          => 'gemini',
+            'name'          => 'Custom TTS Gemini',
+            'base_url'      => 'https://generativelanguage.googleapis.com/v1beta',
+            'api_key'       => 'gem-tts-key-777',
+            'default_model' => 'gemini-2.5-flash-preview-tts',
+            'enabled'       => true,
+        ] );
+
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_tts_provider'] = 'tts-gemini-custom';
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] );
+
+        $tts_res = PressHub_AI_API_Client::resolve_module_config( 'tts' );
+        if ( $tts_res['model'] !== 'gemini-2.5-flash-preview-tts' ) {
+            $failures[] = "resolve_module_config('tts') should use provider default_model when briefing_tts_model is empty; got: " . var_export( $tts_res['model'], true );
+        }
+
+        $pod_tts_res = PressHub_AI_API_Client::resolve_module_config( 'podcast_tts' );
+        if ( $pod_tts_res['model'] !== 'gemini-2.5-flash-preview-tts' ) {
+            $failures[] = "resolve_module_config('podcast_tts') should use provider default_model when briefing_tts_model is empty; got: " . var_export( $pod_tts_res['model'], true );
+        }
+
+        // ==================================================================
+        // 12. call_gemini() omits systemInstruction for TTS models & prepends prompt
+        // ==================================================================
+        self::reset_world();
+        $captured_body = null;
+        $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) use ( &$captured_body ) {
+            [ $url, $args ] = $req;
+            if ( str_contains( $url, 'generativelanguage.googleapis.com' ) ) {
+                $captured_body = json_decode( $args['body'] ?? '{}', true );
+                return [
+                    'response' => [ 'code' => 200 ],
+                    'body'     => json_encode( [
+                        'candidates' => [
+                            [ 'content' => [ 'parts' => [ [ 'text' => 'TTS Generated Audio Text' ] ] ] ]
+                        ]
+                    ] )
+                ];
+            }
+            return [ 'response' => [ 'code' => 200 ], 'body' => '{}' ];
+        };
+
+        $gemini_tts_config = [
+            'type'          => 'gemini',
+            'name'          => 'Gemini TTS',
+            'api_key'       => 'test-gemini-tts-key',
+            'model'         => 'gemini-3.1-flash-tts-preview',
+            'default_model' => 'gemini-3.1-flash-tts-preview',
+            'timeout'       => 60,
+        ];
+        $tts_client = new PressHub_AI_API_Client( $gemini_tts_config );
+        $tts_out = $tts_client->call_provider( 'System Instruction Text', 'User Voice Prompt', false, [] );
+
+        if ( $tts_out !== 'TTS Generated Audio Text' ) {
+            $failures[] = "call_gemini() with TTS model failed to return text; got: " . var_export( $tts_out, true );
+        }
+        if ( isset( $captured_body['systemInstruction'] ) ) {
+            $failures[] = "call_gemini() with TTS model must NOT include systemInstruction in request body; got: " . json_encode( $captured_body );
+        }
+        $user_prompt_sent = $captured_body['contents'][0]['parts'][0]['text'] ?? '';
+        if ( false === strpos( $user_prompt_sent, 'System Instruction Text' ) || false === strpos( $user_prompt_sent, 'User Voice Prompt' ) ) {
+            $failures[] = "call_gemini() with TTS model must prepend system instruction into user prompt; got: " . var_export( $user_prompt_sent, true );
+        }
+
+        // ==================================================================
+        // 13. test_connection() for TTS provider uses empty system prompt
+        // ==================================================================
+        $captured_test_body = null;
+        $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) use ( &$captured_test_body ) {
+            [ $url, $args ] = $req;
+            if ( str_contains( $url, 'generativelanguage.googleapis.com' ) ) {
+                $captured_test_body = json_decode( $args['body'] ?? '{}', true );
+                return [
+                    'response' => [ 'code' => 200 ],
+                    'body'     => json_encode( [
+                        'candidates' => [
+                            [ 'content' => [ 'parts' => [ [ 'text' => 'Hello' ] ] ] ]
+                        ]
+                    ] )
+                ];
+            }
+            return [ 'response' => [ 'code' => 200 ], 'body' => '{}' ];
+        };
+
+        $test_conn_res = $tts_client->test_connection();
+        if ( $test_conn_res !== 'Hello' ) {
+            $failures[] = "test_connection() for TTS provider failed; got: " . var_export( $test_conn_res, true );
+        }
+        if ( isset( $captured_test_body['systemInstruction'] ) ) {
+            $failures[] = "test_connection() for TTS provider must NOT include systemInstruction; got: " . json_encode( $captured_test_body );
+        }
+
+        // ==================================================================
         // Output Results
         // ==================================================================
         if ( $failures ) {

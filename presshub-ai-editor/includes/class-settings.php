@@ -746,15 +746,9 @@ class PressHub_AI_Settings {
                                 <td>
                                     <?php $cur_tts_prov = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' ); ?>
                                     <select name="presshub_ai_briefing_podcast_tts_provider" id="presshub_ai_briefing_podcast_tts_provider" class="regular-text">
-                                        <?php echo self::get_active_providers_options( $cur_tts_prov, __( '-- Use Active Gemini Provider --', 'presshub-ai-editor' ) ); ?>
+                                        <?php echo self::get_speech_providers_options( $cur_tts_prov, __( '-- Use Active Gemini Provider --', 'presshub-ai-editor' ) ); ?>
                                     </select>
                                     <p class="description"><?php echo __( 'Select which AI provider powers neural speech generation (Google Gemini / AI Studio configured in the AI Providers tab).', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_model"><?php echo __( 'Speech AI Model', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_tts_model_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -940,12 +934,36 @@ class PressHub_AI_Settings {
     }
 
     /**
+     * Helper to render active configured speech providers (Gemini) as select options.
+     */
+    public static function get_speech_providers_options( string $selected_id = '', string $default_label = '' ): string {
+        $providers = class_exists( 'PressHub_AI_Provider_Store' ) ? PressHub_AI_Provider_Store::get_all( true ) : [];
+        $html = '';
+        if ( '' !== $default_label ) {
+            $selected = ( '' === $selected_id ) ? ' selected="selected"' : '';
+            $html .= '<option value=""' . $selected . '>' . esc_html( $default_label ) . '</option>';
+        }
+        foreach ( $providers as $prov ) {
+            if ( ( $prov['type'] ?? '' ) !== 'gemini' ) {
+                continue;
+            }
+            $id    = $prov['id'] ?? ( $prov['type'] ?? '' );
+            $name  = $prov['name'] ?? ucfirst( $id );
+            $model = $prov['default_model'] ?? '';
+            $label = $name . ( $model ? ' (' . $model . ')' : '' );
+            $selected = ( $selected_id === $id ) ? ' selected="selected"' : '';
+            $html .= '<option value="' . esc_attr( $id ) . '"' . $selected . '>' . esc_html( $label ) . '</option>';
+        }
+        return $html;
+    }
+
+    /**
      * Render the grid of provider cards.
      */
     public function render_providers_grid(): void {
         require_once __DIR__ . '/class-provider-store.php';
         require_once __DIR__ . '/class-provider-defaults.php';
-        $providers = PressHub_AI_Provider_Store::get_all( false );
+        $providers = PressHub_AI_Provider_Store::get_all( true );
         ?>
         <div class="presshub-providers-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <div>

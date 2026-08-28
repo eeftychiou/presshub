@@ -192,8 +192,14 @@ class PressHub_AI_API_Client {
         // 5. Model resolution:
         // Module option -> Per-provider option -> Provider record default -> Legacy global -> Provider Defaults
         $model = '';
-        if ( 'tts' === $module ) {
+        if ( 'tts' === $module || 'podcast_tts' === $module ) {
             $model = (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+            if ( '' === $model && ! empty( $provider_record['default_model'] ) ) {
+                $model = $provider_record['default_model'];
+            }
+            if ( '' === $model ) {
+                $model = 'gemini-3.1-flash-tts-preview';
+            }
         } else {
             $model = (string) get_option( "presshub_ai_{$module}_model", '' );
         }
@@ -497,7 +503,8 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
-        $sys = 'You are a test bot.';
+        $is_tts = ( false !== stripos( (string) $this->model, 'tts' ) || false !== stripos( (string) $this->model, 'audio' ) || 'google_cloud_tts' === $this->provider );
+        $sys = $is_tts ? '' : 'You are a test bot.';
         $user = 'Reply with exactly the word "Hello" and nothing else.';
         return $this->call_provider( $sys, $user, false, [] );
     }
@@ -1411,6 +1418,12 @@ class PressHub_AI_API_Client {
         // server access logs, proxies, CDNs and referer headers.
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $this->model . ':generateContent';
         
+        $is_tts_model = ( false !== stripos( (string) $this->model, 'tts' ) || false !== stripos( (string) $this->model, 'audio' ) );
+        if ( $is_tts_model && ! empty( $sys_prompt ) ) {
+            $user_prompt = trim( $sys_prompt . "\n\n" . $user_prompt );
+            $sys_prompt  = '';
+        }
+
         $parts = [];
         foreach ( $files as $file_path ) {
             $mime = mime_content_type( $file_path );
@@ -1424,9 +1437,6 @@ class PressHub_AI_API_Client {
         $parts[] = [ 'text' => $user_prompt ];
 
         $body = [
-            'systemInstruction' => [
-                'parts' => [ [ 'text' => $sys_prompt ] ]
-            ],
             'contents' => [
                 [
                     'role' => 'user',
@@ -1434,6 +1444,12 @@ class PressHub_AI_API_Client {
                 ]
             ]
         ];
+
+        if ( ! empty( $sys_prompt ) && ! $is_tts_model ) {
+            $body['systemInstruction'] = [
+                'parts' => [ [ 'text' => $sys_prompt ] ]
+            ];
+        }
         
         $body['generationConfig'] = [
             'temperature'     => null === $temperature ? $this->temperature : (float) $temperature,

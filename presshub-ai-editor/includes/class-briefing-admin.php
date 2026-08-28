@@ -582,7 +582,7 @@ class PressHub_AI_Briefing_Admin {
                     </p>
                 </div>
                 <div class="presshub-script-editor-body">
-                    <textarea id="presshub-briefing-script-editor" class="presshub-script-textarea" rows="14" placeholder="<?php echo esc_attr__( '[Μαρία]: Καλημέρα σε όλους!\n[Νίκος]: Καλημέρα Μαρία...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $status['script_text'] ); ?></textarea>
+                    <textarea id="presshub-briefing-script-editor" class="presshub-script-textarea" rows="18" placeholder="<?php echo esc_attr__( '[Μαρία]: Καλημέρα σε όλους!\n[Νίκος]: Καλημέρα Μαρία...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $status['script_text'] ); ?></textarea>
                     <div class="presshub-editor-actions">
                         <button type="button" class="button button-primary button-large" id="btn-save-script">
                             💾 <?php echo esc_html__( 'Save Script Changes', 'presshub-ai-editor' ); ?>

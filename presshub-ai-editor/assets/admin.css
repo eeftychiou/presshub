@@ -692,3 +692,13 @@ body.presshub-modal-open {
     from { opacity: 0; transform: translateY(2px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+.presshub-script-textarea {
+    min-height: 420px;
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    width: 100%;
+    box-sizing: border-box;
+}
+

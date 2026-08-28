@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * TDD tests for Task 6: Settings UI Redesign: Dynamic Providers Manager, Modular Tabs & Token Viewer.
  */
@@ -213,6 +213,60 @@ class SettingsModularRedesignTest
         }
         if ( get_option( 'presshub_ai_copilot_model' ) !== 'gemini-2.0-flash' ) {
             $failures[] = "presshub_ai_copilot_model was not saved as 'gemini-2.0-flash'.";
+        }
+
+        // -------------------------------------------------------------
+        // Case 9: get_speech_providers_options filters only active Gemini providers
+        // -------------------------------------------------------------
+        self::reset_world();
+        PressHub_AI_Provider_Store::save_provider( [
+            'id'            => 'gemini-active',
+            'type'          => 'gemini',
+            'name'          => 'Active Gemini',
+            'default_model' => 'gemini-3.1-flash-tts-preview',
+            'enabled'       => true,
+        ] );
+        PressHub_AI_Provider_Store::save_provider( [
+            'id'            => 'gemini-disabled',
+            'type'          => 'gemini',
+            'name'          => 'Disabled Gemini',
+            'default_model' => 'gemini-2.0-flash',
+            'enabled'       => false,
+        ] );
+        PressHub_AI_Provider_Store::save_provider( [
+            'id'            => 'openai-active',
+            'type'          => 'openai',
+            'name'          => 'Active OpenAI',
+            'default_model' => 'gpt-4o',
+            'enabled'       => true,
+        ] );
+
+        $speech_opts = PressHub_AI_Settings::get_speech_providers_options( 'gemini-active', '-- Select Speech Provider --' );
+        if ( false === strpos( $speech_opts, 'value="gemini-active"' ) ) {
+            $failures[] = 'get_speech_providers_options must include active Gemini provider; got: ' . $speech_opts;
+        }
+        if ( false === strpos( $speech_opts, 'selected="selected"' ) ) {
+            $failures[] = 'get_speech_providers_options must select the active provider option; got: ' . $speech_opts;
+        }
+        if ( false !== strpos( $speech_opts, 'value="gemini-disabled"' ) ) {
+            $failures[] = 'get_speech_providers_options must NOT include disabled Gemini provider; got: ' . $speech_opts;
+        }
+        if ( false !== strpos( $speech_opts, 'value="openai-active"' ) ) {
+            $failures[] = 'get_speech_providers_options must NOT include non-Gemini provider; got: ' . $speech_opts;
+        }
+
+        // -------------------------------------------------------------
+        // Case 10: render_providers_grid only renders active/enabled providers
+        // -------------------------------------------------------------
+        ob_start();
+        $settings->render_providers_grid();
+        $grid_html = ob_get_clean();
+
+        if ( false === strpos( $grid_html, 'data-provider-id="gemini-active"' ) ) {
+            $failures[] = 'render_providers_grid must include enabled provider gemini-active; got: ' . $grid_html;
+        }
+        if ( false !== strpos( $grid_html, 'data-provider-id="gemini-disabled"' ) ) {
+            $failures[] = 'render_providers_grid must NOT include disabled provider gemini-disabled; got: ' . $grid_html;
         }
 
         if ( $failures ) {
