@@ -1041,8 +1041,6 @@ class PressHub_AI_API_Client {
             $configured_model,
             'gemini-3.1-flash-tts-preview',
             'gemini-2.5-flash-preview-tts',
-            'gemini-2.0-flash-exp',
-            'gemini-2.0-flash',
         ] ) ) );
 
         $audio_base64  = null;

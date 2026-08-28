@@ -128,4 +128,53 @@ class PressHub_AI_Settings_Migration {
 
         update_option( 'presshub_ai_migrated_models', 1 );
     }
+
+    // ------------------------------------------------------------------
+    // P3: deprecated Gemini model migration (idempotent).
+    //
+    // Google's Gemini API shut down gemini-2.0-flash and gemini-2.0-flash-exp
+    // in 2026; both now return "This model … is no longer available." If a
+    // site previously saved one of those values into:
+    //   - the per-provider Gemini model key (presshub_ai_model_gemini), or
+    //   - the legacy shared model key (presshub_ai_model), or
+    //   - the TTS model key (presshub_ai_briefing_tts_model),
+    // then every TTS request will cascade-fail on the dead model first and
+    // only fall through to the valid model on retry — which surfaces in the
+    // token log as the two-line "no longer available" error the user reported.
+    //
+    // This migration runs once and rewrites any deprecated saved value to
+    // the current valid model for that key (gemini-2.5-flash for text gen,
+    // gemini-3.1-flash-tts-preview for TTS).
+    // ------------------------------------------------------------------
+
+    public static function migrate_deprecated_gemini_models(): void {
+        if ( get_option( 'presshub_ai_migrated_deprecated_gemini' ) ) {
+            return;
+        }
+
+        $deprecated_text = [ 'gemini-2.0-flash' ];
+        $valid_text      = 'gemini-2.5-flash';
+        $valid_tts       = 'gemini-3.1-flash-tts-preview';
+
+        // Text-gen keys: legacy shared + per-provider Gemini.
+        $text_keys = [ 'presshub_ai_model', 'presshub_ai_model_gemini' ];
+        foreach ( $text_keys as $key ) {
+            $current = (string) get_option( $key, '' );
+            if ( '' !== $current && in_array( $current, $deprecated_text, true ) ) {
+                update_option( $key, $valid_text );
+            }
+        }
+
+        // TTS key: rewrite any deprecated saved TTS model to the current
+        // primary TTS model. The cascade in synthesize_speech_via_gemini()
+        // no longer contains the deprecated models, so this prevents the
+        // first retry attempt from hitting a dead endpoint.
+        $tts_key = 'presshub_ai_briefing_tts_model';
+        $tts_current = (string) get_option( $tts_key, '' );
+        if ( '' !== $tts_current && in_array( $tts_current, $deprecated_text, true ) ) {
+            update_option( $tts_key, $valid_tts );
+        }
+
+        update_option( 'presshub_ai_migrated_deprecated_gemini', 1 );
+    }
 }

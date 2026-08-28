@@ -40,6 +40,10 @@ class PressHub_AI_Settings {
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
         // Idempotent legacy-model migration; no-op after the first run.
         self::migrate_legacy_model();
+        // Idempotent deprecated-Gemini-model migration; rewrites any saved
+        // gemini-2.0-flash / gemini-2.0-flash-exp values to the current valid
+        // models so TTS requests no longer hit Google's dead endpoints first.
+        self::migrate_deprecated_gemini_models();
     }
 
     public function enqueue_scripts( $hook ) {
@@ -208,5 +212,9 @@ class PressHub_AI_Settings {
 
     public static function migrate_legacy_model(): void {
         PressHub_AI_Settings_Migration::migrate_legacy_model();
+    }
+
+    public static function migrate_deprecated_gemini_models(): void {
+        PressHub_AI_Settings_Migration::migrate_deprecated_gemini_models();
     }
 }
