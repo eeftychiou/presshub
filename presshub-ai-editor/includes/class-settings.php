@@ -916,13 +916,16 @@ class PressHub_AI_Settings {
      * Helper to render active configured providers as select options.
      */
     public static function get_active_providers_options( string $current_val = '', string $default_label = '' ): string {
-        $providers = class_exists( 'PressHub_AI_Provider_Store' ) ? PressHub_AI_Provider_Store::get_all( false ) : [];
+        $providers = class_exists( 'PressHub_AI_Provider_Store' ) ? PressHub_AI_Provider_Store::get_all( true ) : [];
         $html = '';
         if ( '' !== $default_label ) {
             $selected = ( '' === $current_val ) ? ' selected="selected"' : '';
             $html .= '<option value=""' . $selected . '>' . esc_html( $default_label ) . '</option>';
         }
         foreach ( $providers as $prov ) {
+            if ( empty( $prov['enabled'] ) || ( empty( $prov['api_key'] ) && 'ollama_local' !== ( $prov['type'] ?? '' ) ) ) {
+                continue;
+            }
             $id    = $prov['id'] ?? ( $prov['type'] ?? '' );
             $name  = $prov['name'] ?? ucfirst( $id );
             $model = $prov['default_model'] ?? '';
@@ -944,7 +947,7 @@ class PressHub_AI_Settings {
             $html .= '<option value=""' . $selected . '>' . esc_html( $default_label ) . '</option>';
         }
         foreach ( $providers as $prov ) {
-            if ( ( $prov['type'] ?? '' ) !== 'gemini' ) {
+            if ( ( $prov['type'] ?? '' ) !== 'gemini' || empty( $prov['enabled'] ) || empty( $prov['api_key'] ) ) {
                 continue;
             }
             $id    = $prov['id'] ?? ( $prov['type'] ?? '' );

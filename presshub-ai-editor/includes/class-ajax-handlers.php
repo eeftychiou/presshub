@@ -1487,6 +1487,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 : json_decode( wp_unslash( (string) $_POST['provider_data'] ), true );
 
             if ( is_array( $raw_data ) ) {
+                if ( empty( $raw_data['id'] ) ) {
+                    if ( ! empty( $_POST['provider_id'] ) ) {
+                        $raw_data['id'] = sanitize_text_field( wp_unslash( $_POST['provider_id'] ) );
+                    } elseif ( ! empty( $_POST['id'] ) ) {
+                        $raw_data['id'] = sanitize_text_field( wp_unslash( $_POST['id'] ) );
+                    }
+                }
                 $api->set_provider_config( $raw_data );
                 $result = $api->test_connection();
             } else {

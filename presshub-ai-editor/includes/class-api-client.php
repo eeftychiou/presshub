@@ -409,6 +409,30 @@ class PressHub_AI_API_Client {
         $this->provider        = $config['type'] ?? ( $config['provider'] ?? 'openai' );
         $this->provider_id     = $config['id'] ?? ( $config['provider'] ?? $this->provider );
         $this->api_key         = $config['api_key'] ?? '';
+
+        // If API key is empty or masked, attempt to lookup saved record.
+        if ( ( empty( $this->api_key ) || false !== strpos( $this->api_key, '•' ) ) && ! empty( $config['id'] ) ) {
+            if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+                $saved = PressHub_AI_Provider_Store::get( (string) $config['id'] );
+                if ( ! empty( $saved['api_key'] ) ) {
+                    $this->api_key = $saved['api_key'];
+                }
+            }
+        }
+
+        // If still empty, fall back to global options.
+        if ( empty( $this->api_key ) || false !== strpos( $this->api_key, '•' ) ) {
+            if ( 'gemini' === $this->provider ) {
+                $this->api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
+                if ( empty( $this->api_key ) ) {
+                    $this->api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+                }
+            }
+            if ( empty( $this->api_key ) ) {
+                $this->api_key = (string) get_option( 'presshub_ai_api_key', '' );
+            }
+        }
+
         $this->model           = ! empty( $config['model'] ) ? $config['model'] : ( $config['default_model'] ?? '' );
         $this->model           = preg_replace( '#^models/#', '', $this->model );
         $this->temperature     = isset( $config['temperature'] ) ? (float) $config['temperature'] : PressHub_AI_Provider_Defaults::default_temperature();
@@ -504,7 +528,15 @@ class PressHub_AI_API_Client {
         }
 
         $is_tts = ( false !== stripos( (string) $this->model, 'tts' ) || false !== stripos( (string) $this->model, 'audio' ) || 'google_cloud_tts' === $this->provider );
-        $sys = $is_tts ? '' : 'You are a test bot.';
+        if ( $is_tts ) {
+            $speech_res = $this->synthesize_speech_via_gemini( 'Hello', 'Kore', true, 'natural' );
+            if ( is_wp_error( $speech_res ) ) {
+                return $speech_res;
+            }
+            return __( 'Speech API Connection Successful! (Audio generated)', 'presshub-ai-editor' );
+        }
+
+        $sys  = 'You are a test bot.';
         $user = 'Reply with exactly the word "Hello" and nothing else.';
         return $this->call_provider( $sys, $user, false, [] );
     }
@@ -951,7 +983,9 @@ class PressHub_AI_API_Client {
         }
 
         $tts_api_key = '';
-        if ( ! empty( $provider_record['api_key'] ) ) {
+        if ( ! empty( $this->api_key ) && 'gemini' === $this->provider ) {
+            $tts_api_key = $this->api_key;
+        } elseif ( ! empty( $provider_record['api_key'] ) ) {
             $tts_api_key = $provider_record['api_key'];
         }
         if ( empty( $tts_api_key ) ) {
@@ -959,6 +993,9 @@ class PressHub_AI_API_Client {
         }
         if ( empty( $tts_api_key ) ) {
             $tts_api_key = ! empty( $this->briefing_tts_api_key ) ? $this->briefing_tts_api_key : $this->gemini_api_key;
+        }
+        if ( empty( $tts_api_key ) ) {
+            $tts_api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
         }
 
         if ( empty( $tts_api_key ) ) {
@@ -992,7 +1029,7 @@ class PressHub_AI_API_Client {
         $prompt_text = $instruction . "\n\"" . $clean_text . "\"";
 
         // 3. Resolve Model cascade
-        $configured_model = (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+        $configured_model = ! empty( $this->model ) && 'gemini' === $this->provider ? $this->model : (string) get_option( 'presshub_ai_briefing_tts_model', '' );
         if ( empty( $configured_model ) && ! empty( $provider_record['default_model'] ) ) {
             $configured_model = $provider_record['default_model'];
         }

@@ -437,10 +437,11 @@ class APIClientModularTest
         }
 
         // ==================================================================
-        // 13. test_connection() for TTS provider uses empty system prompt
+        // 13. test_connection() for TTS provider synthesizes speech via Gemini
         // ==================================================================
         $captured_test_body = null;
-        $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) use ( &$captured_test_body ) {
+        $fake_pcm = str_repeat( "\x12\x34", 1200 );
+        $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) use ( &$captured_test_body, $fake_pcm ) {
             [ $url, $args ] = $req;
             if ( str_contains( $url, 'generativelanguage.googleapis.com' ) ) {
                 $captured_test_body = json_decode( $args['body'] ?? '{}', true );
@@ -448,7 +449,18 @@ class APIClientModularTest
                     'response' => [ 'code' => 200 ],
                     'body'     => json_encode( [
                         'candidates' => [
-                            [ 'content' => [ 'parts' => [ [ 'text' => 'Hello' ] ] ] ]
+                            [
+                                'content' => [
+                                    'parts' => [
+                                        [
+                                            'inlineData' => [
+                                                'mimeType' => 'audio/pcm;rate=24000',
+                                                'data'     => base64_encode( $fake_pcm ),
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
                         ]
                     ] )
                 ];
@@ -457,11 +469,19 @@ class APIClientModularTest
         };
 
         $test_conn_res = $tts_client->test_connection();
-        if ( $test_conn_res !== 'Hello' ) {
+        if ( is_wp_error( $test_conn_res ) || false === strpos( (string) $test_conn_res, 'Speech API Connection Successful!' ) ) {
             $failures[] = "test_connection() for TTS provider failed; got: " . var_export( $test_conn_res, true );
         }
         if ( isset( $captured_test_body['systemInstruction'] ) ) {
             $failures[] = "test_connection() for TTS provider must NOT include systemInstruction; got: " . json_encode( $captured_test_body );
+        }
+        $modalities = $captured_test_body['generationConfig']['responseModalities'] ?? [];
+        if ( ! in_array( 'AUDIO', $modalities, true ) ) {
+            $failures[] = "test_connection() for TTS provider must request AUDIO modality; got: " . json_encode( $captured_test_body );
+        }
+        $voice_name_sent = $captured_test_body['generationConfig']['speechConfig']['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '';
+        if ( 'Kore' !== $voice_name_sent ) {
+            $failures[] = "test_connection() for TTS provider must configure Kore voice; got: " . var_export( $voice_name_sent, true );
         }
 
         // ==================================================================

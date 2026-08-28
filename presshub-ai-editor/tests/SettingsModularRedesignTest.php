@@ -216,20 +216,30 @@ class SettingsModularRedesignTest
         }
 
         // -------------------------------------------------------------
-        // Case 9: get_speech_providers_options filters only active Gemini providers
+        // Case 9: get_speech_providers_options filters only active Gemini providers with API key
         // -------------------------------------------------------------
         self::reset_world();
         PressHub_AI_Provider_Store::save_provider( [
             'id'            => 'gemini-active',
             'type'          => 'gemini',
             'name'          => 'Active Gemini',
+            'api_key'       => 'test-gemini-key',
             'default_model' => 'gemini-3.1-flash-tts-preview',
+            'enabled'       => true,
+        ] );
+        PressHub_AI_Provider_Store::save_provider( [
+            'id'            => 'gemini-nokey',
+            'type'          => 'gemini',
+            'name'          => 'No Key Gemini',
+            'api_key'       => '',
+            'default_model' => 'gemini-2.0-flash',
             'enabled'       => true,
         ] );
         PressHub_AI_Provider_Store::save_provider( [
             'id'            => 'gemini-disabled',
             'type'          => 'gemini',
             'name'          => 'Disabled Gemini',
+            'api_key'       => 'test-key',
             'default_model' => 'gemini-2.0-flash',
             'enabled'       => false,
         ] );
@@ -237,6 +247,7 @@ class SettingsModularRedesignTest
             'id'            => 'openai-active',
             'type'          => 'openai',
             'name'          => 'Active OpenAI',
+            'api_key'       => 'test-openai-key',
             'default_model' => 'gpt-4o',
             'enabled'       => true,
         ] );
@@ -248,11 +259,26 @@ class SettingsModularRedesignTest
         if ( false === strpos( $speech_opts, 'selected="selected"' ) ) {
             $failures[] = 'get_speech_providers_options must select the active provider option; got: ' . $speech_opts;
         }
+        if ( false !== strpos( $speech_opts, 'value="gemini-nokey"' ) ) {
+            $failures[] = 'get_speech_providers_options must NOT include Gemini provider without api_key; got: ' . $speech_opts;
+        }
         if ( false !== strpos( $speech_opts, 'value="gemini-disabled"' ) ) {
             $failures[] = 'get_speech_providers_options must NOT include disabled Gemini provider; got: ' . $speech_opts;
         }
         if ( false !== strpos( $speech_opts, 'value="openai-active"' ) ) {
             $failures[] = 'get_speech_providers_options must NOT include non-Gemini provider; got: ' . $speech_opts;
+        }
+
+        // Test get_active_providers_options filters out unconfigured/disabled providers
+        $active_opts = PressHub_AI_Settings::get_active_providers_options( 'gemini-active', '-- Default --' );
+        if ( false === strpos( $active_opts, 'value="gemini-active"' ) ) {
+            $failures[] = 'get_active_providers_options must include configured active provider; got: ' . $active_opts;
+        }
+        if ( false !== strpos( $active_opts, 'value="gemini-nokey"' ) ) {
+            $failures[] = 'get_active_providers_options must NOT include provider without API key; got: ' . $active_opts;
+        }
+        if ( false !== strpos( $active_opts, 'value="gemini-disabled"' ) ) {
+            $failures[] = 'get_active_providers_options must NOT include disabled provider; got: ' . $active_opts;
         }
 
         // -------------------------------------------------------------
