@@ -1277,6 +1277,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_text_max_tokens'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_max_tokens' ],
                 'presshub_ai_briefing_text_timeout'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_timeout' ],
                 'presshub_ai_briefing_podcast_provider'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_provider_id' ],
+                'presshub_ai_briefing_podcast_tts_provider'=> [ 'PressHub_AI_Settings_Storage', 'sanitize_provider_id' ],
                 'presshub_ai_briefing_podcast_model'      => [ 'PressHub_AI_Settings_Storage', 'sanitize_model_string' ],
                 'presshub_ai_briefing_podcast_temperature'=> [ 'PressHub_AI_Settings_Storage', 'sanitize_temperature' ],
                 'presshub_ai_briefing_podcast_max_tokens' => [ 'PressHub_AI_Settings_Storage', 'sanitize_max_tokens' ],

@@ -311,6 +311,28 @@ class SettingsModularRedesignTest
             $failures[] = 'render_providers_grid must NOT include disabled provider gemini-disabled; got: ' . $grid_html;
         }
 
+        // -------------------------------------------------------------
+        // Case 11: Speech AI Provider (logosAI) saves via AJAX whitelist
+        // Regression: in v1.9.7 the field was rendered but missing from
+        // $options_map, so save_settings() silently dropped its value.
+        // -------------------------------------------------------------
+        self::reset_world();
+        $_POST['payload'] = json_encode( [
+            'presshub_ai_briefing_podcast_tts_provider' => 'logosai',
+        ] );
+        unset( $_POST['payload_b64'] );
+
+        $save_res = self::catch_ajax_response( function() use ( $ajax ) {
+            $ajax->save_settings();
+        } );
+
+        if ( empty( $save_res['success'] ) ) {
+            $failures[] = 'save_settings with tts_provider should succeed; got: ' . json_encode( $save_res );
+        }
+        if ( get_option( 'presshub_ai_briefing_podcast_tts_provider' ) !== 'logosai' ) {
+            $failures[] = "presshub_ai_briefing_podcast_tts_provider was not saved as 'logosai'; got: " . var_export( get_option( 'presshub_ai_briefing_podcast_tts_provider' ), true );
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {
