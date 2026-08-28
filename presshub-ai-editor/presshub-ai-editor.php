@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 1.9.6
+ * Version: 1.9.7
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
