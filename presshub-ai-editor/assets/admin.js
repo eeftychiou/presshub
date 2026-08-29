@@ -743,6 +743,58 @@ jQuery(document).ready(function($) {
     var providerTemplates = (typeof presshubAI !== 'undefined' && presshubAI.provider_templates) ? presshubAI.provider_templates : {};
     var configuredProviders = (typeof presshubAI !== 'undefined' && presshubAI.configured_providers) ? presshubAI.configured_providers : [];
 
+    // Mask an API key string for safe display and preview
+    function maskApiKey(key) {
+        if (!key || typeof key !== 'string') {
+            return '';
+        }
+        key = key.trim();
+        var len = key.length;
+        if (len === 0) {
+            return '';
+        }
+        if (len >= 10) {
+            var prefix = '';
+            var knownPrefixes = [
+                'sk-proj-',
+                'sk-admin-',
+                'sk-ant-api03-',
+                'sk-ant-',
+                'github_pat_',
+                'ghp_',
+                'gsk_',
+                'AIzaSy',
+                'AIza',
+                'nvapi-',
+                'xai-',
+                'ms-',
+                'sk-'
+            ];
+            for (var i = 0; i < knownPrefixes.length; i++) {
+                var pfx = knownPrefixes[i];
+                if (key.indexOf(pfx) === 0 && (len - pfx.length >= 4)) {
+                    prefix = pfx;
+                    break;
+                }
+            }
+            if (!prefix) {
+                var match = key.match(/^([a-zA-Z0-9_\.]{2,16}[-_])/);
+                if (match && (len - match[1].length >= 4)) {
+                    prefix = match[1];
+                } else if (/^AQ\.[a-zA-Z0-9]{2}/.test(key)) {
+                    prefix = key.substring(0, 5);
+                } else {
+                    prefix = key.substring(0, 4);
+                }
+            }
+            return prefix + '••••••••' + key.substring(len - 4);
+        } else if (len >= 6) {
+            return key.substring(0, 2) + '••••' + key.substring(len - 2);
+        } else {
+            return '••••';
+        }
+    }
+
     function openProviderModal(providerData) {
         var $modal = $('#presshub-provider-modal');
         var $title = $('#presshub-provider-modal-title');
@@ -764,7 +816,14 @@ jQuery(document).ready(function($) {
             var headers = providerData.headers ? (typeof providerData.headers === 'object' ? JSON.stringify(providerData.headers) : providerData.headers) : '';
             $('#provider-form-headers').val(headers);
             $('#provider-form-enabled').prop('checked', !!providerData.enabled);
-            $('#provider-form-api-key').val('').attr('placeholder', providerData.api_key ? '••••••••' : __('Enter API Key', 'presshub-ai-editor'));
+            var maskedKey = providerData.masked_key || providerData.masked_api_key || (providerData.api_key ? (providerData.api_key.indexOf('•') !== -1 ? providerData.api_key : maskApiKey(providerData.api_key)) : '');
+            if (providerData.type === 'ollama_local') {
+                $('#provider-form-api-key').val('').attr('placeholder', __('Not required for local Ollama', 'presshub-ai-editor'));
+            } else if (maskedKey) {
+                $('#provider-form-api-key').val('').attr('placeholder', maskedKey);
+            } else {
+                $('#provider-form-api-key').val('').attr('placeholder', __('Enter API Key', 'presshub-ai-editor'));
+            }
             $('#provider-form-template').val('');
         } else {
             $title.text(__('Add New AI Provider', 'presshub-ai-editor'));
@@ -851,15 +910,18 @@ jQuery(document).ready(function($) {
         e.preventDefault();
         var providerId = $(this).data('provider-id');
         var providerRecord = configuredProviders.find(function(p) { return p.id === providerId; });
+        var $card = $(this).closest('.presshub-provider-card');
         if (!providerRecord) {
             // Read from DOM card attributes if not found in memory
-            var $card = $(this).closest('.presshub-provider-card');
             providerRecord = {
                 id: providerId,
                 name: $card.find('.presshub-card-name').text().trim(),
                 type: $card.data('provider-type') || 'openai',
-                enabled: $card.hasClass('is-enabled')
+                enabled: $card.hasClass('is-enabled'),
+                masked_key: $card.data('provider-masked-key') || ''
             };
+        } else if (!providerRecord.masked_key && $card.length && $card.data('provider-masked-key')) {
+            providerRecord.masked_key = $card.data('provider-masked-key');
         }
         openProviderModal(providerRecord);
     });
