@@ -20,7 +20,7 @@
         // -------------------------------------------------------------------------
         function showNotice(type, message) {
             var noticeClass = 'notice notice-' + type + ' is-dismissible presshub-admin-notice';
-            var icon = type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️');
+            var icon = type === 'success' ? '✅' : (type === 'error' ? '❌' : (type === 'warning' ? '⚠️' : 'ℹ️'));
             var html = '<div class="' + noticeClass + '"><p><strong>' + icon + ' ' + message + '</strong></p></div>';
             
             var $container = $('#presshub-briefing-notices');
@@ -476,15 +476,29 @@
                     setButtonLoading($btn, false);
                     if (response.success) {
                         var count = response.data && response.data.articles ? response.data.articles.length : 0;
-                        showNotice('success', 'Scraped successfully! ' + count + ' articles saved to snapshot.');
+                        if (response.data && response.data.budget_exceeded) {
+                            var durationSec = response.data.duration_ms ? Math.round(response.data.duration_ms / 1000) : 25;
+                            showNotice('warning', response.data.notice || ('Harvest reached time budget (' + durationSec + 's). ' + count + ' articles collected and saved.'));
+                        } else {
+                            showNotice('success', 'Scraped successfully! ' + count + ' articles saved to snapshot.');
+                        }
                         fetchStatus(currentDate);
                     } else {
-                        showNotice('error', response.data || 'Harvest failed.');
+                        var errMsg = (typeof response.data === 'object' && response.data !== null && response.data.message) ? response.data.message : (response.data || 'Harvest failed.');
+                        showNotice('error', errMsg);
                     }
                 },
                 error: function(xhr, status, error) {
                     setButtonLoading($btn, false);
-                    showNotice('error', 'Scrape network error: ' + error);
+                    var errMsg = 'Scrape network error: ' + error;
+                    if (xhr.responseJSON && xhr.responseJSON.data) {
+                        if (typeof xhr.responseJSON.data === 'string') {
+                            errMsg = xhr.responseJSON.data;
+                        } else if (xhr.responseJSON.data.message) {
+                            errMsg = xhr.responseJSON.data.message;
+                        }
+                    }
+                    showNotice('error', errMsg);
                 }
             });
         });
@@ -738,10 +752,15 @@
                 success: function(res1) {
                     if (!res1.success) {
                         setButtonLoading($btn, false);
-                        showNotice('error', 'Step 1 (Scrape) failed: ' + res1.data);
+                        var errMsg = (typeof res1.data === 'object' && res1.data !== null && res1.data.message) ? res1.data.message : (res1.data || 'Step 1 (Scrape) failed');
+                        showNotice('error', 'Step 1 (Scrape) failed: ' + errMsg);
                         return;
                     }
-                    showNotice('info', 'Step 1 Complete. Curating text story...');
+                    if (res1.data && res1.data.budget_exceeded) {
+                        showNotice('info', 'Step 1 partial harvest saved (' + (res1.data.articles ? res1.data.articles.length : 0) + ' articles). Curating text story...');
+                    } else {
+                        showNotice('info', 'Step 1 Complete. Curating text story...');
+                    }
 
                     // Step 2: Curation
                     $.ajax({

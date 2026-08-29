@@ -609,6 +609,20 @@ if ( ! function_exists( 'add_filter' ) ) {
     }
 }
 
+if ( ! function_exists( 'remove_filter' ) ) {
+    function remove_filter( $tag, $callback, $priority = 10 ) {
+        unset( $GLOBALS['FILTERS'][ $tag ] );
+        return true;
+    }
+}
+
+if ( ! function_exists( 'remove_all_filters' ) ) {
+    function remove_all_filters( $tag ) {
+        unset( $GLOBALS['FILTERS'][ $tag ] );
+        return true;
+    }
+}
+
 if ( ! function_exists( 'apply_filters' ) ) {
     function apply_filters( $tag, $value, ...$args ) {
         foreach ( ( $GLOBALS['FILTERS'][ $tag ] ?? [] ) as $entry ) {

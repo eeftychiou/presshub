@@ -142,7 +142,7 @@ if ( $status ) {
 }
 
 $where_clause = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
-$sql = "SELECT id, user_id, action, provider, model, prompt_tokens, completion_tokens, total_tokens, duration_ms, status, created_at FROM wp_presshub_ai_token_logs {$where_clause} ORDER BY id DESC LIMIT {$limit}";
+$sql = "SELECT id, user_id, action_trigger AS action, provider, model, prompt_tokens, completion_tokens, total_tokens, duration_ms, status, created_at FROM wp_presshub_ai_token_logs {$where_clause} ORDER BY id DESC LIMIT {$limit}";
 
 $stmt = $pdo->prepare( $sql );
 $stmt->execute( $params );
@@ -153,10 +153,8 @@ if ( $is_json ) {
     exit( 0 );
 }
 
-echo "\n=== Recent PressHub Token & Activity Logs (Showing " . count( $rows ) . " records) ===\n\n";
-
 if ( empty( $rows ) ) {
-    echo "(No token log records found)\n";
+    echo "No token logs found matching criteria.\n";
     exit( 0 );
 }
 

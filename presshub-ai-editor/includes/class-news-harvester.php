@@ -33,6 +33,9 @@ class PressHub_AI_News_Harvester {
     /** Request timeout in seconds. */
     const REQUEST_TIMEOUT = 15;
 
+    /** Default time budget for harvesting in seconds. */
+    const DEFAULT_TIME_BUDGET = 25;
+
     /** User Agent for harvesting. */
     const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 PressHub-AI-Harvester/1.3.1';
 
@@ -667,17 +670,322 @@ class PressHub_AI_News_Harvester {
 
 
     /**
-     * Harvest all configured sources, scrape articles, detect blocks, and persist daily snapshot.
+     * Get the time budget in seconds for harvesting.
      *
-     * @param string[] $source_urls List of news website URLs.
-     * @param string   $date        Target date in YYYY-MM-DD format (defaults to current date).
-     * @return array Harvest payload with diagnostics and articles.
+     * @param int|float|null $budget Optional explicit budget override.
+     * @return int|float Effective time budget in seconds.
      */
-    public function harvest_all( $sources, string $date = '' ): array {
+    public function get_time_budget( $budget = null ) {
+        if ( null !== $budget && (float) $budget > 0 ) {
+            return (float) $budget;
+        }
+        $filtered = apply_filters( 'presshub_ai_harvest_time_budget', self::DEFAULT_TIME_BUDGET );
+        if ( is_numeric( $filtered ) && (float) $filtered > 0 ) {
+            return (float) $filtered;
+        }
+        return self::DEFAULT_TIME_BUDGET;
+    }
+
+    /**
+     * Harvest a single source with execution time budgeting and error resilience.
+     *
+     * @param array|string   $source      Source config array, URL string, or source ID.
+     * @param string         $date        Target date in YYYY-MM-DD format (defaults to current date).
+     * @param int|float|null $time_budget Optional time budget in seconds.
+     * @return array Harvest payload snapshot with diagnostics and articles.
+     */
+    public function harvest_source( $source, string $date = '', $time_budget = null ): array {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
-        $start_time = microtime( true );
+        $start_time  = microtime( true );
+        $time_budget = $this->get_time_budget( $time_budget );
+
+        // Resolve source structure
+        $source_struct = null;
+        if ( is_string( $source ) && ! preg_match( '/^https?:\/\//i', trim( $source ) ) ) {
+            if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+                $all_sources = PressHub_AI_Settings_Storage::get_briefing_sources();
+                $normalized  = PressHub_AI_Settings_Storage::normalize_sources( $all_sources );
+                foreach ( $normalized as $item ) {
+                    if ( ( $item['id'] ?? '' ) === $source ) {
+                        $source_struct = $item;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ( empty( $source_struct ) ) {
+            if ( is_string( $source ) ) {
+                $url = trim( $source );
+                $source_struct = [
+                    'id'       => 'src_' . substr( md5( $url ), 0, 8 ),
+                    'name'     => (string) ( parse_url( $url, PHP_URL_HOST ) ?: $url ),
+                    'url'      => $url,
+                    'type'     => 'text_news',
+                    'enabled'  => true,
+                    'category' => 'General',
+                    'notes'    => '',
+                ];
+            } elseif ( is_array( $source ) ) {
+                $url = (string) ( $source['url'] ?? '' );
+                $source_struct = array_merge( [
+                    'id'       => 'src_' . substr( md5( $url ), 0, 8 ),
+                    'name'     => (string) ( $source['name'] ?? ( parse_url( $url, PHP_URL_HOST ) ?: $url ) ),
+                    'url'      => $url,
+                    'type'     => (string) ( $source['type'] ?? 'text_news' ),
+                    'enabled'  => isset( $source['enabled'] ) ? (bool) $source['enabled'] : true,
+                    'category' => (string) ( $source['category'] ?? 'General' ),
+                    'notes'    => (string) ( $source['notes'] ?? '' ),
+                ], $source );
+            }
+        }
+
+        if ( empty( $source_struct ) || empty( $source_struct['url'] ) ) {
+            return [
+                'date'               => $date,
+                'harvested_at'       => gmdate( 'c' ),
+                'sources'            => [],
+                'configured_sources' => [],
+                'blocked_sources'    => [],
+                'source_health'      => [],
+                'diagnostics'        => [],
+                'articles'           => [],
+                'budget_exceeded'    => false,
+                'harvested_count'    => 0,
+            ];
+        }
+
+        $source_url  = $source_struct['url'];
+        $source_host = (string) ( parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
+        $src_enabled = ! empty( $source_struct['enabled'] );
+        $src_type    = $source_struct['type'] ?? 'text_news';
+
+        // Load existing snapshot to preserve existing articles
+        $existing = $this->load_snapshot( $date );
+        $payload  = ( is_array( $existing ) && ! empty( $existing ) ) ? $existing : [
+            'date'               => $date,
+            'harvested_at'       => gmdate( 'c' ),
+            'sources'            => [],
+            'configured_sources' => [],
+            'blocked_sources'    => [],
+            'source_health'      => [],
+            'diagnostics'        => [],
+            'articles'           => [],
+            'budget_exceeded'    => false,
+            'harvested_count'    => 0,
+        ];
+
+        if ( ! in_array( $source_url, $payload['sources'] ?? [], true ) ) {
+            $payload['sources'][] = $source_url;
+        }
+
+        $seen_urls   = [];
+        $seen_titles = [];
+        foreach ( ( $payload['articles'] ?? [] ) as $art ) {
+            if ( ! empty( $art['url'] ) ) {
+                $seen_urls[] = $art['url'];
+            }
+            $t = mb_strtolower( trim( (string) ( $art['title'] ?? '' ) ) );
+            if ( '' !== $t ) {
+                $seen_titles[] = $t;
+            }
+        }
+
+        if ( ! $src_enabled || ! in_array( $src_type, [ 'text_news', 'rss_feed' ], true ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::debug( sprintf( "Source '%s' (%s) is disabled or non-text (type: %s); skipping single harvest.", $source_struct['name'], $source_url, $src_type ) );
+            }
+            return $payload;
+        }
+
+        $budget_exceeded       = false;
+        $source_articles_count = 0;
+
+        // Check budget before discovery
+        if ( ( microtime( true ) - $start_time ) >= $time_budget ) {
+            $budget_exceeded = true;
+        } else {
+            try {
+                $discovery = $this->discover_source_articles( $source_url );
+            } catch ( \Throwable $e ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( sprintf( 'Discovery failed for source %s: %s', $source_url, $e->getMessage() ), [ 'exception' => $e ] );
+                }
+                $discovery = [
+                    'source_url'       => $source_url,
+                    'discovery_method' => 'ERROR',
+                    'feed_url'         => null,
+                    'raw_links_count'  => 0,
+                    'article_urls'     => [],
+                    'feed_items'       => [],
+                    'status_code'      => 0,
+                    'latency_ms'       => 0,
+                    'is_blocked'       => false,
+                    'failure_reason'   => $e->getMessage(),
+                ];
+            }
+
+            if ( $discovery['is_blocked'] ) {
+                if ( ! in_array( $source_url, $payload['blocked_sources'] ?? [], true ) ) {
+                    $payload['blocked_sources'][] = $source_url;
+                }
+            } else {
+                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, self::MAX_LINKS_PER_SOURCE );
+
+                foreach ( $links_to_crawl as $article_url ) {
+                    // Check budget before each article fetch
+                    if ( ( microtime( true ) - $start_time ) >= $time_budget ) {
+                        $budget_exceeded = true;
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::warning( sprintf(
+                                'Single source harvest time budget (%ds) reached while crawling %s. Preserving %d articles collected.',
+                                $time_budget,
+                                $source_url,
+                                count( $payload['articles'] )
+                            ) );
+                        }
+                        break;
+                    }
+
+                    if ( in_array( $article_url, $seen_urls, true ) ) {
+                        continue;
+                    }
+
+                    try {
+                        $article_data = $this->fetch_and_parse_article( $article_url, $source_host );
+                    } catch ( \Throwable $e ) {
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::error( sprintf( 'Article fetch failed for %s: %s', $article_url, $e->getMessage() ), [ 'exception' => $e ] );
+                        }
+                        $article_data = null;
+                    }
+
+                    if ( empty( $article_data ) || empty( $article_data['content'] ) ) {
+                        continue;
+                    }
+
+                    $norm_title = mb_strtolower( trim( (string) ( $article_data['title'] ?? '' ) ) );
+                    if ( '' !== $norm_title && in_array( $norm_title, $seen_titles, true ) ) {
+                        continue;
+                    }
+
+                    $seen_urls[]           = $article_url;
+                    $seen_titles[]         = $norm_title;
+                    $payload['articles'][] = $article_data;
+                    $source_articles_count++;
+                }
+            }
+
+            $health_status = 'ok';
+            if ( $discovery['is_blocked'] ) {
+                $health_status = 'blocked';
+            } elseif ( 0 === $source_articles_count ) {
+                $health_status = 'warning';
+            }
+
+            $diag_item = [
+                'url'              => $source_url,
+                'host'             => $source_host,
+                'status'           => $health_status,
+                'http_code'        => $discovery['status_code'] ?? 0,
+                'latency_ms'       => $discovery['latency_ms'] ?? 0,
+                'discovery_method' => $discovery['discovery_method'] ?? 'UNKNOWN',
+                'feed_url'         => $discovery['feed_url'] ?? null,
+                'raw_links_count'  => $discovery['raw_links_count'] ?? 0,
+                'articles_yielded' => $source_articles_count,
+                'failure_reason'   => $discovery['failure_reason'] ?? ( ( 0 === $source_articles_count && ! $discovery['is_blocked'] ) ? '0 articles scraped' : null ),
+            ];
+
+            // Update or append source health
+            $sh_found = false;
+            foreach ( $payload['source_health'] as $idx => $sh ) {
+                if ( ( $sh['url'] ?? '' ) === $source_url ) {
+                    $payload['source_health'][ $idx ] = $diag_item;
+                    $sh_found = true;
+                    break;
+                }
+            }
+            if ( ! $sh_found ) {
+                $payload['source_health'][] = $diag_item;
+            }
+
+            $dg_found = false;
+            foreach ( $payload['diagnostics'] as $idx => $dg ) {
+                if ( ( $dg['url'] ?? '' ) === $source_url ) {
+                    $payload['diagnostics'][ $idx ] = $diag_item;
+                    $dg_found = true;
+                    break;
+                }
+            }
+            if ( ! $dg_found ) {
+                $payload['diagnostics'][] = $diag_item;
+            }
+        }
+
+        $duration_ms                 = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+        $payload['harvested_at']     = gmdate( 'c' );
+        $payload['budget_exceeded']  = $budget_exceeded;
+        $payload['harvested_count']  = count( $payload['articles'] );
+        $payload['duration_ms']      = $duration_ms;
+        $payload['time_budget']      = $time_budget;
+
+        if ( $budget_exceeded ) {
+            $payload['notice'] = sprintf(
+                /* translators: 1: number of articles, 2: elapsed time in seconds, 3: time budget in seconds */
+                __( 'Harvest reached time budget (%2$ds / %3$ds). %1$d articles saved.', 'presshub-ai-editor' ),
+                count( $payload['articles'] ),
+                (int) round( $duration_ms / 1000 ),
+                $time_budget
+            );
+        }
+
+        $this->save_snapshot( $date, $payload );
+
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            PressHub_AI_Token_Logger::log_scrape_request(
+                'scrape_harvest_single',
+                1,
+                $source_articles_count,
+                $duration_ms,
+                $budget_exceeded ? 'partial' : 'success',
+                null,
+                [
+                    'source_url'      => $source_url,
+                    'date'            => $date,
+                    'budget_exceeded' => $budget_exceeded,
+                    'time_budget_sec' => $time_budget,
+                ]
+            );
+        }
+
+        PressHub_AI_Logger::info( sprintf(
+            'Single source harvest completed for %s (%s): %d articles collected, duration %dms%s',
+            $source_url,
+            $date,
+            $source_articles_count,
+            $duration_ms,
+            $budget_exceeded ? ' (budget exceeded)' : ''
+        ) );
+
+        return $payload;
+    }
+
+    /**
+     * Harvest all configured sources, scrape articles, detect blocks, and persist daily snapshot.
+     *
+     * @param string[]|array $sources     List of news website URLs or structured source configs.
+     * @param string         $date        Target date in YYYY-MM-DD format (defaults to current date).
+     * @param int|float|null $time_budget Optional time budget in seconds.
+     * @return array Harvest payload with diagnostics and articles.
+     */
+    public function harvest_all( $sources, string $date = '', $time_budget = null ): array {
+        if ( empty( $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+        $start_time  = microtime( true );
+        $time_budget = $this->get_time_budget( $time_budget );
 
         // Normalize structured sources
         if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
@@ -735,7 +1043,13 @@ class PressHub_AI_News_Harvester {
         $source_urls = array_values( array_unique( array_column( $active_text_sources, 'url' ) ) );
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( sprintf( 'Starting news harvest for %s (%d active text/RSS sources out of %d configured)', $date, count( $source_urls ), count( $structured_sources ) ), [ 'sources' => $source_urls ] );
+            PressHub_AI_Logger::info( sprintf(
+                'Starting news harvest for %s (%d active text/RSS sources out of %d configured, time budget: %ds)',
+                $date,
+                count( $source_urls ),
+                count( $structured_sources ),
+                $time_budget
+            ), [ 'sources' => $source_urls ] );
         }
 
         $payload = [
@@ -747,14 +1061,69 @@ class PressHub_AI_News_Harvester {
             'source_health'      => [],
             'diagnostics'        => [],
             'articles'           => [],
+            'budget_exceeded'    => false,
+            'harvested_count'    => 0,
         ];
+
+        // Preserve any existing manual uploads in snapshot
+        $existing_snapshot = $this->load_snapshot( $date );
+        if ( is_array( $existing_snapshot ) && ! empty( $existing_snapshot['articles'] ) ) {
+            foreach ( $existing_snapshot['articles'] as $art ) {
+                if ( ! empty( $art['is_manual'] ) ) {
+                    $payload['articles'][] = $art;
+                }
+            }
+        }
 
         $seen_urls   = [];
         $seen_titles = [];
+        foreach ( $payload['articles'] as $art ) {
+            if ( ! empty( $art['url'] ) ) {
+                $seen_urls[] = $art['url'];
+            }
+            $t = mb_strtolower( trim( (string) ( $art['title'] ?? '' ) ) );
+            if ( '' !== $t ) {
+                $seen_titles[] = $t;
+            }
+        }
+
+        $budget_exceeded = false;
 
         foreach ( $source_urls as $source_url ) {
-            $source_host = (string) parse_url( $source_url, PHP_URL_HOST ) ?: $source_url;
-            $discovery   = $this->discover_source_articles( $source_url );
+            // Check budget before starting next source
+            if ( ( microtime( true ) - $start_time ) >= $time_budget ) {
+                $budget_exceeded = true;
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf(
+                        'News harvest time budget (%ds) reached before scraping source: %s. Preserving %d articles harvested so far.',
+                        $time_budget,
+                        $source_url,
+                        count( $payload['articles'] )
+                    ) );
+                }
+                break;
+            }
+
+            $source_host = (string) ( parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
+            try {
+                $discovery = $this->discover_source_articles( $source_url );
+            } catch ( \Throwable $e ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( sprintf( 'Discovery failed for source %s: %s', $source_url, $e->getMessage() ), [ 'exception' => $e ] );
+                }
+                $discovery = [
+                    'source_url'       => $source_url,
+                    'discovery_method' => 'ERROR',
+                    'feed_url'         => null,
+                    'raw_links_count'  => 0,
+                    'article_urls'     => [],
+                    'feed_items'       => [],
+                    'status_code'      => 0,
+                    'latency_ms'       => 0,
+                    'is_blocked'       => false,
+                    'failure_reason'   => $e->getMessage(),
+                ];
+            }
 
             $source_articles_count = 0;
 
@@ -765,11 +1134,33 @@ class PressHub_AI_News_Harvester {
 
                 // Scrape each discovered article
                 foreach ( $links_to_crawl as $article_url ) {
+                    // Check budget before each article fetch
+                    if ( ( microtime( true ) - $start_time ) >= $time_budget ) {
+                        $budget_exceeded = true;
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::warning( sprintf(
+                                'News harvest time budget (%ds) reached while crawling articles for %s. Preserving %d articles harvested so far.',
+                                $time_budget,
+                                $source_url,
+                                count( $payload['articles'] )
+                            ) );
+                        }
+                        break 2; // Break both article loop and source loop
+                    }
+
                     if ( in_array( $article_url, $seen_urls, true ) ) {
                         continue;
                     }
 
-                    $article_data = $this->fetch_and_parse_article( $article_url, $source_host );
+                    try {
+                        $article_data = $this->fetch_and_parse_article( $article_url, $source_host );
+                    } catch ( \Throwable $e ) {
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::error( sprintf( 'Article fetch failed for %s: %s', $article_url, $e->getMessage() ), [ 'exception' => $e ] );
+                        }
+                        $article_data = null;
+                    }
+
                     if ( empty( $article_data ) || empty( $article_data['content'] ) ) {
                         continue;
                     }
@@ -814,9 +1205,23 @@ class PressHub_AI_News_Harvester {
             $payload['diagnostics'][]   = $diag_item;
         }
 
-        $this->save_snapshot( $date, $payload );
+        $duration_ms                 = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+        $payload['budget_exceeded']  = $budget_exceeded;
+        $payload['harvested_count']  = count( $payload['articles'] );
+        $payload['duration_ms']      = $duration_ms;
+        $payload['time_budget']      = $time_budget;
 
-        $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+        if ( $budget_exceeded ) {
+            $payload['notice'] = sprintf(
+                /* translators: 1: number of articles, 2: elapsed time in seconds, 3: time budget in seconds */
+                __( 'Harvest reached time budget (%2$ds / %3$ds). %1$d articles collected and saved.', 'presshub-ai-editor' ),
+                count( $payload['articles'] ),
+                (int) round( $duration_ms / 1000 ),
+                $time_budget
+            );
+        }
+
+        $this->save_snapshot( $date, $payload );
 
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
             PressHub_AI_Token_Logger::log_scrape_request(
@@ -824,22 +1229,30 @@ class PressHub_AI_News_Harvester {
                 count( $source_urls ),
                 count( $payload['articles'] ),
                 $duration_ms,
-                'success',
+                $budget_exceeded ? 'partial' : 'success',
                 null,
-                [ 'blocked_sources' => count( $payload['blocked_sources'] ), 'date' => $date ]
+                [
+                    'blocked_sources' => count( $payload['blocked_sources'] ),
+                    'date'            => $date,
+                    'budget_exceeded' => $budget_exceeded,
+                    'time_budget_sec' => $time_budget,
+                ]
             );
         }
 
         PressHub_AI_Logger::info( sprintf(
-            'News harvest completed for %s: %d articles collected, %d blocked, duration %dms',
+            'News harvest completed for %s: %d articles collected, %d blocked, duration %dms%s',
             $date,
             count( $payload['articles'] ),
             count( $payload['blocked_sources'] ),
-            $duration_ms
+            $duration_ms,
+            $budget_exceeded ? ' (budget exceeded)' : ''
         ) );
 
         return $payload;
     }
+
+
 
     /**
      * Fetch a single article URL and extract its title and body text using Multi-Fallback Extractor.
@@ -982,13 +1395,22 @@ class PressHub_AI_News_Harvester {
     }
 
     /**
-     * Save daily snapshot payload to disk as JSON.
+     * Save daily snapshot payload to disk as JSON and in transients.
      *
      * @param string $date Date string YYYY-MM-DD.
      * @param array  $data Snapshot data.
      * @return bool True on success, false on failure.
      */
     public function save_snapshot( string $date, array $data ): bool {
+        $clean_date = preg_replace( '/[^0-9\-]/', '', $date );
+        if ( empty( $clean_date ) ) {
+            $clean_date = gmdate( 'Y-m-d' );
+        }
+
+        if ( function_exists( 'set_transient' ) ) {
+            set_transient( 'presshub_ai_harvest_snapshot_' . $clean_date, $data, DAY_IN_SECONDS );
+        }
+
         $path = $this->get_snapshot_path( $date );
         $dir  = dirname( $path );
 
@@ -1009,23 +1431,35 @@ class PressHub_AI_News_Harvester {
     }
 
     /**
-     * Load daily snapshot payload from disk.
+     * Load daily snapshot payload from disk or transient cache.
      *
      * @param string $date Date string YYYY-MM-DD.
      * @return array|null Decoded payload array or null if not found.
      */
     public function load_snapshot( string $date ): ?array {
+        $clean_date = preg_replace( '/[^0-9\-]/', '', $date );
+        if ( empty( $clean_date ) ) {
+            $clean_date = gmdate( 'Y-m-d' );
+        }
+
         $path = $this->get_snapshot_path( $date );
-        if ( ! file_exists( $path ) ) {
-            return null;
+        if ( file_exists( $path ) ) {
+            $content = @file_get_contents( $path );
+            if ( false !== $content && '' !== trim( $content ) ) {
+                $decoded = json_decode( $content, true );
+                if ( is_array( $decoded ) ) {
+                    return $decoded;
+                }
+            }
         }
 
-        $content = @file_get_contents( $path );
-        if ( false === $content || '' === trim( $content ) ) {
-            return null;
+        if ( function_exists( 'get_transient' ) ) {
+            $cached = get_transient( 'presshub_ai_harvest_snapshot_' . $clean_date );
+            if ( is_array( $cached ) && ! empty( $cached ) ) {
+                return $cached;
+            }
         }
 
-        $decoded = json_decode( $content, true );
-        return is_array( $decoded ) ? $decoded : null;
+        return null;
     }
 }
