@@ -506,7 +506,7 @@ class PressHub_AI_Settings_Render {
                     $is_system   = ! empty( $provider['is_system'] );
                     $has_key     = ! empty( $provider['api_key'] );
                 ?>
-                <div class="presshub-provider-card <?php echo $enabled ? 'is-enabled' : 'is-disabled'; ?>" data-provider-id="<?php echo esc_attr( $id ); ?>" data-provider-type="<?php echo esc_attr( $type ); ?>">
+                <div class="presshub-provider-card <?php echo $enabled ? 'is-enabled' : 'is-disabled'; ?>" data-provider-id="<?php echo esc_attr( $id ); ?>" data-provider-type="<?php echo esc_attr( $type ); ?>" data-provider-has-key="<?php echo $has_key ? '1' : '0'; ?>" data-provider-masked-key="<?php echo esc_attr( $has_key ? self::mask_key( $provider['api_key'] ) : '' ); ?>">
                     <div class="presshub-card-top">
                         <div class="presshub-card-title-wrap">
                             <span class="presshub-provider-badge presshub-badge-<?php echo esc_attr( function_exists( 'sanitize_html_class' ) ? sanitize_html_class( $type ) : self::sanitize_slug( $type ) ); ?>"><?php echo esc_html( strtoupper( $type ) ); ?></span>
@@ -536,7 +536,7 @@ class PressHub_AI_Settings_Render {
                         </div>
                         <div class="presshub-meta-row">
                             <span class="presshub-meta-label"><?php echo __( 'Credentials:', 'presshub-ai-editor' ); ?></span>
-                            <span class="presshub-meta-val"><?php echo $has_key ? '••••••••' : ( 'ollama_local' === $type ? __( 'Not required', 'presshub-ai-editor' ) : '<span class="presshub-missing-key" style="color: #d63638;">' . __( 'No API Key set', 'presshub-ai-editor' ) . '</span>' ); ?></span>
+                            <span class="presshub-meta-val"><?php echo $has_key ? '<span class="code">' . esc_html( self::mask_key( $provider['api_key'] ) ) . '</span>' : ( 'ollama_local' === $type ? esc_html__( 'Not required', 'presshub-ai-editor' ) : '<span class="presshub-missing-key" style="color: #d63638;">' . esc_html__( 'No API Key set', 'presshub-ai-editor' ) . '</span>' ); ?></span>
                         </div>
                     </div>
 
@@ -1527,16 +1527,11 @@ class PressHub_AI_Settings_Render {
     // ------------------------------------------------------------------
 
     /**
-     * Mask a secret for display: '••••' + the last 4 characters.
+     * Mask a secret for display: prefix + '••••••••' + last 4 characters.
      */
     public static function mask_key( $key ): string {
-        $key = (string) $key;
-        if ( '' === $key ) {
-            return '';
-        }
-        $len  = strlen( $key );
-        $tail = $len >= 4 ? substr( $key, -4 ) : $key;
-        return '••••' . $tail;
+        require_once __DIR__ . '/class-provider-store.php';
+        return PressHub_AI_Provider_Store::mask_key( $key );
     }
 
     private static function esc_attr_safe( $text ) {

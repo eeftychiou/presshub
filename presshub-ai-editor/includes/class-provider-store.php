@@ -379,7 +379,12 @@ class PressHub_AI_Provider_Store {
         // API Key
         $api_key = '';
         if ( isset( $data['api_key'] ) && '' !== trim( (string) $data['api_key'] ) ) {
-            $api_key = trim( (string) $data['api_key'] );
+            $raw_key = trim( (string) $data['api_key'] );
+            if ( false !== strpos( $raw_key, '••••' ) || false !== strpos( $raw_key, '••' ) ) {
+                $api_key = ! empty( $existing['api_key'] ) ? $existing['api_key'] : '';
+            } else {
+                $api_key = $raw_key;
+            }
         } elseif ( ! empty( $existing['api_key'] ) ) {
             $api_key = $existing['api_key'];
         }
@@ -570,5 +575,73 @@ class PressHub_AI_Provider_Store {
             'enabled'          => true,
             'is_system'        => false,
         ];
+    }
+
+    /**
+     * Mask an API key or provider record for safe display and preview.
+     *
+     * @param string|array $provider_or_key API key string or provider record array.
+     * @return string Masked key representation or status text.
+     */
+    public static function mask_key( $provider_or_key ): string {
+        if ( is_array( $provider_or_key ) ) {
+            $type    = $provider_or_key['type'] ?? '';
+            $api_key = $provider_or_key['api_key'] ?? '';
+            if ( 'ollama_local' === $type ) {
+                return function_exists( '__' ) ? __( 'Not required', 'presshub-ai-editor' ) : 'Not required';
+            }
+            if ( empty( $api_key ) ) {
+                return function_exists( '__' ) ? __( 'No API Key set', 'presshub-ai-editor' ) : 'No API Key set';
+            }
+            $key = (string) $api_key;
+        } else {
+            $key = (string) $provider_or_key;
+        }
+
+        $key = trim( $key );
+        if ( '' === $key ) {
+            return '';
+        }
+
+        $len = strlen( $key );
+
+        if ( $len >= 10 ) {
+            $prefix = '';
+            $known_prefixes = [
+                'sk-proj-',
+                'sk-admin-',
+                'sk-ant-api03-',
+                'sk-ant-',
+                'github_pat_',
+                'ghp_',
+                'gsk_',
+                'AIzaSy',
+                'AIza',
+                'nvapi-',
+                'xai-',
+                'ms-',
+                'sk-',
+            ];
+            foreach ( $known_prefixes as $pfx ) {
+                if ( 0 === strpos( $key, $pfx ) && ( $len - strlen( $pfx ) >= 4 ) ) {
+                    $prefix = $pfx;
+                    break;
+                }
+            }
+            if ( '' === $prefix ) {
+                if ( preg_match( '/^([a-zA-Z0-9_\.]{2,16}[-_])/', $key, $matches ) && ( $len - strlen( $matches[1] ) >= 4 ) ) {
+                    $prefix = $matches[1];
+                } elseif ( preg_match( '/^(AQ\.[a-zA-Z0-9]{2})/', $key, $matches ) ) {
+                    $prefix = $matches[1];
+                } else {
+                    $prefix = substr( $key, 0, 4 );
+                }
+            }
+            return $prefix . '••••••••' . substr( $key, -4 );
+        } elseif ( $len >= 6 ) {
+            return substr( $key, 0, 2 ) . '••••' . substr( $key, -2 );
+        } else {
+            return '••••';
+        }
     }
 }
