@@ -795,6 +795,51 @@ jQuery(document).ready(function($) {
         }
     }
 
+    function populateModelDropdown(modelsList, selectedModel) {
+        var $select = $('#provider-form-default-model');
+        $select.empty();
+
+        var models = [];
+        if (Array.isArray(modelsList)) {
+            models = modelsList.slice();
+        } else if (typeof modelsList === 'string' && modelsList.trim()) {
+            models = modelsList.split(/[
+,]+/).map(function(m) { return m.trim(); }).filter(Boolean);
+        }
+
+        if (selectedModel && models.indexOf(selectedModel) === -1) {
+            models.unshift(selectedModel);
+        }
+
+        if (models.length === 0) {
+            models = selectedModel ? [selectedModel] : ['default'];
+        }
+
+        var uniqueModels = [];
+        models.forEach(function(m) {
+            if (m && uniqueModels.indexOf(m) === -1) {
+                uniqueModels.push(m);
+            }
+        });
+
+        uniqueModels.forEach(function(m) {
+            var $opt = $('<option></option>').attr('value', m).text(m);
+            if (m === selectedModel) {
+                $opt.prop('selected', true);
+            }
+            $select.append($opt);
+        });
+
+        if (selectedModel) {
+            $select.val(selectedModel);
+        } else if (uniqueModels.length > 0) {
+            $select.val(uniqueModels[0]);
+        }
+
+        $('#provider-form-available-models').val(uniqueModels.join(', '));
+        $('#provider-form-manual-model').val($select.val() || selectedModel || '');
+    }
+
     function openProviderModal(providerData) {
         var $modal = $('#presshub-provider-modal');
         var $title = $('#presshub-provider-modal-title');
@@ -807,15 +852,22 @@ jQuery(document).ready(function($) {
             $('#provider-form-name').val(providerData.name || '');
             $('#provider-form-type').val(providerData.type || 'openai');
             $('#provider-form-base-url').val(providerData.base_url || '');
-            $('#provider-form-default-model').val(providerData.default_model || '');
-            var avail = Array.isArray(providerData.available_models) ? providerData.available_models.join(', ') : (providerData.available_models || '');
-            $('#provider-form-available-models').val(avail);
+
+            var defaultModel = providerData.default_model || '';
+            var availModels = providerData.available_models || (providerTemplates[providerData.type] ? providerTemplates[providerData.type].available_models : [defaultModel]);
+            populateModelDropdown(availModels, defaultModel);
+
+            $('#provider-form-toggle-manual').prop('checked', false);
+            $('#provider-model-select-wrap').show();
+            $('#provider-model-manual-wrap').hide();
+
             $('#provider-form-temperature').val(providerData.temperature !== undefined ? providerData.temperature : 0.7);
             $('#provider-form-max-tokens').val(providerData.max_tokens !== undefined ? providerData.max_tokens : 10000);
             $('#provider-form-timeout').val(providerData.timeout !== undefined ? providerData.timeout : 300);
             var headers = providerData.headers ? (typeof providerData.headers === 'object' ? JSON.stringify(providerData.headers) : providerData.headers) : '';
             $('#provider-form-headers').val(headers);
             $('#provider-form-enabled').prop('checked', !!providerData.enabled);
+
             var maskedKey = providerData.masked_key || providerData.masked_api_key || (providerData.api_key ? (providerData.api_key.indexOf('•') !== -1 ? providerData.api_key : maskApiKey(providerData.api_key)) : '');
             if (providerData.type === 'ollama_local') {
                 $('#provider-form-api-key').val('').attr('placeholder', __('Not required for local Ollama', 'presshub-ai-editor'));
@@ -834,6 +886,13 @@ jQuery(document).ready(function($) {
             $('#provider-form-max-tokens').val('10000');
             $('#provider-form-timeout').val('300');
             $('#provider-form-api-key').attr('placeholder', __('Enter API Key', 'presshub-ai-editor'));
+
+            var firstTmplKey = Object.keys(providerTemplates)[0] || 'openai';
+            var tmpl = providerTemplates[firstTmplKey] || {};
+            populateModelDropdown(tmpl.available_models || [], tmpl.default_model || '');
+            $('#provider-form-toggle-manual').prop('checked', false);
+            $('#provider-model-select-wrap').show();
+            $('#provider-model-manual-wrap').hide();
         }
 
         $modal.show().addClass('is-open');
@@ -897,12 +956,105 @@ jQuery(document).ready(function($) {
         }
         $('#provider-form-type').val(tmpl.type || tmplKey);
         $('#provider-form-base-url').val(tmpl.base_url || '');
-        $('#provider-form-default-model').val(tmpl.default_model || '');
-        var avail = Array.isArray(tmpl.available_models) ? tmpl.available_models.join(', ') : '';
-        $('#provider-form-available-models').val(avail);
+
+        populateModelDropdown(tmpl.available_models || [], tmpl.default_model || '');
+        $('#provider-form-toggle-manual').prop('checked', false);
+        $('#provider-model-select-wrap').show();
+        $('#provider-model-manual-wrap').hide();
+
         $('#provider-form-temperature').val(tmpl.temperature !== undefined ? tmpl.temperature : 0.7);
         $('#provider-form-max-tokens').val(tmpl.max_tokens !== undefined ? tmpl.max_tokens : 10000);
         $('#provider-form-timeout').val(tmpl.timeout !== undefined ? tmpl.timeout : 300);
+    });
+
+    // Provider Type Change Handler
+    $(document).on('change', '#provider-form-type', function() {
+        var provType = $(this).val();
+        if (providerTemplates[provType]) {
+            var tmpl = providerTemplates[provType];
+            if (!$('#provider-form-base-url').val()) {
+                $('#provider-form-base-url').val(tmpl.base_url || '');
+            }
+            var curModel = $('#provider-form-default-model').val();
+            populateModelDropdown(tmpl.available_models || [], curModel || tmpl.default_model || '');
+        }
+    });
+
+    // Manual Model Toggle Handler
+    $(document).on('change', '#provider-form-toggle-manual', function() {
+        var isManual = $(this).is(':checked');
+        if (isManual) {
+            var currentSelectVal = $('#provider-form-default-model').val() || '';
+            $('#provider-form-manual-model').val(currentSelectVal);
+            $('#provider-model-select-wrap').hide();
+            $('#provider-model-manual-wrap').show();
+            $('#provider-form-manual-model').trigger('focus');
+        } else {
+            var manualVal = $('#provider-form-manual-model').val().trim();
+            if (manualVal) {
+                populateModelDropdown($('#provider-form-available-models').val(), manualVal);
+            }
+            $('#provider-model-manual-wrap').hide();
+            $('#provider-model-select-wrap').show();
+        }
+    });
+
+    // Model Dropdown Change Sync
+    $(document).on('change', '#provider-form-default-model', function() {
+        $('#provider-form-manual-model').val($(this).val());
+    });
+
+    // Dynamic Fetch Models from API Handler
+    $(document).on('click', '#provider-form-fetch-models', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var $spinner = $('#provider-form-fetch-spinner');
+        var $notice = $('#presshub-provider-form-notice');
+
+        var providerData = {
+            id: $('#provider-form-id').val().trim(),
+            name: $('#provider-form-name').val().trim(),
+            type: $('#provider-form-type').val(),
+            base_url: $('#provider-form-base-url').val().trim(),
+            api_key: $('#provider-form-api-key').val().trim(),
+            headers: $('#provider-form-headers').val().trim()
+        };
+
+        $btn.prop('disabled', true);
+        $spinner.addClass('is-active');
+        $notice.empty();
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_fetch_provider_models',
+                nonce: presshubAI.nonce,
+                provider_data: JSON.stringify(providerData)
+            }
+        }).done(function(res) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+
+            if (res && res.success && res.data && Array.isArray(res.data.models)) {
+                var currentModel = $('#provider-form-default-model').val() || $('#provider-form-manual-model').val();
+                populateModelDropdown(res.data.models, currentModel);
+
+                $('#provider-form-toggle-manual').prop('checked', false);
+                $('#provider-model-select-wrap').show();
+                $('#provider-model-manual-wrap').hide();
+
+                $notice.html('<div class="notice notice-success"><p>✓ ' + presshubEsc(sprintf(__('Successfully fetched %d models from provider API.', 'presshub-ai-editor'), res.data.models.length)) + '</p></div>');
+            } else {
+                var msg = (res && res.data && res.data.message) ? res.data.message : __('Failed to fetch models from provider API.', 'presshub-ai-editor');
+                $notice.html('<div class="notice notice-error"><p>✗ ' + presshubEsc(msg) + '</p></div>');
+            }
+        }).fail(function(xhr, status, error) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+            $notice.html('<div class="notice notice-error"><p>✗ ' + presshubEsc(__('Error fetching models: ', 'presshub-ai-editor') + (error || status)) + '</p></div>');
+        });
     });
 
     // Edit Provider Card Click
@@ -939,14 +1091,32 @@ jQuery(document).ready(function($) {
             return;
         }
 
+        var isManual = $('#provider-form-toggle-manual').is(':checked');
+        var defaultModel = isManual ? $('#provider-form-manual-model').val().trim() : $('#provider-form-default-model').val();
+        if (!defaultModel) {
+            $notice.html('<div class="notice notice-error"><p>' + presshubEsc(__('Model is required.', 'presshub-ai-editor')) + '</p></div>');
+            return;
+        }
+
+        var availableModels = [];
+        $('#provider-form-default-model option').each(function() {
+            var val = $(this).val();
+            if (val && availableModels.indexOf(val) === -1) {
+                availableModels.push(val);
+            }
+        });
+        if (availableModels.indexOf(defaultModel) === -1) {
+            availableModels.unshift(defaultModel);
+        }
+
         var providerData = {
             id: $('#provider-form-id').val().trim(),
             name: name,
             type: $('#provider-form-type').val(),
             base_url: $('#provider-form-base-url').val().trim(),
             api_key: $('#provider-form-api-key').val().trim(),
-            default_model: $('#provider-form-default-model').val().trim(),
-            available_models: $('#provider-form-available-models').val().trim(),
+            default_model: defaultModel,
+            available_models: availableModels,
             temperature: parseFloat($('#provider-form-temperature').val()) || 0.7,
             max_tokens: parseInt($('#provider-form-max-tokens').val(), 10) || 10000,
             timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
@@ -1072,13 +1242,16 @@ jQuery(document).ready(function($) {
         var $spinner = $('#presshub-provider-form-spinner');
         var $notice = $('#presshub-provider-form-notice');
 
+        var isManual = $('#provider-form-toggle-manual').is(':checked');
+        var defaultModel = isManual ? $('#provider-form-manual-model').val().trim() : $('#provider-form-default-model').val();
+
         var providerData = {
             id: $('#provider-form-id').val().trim(),
             name: $('#provider-form-name').val().trim(),
             type: $('#provider-form-type').val(),
             base_url: $('#provider-form-base-url').val().trim(),
             api_key: $('#provider-form-api-key').val().trim(),
-            default_model: $('#provider-form-default-model').val().trim(),
+            default_model: defaultModel,
             timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
             headers: $('#provider-form-headers').val().trim()
         };

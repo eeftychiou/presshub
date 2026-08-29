@@ -37,6 +37,7 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_save_provider', [ $this, 'save_provider' ] );
         add_action( 'wp_ajax_presshub_ai_delete_provider', [ $this, 'delete_provider' ] );
         add_action( 'wp_ajax_presshub_ai_test_provider', [ $this, 'test_provider' ] );
+        add_action( 'wp_ajax_presshub_ai_fetch_provider_models', [ $this, 'fetch_provider_models' ] );
         // Token & Usage Analytics AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_fetch_token_logs', [ $this, 'fetch_token_logs' ] );
         add_action( 'wp_ajax_presshub_ai_export_token_csv', [ $this, 'export_token_csv' ] );
@@ -1698,6 +1699,60 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         wp_send_json_success( [
             'message' => __( 'Log file cleared successfully.', 'presshub-ai-editor' ),
+        ] );
+    }
+    /**
+     * AJAX endpoint to dynamically fetch available models from a provider API.
+     */
+    public function fetch_provider_models(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-provider-store.php';
+        require_once __DIR__ . '/class-api-client.php';
+
+        $api = new PressHub_AI_API_Client();
+        $data = [];
+
+        if ( ! empty( $_POST['provider_data'] ) ) {
+            $raw_data = is_array( $_POST['provider_data'] )
+                ? $_POST['provider_data']
+                : json_decode( wp_unslash( (string) $_POST['provider_data'] ), true );
+
+            if ( is_array( $raw_data ) ) {
+                $data = $raw_data;
+            }
+        } elseif ( ! empty( $_POST['provider_id'] ) ) {
+            $provider_id = sanitize_text_field( wp_unslash( $_POST['provider_id'] ) );
+            $stored = PressHub_AI_Provider_Store::get( $provider_id );
+            if ( $stored ) {
+                $data = $stored;
+            } else {
+                $data = [ 'id' => $provider_id, 'type' => $provider_id ];
+            }
+        } elseif ( ! empty( $_POST['type'] ) ) {
+            $data = $_POST;
+        }
+
+        if ( empty( $data ) ) {
+            wp_send_json_error( [ 'message' => __( 'No provider configuration received.', 'presshub-ai-editor' ) ] );
+        }
+
+        $result = $api->fetch_remote_models( $data );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( [
+                'message' => $result->get_error_message(),
+            ] );
+        }
+
+        wp_send_json_success( [
+            'models'  => $result,
+            'count'   => count( $result ),
+            'message' => sprintf( __( 'Found %d models.', 'presshub-ai-editor' ), count( $result ) ),
         ] );
     }
 }
