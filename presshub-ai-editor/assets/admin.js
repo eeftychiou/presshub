@@ -718,6 +718,7 @@ jQuery(document).ready(function($) {
 
             if (tabKey === 'token_logs') {
                 loadTokenLogs(1);
+                loadAuditLogs(1);
             } else if (tabKey === 'advanced') {
                 loadDiagnosticLogs();
             }
@@ -1987,6 +1988,196 @@ jQuery(document).ready(function($) {
         }
         $temp.remove();
     }
+
+    // ------------------------------------------------------------------
+    // Configuration Audit Trail Handlers.
+    // ------------------------------------------------------------------
+    var currentAuditPage = 1;
+
+    function loadAuditLogs(page) {
+        if (page !== undefined) {
+            currentAuditPage = page;
+        }
+
+        var $tbody   = $('#presshub-audit-logs-tbody');
+        var $spinner = $('#audit-logs-spinner');
+
+        if (!$tbody.length) {
+            return;
+        }
+
+        var eventType  = $('#audit-filter-event').val() || '';
+        var entityType = $('#audit-filter-entity').val() || '';
+        var search     = $('#audit-filter-search').val() || '';
+
+        $spinner.addClass('is-active');
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_fetch_audit_logs',
+                nonce: presshubAI.nonce,
+                page: currentAuditPage,
+                per_page: 20,
+                event_type: eventType,
+                entity_type: entityType,
+                search: search
+            }
+        }).done(function(res) {
+            $spinner.removeClass('is-active');
+            if (res && res.success && res.data) {
+                var logsData = res.data.logs || {};
+                var items = logsData.items || [];
+
+                if (items.length === 0) {
+                    $tbody.html('<tr><td colspan="7" style="text-align:center; padding: 25px; color: #666;">' + presshubEsc(__('No configuration audit logs found matching the selected filters.', 'presshub-ai-editor')) + '</td></tr>');
+                } else {
+                    var rowsHtml = '';
+                    items.forEach(function(item) {
+                        var detailsText = '-';
+                        if (item.details) {
+                            try {
+                                var parsed = JSON.parse(item.details);
+                                if (typeof parsed === 'object' && parsed !== null) {
+                                    var parts = [];
+                                    for (var k in parsed) {
+                                        if (Object.prototype.hasOwnProperty.call(parsed, k)) {
+                                            var v = parsed[k];
+                                            if (typeof v === 'boolean') {
+                                                v = v ? 'true' : 'false';
+                                            } else if (typeof v === 'object' && v !== null) {
+                                                v = JSON.stringify(v);
+                                            }
+                                            parts.push('<strong>' + presshubEsc(k) + ':</strong> ' + presshubEsc(String(v)));
+                                        }
+                                    }
+                                    detailsText = parts.join(' &bull; ');
+                                } else {
+                                    detailsText = presshubEsc(String(parsed));
+                                }
+                            } catch (e) {
+                                detailsText = presshubEsc(item.details);
+                            }
+                        }
+
+                        var eventBadgeClass = 'presshub-badge';
+                        if (item.event_type && item.event_type.indexOf('deleted') !== -1) {
+                            eventBadgeClass = 'presshub-status-pill pill-inactive';
+                        } else if (item.event_type && item.event_type.indexOf('added') !== -1) {
+                            eventBadgeClass = 'presshub-status-pill pill-active';
+                        }
+
+                        rowsHtml += '<tr>' +
+                            '<td>' + presshubEsc(item.created_at || '') + '</td>' +
+                            '<td><strong>' + presshubEsc(item.user_login || 'system') + '</strong></td>' +
+                            '<td><span class="' + eventBadgeClass + '">' + presshubEsc(item.event_type || '') + '</span></td>' +
+                            '<td><code>' + presshubEsc(item.entity_type || '') + '</code></td>' +
+                            '<td>' + presshubEsc(item.entity_id || '-') + '</td>' +
+                            '<td style="font-size:12px;">' + detailsText + '</td>' +
+                            '<td><code style="font-size:11px;">' + presshubEsc(item.ip_address || '') + '</code></td>' +
+                            '</tr>';
+                    });
+                    $tbody.html(rowsHtml);
+                }
+
+                // Update Pagination Controls
+                var total = logsData.total || 0;
+                var pages = Math.max(1, logsData.pages || 1);
+                var pageNum = logsData.page || 1;
+                var perPage = logsData.per_page || 20;
+                var from = total > 0 ? ((pageNum - 1) * perPage) + 1 : 0;
+                var to = Math.min(total, pageNum * perPage);
+
+                $('#audit-pagination-info').text(sprintf(__('Showing %d - %d of %d entries', 'presshub-ai-editor'), from, to, total));
+                $('#audit-page-current').text(pageNum + ' / ' + pages);
+                $('#audit-page-prev').prop('disabled', pageNum <= 1);
+                $('#audit-page-next').prop('disabled', pageNum >= pages);
+            }
+        }).fail(function(xhr, status, error) {
+            $spinner.removeClass('is-active');
+            $tbody.html('<tr><td colspan="7" style="text-align:center; color:#d63638; padding:20px;">' + presshubEsc(__('Error fetching audit logs: ', 'presshub-ai-editor') + (error || status)) + '</td></tr>');
+        });
+    }
+
+    // Audit Filters & Pagination Events
+    $(document).on('change', '#audit-filter-event, #audit-filter-entity', function() {
+        loadAuditLogs(1);
+    });
+
+    $(document).on('click', '#audit-filter-refresh', function(e) {
+        e.preventDefault();
+        loadAuditLogs(1);
+    });
+
+    $(document).on('keyup', '#audit-filter-search', function(e) {
+        if (e.key === 'Enter') {
+            loadAuditLogs(1);
+        }
+    });
+
+    $(document).on('click', '#audit-page-prev', function(e) {
+        e.preventDefault();
+        if (currentAuditPage > 1) {
+            loadAuditLogs(currentAuditPage - 1);
+        }
+    });
+
+    $(document).on('click', '#audit-page-next', function(e) {
+        e.preventDefault();
+        loadAuditLogs(currentAuditPage + 1);
+    });
+
+    // Export Audit CSV Trigger
+    $(document).on('click', '#audit-export-csv', function(e) {
+        e.preventDefault();
+        var eventType  = $('#audit-filter-event').val() || '';
+        var entityType = $('#audit-filter-entity').val() || '';
+        var search     = $('#audit-filter-search').val() || '';
+
+        var params = $.param({
+            action: 'presshub_ai_export_audit_csv',
+            nonce: presshubAI.nonce,
+            event_type: eventType,
+            entity_type: entityType,
+            search: search
+        });
+
+        window.location.href = presshubAI.ajax_url + '?' + params;
+    });
+
+    // Clear Audit Logs Trigger
+    $(document).on('click', '#audit-clear-logs', function(e) {
+        e.preventDefault();
+        if (!confirm(__('Are you sure you want to delete ALL configuration and provider audit logs? This action cannot be undone.', 'presshub-ai-editor'))) {
+            return;
+        }
+
+        var $spinner = $('#audit-logs-spinner');
+        $spinner.addClass('is-active');
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_clear_audit_logs',
+                nonce: presshubAI.nonce
+            }
+        }).done(function(res) {
+            $spinner.removeClass('is-active');
+            if (res && res.success) {
+                loadAuditLogs(1);
+            } else {
+                var msg = (res && res.data && res.data.message) ? res.data.message : __('Failed to clear audit logs.', 'presshub-ai-editor');
+                showNotice(msg, 'error', $('#presshub-audit-dashboard'));
+            }
+        }).fail(function(xhr, status, error) {
+            $spinner.removeClass('is-active');
+            showNotice(__('Error clearing audit logs: ', 'presshub-ai-editor') + (error || status), 'error', $('#presshub-audit-dashboard'));
+        });
+    });
 
     // ------------------------------------------------------------------
     // Settings Page AJAX Save Handler.

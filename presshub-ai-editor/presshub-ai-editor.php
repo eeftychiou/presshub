@@ -75,6 +75,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 
 /**
  * Auto-update hardening: force the canonical plugin folder name during
@@ -108,11 +109,15 @@ add_filter(
  */
 function presshub_ai_activate() {
     PressHub_AI_Token_Logger::create_table();
+    PressHub_AI_Audit_Logger::create_table();
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
     }
     if ( ! wp_next_scheduled( 'presshub_ai_prune_token_logs' ) ) {
         wp_schedule_event( time(), 'daily', 'presshub_ai_prune_token_logs' );
+    }
+    if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
+        wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
     }
 }
 register_activation_hook( __FILE__, 'presshub_ai_activate' );
@@ -128,6 +133,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
     wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_token_logs' );
+    wp_clear_scheduled_hook( 'presshub_ai_prune_audit_logs' );
 }
 register_deactivation_hook( __FILE__, 'presshub_ai_deactivate' );
 
@@ -135,6 +141,13 @@ register_deactivation_hook( __FILE__, 'presshub_ai_deactivate' );
 add_action( 'presshub_ai_prune_token_logs', function() {
     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
         PressHub_AI_Token_Logger::prune_old_logs( 60 );
+    }
+} );
+
+// Prune audit logs cron action
+add_action( 'presshub_ai_prune_audit_logs', function() {
+    if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+        PressHub_AI_Audit_Logger::prune_logs( 90 );
     }
 } );
 
@@ -175,6 +188,15 @@ function presshub_ai_init() {
         }
         if ( ! wp_next_scheduled( 'presshub_ai_prune_token_logs' ) ) {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_token_logs' );
+        }
+    }
+
+    if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+        if ( get_option( PressHub_AI_Audit_Logger::DB_VERSION_OPTION ) !== PressHub_AI_Audit_Logger::DB_VERSION ) {
+            PressHub_AI_Audit_Logger::create_table();
+        }
+        if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
+            wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
         }
     }
 }

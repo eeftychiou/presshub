@@ -739,6 +739,17 @@ if ( ! function_exists( 'sanitize_key' ) ) {
     }
 }
 
+if ( ! function_exists( 'sanitize_user' ) ) {
+    function sanitize_user( $username, $strict = false ) {
+        $raw = (string) $username;
+        $clean = preg_replace( '/[\x00-\x1F\x7F]/', '', $raw );
+        if ( $strict ) {
+            $clean = preg_replace( '|[^a-z0-9 _.\-@]|i', '', $clean );
+        }
+        return trim( $clean );
+    }
+}
+
 if ( ! function_exists( 'wp_clear_scheduled_hook' ) ) {
     function wp_clear_scheduled_hook( $hook, $args = [] ) {
         $GLOBALS['CLEARED_HOOKS'][] = [ 'hook' => $hook, 'args' => $args ];
@@ -1091,6 +1102,12 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 if ( preg_match( "/provider = '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['provider'] ?? '' ) !== $m[1] ) return false;
                 }
+                if ( preg_match( "/event_type = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['event_type'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/entity_type = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['entity_type'] ?? '' ) !== $m[1] ) return false;
+                }
                 if ( preg_match( "/status = '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['status'] ?? '' ) !== $m[1] ) return false;
                 }
@@ -1104,6 +1121,17 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                     $term = stripslashes( $m[1] );
                     $matched = false;
                     foreach ( [ 'model', 'action_trigger', 'provider', 'error_message', 'metadata' ] as $col ) {
+                        if ( false !== stripos( (string) ( $row[ $col ] ?? '' ), $term ) ) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                    if ( ! $matched ) return false;
+                }
+                if ( preg_match( "/(?:event_type|entity_type|entity_id|user_login|details|ip_address) LIKE '%([^%]+)%'/", $where, $m ) ) {
+                    $term = stripslashes( $m[1] );
+                    $matched = false;
+                    foreach ( [ 'event_type', 'entity_type', 'entity_id', 'user_login', 'details', 'ip_address' ] as $col ) {
                         if ( false !== stripos( (string) ( $row[ $col ] ?? '' ), $term ) ) {
                             $matched = true;
                             break;

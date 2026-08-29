@@ -1077,5 +1077,27 @@ class PressHub_AI_Settings_Storage {
     public static function default_briefing_tts_style(): string {
         return 'formal';
     }
+
+    /**
+     * Record an audit log entry for saved configuration settings.
+     *
+     * @param array $updated_keys List of updated option keys.
+     * @param int   $count        Count of updated options.
+     * @return int|null Inserted audit log ID.
+     */
+    public static function log_settings_saved( array $updated_keys = [], int $count = 0 ): ?int {
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            return PressHub_AI_Audit_Logger::log(
+                'settings_saved',
+                'settings',
+                'presshub_ai_options',
+                [
+                    'options_count' => $count ?: count( $updated_keys ),
+                    'updated_keys'  => $updated_keys,
+                ]
+            );
+        }
+        return null;
+    }
 }
 

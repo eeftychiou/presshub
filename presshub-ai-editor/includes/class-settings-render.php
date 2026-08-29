@@ -839,9 +839,90 @@ class PressHub_AI_Settings_Render {
                     <button type="button" class="button button-secondary" id="token-page-next" disabled="disabled"><?php echo __( 'Next', 'presshub-ai-editor' ); ?> &raquo;</button>
                 </div>
             </div>
+
+            <?php $this->render_audit_trail_section(); ?>
         </div>
         <?php
         $this->render_log_details_modal();
+    }
+
+    /**
+     * Render the Configuration & Provider Audit Trail section.
+     */
+    public function render_audit_trail_section(): void {
+        ?>
+        <hr style="margin: 35px 0 25px; border: 0; border-top: 1px solid #ccd0d4;">
+
+        <div class="presshub-audit-dashboard" id="presshub-audit-dashboard">
+            <h2><?php echo __( 'Configuration & Provider Audit Trail', 'presshub-ai-editor' ); ?></h2>
+            <p><?php echo __( 'Track and audit mutations to AI providers, news sources, and settings with actor details, timestamps, and sanitized changes.', 'presshub-ai-editor' ); ?></p>
+
+            <div class="presshub-token-filters presshub-audit-filters" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 15px;">
+                <div class="filter-group">
+                    <label for="audit-filter-event"><?php echo __( 'Event Type:', 'presshub-ai-editor' ); ?></label>
+                    <select id="audit-filter-event">
+                        <option value=""><?php echo __( 'All Events', 'presshub-ai-editor' ); ?></option>
+                        <option value="settings_saved"><?php echo __( 'Settings Saved', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider_added"><?php echo __( 'Provider Added', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider_updated"><?php echo __( 'Provider Updated', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider_deleted"><?php echo __( 'Provider Deleted', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider_toggled"><?php echo __( 'Provider Toggled', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source_added"><?php echo __( 'News Source Added', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source_updated"><?php echo __( 'News Source Updated', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source_deleted"><?php echo __( 'News Source Deleted', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source_toggled"><?php echo __( 'News Source Toggled', 'presshub-ai-editor' ); ?></option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="audit-filter-entity"><?php echo __( 'Entity Type:', 'presshub-ai-editor' ); ?></label>
+                    <select id="audit-filter-entity">
+                        <option value=""><?php echo __( 'All Entities', 'presshub-ai-editor' ); ?></option>
+                        <option value="provider"><?php echo __( 'AI Provider', 'presshub-ai-editor' ); ?></option>
+                        <option value="settings"><?php echo __( 'Settings', 'presshub-ai-editor' ); ?></option>
+                        <option value="news_source"><?php echo __( 'News Source', 'presshub-ai-editor' ); ?></option>
+                    </select>
+                </div>
+                <div class="filter-group filter-search" style="flex: 1; min-width: 200px;">
+                    <label for="audit-filter-search"><?php echo __( 'Search:', 'presshub-ai-editor' ); ?></label>
+                    <input type="text" id="audit-filter-search" placeholder="<?php echo esc_attr__( 'Search actor, entity, details...', 'presshub-ai-editor' ); ?>" />
+                </div>
+                <div class="filter-actions" style="display: flex; gap: 6px; align-items: flex-end;">
+                    <button type="button" class="button button-secondary" id="audit-filter-refresh"><?php echo __( 'Filter', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary" id="audit-export-csv"><?php echo __( 'Export CSV', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-link-delete" id="audit-clear-logs"><?php echo __( 'Clear Audit Logs', 'presshub-ai-editor' ); ?></button>
+                    <span class="spinner" id="audit-logs-spinner" role="status"></span>
+                </div>
+            </div>
+
+            <div class="presshub-table-responsive" style="margin-top: 15px;">
+                <table class="wp-list-table widefat fixed striped presshub-audit-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 140px;"><?php echo __( 'Date / Time', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 120px;"><?php echo __( 'Actor', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 150px;"><?php echo __( 'Event Type', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 110px;"><?php echo __( 'Entity Type', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 140px;"><?php echo __( 'Entity ID', 'presshub-ai-editor' ); ?></th>
+                            <th><?php echo __( 'Changes & Details Summary', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 110px;"><?php echo __( 'IP Address', 'presshub-ai-editor' ); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody id="presshub-audit-logs-tbody">
+                        <tr><td colspan="7" style="text-align: center; padding: 20px;"><?php echo __( 'Loading configuration audit logs...', 'presshub-ai-editor' ); ?></td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="presshub-pagination-wrap" id="presshub-audit-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+                <span class="pagination-info" id="audit-pagination-info"><?php echo __( 'Showing 0 items', 'presshub-ai-editor' ); ?></span>
+                <div class="pagination-buttons" style="display: flex; gap: 8px;">
+                    <button type="button" class="button button-secondary" id="audit-page-prev" disabled="disabled">&laquo; <?php echo __( 'Previous', 'presshub-ai-editor' ); ?></button>
+                    <span id="audit-page-current" style="display: flex; align-items: center; font-weight: 600;">1 / 1</span>
+                    <button type="button" class="button button-secondary" id="audit-page-next" disabled="disabled"><?php echo __( 'Next', 'presshub-ai-editor' ); ?> &raquo;</button>
+                </div>
+            </div>
+        </div>
+        <?php
     }
 
     /**
