@@ -192,20 +192,24 @@ php -l presshub-ai-editor/includes/<modified-file>.php
 
 ---
 
-## 👁️ Visual Inspection & Screenshot Verification
+## 👁️ Visual Inspection, Browser Tool & Screenshot Verification
 
 As part of the QA pipeline, agents **must** perform a visual inspection of all frontend or admin UI changes in the local testing environment:
 
-1. **Start Local Dev Server**: Ensure the local development server is running (`php dev-env/scripts/server.php`).
-2. **Navigate to Interface**: Open and inspect the modified interface in an automated or browser context (e.g. `http://127.0.0.1:8888/wp-admin/admin.php?page=presshub-ai`).
-3. **Verify Visual States**:
+1. **Start Local Dev Server**:
+   - Ensure the local development server is running (`php dev-env/scripts/server.php`).
+2. **Utilize Browser Automation Tools**:
+   - Agents can use the **`browser-automation` MCP tools** (`navigate`, `get_content`, `click_element`, `fill_element`) or headless browser runners to automate browser workflows.
+   - **Automated Login**: Navigate to `http://127.0.0.1:8888/wp-login.php`, fill `#user_login` with `admin`, `#user_pass` with `password123`, and submit.
+   - **Navigate to Interface**: Directly load the modified view (e.g. `http://127.0.0.1:8888/wp-admin/admin.php?page=presshub-ai` or `http://127.0.0.1:8888/wp-admin/post-new.php`).
+3. **Verify Visual & Interactive States**:
    - Verify layout alignment, typography, and component rendering.
-   - Test UI state variations: **Empty states**, **Loading/Spinner states**, **Active states**, **Error/Validation alerts**, and **Modal dialogs**.
-   - Check responsive layouts across standard desktop and mobile viewports.
-4. **Record Screenshots**:
+   - Test interactive UI state variations: **Empty states**, **Loading/Spinner states**, **Active states**, **Error/Validation alerts**, and **Modal dialogs**.
+   - Check responsive layouts across standard desktop (1280x800) and mobile viewports.
+4. **Record Screenshots & Visual Artifacts**:
    - Capture screenshots of the "before" and "after" states (or the final state of the feature/fix).
 5. **Attach Evidence**:
-   - Attach or reference these screenshots in the Pull Request description or walkthrough artifact to provide visual proof that the fix renders correctly.
+   - Attach or reference these screenshots in the Pull Request description or walkthrough artifact to provide undeniable visual proof that the fix renders correctly.
 
 ---
 
