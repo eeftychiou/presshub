@@ -1548,4 +1548,296 @@ class PressHub_AI_API_Client {
         error_log( 'PressHub AI [gemini] API error: Invalid response from Gemini.' );
         return new WP_Error( 'api_error', __( 'Invalid response from Gemini.', 'presshub-ai-editor' ) );
     }
+    /**
+     * Dynamically fetch available models from a provider's models API endpoint.
+     *
+     * Supports OpenAI, Anthropic, Gemini, Groq, Mistral, DeepSeek, Ollama,
+     * and Custom OpenAI-compatible endpoints.
+     *
+     * @param array|string|null $provider_config Optional provider configuration array or ID.
+     * @return array|WP_Error List of model string identifiers or WP_Error on failure.
+     */
+    public function fetch_remote_models( $provider_config = null ) {
+        if ( is_array( $provider_config ) ) {
+            $this->set_provider_config( $provider_config );
+        } elseif ( is_string( $provider_config ) && '' !== trim( $provider_config ) ) {
+            $store_prov = PressHub_AI_Provider_Store::get( trim( $provider_config ) );
+            if ( $store_prov ) {
+                $this->set_provider_config( $store_prov );
+            } else {
+                $tmpl = PressHub_AI_Provider_Defaults::get_template( trim( $provider_config ) );
+                if ( $tmpl ) {
+                    $this->set_provider_config( $tmpl );
+                }
+            }
+        }
+
+        $type     = ! empty( $this->provider ) ? $this->provider : 'openai';
+        $api_key  = $this->api_key;
+        $base_url = trim( (string) $this->base_url );
+
+        // If API key is empty or masked, try looking up saved provider by ID
+        if ( ( empty( $api_key ) || false !== strpos( $api_key, '•' ) ) && ! empty( $this->provider_id ) ) {
+            if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+                $saved = PressHub_AI_Provider_Store::get( (string) $this->provider_id );
+                if ( ! empty( $saved['api_key'] ) ) {
+                    $api_key = $saved['api_key'];
+                    $this->api_key = $api_key;
+                }
+            }
+        }
+
+        // Fallback to global options if still empty
+        if ( empty( $api_key ) || false !== strpos( $api_key, '•' ) ) {
+            if ( 'gemini' === $type ) {
+                $api_key = (string) get_option( 'presshub_ai_gemini_api_key', get_option( 'presshub_ai_api_key', '' ) );
+            } else {
+                $api_key = (string) get_option( 'presshub_ai_api_key', '' );
+            }
+        }
+
+        if ( empty( $api_key ) && 'ollama_local' !== $type ) {
+            return new WP_Error( 'no_api_key', __( 'API key is required to discover available models.', 'presshub-ai-editor' ) );
+        }
+
+        $models = [];
+
+        if ( 'anthropic' === $type ) {
+            $version = (string) get_option( 'presshub_ai_anthropic_version', '2023-06-01' );
+            $headers = [
+                'x-api-key'         => $api_key,
+                'anthropic-version' => $version,
+                'Content-Type'      => 'application/json',
+            ];
+            if ( ! empty( $this->headers ) && is_array( $this->headers ) ) {
+                $headers = array_merge( $headers, $this->headers );
+            }
+
+            $endpoint = ! empty( $base_url ) ? rtrim( $base_url, '/' ) . '/models' : 'https://api.anthropic.com/v1/models';
+            $response = wp_remote_get( $endpoint, [
+                'headers' => $headers,
+                'timeout' => 30,
+            ] );
+
+            if ( is_wp_error( $response ) ) {
+                return $response;
+            }
+
+            $code     = wp_remote_retrieve_response_code( $response );
+            $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+            if ( $code < 200 || $code >= 300 || ! is_array( $res_body ) ) {
+                $msg = $res_body['error']['message'] ?? sprintf( __( 'Anthropic API returned HTTP %d', 'presshub-ai-editor' ), $code );
+                return new WP_Error( 'api_error', $msg );
+            }
+
+            if ( isset( $res_body['data'] ) && is_array( $res_body['data'] ) ) {
+                foreach ( $res_body['data'] as $item ) {
+                    if ( isset( $item['id'] ) && is_string( $item['id'] ) ) {
+                        $models[] = trim( $item['id'] );
+                    }
+                }
+            }
+        } elseif ( 'gemini' === $type ) {
+            $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . urlencode( $api_key );
+            if ( ! empty( $base_url ) ) {
+                $base = preg_replace( '#/models/?$#i', '', rtrim( $base_url, '/' ) );
+                $endpoint = $base . '/models?key=' . urlencode( $api_key );
+            }
+
+            $referer  = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';
+            $headers  = [
+                'x-goog-api-key' => $api_key,
+                'Content-Type'   => 'application/json',
+                'Referer'        => $referer,
+            ];
+            if ( ! empty( $this->headers ) && is_array( $this->headers ) ) {
+                $headers = array_merge( $headers, $this->headers );
+            }
+
+            $response = wp_remote_get( $endpoint, [
+                'headers' => $headers,
+                'timeout' => 30,
+            ] );
+
+            if ( is_wp_error( $response ) ) {
+                return $response;
+            }
+
+            $code     = wp_remote_retrieve_response_code( $response );
+            $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+            if ( $code < 200 || $code >= 300 || ! is_array( $res_body ) ) {
+                $msg = $res_body['error']['message'] ?? sprintf( __( 'Google Gemini API returned HTTP %d', 'presshub-ai-editor' ), $code );
+                return new WP_Error( 'api_error', $msg );
+            }
+
+            if ( isset( $res_body['models'] ) && is_array( $res_body['models'] ) ) {
+                foreach ( $res_body['models'] as $item ) {
+                    $raw_name = $item['name'] ?? ( $item['id'] ?? '' );
+                    if ( is_string( $raw_name ) && '' !== trim( $raw_name ) ) {
+                        $m = preg_replace( '#^models/#', '', trim( $raw_name ) );
+                        if ( '' !== $m ) {
+                            $models[] = $m;
+                        }
+                    }
+                }
+            }
+        } elseif ( 'ollama_local' === $type ) {
+            $base = ! empty( $base_url ) ? rtrim( $base_url, '/' ) : 'http://localhost:11434/v1';
+            $base_clean = preg_replace( '#/chat/completions/?$#i', '', $base );
+            $v1_endpoint = preg_match( '#/models/?$#i', $base_clean ) ? $base_clean : $base_clean . '/models';
+
+            $headers = [ 'Content-Type' => 'application/json' ];
+            if ( ! empty( $api_key ) ) {
+                $headers['Authorization'] = 'Bearer ' . $api_key;
+            }
+            if ( ! empty( $this->headers ) && is_array( $this->headers ) ) {
+                $headers = array_merge( $headers, $this->headers );
+            }
+
+            // 1. Try OpenAI-compatible /v1/models endpoint
+            $response = wp_remote_get( $v1_endpoint, [
+                'headers' => $headers,
+                'timeout' => 15,
+            ] );
+
+            $success = false;
+            if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
+                $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+                if ( isset( $res_body['data'] ) && is_array( $res_body['data'] ) ) {
+                    foreach ( $res_body['data'] as $item ) {
+                        if ( isset( $item['id'] ) && is_string( $item['id'] ) ) {
+                            $models[] = trim( $item['id'] );
+                            $success = true;
+                        }
+                    }
+                }
+            }
+
+            // 2. Fallback to native Ollama /api/tags endpoint
+            if ( ! $success ) {
+                $root_url = preg_replace( '#/v1.*$#i', '', $base_clean );
+                $tags_endpoint = rtrim( $root_url, '/' ) . '/api/tags';
+
+                $tags_res = wp_remote_get( $tags_endpoint, [
+                    'headers' => $headers,
+                    'timeout' => 15,
+                ] );
+
+                if ( ! is_wp_error( $tags_res ) && 200 === wp_remote_retrieve_response_code( $tags_res ) ) {
+                    $tags_body = json_decode( wp_remote_retrieve_body( $tags_res ), true );
+                    if ( isset( $tags_body['models'] ) && is_array( $tags_body['models'] ) ) {
+                        foreach ( $tags_body['models'] as $item ) {
+                            $m_name = $item['name'] ?? ( $item['model'] ?? '' );
+                            if ( is_string( $m_name ) && '' !== trim( $m_name ) ) {
+                                $models[] = trim( $m_name );
+                            }
+                        }
+                    }
+                } elseif ( is_wp_error( $tags_res ) && empty( $models ) ) {
+                    return $tags_res;
+                }
+            }
+        } else {
+            // OpenAI, Groq, Mistral, DeepSeek, Custom OpenAI
+            if ( empty( $base_url ) ) {
+                if ( 'openai' === $type ) {
+                    $base_url = 'https://api.openai.com/v1';
+                } elseif ( 'groq' === $type ) {
+                    $base_url = 'https://api.groq.com/openai/v1';
+                } elseif ( 'mistral' === $type ) {
+                    $base_url = 'https://api.mistral.ai/v1';
+                } elseif ( 'deepseek' === $type ) {
+                    $base_url = 'https://api.deepseek.com';
+                } else {
+                    return new WP_Error( 'invalid_base_url', __( 'Custom endpoint base URL is missing.', 'presshub-ai-editor' ) );
+                }
+            }
+
+            $base_clean = preg_replace( '#/chat/completions/?$#i', '', rtrim( $base_url, '/' ) );
+            $endpoint = preg_match( '#/models/?$#i', $base_clean ) ? $base_clean : $base_clean . '/models';
+
+            $headers = [
+                'Content-Type' => 'application/json',
+            ];
+            if ( ! empty( $api_key ) ) {
+                $headers['Authorization'] = 'Bearer ' . $api_key;
+            }
+            if ( 'openai' === $type ) {
+                $org = (string) get_option( 'presshub_ai_openai_org', '' );
+                if ( '' !== $org ) {
+                    $headers['OpenAI-Organization'] = $org;
+                }
+            }
+            if ( ! empty( $this->headers ) && is_array( $this->headers ) ) {
+                $headers = array_merge( $headers, $this->headers );
+            }
+
+            $response = wp_remote_get( $endpoint, [
+                'headers' => $headers,
+                'timeout' => 30,
+            ] );
+
+            if ( is_wp_error( $response ) ) {
+                return $response;
+            }
+
+            $code     = wp_remote_retrieve_response_code( $response );
+            $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+            if ( $code < 200 || $code >= 300 || ! is_array( $res_body ) ) {
+                $msg = $res_body['error']['message'] ?? sprintf( __( 'API returned HTTP %d for models discovery', 'presshub-ai-editor' ), $code );
+                return new WP_Error( 'api_error', $msg );
+            }
+
+            if ( isset( $res_body['data'] ) && is_array( $res_body['data'] ) ) {
+                foreach ( $res_body['data'] as $item ) {
+                    if ( is_string( $item ) ) {
+                        $models[] = trim( $item );
+                    } elseif ( isset( $item['id'] ) && is_string( $item['id'] ) ) {
+                        $models[] = trim( $item['id'] );
+                    } elseif ( isset( $item['name'] ) && is_string( $item['name'] ) ) {
+                        $models[] = trim( $item['name'] );
+                    }
+                }
+            } elseif ( isset( $res_body['models'] ) && is_array( $res_body['models'] ) ) {
+                foreach ( $res_body['models'] as $item ) {
+                    if ( is_string( $item ) ) {
+                        $models[] = trim( $item );
+                    } elseif ( isset( $item['id'] ) && is_string( $item['id'] ) ) {
+                        $models[] = trim( $item['id'] );
+                    } elseif ( isset( $item['name'] ) && is_string( $item['name'] ) ) {
+                        $models[] = trim( $item['name'] );
+                    }
+                }
+            } elseif ( isset( $res_body[0] ) ) {
+                foreach ( $res_body as $item ) {
+                    if ( is_string( $item ) ) {
+                        $models[] = trim( $item );
+                    } elseif ( isset( $item['id'] ) && is_string( $item['id'] ) ) {
+                        $models[] = trim( $item['id'] );
+                    } elseif ( isset( $item['name'] ) && is_string( $item['name'] ) ) {
+                        $models[] = trim( $item['name'] );
+                    }
+                }
+            }
+        }
+
+        // Clean, deduplicate and sort discovered models
+        $clean_models = [];
+        foreach ( $models as $m ) {
+            $m_clean = preg_replace( '#^models/#', '', trim( (string) $m ) );
+            if ( '' !== $m_clean && ! in_array( $m_clean, $clean_models, true ) ) {
+                $clean_models[] = $m_clean;
+            }
+        }
+
+        if ( empty( $clean_models ) ) {
+            return new WP_Error( 'no_models_found', __( 'No models found in the provider API response.', 'presshub-ai-editor' ) );
+        }
+
+        natcasesort( $clean_models );
+        return array_values( $clean_models );
+    }
 }

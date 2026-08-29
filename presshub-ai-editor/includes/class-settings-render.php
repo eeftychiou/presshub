@@ -617,15 +617,29 @@ class PressHub_AI_Settings_Render {
                             <p class="description"><?php echo __( 'Stored securely with autoload disabled. Leave blank when editing to keep current secret.', 'presshub-ai-editor' ); ?></p>
                         </div>
 
-                        <div class="presshub-form-row" style="display: flex; gap: 15px; margin-bottom: 15px;">
-                            <div class="presshub-form-group" style="flex: 1;">
-                                <label for="provider-form-default-model"><strong><?php echo __( 'Default Model:', 'presshub-ai-editor' ); ?></strong></label>
-                                <input type="text" id="provider-form-default-model" name="default_model" class="widefat code" placeholder="e.g. gpt-4o" style="margin-top: 4px;" />
+                        <div class="presshub-form-group" style="margin-bottom: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <label for="provider-form-default-model"><strong><?php echo __( 'Model:', 'presshub-ai-editor' ); ?></strong></label>
+                                <label style="font-weight: normal; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" id="provider-form-toggle-manual" />
+                                    <?php echo __( 'Enter model manually', 'presshub-ai-editor' ); ?>
+                                </label>
                             </div>
-                            <div class="presshub-form-group" style="flex: 1;">
-                                <label for="provider-form-available-models"><strong><?php echo __( 'Available Models (comma-separated):', 'presshub-ai-editor' ); ?></strong></label>
-                                <input type="text" id="provider-form-available-models" name="available_models" class="widefat code" placeholder="gpt-4o, gpt-4o-mini, o1" style="margin-top: 4px;" />
+                            <div id="provider-model-select-wrap">
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <select id="provider-form-default-model" name="default_model" class="widefat code" style="flex: 1; margin: 0;"></select>
+                                    <button type="button" class="button button-secondary" id="provider-form-fetch-models" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
+                                        <span class="dashicons dashicons-update" style="font-size: 14px; width: 14px; height: 14px; margin-top: 1px;"></span>
+                                        <?php echo __( 'Fetch Models', 'presshub-ai-editor' ); ?>
+                                    </button>
+                                    <span class="spinner" id="provider-form-fetch-spinner" style="float: none; margin: 0;" role="status"></span>
+                                </div>
                             </div>
+                            <div id="provider-model-manual-wrap" style="display: none;">
+                                <input type="text" id="provider-form-manual-model" class="widefat code" placeholder="<?php echo esc_attr__( 'e.g. gpt-4o, claude-3-5-sonnet-20241022, fine-tune-xyz', 'presshub-ai-editor' ); ?>" style="margin-top: 0;" />
+                            </div>
+                            <input type="hidden" id="provider-form-available-models" name="available_models" value="" />
+                            <p class="description"><?php echo __( 'Select the active model for this provider or fetch latest models directly via the provider API.', 'presshub-ai-editor' ); ?></p>
                         </div>
 
                         <div class="presshub-form-row" style="display: flex; gap: 15px; margin-bottom: 15px;">
