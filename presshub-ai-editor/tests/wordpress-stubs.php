@@ -548,9 +548,21 @@ if ( ! function_exists( 'esc_html__' ) ) {
     }
 }
 
+if ( ! function_exists( 'esc_html_e' ) ) {
+    function esc_html_e( $text, $domain = null ) {
+        echo htmlspecialchars( (string) __( $text, $domain ), ENT_QUOTES, 'UTF-8' );
+    }
+}
+
 if ( ! function_exists( 'esc_attr__' ) ) {
     function esc_attr__( $text, $domain = null ) {
         return htmlspecialchars( (string) __( $text, $domain ), ENT_QUOTES, 'UTF-8' );
+    }
+}
+
+if ( ! function_exists( 'esc_attr_e' ) ) {
+    function esc_attr_e( $text, $domain = null ) {
+        echo htmlspecialchars( (string) __( $text, $domain ), ENT_QUOTES, 'UTF-8' );
     }
 }
 

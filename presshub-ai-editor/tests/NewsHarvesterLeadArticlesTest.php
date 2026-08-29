@@ -253,9 +253,53 @@ lead_check( 'discover_source_articles: article_urls capped at 4', count( $discov
 lead_check( 'discover_source_articles: first link is lead story', false !== strpos( $discovery['article_urls'][0], 'synantisi-mitsotaki' ) );
 lead_check( 'discover_source_articles: fourth link is epikairothta', false !== strpos( $discovery['article_urls'][3], 'fotia-stin-voreia-eyvoia' ) );
 
+
+// =========================================================================
+// 7. Per-Source Article Quota Link Slicing (Issue #31)
+// =========================================================================
+
+$html_10_sample = '<!DOCTYPE html><html><body><main>
+<h1><a href="/politiki/101-title-one/">Title 1</a></h1>
+<h2><a href="/politiki/102-title-two/">Title 2</a></h2>
+<h3><a href="/politiki/103-title-three/">Title 3</a></h3>
+<h4><a href="/politiki/104-title-four/">Title 4</a></h4>
+<h5><a href="/politiki/105-title-five/">Title 5</a></h5>
+<h6><a href="/politiki/106-title-six/">Title 6</a></h6>
+<div><a href="/politiki/107-title-seven/">Title 7</a></div>
+<div><a href="/politiki/108-title-eight/">Title 8</a></div>
+<div><a href="/politiki/109-title-nine/">Title 9</a></div>
+<div><a href="/politiki/110-title-ten/">Title 10</a></div>
+</main></body></html>';
+
+$GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $html_10_sample ) {
+    return [
+        'response' => [ 'code' => 200 ],
+        'body'     => $html_10_sample,
+    ];
+};
+
+// Test source with max_articles = 8
+$discovery_8 = $harvester->discover_source_articles( [
+    'url'          => 'https://www.kathimerini.gr',
+    'max_articles' => 8,
+] );
+lead_check( 'discover_source_articles: max_articles = 8 yields 8 links', count( $discovery_8['article_urls'] ) === 8 );
+lead_check( 'discover_source_articles: 8th link is title-eight', isset( $discovery_8['article_urls'][7] ) && false !== strpos( $discovery_8['article_urls'][7], 'title-eight' ) );
+
+// Test source with max_articles = 2
+$discovery_2 = $harvester->discover_source_articles( [
+    'url'          => 'https://www.kathimerini.gr',
+    'max_articles' => 2,
+] );
+lead_check( 'discover_source_articles: max_articles = 2 yields 2 links', count( $discovery_2['article_urls'] ) === 2 );
+
+// Test explicit limit parameter
+$discovery_explicit_6 = $harvester->discover_source_articles( 'https://www.kathimerini.gr', 6 );
+lead_check( 'discover_source_articles: explicit limit = 6 yields 6 links', count( $discovery_explicit_6['article_urls'] ) === 6 );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "NewsHarvesterLeadArticlesTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
 
-echo "NewsHarvesterLeadArticlesTest: OK (60+ checks)\n";
+echo "NewsHarvesterLeadArticlesTest: OK (70+ checks)\n";

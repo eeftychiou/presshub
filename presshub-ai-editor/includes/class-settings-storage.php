@@ -661,13 +661,14 @@ class PressHub_AI_Settings_Storage {
                     $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
 
                     $clean_sources[] = [
-                        'id'       => 'src_' . substr( md5( $norm_url ), 0, 8 ),
-                        'name'     => $host_name ?: $url,
-                        'url'      => esc_url_raw( $url ),
-                        'type'     => 'text_news',
-                        'enabled'  => true,
-                        'category' => 'General',
-                        'notes'    => '',
+                        'id'           => 'src_' . substr( md5( $norm_url ), 0, 8 ),
+                        'name'         => $host_name ?: $url,
+                        'url'          => esc_url_raw( $url ),
+                        'type'         => 'text_news',
+                        'enabled'      => true,
+                        'category'     => 'General',
+                        'notes'        => '',
+                        'max_articles' => 5,
                     ];
                 } elseif ( is_array( $item ) ) {
                     // Structured source object
@@ -712,14 +713,17 @@ class PressHub_AI_Settings_Storage {
 
                     $notes = sanitize_textarea_field( (string) ( $item['notes'] ?? '' ) );
 
+                    $max_articles = isset( $item['max_articles'] ) ? max( 1, min( 30, (int) $item['max_articles'] ) ) : 5;
+
                     $clean_sources[] = [
-                        'id'       => $id,
-                        'name'     => $name,
-                        'url'      => $url,
-                        'type'     => $type,
-                        'enabled'  => $enabled,
-                        'category' => $category,
-                        'notes'    => $notes,
+                        'id'           => $id,
+                        'name'         => $name,
+                        'url'          => $url,
+                        'type'         => $type,
+                        'enabled'      => $enabled,
+                        'category'     => $category,
+                        'notes'        => $notes,
+                        'max_articles' => $max_articles,
                     ];
                 }
             }
@@ -741,13 +745,14 @@ class PressHub_AI_Settings_Storage {
                 $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
 
                 $clean_sources[] = [
-                    'id'       => 'src_' . substr( md5( $norm_url ), 0, 8 ),
-                    'name'     => $host_name ?: $line,
-                    'url'      => esc_url_raw( $line ),
-                    'type'     => 'text_news',
-                    'enabled'  => true,
-                    'category' => 'General',
-                    'notes'    => '',
+                    'id'           => 'src_' . substr( md5( $norm_url ), 0, 8 ),
+                    'name'         => $host_name ?: $line,
+                    'url'          => esc_url_raw( $line ),
+                    'type'         => 'text_news',
+                    'enabled'      => true,
+                    'category'     => 'General',
+                    'notes'        => '',
+                    'max_articles' => 5,
                 ];
             }
         }
