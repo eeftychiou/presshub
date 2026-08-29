@@ -152,6 +152,11 @@ class PressHub_AI_Settings_Render {
                             </tr>
                         </tbody>
                     </table>
+
+                    <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
+                        <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="coauthor"><?php echo esc_html__( 'Save AI Co-Author Settings', 'presshub-ai-editor' ); ?></button>
+                        <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                    </div>
                 </div>
 
                 <!-- TAB 3: Daily Briefing Hub -->
@@ -329,6 +334,11 @@ class PressHub_AI_Settings_Render {
                             </tr>
                         </tbody>
                     </table>
+
+                    <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
+                        <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="briefing"><?php echo esc_html__( 'Save Daily Briefing Settings', 'presshub-ai-editor' ); ?></button>
+                        <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                    </div>
                 </div>
 
                 <!-- TAB 4: AI Copilot & Assistant -->
@@ -382,6 +392,11 @@ class PressHub_AI_Settings_Render {
                             </tr>
                         </tbody>
                     </table>
+
+                    <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
+                        <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="copilot"><?php echo esc_html__( 'Save AI Copilot Settings', 'presshub-ai-editor' ); ?></button>
+                        <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                    </div>
                 </div>
 
                 <!-- TAB 5: Token & Usage Analytics Logs -->
@@ -421,6 +436,11 @@ class PressHub_AI_Settings_Render {
                         <span id="presshub-ai-log-status" style="margin-left: 10px; color: #666;"></span>
                     </div>
                     <textarea id="presshub-ai-log-viewer" rows="14" class="large-text code" readonly="readonly" style="font-size: 12px; background: #1e1e1e; color: #d4d4d4; font-family: monospace;" placeholder="<?php echo esc_attr__( 'Click "Refresh Logs" to load diagnostic entries...', 'presshub-ai-editor' ); ?>"></textarea>
+
+                    <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
+                        <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="advanced"><?php echo esc_html__( 'Save Advanced Settings', 'presshub-ai-editor' ); ?></button>
+                        <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                    </div>
                 </div>
 
                 <div class="presshub-settings-submit-wrap" id="presshub-settings-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">

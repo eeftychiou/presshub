@@ -1079,19 +1079,154 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Get the map of options and their respective sanitization callbacks for a specific settings section/tab.
+     *
+     * @param string $section Section/tab identifier ('coauthor', 'briefing', 'copilot', 'advanced', 'general', 'providers', or 'all'/empty).
+     * @return array<string, callable> Map of option_name => sanitization callback.
+     */
+    public static function get_section_options_map( string $section = '' ): array {
+        $section = strtolower( trim( $section ) );
+        $section = str_replace( 'presshub_ai_', '', $section );
+
+        $coauthor_map = [
+            'presshub_ai_coauthor_provider'    => [ __CLASS__, 'sanitize_provider_id' ],
+            'presshub_ai_coauthor_model'       => [ __CLASS__, 'sanitize_model_string' ],
+            'presshub_ai_coauthor_temperature' => [ __CLASS__, 'sanitize_temperature' ],
+            'presshub_ai_coauthor_max_tokens'  => [ __CLASS__, 'sanitize_max_tokens' ],
+            'presshub_ai_coauthor_timeout'     => [ __CLASS__, 'sanitize_timeout' ],
+            'presshub_ai_fetch_urls'           => [ __CLASS__, 'sanitize_fetch_urls' ],
+            'presshub_ai_debug_prompts'        => [ __CLASS__, 'sanitize_boolean' ],
+        ];
+
+        $briefing_map = [
+            'presshub_ai_briefing_text_provider'        => [ __CLASS__, 'sanitize_provider_id' ],
+            'presshub_ai_briefing_text_model'           => [ __CLASS__, 'sanitize_model_string' ],
+            'presshub_ai_briefing_sources'              => [ __CLASS__, 'sanitize_briefing_sources' ],
+            'presshub_ai_briefing_harvest_time'         => [ __CLASS__, 'sanitize_harvest_time' ],
+            'presshub_ai_briefing_generation_time'      => [ __CLASS__, 'sanitize_generation_time' ],
+            'presshub_ai_briefing_text_category'        => [ __CLASS__, 'sanitize_category_id' ],
+            'presshub_ai_briefing_text_status'          => [ __CLASS__, 'sanitize_briefing_status' ],
+            'presshub_ai_briefing_text_preset'          => [ __CLASS__, 'sanitize_preset_slug' ],
+            'presshub_ai_briefing_text_prompt'          => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'presshub_ai_briefing_text_temperature'     => [ __CLASS__, 'sanitize_temperature' ],
+            'presshub_ai_briefing_text_max_tokens'      => [ __CLASS__, 'sanitize_max_tokens' ],
+            'presshub_ai_briefing_text_timeout'         => [ __CLASS__, 'sanitize_timeout' ],
+            'presshub_ai_briefing_podcast_provider'     => [ __CLASS__, 'sanitize_provider_id' ],
+            'presshub_ai_briefing_podcast_tts_provider' => [ __CLASS__, 'sanitize_provider_id' ],
+            'presshub_ai_briefing_podcast_model'        => [ __CLASS__, 'sanitize_model_string' ],
+            'presshub_ai_briefing_target_duration'      => [ __CLASS__, 'sanitize_briefing_duration' ],
+            'presshub_ai_briefing_host_female'          => [ __CLASS__, 'sanitize_briefing_host_female' ],
+            'presshub_ai_briefing_host_male'            => [ __CLASS__, 'sanitize_briefing_host_male' ],
+            'presshub_ai_briefing_tts_style'            => [ __CLASS__, 'sanitize_briefing_tts_style' ],
+            'presshub_ai_briefing_tts_custom_style'     => [ __CLASS__, 'sanitize_briefing_tts_custom_style' ],
+            'presshub_ai_briefing_voice_female'         => [ __CLASS__, 'sanitize_voice_female' ],
+            'presshub_ai_briefing_voice_male'           => [ __CLASS__, 'sanitize_voice_male' ],
+            'presshub_ai_briefing_voice_speed'          => [ __CLASS__, 'sanitize_voice_speed' ],
+            'presshub_ai_briefing_voice_pitch'          => [ __CLASS__, 'sanitize_voice_pitch' ],
+            'presshub_ai_briefing_podcast_category'     => [ __CLASS__, 'sanitize_category_id' ],
+            'presshub_ai_briefing_podcast_status'       => [ __CLASS__, 'sanitize_briefing_status' ],
+            'presshub_ai_briefing_podcast_preset'       => [ __CLASS__, 'sanitize_preset_slug' ],
+            'presshub_ai_briefing_podcast_prompt'       => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'presshub_ai_briefing_podcast_temperature'  => [ __CLASS__, 'sanitize_temperature' ],
+            'presshub_ai_briefing_podcast_max_tokens'   => [ __CLASS__, 'sanitize_max_tokens' ],
+            'presshub_ai_briefing_podcast_timeout'      => [ __CLASS__, 'sanitize_timeout' ],
+            'presshub_ai_briefing_tts_engine'           => [ __CLASS__, 'sanitize_briefing_tts_engine' ],
+            'presshub_ai_briefing_tts_api_key'          => [ __CLASS__, 'sanitize_briefing_tts_api_key' ],
+            'presshub_ai_remove_briefing_tts_api_key'   => [ __CLASS__, 'sanitize_remove_briefing_tts_api_key' ],
+            'presshub_ai_briefing_tts_model'            => [ __CLASS__, 'sanitize_briefing_tts_model' ],
+        ];
+
+        $copilot_map = [
+            'presshub_ai_copilot_provider'    => [ __CLASS__, 'sanitize_provider_id' ],
+            'presshub_ai_copilot_model'       => [ __CLASS__, 'sanitize_model_string' ],
+            'presshub_ai_copilot_temperature' => [ __CLASS__, 'sanitize_temperature' ],
+            'presshub_ai_copilot_max_tokens'  => [ __CLASS__, 'sanitize_max_tokens' ],
+            'presshub_ai_copilot_timeout'     => [ __CLASS__, 'sanitize_timeout' ],
+        ];
+
+        $advanced_map = [
+            'presshub_ai_github_token'                => [ __CLASS__, 'sanitize_github_token' ],
+            'presshub_ai_remove_github_token'         => [ __CLASS__, 'sanitize_remove_github_token' ],
+            'presshub_ai_google_cloud_api_key'        => [ __CLASS__, 'sanitize_google_cloud_api_key' ],
+            'presshub_ai_remove_google_cloud_api_key' => [ __CLASS__, 'sanitize_remove_google_cloud_api_key' ],
+            'presshub_ai_gcloud_project_id'           => [ __CLASS__, 'sanitize_gcloud_project_id' ],
+            'presshub_ai_imagen_region'               => [ __CLASS__, 'sanitize_imagen_region' ],
+            'presshub_ai_rate_limit_enabled'          => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_rate_limit_per_hour'         => [ __CLASS__, 'sanitize_rate_limit_per_hour' ],
+            'presshub_ai_rate_limit_window_seconds'   => [ __CLASS__, 'sanitize_rate_limit_window_seconds' ],
+            'presshub_ai_research_retention_days'     => [ __CLASS__, 'sanitize_research_retention_days' ],
+            'presshub_ai_log_level'                   => [ __CLASS__, 'sanitize_log_level' ],
+        ];
+
+        $general_map = [
+            'presshub_ai_provider'      => [ __CLASS__, 'sanitize_provider' ],
+            'presshub_ai_fetch_urls'    => [ __CLASS__, 'sanitize_fetch_urls' ],
+            'presshub_ai_debug_prompts' => [ __CLASS__, 'sanitize_boolean' ],
+        ];
+
+        $providers_map = [
+            'presshub_ai_provider'                    => [ __CLASS__, 'sanitize_provider' ],
+            'presshub_ai_api_key'                     => [ __CLASS__, 'sanitize_api_key' ],
+            'presshub_ai_remove_api_key'              => [ __CLASS__, 'sanitize_remove_api_key' ],
+            'presshub_ai_model_openai'                => function( $v ) { return PressHub_AI_Settings_Storage::sanitize_model( $v, 'openai' ); },
+            'presshub_ai_temperature_openai'          => [ __CLASS__, 'sanitize_temperature' ],
+            'presshub_ai_max_tokens_openai'           => [ __CLASS__, 'sanitize_max_tokens' ],
+            'presshub_ai_timeout_openai'              => [ __CLASS__, 'sanitize_timeout' ],
+            'presshub_ai_model_anthropic'             => function( $v ) { return PressHub_AI_Settings_Storage::sanitize_model( $v, 'anthropic' ); },
+            'presshub_ai_temperature_anthropic'       => [ __CLASS__, 'sanitize_temperature' ],
+            'presshub_ai_max_tokens_anthropic'        => [ __CLASS__, 'sanitize_max_tokens' ],
+            'presshub_ai_timeout_anthropic'           => [ __CLASS__, 'sanitize_timeout' ],
+            'presshub_ai_model_gemini'                => function( $v ) { return PressHub_AI_Settings_Storage::sanitize_model( $v, 'gemini' ); },
+            'presshub_ai_temperature_gemini'          => [ __CLASS__, 'sanitize_temperature' ],
+            'presshub_ai_max_tokens_gemini'           => [ __CLASS__, 'sanitize_max_tokens' ],
+            'presshub_ai_timeout_gemini'              => [ __CLASS__, 'sanitize_timeout' ],
+            'presshub_ai_openai_org'                  => [ __CLASS__, 'sanitize_openai_org' ],
+            'presshub_ai_anthropic_version'           => [ __CLASS__, 'sanitize_anthropic_version' ],
+        ];
+
+        switch ( $section ) {
+            case 'coauthor':
+                return $coauthor_map;
+            case 'briefing':
+                return $briefing_map;
+            case 'copilot':
+                return $copilot_map;
+            case 'advanced':
+                return $advanced_map;
+            case 'general':
+                return $general_map;
+            case 'providers':
+                return $providers_map;
+            case 'all':
+            case '':
+            default:
+                return array_merge(
+                    $general_map,
+                    $providers_map,
+                    $coauthor_map,
+                    $briefing_map,
+                    $copilot_map,
+                    $advanced_map
+                );
+        }
+    }
+
+    /**
      * Record an audit log entry for saved configuration settings.
      *
-     * @param array $updated_keys List of updated option keys.
-     * @param int   $count        Count of updated options.
+     * @param array  $updated_keys List of updated option keys.
+     * @param int    $count        Count of updated options.
+     * @param string $section      Section or tab name.
      * @return int|null Inserted audit log ID.
      */
-    public static function log_settings_saved( array $updated_keys = [], int $count = 0 ): ?int {
+    public static function log_settings_saved( array $updated_keys = [], int $count = 0, string $section = 'presshub_ai_options' ): ?int {
         if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
             return PressHub_AI_Audit_Logger::log(
                 'settings_saved',
                 'settings',
-                'presshub_ai_options',
+                $section,
                 [
+                    'section'       => $section,
                     'options_count' => $count ?: count( $updated_keys ),
                     'updated_keys'  => $updated_keys,
                 ]

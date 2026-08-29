@@ -13,4 +13,16 @@ if ( ! function_exists( 'add_action' ) ) {
             $GLOBALS['TRANSITION_HANDLERS'][] = $callback;
         }
     }
+}
+
+if ( ! function_exists( 'has_action' ) ) {
+    function has_action( $hook, $callback_to_check = false ) {
+        if ( ! isset( $GLOBALS['ACTIONS'][ $hook ] ) || empty( $GLOBALS['ACTIONS'][ $hook ] ) ) {
+            return false;
+        }
+        if ( false === $callback_to_check ) {
+            return true;
+        }
+        return in_array( $callback_to_check, $GLOBALS['ACTIONS'][ $hook ], true );
+    }
 }
