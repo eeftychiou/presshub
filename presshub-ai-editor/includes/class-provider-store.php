@@ -13,6 +13,7 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 require_once __DIR__ . '/class-provider-defaults.php';
+require_once __DIR__ . '/class-audit-logger.php';
 
 class PressHub_AI_Provider_Store {
 
@@ -113,6 +114,19 @@ class PressHub_AI_Provider_Store {
             $clean['id']   = self::generate_unique_id( $clean['type'], $clean['name'], $existing_ids );
         }
 
+        $is_new = ( null === $existing_index );
+        $is_toggle_only = false;
+
+        if ( ! $is_new && is_array( $existing_record ) ) {
+            // Check if only enabled status was mutated
+            $existing_copy = $existing_record;
+            $clean_copy    = $clean;
+            $existing_copy['enabled'] = $clean['enabled'];
+            if ( $existing_copy === $clean_copy && $existing_record['enabled'] !== $clean['enabled'] ) {
+                $is_toggle_only = true;
+            }
+        }
+
         if ( null !== $existing_index ) {
             $providers[ $existing_index ] = $clean;
         } else {
@@ -121,7 +135,69 @@ class PressHub_AI_Provider_Store {
 
         update_option( self::OPTION_CONFIGURED_PROVIDERS, $providers, false );
 
+        // Audit Logging
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            if ( $is_new ) {
+                PressHub_AI_Audit_Logger::log(
+                    'provider_added',
+                    'provider',
+                    $clean['id'],
+                    [
+                        'name'          => $clean['name'],
+                        'type'          => $clean['type'],
+                        'default_model' => $clean['default_model'],
+                        'enabled'       => $clean['enabled'],
+                        'api_key'       => self::mask_key( $clean['api_key'] ?? '' ),
+                    ]
+                );
+            } elseif ( $is_toggle_only ) {
+                PressHub_AI_Audit_Logger::log(
+                    'provider_toggled',
+                    'provider',
+                    $clean['id'],
+                    [
+                        'name'             => $clean['name'],
+                        'enabled'          => $clean['enabled'],
+                        'previous_enabled' => $existing_record['enabled'] ?? null,
+                    ]
+                );
+            } else {
+                PressHub_AI_Audit_Logger::log(
+                    'provider_updated',
+                    'provider',
+                    $clean['id'],
+                    [
+                        'name'          => $clean['name'],
+                        'type'          => $clean['type'],
+                        'default_model' => $clean['default_model'],
+                        'enabled'       => $clean['enabled'],
+                        'api_key'       => self::mask_key( $clean['api_key'] ?? '' ),
+                    ]
+                );
+            }
+        }
+
         return $clean['id'];
+    }
+
+    /**
+     * Toggle a provider's enabled state.
+     *
+     * @param string    $provider_id Provider slug/ID.
+     * @param bool|null $enabled     Explicit target state, or null to flip.
+     * @return array|null Updated provider record or null if not found.
+     */
+    public static function toggle_provider( string $provider_id, ?bool $enabled = null ): ?array {
+        $provider = self::get( $provider_id );
+        if ( null === $provider ) {
+            return null;
+        }
+
+        $new_enabled = ( null !== $enabled ) ? $enabled : ! ( ! empty( $provider['enabled'] ) );
+        $provider['enabled'] = $new_enabled;
+        self::save_provider( $provider );
+
+        return self::get( $provider_id );
     }
 
     /**
@@ -133,11 +209,13 @@ class PressHub_AI_Provider_Store {
     public static function delete_provider( string $provider_id ): bool {
         $providers = self::get_all( false );
         $found     = false;
+        $deleted_record = null;
         $updated   = [];
 
         foreach ( $providers as $provider ) {
             if ( ( $provider['id'] ?? '' ) === $provider_id ) {
-                $found = true;
+                $found          = true;
+                $deleted_record = $provider;
                 continue;
             }
             $updated[] = $provider;
@@ -148,6 +226,20 @@ class PressHub_AI_Provider_Store {
         }
 
         update_option( self::OPTION_CONFIGURED_PROVIDERS, $updated, false );
+
+        // Audit Logging
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log(
+                'provider_deleted',
+                'provider',
+                $provider_id,
+                [
+                    'name' => $deleted_record['name'] ?? $provider_id,
+                    'type' => $deleted_record['type'] ?? '',
+                ]
+            );
+        }
+
         return true;
     }
 

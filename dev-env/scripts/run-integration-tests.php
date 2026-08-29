@@ -167,6 +167,8 @@ run_test( 'AJAX action handlers registered in WordPress', function() {
     return has_action( 'wp_ajax_presshub_ai_chat' )
         && has_action( 'wp_ajax_presshub_ai_save_provider' )
         && has_action( 'wp_ajax_presshub_ai_fetch_token_logs' )
+        && has_action( 'wp_ajax_presshub_ai_fetch_audit_logs' )
+        && has_action( 'wp_ajax_presshub_ai_clear_audit_logs' )
         && has_action( 'wp_ajax_presshub_ai_briefing_get_status' );
 } );
 
@@ -182,6 +184,49 @@ run_test( 'WordPress options persistence for PressHub AI settings', function() {
     $val = get_option( 'presshub_ai_test_key' );
     delete_option( 'presshub_ai_test_key' );
     return $val === 'test_value_123';
+} );
+
+// Test 14: Audit Logger Table Exists
+run_test( 'Database table wp_presshub_ai_audit_logs exists', function() {
+    global $wpdb;
+    if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+        PressHub_AI_Audit_Logger::create_table();
+    }
+    $table = $wpdb->prefix . 'presshub_ai_audit_logs';
+    $exists = $wpdb->get_var( "SELECT name FROM sqlite_master WHERE type='table' AND name='{$table}'" );
+    return ! empty( $exists );
+} );
+
+// Test 15: Audit Logger DB Insertion and Retrieval
+run_test( 'PressHub_AI_Audit_Logger records mutation to DB', function() {
+    if ( ! class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+        return 'Class PressHub_AI_Audit_Logger not found';
+    }
+    $id = PressHub_AI_Audit_Logger::log(
+        'provider_added',
+        'provider',
+        'integration-test-prov',
+        [
+            'name'    => 'Integration Provider',
+            'api_key' => 'sk-proj-integration1234567890',
+            'enabled' => true,
+        ]
+    );
+    if ( empty( $id ) || ! is_numeric( $id ) ) {
+        return 'Failed to insert audit log entry';
+    }
+    $logs = PressHub_AI_Audit_Logger::get_logs( [ 'entity_id' => 'integration-test-prov' ] );
+    if ( empty( $logs['items'] ) ) {
+        return 'Inserted audit log entry could not be queried';
+    }
+    $entry = $logs['items'][0];
+    if ( 'provider_added' !== $entry['event_type'] || 'provider' !== $entry['entity_type'] ) {
+        return 'Audit log entry event_type/entity_type mismatch';
+    }
+    if ( false !== strpos( (string) $entry['details'], 'sk-proj-integration1234567890' ) ) {
+        return 'Audit log entry details contains unmasked secret API key';
+    }
+    return true;
 } );
 
 echo "\n=================================================================\n";

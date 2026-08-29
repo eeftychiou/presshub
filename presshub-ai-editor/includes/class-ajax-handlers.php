@@ -39,10 +39,19 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_delete_provider', [ $this, 'delete_provider' ] );
         add_action( 'wp_ajax_presshub_ai_test_provider', [ $this, 'test_provider' ] );
         add_action( 'wp_ajax_presshub_ai_fetch_provider_models', [ $this, 'fetch_provider_models' ] );
+        // News Source Manager AJAX endpoints
+        add_action( 'wp_ajax_presshub_ai_save_news_source', [ $this, 'save_news_source' ] );
+        add_action( 'wp_ajax_presshub_ai_delete_news_source', [ $this, 'delete_news_source' ] );
+        add_action( 'wp_ajax_presshub_ai_toggle_news_source', [ $this, 'toggle_news_source' ] );
         // Token & Usage Analytics AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_fetch_token_logs', [ $this, 'fetch_token_logs' ] );
         add_action( 'wp_ajax_presshub_ai_export_token_csv', [ $this, 'export_token_csv' ] );
         add_action( 'wp_ajax_presshub_ai_clear_token_logs', [ $this, 'clear_token_logs' ] );
+        // Configuration Audit Logs AJAX endpoints
+        add_action( 'wp_ajax_presshub_ai_fetch_audit_logs', [ $this, 'fetch_audit_logs' ] );
+        add_action( 'wp_ajax_presshub_ai_get_audit_logs', [ $this, 'fetch_audit_logs' ] );
+        add_action( 'wp_ajax_presshub_ai_clear_audit_logs', [ $this, 'clear_audit_logs' ] );
+        add_action( 'wp_ajax_presshub_ai_export_audit_csv', [ $this, 'export_audit_csv' ] );
         // Diagnostic Logs Endpoints
         add_action( 'wp_ajax_presshub_ai_get_logs', [ $this, 'get_logs' ] );
         add_action( 'wp_ajax_presshub_ai_clear_logs', [ $this, 'clear_logs' ] );
@@ -1351,6 +1360,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                     'processed' => $processed,
                 ] );
             }
+
+            if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+                PressHub_AI_Settings_Storage::log_settings_saved( $processed, $saved_count );
+            }
         } catch ( Throwable $t ) {
             if ( $t instanceof RuntimeException && 0 === strpos( $t->getMessage(), 'wp_send_json' ) ) {
                 throw $t;
@@ -1649,6 +1662,121 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         wp_send_json_success( [ 'message' => __( 'Token logs cleared successfully.', 'presshub-ai-editor' ) ] );
+    }
+
+    /**
+     * AJAX endpoint to query configuration audit logs.
+     */
+    public function fetch_audit_logs(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-audit-logger.php';
+
+        $page        = max( 1, (int) ( $_REQUEST['page'] ?? 1 ) );
+        $per_page    = max( 1, min( 500, (int) ( $_REQUEST['per_page'] ?? 20 ) ) );
+        $event_type  = sanitize_text_field( wp_unslash( $_REQUEST['event_type'] ?? '' ) );
+        $entity_type = sanitize_text_field( wp_unslash( $_REQUEST['entity_type'] ?? '' ) );
+        $search      = sanitize_text_field( wp_unslash( $_REQUEST['search'] ?? '' ) );
+        $start_date  = sanitize_text_field( wp_unslash( $_REQUEST['start_date'] ?? '' ) );
+        $end_date    = sanitize_text_field( wp_unslash( $_REQUEST['end_date'] ?? '' ) );
+        $orderby     = sanitize_key( wp_unslash( $_REQUEST['orderby'] ?? 'id' ) );
+        $order       = sanitize_key( wp_unslash( $_REQUEST['order'] ?? 'DESC' ) );
+
+        $query_args = [
+            'page'        => $page,
+            'per_page'    => $per_page,
+            'event_type'  => $event_type,
+            'entity_type' => $entity_type,
+            'search'      => $search,
+            'start_date'  => $start_date,
+            'end_date'    => $end_date,
+            'orderby'     => $orderby,
+            'order'       => $order,
+        ];
+
+        $logs_result = PressHub_AI_Audit_Logger::get_logs( $query_args );
+
+        wp_send_json_success( [
+            'logs' => $logs_result,
+        ] );
+    }
+
+    /**
+     * Alias for fetch_audit_logs().
+     */
+    public function get_audit_logs(): void {
+        $this->fetch_audit_logs();
+    }
+
+    /**
+     * AJAX endpoint to export filtered configuration audit logs to CSV.
+     */
+    public function export_audit_csv(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-audit-logger.php';
+
+        $event_type  = sanitize_text_field( wp_unslash( $_REQUEST['event_type'] ?? '' ) );
+        $entity_type = sanitize_text_field( wp_unslash( $_REQUEST['entity_type'] ?? '' ) );
+        $search      = sanitize_text_field( wp_unslash( $_REQUEST['search'] ?? '' ) );
+        $start_date  = sanitize_text_field( wp_unslash( $_REQUEST['start_date'] ?? '' ) );
+        $end_date    = sanitize_text_field( wp_unslash( $_REQUEST['end_date'] ?? '' ) );
+
+        $query_args = [
+            'event_type'  => $event_type,
+            'entity_type' => $entity_type,
+            'search'      => $search,
+            'start_date'  => $start_date,
+            'end_date'    => $end_date,
+        ];
+
+        $csv = PressHub_AI_Audit_Logger::export_csv( $query_args );
+        $filename = 'presshub-ai-audit-logs-' . gmdate( 'Y-m-d' ) . '.csv';
+
+        if ( isset( $_REQUEST['format'] ) && 'json' === $_REQUEST['format'] ) {
+            wp_send_json_success( [
+                'csv'      => $csv,
+                'filename' => $filename,
+            ] );
+        }
+
+        if ( ! headers_sent() ) {
+            header( 'Content-Type: text/csv; charset=utf-8' );
+            header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+            header( 'Pragma: no-cache' );
+            header( 'Expires: 0' );
+        }
+
+        echo $csv;
+        exit;
+    }
+
+    /**
+     * AJAX endpoint to clear all configuration audit logs.
+     */
+    public function clear_audit_logs(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-audit-logger.php';
+        $cleared = PressHub_AI_Audit_Logger::clear_all_logs();
+
+        if ( ! $cleared ) {
+            wp_send_json_error( [ 'message' => __( 'Failed to clear audit logs.', 'presshub-ai-editor' ) ] );
+        }
+
+        wp_send_json_success( [ 'message' => __( 'Audit logs cleared successfully.', 'presshub-ai-editor' ) ] );
     }
 
     /**

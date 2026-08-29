@@ -17,12 +17,224 @@ require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-news-curator.php';
 require_once __DIR__ . '/class-podcast-producer.php';
 require_once __DIR__ . '/class-audio-synthesizer.php';
+require_once __DIR__ . '/class-audit-logger.php';
+require_once __DIR__ . '/class-settings-storage.php';
 
 class PressHub_AI_Briefing_Admin {
 
     /** Admin script and style handles. */
     const SCRIPT_HANDLE = 'presshub-ai-briefing-admin-js';
     const STYLE_HANDLE  = 'presshub-ai-briefing-admin-css';
+
+    /**
+     * Retrieve all configured briefing news sources.
+     *
+     * @return array[] List of structured source arrays.
+     */
+    public static function get_news_sources(): array {
+        return PressHub_AI_Settings_Storage::get_briefing_sources();
+    }
+
+    /**
+     * Save (create or update) a news source and record an audit log event.
+     *
+     * @param array $data Source data array.
+     * @return array Sanitized source array.
+     */
+    public static function save_news_source( array $data ): array {
+        $sources = self::get_news_sources();
+
+        $raw_url = trim( (string) ( $data['url'] ?? '' ) );
+        $url     = esc_url_raw( $raw_url );
+        $norm_url = strtolower( rtrim( $url, '/' ) );
+
+        $id = sanitize_key( (string) ( $data['id'] ?? '' ) );
+        if ( empty( $id ) ) {
+            $id = 'src_' . substr( md5( $norm_url . microtime() ), 0, 8 );
+        }
+
+        $host      = (string) parse_url( $url, PHP_URL_HOST );
+        $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
+        $name      = sanitize_text_field( (string) ( $data['name'] ?? '' ) );
+        if ( '' === trim( $name ) ) {
+            $name = $host_name ?: ( $url ?: __( 'News Source', 'presshub-ai-editor' ) );
+        }
+
+        $type = sanitize_key( (string) ( $data['type'] ?? 'text_news' ) );
+        $supported_types = array_keys( PressHub_AI_Settings_Storage::get_supported_media_types() );
+        if ( ! in_array( $type, $supported_types, true ) ) {
+            $type = 'text_news';
+        }
+
+        $enabled = true;
+        if ( isset( $data['enabled'] ) ) {
+            $val = $data['enabled'];
+            $enabled = ( true === $val || 1 === $val || '1' === $val || 'true' === $val );
+        }
+
+        $category = sanitize_text_field( (string) ( $data['category'] ?? 'General' ) );
+        if ( '' === trim( $category ) ) {
+            $category = 'General';
+        }
+
+        $notes = sanitize_textarea_field( (string) ( $data['notes'] ?? '' ) );
+
+        $clean = [
+            'id'       => $id,
+            'name'     => $name,
+            'url'      => $url,
+            'type'     => $type,
+            'enabled'  => $enabled,
+            'category' => $category,
+            'notes'    => $notes,
+        ];
+
+        $existing_index  = null;
+        $existing_source = null;
+        foreach ( $sources as $index => $src ) {
+            if ( ( $src['id'] ?? '' ) === $id ) {
+                $existing_index  = $index;
+                $existing_source = $src;
+                break;
+            }
+        }
+
+        $is_new = ( null === $existing_index );
+        $is_toggle_only = false;
+
+        if ( ! $is_new && is_array( $existing_source ) ) {
+            $existing_copy = $existing_source;
+            $clean_copy    = $clean;
+            $existing_copy['enabled'] = $clean['enabled'];
+            if ( $existing_copy === $clean_copy && $existing_source['enabled'] !== $clean['enabled'] ) {
+                $is_toggle_only = true;
+            }
+        }
+
+        if ( null !== $existing_index ) {
+            $sources[ $existing_index ] = $clean;
+        } else {
+            $sources[] = $clean;
+        }
+
+        update_option( 'presshub_ai_briefing_sources', array_values( $sources ), false );
+
+        // Audit Logging
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            if ( $is_new ) {
+                PressHub_AI_Audit_Logger::log(
+                    'news_source_added',
+                    'news_source',
+                    $clean['id'],
+                    [
+                        'name'     => $clean['name'],
+                        'url'      => $clean['url'],
+                        'type'     => $clean['type'],
+                        'enabled'  => $clean['enabled'],
+                        'category' => $clean['category'],
+                    ]
+                );
+            } elseif ( $is_toggle_only ) {
+                PressHub_AI_Audit_Logger::log(
+                    'news_source_toggled',
+                    'news_source',
+                    $clean['id'],
+                    [
+                        'name'             => $clean['name'],
+                        'url'              => $clean['url'],
+                        'enabled'          => $clean['enabled'],
+                        'previous_enabled' => $existing_source['enabled'] ?? null,
+                    ]
+                );
+            } else {
+                PressHub_AI_Audit_Logger::log(
+                    'news_source_updated',
+                    'news_source',
+                    $clean['id'],
+                    [
+                        'name'     => $clean['name'],
+                        'url'      => $clean['url'],
+                        'type'     => $clean['type'],
+                        'enabled'  => $clean['enabled'],
+                        'category' => $clean['category'],
+                    ]
+                );
+            }
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Delete a news source by ID and record an audit log event.
+     *
+     * @param string $source_id Source ID.
+     * @return bool True if deleted, false if not found.
+     */
+    public static function delete_news_source( string $source_id ): bool {
+        $sources = self::get_news_sources();
+        $found   = false;
+        $deleted = null;
+        $updated = [];
+
+        foreach ( $sources as $src ) {
+            if ( ( $src['id'] ?? '' ) === $source_id ) {
+                $found   = true;
+                $deleted = $src;
+                continue;
+            }
+            $updated[] = $src;
+        }
+
+        if ( ! $found ) {
+            return false;
+        }
+
+        update_option( 'presshub_ai_briefing_sources', array_values( $updated ), false );
+
+        // Audit Logging
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log(
+                'news_source_deleted',
+                'news_source',
+                $source_id,
+                [
+                    'name' => $deleted['name'] ?? $source_id,
+                    'url'  => $deleted['url'] ?? '',
+                ]
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Toggle a news source's enabled state and record an audit log event.
+     *
+     * @param string    $source_id Source ID.
+     * @param bool|null $enabled   Explicit enabled state or null to flip.
+     * @return array|null Updated source array or null if not found.
+     */
+    public static function toggle_news_source( string $source_id, ?bool $enabled = null ): ?array {
+        $sources = self::get_news_sources();
+        $target  = null;
+
+        foreach ( $sources as $src ) {
+            if ( ( $src['id'] ?? '' ) === $source_id ) {
+                $target = $src;
+                break;
+            }
+        }
+
+        if ( null === $target ) {
+            return null;
+        }
+
+        $new_enabled = ( null !== $enabled ) ? $enabled : ! ( ! empty( $target['enabled'] ) );
+        $target['enabled'] = $new_enabled;
+
+        return self::save_news_source( $target );
+    }
 
     public function __construct() {
         add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
