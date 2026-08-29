@@ -1,6 +1,6 @@
 # Agent Instructions for PressHub AI
 
-Welcome to the **PressHub** repository. This document outlines the standard operating procedures, workflows, debugging tools, and verification tasks for all autonomous agents and developers contributing to the codebase.
+Welcome to the **PressHub** repository. This document outlines the standard operating procedures, workflows, security rules, debugging tools, and verification tasks for all autonomous agents and developers contributing to the codebase.
 
 ---
 
@@ -9,7 +9,7 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
 - **`presshub-ai-editor/`**: The core WordPress plugin source code.
   - `includes/`: PHP classes (API client, token logger, structured logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings).
   - `assets/`: Frontend/Admin JavaScript and CSS.
-  - `tests/`: Isolated PHP unit test suite (46 test files + `run-all-tests.php`).
+  - `tests/`: Isolated PHP unit test suite (49 test files + `run-all-tests.php`).
 - **`presshub-workflow/`**: TypeScript workflow and MCP server components (Jest test suite).
 - **`dev-env/`**: Fully configured, self-contained local WordPress development and testing environment powered by the official WordPress Core SQLite database engine (zero external database services required).
 
@@ -142,6 +142,23 @@ php dev-env/scripts/reset-db.php
 
 ---
 
+## 🔒 Security & Hardening Standards
+
+All code contributions must strictly adhere to WordPress security best practices:
+
+1. **Nonce Verification**:
+   - Every AJAX action and form POST must verify nonces via `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` or `check_admin_referer()`.
+2. **Capability & Authorization Checks**:
+   - All admin endpoints and settings modifications must enforce explicit user capability gates (`current_user_can( 'manage_options' )` or filtered capability `apply_filters( 'presshub_ai_settings_cap', 'manage_options' )`).
+3. **Data Sanitization & Escaping**:
+   - **Input Sanitization**: Always sanitize input using `sanitize_text_field()`, `sanitize_textarea_field()`, `sanitize_key()`, `esc_url_raw()`, and `wp_unslash()`.
+   - **Output Escaping**: Always escape output in templates and HTML renders using `esc_html()`, `esc_attr()`, `esc_url()`, `esc_textarea()`, or `wp_kses_post()`.
+4. **Secret Redaction**:
+   - Never log unmasked API keys or secret tokens into `debug.log`, token log metadata, or client-side JavaScript payloads.
+   - Always mask API keys displaying only prefix and suffix (e.g. `sk-pr••••••••3x9K`).
+
+---
+
 ## 🧪 Verification & Testing Protocol
 
 Before marking any task, bugfix, or feature as complete, you **MUST** run all verification test suites:
@@ -152,7 +169,7 @@ Validates plugin activation, database tables, logger outputs, options persistenc
 php dev-env/scripts/run-integration-tests.php
 ```
 
-### 2. Plugin Unit Tests (46 test files)
+### 2. Plugin Unit Tests (49 test files)
 Runs all unit tests in process-isolated PHP runners:
 ```bash
 php presshub-ai-editor/tests/run-all-tests.php
@@ -178,11 +195,17 @@ php -l presshub-ai-editor/includes/<modified-file>.php
 ## 👁️ Visual Inspection & Screenshot Verification
 
 As part of the QA pipeline, agents **must** perform a visual inspection of all frontend or admin UI changes in the local testing environment:
-1. Start the local development server if not already running (`php dev-env/scripts/server.php`).
-2. Navigate to the modified interface in an automated or browser context (`http://127.0.0.1:8888/wp-admin/admin.php?page=presshub-ai`).
-3. Verify the UI layout, state changes, and component rendering match the requirements.
-4. **Record screenshots** of the "before" and "after" states (or the final state of the feature/fix).
-5. Attach or reference these screenshots in the Pull Request or walkthrough artifact to provide visual proof that the fix renders correctly.
+
+1. **Start Local Dev Server**: Ensure the local development server is running (`php dev-env/scripts/server.php`).
+2. **Navigate to Interface**: Open and inspect the modified interface in an automated or browser context (e.g. `http://127.0.0.1:8888/wp-admin/admin.php?page=presshub-ai`).
+3. **Verify Visual States**:
+   - Verify layout alignment, typography, and component rendering.
+   - Test UI state variations: **Empty states**, **Loading/Spinner states**, **Active states**, **Error/Validation alerts**, and **Modal dialogs**.
+   - Check responsive layouts across standard desktop and mobile viewports.
+4. **Record Screenshots**:
+   - Capture screenshots of the "before" and "after" states (or the final state of the feature/fix).
+5. **Attach Evidence**:
+   - Attach or reference these screenshots in the Pull Request description or walkthrough artifact to provide visual proof that the fix renders correctly.
 
 ---
 
@@ -260,7 +283,7 @@ Concrete implementation plan or proposed code changes.
 ### 4. Issue Linking & Relationship Best Practices
 - **Cross-Referencing**: When filing an issue related to, caused by, or resolving another issue, explicitly reference `#<id>` in the body or via comment:
   ```bash
-  gh issue comment <id> --body "Relates to #<other-id>: shares common root cause."
+  gh issue comment <id> --body "Relates to #<other-id>: shares common root cause in rate-limiter."
   ```
 - **Duplicate / Superseded**: If an issue replaces another:
   ```bash
@@ -360,7 +383,7 @@ digraph SDLC {
 Before committing, you **MUST** run all verification test suites and ensure a 100% clean pass rate:
 
 ```bash
-# 1. Plugin Unit Tests (All 46+ test suites)
+# 1. Plugin Unit Tests (All 49+ test suites)
 php presshub-ai-editor/tests/run-all-tests.php
 
 # 2. Live WordPress Integration Tests
