@@ -104,11 +104,11 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_coauthor_max_tokens"><?php echo __( 'Max Completion Tokens', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_coauthor_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $cur_coauthor_tokens = (int) get_option( 'presshub_ai_coauthor_max_tokens', 10000 ); ?>
-                                    <input type="number" min="1" max="32768" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_tokens ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'Maximum output tokens for generated drafts (1 - 32768). Default 10000.', 'presshub-ai-editor' ); ?></p>
+                                    <?php $cur_coauthor_tokens = (int) get_option( 'presshub_ai_coauthor_max_tokens', PressHub_AI_Provider_Defaults::default_max_tokens() ); ?>
+                                    <input type="number" min="1" max="65536" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_tokens ); ?>" class="small-text" />
+                                    <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (1 - 65,536). Default: 16,384.', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
                             <tr>
@@ -343,11 +343,11 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_copilot_max_tokens"><?php echo __( 'Max Completion Tokens', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_copilot_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $cur_copilot_tokens = (int) get_option( 'presshub_ai_copilot_max_tokens', 10000 ); ?>
-                                    <input type="number" min="1" max="32768" name="presshub_ai_copilot_max_tokens" id="presshub_ai_copilot_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_tokens ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'Maximum output tokens for Copilot conversational turns (1 - 32768). Default 10000.', 'presshub-ai-editor' ); ?></p>
+                                    <?php $cur_copilot_tokens = (int) get_option( 'presshub_ai_copilot_max_tokens', PressHub_AI_Provider_Defaults::default_max_tokens() ); ?>
+                                    <input type="number" min="1" max="65536" name="presshub_ai_copilot_max_tokens" id="presshub_ai_copilot_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_tokens ); ?>" class="small-text" />
+                                    <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (1 - 65,536). Default: 16,384.', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
                             <tr>
@@ -501,7 +501,7 @@ class PressHub_AI_Settings_Render {
                     $model       = $provider['default_model'] ?? '';
                     $timeout     = $provider['timeout'] ?? 300;
                     $temp        = $provider['temperature'] ?? 0.7;
-                    $max_tokens  = $provider['max_tokens'] ?? 10000;
+                    $max_tokens  = $provider['max_tokens'] ?? PressHub_AI_Provider_Defaults::default_max_tokens();
                     $enabled     = ! empty( $provider['enabled'] );
                     $is_system   = ! empty( $provider['is_system'] );
                     $has_key     = ! empty( $provider['api_key'] );

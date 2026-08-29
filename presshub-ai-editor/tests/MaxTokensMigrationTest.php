@@ -2,7 +2,7 @@
 /**
  * MaxTokensMigrationTest — the 1.2.8 migration must clear per-provider
  * max_tokens options still holding the OLD default (2000) so the new
- * 10000 default applies, while leaving deliberate custom values alone.
+ * 16384 default applies, while leaving deliberate custom values alone.
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
@@ -45,8 +45,8 @@ mtm_check( 'migration flag set', ( $GLOBALS['OPTIONS_STORE']['presshub_ai_migrat
 
 // The cleared providers now resolve to the new default.
 $api = new PressHub_AI_API_Client();
-mtm_check( 'default after migration is 10000', 10000 === PressHub_AI_Provider_Defaults::default_max_tokens() );
-mtm_check( 'meta reflects 10000 default', false !== strpos( PressHub_AI_API_Client::current_request_meta(), 'max_tokens=10000' ) );
+mtm_check( 'default after migration is 16384', 16384 === PressHub_AI_Provider_Defaults::default_max_tokens() );
+mtm_check( 'meta reflects 16384 default', false !== strpos( PressHub_AI_API_Client::current_request_meta(), 'max_tokens=16384' ) );
 
 // --- Case 2: idempotent — second run changes nothing ------------------------
 $before = $GLOBALS['OPTIONS_STORE'];
