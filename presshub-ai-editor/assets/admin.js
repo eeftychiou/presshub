@@ -803,9 +803,13 @@ jQuery(document).ready(function($) {
         if (Array.isArray(modelsList)) {
             models = modelsList.slice();
         } else if (typeof modelsList === 'string' && modelsList.trim()) {
-            models = modelsList.split(/[
-
-,]+/).map(function(m) { return m.trim(); }).filter(Boolean);
+            // Split on commas, newlines (\n or \r), and runs of whitespace between
+            // entries. Using `new RegExp(...)` instead of a `/.../` literal so the
+            // pattern can be authored on a single line; a `/[` literal whose body
+            // contains a real newline is a SyntaxError (Issue #14).
+            models = modelsList.split(new RegExp('\\s*,\\s*|[\\r\\n]+\\s*', 'g'))
+                .map(function(m) { return m.trim(); })
+                .filter(Boolean);
         }
 
         if (selectedModel && models.indexOf(selectedModel) === -1) {
