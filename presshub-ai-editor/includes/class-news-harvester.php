@@ -27,8 +27,8 @@ require_once __DIR__ . '/class-url-fetcher.php';
 
 class PressHub_AI_News_Harvester {
 
-    /** Maximum links to crawl per homepage to respect time budgets. */
-    const MAX_LINKS_PER_SOURCE = 15;
+    /** Maximum links to crawl per homepage to respect time budgets (default 4 for 10-12 sources sampling). */
+    const MAX_LINKS_PER_SOURCE = 4;
 
     /** Request timeout in seconds. */
     const REQUEST_TIMEOUT = 15;
@@ -38,6 +38,286 @@ class PressHub_AI_News_Harvester {
 
     /** User Agent for harvesting. */
     const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 PressHub-AI-Harvester/1.3.1';
+
+    /**
+     * Get the maximum number of links to harvest per source.
+     *
+     * @param int|null $limit Optional explicit limit override.
+     * @return int Effective maximum links per source.
+     */
+    public function get_max_links_per_source( $limit = null ): int {
+        if ( null !== $limit && (int) $limit > 0 ) {
+            return (int) $limit;
+        }
+        $filtered = apply_filters( 'presshub_ai_harvest_max_links_per_source', self::MAX_LINKS_PER_SOURCE );
+        if ( is_numeric( $filtered ) && (int) $filtered > 0 ) {
+            return (int) $filtered;
+        }
+        return self::MAX_LINKS_PER_SOURCE;
+    }
+
+    /**
+     * Count words in a text string (Unicode aware).
+     *
+     * @param string $text Raw text.
+     * @return int Number of words.
+     */
+    public function count_words( string $text ): int {
+        $words = preg_split( '/\s+/u', trim( wp_strip_all_tags( $text ) ), -1, PREG_SPLIT_NO_EMPTY );
+        return is_array( $words ) ? count( $words ) : 0;
+    }
+
+    /**
+     * Remove Greek and Latin diacritics/accents from a UTF-8 string for comparison.
+     *
+     * @param string $str Input string.
+     * @return string Accent-free string.
+     */
+    public function remove_accents_utf8( string $str ): string {
+        $accents = [
+            'ά' => 'α', 'έ' => 'ε', 'ή' => 'η', 'ί' => 'ι', 'ό' => 'ο', 'ύ' => 'υ', 'ώ' => 'ω',
+            'ΐ' => 'ι', 'ΰ' => 'υ', 'ϊ' => 'ι', 'ϋ' => 'υ',
+            'Ά' => 'α', 'Έ' => 'ε', 'Ή' => 'η', 'Ί' => 'ι', 'Ό' => 'ο', 'Ύ' => 'υ', 'Ώ' => 'ω',
+            'Ϊ' => 'ι', 'Ϋ' => 'υ',
+            'à' => 'a', 'á' => 'a', 'â' => 'a', 'ã' => 'a', 'ä' => 'a', 'å' => 'a',
+            'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e',
+            'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
+            'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ö' => 'o',
+            'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u',
+            'ý' => 'y', 'ÿ' => 'y', 'ñ' => 'n', 'ç' => 'c',
+        ];
+        return strtr( $str, $accents );
+    }
+
+    /**
+     * Determine whether a title matches a category/section or utility page name.
+     *
+     * @param string $title Page or article title.
+     * @return bool True if category title, false otherwise.
+     */
+    public function is_category_title( string $title ): bool {
+        $clean = mb_strtolower( trim( preg_replace( '/[^\p{L}\p{N}\s]/u', '', $title ) ) );
+        $clean = $this->remove_accents_utf8( $clean );
+        if ( '' === $clean ) {
+            return true;
+        }
+        $category_titles = [
+            'πολιτικη', 'οικονομια', 'κοινωνια', 'κοσμος', 'αποψεις', 'πολιτισμος',
+            'αθλητισμος', 'καιρος', 'παιχνιδια', 'στηλες', 'αρχικη', 'ειδησεις',
+            'επικαιροτητα', 'ελλαδα', 'διεθνη', 'lifestyle', 'υγεια', 'αυτοκινητο',
+            'τεχνολογια', 'ταξιδια', 'γυναικα', 'γνωμες', 'αρθρα', 'συνεντευξεις',
+            'αφιερωματα', 'βουλη', 'ροη ειδησεων', 'ολες οι ειδησεις', 'δημοφιλη',
+            'πρωτοσελιδα', 'ερεπλικα', 'ereplica', 'webtv', 'podcasts', 'podcast',
+            'politics', 'economy', 'society', 'world', 'opinion', 'opinions',
+            'culture', 'sports', 'weather', 'games', 'home', 'news', 'latest news',
+            'top stories', 'all news', 'trending', 'breaking news', 'health',
+            'technology', 'travel', 'entertainment', 'contact', 'about', 'terms',
+            'privacy', 'privacy policy', 'terms of use', 'about us', 'contact us',
+            'πολιτικη απορρητου', 'οροι χρησης', 'επικοινωνια', 'σχετικα με εμας',
+        ];
+        return in_array( $clean, $category_titles, true );
+    }
+
+    /**
+     * Determine whether harvested article data meets quality & depth thresholds.
+     * Discards items where title is <= 2 words, matches category names, or word count < 30 words.
+     *
+     * @param array $article_data Extracted article data array.
+     * @return bool True if valid article, false otherwise.
+     */
+    public function is_valid_harvested_article( array $article_data ): bool {
+        $title   = trim( (string) ( $article_data['title'] ?? '' ) );
+        $content = trim( (string) ( $article_data['content'] ?? '' ) );
+
+        if ( empty( $title ) || empty( $content ) ) {
+            return false;
+        }
+
+        if ( $this->is_category_title( $title ) ) {
+            return false;
+        }
+
+        $title_word_count = $this->count_words( $title );
+        $min_title_words  = (int) apply_filters( 'presshub_ai_harvest_min_title_words', 3 );
+        if ( $title_word_count < $min_title_words ) {
+            return false;
+        }
+
+        $content_word_count = $this->count_words( $content );
+        $min_content_words  = (int) apply_filters( 'presshub_ai_harvest_min_word_count', 30 );
+        if ( $content_word_count < $min_content_words ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Determine whether a given URL is a legitimate news article vs category/section/utility landing page.
+     *
+     * @param string $url      Target URL or path.
+     * @param string $base_url Optional source base URL for resolving relative links.
+     * @return bool True if valid article URL, false if category/section/utility page.
+     */
+    public function is_article_url( string $url, string $base_url = '' ): bool {
+        $url = trim( $url );
+        if ( empty( $url ) || '#' === $url || 0 === strpos( $url, '#' ) ) {
+            return false;
+        }
+
+        if ( preg_match( '/^(javascript|mailto|tel|data):/i', $url ) ) {
+            return false;
+        }
+
+        $abs = ( 0 === strpos( $url, 'http://' ) || 0 === strpos( $url, 'https://' ) )
+            ? $url
+            : $this->resolve_relative_url( $url, $base_url );
+
+        if ( empty( $abs ) || ! filter_var( $abs, FILTER_VALIDATE_URL ) ) {
+            return false;
+        }
+
+        $parts = parse_url( $abs );
+        $path  = trim( (string) ( $parts['path'] ?? '' ), '/' );
+
+        if ( '' === $path || 'index.php' === $path || 'index.html' === $path ) {
+            return false;
+        }
+
+        // Reject static assets and media files
+        if ( preg_match( '/\.(?:jpe?g|png|gif|svg|webp|avif|pdf|docx?|xlsx?|zip|rar|tar|gz|mp3|mp4|avi|mov|wmv|ogg|wav|css|js|xml|json|ico|woff2?|ttf|eot)(?:\?.*)?$/i', $abs ) ) {
+            return false;
+        }
+
+        // Check excluded substring patterns
+        $excluded_patterns = [
+            '/category/', '/categories/', '/tag/', '/tags/', '/author/', '/authors/',
+            '/topic/', '/topics/', '/section/', '/sections/', '/page/', '/pages/',
+            '/archive/', '/archives/', '/terms', '/privacy', '/oroi', '/politiki-aporritou',
+            '/contact', '/epikoino', '/about', '/cookie', '/feed', '/rss', '/wp-json/',
+            '/search', '/login', '/wp-login', '/newsletter', '/sitemap', '/advertis',
+            '/subscription', '/cart', '/checkout', '/account', '/membership',
+            'facebook.com', 'twitter.com', 'x.com', 'instagram.com', 'youtube.com',
+            'linkedin.com', 'tiktok.com', 't.me', 'whatsapp.com', 'pinterest.com',
+        ];
+
+        foreach ( $excluded_patterns as $pattern ) {
+            if ( false !== stripos( $abs, $pattern ) ) {
+                return false;
+            }
+        }
+
+        $category_slugs = [
+            'politiki', 'oikonomia', 'koinonia', 'kosmos', 'apopseis', 'politismos',
+            'athlitismos', 'kairos', 'paixnidia', 'ereplica', 'stiles', 'life',
+            'media', 'webtv', 'podcasts', 'podcast', 'contact', 'privacy', 'terms',
+            'about', 'rss', 'feed', 'category', 'categories', 'tag', 'tags',
+            'section', 'sections', 'topic', 'topics', 'author', 'authors',
+            'archive', 'archives', 'page', 'pages', 'search', 'login', 'wp-login',
+            'newsletter', 'sitemap', 'advertis', 'advertising', 'diafimisi',
+            'vouli', 'epikairothta', 'ellada', 'diethni', 'lifestyle', 'ygeia',
+            'auto', 'texnologia', 'travel', 'gynaika', 'sports', 'sport',
+            'politics', 'economy', 'business', 'society', 'world', 'opinion',
+            'opinions', 'culture', 'weather', 'games', 'replica', 'columns',
+            'technology', 'science', 'health', 'entertainment', 'video', 'videos',
+            'audio', 'galleries', 'photos', 'live', 'blogs', 'blog', 'columnists',
+            'epistimi', 'perivallon', 'astynomiko', 'dikastiko', 'diethnh',
+            'oikonomika', 'politika', 'koinonika', 'news', 'home', 'main',
+            'editorial', 'interviews', 'special-reports', 'focus', 'frontpage',
+        ];
+
+        $segments = array_values( array_filter( explode( '/', $path ), 'strlen' ) );
+        $segment_count = count( $segments );
+
+        if ( 0 === $segment_count ) {
+            return false;
+        }
+
+        // 1-segment URLs: e.g. /politiki/ or /article-1
+        if ( 1 === $segment_count ) {
+            $slug = strtolower( preg_replace( '/\.(html|htm|php|amp)$/i', '', $segments[0] ) );
+            if ( in_array( $slug, $category_slugs, true ) ) {
+                return false;
+            }
+            // Require article indicators: numeric ID (e.g. article-1 or news-12345), date, or substantive slug with at least 2 hyphens
+            $has_numeric_id = (bool) preg_match( '/(?:-\d+$|\d{5,})/', $slug );
+            $has_date       = (bool) preg_match( '/\d{4}/', $slug );
+            $has_hyphens    = ( substr_count( $slug, '-' ) >= 2 );
+
+            if ( ! $has_numeric_id && ! $has_date && ! $has_hyphens ) {
+                return false;
+            }
+            return true;
+        }
+
+        // 2-segment URLs: e.g. /category/politiki, /news/101, /politiki/562345, /politiki/ayxiseis-syntaxeis-metra
+        if ( 2 === $segment_count ) {
+            $seg0 = strtolower( $segments[0] );
+            $seg1 = strtolower( preg_replace( '/\.(html|htm|php|amp)$/i', '', $segments[1] ) );
+
+            // Blacklisted taxonomy roots
+            if ( in_array( $seg0, [ 'category', 'categories', 'tag', 'tags', 'topic', 'topics', 'section', 'sections', 'author', 'authors', 'archive', 'archives', 'page' ], true ) ) {
+                return false;
+            }
+
+            // Both segments are category names (e.g. /politiki/apopseis/)
+            if ( in_array( $seg0, $category_slugs, true ) && in_array( $seg1, $category_slugs, true ) ) {
+                return false;
+            }
+
+            // Check article indicators on segment 1
+            $is_numeric     = is_numeric( $seg1 );
+            $has_numeric_id = (bool) preg_match( '/(?:-\d+$|\d{4,})/', $seg1 );
+            $has_date       = (bool) preg_match( '/\d{4}/', $seg1 ) || (bool) preg_match( '/\d{4}/', $seg0 );
+            $has_hyphens    = ( substr_count( $seg1, '-' ) >= 2 );
+            $is_article_dir = in_array( $seg0, [ 'article', 'articles', 'story', 'stories', 'news', 'post', 'posts' ], true );
+
+            if ( $is_numeric || $has_numeric_id || $has_date || $has_hyphens || ( $is_article_dir && ( is_numeric( $seg1 ) || substr_count( $seg1, '-' ) >= 1 ) ) ) {
+                return true;
+            }
+
+            // Single word segment 1 under a category is a sub-category landing page (e.g. /politiki/vouli/)
+            return false;
+        }
+
+        // 3+ segment URLs: e.g. /politiki/562345/synantisi-mitsotaki, /2026/08/26/fotia-eyvoia
+        $last_seg = strtolower( preg_replace( '/\.(html|htm|php|amp)$/i', '', end( $segments ) ) );
+
+        // Date component in path (e.g. /2026/08/26/ or /epikairothta/2026/08/26/)
+        if ( preg_match( '#/\d{4}/\d{2}(?:/\d{2})?/#', '/' . $path . '/' ) ) {
+            return true;
+        }
+
+        // Numeric ID segment anywhere (e.g. /politiki/562345/slug or /article/789123/slug)
+        foreach ( $segments as $seg ) {
+            if ( preg_match( '/^\d{4,}$/', $seg ) ) {
+                return true;
+            }
+        }
+
+        // Last segment article indicators
+        $last_has_id      = (bool) preg_match( '/(?:-\d+$|\d{4,})/', $last_seg );
+        $last_has_hyphens = ( substr_count( $last_seg, '-' ) >= 1 );
+
+        if ( $last_has_id || $last_has_hyphens ) {
+            return true;
+        }
+
+        // If all segments are in category slugs, it's a deep taxonomy hierarchy
+        $all_categories = true;
+        foreach ( $segments as $seg ) {
+            $s = strtolower( preg_replace( '/\.(html|htm|php|amp)$/i', '', $seg ) );
+            if ( ! in_array( $s, $category_slugs, true ) ) {
+                $all_categories = false;
+                break;
+            }
+        }
+        if ( $all_categories ) {
+            return false;
+        }
+
+        return true;
+    }
 
     /**
      * Fetch homepage HTML or Feed and extract unique article URLs.
@@ -156,7 +436,7 @@ class PressHub_AI_News_Harvester {
                     'discovery_method' => 'FEED_DIRECT',
                     'feed_url'         => $url,
                     'raw_links_count'  => count( $feed_items ),
-                    'article_urls'     => array_slice( $urls, 0, self::MAX_LINKS_PER_SOURCE ),
+                    'article_urls'     => array_slice( $urls, 0, $this->get_max_links_per_source() ),
                     'feed_items'       => $feed_items,
                     'status_code'      => $code,
                     'latency_ms'       => $latency_ms,
@@ -185,7 +465,7 @@ class PressHub_AI_News_Harvester {
                         'discovery_method' => 'RSS_FEED',
                         'feed_url'         => $discovered_feed_url,
                         'raw_links_count'  => count( $feed_items ),
-                        'article_urls'     => array_slice( $urls, 0, self::MAX_LINKS_PER_SOURCE ),
+                        'article_urls'     => array_slice( $urls, 0, $this->get_max_links_per_source() ),
                         'feed_items'       => $feed_items,
                         'status_code'      => $code,
                         'latency_ms'       => $latency_ms,
@@ -207,7 +487,7 @@ class PressHub_AI_News_Harvester {
                 'discovery_method' => 'RSS_FEED',
                 'feed_url'         => $probed_feed['feed_url'],
                 'raw_links_count'  => count( $feed_items ),
-                'article_urls'     => array_slice( $urls, 0, self::MAX_LINKS_PER_SOURCE ),
+                'article_urls'     => array_slice( $urls, 0, $this->get_max_links_per_source() ),
                 'feed_items'       => $feed_items,
                 'status_code'      => $code,
                 'latency_ms'       => $latency_ms,
@@ -225,7 +505,7 @@ class PressHub_AI_News_Harvester {
             'discovery_method' => 'HTML_SCRAPER',
             'feed_url'         => null,
             'raw_links_count'  => count( $html_links ),
-            'article_urls'     => array_slice( $html_links, 0, self::MAX_LINKS_PER_SOURCE ),
+            'article_urls'     => array_slice( $html_links, 0, $this->get_max_links_per_source() ),
             'feed_items'       => [],
             'status_code'      => $code,
             'latency_ms'       => $latency_ms,
@@ -439,7 +719,8 @@ class PressHub_AI_News_Harvester {
     }
 
     /**
-     * Parse HTML and extract valid article links, combining JSON-LD schemas and DOM anchors.
+     * Parse HTML and extract valid article links, prioritizing editorial headings, lead/hero containers,
+     * card components, and semantic articles over general navigation and footer anchors.
      *
      * @param string $html     Raw HTML content.
      * @param string $base_url Homepage base URL for resolving relative links.
@@ -454,61 +735,53 @@ class PressHub_AI_News_Harvester {
             return [];
         }
 
-        $discovered_links = [];
-
         // 1. JSON-LD Schema links (ItemList, NewsArticle)
         $json_ld_links = $this->extract_links_from_json_ld( $html, $base_url );
-        foreach ( $json_ld_links as $jlink ) {
-            $discovered_links[] = $jlink;
-        }
 
-        // 2. DOM Anchors
-        // Strip navigation, header, footer, script, style, form, aside to avoid utility links
+        // 2. Clean HTML: Strip navigation, header, footer, script, style, form, aside to avoid utility links
         $clean_html = preg_replace( '#<(script|style|noscript|header|footer|nav|form|aside)[^>]*>.*?</(script|style|noscript|header|footer|nav|form|aside)>#is', ' ', $html );
+        $clean_html = preg_replace( '#<(?:div|section|ul|ol|nav)[^>]*class=["\'][^"\']*(?:main-menu|site-nav|navigation|navbar|main-nav|top-nav|subnav|site-header|site-footer|footer-links|sidebar|social-share|share-buttons)[^"\']*["\'][^>]*>.*?</(?:div|section|ul|ol|nav)>#is', ' ', $clean_html );
 
-        // Extract all <a href="..."> links
-        preg_match_all( '#<a\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>#i', $clean_html, $matches );
-        $raw_hrefs = $matches[1] ?? [];
+        // 3. Priority Buckets
+        // Bucket 2: Priority Editorial Containers, Heading Anchors, & <article> Tags
+        preg_match_all( '#<(?:div|section|article|li)[^>]*class=["\'][^"\']*(?:lead|hero|top-story|top_story|top-news|top_news|featured|entry-title|story|card)[^"\']*["\'][^>]*>(.*?)</(?:div|section|article|li)>#is', $clean_html, $container_matches );
+        $priority_html_blocks = implode( ' ', $container_matches[0] ?? [] );
 
-        // Excluded path and keyword substrings (Greek & English)
-        $excluded_patterns = [
-            '/tag/', '/tags/', '/category/', '/categories/', '/author/', '/page/',
-            '/terms', '/privacy', '/oroi', '/politiki-aporritou', '/contact', '/epikoino',
-            '/about', '/cookie', '/feed', '/rss', '/wp-json/', '/search', '/login',
-            '/wp-login', '/newsletter', '/sitemap', '/advertis', '/subscription',
-            'facebook.com', 'twitter.com', 'x.com', 'instagram.com', 'youtube.com',
-            'linkedin.com', 'tiktok.com', 't.me', 'whatsapp.com', 'pinterest.com',
-            'mailto:', 'tel:', 'javascript:', '#',
-        ];
+        preg_match_all( '#<article[^>]*>(.*?)</article>#is', $clean_html, $article_matches );
+        $priority_html_blocks .= ' ' . implode( ' ', $article_matches[0] ?? [] );
 
-        foreach ( $raw_hrefs as $href ) {
-            $href = trim( $href );
+        // Headings containing links (e.g. <h2><a href="...">...</a></h2>) and links wrapping headings (e.g. <a href="..."><h2>...</h2></a>)
+        preg_match_all( '#<h[1-4][^>]*>.*?<a\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>.*?</h[1-4]>#is', $clean_html, $h_matches1 );
+        preg_match_all( '#<a\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>\s*<h[1-4][^>]*>.*?</h[1-4]>\s*</a>#is', $clean_html, $h_matches2 );
+        $heading_hrefs = array_merge( $h_matches1[1] ?? [], $h_matches2[1] ?? [] );
+
+        preg_match_all( '#<a\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>#i', $priority_html_blocks, $p_matches );
+        $priority_hrefs = array_merge( $heading_hrefs, $p_matches[1] ?? [] );
+
+        // Bucket 3: General DOM links across the page body
+        preg_match_all( '#<a\s+[^>]*?href=["\']([^"\']+)["\'][^>]*>#i', $clean_html, $gen_matches );
+        $general_hrefs = $gen_matches[1] ?? [];
+
+        $candidate_hrefs = array_merge( $json_ld_links, $priority_hrefs, $general_hrefs );
+        $discovered_links = [];
+
+        foreach ( $candidate_hrefs as $href ) {
+            $href = trim( (string) $href );
             if ( '' === $href || '#' === $href || 0 === strpos( $href, '#' ) ) {
                 continue;
             }
 
-            if ( preg_match( '/^(javascript|mailto|tel):/i', $href ) ) {
-                continue;
-            }
-
-            $skip = false;
-            foreach ( $excluded_patterns as $pattern ) {
-                if ( false !== stripos( $href, $pattern ) ) {
-                    $skip = true;
-                    break;
-                }
-            }
-            if ( $skip ) {
+            if ( preg_match( '/^(javascript|mailto|tel|data):/i', $href ) ) {
                 continue;
             }
 
             $norm = $this->normalize_article_url( $href, $base_url );
-            if ( ! empty( $norm ) ) {
+            if ( ! empty( $norm ) && ! in_array( $norm, $discovered_links, true ) ) {
                 $discovered_links[] = $norm;
             }
         }
 
-        return array_values( array_unique( $discovered_links ) );
+        return $discovered_links;
     }
 
     /**
@@ -589,6 +862,10 @@ class PressHub_AI_News_Harvester {
             if ( false === strpos( $target_host, 'amna.gr' ) && false === strpos( $target_host, 'ape-mpe.gr' ) ) {
                 return '';
             }
+        }
+
+        if ( ! $this->is_article_url( $abs, $base_url ) ) {
+            return '';
         }
 
         return ( $parts['scheme'] ?? 'https' ) . '://' . $parts['host'] . $path;
@@ -832,7 +1109,7 @@ class PressHub_AI_News_Harvester {
                     $payload['blocked_sources'][] = $source_url;
                 }
             } else {
-                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, self::MAX_LINKS_PER_SOURCE );
+                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, $this->get_max_links_per_source() );
 
                 foreach ( $links_to_crawl as $article_url ) {
                     // Check budget before each article fetch
@@ -860,6 +1137,29 @@ class PressHub_AI_News_Harvester {
                             PressHub_AI_Logger::error( sprintf( 'Article fetch failed for %s: %s', $article_url, $e->getMessage() ), [ 'exception' => $e ] );
                         }
                         $article_data = null;
+                    }
+
+                    // Fallback to feed item if available
+                    if ( ( empty( $article_data ) || empty( $article_data['content'] ) ) && ! empty( $discovery['feed_items'] ) ) {
+                        foreach ( $discovery['feed_items'] as $fitem ) {
+                            if ( ( $fitem['url'] ?? '' ) === $article_url && ! empty( $fitem['content'] ) ) {
+                                $candidate = [
+                                    'url'          => $article_url,
+                                    'title'        => $fitem['title'] ?? '',
+                                    'content'      => $fitem['content'] ?? '',
+                                    'source'       => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
+                                    'tier'         => 'feed',
+                                    'published_at' => $fitem['published_at'] ?? '',
+                                    'char_count'   => mb_strlen( $fitem['content'] ?? '' ),
+                                    'is_manual'    => false,
+                                    'harvested_at' => gmdate( 'c' ),
+                                ];
+                                if ( $this->is_valid_harvested_article( $candidate ) ) {
+                                    $article_data = $candidate;
+                                }
+                                break;
+                            }
+                        }
                     }
 
                     if ( empty( $article_data ) || empty( $article_data['content'] ) ) {
@@ -1130,7 +1430,7 @@ class PressHub_AI_News_Harvester {
             if ( $discovery['is_blocked'] ) {
                 $payload['blocked_sources'][] = $source_url;
             } else {
-                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, self::MAX_LINKS_PER_SOURCE );
+                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, $this->get_max_links_per_source() );
 
                 // Scrape each discovered article
                 foreach ( $links_to_crawl as $article_url ) {
@@ -1159,6 +1459,29 @@ class PressHub_AI_News_Harvester {
                             PressHub_AI_Logger::error( sprintf( 'Article fetch failed for %s: %s', $article_url, $e->getMessage() ), [ 'exception' => $e ] );
                         }
                         $article_data = null;
+                    }
+
+                    // Fallback to feed item if available
+                    if ( ( empty( $article_data ) || empty( $article_data['content'] ) ) && ! empty( $discovery['feed_items'] ) ) {
+                        foreach ( $discovery['feed_items'] as $fitem ) {
+                            if ( ( $fitem['url'] ?? '' ) === $article_url && ! empty( $fitem['content'] ) ) {
+                                $candidate = [
+                                    'url'          => $article_url,
+                                    'title'        => $fitem['title'] ?? '',
+                                    'content'      => $fitem['content'] ?? '',
+                                    'source'       => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
+                                    'tier'         => 'feed',
+                                    'published_at' => $fitem['published_at'] ?? '',
+                                    'char_count'   => mb_strlen( $fitem['content'] ?? '' ),
+                                    'is_manual'    => false,
+                                    'harvested_at' => gmdate( 'c' ),
+                                ];
+                                if ( $this->is_valid_harvested_article( $candidate ) ) {
+                                    $article_data = $candidate;
+                                }
+                                break;
+                            }
+                        }
                     }
 
                     if ( empty( $article_data ) || empty( $article_data['content'] ) ) {
@@ -1288,6 +1611,18 @@ class PressHub_AI_News_Harvester {
             'is_manual'    => false,
             'harvested_at' => gmdate( 'c' ),
         ];
+
+        if ( ! $this->is_valid_harvested_article( $article_data ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::debug( sprintf(
+                    'Discarding shallow or non-article page: %s (title: "%s", words: %d)',
+                    $url,
+                    $title,
+                    $this->count_words( $content )
+                ) );
+            }
+            return null;
+        }
 
         PressHub_AI_Logger::log_harvest_article( $url, $title, $article_data['tier'], $article_data['char_count'], true );
 

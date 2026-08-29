@@ -72,7 +72,7 @@ class NewsHarvesterTimeoutBudgetTest
             usleep( 50000 ); // 50ms
             return [
                 'response' => [ 'code' => 200 ],
-                'body'     => '<article><h1>' . basename( $url ) . '</h1><p>Content for ' . $url . '</p></article>',
+                'body'     => '<article><h1>' . basename( $url ) . ' Headline Story</h1><p>Detailed news content for ' . $url . ' containing enough words to pass all validation checks cleanly and verify timeout budgeting during single and batch harvests without tripping shallow article filters.</p></article>',
             ];
         };
 
@@ -101,7 +101,7 @@ class NewsHarvesterTimeoutBudgetTest
             }
             return [
                 'response' => [ 'code' => 200 ],
-                'body'     => '<article><h1>' . basename( $url ) . '</h1><p>Content for ' . $url . '</p></article>',
+                'body'     => '<article><h1>' . basename( $url ) . ' Headline Story</h1><p>Detailed news content for ' . $url . ' containing enough words to pass all validation checks cleanly and verify timeout budgeting during single and batch harvests without tripping shallow article filters.</p></article>',
             ];
         };
 
@@ -118,13 +118,13 @@ class NewsHarvesterTimeoutBudgetTest
             if ( 'https://www.single-test.gr' === $url ) {
                 return [
                     'response' => [ 'code' => 200 ],
-                    'body'     => '<main><a href="https://www.single-test.gr/article-100">Single News</a></main>',
+                    'body'     => '<main><a href="https://www.single-test.gr/article-100">Single News Story</a></main>',
                 ];
             }
             if ( 'https://www.single-test.gr/article-100' === $url ) {
                 return [
                     'response' => [ 'code' => 200 ],
-                    'body'     => '<article><h1>Είδηση Μονής Πηγής</h1><p>Περιεχόμενο από τη συγκεκριμένη πηγή.</p></article>',
+                    'body'     => '<article><h1>Είδηση Μονής Πηγής για την Επικαιρότητα</h1><p>Περιεχόμενο από τη συγκεκριμένη πηγή με πλήρη ανάλυση των δεδομένων και όλες τις πληροφορίες που χρειάζεται ο αναγνώστης για να κατανοήσει τα τρέχοντα γεγονότα στην οικονομία και την πολιτική.</p></article>',
                 ];
             }
             return [ 'response' => [ 'code' => 404 ], 'body' => '' ];
@@ -132,7 +132,7 @@ class NewsHarvesterTimeoutBudgetTest
 
         $single_result = $harvester->harvest_source( 'https://www.single-test.gr', '2026-08-22', 25 );
         $check( 'harvest_source: 1 article scraped', count( $single_result['articles'] ?? [] ) === 1 );
-        $check( 'harvest_source: article title matches', 'Είδηση Μονής Πηγής' === ( $single_result['articles'][0]['title'] ?? '' ) );
+        $check( 'harvest_source: article title matches', false !== strpos( $single_result['articles'][0]['title'] ?? '', 'Είδηση Μονής Πηγής' ) );
         $check( 'harvest_source: budget_exceeded is false', false === ( $single_result['budget_exceeded'] ?? true ) );
         $check( 'harvest_source: source_health recorded', ! empty( $single_result['source_health'] ) );
 
@@ -162,7 +162,7 @@ class NewsHarvesterTimeoutBudgetTest
             if ( 'https://www.working-source.gr/article-1' === $url ) {
                 return [
                     'response' => [ 'code' => 200 ],
-                    'body'     => '<article><h1>Επιτυχές Άρθρο</h1><p>Περιεχόμενο επιτυχούς άρθρου.</p></article>',
+                    'body'     => '<article><h1>Επιτυχές Άρθρο για τις Εξελίξεις</h1><p>Περιεχόμενο επιτυχούς άρθρου με αναλυτική καταγραφή των γεγονότων και δηλώσεις των πρωταγωνιστών της επικαιρότητας στην Ελλάδα και το εξωτερικό για τις νέες επενδύσεις, την πορεία της οικονομίας και τη δημιουργία νέων θέσεων εργασίας σε όλη την επικράτεια.</p></article>',
                 ];
             }
             return [ 'response' => [ 'code' => 500 ], 'body' => 'Server Error' ];
@@ -203,7 +203,7 @@ class NewsHarvesterTimeoutBudgetTest
             if ( 'https://www.working-source.gr/article-1' === $url ) {
                 return [
                     'response' => [ 'code' => 200 ],
-                    'body'     => '<article><h1>Επιτυχές Άρθρο</h1><p>Περιεχόμενο επιτυχούς άρθρου.</p></article>',
+                    'body'     => '<article><h1>Επιτυχές Άρθρο για τις Εξελίξεις</h1><p>Περιεχόμενο επιτυχούς άρθρου με αναλυτική καταγραφή των γεγονότων και δηλώσεις των πρωταγωνιστών της επικαιρότητας στην Ελλάδα και το εξωτερικό για τις νέες επενδύσεις, την πορεία της οικονομίας και τη δημιουργία νέων θέσεων εργασίας σε όλη την επικράτεια.</p></article>',
                 ];
             }
             return [ 'response' => [ 'code' => 404 ], 'body' => '' ];

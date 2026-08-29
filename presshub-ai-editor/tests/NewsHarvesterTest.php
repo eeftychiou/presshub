@@ -91,7 +91,7 @@ $GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $sample_greek_html ) {
             'body'     => $sample_greek_html,
         ];
     }
-    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><h1>Άρθρο</h1><p>Περιεχόμενο άρθρου.</p></article>' ];
+    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><h1>Άρθρο για την Επικαιρότητα</h1><p>Περιεχόμενο άρθρου με αναλυτικές πληροφορίες για τις τρέχουσες εξελίξεις στην πολιτική και την οικονομία της χώρας, προσφέροντας πλήρη κάλυψη των γεγονότων που απασχολούν την κοινή γνώμη.</p></article>' ];
 };
 
 $harvester = new PressHub_AI_News_Harvester();
@@ -134,11 +134,11 @@ $blocked_sources_tests = [
     'https://www.cloudflare-challenge.gr' => [ 'response' => [ 'code' => 200 ], 'body' => $cf_challenge_html ],
     'https://www.normal-news.gr' => [
         'response' => [ 'code' => 200 ],
-        'body'     => '<article><h1><a href="https://www.normal-news.gr/news/101">Κανονική Είδηση</a></h1><p>Περιεχόμενο κανονικής είδησης.</p></article>',
+        'body'     => '<article><h1><a href="https://www.normal-news.gr/news/101">Κανονική Είδηση για την Οικονομία</a></h1><p>Περιεχόμενο κανονικής είδησης με εκτενή ανάλυση για τις εξελίξεις στους οικονομικούς δείκτες και τις προοπτικές ανάπτυξης για το τρέχον έτος στην Ελλάδα.</p></article>',
     ],
     'https://www.normal-news.gr/news/101' => [
         'response' => [ 'code' => 200 ],
-        'body'     => '<article><h1>Κανονική Είδηση</h1><p>Αναλυτικό κείμενο για την είδηση στην Ελλάδα.</p></article>',
+        'body'     => '<article><h1>Κανονική Είδηση για την Οικονομία</h1><p>Αναλυτικό κείμενο για την είδηση στην Ελλάδα με πλήρεις λεπτομέρειες σχετικά με τις αποφάσεις του υπουργικού συμβουλίου και τα μέτρα που θα ανακοινωθούν άμεσα για την ενίσχυση της αγοράς και των επιχειρήσεων.</p></article>',
     ],
 ];
 
@@ -146,7 +146,7 @@ $GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $blocked_sources_tests 
     if ( isset( $blocked_sources_tests[ $url ] ) ) {
         return $blocked_sources_tests[ $url ];
     }
-    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><p>Dummy text</p></article>' ];
+    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><h1>Άρθρο για την Επικαιρότητα</h1><p>Κείμενο άρθρου με αναλυτική καταγραφή των γεγονότων και δηλώσεις των πρωταγωνιστών της επικαιρότητας στην Ελλάδα και το εξωτερικό.</p></article>' ];
 };
 
 $sources = [
@@ -179,23 +179,23 @@ $shared_article_url = 'https://www.amna.gr/article/789123/koino-tilegrafima-ape-
 $multi_outlet_responses = [
     $outlet_a_url => [
         'response' => [ 'code' => 200 ],
-        'body' => '<main><a href="' . $shared_article_url . '">Τηλεγράφημα ΑΠΕ-ΜΠΕ</a><a href="https://www.outlet-a.gr/news/1">Μοναδική Είδηση Α</a></main>',
+        'body' => '<main><a href="' . $shared_article_url . '">Τηλεγράφημα ΑΠΕ-ΜΠΕ για τις Διεθνείς Σχέσεις</a><a href="https://www.outlet-a.gr/news/1">Μοναδική Είδηση Α για τις Εξελίξεις</a></main>',
     ],
     $outlet_b_url => [
         'response' => [ 'code' => 200 ],
-        'body' => '<main><a href="' . $shared_article_url . '">Τηλεγράφημα ΑΠΕ-ΜΠΕ</a><a href="https://www.outlet-b.gr/news/2">Μοναδική Είδηση Β</a></main>',
+        'body' => '<main><a href="' . $shared_article_url . '">Τηλεγράφημα ΑΠΕ-ΜΠΕ για τις Διεθνείς Σχέσεις</a><a href="https://www.outlet-b.gr/news/2">Μοναδική Είδηση Β για την Κοινωνία</a></main>',
     ],
     $shared_article_url => [
         'response' => [ 'code' => 200 ],
-        'body' => '<article><h1>Κοινό Τηλεγράφημα</h1><p>Επίσημη ανακοίνωση από το πρακτορείο ειδήσεων.</p></article>',
+        'body' => '<article><h1>Κοινό Τηλεγράφημα από το Πρακτορείο</h1><p>Επίσημη ανακοίνωση από το πρακτορείο ειδήσεων σχετικά με τις συνομιλίες κορυφής και τις κοινές πρωτοβουλίες για την ενίσχυση της ασφάλειας και της συνεργασίας στην περιοχή της Ανατολικής Μεσογείου.</p></article>',
     ],
     'https://www.outlet-a.gr/news/1' => [
         'response' => [ 'code' => 200 ],
-        'body' => '<article><h1>Είδηση Α</h1><p>Αποκλειστικό ρεπορτάζ του πρώτου μέσου.</p></article>',
+        'body' => '<article><h1>Είδηση Α για τις Εξελίξεις</h1><p>Αποκλειστικό ρεπορτάζ του πρώτου μέσου με αναλυτικά στοιχεία για τις νομοθετικές ρυθμίσεις που προωθούνται στη Βουλή των Ελλήνων και αναμένεται να ψηφιστούν εντός της εβδομάδας.</p></article>',
     ],
     'https://www.outlet-b.gr/news/2' => [
         'response' => [ 'code' => 200 ],
-        'body' => '<article><h1>Είδηση Β</h1><p>Αποκλειστικό ρεπορτάζ του δεύτερου μέσου.</p></article>',
+        'body' => '<article><h1>Είδηση Β για την Κοινωνία</h1><p>Αποκλειστικό ρεπορτάζ του δεύτερου μέσου σχετικά με τις νέες επενδύσεις στον τομέα της πράσινης ενέργειας και τη δημιουργία νέων θέσεων εργασίας σε όλη την επικράτεια.</p></article>',
     ],
 ];
 
@@ -303,15 +303,15 @@ $rss_xml_sample = '<?xml version="1.0" encoding="UTF-8"?>
         <item>
             <title>Εξελίξεις στην οικονομία</title>
             <link>https://www.news247.gr/oikonomia/article-101</link>
-            <description>Σημαντική άνοδος στους δείκτες.</description>
-            <content:encoded><![CDATA[<p>Πλήρες αναλυτικό κείμενο για τις οικονομικές εξελίξεις στην Ελλάδα.</p>]]></content:encoded>
+            <description>Σημαντική άνοδος στους δείκτες του χρηματιστηρίου και θετικές προοπτικές για την αγορά εργασίας.</description>
+            <content:encoded><![CDATA[<p>Πλήρες αναλυτικό κείμενο για τις οικονομικές εξελίξεις στην Ελλάδα με έμφαση στα νέα φορολογικά κίνητρα και την ενίσχυση της ρευστότητας των επιχειρήσεων για την ταχύτερη ανάπτυξη της ελληνικής οικονομίας και τη δημιουργία θέσεων εργασίας σε όλους τους κλάδους.</p>]]></content:encoded>
             <pubDate>Wed, 26 Aug 2026 08:30:00 +0300</pubDate>
             <guid>https://www.news247.gr/oikonomia/article-101</guid>
         </item>
         <item>
             <title>Διεθνής σύνοδος κορυφής</title>
             <link>https://www.news247.gr/kosmos/article-102</link>
-            <description>Συμφωνία για το κλίμα.</description>
+            <description>Συμφωνία για το κλίμα και τη μείωση των εκπομπών ρύπων κατά τη διάρκεια της διεθνούς συνόδου κορυφής με τη συμμετοχή εκπροσώπων από όλες τις χώρες μέλη για την προστασία του περιβάλλοντος.</description>
             <pubDate>Wed, 26 Aug 2026 07:15:00 +0300</pubDate>
         </item>
     </channel>
@@ -419,7 +419,7 @@ $GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $rss_xml_sample ) {
     if ( 'https://www.direct-feed.gr/rss.xml' === $url ) {
         return [ 'response' => [ 'code' => 200 ], 'body' => $rss_xml_sample ];
     }
-    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><h1>Άρθρο</h1><p>Κείμενο άρθρου με αρκετούς χαρακτήρες για να περάσει την επικύρωση.</p></article>' ];
+    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><h1>Άρθρο για την Επικαιρότητα</h1><p>Κείμενο άρθρου με αρκετούς χαρακτήρες και αναλυτικές πληροφορίες για να περάσει την επικύρωση περιεχομένου και τίτλου χωρίς κανένα πρόβλημα στην επεξεργασία της ροής ειδήσεων και τη συλλογή άρθρων από τις κορυφαίες πηγές ενημέρωσης στην Ελλάδα.</p></article>' ];
 };
 
 $direct_harvest = $harvester->harvest_all( [ 'https://www.direct-feed.gr/rss.xml' ], '2026-08-26' );
