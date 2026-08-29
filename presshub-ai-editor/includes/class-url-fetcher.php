@@ -386,39 +386,142 @@ class PressHub_AI_URL_Fetcher {
 
         $xpath = new DOMXPath( $doc );
 
-        // Strip noise and boilerplate sub-nodes
+        // Strip noise and boilerplate sub-nodes (scripts, styles, nav, aside, footer, ads, etc.)
         $noise_query = '//script | //style | //noscript | //header | //footer | //nav | //form | //aside | //svg | //iframe | //figure | //figcaption | //*[contains(@class, "social")] | //*[contains(@class, "share")] | //*[contains(@class, "related")] | //*[contains(@class, "advert")] | //*[contains(@class, "sidebar")] | //*[contains(@class, "banner")] | //*[contains(@class, "comment")] | //*[contains(@class, "author-bio")] | //*[contains(@class, "newsletter")] | //*[contains(@class, "cookie")]';
         $noise_nodes = $xpath->query( $noise_query );
         if ( $noise_nodes ) {
             foreach ( $noise_nodes as $noise ) {
-                if ( $noise->parentNode ) {
-                    $noise->parentNode->removeChild( $noise );
+                if ( ! $noise->parentNode ) {
+                    continue;
+                }
+
+                $tag_name = strtolower( $noise->nodeName );
+
+                // Never remove root or primary content containers
+                if ( in_array( $tag_name, [ 'html', 'body', 'main', 'article' ], true ) ) {
+                    continue;
+                }
+
+                // Never remove containers with explicit article/content IDs
+                if ( $noise->hasAttribute( 'id' ) ) {
+                    $id = $noise->getAttribute( 'id' );
+                    if ( preg_match( '/(printSection|article|story|content|body)/i', $id ) ) {
+                        continue;
+                    }
+                }
+
+                // For generic class-based noise matches, do not remove if node has substantial paragraph content
+                if ( ! in_array( $tag_name, [ 'script', 'style', 'noscript', 'header', 'footer', 'nav', 'aside', 'svg', 'iframe', 'form' ], true ) ) {
+                    $p_tags = $noise->getElementsByTagName( 'p' );
+                    if ( $p_tags->length >= 3 || mb_strlen( trim( $noise->textContent ) ) > 600 ) {
+                        continue;
+                    }
+                }
+
+                $noise->parentNode->removeChild( $noise );
+            }
+        }
+
+        // Expanded priority list of DOM containers
+        $queries = [
+            '//*[@id="printSection" or contains(@id, "printSection")]',
+            '//*[contains(@id, "article-content") or contains(@id, "story-text") or contains(@id, "article-body")]',
+            '//article',
+            '//*[contains(@class, "entry-content") or contains(@class, "article__body") or contains(@class, "article-body") or contains(@class, "story-body") or contains(@class, "post-content") or contains(@class, "main-content") or contains(@class, "article-content") or contains(@class, "story-content") or contains(@class, "news-item-body") or contains(@class, "field--name-body") or contains(@class, "field-name-body") or contains(@class, "text-formatted") or contains(@class, "node__content") or contains(@class, "article-main-content")]',
+            '//section[contains(@class, "story-body") or contains(@class, "article__content") or contains(@class, "article-body") or contains(@class, "story-content") or contains(@class, "news-item-body") or contains(@class, "node__content")]',
+            '//main',
+        ];
+
+        $best_text   = '';
+        $best_length = 0;
+        $seen_nodes  = [];
+
+        // Highest-Density Node Selection (Longest Text): Iterate through all matching container nodes
+        foreach ( $queries as $query ) {
+            $nodes = $xpath->query( $query );
+            if ( ! $nodes || $nodes->length === 0 ) {
+                continue;
+            }
+
+            foreach ( $nodes as $node ) {
+                $node_path = ( method_exists( $node, 'getNodePath' ) && $node->getNodePath() ) ? $node->getNodePath() : spl_object_hash( $node );
+                if ( isset( $seen_nodes[ $node_path ] ) ) {
+                    continue;
+                }
+                $seen_nodes[ $node_path ] = true;
+
+                $node_html = $doc->saveHTML( $node );
+                if ( empty( $node_html ) ) {
+                    continue;
+                }
+
+                $node_html = preg_replace( '#<(p|br|h[1-6]|li|div|blockquote)[^>]*>#i', "\n\n", $node_html );
+                $text = wp_strip_all_tags( $node_html );
+                $text = preg_replace( '/[ \t]+/', ' ', $text );
+                $text = preg_replace( '/\n{3,}/', "\n\n", $text );
+                $clean_text = trim( $text );
+                $char_count = mb_strlen( $clean_text );
+
+                if ( $char_count > $best_length ) {
+                    $best_length = $char_count;
+                    $best_text   = $clean_text;
                 }
             }
         }
 
-        // Priority list of containers
-        $queries = [
-            '//article',
-            '//div[contains(@class, "entry-content") or contains(@class, "article__body") or contains(@class, "article-body") or contains(@class, "story-body") or contains(@class, "post-content") or contains(@class, "main-content") or contains(@class, "article-content") or contains(@class, "story-content")]',
-            '//section[contains(@class, "story-body") or contains(@class, "article__content") or contains(@class, "article-body") or contains(@class, "story-content")]',
-            '//main',
-        ];
+        // Paragraph Cluster Fallback:
+        // If no specific container matches or all candidates yield < 200 chars,
+        // aggregate paragraph clusters (//p) inside the largest common parent element containing substantial text.
+        if ( $best_length < 200 ) {
+            $p_nodes = $xpath->query( '//p' );
+            if ( $p_nodes && $p_nodes->length > 0 ) {
+                $parent_clusters = [];
 
-        foreach ( $queries as $query ) {
-            $nodes = $xpath->query( $query );
-            if ( $nodes && $nodes->length > 0 ) {
-                $node_html = $doc->saveHTML( $nodes->item( 0 ) );
-                if ( ! empty( $node_html ) ) {
+                foreach ( $p_nodes as $p ) {
+                    $p_text = trim( wp_strip_all_tags( $doc->saveHTML( $p ) ) );
+                    if ( mb_strlen( $p_text ) < 10 ) {
+                        continue;
+                    }
+
+                    // Collect candidate parent and grandparent nodes
+                    $candidates = [];
+                    if ( $p->parentNode && ! in_array( strtolower( $p->parentNode->nodeName ), [ 'html', 'body' ], true ) ) {
+                        $candidates[] = $p->parentNode;
+                    }
+                    if ( $p->parentNode && $p->parentNode->parentNode && ! in_array( strtolower( $p->parentNode->parentNode->nodeName ), [ 'html', 'body' ], true ) ) {
+                        $candidates[] = $p->parentNode->parentNode;
+                    }
+
+                    foreach ( $candidates as $cand ) {
+                        $path = ( method_exists( $cand, 'getNodePath' ) && $cand->getNodePath() ) ? $cand->getNodePath() : spl_object_hash( $cand );
+                        if ( ! isset( $parent_clusters[ $path ] ) ) {
+                            $parent_clusters[ $path ] = $cand;
+                        }
+                    }
+                }
+
+                foreach ( $parent_clusters as $cluster_node ) {
+                    $node_html = $doc->saveHTML( $cluster_node );
+                    if ( empty( $node_html ) ) {
+                        continue;
+                    }
                     $node_html = preg_replace( '#<(p|br|h[1-6]|li|div|blockquote)[^>]*>#i', "\n\n", $node_html );
                     $text = wp_strip_all_tags( $node_html );
                     $text = preg_replace( '/[ \t]+/', ' ', $text );
                     $text = preg_replace( '/\n{3,}/', "\n\n", $text );
-                    if ( mb_strlen( trim( $text ) ) >= 10 ) {
-                        return trim( $text );
+                    $clean_text = trim( $text );
+                    $char_count = mb_strlen( $clean_text );
+
+                    if ( $char_count > $best_length ) {
+                        $best_length = $char_count;
+                        $best_text   = $clean_text;
                     }
                 }
             }
+        }
+
+        if ( $best_length >= 10 ) {
+            return $best_text;
         }
 
         return '';
