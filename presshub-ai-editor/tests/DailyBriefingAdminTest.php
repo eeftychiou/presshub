@@ -352,12 +352,12 @@ class DailyBriefingAdminTest
             if ( false !== strpos( $url, 'article-1' ) ) {
                 return [
                     'response' => [ 'code' => 200 ],
-                    'body'     => '<html><body><h1>Είδηση Τίτλος</h1><p>Περιεχόμενο είδησης...</p></body></html>',
+                    'body'     => '<html><body><h1>Είδηση Τίτλος για την Επικαιρότητα</h1><p>Περιεχόμενο είδησης με αναλυτική καταγραφή των γεγονότων και όλες τις απαραίτητες λεπτομέρειες για την πορεία των διαπραγματεύσεων και τις νέες αποφάσεις που ελήφθησαν κατά τη διάρκεια της συνόδου.</p></body></html>',
                 ];
             }
             return [
                 'response' => [ 'code' => 200 ],
-                'body'     => '<html><body><a href="https://www.tovima.gr/politics/article-1">Είδηση</a></body></html>',
+                'body'     => '<html><body><a href="https://www.tovima.gr/politics/article-1">Είδηση για την Επικαιρότητα</a></body></html>',
             ];
         };
 

@@ -176,13 +176,19 @@ class PressHub_AI_URL_Fetcher {
     public static function extract_article_semantic( string $html, string $url = '' ): array {
         $html = (string) $html;
 
-        // Default extracted title from HTML <title> or <h1>
+        // Default extracted title from <h1>, OpenGraph, or HTML <title>
         $page_title = '';
         if ( preg_match( '#<h1[^>]*>(.*?)</h1>#is', $html, $m ) ) {
             $page_title = trim( wp_strip_all_tags( $m[1] ) );
+            $page_title = preg_replace( '/\s*[-|–—]\s*[^-\|–—]+$/u', '', $page_title );
+        } elseif ( preg_match( '/<meta\s+[^>]*property=["\']og:title["\'][^>]*content=["\']([^"\']+)["\']/i', $html, $m )
+            || preg_match( '/<meta\s+[^>]*content=["\']([^"\']+)["\'][^>]*property=["\']og:title["\']/i', $html, $m )
+            || preg_match( '/<meta\s+[^>]*name=["\']twitter:title["\'][^>]*content=["\']([^"\']+)["\']/i', $html, $m ) ) {
+            $page_title = html_entity_decode( trim( $m[1] ), ENT_QUOTES, 'UTF-8' );
+            $page_title = preg_replace( '/\s*[-|–—]\s*[^-\|–—]+$/u', '', $page_title );
         } elseif ( preg_match( '#<title[^>]*>(.*?)</title>#is', $html, $m ) ) {
             $page_title = trim( wp_strip_all_tags( $m[1] ) );
-            $page_title = preg_replace( '/\s*[-|–]\s*.*$/u', '', $page_title );
+            $page_title = preg_replace( '/\s*[-|–—]\s*.*$/u', '', $page_title );
         }
 
         // =========================================================================
