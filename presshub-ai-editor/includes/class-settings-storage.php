@@ -189,7 +189,7 @@ class PressHub_AI_Settings_Storage {
         ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_sources', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_sources' ],
-            'type'              => 'string',
+            'type'              => 'array',
         ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_harvest_time', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_harvest_time' ],
@@ -508,7 +508,7 @@ class PressHub_AI_Settings_Storage {
 
     public static function sanitize_max_tokens( $value ) {
         $n = (int) wp_unslash( $value );
-        return max( 1, min( 32768, $n ) );
+        return max( 1, min( 65536, $n ) );
     }
 
     public static function sanitize_timeout( $value ) {
@@ -556,25 +556,221 @@ class PressHub_AI_Settings_Storage {
         return substr( self::sanitize_text( $value ), 0, 50 );
     }
 
-    public static function sanitize_briefing_sources( $value ) {
+    /**
+     * Supported media types for News Source Manager.
+     *
+     * @return array<string, array{label: string, description: string, active: bool, badge_label: string, badge_class: string, icon: string}>
+     */
+    public static function get_supported_media_types(): array {
+        return [
+            'text_news'     => [
+                'label'       => __( 'News Website (HTML)', 'presshub-ai-editor' ),
+                'description' => __( 'Standard digital news portal / website scraped by the HTML engine.', 'presshub-ai-editor' ),
+                'active'      => true,
+                'badge_label' => __( 'Active Harvester', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-active',
+                'icon'        => 'dashicons-admin-site-alt3',
+            ],
+            'rss_feed'      => [
+                'label'       => __( 'RSS / Atom Feed', 'presshub-ai-editor' ),
+                'description' => __( 'Dedicated XML/RSS or Atom feed with structured story links.', 'presshub-ai-editor' ),
+                'active'      => true,
+                'badge_label' => __( 'Active Harvester', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-active',
+                'icon'        => 'dashicons-rss',
+            ],
+            'youtube'       => [
+                'label'       => __( 'YouTube Channel / Playlist', 'presshub-ai-editor' ),
+                'description' => __( 'YouTube video channels, video playlists, and vlogs (planned multi-modal pipeline).', 'presshub-ai-editor' ),
+                'active'      => false,
+                'badge_label' => __( 'Planned Multi-Modal', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-planned',
+                'icon'        => 'dashicons-video-alt3',
+            ],
+            'vlog'          => [
+                'label'       => __( 'Video / Vlog Feed', 'presshub-ai-editor' ),
+                'description' => __( 'Video feeds and streaming clips (planned multi-modal pipeline).', 'presshub-ai-editor' ),
+                'active'      => false,
+                'badge_label' => __( 'Planned Multi-Modal', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-planned',
+                'icon'        => 'dashicons-video-alt',
+            ],
+            'podcast_audio' => [
+                'label'       => __( 'Audio Podcast / RSS', 'presshub-ai-editor' ),
+                'description' => __( 'Audio feeds and podcast RSS for future Whisper / Gemini audio transcription.', 'presshub-ai-editor' ),
+                'active'      => false,
+                'badge_label' => __( 'Planned Multi-Modal', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-planned',
+                'icon'        => 'dashicons-format-audio',
+            ],
+        ];
+    }
+
+    /**
+     * Normalize and sanitize news sources into structured schema.
+     * Supports JSON strings, structured source arrays, legacy string lists, and plain URL arrays.
+     *
+     * @param mixed $value JSON string, array of objects, array of URLs, or newline-delimited string.
+     * @return array[] List of structured source arrays.
+     */
+    public static function normalize_sources( $value ): array {
+        if ( empty( $value ) ) {
+            return PressHub_AI_Settings_Migration::default_structured_sources();
+        }
+
         $value = wp_unslash( $value );
-        $is_array = is_array( $value );
-        $items = $is_array ? $value : preg_split( '/[\r\n,]+/', (string) $value );
-        $clean = [];
-        foreach ( (array) $items as $item ) {
-            if ( ! is_string( $item ) ) {
-                continue;
+
+        // If JSON string, decode it
+        if ( is_string( $value ) ) {
+            $trimmed = trim( $value );
+            if ( '' === $trimmed ) {
+                return PressHub_AI_Settings_Migration::default_structured_sources();
             }
-            $item = trim( strip_tags( $item ) );
-            if ( '' === $item ) {
-                continue;
-            }
-            if ( preg_match( '/^https?:\/\/[^\s]+$/i', $item ) ) {
-                $clean[] = $item;
+            if ( ( '[' === $trimmed[0] && ']' === substr( $trimmed, -1 ) ) || ( '{' === $trimmed[0] && '}' === substr( $trimmed, -1 ) ) ) {
+                $decoded = json_decode( $trimmed, true );
+                if ( is_array( $decoded ) ) {
+                    $value = $decoded;
+                }
             }
         }
-        $clean = array_values( array_unique( $clean ) );
-        return $is_array ? $clean : implode( "\n", $clean );
+
+        $supported_types = array_keys( self::get_supported_media_types() );
+        $clean_sources   = [];
+        $seen_urls       = [];
+
+        if ( is_array( $value ) ) {
+            foreach ( $value as $item ) {
+                if ( is_string( $item ) ) {
+                    // Legacy URL string in array
+                    $url = trim( strip_tags( $item ) );
+                    if ( '' === $url || ! preg_match( '/^https?:\/\/[^\s]+$/i', $url ) || ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
+                        continue;
+                    }
+                    $norm_url = strtolower( rtrim( $url, '/' ) );
+                    if ( isset( $seen_urls[ $norm_url ] ) ) {
+                        continue;
+                    }
+                    $seen_urls[ $norm_url ] = true;
+
+                    $host      = (string) parse_url( $url, PHP_URL_HOST );
+                    $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
+
+                    $clean_sources[] = [
+                        'id'       => 'src_' . substr( md5( $norm_url ), 0, 8 ),
+                        'name'     => $host_name ?: $url,
+                        'url'      => esc_url_raw( $url ),
+                        'type'     => 'text_news',
+                        'enabled'  => true,
+                        'category' => 'General',
+                        'notes'    => '',
+                    ];
+                } elseif ( is_array( $item ) ) {
+                    // Structured source object
+                    $raw_url = trim( (string) ( $item['url'] ?? '' ) );
+                    if ( '' === $raw_url || ! preg_match( '/^https?:\/\/[^\s]+$/i', $raw_url ) || ! filter_var( $raw_url, FILTER_VALIDATE_URL ) ) {
+                        continue;
+                    }
+                    $url      = esc_url_raw( $raw_url );
+                    $norm_url = strtolower( rtrim( $url, '/' ) );
+                    if ( isset( $seen_urls[ $norm_url ] ) ) {
+                        continue;
+                    }
+                    $seen_urls[ $norm_url ] = true;
+
+                    $id = sanitize_key( (string) ( $item['id'] ?? '' ) );
+                    if ( empty( $id ) ) {
+                        $id = 'src_' . substr( md5( $norm_url ), 0, 8 );
+                    }
+
+                    $host      = (string) parse_url( $url, PHP_URL_HOST );
+                    $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
+                    $name      = sanitize_text_field( (string) ( $item['name'] ?? '' ) );
+                    if ( '' === trim( $name ) ) {
+                        $name = $host_name ?: $url;
+                    }
+
+                    $type = sanitize_key( (string) ( $item['type'] ?? 'text_news' ) );
+                    if ( ! in_array( $type, $supported_types, true ) ) {
+                        $type = 'text_news';
+                    }
+
+                    $enabled = true;
+                    if ( isset( $item['enabled'] ) ) {
+                        $val = $item['enabled'];
+                        $enabled = ( true === $val || 1 === $val || '1' === $val || 'true' === $val );
+                    }
+
+                    $category = sanitize_text_field( (string) ( $item['category'] ?? 'General' ) );
+                    if ( '' === trim( $category ) ) {
+                        $category = 'General';
+                    }
+
+                    $notes = sanitize_textarea_field( (string) ( $item['notes'] ?? '' ) );
+
+                    $clean_sources[] = [
+                        'id'       => $id,
+                        'name'     => $name,
+                        'url'      => $url,
+                        'type'     => $type,
+                        'enabled'  => $enabled,
+                        'category' => $category,
+                        'notes'    => $notes,
+                    ];
+                }
+            }
+        } elseif ( is_string( $value ) ) {
+            // Legacy plaintext newline-separated URLs
+            $lines = preg_split( '/[\r\n,]+/', $value );
+            foreach ( (array) $lines as $line ) {
+                $line = trim( strip_tags( (string) $line ) );
+                if ( '' === $line || ! preg_match( '/^https?:\/\/[^\s]+$/i', $line ) || ! filter_var( $line, FILTER_VALIDATE_URL ) ) {
+                    continue;
+                }
+                $norm_url = strtolower( rtrim( $line, '/' ) );
+                if ( isset( $seen_urls[ $norm_url ] ) ) {
+                    continue;
+                }
+                $seen_urls[ $norm_url ] = true;
+
+                $host      = (string) parse_url( $line, PHP_URL_HOST );
+                $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
+
+                $clean_sources[] = [
+                    'id'       => 'src_' . substr( md5( $norm_url ), 0, 8 ),
+                    'name'     => $host_name ?: $line,
+                    'url'      => esc_url_raw( $line ),
+                    'type'     => 'text_news',
+                    'enabled'  => true,
+                    'category' => 'General',
+                    'notes'    => '',
+                ];
+            }
+        }
+
+        return array_values( $clean_sources );
+    }
+
+    /**
+     * Sanitizer callback for presshub_ai_briefing_sources.
+     *
+     * @param mixed $value
+     * @return array[] Sanitized structured sources.
+     */
+    public static function sanitize_briefing_sources( $value ): array {
+        return self::normalize_sources( $value );
+    }
+
+    /**
+     * Helper to retrieve structured briefing sources from database.
+     *
+     * @return array[] Structured sources.
+     */
+    public static function get_briefing_sources(): array {
+        $raw = get_option( 'presshub_ai_briefing_sources', null );
+        if ( null === $raw || '' === $raw || [] === $raw ) {
+            return PressHub_AI_Settings_Migration::default_structured_sources();
+        }
+        return self::normalize_sources( $raw );
     }
 
     public static function sanitize_harvest_time( $value ) {

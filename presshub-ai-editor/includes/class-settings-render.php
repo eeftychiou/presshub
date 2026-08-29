@@ -104,11 +104,11 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_coauthor_max_tokens"><?php echo __( 'Max Completion Tokens', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_coauthor_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $cur_coauthor_tokens = (int) get_option( 'presshub_ai_coauthor_max_tokens', 10000 ); ?>
-                                    <input type="number" min="1" max="32768" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_tokens ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'Maximum output tokens for generated drafts (1 - 32768). Default 10000.', 'presshub-ai-editor' ); ?></p>
+                                    <?php $cur_coauthor_tokens = (int) get_option( 'presshub_ai_coauthor_max_tokens', PressHub_AI_Provider_Defaults::default_max_tokens() ); ?>
+                                    <input type="number" min="1" max="65536" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_tokens ); ?>" class="small-text" />
+                                    <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (1 - 65,536). Default: 16,384.', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
                             <tr>
@@ -343,11 +343,11 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_copilot_max_tokens"><?php echo __( 'Max Completion Tokens', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_copilot_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $cur_copilot_tokens = (int) get_option( 'presshub_ai_copilot_max_tokens', 10000 ); ?>
-                                    <input type="number" min="1" max="32768" name="presshub_ai_copilot_max_tokens" id="presshub_ai_copilot_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_tokens ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'Maximum output tokens for Copilot conversational turns (1 - 32768). Default 10000.', 'presshub-ai-editor' ); ?></p>
+                                    <?php $cur_copilot_tokens = (int) get_option( 'presshub_ai_copilot_max_tokens', PressHub_AI_Provider_Defaults::default_max_tokens() ); ?>
+                                    <input type="number" min="1" max="65536" name="presshub_ai_copilot_max_tokens" id="presshub_ai_copilot_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_tokens ); ?>" class="small-text" />
+                                    <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (1 - 65,536). Default: 16,384.', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
                             <tr>
@@ -416,6 +416,7 @@ class PressHub_AI_Settings_Render {
             </form>
 
             <?php $this->render_provider_modal(); ?>
+            <?php $this->render_source_modal(); ?>
         </div>
         <?php
     }
@@ -511,12 +512,12 @@ class PressHub_AI_Settings_Render {
                     $model       = $provider['default_model'] ?? '';
                     $timeout     = $provider['timeout'] ?? 300;
                     $temp        = $provider['temperature'] ?? 0.7;
-                    $max_tokens  = $provider['max_tokens'] ?? 10000;
+                    $max_tokens  = $provider['max_tokens'] ?? PressHub_AI_Provider_Defaults::default_max_tokens();
                     $enabled     = ! empty( $provider['enabled'] );
                     $is_system   = ! empty( $provider['is_system'] );
                     $has_key     = ! empty( $provider['api_key'] );
                 ?>
-                <div class="presshub-provider-card <?php echo $enabled ? 'is-enabled' : 'is-disabled'; ?>" data-provider-id="<?php echo esc_attr( $id ); ?>" data-provider-type="<?php echo esc_attr( $type ); ?>">
+                <div class="presshub-provider-card <?php echo $enabled ? 'is-enabled' : 'is-disabled'; ?>" data-provider-id="<?php echo esc_attr( $id ); ?>" data-provider-type="<?php echo esc_attr( $type ); ?>" data-provider-has-key="<?php echo $has_key ? '1' : '0'; ?>" data-provider-masked-key="<?php echo esc_attr( $has_key ? self::mask_key( $provider['api_key'] ) : '' ); ?>">
                     <div class="presshub-card-top">
                         <div class="presshub-card-title-wrap">
                             <span class="presshub-provider-badge presshub-badge-<?php echo esc_attr( function_exists( 'sanitize_html_class' ) ? sanitize_html_class( $type ) : self::sanitize_slug( $type ) ); ?>"><?php echo esc_html( strtoupper( $type ) ); ?></span>
@@ -546,7 +547,7 @@ class PressHub_AI_Settings_Render {
                         </div>
                         <div class="presshub-meta-row">
                             <span class="presshub-meta-label"><?php echo __( 'Credentials:', 'presshub-ai-editor' ); ?></span>
-                            <span class="presshub-meta-val"><?php echo $has_key ? '••••••••' : ( 'ollama_local' === $type ? __( 'Not required', 'presshub-ai-editor' ) : '<span class="presshub-missing-key" style="color: #d63638;">' . __( 'No API Key set', 'presshub-ai-editor' ) . '</span>' ); ?></span>
+                            <span class="presshub-meta-val"><?php echo $has_key ? '<span class="code">' . esc_html( self::mask_key( $provider['api_key'] ) ) . '</span>' : ( 'ollama_local' === $type ? esc_html__( 'Not required', 'presshub-ai-editor' ) : '<span class="presshub-missing-key" style="color: #d63638;">' . esc_html__( 'No API Key set', 'presshub-ai-editor' ) . '</span>' ); ?></span>
                         </div>
                     </div>
 
@@ -627,15 +628,29 @@ class PressHub_AI_Settings_Render {
                             <p class="description"><?php echo __( 'Stored securely with autoload disabled. Leave blank when editing to keep current secret.', 'presshub-ai-editor' ); ?></p>
                         </div>
 
-                        <div class="presshub-form-row" style="display: flex; gap: 15px; margin-bottom: 15px;">
-                            <div class="presshub-form-group" style="flex: 1;">
-                                <label for="provider-form-default-model"><strong><?php echo __( 'Default Model:', 'presshub-ai-editor' ); ?></strong></label>
-                                <input type="text" id="provider-form-default-model" name="default_model" class="widefat code" placeholder="e.g. gpt-4o" style="margin-top: 4px;" />
+                        <div class="presshub-form-group" style="margin-bottom: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <label for="provider-form-default-model"><strong><?php echo __( 'Model:', 'presshub-ai-editor' ); ?></strong></label>
+                                <label style="font-weight: normal; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" id="provider-form-toggle-manual" />
+                                    <?php echo __( 'Enter model manually', 'presshub-ai-editor' ); ?>
+                                </label>
                             </div>
-                            <div class="presshub-form-group" style="flex: 1;">
-                                <label for="provider-form-available-models"><strong><?php echo __( 'Available Models (comma-separated):', 'presshub-ai-editor' ); ?></strong></label>
-                                <input type="text" id="provider-form-available-models" name="available_models" class="widefat code" placeholder="gpt-4o, gpt-4o-mini, o1" style="margin-top: 4px;" />
+                            <div id="provider-model-select-wrap">
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <select id="provider-form-default-model" name="default_model" class="widefat code" style="flex: 1; margin: 0;"></select>
+                                    <button type="button" class="button button-secondary" id="provider-form-fetch-models" style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
+                                        <span class="dashicons dashicons-update" style="font-size: 14px; width: 14px; height: 14px; margin-top: 1px;"></span>
+                                        <?php echo __( 'Fetch Models', 'presshub-ai-editor' ); ?>
+                                    </button>
+                                    <span class="spinner" id="provider-form-fetch-spinner" style="float: none; margin: 0;" role="status"></span>
+                                </div>
                             </div>
+                            <div id="provider-model-manual-wrap" style="display: none;">
+                                <input type="text" id="provider-form-manual-model" class="widefat code" placeholder="<?php echo esc_attr__( 'e.g. gpt-4o, claude-3-5-sonnet-20241022, fine-tune-xyz', 'presshub-ai-editor' ); ?>" style="margin-top: 0;" />
+                            </div>
+                            <input type="hidden" id="provider-form-available-models" name="available_models" value="" />
+                            <p class="description"><?php echo __( 'Select the active model for this provider or fetch latest models directly via the provider API.', 'presshub-ai-editor' ); ?></p>
                         </div>
 
                         <div class="presshub-form-row" style="display: flex; gap: 15px; margin-bottom: 15px;">
@@ -1189,13 +1204,210 @@ class PressHub_AI_Settings_Render {
         if ( function_exists( 'wp_cache_delete' ) ) {
             wp_cache_delete( $option, 'options' );
         }
-        $sources = get_option( $option, '' );
-        if ( is_array( $sources ) ) {
-            $sources = implode( "\n", $sources );
-        }
+        $sources      = PressHub_AI_Settings_Storage::get_briefing_sources();
+        $total_count  = count( $sources );
+        $active_count = count( array_filter( $sources, function( $s ) { return ! empty( $s['enabled'] ); } ) );
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="5" class="large-text code" placeholder="https://news.in.gr&#10;https://www.kathimerini.gr"><?php echo esc_textarea( (string) $sources ); ?></textarea>
-        <p class="description"><?php echo __( 'Enter one Greek news homepage or RSS/article URL per line. Leave empty to use default outlets.', 'presshub-ai-editor' ); ?></p>
+        <div class="presshub-sources-manager-wrap" id="presshub-sources-manager-wrap">
+            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo esc_attr( wp_json_encode( $sources ) ); ?>" />
+            
+            <div class="presshub-sources-toolbar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="presshub-sources-count-badge" class="presshub-badge">
+                        <?php echo sprintf( esc_html__( '%d Sources (%d Active)', 'presshub-ai-editor' ), $total_count, $active_count ); ?>
+                    </span>
+                    <span style="color: #646970; font-size: 12px;">
+                        <?php echo esc_html__( 'Configure editorial outlets, RSS feeds, and multi-modal streams for daily morning harvesting.', 'presshub-ai-editor' ); ?>
+                    </span>
+                </div>
+                <div>
+                    <button type="button" class="button button-primary" id="presshub-add-source-btn">
+                        <span class="dashicons dashicons-plus-alt2" style="vertical-align: text-bottom; margin-right: 4px;"></span><?php echo esc_html__( 'Add News Source', 'presshub-ai-editor' ); ?>
+                    </button>
+                </div>
+            </div>
+
+            <div class="presshub-table-responsive presshub-sources-table-wrap">
+                <table class="wp-list-table widefat fixed striped presshub-sources-table" id="presshub-sources-table">
+                    <thead>
+                        <tr>
+                            <th scope="col" style="width: 80px; text-align: center;"><?php echo esc_html__( 'Status', 'presshub-ai-editor' ); ?></th>
+                            <th scope="col" style="width: 170px;"><?php echo esc_html__( 'Source Name', 'presshub-ai-editor' ); ?></th>
+                            <th scope="col"><?php echo esc_html__( 'URL / Feed', 'presshub-ai-editor' ); ?></th>
+                            <th scope="col" style="width: 180px;"><?php echo esc_html__( 'Media Type', 'presshub-ai-editor' ); ?></th>
+                            <th scope="col" style="width: 140px;"><?php echo esc_html__( 'Category / Notes', 'presshub-ai-editor' ); ?></th>
+                            <th scope="col" style="width: 170px; text-align: right;"><?php echo esc_html__( 'Actions', 'presshub-ai-editor' ); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody id="presshub-sources-tbody">
+                        <?php
+                        if ( empty( $sources ) ) {
+                            echo '<tr class="presshub-sources-empty-row"><td colspan="6" style="text-align: center; color: #646970; padding: 20px;">' . esc_html__( 'No news sources configured yet. Click "Add News Source" to add one.', 'presshub-ai-editor' ) . '</td></tr>';
+                        } else {
+                            foreach ( $sources as $source ) {
+                                echo $this->render_source_row( $source ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+                            }
+                        }
+                        ?>
+                    </tbody>
+                </table>
+            </div>
+            <p class="description" style="margin-top: 8px;">
+                <?php echo esc_html__( 'Active text/RSS sources are crawled every morning during the harvest window. Multi-modal (video/audio) sources are preserved for upcoming ingestion pipelines.', 'presshub-ai-editor' ); ?>
+            </p>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render a single row of the News Sources table.
+     *
+     * @param array $source Source configuration array.
+     * @return string HTML table row.
+     */
+    public function render_source_row( array $source ): string {
+        $id       = esc_attr( $source['id'] ?? '' );
+        $name     = esc_html( $source['name'] ?? '' );
+        $url      = esc_url( $source['url'] ?? '' );
+        $type     = esc_attr( $source['type'] ?? 'text_news' );
+        $enabled  = ! empty( $source['enabled'] );
+        $category = esc_html( $source['category'] ?? 'General' );
+        $notes    = esc_html( $source['notes'] ?? '' );
+
+        $types_info = PressHub_AI_Settings_Storage::get_supported_media_types();
+        $type_meta  = $types_info[ $type ] ?? $types_info['text_news'];
+
+        $status_class = $enabled ? 'pill-active' : 'pill-inactive';
+        $status_text  = $enabled ? __( 'Active', 'presshub-ai-editor' ) : __( 'Disabled', 'presshub-ai-editor' );
+        $toggle_title = $enabled ? __( 'Click to disable source', 'presshub-ai-editor' ) : __( 'Click to enable source', 'presshub-ai-editor' );
+
+        $badge_class = $type_meta['badge_class'] ?? 'badge-active';
+        $icon_class  = $type_meta['icon'] ?? 'dashicons-admin-site-alt3';
+        $type_label  = $type_meta['label'] ?? $type;
+
+        $json_data = esc_attr( wp_json_encode( $source ) );
+
+        $html  = '<tr class="presshub-source-row ' . ( $enabled ? '' : 'is-disabled' ) . '" data-id="' . $id . '" data-source="' . $json_data . '">';
+        $html .= '<td style="text-align: center; vertical-align: middle;">';
+        $html .= '<button type="button" class="presshub-source-toggle-status presshub-status-pill ' . $status_class . '" title="' . esc_attr( $toggle_title ) . '" data-id="' . $id . '">';
+        $html .= esc_html( $status_text );
+        $html .= '</button>';
+        $html .= '</td>';
+
+        $html .= '<td style="vertical-align: middle;">';
+        $html .= '<strong class="presshub-source-name">' . $name . '</strong>';
+        if ( '' !== $notes ) {
+            $html .= '<div class="presshub-source-subnote" style="color: #646970; font-size: 11px; margin-top: 2px;">' . $notes . '</div>';
+        }
+        $html .= '</td>';
+
+        $html .= '<td style="vertical-align: middle;">';
+        $html .= '<a href="' . $url . '" target="_blank" rel="noopener noreferrer" class="presshub-source-url code" style="word-break: break-all;">' . esc_html( $url ) . ' <span class="dashicons dashicons-external" style="font-size: 12px; width: 12px; height: 12px; text-decoration: none; vertical-align: middle;"></span></a>';
+        $html .= '</td>';
+
+        $html .= '<td style="vertical-align: middle;">';
+        $html .= '<span class="presshub-media-badge ' . esc_attr( $badge_class ) . '">';
+        $html .= '<span class="dashicons ' . esc_attr( $icon_class ) . '" style="font-size: 14px; width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"></span>';
+        $html .= esc_html( $type_label );
+        $html .= '</span>';
+        $html .= '</td>';
+
+        $html .= '<td style="vertical-align: middle;">';
+        $html .= '<span class="presshub-category-pill">' . $category . '</span>';
+        $html .= '</td>';
+
+        $html .= '<td style="text-align: right; vertical-align: middle;">';
+        $html .= '<div class="presshub-source-actions" style="display: flex; gap: 6px; justify-content: flex-end;">';
+        $html .= '<button type="button" class="button button-small presshub-source-test-btn" data-url="' . $url . '" data-type="' . $type . '" title="' . esc_attr__( 'Test connectivity', 'presshub-ai-editor' ) . '">';
+        $html .= '<span class="dashicons dashicons-networking" style="font-size: 14px; width: 14px; height: 14px; vertical-align: text-top;"></span> ' . esc_html__( 'Test', 'presshub-ai-editor' );
+        $html .= '</button>';
+        $html .= '<button type="button" class="button button-small presshub-source-edit-btn" data-id="' . $id . '" title="' . esc_attr__( 'Edit source', 'presshub-ai-editor' ) . '">';
+        $html .= '<span class="dashicons dashicons-edit" style="font-size: 14px; width: 14px; height: 14px; vertical-align: text-top;"></span> ' . esc_html__( 'Edit', 'presshub-ai-editor' );
+        $html .= '</button>';
+        $html .= '<button type="button" class="button button-small presshub-source-delete-btn" data-id="' . $id . '" title="' . esc_attr__( 'Delete source', 'presshub-ai-editor' ) . '" style="color: #b32d2e;">';
+        $html .= '<span class="dashicons dashicons-trash" style="font-size: 14px; width: 14px; height: 14px; vertical-align: text-top;"></span>';
+        $html .= '</button>';
+        $html .= '</div>';
+        $html .= '</td>';
+
+        $html .= '</tr>';
+        return $html;
+    }
+
+    /**
+     * Render the Add/Edit News Source modal dialog.
+     */
+    public function render_source_modal(): void {
+        $types = PressHub_AI_Settings_Storage::get_supported_media_types();
+        ?>
+        <div id="presshub-source-modal" class="presshub-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="presshub-source-modal-title" style="display:none;">
+            <div class="presshub-modal presshub-source-modal-content">
+                <div class="presshub-modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid #dcdcde;">
+                    <h2 id="presshub-source-modal-title" style="margin:0; font-size: 16px;"><?php echo esc_html__( 'Add News Source', 'presshub-ai-editor' ); ?></h2>
+                    <button type="button" class="presshub-modal-close" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;" aria-label="<?php echo esc_attr__( 'Close', 'presshub-ai-editor' ); ?>">&times;</button>
+                </div>
+                <div class="presshub-modal-body" style="padding: 20px; max-height: 70vh; overflow-y: auto;">
+                    <form id="presshub-source-form">
+                        <input type="hidden" id="source-form-id" name="id" value="" />
+                        
+                        <div class="presshub-form-row" style="display: flex; gap: 15px; margin-bottom: 15px;">
+                            <div class="presshub-form-group" style="flex: 1;">
+                                <label for="source-form-name"><strong><?php echo esc_html__( 'Source Name:', 'presshub-ai-editor' ); ?> <span style="color:red;">*</span></strong></label>
+                                <input type="text" id="source-form-name" name="name" class="widefat" required placeholder="<?php echo esc_attr__( 'e.g. Η Καθημερινή', 'presshub-ai-editor' ); ?>" style="margin-top: 4px;" />
+                            </div>
+                            <div class="presshub-form-group" style="flex: 1;">
+                                <label for="source-form-type"><strong><?php echo esc_html__( 'Media Type:', 'presshub-ai-editor' ); ?></strong></label>
+                                <select id="source-form-type" name="type" class="widefat" style="margin-top: 4px;">
+                                    <?php foreach ( $types as $t_key => $t_info ) : ?>
+                                        <option value="<?php echo esc_attr( $t_key ); ?>">
+                                            <?php echo esc_html( $t_info['label'] ); ?> <?php echo $t_info['active'] ? esc_html__( '[Active Harvester]', 'presshub-ai-editor' ) : esc_html__( '[Planned Multi-Modal]', 'presshub-ai-editor' ); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="presshub-form-group" style="margin-bottom: 15px;">
+                            <label for="source-form-url"><strong><?php echo esc_html__( 'Source URL / RSS Feed:', 'presshub-ai-editor' ); ?> <span style="color:red;">*</span></strong></label>
+                            <input type="url" id="source-form-url" name="url" class="widefat code" required placeholder="https://www.kathimerini.gr" style="margin-top: 4px;" />
+                            <p class="description"><?php echo esc_html__( 'Homepage URL or direct RSS/Atom feed URL to scrape for daily news articles.', 'presshub-ai-editor' ); ?></p>
+                        </div>
+
+                        <div class="presshub-form-row" style="display: flex; gap: 15px; margin-bottom: 15px;">
+                            <div class="presshub-form-group" style="flex: 1;">
+                                <label for="source-form-category"><strong><?php echo esc_html__( 'Category / Beat:', 'presshub-ai-editor' ); ?></strong></label>
+                                <input type="text" id="source-form-category" name="category" class="widefat" placeholder="<?php echo esc_attr__( 'e.g. General, Economy, Tech', 'presshub-ai-editor' ); ?>" style="margin-top: 4px;" />
+                            </div>
+                            <div class="presshub-form-group" style="flex: 1; display: flex; align-items: flex-end; padding-bottom: 4px;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                                    <input type="checkbox" id="source-form-enabled" name="enabled" value="1" checked="checked" />
+                                    <strong><?php echo esc_html__( 'Enable in Daily Harvest', 'presshub-ai-editor' ); ?></strong>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="presshub-form-group" style="margin-bottom: 15px;">
+                            <label for="source-form-notes"><strong><?php echo esc_html__( 'Editorial Notes:', 'presshub-ai-editor' ); ?></strong></label>
+                            <textarea id="source-form-notes" name="notes" class="widefat" rows="2" placeholder="<?php echo esc_attr__( 'Optional editorial notes or scraping context...', 'presshub-ai-editor' ); ?>" style="margin-top: 4px;"></textarea>
+                        </div>
+
+                        <div id="presshub-source-form-notice" style="display: none; margin-top: 10px;"></div>
+                    </form>
+                </div>
+                <div class="presshub-modal-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-top: 1px solid #dcdcde; background: #f6f7f7;">
+                    <div>
+                        <button type="button" id="presshub-source-form-test" class="button button-secondary">
+                            <span class="dashicons dashicons-networking" style="vertical-align:text-bottom; margin-right:2px;"></span> <?php echo esc_html__( 'Test Connection', 'presshub-ai-editor' ); ?>
+                        </button>
+                        <span id="presshub-source-form-spinner" class="spinner" role="status" style="float: none; margin: 0 0 0 6px;"><span class="screen-reader-text"></span></span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="button button-secondary presshub-modal-cancel"><?php echo esc_html__( 'Cancel', 'presshub-ai-editor' ); ?></button>
+                        <button type="button" id="presshub-source-form-save" class="button button-primary"><?php echo esc_html__( 'Save Source', 'presshub-ai-editor' ); ?></button>
+                    </div>
+                </div>
+            </div>
+        </div>
         <?php
     }
 
@@ -1537,16 +1749,11 @@ class PressHub_AI_Settings_Render {
     // ------------------------------------------------------------------
 
     /**
-     * Mask a secret for display: '••••' + the last 4 characters.
+     * Mask a secret for display: prefix + '••••••••' + last 4 characters.
      */
     public static function mask_key( $key ): string {
-        $key = (string) $key;
-        if ( '' === $key ) {
-            return '';
-        }
-        $len  = strlen( $key );
-        $tail = $len >= 4 ? substr( $key, -4 ) : $key;
-        return '••••' . $tail;
+        require_once __DIR__ . '/class-provider-store.php';
+        return PressHub_AI_Provider_Store::mask_key( $key );
     }
 
     private static function esc_attr_safe( $text ) {

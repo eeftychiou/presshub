@@ -412,19 +412,10 @@ function presshub_ai_schedule_briefing_crons() {
  * @return array Harvest payload.
  */
 function presshub_ai_execute_harvest_cron() {
-    $harvester   = new PressHub_AI_News_Harvester();
-    $raw_sources = get_option( 'presshub_ai_briefing_sources', '' );
-    if ( is_array( $raw_sources ) ) {
-        $sources = $raw_sources;
-    } else {
-        $sources = preg_split( '/[\r\n,]+/', (string) $raw_sources );
-    }
-    $sources = array_values( array_filter( array_map( 'trim', (array) $sources ) ) );
-
-    if ( empty( $sources ) && class_exists( 'PressHub_AI_Settings' ) ) {
-        $sources = PressHub_AI_Settings::default_briefing_sources();
-    }
-
+    $harvester = new PressHub_AI_News_Harvester();
+    $sources   = class_exists( 'PressHub_AI_Settings_Storage' )
+        ? PressHub_AI_Settings_Storage::get_briefing_sources()
+        : ( class_exists( 'PressHub_AI_Settings' ) ? PressHub_AI_Settings::default_briefing_sources() : [] );
     return $harvester->harvest_all( $sources );
 }
 

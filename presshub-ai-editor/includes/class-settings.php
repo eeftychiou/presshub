@@ -57,7 +57,11 @@ class PressHub_AI_Settings {
                 'ajax_url'             => admin_url( 'admin-ajax.php' ),
                 'nonce'                => wp_create_nonce( 'presshub_ai_nonce' ),
                 'provider_templates'   => PressHub_AI_Provider_Defaults::get_templates(),
-                'configured_providers' => PressHub_AI_Provider_Store::get_all( false ),
+                'configured_providers' => array_map( function( $p ) {
+                    $p['masked_key'] = PressHub_AI_Provider_Store::mask_key( $p['api_key'] ?? '' );
+                    $p['api_key']    = $p['masked_key'];
+                    return $p;
+                }, PressHub_AI_Provider_Store::get_all( false ) ),
             ] );
         }
     }
@@ -160,6 +164,10 @@ class PressHub_AI_Settings {
 
     public static function default_timeout( $provider ): int {
         return PressHub_AI_Settings_Migration::default_timeout( $provider );
+    }
+
+    public static function default_structured_sources(): array {
+        return PressHub_AI_Settings_Migration::default_structured_sources();
     }
 
     public static function default_briefing_sources(): array {

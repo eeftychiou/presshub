@@ -23,7 +23,7 @@ class PressHub_AI_Provider_Defaults {
     ];
 
     const DEFAULT_TEMPERATURE = 0.7;
-    const DEFAULT_MAX_TOKENS   = 10000;
+    const DEFAULT_MAX_TOKENS   = 16384;
 
     /** Timeouts set to 300 seconds (5 minutes) across all providers. */
     const DEFAULT_TIMEOUT        = 300;
@@ -41,7 +41,7 @@ class PressHub_AI_Provider_Defaults {
             'available_models' => [ 'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o3-mini' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => 16384,
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -54,7 +54,7 @@ class PressHub_AI_Provider_Defaults {
             'available_models' => [ 'claude-3-5-sonnet-20240620', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => 16384,
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -67,7 +67,7 @@ class PressHub_AI_Provider_Defaults {
             'available_models' => [ 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts', 'gemini-2.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-flash-latest' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => 16384,
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -80,7 +80,7 @@ class PressHub_AI_Provider_Defaults {
             'available_models' => [ 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => 16384,
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -93,7 +93,7 @@ class PressHub_AI_Provider_Defaults {
             'available_models' => [ 'mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => 16384,
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -106,7 +106,7 @@ class PressHub_AI_Provider_Defaults {
             'available_models' => [ 'deepseek-chat', 'deepseek-reasoner' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => 16384,
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -119,7 +119,7 @@ class PressHub_AI_Provider_Defaults {
             'available_models' => [ 'llama3:latest', 'mistral:latest', 'qwen2.5:latest', 'phi3:latest' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => 16384,
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -132,7 +132,7 @@ class PressHub_AI_Provider_Defaults {
             'available_models' => [ 'default' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => 16384,
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => false,

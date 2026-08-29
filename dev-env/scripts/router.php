@@ -16,7 +16,6 @@ $file = $root . $path;
 if ( $path !== '/' && file_exists( $file ) && ! is_dir( $file ) ) {
     $ext = strtolower( pathinfo( $file, PATHINFO_EXTENSION ) );
     
-    // Set appropriate MIME types for static assets
     $mimes = [
         'css'   => 'text/css',
         'js'    => 'application/javascript',
@@ -43,7 +42,6 @@ if ( $path !== '/' && file_exists( $file ) && ! is_dir( $file ) ) {
         return true;
     }
 
-    // Direct PHP script executions (e.g. wp-login.php, wp-admin/admin-ajax.php, wp-cron.php)
     if ( $ext === 'php' ) {
         $_SERVER['SCRIPT_FILENAME'] = $file;
         $_SERVER['SCRIPT_NAME']     = $path;

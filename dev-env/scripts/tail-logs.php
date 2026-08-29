@@ -97,7 +97,6 @@ $read_entries = function() use ( $wp_log_file, $ph_log_file, $source, $level_fil
         }
     }
 
-    // Filter
     $filtered = [];
     foreach ( $entries as $item ) {
         $text = $item['raw'];
@@ -157,7 +156,7 @@ while ( true ) {
             $wp_pos = ftell( $fp );
             fclose( $fp );
         } elseif ( $cur_size < $wp_pos ) {
-            $wp_pos = 0; // Rotated/cleared
+            $wp_pos = 0;
         }
     }
 
@@ -179,11 +178,11 @@ while ( true ) {
             $ph_pos = ftell( $fp );
             fclose( $fp );
         } elseif ( $cur_size < $ph_pos ) {
-            $ph_pos = 0; // Rotated/cleared
+            $ph_pos = 0;
         }
     }
 
-    usleep( 300000 ); // 300ms polling
+    usleep( 300000 );
 }
 
 function format_log_line( string $source, string $line ): void {

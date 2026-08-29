@@ -22,7 +22,7 @@ $pdo = new PDO( 'sqlite:' . $db_file );
 $pdo->setAttribute( PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION );
 
 $args = $argv;
-array_shift( $args ); // remove script name
+array_shift( $args );
 
 $is_json = false;
 $query   = null;
@@ -145,7 +145,6 @@ function print_table( array $rows ): void {
         }
     }
 
-    // Border
     $border = '+';
     foreach ( $headers as $h ) {
         $border .= str_repeat( '-', $widths[ $h ] + 2 ) . '+';

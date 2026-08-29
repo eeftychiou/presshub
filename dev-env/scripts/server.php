@@ -14,7 +14,6 @@ $router_file = __DIR__ . '/router.php';
 $host = '127.0.0.1';
 $port = 8888;
 
-// Allow port override via CLI argument (e.g. php server.php 8080)
 if ( isset( $argv[1] ) && is_numeric( $argv[1] ) ) {
     $port = (int) $argv[1];
 }

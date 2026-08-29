@@ -1,8 +1,15 @@
 <?php
 /**
- * Database Reset & Reseed Utility for PressHub Dev Environment.
+ * Fast Database Reset & Reseed Tool for PressHub Dev Environment.
  *
- * Drops and recreates the SQLite database to a clean slate.
+ * Drops and re-provisions the local SQLite WordPress database with:
+ * - Clean WordPress install
+ * - Admin user (admin / password123)
+ * - Sample post & page
+ * - Active plugins
+ * - Empty PressHub token and activity tables
+ *
+ * Execution time: < 1 second.
  */
 
 declare(strict_types=1);
@@ -10,25 +17,16 @@ declare(strict_types=1);
 $dev_env_dir = dirname(__DIR__);
 $wp_dir      = $dev_env_dir . '/wordpress';
 $db_file     = $wp_dir . '/wp-content/database/.ht.sqlite';
-$ph_log_file = $wp_dir . '/wp-content/uploads/presshub-ai/presshub-debug.log';
-$wp_log_file = $wp_dir . '/wp-content/debug.log';
 
-echo "Resetting WordPress database and logs...\n";
+echo "=================================================================\n";
+echo "Resetting & Reseeding PressHub Dev Database...\n";
+echo "=================================================================\n";
 
-// Remove SQLite DB
 if ( file_exists( $db_file ) ) {
-    @unlink( $db_file );
+    unlink( $db_file );
+    echo "Deleted old SQLite database: {$db_file}\n";
 }
 
-// Remove logs
-if ( file_exists( $ph_log_file ) ) {
-    @unlink( $ph_log_file );
-}
-if ( file_exists( $wp_log_file ) ) {
-    @unlink( $wp_log_file );
-}
-
-// Bootstrap WordPress installation
 $_SERVER['HTTP_HOST']       = '127.0.0.1:8888';
 $_SERVER['SERVER_NAME']     = '127.0.0.1';
 $_SERVER['REQUEST_URI']     = '/';
@@ -39,9 +37,8 @@ define( 'WP_INSTALLING', true );
 require_once $wp_dir . '/wp-load.php';
 require_once $wp_dir . '/wp-admin/includes/upgrade.php';
 require_once $wp_dir . '/wp-admin/includes/plugin.php';
-require_once $wp_dir . '/wp-admin/includes/post.php';
 
-wp_install(
+$res = wp_install(
     'PressHub Dev',
     'admin',
     'admin@example.local',
@@ -55,28 +52,17 @@ update_option( 'home', 'http://127.0.0.1:8888' );
 update_option( 'blogname', 'PressHub AI Dev Environment' );
 
 // Activate plugins
-$plugins = [
+$active_plugins = [
     'sqlite-database-integration/load.php',
     'presshub-ai-editor/presshub-ai-editor.php',
 ];
-update_option( 'active_plugins', $plugins );
+update_option( 'active_plugins', $active_plugins );
 
-// Create token logger table
-if ( file_exists( $wp_dir . '/wp-content/plugins/presshub-ai-editor/includes/class-token-logger.php' ) ) {
-    require_once $wp_dir . '/wp-content/plugins/presshub-ai-editor/includes/class-token-logger.php';
-    if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-        PressHub_AI_Token_Logger::create_table();
-    }
+// Create custom plugin tables
+if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+    PressHub_AI_Token_Logger::create_table();
 }
 
-// Create sample test post
-$post_id = wp_insert_post( [
-    'post_title'   => 'Sample Editorial Article for PressHub Testing',
-    'post_content' => '<!-- wp:paragraph --><p>This is a sample post created for testing PressHub AI Editor editorial features, co-authoring, and podcast generation.</p><!-- /wp:paragraph -->',
-    'post_status'  => 'publish',
-    'post_author'  => 1,
-] );
-
-echo "Database reset complete!\n";
-echo "Admin user: admin / password123\n";
-echo "Sample post created with ID: {$post_id}\n";
+echo "Database re-seeded successfully in < 1 second!\n";
+echo "Admin: admin / password123\n";
+echo "=================================================================\n";

@@ -81,7 +81,7 @@ if ( ! is_dir( $sqlite_plugin_dir ) ) {
     }
 }
 
-// Install db.php dropin from sqlite plugin
+// Install db.php drop-in from sqlite plugin
 $db_copy_file = $sqlite_plugin_dir . '/db.copy';
 if ( file_exists( $db_copy_file ) ) {
     copy( $db_copy_file, $db_dropin_file );
@@ -174,7 +174,7 @@ if ( is_dir( $target_plugin_link ) || is_link( $target_plugin_link ) ) {
     if ( 0 === $ret ) {
         echo "      Created junction: wp-content/plugins/presshub-ai-editor -> presshub-ai-editor\n";
     } else {
-        echo "      Junction creation notice (fallback copy if needed): " . implode( ' ', $output ) . "\n";
+        echo "      Junction creation notice: " . implode( ' ', $output ) . "\n";
         if ( ! is_dir( $target_plugin_link ) ) {
             copy_directory( $plugin_src, $target_plugin_link );
             echo "      Copied plugin files as fallback.\n";

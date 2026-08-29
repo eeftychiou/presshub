@@ -1,6 +1,6 @@
 # Agent Instructions for PressHub AI
 
-Welcome to the **PressHub** repository. This guide provides AI coding assistants and developers with critical instructions, workflows, and tools to develop, test, debug, and verify features and fixes across the codebase.
+Welcome to the **PressHub** repository. This document outlines the standard operating procedures, workflows, security rules, debugging tools, and verification tasks for all autonomous agents and developers contributing to the codebase.
 
 ---
 
@@ -9,7 +9,7 @@ Welcome to the **PressHub** repository. This guide provides AI coding assistants
 - **`presshub-ai-editor/`**: The core WordPress plugin source code.
   - `includes/`: PHP classes (API client, token logger, structured logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings).
   - `assets/`: Frontend/Admin JavaScript and CSS.
-  - `tests/`: Isolated PHP unit test suite (46 test files + `run-all-tests.php`).
+  - `tests/`: Isolated PHP unit test suite (49 test files + `run-all-tests.php`).
 - **`presshub-workflow/`**: TypeScript workflow and MCP server components (Jest test suite).
 - **`dev-env/`**: Fully configured, self-contained local WordPress development and testing environment powered by the official WordPress Core SQLite database engine (zero external database services required).
 
@@ -22,6 +22,7 @@ All ongoing development, feature work, bug fixes, and live testing **must** util
 ### 1. Direct Code Linking
 The plugin in `dev-env/wordpress/wp-content/plugins/presshub-ai-editor` is a direct filesystem junction (`mklink /J`) pointing to `presshub-ai-editor/` in the repository root.
 - **No manual copying or rebuilding is required** when modifying PHP, JS, or CSS files in `presshub-ai-editor/` — changes are live immediately.
+- **Live Branch Sync**: When switching branches in git, the junction dynamically reflects the current checked-out branch in WordPress.
 
 ### 2. Environment Credentials & Endpoints
 - **Front-end URL**: `http://127.0.0.1:8888`
@@ -141,6 +142,23 @@ php dev-env/scripts/reset-db.php
 
 ---
 
+## 🔒 Security & Hardening Standards
+
+All code contributions must strictly adhere to WordPress security best practices:
+
+1. **Nonce Verification**:
+   - Every AJAX action and form POST must verify nonces via `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` or `check_admin_referer()`.
+2. **Capability & Authorization Checks**:
+   - All admin endpoints and settings modifications must enforce explicit user capability gates (`current_user_can( 'manage_options' )` or filtered capability `apply_filters( 'presshub_ai_settings_cap', 'manage_options' )`).
+3. **Data Sanitization & Escaping**:
+   - **Input Sanitization**: Always sanitize input using `sanitize_text_field()`, `sanitize_textarea_field()`, `sanitize_key()`, `esc_url_raw()`, and `wp_unslash()`.
+   - **Output Escaping**: Always escape output in templates and HTML renders using `esc_html()`, `esc_attr()`, `esc_url()`, `esc_textarea()`, or `wp_kses_post()`.
+4. **Secret Redaction**:
+   - Never log unmasked API keys or secret tokens into `debug.log`, token log metadata, or client-side JavaScript payloads.
+   - Always mask API keys displaying only prefix and suffix (e.g. `sk-pr••••••••3x9K`).
+
+---
+
 ## 🧪 Verification & Testing Protocol
 
 Before marking any task, bugfix, or feature as complete, you **MUST** run all verification test suites:
@@ -151,7 +169,7 @@ Validates plugin activation, database tables, logger outputs, options persistenc
 php dev-env/scripts/run-integration-tests.php
 ```
 
-### 2. Plugin Unit Tests (46 test files)
+### 2. Plugin Unit Tests (49 test files)
 Runs all unit tests in process-isolated PHP runners:
 ```bash
 php presshub-ai-editor/tests/run-all-tests.php
@@ -162,6 +180,7 @@ php presshub-ai-editor/tests/run-all-tests.php
 cd presshub-workflow
 npm test
 npx tsc --noEmit
+cd ..
 ```
 
 ### 4. PHP Syntax Verification
@@ -170,6 +189,23 @@ Ensure no syntax errors in modified PHP files:
 php -l presshub-ai-editor/presshub-ai-editor.php
 php -l presshub-ai-editor/includes/<modified-file>.php
 ```
+
+---
+
+## 👁️ Visual Inspection & Screenshot Verification
+
+As part of the QA pipeline, agents **must** perform a visual inspection of all frontend or admin UI changes in the local testing environment:
+
+1. **Start Local Dev Server**: Ensure the local development server is running (`php dev-env/scripts/server.php`).
+2. **Navigate to Interface**: Open and inspect the modified interface in an automated or browser context (e.g. `http://127.0.0.1:8888/wp-admin/admin.php?page=presshub-ai`).
+3. **Verify Visual States**:
+   - Verify layout alignment, typography, and component rendering.
+   - Test UI state variations: **Empty states**, **Loading/Spinner states**, **Active states**, **Error/Validation alerts**, and **Modal dialogs**.
+   - Check responsive layouts across standard desktop and mobile viewports.
+4. **Record Screenshots**:
+   - Capture screenshots of the "before" and "after" states (or the final state of the feature/fix).
+5. **Attach Evidence**:
+   - Attach or reference these screenshots in the Pull Request description or walkthrough artifact to provide visual proof that the fix renders correctly.
 
 ---
 
@@ -270,7 +306,7 @@ An issue may **only** be closed when the fix is fully verified:
 
 ## 🔄 Complete Software Development Life Cycle (SDLC) & Git Workflow
 
-All bug fixes, enhancements, and features **must** follow this structured end-to-end SDLC from issue creation to main branch merge.
+All bug fixes, enhancements, and features **must** follow this structured end-to-end SDLC from issue creation to main branch merge:
 
 ```dot
 digraph SDLC {
@@ -338,6 +374,7 @@ digraph SDLC {
    - Check real-time logs: `php dev-env/scripts/tail-logs.php --level=ERROR`
    - Check database records: `php dev-env/scripts/view-token-logs.php` or `php dev-env/scripts/query-db.php "..."`
    - Test UI in WordPress Admin: `http://127.0.0.1:8888/wp-admin/`
+   - Capture screenshots for any modified UI views.
 
 ---
 
@@ -346,7 +383,7 @@ digraph SDLC {
 Before committing, you **MUST** run all verification test suites and ensure a 100% clean pass rate:
 
 ```bash
-# 1. Plugin Unit Tests (All 46+ test suites)
+# 1. Plugin Unit Tests (All 49+ test suites)
 php presshub-ai-editor/tests/run-all-tests.php
 
 # 2. Live WordPress Integration Tests
@@ -392,6 +429,7 @@ git commit -m "fix(settings): prevent pre-populating active providers on clean i
    - [x] \`php presshub-ai-editor/tests/run-all-tests.php\` passed (100%)
    - [x] \`php dev-env/scripts/run-integration-tests.php\` passed (100%)
    - [x] Verified clean state in local dev environment
+   - [x] Visual inspection and screenshots verified
 
    Closes #1"
    ```
@@ -448,8 +486,7 @@ gh run view <run-id> --log-failed # Inspect failed CI run logs
 
 # Pull Requests & Releases
 gh pr list                        # List pull requests
-gh pr create                      # Create a pull request
-gh release list                   # List releases and release assets
+gh pr view <id>                   # View PR details
+gh pr checks <id>                 # Check status of PR CI checks
+gh pr merge <id> --squash         # Merge PR into main branch
 ```
-
-

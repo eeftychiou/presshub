@@ -7,7 +7,7 @@
  *   - per-provider default models (openai gpt-4o, anthropic
  *     claude-3-5-sonnet-20240620, gemini gemini-1.5-pro-latest,
  *     unknown provider falls back to gpt-4o);
- *   - shared defaults (temperature 0.7, max_tokens 10000);
+ *   - shared defaults (temperature 0.7, max_tokens 16384);
  *   - per-provider timeouts (openai 60, everyone else 90);
  *   - consistency: PressHub_AI_Settings and PressHub_AI_API_Client
  *     resolve the exact same defaults as PressHub_AI_Provider_Defaults
@@ -47,8 +47,8 @@ class ProviderDefaultsTest
         if ( PressHub_AI_Provider_Defaults::default_temperature() !== 0.7 ) {
             $failures[] = 'default_temperature() should be 0.7; got: ' . var_export( PressHub_AI_Provider_Defaults::default_temperature(), true );
         }
-        if ( PressHub_AI_Provider_Defaults::default_max_tokens() !== 10000 ) {
-            $failures[] = 'default_max_tokens() should be 10000; got: ' . var_export( PressHub_AI_Provider_Defaults::default_max_tokens(), true );
+        if ( PressHub_AI_Provider_Defaults::default_max_tokens() !== 16384 ) {
+            $failures[] = 'default_max_tokens() should be 16384; got: ' . var_export( PressHub_AI_Provider_Defaults::default_max_tokens(), true );
         }
 
         // --- Case 3: timeout per provider (default 300s) ---
