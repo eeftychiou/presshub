@@ -657,7 +657,7 @@ jQuery(document).ready(function($) {
         e.preventDefault();
         var targetId = $(this).data('target');
         if (targetId) {
-            $('#' + targetId).val('');
+            $('#' + targetId).val('').trigger('input');
         }
     });
 
@@ -666,9 +666,243 @@ jQuery(document).ready(function($) {
         var targetId = $(this).data('target');
         var defaultPrompt = $(this).data('default');
         if (targetId && defaultPrompt) {
-            $('#' + targetId).val(defaultPrompt);
+            $('#' + targetId).val(defaultPrompt).trigger('input');
         }
     });
+
+    // ------------------------------------------------------------------
+    // Dirty-State Tracking & Unsaved-Changes Warning Engine (Issue #17)
+    // ------------------------------------------------------------------
+    var tabBaselines = {};
+    var providerModalBaseline = null;
+
+    /**
+     * Compute a deterministic signature/snapshot of all form fields in a tab pane.
+     *
+     * @param {string} tabKey
+     * @return {string}
+     */
+    function getTabFormSnapshot(tabKey) {
+        var $tabPane = $('#presshub-tab-pane-' + tabKey);
+        if (!$tabPane.length) {
+            return '';
+        }
+        var fields = [];
+        $tabPane.find('input, select, textarea').each(function() {
+            var $el = $(this);
+            var id = $el.attr('id') || '';
+            var name = $el.attr('name') || id;
+
+            // Exclude nonces, action markers, and read-only diagnostic log viewer
+            if (!name || name === 'action' || name === 'option_page' || name === '_wp_http_referer' || name === '_wpnonce') {
+                return;
+            }
+            if (id === 'presshub-ai-log-viewer' || $el.hasClass('presshub-no-dirty')) {
+                return;
+            }
+
+            var type = $el.attr('type');
+            if (type === 'checkbox') {
+                fields.push(name + '=' + ($el.is(':checked') ? ($el.val() || '1') : '__UNCHECKED__'));
+            } else if (type === 'radio') {
+                if ($el.is(':checked')) {
+                    fields.push(name + '=' + ($el.val() || ''));
+                }
+            } else {
+                fields.push(name + '=' + ($el.val() || ''));
+            }
+        });
+        return fields.join('&');
+    }
+
+    /**
+     * Initialize baseline snapshots for all savable tab panes.
+     */
+    function initTabBaselines() {
+        var savableTabs = ['coauthor', 'briefing', 'copilot', 'advanced'];
+        savableTabs.forEach(function(key) {
+            tabBaselines[key] = getTabFormSnapshot(key);
+        });
+        $('.presshub-tab-pane').each(function() {
+            var paneId = $(this).attr('id') || '';
+            if (paneId.indexOf('presshub-tab-pane-') === 0) {
+                var tabKey = paneId.replace('presshub-tab-pane-', '');
+                if (typeof tabBaselines[tabKey] === 'undefined') {
+                    tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
+                }
+            }
+        });
+    }
+
+    /**
+     * Check if a specific tab has unsaved changes.
+     *
+     * @param {string} tabKey
+     * @return {boolean}
+     */
+    function isTabDirty(tabKey) {
+        if (!tabKey || typeof tabBaselines[tabKey] === 'undefined') {
+            return false;
+        }
+        return getTabFormSnapshot(tabKey) !== tabBaselines[tabKey];
+    }
+
+    /**
+     * Check if any tab has unsaved changes.
+     *
+     * @return {boolean}
+     */
+    function isAnyTabDirty() {
+        var keys = Object.keys(tabBaselines);
+        for (var i = 0; i < keys.length; i++) {
+            if (isTabDirty(keys[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Update visual dirty indicators across desktop nav tabs, mobile tab select, and sticky save bar.
+     *
+     * @param {string} tabKey
+     */
+    function updateTabDirtyState(tabKey) {
+        if (!tabKey) {
+            return;
+        }
+        var dirty = isTabDirty(tabKey);
+
+        // 1. Desktop / Tablet Nav Tab
+        var $navTab = $('#presshub-ai-settings-tabs .nav-tab[data-tab="' + tabKey + '"]');
+        if ($navTab.length) {
+            if (dirty) {
+                $navTab.addClass('is-dirty');
+            } else {
+                $navTab.removeClass('is-dirty');
+            }
+        }
+
+        // 2. Mobile Tab Select option
+        var $mobileOption = $('#presshub-mobile-tab-select option[value="' + tabKey + '"]');
+        if ($mobileOption.length) {
+            var baseLabel = $mobileOption.data('base-label');
+            if (!baseLabel) {
+                baseLabel = $mobileOption.text().replace(/\s*•\s*\(unsaved\)$/i, '').replace(/\s*\*$/i, '').trim();
+                $mobileOption.data('base-label', baseLabel);
+            }
+            if (dirty) {
+                $mobileOption.text(baseLabel + ' • (' + __('unsaved', 'presshub-ai-editor') + ')').addClass('is-dirty');
+            } else {
+                $mobileOption.text(baseLabel).removeClass('is-dirty');
+            }
+        }
+
+        // 3. Mobile Select element dirty indicator
+        var $mobileSelect = $('#presshub-mobile-tab-select');
+        if ($mobileSelect.length) {
+            if (isAnyTabDirty()) {
+                $mobileSelect.addClass('is-dirty');
+            } else {
+                $mobileSelect.removeClass('is-dirty');
+            }
+        }
+
+        // 4. Update sticky save bar
+        updateStickySaveBarDirtyState();
+    }
+
+    /**
+     * Update sticky save bar dirty indicators based on the currently active tab.
+     */
+    function updateStickySaveBarDirtyState() {
+        var $stickyBar = $('#presshub-sticky-save-bar');
+        if (!$stickyBar.length) {
+            return;
+        }
+        var activeTab = $stickyBar.attr('data-active-tab') ||
+                        $('#presshub-ai-settings-tabs .nav-tab-active').data('tab') ||
+                        $('#presshub-mobile-tab-select').val() ||
+                        '';
+
+        var activeDirty = isTabDirty(activeTab);
+        var $unsavedBadge = $('#presshub-sticky-unsaved-badge');
+
+        if (activeDirty) {
+            $stickyBar.addClass('has-unsaved');
+            if ($unsavedBadge.length) {
+                $unsavedBadge.show();
+            }
+        } else {
+            $stickyBar.removeClass('has-unsaved');
+            if ($unsavedBadge.length) {
+                $unsavedBadge.hide();
+            }
+        }
+    }
+
+    /**
+     * Compute a deterministic signature of all form fields in the provider modal.
+     *
+     * @return {string}
+     */
+    function getProviderModalSnapshot() {
+        var $form = $('#presshub-provider-form');
+        if (!$form.length) {
+            return '';
+        }
+        var fields = [];
+        $form.find('input, select, textarea').each(function() {
+            var $el = $(this);
+            var name = $el.attr('name') || $el.attr('id') || '';
+            if (!name) {
+                return;
+            }
+            var type = $el.attr('type');
+            if (type === 'checkbox') {
+                fields.push(name + '=' + ($el.is(':checked') ? '1' : '0'));
+            } else if (type === 'radio') {
+                if ($el.is(':checked')) {
+                    fields.push(name + '=' + ($el.val() || ''));
+                }
+            } else {
+                fields.push(name + '=' + ($el.val() || ''));
+            }
+        });
+        return fields.join('&');
+    }
+
+    /**
+     * Check if provider modal has unsaved changes.
+     *
+     * @return {boolean}
+     */
+    function isProviderModalDirty() {
+        if (!$('#presshub-provider-modal').is(':visible') || providerModalBaseline === null) {
+            return false;
+        }
+        return getProviderModalSnapshot() !== providerModalBaseline;
+    }
+
+    /**
+     * Attempt to close provider modal, displaying an inline discard confirmation notice if dirty.
+     *
+     * @param {boolean} force
+     * @return {boolean}
+     */
+    function tryCloseProviderModal(force) {
+        if (!force && isProviderModalDirty()) {
+            var $notice = $('#presshub-provider-discard-notice');
+            if ($notice.length) {
+                $notice.slideDown(150);
+            }
+            return false;
+        }
+        $('#presshub-provider-discard-notice').hide();
+        providerModalBaseline = null;
+        closeProviderModal();
+        return true;
+    }
 
     // ------------------------------------------------------------------
     // Settings Page Tabs Organization.
@@ -729,6 +963,7 @@ jQuery(document).ready(function($) {
             }
 
             updateStickySaveBar(tabKey);
+            updateStickySaveBarDirtyState();
 
             if (window.location.hash !== '#' + tabKey) {
                 if (window.history && window.history.replaceState) {
@@ -759,6 +994,7 @@ jQuery(document).ready(function($) {
             } else {
                 $stickyBar.fadeOut(150);
             }
+            updateStickySaveBarDirtyState();
         }
 
         $tabs.on('click', '.nav-tab', function(e) {
@@ -798,9 +1034,30 @@ jQuery(document).ready(function($) {
             }
             updateStickySaveBar(defaultTab);
         }
+
+        // Initialize baseline snapshots and bind live input/change/keyup listeners
+        initTabBaselines();
+        updateStickySaveBarDirtyState();
+
+        $(document).on('input change keyup', '#presshub-ai-settings-form input, #presshub-ai-settings-form select, #presshub-ai-settings-form textarea', function() {
+            var $pane = $(this).closest('.presshub-tab-pane');
+            if ($pane.length && $pane.attr('id')) {
+                var tabKey = $pane.attr('id').replace('presshub-tab-pane-', '');
+                updateTabDirtyState(tabKey);
+            }
+        });
     }
 
     initSettingsTabs();
+
+    // Register beforeunload handler for unsaved changes
+    window.addEventListener('beforeunload', function(e) {
+        if (isAnyTabDirty() || isProviderModalDirty()) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        }
+    });
 
     // ------------------------------------------------------------------
     // Dynamic AI Providers Manager Logic
@@ -967,6 +1224,8 @@ jQuery(document).ready(function($) {
 
         $modal.show().addClass('is-open');
         $('body').addClass('presshub-modal-open');
+        $('#presshub-provider-discard-notice').hide();
+        providerModalBaseline = getProviderModalSnapshot();
     }
 
     function closeProviderModal() {
@@ -989,13 +1248,16 @@ jQuery(document).ready(function($) {
 
     $(document).on('click', '.presshub-modal-close, .presshub-modal-cancel', function(e) {
         e.preventDefault();
-        closeProviderModal();
-        closeLogDetailsModal();
+        if ($(this).closest('#presshub-provider-modal').length) {
+            tryCloseProviderModal(false);
+        } else {
+            closeLogDetailsModal();
+        }
     });
 
     $(document).on('click', '#presshub-provider-modal, #presshub-log-details-modal', function(e) {
         if ($(e.target).is('#presshub-provider-modal')) {
-            closeProviderModal();
+            tryCloseProviderModal(false);
         }
         if ($(e.target).is('#presshub-log-details-modal')) {
             closeLogDetailsModal();
@@ -1005,12 +1267,22 @@ jQuery(document).ready(function($) {
     $(document).on('keydown', function(e) {
         if (e.key === 'Escape') {
             if ($('#presshub-provider-modal').is(':visible')) {
-                closeProviderModal();
+                tryCloseProviderModal(false);
             }
             if ($('#presshub-log-details-modal').is(':visible')) {
                 closeLogDetailsModal();
             }
         }
+    });
+
+    $(document).on('click', '.presshub-provider-discard-confirm-btn', function(e) {
+        e.preventDefault();
+        tryCloseProviderModal(true);
+    });
+
+    $(document).on('click', '.presshub-provider-discard-cancel-btn', function(e) {
+        e.preventDefault();
+        $('#presshub-provider-discard-notice').slideUp(150);
     });
 
     // Preset Template Selection Auto-fill
@@ -1212,6 +1484,7 @@ jQuery(document).ready(function($) {
             $spinner.removeClass('is-active');
 
             if (res && res.success) {
+                providerModalBaseline = null;
                 $notice.html('<div class="notice notice-success"><p>' + presshubEsc(res.data.message || __('Provider saved.', 'presshub-ai-editor')) + '</p></div>');
                 setTimeout(function() {
                     closeProviderModal();
@@ -1400,7 +1673,7 @@ jQuery(document).ready(function($) {
     initSourcesState();
 
     function syncSourcesInput() {
-        $('#presshub_ai_briefing_sources').val(JSON.stringify(presshubSourcesState));
+        $('#presshub_ai_briefing_sources').val(JSON.stringify(presshubSourcesState)).trigger('input');
     }
 
     function renderSourcesTable() {
@@ -2310,6 +2583,9 @@ jQuery(document).ready(function($) {
             }
 
             if (res && res.success) {
+                tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
+                updateTabDirtyState(tabKey);
+
                 var successMsg = (res.data && res.data.message) ? res.data.message : __('Settings saved successfully.', 'presshub-ai-editor');
                 if (res.data && res.data.sources !== undefined) {
                     if (Array.isArray(res.data.sources)) {
@@ -2492,6 +2768,11 @@ jQuery(document).ready(function($) {
             $spinner.removeClass('is-active');
 
             if (res && res.success) {
+                initTabBaselines();
+                Object.keys(tabBaselines).forEach(function(k) {
+                    updateTabDirtyState(k);
+                });
+
                 var successMsg = (res.data && res.data.message) ? res.data.message : 'Settings saved successfully.';
                 if (res.data && res.data.sources !== undefined) {
                     if (Array.isArray(res.data.sources)) {

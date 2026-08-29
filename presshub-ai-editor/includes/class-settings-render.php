@@ -449,13 +449,17 @@ class PressHub_AI_Settings_Render {
                 </div>
             </form>
 
-            <!-- Sticky Save Changes Bar for Long Settings Pages (Issue #16) -->
+            <!-- Sticky Save Changes Bar for Long Settings Pages (Issue #16 & #17) -->
             <div id="presshub-sticky-save-bar" class="presshub-sticky-save-bar" role="region" aria-label="<?php echo esc_attr__( 'Quick Save Bar', 'presshub-ai-editor' ); ?>" style="display: none;">
                 <div class="presshub-sticky-save-bar-content">
                     <div class="presshub-sticky-section-info">
                         <span class="dashicons dashicons-admin-generic presshub-sticky-icon" aria-hidden="true"></span>
                         <span class="presshub-sticky-text"><?php echo esc_html__( 'Active Section:', 'presshub-ai-editor' ); ?></span>
                         <span class="presshub-sticky-section-badge" id="presshub-sticky-section-badge"><?php echo esc_html__( 'AI Providers', 'presshub-ai-editor' ); ?></span>
+                        <span class="presshub-sticky-unsaved-badge" id="presshub-sticky-unsaved-badge" style="display: none;">
+                            <span class="dashicons dashicons-warning" aria-hidden="true" style="font-size: 14px; width: 14px; height: 14px; line-height: 14px;"></span>
+                            <?php echo esc_html__( 'Unsaved changes', 'presshub-ai-editor' ); ?>
+                        </span>
                     </div>
                     <div class="presshub-sticky-actions">
                         <span id="presshub-sticky-status-msg" class="presshub-sticky-status-msg" role="status" aria-live="polite"></span>
@@ -641,6 +645,15 @@ class PressHub_AI_Settings_Render {
                     <button type="button" class="presshub-modal-close" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;" aria-label="<?php echo esc_attr__( 'Close', 'presshub-ai-editor' ); ?>">&times;</button>
                 </div>
                 <div class="presshub-modal-body" style="padding: 20px; max-height: 70vh; overflow-y: auto;">
+                    <div id="presshub-provider-discard-notice" class="presshub-provider-discard-notice" style="display: none; margin-bottom: 15px; padding: 10px 14px; background: #fff8e5; border-left: 4px solid #dba617; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                            <span><strong><?php echo esc_html__( 'Unsaved changes:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'You have unsaved provider changes. Discard them?', 'presshub-ai-editor' ); ?></span>
+                            <div style="display: flex; gap: 8px;">
+                                <button type="button" class="button button-link-delete presshub-provider-discard-confirm-btn" style="color: #b32d2e;"><?php echo esc_html__( 'Discard', 'presshub-ai-editor' ); ?></button>
+                                <button type="button" class="button button-secondary presshub-provider-discard-cancel-btn"><?php echo esc_html__( 'Keep Editing', 'presshub-ai-editor' ); ?></button>
+                            </div>
+                        </div>
+                    </div>
                     <form id="presshub-provider-form">
                         <input type="hidden" id="provider-form-id" name="id" value="" />
 
