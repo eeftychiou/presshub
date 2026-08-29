@@ -26,7 +26,27 @@ class PressHub_AI_URL_Fetcher {
     const REQUEST_TIMEOUT = 15;
 
     /** UA so sites don't block the fetch as a generic bot. */
-    const USER_AGENT = 'PressHub-AI-Co-Pilot/1.3.1 (+https://github.com/eeftychiou/presshub)';
+    const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 PressHub-AI-Co-Pilot/1.3.1';
+
+    /**
+     * Default modern browser request headers to minimize false-positive bot blocks.
+     *
+     * @return array<string, string>
+     */
+    public static function get_default_headers(): array {
+        return (array) apply_filters( 'presshub_ai_url_fetcher_headers', [
+            'Accept'                    => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language'           => 'el,el-GR;q=0.9,en;q=0.8',
+            'Sec-Ch-Ua'                 => '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
+            'Sec-Ch-Ua-Mobile'          => '?0',
+            'Sec-Ch-Ua-Platform'        => '"Windows"',
+            'Sec-Fetch-Dest'            => 'document',
+            'Sec-Fetch-Mode'            => 'navigate',
+            'Sec-Fetch-Site'            => 'none',
+            'Sec-Fetch-User'            => '?1',
+            'Upgrade-Insecure-Requests' => '1',
+        ] );
+    }
 
     /**
      * Whether URL fetching is active: option on AND not filtered off.
@@ -62,6 +82,7 @@ class PressHub_AI_URL_Fetcher {
             'timeout'     => self::REQUEST_TIMEOUT,
             'user-agent'  => self::USER_AGENT,
             'redirection' => 3,
+            'headers'     => self::get_default_headers(),
         ] );
         if ( is_wp_error( $response ) ) {
             return '';
@@ -103,10 +124,7 @@ class PressHub_AI_URL_Fetcher {
             'timeout'     => self::REQUEST_TIMEOUT,
             'user-agent'  => self::USER_AGENT,
             'redirection' => 3,
-            'headers'     => [
-                'Accept'          => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language' => 'el,el-GR;q=0.9,en;q=0.8',
-            ],
+            'headers'     => self::get_default_headers(),
         ] );
 
         if ( is_wp_error( $response ) ) {

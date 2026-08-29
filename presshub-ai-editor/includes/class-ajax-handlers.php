@@ -869,7 +869,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $budget = PressHub_AI_Settings_Storage::get_harvest_time_budget();
 
         if ( function_exists( 'set_time_limit' ) ) {
-            @set_time_limit( (int) $budget + 30 );
+            @set_time_limit( (int) $budget + 60 );
         }
         if ( function_exists( 'wp_raise_memory_limit' ) ) {
             wp_raise_memory_limit( 'admin' );
