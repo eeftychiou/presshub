@@ -160,4 +160,61 @@ class PressHub_AI_Logger {
         }
         return true;
     }
+
+    /**
+     * Log a source harvesting diagnostic event.
+     */
+    public static function log_harvest_source( string $source_url, string $method, int $code, int $latency_ms, int $links_count, ?string $failure = null ): void {
+        $status_label = ( $code >= 200 && $code < 300 && empty( $failure ) ) ? 'OK' : 'FAIL';
+        $msg = sprintf(
+            '[HARVEST_SOURCE] %s | [%s] Code: %d | Latency: %dms | Articles/Links: %d | Status: %s%s',
+            $source_url,
+            $method,
+            $code,
+            $latency_ms,
+            $links_count,
+            $status_label,
+            $failure ? ' (' . $failure . ')' : ''
+        );
+        $context = [
+            'source'     => $source_url,
+            'method'     => $method,
+            'code'       => $code,
+            'latency_ms' => $latency_ms,
+            'links'      => $links_count,
+            'failure'    => $failure,
+        ];
+        if ( ! empty( $failure ) || $code >= 400 ) {
+            self::warning( $msg, $context );
+        } else {
+            self::info( $msg, $context );
+        }
+    }
+
+    /**
+     * Log an individual article extraction diagnostic event.
+     */
+    public static function log_harvest_article( string $url, string $title, string $tier, int $char_count, bool $success, ?string $failure = null ): void {
+        $msg = sprintf(
+            '[HARVEST_ARTICLE] %s | Tier: %s | Chars: %d | Status: %s | Title: %s%s',
+            $url,
+            $tier,
+            $char_count,
+            $success ? 'SUCCESS' : 'FAIL',
+            mb_substr( $title, 0, 60 ),
+            $failure ? ' (' . $failure . ')' : ''
+        );
+        $context = [
+            'url'        => $url,
+            'tier'       => $tier,
+            'char_count' => $char_count,
+            'success'    => $success,
+            'failure'    => $failure,
+        ];
+        if ( $success ) {
+            self::debug( $msg, $context );
+        } else {
+            self::warning( $msg, $context );
+        }
+    }
 }

@@ -180,6 +180,47 @@
                 updateSelectedCountBadge();
             }
 
+                        // 1b. Render Harvest Diagnostics & Source Health Table (Issue #5)
+            var $healthTbody = $('#presshub-source-health-tbody');
+            if ($healthTbody.length && status.source_health && Array.isArray(status.source_health)) {
+                if (status.source_health.length > 0) {
+                    var healthRowsHtml = '';
+                    $.each(status.source_health, function(idx, h) {
+                        var hUrl = h.url || '';
+                        var hStatus = (h.status || 'ok').toLowerCase();
+                        var hCode = h.http_code || '-';
+                        var hMethod = h.discovery_method || 'UNKNOWN';
+                        var hLat = (h.latency_ms !== undefined) ? h.latency_ms + 'ms' : '-';
+                        var hYield = (h.articles_yielded !== undefined) ? h.articles_yielded : 0;
+                        var hReason = h.failure_reason || (hStatus === 'ok' ? 'Healthy' : '-');
+
+                        var badgeClass = 'badge-success';
+                        if (hStatus === 'blocked') badgeClass = 'badge-danger';
+                        else if (hStatus === 'warning') badgeClass = 'badge-warning';
+                        else if (hStatus === 'error') badgeClass = 'badge-danger';
+
+                        var methodClass = 'method-html';
+                        if (hMethod === 'RSS_FEED' || hMethod === 'FEED_DIRECT') methodClass = 'method-rss';
+
+                        var escUrl = $('<div>').text(hUrl).html();
+                        var escReason = $('<div>').text(hReason).html();
+
+                        healthRowsHtml += '<tr>' +
+                            '<td><code title="' + escUrl + '">' + escUrl + '</code></td>' +
+                            '<td><span class="presshub-status-pill ' + badgeClass + '">' + hStatus.toUpperCase() + '</span></td>' +
+                            '<td><strong>' + hCode + '</strong></td>' +
+                            '<td><span class="presshub-method-pill ' + methodClass + '">' + hMethod + '</span></td>' +
+                            '<td>' + hLat + '</td>' +
+                            '<td><strong>' + hYield + '</strong></td>' +
+                            '<td><small>' + escReason + '</small></td>' +
+                        '</tr>';
+                    });
+                    $healthTbody.html(healthRowsHtml);
+                } else {
+                    $healthTbody.html('<tr><td colspan="7" style="text-align: center; color: #777; padding: 15px;">No harvest diagnostics recorded yet for this date.</td></tr>');
+                }
+            }
+
             // Blocked sources banner
             if (status.blocked_sources && status.blocked_sources.length > 0) {
                 var badges = '';
@@ -389,6 +430,17 @@
         // -------------------------------------------------------------------------
         // Event: Date Picker Change
         // -------------------------------------------------------------------------
+                // Event: Refresh Health Status Button
+        $('#btn-refresh-diagnostics').on('click', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            setButtonLoading($btn, true, null, 'Refreshing...');
+            fetchStatus(currentDate, function() {
+                setButtonLoading($btn, false);
+                showNotice('info', 'Refreshed source health diagnostics.');
+            });
+        });
+
         $('#presshub-date-picker').on('change', function() {
             var newDate = $(this).val();
             if (newDate) {
