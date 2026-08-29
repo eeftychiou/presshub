@@ -397,8 +397,14 @@ class DailyBriefingSettingsTest
         if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 5 ) !== 10 ) {
             $failures[] = 'harvest time budget 5 (below 10) should clamp to min 10.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 500 ) !== 300 ) {
-            $failures[] = 'harvest time budget 500 (above 300) should clamp to max 300.';
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 500 ) !== 500 ) {
+            $failures[] = 'harvest time budget 500 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 900 ) !== 900 ) {
+            $failures[] = 'harvest time budget 900 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 1200 ) !== 900 ) {
+            $failures[] = 'harvest time budget 1200 (above 900) should clamp to max 900.';
         }
         if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 'invalid' ) !== 60 ) {
             $failures[] = 'non-numeric harvest time budget should fall back to default 60.';
@@ -409,13 +415,17 @@ class DailyBriefingSettingsTest
         if ( PressHub_AI_Settings_Storage::get_harvest_time_budget() !== 60 ) {
             $failures[] = 'get_harvest_time_budget() should default to 60.';
         }
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] = 120;
-        if ( PressHub_AI_Settings_Storage::get_harvest_time_budget() !== 120 ) {
-            $failures[] = 'get_harvest_time_budget() should return saved option 120.';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] = 900;
+        if ( PressHub_AI_Settings_Storage::get_harvest_time_budget() !== 900 ) {
+            $failures[] = 'get_harvest_time_budget() should return saved option 900.';
         }
         $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] = 5;
         if ( PressHub_AI_Settings_Storage::get_harvest_time_budget() !== 60 ) {
             $failures[] = 'get_harvest_time_budget() should fallback to 60 for out-of-range option 5.';
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] = 950;
+        if ( PressHub_AI_Settings_Storage::get_harvest_time_budget() !== 60 ) {
+            $failures[] = 'get_harvest_time_budget() should fallback to 60 for out-of-range option 950.';
         }
 
         // Section options map inclusion test
@@ -435,8 +445,8 @@ class DailyBriefingSettingsTest
         if ( false === strpos( $render_html, 'name="presshub_ai_harvest_time_budget"' ) ) {
             $failures[] = 'render_harvest_time_budget_field should render input with name="presshub_ai_harvest_time_budget".';
         }
-        if ( false === strpos( $render_html, 'min="10"' ) || false === strpos( $render_html, 'max="300"' ) ) {
-            $failures[] = 'render_harvest_time_budget_field should render min="10" and max="300".';
+        if ( false === strpos( $render_html, 'min="10"' ) || false === strpos( $render_html, 'max="900"' ) ) {
+            $failures[] = 'render_harvest_time_budget_field should render min="10" and max="900".';
         }
         if ( false === strpos( $render_html, 'value="75"' ) ) {
             $failures[] = 'render_harvest_time_budget_field should render value="75".';

@@ -797,17 +797,17 @@ class PressHub_AI_Settings_Storage {
             return 60;
         }
         $n = (int) $value;
-        return max( 10, min( 300, $n ) );
+        return max( 10, min( 900, $n ) );
     }
 
     /**
-     * Helper to retrieve configured harvest time budget from database (clamped 10–300s, default 60s).
+     * Helper to retrieve configured harvest time budget from database (clamped 10–900s, default 60s).
      *
      * @return int Configured execution time budget in seconds.
      */
     public static function get_harvest_time_budget(): int {
         $budget = (int) get_option( 'presshub_ai_harvest_time_budget', 60 );
-        return ( $budget >= 10 && $budget <= 300 ) ? $budget : 60;
+        return ( $budget >= 10 && $budget <= 900 ) ? $budget : 60;
     }
 
     private static function sanitize_time_format( $value, $default = '06:30' ): string {

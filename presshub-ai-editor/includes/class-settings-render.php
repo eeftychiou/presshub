@@ -1593,12 +1593,12 @@ class PressHub_AI_Settings_Render {
     public function render_harvest_time_budget_field() {
         $option = 'presshub_ai_harvest_time_budget';
         $value  = (int) get_option( $option, 60 );
-        if ( $value < 10 || $value > 300 ) {
+        if ( $value < 10 || $value > 900 ) {
             $value = 60;
         }
         ?>
-        <input type="number" min="10" max="300" step="5" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Maximum execution time in seconds allocated for crawling news sources and extracting articles during each briefing cycle (10 to 300 seconds). Default: 60s.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="10" max="900" step="15" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Maximum execution time in seconds allocated for crawling news sources and extracting articles during each briefing cycle (10 to 900 seconds / 15 minutes). Default: 60s.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

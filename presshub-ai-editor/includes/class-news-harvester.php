@@ -40,6 +40,50 @@ class PressHub_AI_News_Harvester {
     const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 PressHub-AI-Harvester/1.3.1';
 
     /**
+     * Timestamp tracker for polite per-host crawl delays (host => float microtime).
+     *
+     * @var array<string, float>
+     */
+    protected array $last_host_request_time = [];
+
+    /**
+     * Polite rate-limiting throttle between successive requests to the same host.
+     *
+     * @param string $url Target request URL.
+     */
+    public function throttle_host_request( string $url ): void {
+        $host = (string) parse_url( $url, PHP_URL_HOST );
+        if ( empty( $host ) ) {
+            return;
+        }
+
+        $delay_ms = (int) apply_filters( 'presshub_ai_crawl_delay_ms', 500, $host );
+        if ( $delay_ms > 0 && isset( $this->last_host_request_time[ $host ] ) ) {
+            $elapsed_ms = ( microtime( true ) - $this->last_host_request_time[ $host ] ) * 1000;
+            if ( $elapsed_ms < $delay_ms ) {
+                usleep( (int) ( ( $delay_ms - $elapsed_ms ) * 1000 ) );
+            }
+        }
+        $this->last_host_request_time[ $host ] = microtime( true );
+    }
+
+    /**
+     * Reset per-host crawl delay timestamps.
+     */
+    public function reset_host_throttle(): void {
+        $this->last_host_request_time = [];
+    }
+
+    /**
+     * Get per-host crawl delay timestamps map.
+     *
+     * @return array<string, float>
+     */
+    public function get_last_host_request_time(): array {
+        return $this->last_host_request_time;
+    }
+
+    /**
      * Get the maximum number of links to harvest per source.
      *
      * @param int|null $limit Optional explicit limit override.
@@ -365,6 +409,7 @@ class PressHub_AI_News_Harvester {
         }
 
         $start_time = microtime( true );
+        $this->throttle_host_request( $url );
         $response   = wp_remote_get( $url, [
             'timeout'     => self::REQUEST_TIMEOUT,
             'user-agent'  => self::USER_AGENT,
@@ -455,6 +500,7 @@ class PressHub_AI_News_Harvester {
         // Case B: Auto-detect RSS/Atom <link> tags in HTML head
         $discovered_feed_url = $this->discover_feed_url( $body, $url );
         if ( ! empty( $discovered_feed_url ) ) {
+            $this->throttle_host_request( $discovered_feed_url );
             $feed_res = wp_remote_get( $discovered_feed_url, [
                 'timeout'     => self::REQUEST_TIMEOUT,
                 'user-agent'  => self::USER_AGENT,
@@ -619,11 +665,13 @@ class PressHub_AI_News_Harvester {
         }
 
         $clean_url = $this->resolve_relative_url( $link, $base_url );
+        $clean_desc = isset( $entry->description ) ? trim( wp_strip_all_tags( (string) $entry->description ) ) : '';
 
         return [
             'url'          => $clean_url,
             'title'        => trim( wp_strip_all_tags( $title ) ),
             'content'      => trim( wp_strip_all_tags( $content ) ),
+            'description'  => $clean_desc,
             'published_at' => ! empty( $pub_date ) ? gmdate( 'c', strtotime( $pub_date ) ?: time() ) : '',
             'guid'         => (string) ( $entry->guid ?? '' ),
         ];
@@ -661,13 +709,15 @@ class PressHub_AI_News_Harvester {
             $content = (string) $entry->summary;
         }
 
-        $published = (string) ( $entry->published ?? ( $entry->updated ?? '' ) );
-        $clean_url  = $this->resolve_relative_url( $link, $base_url );
+        $published     = (string) ( $entry->published ?? ( $entry->updated ?? '' ) );
+        $clean_url     = $this->resolve_relative_url( $link, $base_url );
+        $clean_summary = isset( $entry->summary ) ? trim( wp_strip_all_tags( (string) $entry->summary ) ) : '';
 
         return [
             'url'          => $clean_url,
             'title'        => trim( wp_strip_all_tags( $title ) ),
             'content'      => trim( wp_strip_all_tags( $content ) ),
+            'description'  => $clean_summary,
             'published_at' => ! empty( $published ) ? gmdate( 'c', strtotime( $published ) ?: time() ) : '',
             'guid'         => (string) ( $entry->id ?? '' ),
         ];
@@ -701,6 +751,7 @@ class PressHub_AI_News_Harvester {
 
         foreach ( $common_paths as $path ) {
             $probe_url = $scheme . '://' . $host . $path;
+            $this->throttle_host_request( $probe_url );
             $res = wp_remote_get( $probe_url, [
                 'timeout'     => 5,
                 'user-agent'  => self::USER_AGENT,
@@ -1151,20 +1202,29 @@ class PressHub_AI_News_Harvester {
                     // Fallback to feed item if available
                     if ( ( empty( $article_data ) || empty( $article_data['content'] ) ) && ! empty( $discovery['feed_items'] ) ) {
                         foreach ( $discovery['feed_items'] as $fitem ) {
-                            if ( ( $fitem['url'] ?? '' ) === $article_url && ! empty( $fitem['content'] ) ) {
-                                $candidate = [
-                                    'url'          => $article_url,
-                                    'title'        => $fitem['title'] ?? '',
-                                    'content'      => $fitem['content'] ?? '',
-                                    'source'       => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
-                                    'tier'         => 'feed',
-                                    'published_at' => $fitem['published_at'] ?? '',
-                                    'char_count'   => mb_strlen( $fitem['content'] ?? '' ),
-                                    'is_manual'    => false,
-                                    'harvested_at' => gmdate( 'c' ),
-                                ];
-                                if ( $this->is_valid_harvested_article( $candidate ) ) {
-                                    $article_data = $candidate;
+                            $fitem_url = rtrim( (string) ( $fitem['url'] ?? '' ), '/' );
+                            $curr_url  = rtrim( (string) $article_url, '/' );
+                            if ( $fitem_url === $curr_url || ( $fitem['url'] ?? '' ) === $article_url ) {
+                                $feed_content = ! empty( $fitem['content'] ) ? $fitem['content'] : ( $fitem['description'] ?? '' );
+                                if ( ! empty( $feed_content ) ) {
+                                    $candidate = [
+                                        'url'             => $article_url,
+                                        'title'           => $fitem['title'] ?? '',
+                                        'content'         => $feed_content,
+                                        'source'          => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
+                                        'tier'            => 'rss_description',
+                                        'published_at'    => $fitem['published_at'] ?? '',
+                                        'char_count'      => mb_strlen( $feed_content ),
+                                        'is_manual'       => false,
+                                        'harvested_at'    => gmdate( 'c' ),
+                                        'fallback_reason' => 'waf_or_http_error',
+                                    ];
+                                    if ( $this->is_valid_harvested_article( $candidate ) ) {
+                                        $article_data = $candidate;
+                                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                                            PressHub_AI_Logger::info( sprintf( 'Used RSS description fallback for %s due to HTML extraction/WAF block.', $article_url ) );
+                                        }
+                                    }
                                 }
                                 break;
                             }
@@ -1486,20 +1546,29 @@ class PressHub_AI_News_Harvester {
                     // Fallback to feed item if available
                     if ( ( empty( $article_data ) || empty( $article_data['content'] ) ) && ! empty( $discovery['feed_items'] ) ) {
                         foreach ( $discovery['feed_items'] as $fitem ) {
-                            if ( ( $fitem['url'] ?? '' ) === $article_url && ! empty( $fitem['content'] ) ) {
-                                $candidate = [
-                                    'url'          => $article_url,
-                                    'title'        => $fitem['title'] ?? '',
-                                    'content'      => $fitem['content'] ?? '',
-                                    'source'       => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
-                                    'tier'         => 'feed',
-                                    'published_at' => $fitem['published_at'] ?? '',
-                                    'char_count'   => mb_strlen( $fitem['content'] ?? '' ),
-                                    'is_manual'    => false,
-                                    'harvested_at' => gmdate( 'c' ),
-                                ];
-                                if ( $this->is_valid_harvested_article( $candidate ) ) {
-                                    $article_data = $candidate;
+                            $fitem_url = rtrim( (string) ( $fitem['url'] ?? '' ), '/' );
+                            $curr_url  = rtrim( (string) $article_url, '/' );
+                            if ( $fitem_url === $curr_url || ( $fitem['url'] ?? '' ) === $article_url ) {
+                                $feed_content = ! empty( $fitem['content'] ) ? $fitem['content'] : ( $fitem['description'] ?? '' );
+                                if ( ! empty( $feed_content ) ) {
+                                    $candidate = [
+                                        'url'             => $article_url,
+                                        'title'           => $fitem['title'] ?? '',
+                                        'content'         => $feed_content,
+                                        'source'          => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
+                                        'tier'            => 'rss_description',
+                                        'published_at'    => $fitem['published_at'] ?? '',
+                                        'char_count'      => mb_strlen( $feed_content ),
+                                        'is_manual'       => false,
+                                        'harvested_at'    => gmdate( 'c' ),
+                                        'fallback_reason' => 'waf_or_http_error',
+                                    ];
+                                    if ( $this->is_valid_harvested_article( $candidate ) ) {
+                                        $article_data = $candidate;
+                                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                                            PressHub_AI_Logger::info( sprintf( 'Used RSS description fallback for %s due to HTML extraction/WAF block.', $article_url ) );
+                                        }
+                                    }
                                 }
                                 break;
                             }
@@ -1607,6 +1676,7 @@ class PressHub_AI_News_Harvester {
      * @return array|null Article data array or null on failure.
      */
     protected function fetch_and_parse_article( string $url, string $source_host = '' ): ?array {
+        $this->throttle_host_request( $url );
         $extracted = PressHub_AI_URL_Fetcher::fetch_article_data( $url );
 
         if ( ! $extracted['success'] || empty( $extracted['content'] ) ) {
