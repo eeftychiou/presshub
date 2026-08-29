@@ -25,7 +25,22 @@ class ProviderStoreTest {
         $failures = [];
 
         // ==================================================================
-        // 1. Legacy Migration Test
+        // 1a. Fresh Installation Test (Clean DB, No Legacy Options)
+        // ==================================================================
+        self::reset();
+        $fresh_all = PressHub_AI_Provider_Store::get_all( false );
+        if ( $fresh_all !== [] ) {
+            $failures[] = "Fresh installation should initialize with 0 configured providers. Got: " . count( $fresh_all );
+        }
+        if ( ! isset( $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] ) || $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] !== [] ) {
+            $failures[] = "Fresh install should set presshub_ai_configured_providers to []. Got: " . var_export( $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] ?? null, true );
+        }
+        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_providers_migrated'] ?? null ) !== 1 ) {
+            $failures[] = "Fresh install should set presshub_ai_providers_migrated to 1. Got: " . var_export( $GLOBALS['OPTIONS_STORE']['presshub_ai_providers_migrated'] ?? null, true );
+        }
+
+        // ==================================================================
+        // 1b. Legacy Migration Test (Upgrade from older version with API keys)
         // ==================================================================
         self::reset();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
@@ -37,8 +52,8 @@ class ProviderStoreTest {
         PressHub_AI_Provider_Store::migrate_legacy_options();
 
         $migrated = PressHub_AI_Provider_Store::get_all( false );
-        if ( count( $migrated ) < 7 ) {
-            $failures[] = "Migration should seed at least 7 standard providers. Got: " . count( $migrated );
+        if ( count( $migrated ) !== 1 ) {
+            $failures[] = "Migration with legacy OpenAI key should migrate only the configured provider (1). Got: " . count( $migrated );
         }
 
         // Check OpenAI migrated record
@@ -57,6 +72,9 @@ class ProviderStoreTest {
             }
             if ( $openai['timeout'] !== 300 ) {
                 $failures[] = "OpenAI timeout should default to 300. Got: " . $openai['timeout'];
+            }
+            if ( empty( $openai['enabled'] ) ) {
+                $failures[] = "OpenAI migrated provider should be enabled.";
             }
         }
 

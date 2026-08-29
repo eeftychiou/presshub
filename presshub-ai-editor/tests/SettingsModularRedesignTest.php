@@ -311,6 +311,18 @@ class SettingsModularRedesignTest
             $failures[] = 'render_providers_grid must NOT include disabled provider gemini-disabled; got: ' . $grid_html;
         }
 
+        // Case 10b: render_providers_grid empty state on fresh install / no active providers
+        self::reset_world();
+        ob_start();
+        $settings->render_providers_grid();
+        $empty_grid_html = ob_get_clean();
+        if ( false === strpos( $empty_grid_html, 'presshub-no-providers' ) ) {
+            $failures[] = 'render_providers_grid must render .presshub-no-providers empty state when no providers configured; got: ' . $empty_grid_html;
+        }
+        if ( false === strpos( $empty_grid_html, 'No AI providers configured yet' ) ) {
+            $failures[] = 'render_providers_grid empty state must include "No AI providers configured yet"; got: ' . $empty_grid_html;
+        }
+
         // -------------------------------------------------------------
         // Case 11: Speech AI Provider (logosAI) saves via AJAX whitelist
         // Regression: in v1.9.7 the field was rendered but missing from
