@@ -864,20 +864,65 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( 300 );
+        }
+        if ( function_exists( 'wp_raise_memory_limit' ) ) {
+            wp_raise_memory_limit( 'admin' );
+        }
+
         $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
 
-        require_once __DIR__ . '/class-news-harvester.php';
-        require_once __DIR__ . '/class-settings.php';
-        require_once __DIR__ . '/class-settings-storage.php';
+        $source_id = isset( $_POST['source_id'] ) ? sanitize_text_field( wp_unslash( $_POST['source_id'] ) ) : '';
 
-        $sources   = PressHub_AI_Settings_Storage::get_briefing_sources();
-        $harvester = new PressHub_AI_News_Harvester();
-        $result    = $harvester->harvest_all( $sources, $date );
+        try {
+            require_once __DIR__ . '/class-news-harvester.php';
+            require_once __DIR__ . '/class-settings.php';
+            require_once __DIR__ . '/class-settings-storage.php';
 
-        wp_send_json_success( $result );
+            $sources   = PressHub_AI_Settings_Storage::get_briefing_sources();
+            $harvester = new PressHub_AI_News_Harvester();
+
+            if ( ! empty( $source_id ) ) {
+                $target_source = null;
+                $normalized    = PressHub_AI_Settings_Storage::normalize_sources( $sources );
+                foreach ( $normalized as $src ) {
+                    if ( ( $src['id'] ?? '' ) === $source_id || ( $src['url'] ?? '' ) === $source_id ) {
+                        $target_source = $src;
+                        break;
+                    }
+                }
+                if ( empty( $target_source ) ) {
+                    $target_source = $source_id;
+                }
+                $result = $harvester->harvest_source( $target_source, $date );
+            } else {
+                $result = $harvester->harvest_all( $sources, $date );
+            }
+
+            wp_send_json_success( $result );
+        } catch ( \Throwable $e ) {
+            if ( $e instanceof \RuntimeException && 0 === strpos( $e->getMessage(), 'wp_send_json' ) ) {
+                throw $e;
+            }
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Unhandled exception during news harvest: ' . $e->getMessage(), [
+                    'exception' => $e->getMessage(),
+                    'trace'     => $e->getTraceAsString(),
+                    'date'      => $date,
+                    'source_id' => $source_id,
+                ] );
+            }
+
+            wp_send_json_error( [
+                'message'   => sprintf( __( 'Scrape failed: %s', 'presshub-ai-editor' ), $e->getMessage() ),
+                'exception' => $e->getMessage(),
+                'date'      => $date,
+            ] );
+        }
     }
 
     /**
