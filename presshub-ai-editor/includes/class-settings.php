@@ -166,6 +166,10 @@ class PressHub_AI_Settings {
         return PressHub_AI_Settings_Migration::default_timeout( $provider );
     }
 
+    public static function default_structured_sources(): array {
+        return PressHub_AI_Settings_Migration::default_structured_sources();
+    }
+
     public static function default_briefing_sources(): array {
         return PressHub_AI_Settings_Migration::default_briefing_sources();
     }

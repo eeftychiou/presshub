@@ -289,6 +289,7 @@ $nonexistent = $harvester->load_snapshot( '1999-01-01' );
 nh_check( 'load_snapshot: nonexistent date returns null or empty', empty( $nonexistent ) );
 
 
+
 // =========================================================================
 // 6. RSS 2.0 Feed Auto-Detection via <link rel="alternate" type="application/rss+xml">
 // =========================================================================
@@ -428,6 +429,59 @@ nh_check( 'diagnostics: discovery_method is FEED_DIRECT', ( $direct_harvest['sou
 nh_check( 'diagnostics: http_code is 200', ( $direct_harvest['source_health'][0]['http_code'] ?? 0 ) === 200 );
 nh_check( 'diagnostics: status is ok', ( $direct_harvest['source_health'][0]['status'] ?? '' ) === 'ok' );
 nh_check( 'diagnostics: latency recorded', isset( $direct_harvest['source_health'][0]['latency_ms'] ) );
+// =========================================================================
+// 10. Structured Sources with Media Types & Disabled Status
+// =========================================================================
+
+$structured_test_sources = [
+    [
+        'id'       => 'src_active_news',
+        'name'     => 'Active News Outlet',
+        'url'      => 'https://www.normal-news.gr',
+        'type'     => 'text_news',
+        'enabled'  => true,
+        'category' => 'General',
+        'notes'    => 'Scraped outlet',
+    ],
+    [
+        'id'       => 'src_disabled_news',
+        'name'     => 'Disabled News Outlet',
+        'url'      => 'https://www.disabled-news.gr',
+        'type'     => 'text_news',
+        'enabled'  => false,
+        'category' => 'General',
+        'notes'    => 'Temporarily turned off',
+    ],
+    [
+        'id'       => 'src_youtube',
+        'name'     => 'Greek News Channel',
+        'url'      => 'https://www.youtube.com/channel/UC123456',
+        'type'     => 'youtube',
+        'enabled'  => true,
+        'category' => 'Video',
+        'notes'    => 'Preserved for multi-modal',
+    ],
+    [
+        'id'       => 'src_podcast',
+        'name'     => 'Greek Audio Podcast',
+        'url'      => 'https://podcast.example.com/rss.xml',
+        'type'     => 'podcast_audio',
+        'enabled'  => true,
+        'category' => 'Audio',
+        'notes'    => 'Preserved for multi-modal',
+    ],
+];
+
+$structured_harvest = $harvester->harvest_all( $structured_test_sources, '2026-08-26' );
+nh_check( 'structured_sources: harvest_all returns array', is_array( $structured_harvest ) );
+nh_check( 'structured_sources: only 1 active harvest URL executed', count( $structured_harvest['sources'] ?? [] ) === 1 );
+nh_check( 'structured_sources: active URL is normal-news.gr', in_array( 'https://www.normal-news.gr', $structured_harvest['sources'] ?? [], true ) );
+nh_check( 'structured_sources: disabled source excluded from harvest URLs', ! in_array( 'https://www.disabled-news.gr', $structured_harvest['sources'] ?? [], true ) );
+nh_check( 'structured_sources: youtube source preserved and excluded from text harvest URLs', ! in_array( 'https://www.youtube.com/channel/UC123456', $structured_harvest['sources'] ?? [], true ) );
+nh_check( 'structured_sources: podcast source preserved and excluded from text harvest URLs', ! in_array( 'https://podcast.example.com/rss.xml', $structured_harvest['sources'] ?? [], true ) );
+nh_check( 'structured_sources: configured_sources preserves all 4 items', count( $structured_harvest['configured_sources'] ?? [] ) === 4 );
+
+
 
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
@@ -446,4 +500,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "NewsHarvesterTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "NewsHarvesterTest: OK (28 checks)\n";
+echo "NewsHarvesterTest: OK (62 checks)\n";

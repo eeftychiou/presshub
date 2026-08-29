@@ -665,30 +665,88 @@ class PressHub_AI_News_Harvester {
         return false;
     }
 
+
     /**
-     * Harvest all configured sources, scrape articles, track health diagnostics, and persist snapshot.
+     * Harvest all configured sources, scrape articles, detect blocks, and persist daily snapshot.
      *
      * @param string[] $source_urls List of news website URLs.
      * @param string   $date        Target date in YYYY-MM-DD format (defaults to current date).
      * @return array Harvest payload with diagnostics and articles.
      */
-    public function harvest_all( array $source_urls, string $date = '' ): array {
+    public function harvest_all( $sources, string $date = '' ): array {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
-        $start_time  = microtime( true );
-        $source_urls = array_values( array_unique( array_filter( array_map( 'trim', $source_urls ) ) ) );
+        $start_time = microtime( true );
 
-        PressHub_AI_Logger::info( sprintf( 'Starting hybrid news harvest for %s (%d sources)', $date, count( $source_urls ) ), [ 'sources' => $source_urls ] );
+        // Normalize structured sources
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            $structured_sources = PressHub_AI_Settings_Storage::normalize_sources( $sources );
+        } else {
+            $structured_sources = [];
+            foreach ( (array) $sources as $item ) {
+                if ( is_string( $item ) && preg_match( '/^https?:\/\//i', trim( $item ) ) ) {
+                    $structured_sources[] = [
+                        'id'       => 'src_' . substr( md5( trim( $item ) ), 0, 8 ),
+                        'name'     => (string) parse_url( trim( $item ), PHP_URL_HOST ),
+                        'url'      => trim( $item ),
+                        'type'     => 'text_news',
+                        'enabled'  => true,
+                        'category' => 'General',
+                        'notes'    => '',
+                    ];
+                } elseif ( is_array( $item ) && ! empty( $item['url'] ) ) {
+                    $structured_sources[] = array_merge( [
+                        'id'       => 'src_' . substr( md5( (string) $item['url'] ), 0, 8 ),
+                        'name'     => (string) ( $item['name'] ?? parse_url( (string) $item['url'], PHP_URL_HOST ) ),
+                        'url'      => (string) $item['url'],
+                        'type'     => (string) ( $item['type'] ?? 'text_news' ),
+                        'enabled'  => isset( $item['enabled'] ) ? (bool) $item['enabled'] : true,
+                        'category' => (string) ( $item['category'] ?? 'General' ),
+                        'notes'    => (string) ( $item['notes'] ?? '' ),
+                    ], $item );
+                }
+            }
+        }
+
+        $active_text_sources = [];
+        foreach ( $structured_sources as $src ) {
+            $src_url     = $src['url'] ?? '';
+            $src_name    = $src['name'] ?? ( parse_url( $src_url, PHP_URL_HOST ) ?: $src_url );
+            $src_type    = $src['type'] ?? 'text_news';
+            $src_enabled = ! empty( $src['enabled'] );
+
+            if ( ! $src_enabled ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::debug( sprintf( "Source '%s' (%s) is disabled; skipping harvest.", $src_name, $src_url ) );
+                }
+                continue;
+            }
+
+            if ( in_array( $src_type, [ 'text_news', 'rss_feed' ], true ) ) {
+                $active_text_sources[] = $src;
+            } else {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::info( sprintf( "Preserving non-text source '%s' (type: %s, url: %s) for multi-modal ingestion pipeline.", $src_name, $src_type, $src_url ) );
+                }
+            }
+        }
+
+        $source_urls = array_values( array_unique( array_column( $active_text_sources, 'url' ) ) );
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'Starting news harvest for %s (%d active text/RSS sources out of %d configured)', $date, count( $source_urls ), count( $structured_sources ) ), [ 'sources' => $source_urls ] );
+        }
 
         $payload = [
-            'date'            => $date,
-            'harvested_at'    => gmdate( 'c' ),
-            'sources'         => $source_urls,
-            'blocked_sources' => [],
-            'source_health'   => [],
-            'diagnostics'     => [],
-            'articles'        => [],
+            'date'               => $date,
+            'harvested_at'       => gmdate( 'c' ),
+            'sources'            => $source_urls,
+            'configured_sources' => $structured_sources,
+            'blocked_sources'    => [],
+            'source_health'      => [],
+            'diagnostics'        => [],
+            'articles'           => [],
         ];
 
         $seen_urls   = [];
