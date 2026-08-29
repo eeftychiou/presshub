@@ -58,14 +58,28 @@ class PressHub_AI_Settings_Render {
         <div class="wrap presshub-ai-settings-wrap">
             <h1><?php echo __( 'PressHub AI Settings', 'presshub-ai-editor' ); ?></h1>
 
-            <nav class="nav-tab-wrapper wp-clearfix" id="presshub-ai-settings-tabs" style="margin-bottom: 20px;">
-                <a href="#providers" class="nav-tab nav-tab-active" data-tab="providers"><?php echo __( 'AI Providers', 'presshub-ai-editor' ); ?></a>
-                <a href="#coauthor" class="nav-tab" data-tab="coauthor"><?php echo __( 'AI Co-Author & Review', 'presshub-ai-editor' ); ?></a>
-                <a href="#briefing" class="nav-tab" data-tab="briefing"><?php echo __( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></a>
-                <a href="#copilot" class="nav-tab" data-tab="copilot"><?php echo __( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></a>
-                <a href="#token_logs" class="nav-tab" data-tab="token_logs"><?php echo __( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></a>
-                <a href="#advanced" class="nav-tab" data-tab="advanced"><?php echo __( 'Advanced & System', 'presshub-ai-editor' ); ?></a>
-            </nav>
+            <div class="presshub-settings-nav-container">
+                <div class="presshub-mobile-tab-select-wrap">
+                    <label for="presshub-mobile-tab-select" class="screen-reader-text"><?php echo esc_html__( 'Select Settings Section', 'presshub-ai-editor' ); ?></label>
+                    <select id="presshub-mobile-tab-select" class="presshub-mobile-tab-select" aria-label="<?php echo esc_attr__( 'Select Settings Section', 'presshub-ai-editor' ); ?>">
+                        <option value="providers" selected="selected"><?php echo esc_html__( 'AI Providers', 'presshub-ai-editor' ); ?></option>
+                        <option value="coauthor"><?php echo esc_html__( 'AI Co-Author & Review', 'presshub-ai-editor' ); ?></option>
+                        <option value="briefing"><?php echo esc_html__( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></option>
+                        <option value="copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></option>
+                        <option value="token_logs"><?php echo esc_html__( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></option>
+                        <option value="advanced"><?php echo esc_html__( 'Advanced & System', 'presshub-ai-editor' ); ?></option>
+                    </select>
+                </div>
+
+                <nav class="nav-tab-wrapper wp-clearfix" id="presshub-ai-settings-tabs" aria-label="<?php echo esc_attr__( 'Settings Sections', 'presshub-ai-editor' ); ?>" role="tablist" style="margin-bottom: 20px;">
+                    <a href="#providers" id="presshub-tab-providers" class="nav-tab nav-tab-active" data-tab="providers" role="tab" aria-selected="true" aria-controls="presshub-tab-pane-providers"><?php echo esc_html__( 'AI Providers', 'presshub-ai-editor' ); ?></a>
+                    <a href="#coauthor" id="presshub-tab-coauthor" class="nav-tab" data-tab="coauthor" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-coauthor"><?php echo esc_html__( 'AI Co-Author & Review', 'presshub-ai-editor' ); ?></a>
+                    <a href="#briefing" id="presshub-tab-briefing" class="nav-tab" data-tab="briefing" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-briefing"><?php echo esc_html__( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></a>
+                    <a href="#copilot" id="presshub-tab-copilot" class="nav-tab" data-tab="copilot" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></a>
+                    <a href="#token_logs" id="presshub-tab-token_logs" class="nav-tab" data-tab="token_logs" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-token_logs"><?php echo esc_html__( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></a>
+                    <a href="#advanced" id="presshub-tab-advanced" class="nav-tab" data-tab="advanced" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-advanced"><?php echo esc_html__( 'Advanced & System', 'presshub-ai-editor' ); ?></a>
+                </nav>
+            </div>
 
             <form method="post" action="options.php" id="presshub-ai-settings-form">
                 <?php
