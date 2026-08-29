@@ -507,8 +507,10 @@ body.presshub-modal-open {
     font-size: 18px;
 }
 
-.presshub-settings-submit-wrap {
+.presshub-settings-submit-wrap,
+.presshub-tab-submit-wrap {
     padding-top: 15px;
+    margin-top: 20px;
     border-top: 1px solid #e0e0e0;
 }
 

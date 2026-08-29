@@ -33,6 +33,7 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
         // AJAX Settings Save
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
+        add_action( 'wp_ajax_presshub_ai_save_settings_section', [ $this, 'save_settings_section' ] );
         // Dynamic AI Providers Manager AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_save_provider', [ $this, 'save_provider' ] );
         add_action( 'wp_ajax_presshub_ai_test_source', [ $this, 'test_source' ] );
@@ -1383,6 +1384,161 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
             'sources' => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'   => [
+                'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
+                'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
+                'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
+                'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
+            ],
+        ] );
+    }
+
+    /**
+     * AJAX handler: save PressHub AI settings for a specific tab / section.
+     */
+    public function save_settings_section(): void {
+        try {
+            check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+            $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+            if ( ! current_user_can( $cap ) ) {
+                wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub AI settings.', 'presshub-ai-editor' ) ], 403 );
+            }
+
+            $tab = isset( $_POST['tab'] ) ? sanitize_key( wp_unslash( $_POST['tab'] ) ) : '';
+            if ( empty( $tab ) && isset( $_POST['section'] ) ) {
+                $tab = sanitize_key( wp_unslash( $_POST['section'] ) );
+            }
+
+            $post_data = $_POST;
+            if ( isset( $_POST['payload_b64'] ) && is_string( $_POST['payload_b64'] ) ) {
+                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) );
+                if ( false !== $raw_json ) {
+                    $decoded = json_decode( $raw_json, true );
+                    if ( is_array( $decoded ) ) {
+                        $post_data = array_merge( $post_data, $decoded );
+                    }
+                }
+            } elseif ( isset( $_POST['payload'] ) && is_string( $_POST['payload'] ) ) {
+                $decoded = json_decode( wp_unslash( $_POST['payload'] ), true );
+                if ( is_array( $decoded ) ) {
+                    $post_data = array_merge( $post_data, $decoded );
+                }
+            } elseif ( isset( $_POST['settings'] ) && is_string( $_POST['settings'] ) ) {
+                parse_str( $_POST['settings'], $parsed );
+                if ( is_array( $parsed ) ) {
+                    $post_data = array_merge( $post_data, $parsed );
+                }
+            }
+
+            require_once __DIR__ . '/class-settings.php';
+            require_once __DIR__ . '/class-settings-storage.php';
+            require_once __DIR__ . '/class-logger.php';
+
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::debug( sprintf( 'AJAX save_settings_section request received for tab: %s', $tab ), [ 'raw_keys' => array_keys( $post_data ) ] );
+            }
+
+            $options_map = PressHub_AI_Settings_Storage::get_section_options_map( $tab );
+
+            $saved_count = 0;
+            $saved_keys  = [];
+
+            foreach ( $options_map as $option => $sanitizer ) {
+                try {
+                    // Handle removal flags
+                    if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token', 'presshub_ai_remove_briefing_tts_api_key' ], true ) ) {
+                        if ( isset( $post_data[ $option ] ) && ! empty( $post_data[ $option ] ) ) {
+                            call_user_func( $sanitizer, $post_data[ $option ] );
+                            $saved_count++;
+                            $saved_keys[] = $option;
+                        }
+                        continue;
+                    }
+
+                    // Handle secret keys (skip if empty or masked placeholder)
+                    if ( in_array( $option, [ 'presshub_ai_api_key', 'presshub_ai_google_cloud_api_key', 'presshub_ai_github_token', 'presshub_ai_briefing_tts_api_key' ], true ) ) {
+                        if ( isset( $post_data[ $option ] ) ) {
+                            $raw_secret = trim( (string) wp_unslash( $post_data[ $option ] ) );
+                            if ( '' !== $raw_secret && false === strpos( $raw_secret, '••••' ) ) {
+                                $clean = call_user_func( $sanitizer, $raw_secret );
+                                $saved_count++;
+                                $saved_keys[] = $option;
+                                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                                    PressHub_AI_Logger::debug( sprintf( 'Saved secret option %s in section %s', $option, $tab ) );
+                                }
+                            }
+                        }
+                        continue;
+                    }
+
+                    // Handle standard options
+                    if ( isset( $post_data[ $option ] ) ) {
+                        $clean = call_user_func( $sanitizer, $post_data[ $option ] );
+                        update_option( $option, $clean );
+                        $saved_count++;
+                        $saved_keys[] = $option;
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::debug( sprintf( 'Saved option %s in section %s', $option, $tab ) );
+                        }
+                    } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
+                        // Unchecked checkbox belonging to this section defaults to 0
+                        update_option( $option, 0 );
+                        $saved_count++;
+                        $saved_keys[] = $option;
+                    }
+                } catch ( Throwable $opt_err ) {
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::warning( sprintf( 'Error updating option %s in section %s: %s', $option, $tab, $opt_err->getMessage() ) );
+                    }
+                }
+            }
+
+            if ( function_exists( 'wp_cache_delete' ) ) {
+                wp_cache_delete( 'alloptions', 'options' );
+                wp_cache_delete( 'notoptions', 'options' );
+                foreach ( array_keys( $options_map ) as $opt_key ) {
+                    wp_cache_delete( $opt_key, 'options' );
+                }
+            }
+
+            $saved_key          = (string) get_option( 'presshub_ai_api_key', '' );
+            $saved_gcloud       = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
+            $saved_github       = (string) get_option( 'presshub_ai_github_token', '' );
+            $saved_briefing_tts = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( sprintf( 'Settings section "%s" successfully saved (%d options updated)', $tab, $saved_count ), [
+                    'user_id'    => get_current_user_id(),
+                    'saved_keys' => $saved_keys,
+                    'tab'        => $tab,
+                ] );
+            }
+
+            if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+                PressHub_AI_Settings_Storage::log_settings_saved( $saved_keys, $saved_count, $tab ?: 'settings' );
+            }
+        } catch ( Throwable $t ) {
+            if ( $t instanceof RuntimeException && 0 === strpos( $t->getMessage(), 'wp_send_json' ) ) {
+                throw $t;
+            }
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Exception in save_settings_section: ' . $t->getMessage(), [
+                    'file' => basename( $t->getFile() ),
+                    'line' => $t->getLine(),
+                ] );
+            }
+            wp_send_json_error( [
+                'message' => 'Error saving section settings: ' . $t->getMessage() . ' (' . basename( $t->getFile() ) . ':' . $t->getLine() . ')'
+            ], 500 );
+        }
+
+        wp_send_json_success( [
+            'message'    => __( 'Settings saved successfully.', 'presshub-ai-editor' ),
+            'tab'        => $tab,
+            'saved_keys' => $saved_keys,
+            'count'      => $saved_count,
+            'sources'    => PressHub_AI_Settings_Storage::get_briefing_sources(),
+            'masks'      => [
                 'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                 'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
                 'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),

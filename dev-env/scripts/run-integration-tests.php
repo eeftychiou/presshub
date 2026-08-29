@@ -166,6 +166,7 @@ run_test( 'PressHub_AI_Rate_Limiter tracks and enforces limits', function() {
 run_test( 'AJAX action handlers registered in WordPress', function() {
     return has_action( 'wp_ajax_presshub_ai_chat' )
         && has_action( 'wp_ajax_presshub_ai_save_provider' )
+        && has_action( 'wp_ajax_presshub_ai_save_settings_section' )
         && has_action( 'wp_ajax_presshub_ai_fetch_token_logs' )
         && has_action( 'wp_ajax_presshub_ai_fetch_audit_logs' )
         && has_action( 'wp_ajax_presshub_ai_clear_audit_logs' )
