@@ -449,6 +449,25 @@ class PressHub_AI_Settings_Render {
                 </div>
             </form>
 
+            <!-- Sticky Save Changes Bar for Long Settings Pages (Issue #16) -->
+            <div id="presshub-sticky-save-bar" class="presshub-sticky-save-bar" role="region" aria-label="<?php echo esc_attr__( 'Quick Save Bar', 'presshub-ai-editor' ); ?>" style="display: none;">
+                <div class="presshub-sticky-save-bar-content">
+                    <div class="presshub-sticky-section-info">
+                        <span class="dashicons dashicons-admin-generic presshub-sticky-icon" aria-hidden="true"></span>
+                        <span class="presshub-sticky-text"><?php echo esc_html__( 'Active Section:', 'presshub-ai-editor' ); ?></span>
+                        <span class="presshub-sticky-section-badge" id="presshub-sticky-section-badge"><?php echo esc_html__( 'AI Providers', 'presshub-ai-editor' ); ?></span>
+                    </div>
+                    <div class="presshub-sticky-actions">
+                        <span id="presshub-sticky-status-msg" class="presshub-sticky-status-msg" role="status" aria-live="polite"></span>
+                        <span id="presshub-sticky-save-spinner" class="spinner presshub-sticky-save-spinner" role="status"><span class="screen-reader-text"></span></span>
+                        <button type="button" id="presshub-sticky-save-btn" class="button button-primary presshub-sticky-save-btn" aria-label="<?php echo esc_attr__( 'Save changes for active section', 'presshub-ai-editor' ); ?>">
+                            <span class="dashicons dashicons-saved" aria-hidden="true" style="font-size: 16px; width: 16px; height: 16px; vertical-align: text-top; margin-right: 4px;"></span>
+                            <?php echo esc_html__( 'Save Changes', 'presshub-ai-editor' ); ?>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <?php $this->render_provider_modal(); ?>
             <?php $this->render_source_modal(); ?>
         </div>

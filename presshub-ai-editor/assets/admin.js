@@ -728,10 +728,36 @@ jQuery(document).ready(function($) {
                 }
             }
 
+            updateStickySaveBar(tabKey);
+
             if (window.location.hash !== '#' + tabKey) {
                 if (window.history && window.history.replaceState) {
                     window.history.replaceState(null, null, '#' + tabKey);
                 }
+            }
+        }
+
+        function updateStickySaveBar(tabKey) {
+            var $stickyBar = $('#presshub-sticky-save-bar');
+            if (!$stickyBar.length) {
+                return;
+            }
+            var savableTabs = {
+                'coauthor': __('AI Co-Author & Review', 'presshub-ai-editor'),
+                'briefing': __('Daily Briefing Hub', 'presshub-ai-editor'),
+                'copilot': __('AI Copilot & Assistant', 'presshub-ai-editor'),
+                'advanced': __('Advanced & System', 'presshub-ai-editor')
+            };
+
+            if (savableTabs[tabKey]) {
+                var $activeNavTab = $tabs.find('.nav-tab[data-tab="' + tabKey + '"]');
+                var tabLabel = ($activeNavTab.length && $activeNavTab.text()) ? $activeNavTab.text().trim() : savableTabs[tabKey];
+                $('#presshub-sticky-section-badge').text(tabLabel);
+                $stickyBar.attr('data-active-tab', tabKey);
+                $('#presshub-sticky-status-msg').text('').removeClass('is-success is-error');
+                $stickyBar.fadeIn(150);
+            } else {
+                $stickyBar.fadeOut(150);
             }
         }
 
@@ -770,6 +796,7 @@ jQuery(document).ready(function($) {
             if ($mobileSelect.length) {
                 $mobileSelect.val(defaultTab);
             }
+            updateStickySaveBar(defaultTab);
         }
     }
 
@@ -2176,31 +2203,43 @@ jQuery(document).ready(function($) {
     });
 
     // ------------------------------------------------------------------
-    // Per-Tab AJAX Settings Save Handler.
+    // Per-Tab AJAX Settings Save Handler & Sticky Save Bar Integration.
     // ------------------------------------------------------------------
-    $(document).on('click', '.presshub-tab-save-btn', function(e) {
-        e.preventDefault();
+    function saveSettingsTab(tabKey) {
+        if (!tabKey) {
+            return;
+        }
 
-        var $btn = $(this);
-        var tabKey = $btn.data('tab') || '';
-        var $tabPane = tabKey ? $('#presshub-tab-pane-' + tabKey) : $btn.closest('.presshub-tab-pane');
+        var $tabPane = $('#presshub-tab-pane-' + tabKey);
         if (!$tabPane.length) {
-            $tabPane = $btn.closest('.presshub-tab-pane');
-        }
-        if (!tabKey && $tabPane.attr('id')) {
-            tabKey = $tabPane.attr('id').replace('presshub-tab-pane-', '');
+            return;
         }
 
-        var $spinner = $btn.siblings('.presshub-tab-save-spinner');
-        if (!$spinner.length) {
-            $spinner = $btn.siblings('.spinner');
-        }
+        var $tabBtn = $tabPane.find('.presshub-tab-save-btn');
+        var $tabSpinner = $tabPane.find('.presshub-tab-save-spinner, .spinner');
+        var $stickyBar = $('#presshub-sticky-save-bar');
+        var $stickyBtn = $('#presshub-sticky-save-btn, .presshub-sticky-save-btn');
+        var $stickySpinner = $('#presshub-sticky-save-spinner, .presshub-sticky-save-spinner');
+        var $stickyStatus = $('#presshub-sticky-status-msg');
 
         $tabPane.find('.presshub-settings-notice').remove();
         $('.presshub-settings-notice').remove();
 
-        $btn.prop('disabled', true);
-        $spinner.addClass('is-active');
+        if ($tabBtn.length) {
+            $tabBtn.prop('disabled', true);
+        }
+        if ($tabSpinner.length) {
+            $tabSpinner.addClass('is-active');
+        }
+        if ($stickyBtn.length) {
+            $stickyBtn.prop('disabled', true);
+        }
+        if ($stickySpinner.length) {
+            $stickySpinner.addClass('is-active');
+        }
+        if ($stickyStatus.length) {
+            $stickyStatus.removeClass('is-success is-error').text(__('Saving...', 'presshub-ai-editor')).show();
+        }
 
         var settingsPayload = {};
         $tabPane.find('input, select, textarea').each(function() {
@@ -2257,8 +2296,18 @@ jQuery(document).ready(function($) {
             dataType: 'json',
             data: ajaxData
         }).done(function(res) {
-            $btn.prop('disabled', false);
-            $spinner.removeClass('is-active');
+            if ($tabBtn.length) {
+                $tabBtn.prop('disabled', false);
+            }
+            if ($tabSpinner.length) {
+                $tabSpinner.removeClass('is-active');
+            }
+            if ($stickyBtn.length) {
+                $stickyBtn.prop('disabled', false);
+            }
+            if ($stickySpinner.length) {
+                $stickySpinner.removeClass('is-active');
+            }
 
             if (res && res.success) {
                 var successMsg = (res.data && res.data.message) ? res.data.message : __('Settings saved successfully.', 'presshub-ai-editor');
@@ -2281,6 +2330,17 @@ jQuery(document).ready(function($) {
                 var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(successMsg) + '</p></div>';
                 $tabPane.prepend(noticeHtml);
 
+                if ($stickyStatus.length) {
+                    $stickyStatus.addClass('is-success').removeClass('is-error').text(__('Saved!', 'presshub-ai-editor'));
+                    setTimeout(function() {
+                        if ($stickyStatus.hasClass('is-success')) {
+                            $stickyStatus.fadeOut(400, function() {
+                                $(this).text('').removeClass('is-success').show();
+                            });
+                        }
+                    }, 3000);
+                }
+
                 if (res.data && res.data.masks) {
                     if (res.data.masks.api_key) {
                         $('#presshub_ai_api_key').attr('placeholder', res.data.masks.api_key);
@@ -2299,10 +2359,24 @@ jQuery(document).ready(function($) {
                 var err = (res && res.data && res.data.message) ? res.data.message : __('Failed to save settings.', 'presshub-ai-editor');
                 var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(err) + '</p></div>';
                 $tabPane.prepend(errHtml);
+                if ($stickyStatus.length) {
+                    $stickyStatus.addClass('is-error').removeClass('is-success').text(__('Save failed', 'presshub-ai-editor'));
+                }
             }
         }).fail(function(xhr, status, error) {
-            $btn.prop('disabled', false);
-            $spinner.removeClass('is-active');
+            if ($tabBtn.length) {
+                $tabBtn.prop('disabled', false);
+            }
+            if ($tabSpinner.length) {
+                $tabSpinner.removeClass('is-active');
+            }
+            if ($stickyBtn.length) {
+                $stickyBtn.prop('disabled', false);
+            }
+            if ($stickySpinner.length) {
+                $stickySpinner.removeClass('is-active');
+            }
+
             var errorDetail = '';
             if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
                 errorDetail = xhr.responseJSON.data.message;
@@ -2314,7 +2388,36 @@ jQuery(document).ready(function($) {
             }
             var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc('Error while saving (' + (xhr.status || 0) + '): ' + errorDetail) + '</p></div>';
             $tabPane.prepend(errHtml);
+            if ($stickyStatus.length) {
+                $stickyStatus.addClass('is-error').removeClass('is-success').text(__('Save error', 'presshub-ai-editor'));
+            }
         });
+    }
+
+    $(document).on('click', '.presshub-tab-save-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var tabKey = $btn.data('tab') || '';
+        if (!tabKey) {
+            var $tabPane = $btn.closest('.presshub-tab-pane');
+            if ($tabPane.attr('id')) {
+                tabKey = $tabPane.attr('id').replace('presshub-tab-pane-', '');
+            }
+        }
+        if (tabKey) {
+            saveSettingsTab(tabKey);
+        }
+    });
+
+    $(document).on('click', '#presshub-sticky-save-btn, .presshub-sticky-save-btn', function(e) {
+        e.preventDefault();
+        var tabKey = $('#presshub-sticky-save-bar').attr('data-active-tab') ||
+                     $('#presshub-ai-settings-tabs .nav-tab-active').data('tab') ||
+                     $('#presshub-mobile-tab-select').val() ||
+                     '';
+        if (tabKey) {
+            saveSettingsTab(tabKey);
+        }
     });
 
     // ------------------------------------------------------------------

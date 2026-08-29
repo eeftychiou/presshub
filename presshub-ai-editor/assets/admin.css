@@ -515,6 +515,163 @@ body.presshub-modal-open {
 }
 
 /* ==========================================================================
+   Sticky Save Changes Bar (Issue #16)
+   ========================================================================== */
+.presshub-ai-settings-wrap {
+    padding-bottom: 70px;
+}
+
+.presshub-sticky-save-bar {
+    position: fixed;
+    bottom: 0;
+    left: 160px;
+    right: 0;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-top: 1px solid #dcdcde;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08), 0 -1px 3px rgba(0, 0, 0, 0.04);
+    padding: 10px 24px;
+    box-sizing: border-box;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease-in-out;
+    animation: presshubStickySlideUp 0.25s ease-out;
+}
+
+@keyframes presshubStickySlideUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+body.folded .presshub-sticky-save-bar,
+body.auto-fold .presshub-sticky-save-bar {
+    left: 36px;
+}
+
+.presshub-sticky-save-bar-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.presshub-sticky-section-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #50575e;
+    font-weight: 500;
+}
+
+.presshub-sticky-icon {
+    color: #2271b1;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+}
+
+.presshub-sticky-text {
+    color: #50575e;
+    font-weight: 600;
+}
+
+.presshub-sticky-section-badge {
+    display: inline-block;
+    background: #f0f0f1;
+    color: #1d2327;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.presshub-sticky-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.presshub-sticky-status-msg {
+    font-size: 13px;
+    font-weight: 500;
+    color: #50575e;
+    transition: color 0.2s ease;
+}
+
+.presshub-sticky-status-msg.is-success {
+    color: #00a32a;
+    font-weight: 600;
+}
+
+.presshub-sticky-status-msg.is-error {
+    color: #d63638;
+    font-weight: 600;
+}
+
+.presshub-sticky-save-spinner {
+    float: none;
+    margin: 0;
+}
+
+.presshub-sticky-save-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-weight: 600;
+    min-height: 36px;
+    line-height: 34px;
+    padding: 0 18px;
+    cursor: pointer;
+}
+
+@media (max-width: 960px) {
+    .presshub-sticky-save-bar {
+        left: 36px;
+    }
+}
+
+@media (max-width: 782px) {
+    .presshub-sticky-save-bar {
+        left: 0;
+        padding: 8px 12px;
+    }
+    .presshub-sticky-save-bar-content {
+        gap: 8px;
+    }
+    .presshub-sticky-text {
+        display: none;
+    }
+    .presshub-sticky-section-badge {
+        max-width: 140px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 11px;
+        padding: 2px 6px;
+    }
+    .presshub-sticky-save-btn {
+        min-height: 44px; /* WCAG 2.1 touch target height */
+        min-width: 44px;  /* WCAG 2.1 touch target width */
+        line-height: 42px;
+        font-size: 14px;
+        padding: 0 16px;
+    }
+}
+
+/* ==========================================================================
    AI Providers Manager & Card Grid (Task 6)
    ========================================================================== */
 .presshub-providers-grid {
