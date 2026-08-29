@@ -128,9 +128,24 @@ presshub-ai-editor/          WordPress plugin (PHP)
   tests/                     TDD harness suites (plain-PHP, no PHPUnit)
   assets/                    sidebar/editor scripts
 presshub-workflow/           TypeScript workflow tests (Jest + tsc)
+dev-env/                     Local WordPress dev environment & debugging tooling (SQLite-powered)
 .github/workflows/           CI (PHP harness + lint; Jest + tsc)
 docs/                        design docs, review reports
+AGENTS.md                    Instructions and tooling guide for AI coding assistants
 ```
+
+### Local WordPress Development Environment
+
+The repository includes a self-contained local WordPress environment powered by the WordPress Core SQLite database engine (zero external database daemons required).
+
+- **Start Dev Server**: `php dev-env/scripts/server.php` → `http://127.0.0.1:8888` (Admin: `admin` / `password123`)
+- **Live Plugin Linking**: `wp-content/plugins/presshub-ai-editor` directly maps to `presshub-ai-editor/`.
+- **Stream Logs**: `php dev-env/scripts/tail-logs.php --follow` (Core `debug.log` & PressHub `presshub-debug.log`)
+- **Inspect Token & DB Logs**: `php dev-env/scripts/view-token-logs.php`
+- **Query Database**: `php dev-env/scripts/query-db.php --tables`
+- **Run Live Integration Tests**: `php dev-env/scripts/run-integration-tests.php`
+
+For complete instructions and CLI workflows, see [AGENTS.md](file:///c:/Users/User/Antigravity/Presshub/AGENTS.md) and [dev-env/README.md](file:///c:/Users/User/Antigravity/Presshub/dev-env/README.md).
 
 ### TDD harness
 
@@ -139,8 +154,8 @@ stubbed in `tests/wordpress-stubs.php`):
 
 ```sh
 cd presshub-ai-editor
-php tests/ResearchJobGuardTest.php     # single suite
-for t in tests/*Test.php; do php "$t"; done   # full PHP suite
+php tests/run-all-tests.php              # runs all 46 test suites
+php tests/ResearchJobGuardTest.php       # single suite
 ```
 
 The workflow package is tested separately:

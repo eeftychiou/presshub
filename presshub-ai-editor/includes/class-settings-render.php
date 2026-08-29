@@ -430,16 +430,21 @@ class PressHub_AI_Settings_Render {
             $selected = ( '' === $current_val ) ? ' selected="selected"' : '';
             $html .= '<option value=""' . $selected . '>' . esc_html( $default_label ) . '</option>';
         }
+        $has_options = false;
         foreach ( $providers as $prov ) {
             if ( empty( $prov['enabled'] ) || ( empty( $prov['api_key'] ) && 'ollama_local' !== ( $prov['type'] ?? '' ) ) ) {
                 continue;
             }
+            $has_options = true;
             $id    = $prov['id'] ?? ( $prov['type'] ?? '' );
             $name  = $prov['name'] ?? ucfirst( $id );
             $model = $prov['default_model'] ?? '';
             $label = $name . ( $model ? ' (' . $model . ')' : '' ) . ( empty( $prov['enabled'] ) ? ' [' . __( 'Disabled', 'presshub-ai-editor' ) . ']' : '' );
             $selected = ( $current_val === $id ) ? ' selected="selected"' : '';
             $html .= '<option value="' . esc_attr( $id ) . '"' . $selected . '>' . esc_html( $label ) . '</option>';
+        }
+        if ( ! $has_options && '' === $default_label ) {
+            $html .= '<option value="" selected="selected">' . esc_html__( '-- No Active Providers Configured --', 'presshub-ai-editor' ) . '</option>';
         }
         return $html;
     }
@@ -454,16 +459,21 @@ class PressHub_AI_Settings_Render {
             $selected = ( '' === $selected_id ) ? ' selected="selected"' : '';
             $html .= '<option value=""' . $selected . '>' . esc_html( $default_label ) . '</option>';
         }
+        $has_options = false;
         foreach ( $providers as $prov ) {
             if ( ( $prov['type'] ?? '' ) !== 'gemini' || empty( $prov['enabled'] ) || empty( $prov['api_key'] ) ) {
                 continue;
             }
+            $has_options = true;
             $id    = $prov['id'] ?? ( $prov['type'] ?? '' );
             $name  = $prov['name'] ?? ucfirst( $id );
             $model = $prov['default_model'] ?? '';
             $label = $name . ( $model ? ' (' . $model . ')' : '' );
             $selected = ( $selected_id === $id ) ? ' selected="selected"' : '';
             $html .= '<option value="' . esc_attr( $id ) . '"' . $selected . '>' . esc_html( $label ) . '</option>';
+        }
+        if ( ! $has_options && '' === $default_label ) {
+            $html .= '<option value="" selected="selected">' . esc_html__( '-- No Gemini Provider Configured --', 'presshub-ai-editor' ) . '</option>';
         }
         return $html;
     }

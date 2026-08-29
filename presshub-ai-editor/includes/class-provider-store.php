@@ -188,145 +188,117 @@ class PressHub_AI_Provider_Store {
             return;
         }
 
-        $legacy_provider   = (string) get_option( 'presshub_ai_provider', 'gemini' );
-        $legacy_api_key    = (string) get_option( 'presshub_ai_api_key', '' );
-        $legacy_tts_key    = (string) get_option( 'presshub_ai_google_cloud_api_key', get_option( 'presshub_ai_briefing_tts_api_key', '' ) );
+        $legacy_provider_raw = get_option( 'presshub_ai_provider', null );
+        $legacy_api_key_raw  = get_option( 'presshub_ai_api_key', null );
+        $legacy_gcloud_key   = get_option( 'presshub_ai_google_cloud_api_key', null );
+        $legacy_tts_key      = get_option( 'presshub_ai_briefing_tts_api_key', null );
+        $openai_org_raw      = get_option( 'presshub_ai_openai_org', null );
+        $anthropic_ver_raw   = get_option( 'presshub_ai_anthropic_version', null );
 
-        $openai_org        = (string) get_option( 'presshub_ai_openai_org', '' );
-        $anthropic_version = (string) get_option( 'presshub_ai_anthropic_version', '' );
+        $has_legacy_config = ( null !== $legacy_provider_raw ) ||
+                             ( null !== $legacy_api_key_raw ) ||
+                             ( null !== $legacy_gcloud_key ) ||
+                             ( null !== $legacy_tts_key ) ||
+                             ( null !== $openai_org_raw ) ||
+                             ( null !== $anthropic_ver_raw );
+
+        if ( ! $has_legacy_config ) {
+            foreach ( [ 'openai', 'anthropic', 'gemini' ] as $prov_type ) {
+                if ( null !== get_option( 'presshub_ai_model_' . $prov_type, null ) ||
+                     null !== get_option( 'presshub_ai_temperature_' . $prov_type, null ) ||
+                     null !== get_option( 'presshub_ai_max_tokens_' . $prov_type, null ) ||
+                     null !== get_option( 'presshub_ai_timeout_' . $prov_type, null ) ) {
+                    $has_legacy_config = true;
+                    break;
+                }
+            }
+        }
+
+        if ( ! $has_legacy_config ) {
+            // Fresh installation: initialize empty configured providers and mark as migrated.
+            update_option( self::OPTION_CONFIGURED_PROVIDERS, [], false );
+            update_option( self::OPTION_MIGRATED, 1, false );
+            return;
+        }
+
+        $legacy_provider   = (string) ( $legacy_provider_raw ?? 'gemini' );
+        $legacy_api_key    = trim( (string) ( $legacy_api_key_raw ?? '' ) );
+        $openai_org        = trim( (string) ( $openai_org_raw ?? '' ) );
+        $anthropic_version = trim( (string) ( $anthropic_ver_raw ?? '' ) );
 
         $templates = PressHub_AI_Provider_Defaults::get_templates();
         $providers = [];
 
         // 1. Google Gemini
-        $gemini_key = ( 'gemini' === $legacy_provider ) ? $legacy_api_key : '';
-        $providers[] = [
-            'id'               => 'gemini-main',
-            'type'             => 'gemini',
-            'name'             => 'Google Gemini',
-            'api_key'          => $gemini_key,
-            'base_url'         => $templates['gemini']['base_url'],
-            'default_model'    => (string) get_option( 'presshub_ai_model_gemini', $templates['gemini']['default_model'] ),
-            'available_models' => $templates['gemini']['available_models'],
-            'timeout'          => (int) get_option( 'presshub_ai_timeout_gemini', 300 ),
-            'temperature'      => (float) get_option( 'presshub_ai_temperature_gemini', 0.7 ),
-            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_gemini', 10000 ),
-            'headers'          => [],
-            'enabled'          => true,
-            'is_system'        => true,
-        ];
+        $gemini_key          = ( 'gemini' === $legacy_provider ) ? $legacy_api_key : '';
+        $gemini_custom_model = get_option( 'presshub_ai_model_gemini', null );
+        if ( '' !== $gemini_key || ( null !== $gemini_custom_model && '' !== trim( (string) $gemini_custom_model ) ) ) {
+            $providers[] = [
+                'id'               => 'gemini-main',
+                'type'             => 'gemini',
+                'name'             => 'Google Gemini',
+                'api_key'          => $gemini_key,
+                'base_url'         => $templates['gemini']['base_url'],
+                'default_model'    => (string) ( $gemini_custom_model ?? $templates['gemini']['default_model'] ),
+                'available_models' => $templates['gemini']['available_models'],
+                'timeout'          => (int) get_option( 'presshub_ai_timeout_gemini', 300 ),
+                'temperature'      => (float) get_option( 'presshub_ai_temperature_gemini', 0.7 ),
+                'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_gemini', 10000 ),
+                'headers'          => [],
+                'enabled'          => true,
+                'is_system'        => true,
+            ];
+        }
 
         // 2. OpenAI
-        $openai_key     = ( 'openai' === $legacy_provider ) ? $legacy_api_key : '';
-        $openai_headers = [];
-        if ( '' !== $openai_org ) {
-            $openai_headers['OpenAI-Organization'] = $openai_org;
+        $openai_key          = ( 'openai' === $legacy_provider ) ? $legacy_api_key : '';
+        $openai_custom_model = get_option( 'presshub_ai_model_openai', null );
+        if ( '' !== $openai_key || '' !== $openai_org || ( null !== $openai_custom_model && '' !== trim( (string) $openai_custom_model ) ) ) {
+            $openai_headers = [];
+            if ( '' !== $openai_org ) {
+                $openai_headers['OpenAI-Organization'] = $openai_org;
+            }
+            $providers[] = [
+                'id'               => 'openai-default',
+                'type'             => 'openai',
+                'name'             => 'OpenAI',
+                'api_key'          => $openai_key,
+                'base_url'         => $templates['openai']['base_url'],
+                'default_model'    => (string) ( $openai_custom_model ?? $templates['openai']['default_model'] ),
+                'available_models' => $templates['openai']['available_models'],
+                'timeout'          => (int) get_option( 'presshub_ai_timeout_openai', 300 ),
+                'temperature'      => (float) get_option( 'presshub_ai_temperature_openai', 0.7 ),
+                'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_openai', 10000 ),
+                'headers'          => $openai_headers,
+                'enabled'          => true,
+                'is_system'        => true,
+            ];
         }
-        $providers[] = [
-            'id'               => 'openai-default',
-            'type'             => 'openai',
-            'name'             => 'OpenAI',
-            'api_key'          => $openai_key,
-            'base_url'         => $templates['openai']['base_url'],
-            'default_model'    => (string) get_option( 'presshub_ai_model_openai', $templates['openai']['default_model'] ),
-            'available_models' => $templates['openai']['available_models'],
-            'timeout'          => (int) get_option( 'presshub_ai_timeout_openai', 300 ),
-            'temperature'      => (float) get_option( 'presshub_ai_temperature_openai', 0.7 ),
-            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_openai', 10000 ),
-            'headers'          => $openai_headers,
-            'enabled'          => true,
-            'is_system'        => true,
-        ];
 
         // 3. Anthropic Claude
-        $anthropic_key     = ( 'anthropic' === $legacy_provider ) ? $legacy_api_key : '';
-        $anthropic_headers = [];
-        if ( '' !== $anthropic_version ) {
-            $anthropic_headers['anthropic-version'] = $anthropic_version;
+        $anthropic_key          = ( 'anthropic' === $legacy_provider ) ? $legacy_api_key : '';
+        $anthropic_custom_model = get_option( 'presshub_ai_model_anthropic', null );
+        if ( '' !== $anthropic_key || '' !== $anthropic_version || ( null !== $anthropic_custom_model && '' !== trim( (string) $anthropic_custom_model ) ) ) {
+            $anthropic_headers = [];
+            if ( '' !== $anthropic_version ) {
+                $anthropic_headers['anthropic-version'] = $anthropic_version;
+            }
+            $providers[] = [
+                'id'               => 'anthropic-default',
+                'type'             => 'anthropic',
+                'name'             => 'Anthropic Claude',
+                'api_key'          => $anthropic_key,
+                'base_url'         => $templates['anthropic']['base_url'],
+                'default_model'    => (string) ( $anthropic_custom_model ?? $templates['anthropic']['default_model'] ),
+                'available_models' => $templates['anthropic']['available_models'],
+                'timeout'          => (int) get_option( 'presshub_ai_timeout_anthropic', 300 ),
+                'temperature'      => (float) get_option( 'presshub_ai_temperature_anthropic', 0.7 ),
+                'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_anthropic', 10000 ),
+                'headers'          => $anthropic_headers,
+                'enabled'          => true,
+                'is_system'        => true,
+            ];
         }
-        $providers[] = [
-            'id'               => 'anthropic-default',
-            'type'             => 'anthropic',
-            'name'             => 'Anthropic Claude',
-            'api_key'          => $anthropic_key,
-            'base_url'         => $templates['anthropic']['base_url'],
-            'default_model'    => (string) get_option( 'presshub_ai_model_anthropic', $templates['anthropic']['default_model'] ),
-            'available_models' => $templates['anthropic']['available_models'],
-            'timeout'          => (int) get_option( 'presshub_ai_timeout_anthropic', 300 ),
-            'temperature'      => (float) get_option( 'presshub_ai_temperature_anthropic', 0.7 ),
-            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_anthropic', 10000 ),
-            'headers'          => $anthropic_headers,
-            'enabled'          => true,
-            'is_system'        => true,
-        ];
-
-        // 4. Groq
-        $providers[] = [
-            'id'               => 'groq-default',
-            'type'             => 'groq',
-            'name'             => 'Groq',
-            'api_key'          => '',
-            'base_url'         => $templates['groq']['base_url'],
-            'default_model'    => $templates['groq']['default_model'],
-            'available_models' => $templates['groq']['available_models'],
-            'timeout'          => 300,
-            'temperature'      => 0.7,
-            'max_tokens'       => 10000,
-            'headers'          => [],
-            'enabled'          => true,
-            'is_system'        => true,
-        ];
-
-        // 6. Mistral AI
-        $providers[] = [
-            'id'               => 'mistral-default',
-            'type'             => 'mistral',
-            'name'             => 'Mistral AI',
-            'api_key'          => '',
-            'base_url'         => $templates['mistral']['base_url'],
-            'default_model'    => $templates['mistral']['default_model'],
-            'available_models' => $templates['mistral']['available_models'],
-            'timeout'          => 300,
-            'temperature'      => 0.7,
-            'max_tokens'       => 10000,
-            'headers'          => [],
-            'enabled'          => true,
-            'is_system'        => true,
-        ];
-
-        // 7. DeepSeek
-        $providers[] = [
-            'id'               => 'deepseek-default',
-            'type'             => 'deepseek',
-            'name'             => 'DeepSeek',
-            'api_key'          => '',
-            'base_url'         => $templates['deepseek']['base_url'],
-            'default_model'    => $templates['deepseek']['default_model'],
-            'available_models' => $templates['deepseek']['available_models'],
-            'timeout'          => 300,
-            'temperature'      => 0.7,
-            'max_tokens'       => 10000,
-            'headers'          => [],
-            'enabled'          => true,
-            'is_system'        => true,
-        ];
-
-        // 8. Local Ollama
-        $providers[] = [
-            'id'               => 'ollama-local',
-            'type'             => 'ollama_local',
-            'name'             => 'Local Ollama',
-            'api_key'          => '',
-            'base_url'         => $templates['ollama_local']['base_url'],
-            'default_model'    => $templates['ollama_local']['default_model'],
-            'available_models' => $templates['ollama_local']['available_models'],
-            'timeout'          => 300,
-            'temperature'      => 0.7,
-            'max_tokens'       => 10000,
-            'headers'          => [],
-            'enabled'          => true,
-            'is_system'        => true,
-        ];
 
         // Sanitize all items before saving
         $clean_providers = [];
