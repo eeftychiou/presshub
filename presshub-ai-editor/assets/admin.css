@@ -1090,3 +1090,86 @@ body.presshub-modal-open {
 .presshub-source-modal-content {
     max-width: 640px;
 }
+
+/* ==========================================================================
+   Dirty-State Tracking & Unsaved-Changes Warning (Issue #17)
+   ========================================================================== */
+.presshub-ai-settings-wrap .nav-tab.is-dirty {
+    position: relative;
+    padding-right: 24px;
+}
+
+.presshub-ai-settings-wrap .nav-tab.is-dirty::after {
+    content: "";
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background-color: #dba617; /* WP amber warning */
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px #fff;
+    display: inline-block;
+}
+
+.presshub-ai-settings-wrap .nav-tab.nav-tab-active.is-dirty::after {
+    background-color: #d63638; /* Accent red indicator on active tab */
+    box-shadow: 0 0 0 2px #fff;
+}
+
+/* Mobile Tab Selector Dirty State */
+.presshub-mobile-tab-select.is-dirty {
+    border-color: #dba617;
+    box-shadow: 0 0 0 1px #dba617;
+}
+
+/* Sticky Save Bar Dirty State & Badges */
+.presshub-sticky-unsaved-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fcf9e8;
+    color: #8c5b00;
+    border: 1px solid #dba617;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    animation: presshubPulseDirty 2s infinite ease-in-out;
+}
+
+.presshub-sticky-save-bar.has-unsaved {
+    border-top-color: #dba617;
+    box-shadow: 0 -4px 14px rgba(219, 166, 23, 0.2), 0 -1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.presshub-sticky-save-bar.has-unsaved .presshub-sticky-section-badge {
+    border-color: #dba617;
+    background: #fff8e5;
+    color: #8c5b00;
+}
+
+.presshub-sticky-save-bar.has-unsaved .presshub-sticky-save-btn {
+    box-shadow: 0 0 0 1px #fff, 0 0 0 3px rgba(34, 113, 177, 0.35);
+}
+
+@keyframes presshubPulseDirty {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* Provider Modal Discard Notice */
+.presshub-provider-discard-notice {
+    border-left: 4px solid #dba617;
+    background: #fff8e5;
+    padding: 10px 14px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+    font-size: 13px;
+}
