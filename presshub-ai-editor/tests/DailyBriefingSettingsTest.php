@@ -83,27 +83,72 @@ class DailyBriefingSettingsTest
 
         $cbs = $GLOBALS['SANITIZE_CALLBACKS'] ?? [];
 
-        // --- Case 2: Sanitization of presshub_ai_briefing_sources ---
+        // --- Case 2: Sanitization of presshub_ai_briefing_sources (Structured Schema & Migration) ---
         self::reset_options();
         $raw_sources_str = " https://www.kathimerini.gr \n\n  https://www.tovima.gr\njavascript:alert(1)\nnot-a-url\nhttps://www.kathimerini.gr ";
         $sanitized_str = self::sanitize( $cbs, 'presshub_ai_briefing_sources', $raw_sources_str );
-        if ( false === strpos( $sanitized_str, 'https://www.kathimerini.gr' ) || false === strpos( $sanitized_str, 'https://www.tovima.gr' ) ) {
-            $failures[] = 'presshub_ai_briefing_sources should contain valid URLs; got: ' . var_export( $sanitized_str, true );
-        }
-        if ( false !== strpos( $sanitized_str, 'javascript' ) || false !== strpos( $sanitized_str, 'not-a-url' ) ) {
-            $failures[] = 'presshub_ai_briefing_sources must strip invalid and non-http URLs; got: ' . var_export( $sanitized_str, true );
-        }
-        // Deduplication check
-        $lines = array_filter( explode( "\n", trim( $sanitized_str ) ) );
-        if ( count( $lines ) !== 2 ) {
-            $failures[] = 'presshub_ai_briefing_sources should deduplicate URLs; got count ' . count( $lines );
+        if ( ! is_array( $sanitized_str ) || count( $sanitized_str ) !== 2 ) {
+            $failures[] = 'presshub_ai_briefing_sources should sanitize legacy string to 2 structured source items; got: ' . var_export( $sanitized_str, true );
+        } else {
+            $urls = array_column( $sanitized_str, 'url' );
+            if ( ! in_array( 'https://www.kathimerini.gr', $urls, true ) || ! in_array( 'https://www.tovima.gr', $urls, true ) ) {
+                $failures[] = 'presshub_ai_briefing_sources must contain normalized URLs; got: ' . var_export( $urls, true );
+            }
+            if ( empty( $sanitized_str[0]['name'] ) || empty( $sanitized_str[0]['id'] ) || 'text_news' !== $sanitized_str[0]['type'] || true !== $sanitized_str[0]['enabled'] ) {
+                $failures[] = 'presshub_ai_briefing_sources legacy string should set structured defaults; got: ' . var_export( $sanitized_str[0], true );
+            }
         }
 
-        // Array input handling
+        // Array input handling (legacy array migration)
         $raw_sources_arr = [ ' https://www.naftemporiki.gr ', 'https://www.in.gr', 'bad-entry', 'https://www.naftemporiki.gr' ];
         $sanitized_arr = self::sanitize( $cbs, 'presshub_ai_briefing_sources', $raw_sources_arr );
-        if ( ! is_array( $sanitized_arr ) || ! in_array( 'https://www.naftemporiki.gr', $sanitized_arr, true ) || count( $sanitized_arr ) !== 2 ) {
-            $failures[] = 'presshub_ai_briefing_sources array input should return clean array of 2 unique URLs; got: ' . var_export( $sanitized_arr, true );
+        if ( ! is_array( $sanitized_arr ) || count( $sanitized_arr ) !== 2 ) {
+            $failures[] = 'presshub_ai_briefing_sources array input should return clean array of 2 unique structured sources; got: ' . var_export( $sanitized_arr, true );
+        }
+
+        // Structured JSON input handling
+        $json_input = json_encode( [
+            [
+                'id'       => 'src_custom_1',
+                'name'     => 'Custom Greek Feed',
+                'url'      => 'https://www.custom-news.gr/feed.xml',
+                'type'     => 'rss_feed',
+                'enabled'  => true,
+                'category' => 'Technology',
+                'notes'    => 'Main RSS stream',
+            ],
+            [
+                'id'       => 'src_youtube_1',
+                'name'     => 'Greek News Daily Vlog',
+                'url'      => 'https://www.youtube.com/@GreekNewsDaily',
+                'type'     => 'youtube',
+                'enabled'  => false,
+                'category' => 'Video',
+                'notes'    => 'YouTube daily briefing channel',
+            ],
+            [
+                'id'       => 'src_podcast_1',
+                'name'     => 'Morning Briefing Podcast',
+                'url'      => 'https://podcast.example.com/rss',
+                'type'     => 'podcast_audio',
+                'enabled'  => true,
+                'category' => 'Podcast',
+                'notes'    => 'Audio podcast feed',
+            ],
+        ] );
+        $sanitized_json = self::sanitize( $cbs, 'presshub_ai_briefing_sources', $json_input );
+        if ( ! is_array( $sanitized_json ) || count( $sanitized_json ) !== 3 ) {
+            $failures[] = 'presshub_ai_briefing_sources should correctly decode and sanitize JSON input; got: ' . var_export( $sanitized_json, true );
+        } else {
+            if ( $sanitized_json[0]['type'] !== 'rss_feed' || true !== $sanitized_json[0]['enabled'] || 'Technology' !== $sanitized_json[0]['category'] ) {
+                $failures[] = 'presshub_ai_briefing_sources JSON rss_feed not sanitized correctly; got: ' . var_export( $sanitized_json[0], true );
+            }
+            if ( $sanitized_json[1]['type'] !== 'youtube' || false !== $sanitized_json[1]['enabled'] ) {
+                $failures[] = 'presshub_ai_briefing_sources JSON youtube disabled source not sanitized correctly; got: ' . var_export( $sanitized_json[1], true );
+            }
+            if ( $sanitized_json[2]['type'] !== 'podcast_audio' || true !== $sanitized_json[2]['enabled'] ) {
+                $failures[] = 'presshub_ai_briefing_sources JSON podcast_audio source not sanitized correctly; got: ' . var_export( $sanitized_json[2], true );
+            }
         }
 
         // --- Case 3: Sanitization of harvest_time & generation_time & tts_engine ---

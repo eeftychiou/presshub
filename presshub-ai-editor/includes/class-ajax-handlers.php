@@ -35,6 +35,7 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
         // Dynamic AI Providers Manager AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_save_provider', [ $this, 'save_provider' ] );
+        add_action( 'wp_ajax_presshub_ai_test_source', [ $this, 'test_source' ] );
         add_action( 'wp_ajax_presshub_ai_delete_provider', [ $this, 'delete_provider' ] );
         add_action( 'wp_ajax_presshub_ai_test_provider', [ $this, 'test_provider' ] );
         add_action( 'wp_ajax_presshub_ai_fetch_provider_models', [ $this, 'fetch_provider_models' ] );
@@ -860,19 +861,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-news-harvester.php';
         require_once __DIR__ . '/class-settings.php';
+        require_once __DIR__ . '/class-settings-storage.php';
 
-        $raw_sources = get_option( 'presshub_ai_briefing_sources', '' );
-        if ( is_array( $raw_sources ) ) {
-            $sources = $raw_sources;
-        } else {
-            $sources = preg_split( '/[\r\n,]+/', (string) $raw_sources );
-        }
-        $sources = array_values( array_filter( array_map( 'trim', (array) $sources ) ) );
-
-        if ( empty( $sources ) && class_exists( 'PressHub_AI_Settings' ) ) {
-            $sources = PressHub_AI_Settings::default_briefing_sources();
-        }
-
+        $sources   = PressHub_AI_Settings_Storage::get_briefing_sources();
         $harvester = new PressHub_AI_News_Harvester();
         $result    = $harvester->harvest_all( $sources, $date );
 
@@ -1377,7 +1368,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         wp_send_json_success( [
             'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
-            'sources' => (string) get_option( 'presshub_ai_briefing_sources', '' ),
+            'sources' => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'   => [
                 'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                 'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
@@ -1753,6 +1744,75 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'models'  => $result,
             'count'   => count( $result ),
             'message' => sprintf( __( 'Found %d models.', 'presshub-ai-editor' ), count( $result ) ),
+        ] );
+    }
+
+    /**
+     * AJAX endpoint to test connectivity and link discovery of a news source.
+     */
+    public function test_source(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ] );
+        }
+
+        $url  = isset( $_POST['url'] ) ? esc_url_raw( wp_unslash( $_POST['url'] ) ) : '';
+        $type = isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : 'text_news';
+
+        if ( empty( $url ) || ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
+            wp_send_json_error( [ 'message' => __( 'Please provide a valid HTTP/HTTPS URL.', 'presshub-ai-editor' ) ] );
+        }
+
+        require_once __DIR__ . '/class-news-harvester.php';
+        $start_time = microtime( true );
+        $response   = wp_remote_get( $url, [
+            'timeout'     => 12,
+            'user-agent'  => PressHub_AI_News_Harvester::USER_AGENT,
+            'redirection' => 5,
+            'headers'     => [
+                'Accept'          => 'text/html,application/xhtml+xml,application/xml,application/rss+xml;q=0.9,*/*;q=0.8',
+                'Accept-Language' => 'el,el-GR;q=0.9,en;q=0.8',
+            ],
+        ] );
+        $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( [
+                'status_code' => 0,
+                'duration_ms' => $duration_ms,
+                'message'     => sprintf( __( 'Connection failed: %s (%dms)', 'presshub-ai-editor' ), $response->get_error_message(), $duration_ms ),
+            ] );
+        }
+
+        $code = wp_remote_retrieve_response_code( $response );
+        $body = (string) wp_remote_retrieve_body( $response );
+
+        $harvester = new PressHub_AI_News_Harvester();
+        if ( $harvester->is_cloudflare_or_blocked( $response, $body ) ) {
+            wp_send_json_error( [
+                'status_code' => $code,
+                'duration_ms' => $duration_ms,
+                'is_blocked'  => true,
+                'message'     => sprintf( __( 'Bot protection / Cloudflare challenge detected (HTTP %d, %dms). This outlet may require manual text upload.', 'presshub-ai-editor' ), $code, $duration_ms ),
+            ] );
+        }
+
+        if ( $code >= 400 ) {
+            wp_send_json_error( [
+                'status_code' => $code,
+                'duration_ms' => $duration_ms,
+                'message'     => sprintf( __( 'HTTP Error %d returned by source (%dms).', 'presshub-ai-editor' ), $code, $duration_ms ),
+            ] );
+        }
+
+        $links_found = count( $harvester->extract_article_links_from_html( $body, $url ) );
+
+        wp_send_json_success( [
+            'status_code' => $code,
+            'duration_ms' => $duration_ms,
+            'links_found' => $links_found,
+            'message'     => sprintf( __( 'Connected successfully (HTTP %d, %dms). Discovered %d article links.', 'presshub-ai-editor' ), $code, $duration_ms, $links_found ),
         ] );
     }
 }
