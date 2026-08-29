@@ -8,6 +8,7 @@ require_once __DIR__ . '/class-preset-store.php';
 require_once __DIR__ . '/class-preset-resolver.php';
 require_once __DIR__ . '/class-url-fetcher.php';
 require_once __DIR__ . '/class-markdown.php';
+require_once __DIR__ . '/class-logger.php';
 require_once __DIR__ . '/class-token-logger.php';
 
 /**
@@ -1287,6 +1288,18 @@ class PressHub_AI_API_Client {
         if ( isset( $res_body['choices'][0]['message']['content'] ) ) {
             $prompt_tokens     = (int) ( $res_body['usage']['prompt_tokens'] ?? 0 );
             $completion_tokens = (int) ( $res_body['usage']['completion_tokens'] ?? 0 );
+            $finish_reason     = (string) ( $res_body['choices'][0]['finish_reason'] ?? '' );
+
+            if ( 'length' === $finish_reason ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( 'LLM output truncated: provider "%s", model "%s" reached maximum output tokens limit (%d tokens).', $provider_name, $model, $max_tokens ) );
+                }
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', 'LLM output truncated: maximum output tokens limit reached (finish_reason: length).', [ 'truncated' => true, 'finish_reason' => 'length', 'max_tokens' => $max_tokens ] );
+                }
+                return new WP_Error( 'output_truncated', __( 'The AI response was truncated because it reached the maximum output tokens limit. Please increase Maximum Output Tokens in settings or request a shorter response.', 'presshub-ai-editor' ) );
+            }
+
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null );
             }
@@ -1355,6 +1368,18 @@ class PressHub_AI_API_Client {
         if ( isset( $body['choices'][0]['message']['content'] ) ) {
             $prompt_tokens     = (int) ( $body['usage']['prompt_tokens'] ?? 0 );
             $completion_tokens = (int) ( $body['usage']['completion_tokens'] ?? 0 );
+            $finish_reason     = (string) ( $body['choices'][0]['finish_reason'] ?? '' );
+
+            if ( 'length' === $finish_reason ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( 'LLM output truncated: provider "openai", model "%s" reached maximum output tokens limit (%d tokens).', $this->model, $this->max_tokens ) );
+                }
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', 'LLM output truncated: maximum output tokens limit reached (finish_reason: length).', [ 'truncated' => true, 'finish_reason' => 'length', 'max_tokens' => $this->max_tokens ] );
+                }
+                return new WP_Error( 'output_truncated', __( 'The AI response was truncated because it reached the maximum output tokens limit. Please increase Maximum Output Tokens in settings or request a shorter response.', 'presshub-ai-editor' ) );
+            }
+
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null );
             }
@@ -1435,6 +1460,18 @@ class PressHub_AI_API_Client {
         if ( isset( $body['content'][0]['text'] ) ) {
             $prompt_tokens     = (int) ( $body['usage']['input_tokens'] ?? 0 );
             $completion_tokens = (int) ( $body['usage']['output_tokens'] ?? 0 );
+            $stop_reason       = (string) ( $body['stop_reason'] ?? '' );
+
+            if ( in_array( $stop_reason, [ 'max_tokens', 'length' ], true ) ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( 'LLM output truncated: provider "anthropic", model "%s" reached maximum output tokens limit (%d tokens).', $this->model, $this->max_tokens ) );
+                }
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', 'LLM output truncated: maximum output tokens limit reached (stop_reason: max_tokens).', [ 'truncated' => true, 'stop_reason' => $stop_reason, 'max_tokens' => $this->max_tokens ] );
+                }
+                return new WP_Error( 'output_truncated', __( 'The AI response was truncated because it reached the maximum output tokens limit. Please increase Maximum Output Tokens in settings or request a shorter response.', 'presshub-ai-editor' ) );
+            }
+
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null );
             }
@@ -1530,6 +1567,18 @@ class PressHub_AI_API_Client {
         if ( isset( $body['candidates'][0]['content']['parts'][0]['text'] ) ) {
             $prompt_tokens     = (int) ( $body['usageMetadata']['promptTokenCount'] ?? 0 );
             $completion_tokens = (int) ( $body['usageMetadata']['candidatesTokenCount'] ?? 0 );
+            $finish_reason     = (string) ( $body['candidates'][0]['finishReason'] ?? ( $body['candidates'][0]['finish_reason'] ?? '' ) );
+
+            if ( in_array( strtoupper( $finish_reason ), [ 'MAX_TOKENS', 'LENGTH' ], true ) ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( sprintf( 'LLM output truncated: provider "gemini", model "%s" reached maximum output tokens limit (%d tokens).', $this->model, $this->max_tokens ) );
+                }
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', 'LLM output truncated: maximum output tokens limit reached (finishReason: MAX_TOKENS).', [ 'truncated' => true, 'finish_reason' => $finish_reason, 'max_tokens' => $this->max_tokens ] );
+                }
+                return new WP_Error( 'output_truncated', __( 'The AI response was truncated because it reached the maximum output tokens limit. Please increase Maximum Output Tokens in settings or request a shorter response.', 'presshub-ai-editor' ) );
+            }
+
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null );
             }

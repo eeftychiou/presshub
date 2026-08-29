@@ -210,7 +210,7 @@ class PressHub_AI_Provider_Store {
             'available_models' => $templates['gemini']['available_models'],
             'timeout'          => (int) get_option( 'presshub_ai_timeout_gemini', 300 ),
             'temperature'      => (float) get_option( 'presshub_ai_temperature_gemini', 0.7 ),
-            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_gemini', 10000 ),
+            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_gemini', PressHub_AI_Provider_Defaults::default_max_tokens() ),
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -232,7 +232,7 @@ class PressHub_AI_Provider_Store {
             'available_models' => $templates['openai']['available_models'],
             'timeout'          => (int) get_option( 'presshub_ai_timeout_openai', 300 ),
             'temperature'      => (float) get_option( 'presshub_ai_temperature_openai', 0.7 ),
-            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_openai', 10000 ),
+            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_openai', PressHub_AI_Provider_Defaults::default_max_tokens() ),
             'headers'          => $openai_headers,
             'enabled'          => true,
             'is_system'        => true,
@@ -254,7 +254,7 @@ class PressHub_AI_Provider_Store {
             'available_models' => $templates['anthropic']['available_models'],
             'timeout'          => (int) get_option( 'presshub_ai_timeout_anthropic', 300 ),
             'temperature'      => (float) get_option( 'presshub_ai_temperature_anthropic', 0.7 ),
-            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_anthropic', 10000 ),
+            'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_anthropic', PressHub_AI_Provider_Defaults::default_max_tokens() ),
             'headers'          => $anthropic_headers,
             'enabled'          => true,
             'is_system'        => true,
@@ -271,7 +271,7 @@ class PressHub_AI_Provider_Store {
             'available_models' => $templates['groq']['available_models'],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => PressHub_AI_Provider_Defaults::default_max_tokens(),
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -288,7 +288,7 @@ class PressHub_AI_Provider_Store {
             'available_models' => $templates['mistral']['available_models'],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => PressHub_AI_Provider_Defaults::default_max_tokens(),
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -305,7 +305,7 @@ class PressHub_AI_Provider_Store {
             'available_models' => $templates['deepseek']['available_models'],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => PressHub_AI_Provider_Defaults::default_max_tokens(),
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -322,7 +322,7 @@ class PressHub_AI_Provider_Store {
             'available_models' => $templates['ollama_local']['available_models'],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => PressHub_AI_Provider_Defaults::default_max_tokens(),
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => true,
@@ -450,11 +450,11 @@ class PressHub_AI_Provider_Store {
         }
 
         // Max Tokens
-        $max_tokens = 10000;
+        $max_tokens = PressHub_AI_Provider_Defaults::default_max_tokens();
         if ( isset( $data['max_tokens'] ) ) {
-            $max_tokens = max( 1, (int) $data['max_tokens'] );
+            $max_tokens = max( 1, min( 65536, (int) $data['max_tokens'] ) );
         } elseif ( isset( $existing['max_tokens'] ) ) {
-            $max_tokens = max( 1, (int) $existing['max_tokens'] );
+            $max_tokens = max( 1, min( 65536, (int) $existing['max_tokens'] ) );
         }
 
         // Headers
@@ -570,7 +570,7 @@ class PressHub_AI_Provider_Store {
             'available_models' => [ 'default' ],
             'timeout'          => 300,
             'temperature'      => 0.7,
-            'max_tokens'       => 10000,
+            'max_tokens'       => PressHub_AI_Provider_Defaults::default_max_tokens(),
             'headers'          => [],
             'enabled'          => true,
             'is_system'        => false,

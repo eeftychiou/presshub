@@ -508,7 +508,7 @@ class PressHub_AI_Settings_Storage {
 
     public static function sanitize_max_tokens( $value ) {
         $n = (int) wp_unslash( $value );
-        return max( 1, min( 32768, $n ) );
+        return max( 1, min( 65536, $n ) );
     }
 
     public static function sanitize_timeout( $value ) {
