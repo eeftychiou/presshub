@@ -677,7 +677,8 @@ jQuery(document).ready(function($) {
     // ------------------------------------------------------------------
     function initSettingsTabs() {
         var $tabs = $('#presshub-ai-settings-tabs');
-        if (!$tabs.length) {
+        var $mobileSelect = $('#presshub-mobile-tab-select');
+        if (!$tabs.length && !$mobileSelect.length) {
             return;
         }
 
@@ -694,9 +695,17 @@ jQuery(document).ready(function($) {
                 tabKey = tabAliases[tabKey];
             }
 
-            $tabs.find('.nav-tab').removeClass('nav-tab-active');
-            $tabs.find('.nav-tab[data-tab="' + tabKey + '"]').addClass('nav-tab-active');
+            // Sync desktop/tablet tabs & accessibility states
+            $tabs.find('.nav-tab').removeClass('nav-tab-active').attr('aria-selected', 'false');
+            var $activeTab = $tabs.find('.nav-tab[data-tab="' + tabKey + '"]');
+            $activeTab.addClass('nav-tab-active').attr('aria-selected', 'true');
 
+            // Sync mobile select dropdown
+            if ($mobileSelect.length && $mobileSelect.val() !== tabKey) {
+                $mobileSelect.val(tabKey);
+            }
+
+            // Toggle tab pane visibility
             $('.presshub-tab-pane').hide();
             $('#presshub-tab-pane-' + tabKey).show();
 
@@ -713,6 +722,15 @@ jQuery(document).ready(function($) {
                 loadDiagnosticLogs();
             }
 
+            // Scroll active tab into view in horizontal scrolling container
+            if ($activeTab.length && typeof $activeTab[0].scrollIntoView === 'function') {
+                try {
+                    $activeTab[0].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                } catch (e) {
+                    // Fallback
+                }
+            }
+
             if (window.location.hash !== '#' + tabKey) {
                 if (window.history && window.history.replaceState) {
                     window.history.replaceState(null, null, '#' + tabKey);
@@ -726,11 +744,34 @@ jQuery(document).ready(function($) {
             switchTab(tabKey);
         });
 
+        $(document).on('change', '#presshub-mobile-tab-select', function(e) {
+            var tabKey = $(this).val();
+            if (tabKey) {
+                switchTab(tabKey);
+            }
+        });
+
+        $(window).on('hashchange', function() {
+            var hash = (window.location.hash || '').replace('#', '');
+            if (hash) {
+                var targetTab = tabAliases[hash] || hash;
+                if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length) {
+                    switchTab(targetTab);
+                }
+            }
+        });
+
         var initialHash = (window.location.hash || '').replace('#', '');
         if (initialHash) {
             var targetTab = tabAliases[initialHash] || initialHash;
-            if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length) {
+            if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length) {
                 switchTab(targetTab);
+            }
+        } else {
+            // Ensure default active tab is in sync
+            var defaultTab = $tabs.find('.nav-tab-active').data('tab') || 'providers';
+            if ($mobileSelect.length) {
+                $mobileSelect.val(defaultTab);
             }
         }
     }

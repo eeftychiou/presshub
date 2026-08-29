@@ -382,16 +382,119 @@ body.presshub-modal-open {
 /* ------------------------------------------------------------------
  * Settings Page Tabs & Sections Layout
  * ------------------------------------------------------------------ */
+.presshub-settings-nav-container {
+    margin-bottom: 20px;
+    position: relative;
+}
+
 .presshub-ai-settings-wrap .nav-tab-wrapper {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    gap: 4px;
+    padding-bottom: 0;
     border-bottom: 1px solid #c3c4c7;
     margin-bottom: 20px;
 }
 
 .presshub-ai-settings-wrap .nav-tab {
+    float: none;
+    white-space: nowrap;
+    flex-shrink: 0;
     font-size: 14px;
     font-weight: 500;
     padding: 8px 16px;
     cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.presshub-ai-settings-wrap .nav-tab:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: -2px;
+    box-shadow: none;
+}
+
+.presshub-mobile-tab-select-wrap {
+    display: none;
+    margin-bottom: 16px;
+}
+
+.presshub-mobile-tab-select {
+    width: 100%;
+    max-width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+    border-radius: 6px;
+    border: 1px solid #8c8f94;
+    background-color: #ffffff;
+    color: #1d2327;
+    box-sizing: border-box;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    cursor: pointer;
+}
+
+.presshub-mobile-tab-select:focus {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+    outline: 2px solid transparent;
+}
+
+@media (max-width: 960px) {
+    .presshub-ai-settings-wrap .nav-tab-wrapper {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: nowrap;
+        scrollbar-width: thin;
+        gap: 6px;
+        padding-bottom: 2px;
+    }
+    .presshub-ai-settings-wrap .nav-tab {
+        min-height: 40px;
+        padding: 8px 14px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 782px) {
+    .presshub-mobile-tab-select-wrap {
+        display: block;
+    }
+    .presshub-ai-settings-wrap .nav-tab-wrapper {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 6px;
+        gap: 6px;
+        scrollbar-width: thin;
+        margin-bottom: 15px;
+    }
+    .presshub-ai-settings-wrap .nav-tab {
+        min-height: 44px; /* WCAG 2.1 touch target height */
+        padding: 10px 14px;
+        font-size: 13px;
+        line-height: 22px;
+        display: inline-flex;
+        align-items: center;
+        box-sizing: border-box;
+    }
+    .presshub-mobile-tab-select {
+        min-height: 44px; /* WCAG 2.1 touch target height */
+        font-size: 16px; /* Prevents iOS auto-zoom on select focus */
+        padding: 10px 12px;
+    }
 }
 
 .presshub-tab-pane {
