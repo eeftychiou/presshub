@@ -155,6 +155,7 @@ class PressHub_AI_Briefing_Admin {
         $snapshot = $harvester->load_snapshot( $date );
         $articles = $snapshot['articles'] ?? [];
         $blocked_sources = $snapshot['blocked_sources'] ?? [];
+        $source_health = $snapshot['source_health'] ?? ( $snapshot['diagnostics'] ?? [] );
         $harvested_at = $snapshot['harvested_at'] ?? null;
         $is_harvested = ! empty( $snapshot ) && is_array( $snapshot );
 
@@ -201,6 +202,8 @@ class PressHub_AI_Briefing_Admin {
             'article_count'       => count( $articles ),
             'sources'             => $snapshot['sources'] ?? [],
             'blocked_sources'     => $blocked_sources,
+            'source_health'       => $source_health,
+            'diagnostics'         => $source_health,
             'articles'            => $articles,
             'text_created'        => $text_created,
             'text_post_id'        => $text_post_id,
@@ -283,6 +286,80 @@ class PressHub_AI_Briefing_Admin {
                     </p>
                 </div>
             </div>
+
+                        <!-- Harvest Diagnostics & Source Health Section (Issue #5) -->
+            <section class="presshub-section-container presshub-source-health-section" id="presshub-source-health-section">
+                <div class="presshub-section-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="presshub-section-title-wrap">
+                        <h2>🩺 <?php echo esc_html__( 'Harvest Diagnostics & Source Health', 'presshub-ai-editor' ); ?></h2>
+                        <p class="description">
+                            <?php echo esc_html__( 'Per-source HTTP response codes, latency metrics, hybrid discovery method (RSS vs HTML Scraper), and article yields.', 'presshub-ai-editor' ); ?>
+                        </p>
+                    </div>
+                    <div class="presshub-health-actions">
+                        <button type="button" class="button button-secondary button-small" id="btn-refresh-diagnostics">
+                            🔄 <?php echo esc_html__( 'Refresh Health Status', 'presshub-ai-editor' ); ?>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="presshub-source-health-table-wrap" style="overflow-x: auto; margin-top: 12px;">
+                    <table class="wp-list-table widefat fixed striped presshub-source-health-table" id="presshub-source-health-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 28%;"><?php echo esc_html__( 'News Source URL', 'presshub-ai-editor' ); ?></th>
+                                <th style="width: 12%;"><?php echo esc_html__( 'Health Status', 'presshub-ai-editor' ); ?></th>
+                                <th style="width: 10%;"><?php echo esc_html__( 'HTTP Code', 'presshub-ai-editor' ); ?></th>
+                                <th style="width: 16%;"><?php echo esc_html__( 'Discovery Method', 'presshub-ai-editor' ); ?></th>
+                                <th style="width: 10%;"><?php echo esc_html__( 'Latency', 'presshub-ai-editor' ); ?></th>
+                                <th style="width: 12%;"><?php echo esc_html__( 'Yielded Articles', 'presshub-ai-editor' ); ?></th>
+                                <th style="width: 12%;"><?php echo esc_html__( 'Notes / Cause', 'presshub-ai-editor' ); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody id="presshub-source-health-tbody">
+                            <?php
+                            $health_entries = ! empty( $status['source_health'] ) ? $status['source_health'] : [];
+                            if ( ! empty( $health_entries ) ) :
+                                foreach ( $health_entries as $h ) :
+                                    $h_url    = $h['url'] ?? '';
+                                    $h_status = $h['status'] ?? 'ok';
+                                    $h_code   = (int) ( $h['http_code'] ?? 0 );
+                                    $h_method = $h['discovery_method'] ?? 'UNKNOWN';
+                                    $h_lat    = (int) ( $h['latency_ms'] ?? 0 );
+                                    $h_count  = (int) ( $h['articles_yielded'] ?? 0 );
+                                    $h_reason = $h['failure_reason'] ?? ( 'ok' === $h_status ? __( 'Healthy', 'presshub-ai-editor' ) : '-' );
+                                    
+                                    $badge_class = 'badge-success';
+                                    if ( 'blocked' === $h_status ) $badge_class = 'badge-danger';
+                                    elseif ( 'warning' === $h_status ) $badge_class = 'badge-warning';
+                                    elseif ( 'error' === $h_status ) $badge_class = 'badge-danger';
+
+                                    $method_class = 'method-html';
+                                    if ( 'RSS_FEED' === $h_method || 'FEED_DIRECT' === $h_method ) $method_class = 'method-rss';
+                            ?>
+                                <tr>
+                                    <td><code title="<?php echo esc_attr( $h_url ); ?>"><?php echo esc_html( $h_url ); ?></code></td>
+                                    <td><span class="presshub-status-pill <?php echo esc_attr( $badge_class ); ?>"><?php echo esc_html( strtoupper( $h_status ) ); ?></span></td>
+                                    <td><strong><?php echo esc_html( $h_code ?: '-' ); ?></strong></td>
+                                    <td><span class="presshub-method-pill <?php echo esc_attr( $method_class ); ?>"><?php echo esc_html( $h_method ); ?></span></td>
+                                    <td><?php echo esc_html( $h_lat . 'ms' ); ?></td>
+                                    <td><strong><?php echo esc_html( (string) $h_count ); ?></strong></td>
+                                    <td><small><?php echo esc_html( $h_reason ); ?></small></td>
+                                </tr>
+                            <?php
+                                endforeach;
+                            else :
+                            ?>
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: #777; padding: 15px;">
+                                        <?php echo esc_html__( 'No harvest diagnostics recorded yet for this date. Run scrape to populate source health.', 'presshub-ai-editor' ); ?>
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
 
             <!-- Pipeline Milestones 4-Stage Grid -->
             <div class="presshub-pipeline-grid">

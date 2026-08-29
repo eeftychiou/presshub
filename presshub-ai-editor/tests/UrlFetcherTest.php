@@ -140,6 +140,88 @@ uf_check( 'boilerplate: body kept', false !== strpos( $cut, 'Main article body t
 uf_check( 'boilerplate: english marker works', PressHub_AI_URL_Fetcher::cut_boilerplate( "Body text.\nComments\nmore" ) === 'Body text.' );
 uf_check( 'boilerplate: no marker → unchanged', PressHub_AI_URL_Fetcher::cut_boilerplate( 'Just body text.' ) === 'Just body text.' );
 
+
+// --- 9. Tier 1: JSON-LD Structured Data Extraction --------------------------
+$json_ld_html = '<!DOCTYPE html>
+<html>
+<head>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "NewsArticle",
+        "headline": "Κυβερνητικές ανακοινώσεις για τη φορολογία",
+        "datePublished": "2026-08-26T09:00:00+03:00",
+        "articleBody": "Αναλυτικά μέτρα στήριξης για τις επιχειρήσεις και τους επαγγελματίες ανακοίνωσε το οικονομικό επιτελείο. Το σχέδιο περιλαμβάνει μειώσεις συντελεστών και φοροελαφρύνσεις για το νέο έτος."
+    }
+    </script>
+</head>
+<body>
+    <nav>Menu</nav>
+    <div class="sidebar">Ads</div>
+</body>
+</html>';
+
+$res_json_ld = PressHub_AI_URL_Fetcher::extract_article_semantic( $json_ld_html );
+uf_check( 'json_ld tier: tier name is json_ld', ( $res_json_ld['tier'] ?? '' ) === 'json_ld' );
+uf_check( 'json_ld tier: headline matches', ( $res_json_ld['title'] ?? '' ) === 'Κυβερνητικές ανακοινώσεις για τη φορολογία' );
+uf_check( 'json_ld tier: content matches articleBody', false !== strpos( $res_json_ld['content'] ?? '', 'Αναλυτικά μέτρα στήριξης' ) );
+uf_check( 'json_ld tier: datePublished extracted', ( $res_json_ld['published_at'] ?? '' ) === '2026-08-26T09:00:00+03:00' );
+
+
+// --- 10. Tier 2: Semantic DOM News Container Extraction ----------------------
+$dom_container_html = '<!DOCTYPE html>
+<html>
+<head><title>Οικονομικές Ειδήσεις</title></head>
+<body>
+    <header><nav><a href="/">Home</a></nav></header>
+    <div class="entry-content">
+        <h1>Νέα επένδυση στην πράσινη ενέργεια</h1>
+        <div class="social-share">Share on Twitter</div>
+        <p>Μεγάλο επενδυτικό σχέδιο ύψους 500 εκατομμυρίων ευρώ ανακοινώθηκε σήμερα.</p>
+        <p>Το έργο θα δημιουργήσει πάνω από 1.000 νέες θέσεις εργασίας.</p>
+        <div class="related-posts">Διαβάστε επίσης</div>
+    </div>
+    <footer>Footer notes</footer>
+</body>
+</html>';
+
+$res_dom = PressHub_AI_URL_Fetcher::extract_article_semantic( $dom_container_html );
+uf_check( 'dom tier: tier name is dom', ( $res_dom['tier'] ?? '' ) === 'dom' );
+uf_check( 'dom tier: contains investment text', false !== strpos( $res_dom['content'] ?? '', 'Μεγάλο επενδυτικό σχέδιο' ) );
+uf_check( 'dom tier: stripped social share', false === strpos( $res_dom['content'] ?? '', 'Share on Twitter' ) );
+uf_check( 'dom tier: stripped related posts', false === strpos( $res_dom['content'] ?? '', 'Διαβάστε επίσης' ) );
+
+
+// --- 11. Tier 3: OpenGraph & Meta Tags Fallback ------------------------------
+$og_html = '<!DOCTYPE html>
+<html>
+<head>
+    <meta property="og:title" content="Σημαντική διεθνής συνάντηση στην Αθήνα" />
+    <meta property="og:description" content="Συζητήθηκαν κρίσιμα θέματα περιφερειακής ασφάλειας και συνεργασίας μεταξύ των δύο χωρών." />
+    <meta property="article:published_time" content="2026-08-26T12:00:00Z" />
+</head>
+<body>
+    <div>Paywall: Subscribe to read full article</div>
+</body>
+</html>';
+
+$res_og = PressHub_AI_URL_Fetcher::extract_article_semantic( $og_html );
+uf_check( 'opengraph tier: tier name is opengraph', ( $res_og['tier'] ?? '' ) === 'opengraph' );
+uf_check( 'opengraph tier: title extracted', ( $res_og['title'] ?? '' ) === 'Σημαντική διεθνής συνάντηση στην Αθήνα' );
+uf_check( 'opengraph tier: description extracted', false !== strpos( $res_og['content'] ?? '', 'Συζητήθηκαν κρίσιμα θέματα' ) );
+uf_check( 'opengraph tier: published time extracted', ( $res_og['published_at'] ?? '' ) === '2026-08-26T12:00:00Z' );
+
+
+// --- 12. fetch_article_data Structured Result --------------------------------
+$GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $json_ld_html ) {
+    return [ 'response' => [ 'code' => 200 ], 'body' => $json_ld_html ];
+};
+$art_data = PressHub_AI_URL_Fetcher::fetch_article_data( 'https://example.com/tax-news' );
+uf_check( 'fetch_article_data: success is true', true === $art_data['success'] );
+uf_check( 'fetch_article_data: status_code is 200', 200 === $art_data['status_code'] );
+uf_check( 'fetch_article_data: tier is json_ld', ( $art_data['tier'] ?? '' ) === 'json_ld' );
+uf_check( 'fetch_article_data: char_count > 0', ( $art_data['char_count'] ?? 0 ) > 50 );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "UrlFetcherTest: {$failures} failure(s)\n" );
     exit( 1 );

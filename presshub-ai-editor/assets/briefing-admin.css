@@ -633,3 +633,72 @@
     margin-bottom: 0;
 }
 
+
+/* Source Health Diagnostics Table (Issue #5) */
+.presshub-source-health-section {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.presshub-source-health-table {
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+.presshub-source-health-table th {
+    background: #f6f7f7;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 10px 12px;
+}
+.presshub-source-health-table td {
+    padding: 10px 12px;
+    vertical-align: middle;
+    font-size: 13px;
+}
+.presshub-status-pill.badge-success {
+    background: #d1e7dd;
+    color: #0f5132;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+}
+.presshub-status-pill.badge-warning {
+    background: #fff3cd;
+    color: #664d03;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+}
+.presshub-status-pill.badge-danger {
+    background: #f8d7da;
+    color: #842029;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+}
+.presshub-method-pill {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+}
+.presshub-method-pill.method-rss {
+    background: #cff4fc;
+    color: #055160;
+    border: 1px solid #9eeaf9;
+}
+.presshub-method-pill.method-html {
+    background: #e2e3e5;
+    color: #41464b;
+    border: 1px solid #d3d6d8;
+}

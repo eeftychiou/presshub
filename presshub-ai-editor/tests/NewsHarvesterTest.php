@@ -288,6 +288,147 @@ nh_check( 'load_snapshot: date matches', ( $loaded_data['date'] ?? '' ) === '202
 $nonexistent = $harvester->load_snapshot( '1999-01-01' );
 nh_check( 'load_snapshot: nonexistent date returns null or empty', empty( $nonexistent ) );
 
+
+// =========================================================================
+// 6. RSS 2.0 Feed Auto-Detection via <link rel="alternate" type="application/rss+xml">
+// =========================================================================
+
+$rss_xml_sample = '<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>News 24/7 Feed</title>
+        <link>https://www.news247.gr</link>
+        <description>Ειδήσεις από την Ελλάδα</description>
+        <item>
+            <title>Εξελίξεις στην οικονομία</title>
+            <link>https://www.news247.gr/oikonomia/article-101</link>
+            <description>Σημαντική άνοδος στους δείκτες.</description>
+            <content:encoded><![CDATA[<p>Πλήρες αναλυτικό κείμενο για τις οικονομικές εξελίξεις στην Ελλάδα.</p>]]></content:encoded>
+            <pubDate>Wed, 26 Aug 2026 08:30:00 +0300</pubDate>
+            <guid>https://www.news247.gr/oikonomia/article-101</guid>
+        </item>
+        <item>
+            <title>Διεθνής σύνοδος κορυφής</title>
+            <link>https://www.news247.gr/kosmos/article-102</link>
+            <description>Συμφωνία για το κλίμα.</description>
+            <pubDate>Wed, 26 Aug 2026 07:15:00 +0300</pubDate>
+        </item>
+    </channel>
+</rss>';
+
+$landing_with_rss = '<!DOCTYPE html>
+<html>
+<head>
+    <title>News247</title>
+    <link rel="alternate" type="application/rss+xml" title="News247 RSS" href="https://www.news247.gr/rss.xml" />
+</head>
+<body>
+    <h1>News247 Homepage</h1>
+    <a href="/utility-link">Utility</a>
+</body>
+</html>';
+
+$GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $landing_with_rss, $rss_xml_sample ) {
+    if ( 'https://www.news247.gr' === $url || 'https://www.news247.gr/' === $url ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => $landing_with_rss ];
+    }
+    if ( 'https://www.news247.gr/rss.xml' === $url ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => $rss_xml_sample ];
+    }
+    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><h1>Title</h1><p>Body</p></article>' ];
+};
+
+$discovery_rss = $harvester->discover_source_articles( 'https://www.news247.gr' );
+nh_check( 'rss_autodetect: discovery_method is RSS_FEED', ( $discovery_rss['discovery_method'] ?? '' ) === 'RSS_FEED' );
+nh_check( 'rss_autodetect: feed_url discovered', ( $discovery_rss['feed_url'] ?? '' ) === 'https://www.news247.gr/rss.xml' );
+nh_check( 'rss_autodetect: 2 article URLs found', count( $discovery_rss['article_urls'] ?? [] ) === 2 );
+nh_check( 'rss_autodetect: first article URL matches', in_array( 'https://www.news247.gr/oikonomia/article-101', $discovery_rss['article_urls'] ?? [], true ) );
+nh_check( 'rss_autodetect: second article URL matches', in_array( 'https://www.news247.gr/kosmos/article-102', $discovery_rss['article_urls'] ?? [], true ) );
+
+
+// =========================================================================
+// 7. Atom Feed Auto-Detection via <link rel="alternate" type="application/atom+xml">
+// =========================================================================
+
+$atom_xml_sample = '<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <title>Protothema Atom Feed</title>
+    <link href="https://www.protothema.gr"/>
+    <updated>2026-08-26T08:00:00Z</updated>
+    <entry>
+        <title>Έκτακτο δελτίο καιρού</title>
+        <link rel="alternate" href="https://www.protothema.gr/kairos/article-201" />
+        <summary>Ισχυρές βροχές και καταιγίδες.</summary>
+        <content type="html"><![CDATA[<p>Αναλυτική πρόγνωση για όλες τις περιφέρειες.</p>]]></content>
+        <published>2026-08-26T07:45:00Z</published>
+    </entry>
+</feed>';
+
+$landing_with_atom = '<!DOCTYPE html>
+<html>
+<head>
+    <link rel="alternate" type="application/atom+xml" href="/atom.xml" />
+</head>
+<body><h1>Protothema</h1></body>
+</html>';
+
+$GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $landing_with_atom, $atom_xml_sample ) {
+    if ( 'https://www.protothema.gr' === $url ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => $landing_with_atom ];
+    }
+    if ( 'https://www.protothema.gr/atom.xml' === $url ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => $atom_xml_sample ];
+    }
+    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><h1>Article</h1><p>Body</p></article>' ];
+};
+
+$discovery_atom = $harvester->discover_source_articles( 'https://www.protothema.gr' );
+nh_check( 'atom_autodetect: discovery_method is RSS_FEED', ( $discovery_atom['discovery_method'] ?? '' ) === 'RSS_FEED' );
+nh_check( 'atom_autodetect: relative feed resolved', ( $discovery_atom['feed_url'] ?? '' ) === 'https://www.protothema.gr/atom.xml' );
+nh_check( 'atom_autodetect: article url extracted', in_array( 'https://www.protothema.gr/kairos/article-201', $discovery_atom['article_urls'] ?? [], true ) );
+
+
+// =========================================================================
+// 8. Feed Probing Fallback (/feed, /rss, /rss.xml)
+// =========================================================================
+
+$landing_no_link = '<!DOCTYPE html><html><head><title>Site</title></head><body><h1>No Link Header</h1></body></html>';
+
+$GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $landing_no_link, $rss_xml_sample ) {
+    if ( 'https://www.probe-test.gr' === $url ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => $landing_no_link ];
+    }
+    if ( 'https://www.probe-test.gr/feed' === $url ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => $rss_xml_sample ];
+    }
+    return [ 'response' => [ 'code' => 404 ], 'body' => 'Not Found' ];
+};
+
+$discovery_probe = $harvester->discover_source_articles( 'https://www.probe-test.gr' );
+nh_check( 'probe_feed: found probed /feed endpoint', ( $discovery_probe['discovery_method'] ?? '' ) === 'RSS_FEED' );
+nh_check( 'probe_feed: probed feed url recorded', ( $discovery_probe['feed_url'] ?? '' ) === 'https://www.probe-test.gr/feed' );
+nh_check( 'probe_feed: articles extracted from probed feed', count( $discovery_probe['article_urls'] ?? [] ) === 2 );
+
+
+// =========================================================================
+// 9. Direct XML Feed Source & Diagnostic Health Tracking
+// =========================================================================
+
+$GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $rss_xml_sample ) {
+    if ( 'https://www.direct-feed.gr/rss.xml' === $url ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => $rss_xml_sample ];
+    }
+    return [ 'response' => [ 'code' => 200 ], 'body' => '<article><h1>Άρθρο</h1><p>Κείμενο άρθρου με αρκετούς χαρακτήρες για να περάσει την επικύρωση.</p></article>' ];
+};
+
+$direct_harvest = $harvester->harvest_all( [ 'https://www.direct-feed.gr/rss.xml' ], '2026-08-26' );
+nh_check( 'direct_feed: articles harvested', count( $direct_harvest['articles'] ?? [] ) >= 1 );
+nh_check( 'diagnostics: source_health populated', ! empty( $direct_harvest['source_health'] ) );
+nh_check( 'diagnostics: discovery_method is FEED_DIRECT', ( $direct_harvest['source_health'][0]['discovery_method'] ?? '' ) === 'FEED_DIRECT' );
+nh_check( 'diagnostics: http_code is 200', ( $direct_harvest['source_health'][0]['http_code'] ?? 0 ) === 200 );
+nh_check( 'diagnostics: status is ok', ( $direct_harvest['source_health'][0]['status'] ?? '' ) === 'ok' );
+nh_check( 'diagnostics: latency recorded', isset( $direct_harvest['source_health'][0]['latency_ms'] ) );
+
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
     $files = new RecursiveIteratorIterator(
