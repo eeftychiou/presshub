@@ -79,14 +79,17 @@ class PressHub_AI_Briefing_Admin {
 
         $notes = sanitize_textarea_field( (string) ( $data['notes'] ?? '' ) );
 
+        $max_articles = isset( $data['max_articles'] ) ? max( 1, min( 30, (int) $data['max_articles'] ) ) : 5;
+
         $clean = [
-            'id'       => $id,
-            'name'     => $name,
-            'url'      => $url,
-            'type'     => $type,
-            'enabled'  => $enabled,
-            'category' => $category,
-            'notes'    => $notes,
+            'id'           => $id,
+            'name'         => $name,
+            'url'          => $url,
+            'type'         => $type,
+            'enabled'      => $enabled,
+            'category'     => $category,
+            'notes'        => $notes,
+            'max_articles' => $max_articles,
         ];
 
         $existing_index  = null;

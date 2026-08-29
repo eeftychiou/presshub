@@ -1664,6 +1664,7 @@ jQuery(document).ready(function($) {
                     type: 'text_news',
                     enabled: true,
                     category: 'General',
+                    max_articles: 5,
                     notes: ''
                 };
             });
@@ -1710,6 +1711,7 @@ jQuery(document).ready(function($) {
             var statusPill = isEnabled ? 'pill-active' : 'pill-inactive';
             var statusText = isEnabled ? 'Active' : 'Disabled';
             var toggleTitle = isEnabled ? 'Click to disable source' : 'Click to enable source';
+            var maxArticles = src.max_articles ? Math.max(1, Math.min(30, parseInt(src.max_articles, 10))) : 5;
 
             var rowHtml = '<tr class="presshub-source-row ' + (isEnabled ? '' : 'is-disabled') + '" data-id="' + presshubEsc(src.id) + '">' +
                 '<td style="text-align: center; vertical-align: middle;">' +
@@ -1732,6 +1734,7 @@ jQuery(document).ready(function($) {
                 '</td>' +
                 '<td style="vertical-align: middle;">' +
                     '<span class="presshub-category-pill">' + presshubEsc(src.category || 'General') + '</span>' +
+                    '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">Quota: ' + maxArticles + ' articles</span></div>' +
                 '</td>' +
                 '<td style="text-align: right; vertical-align: middle;">' +
                     '<div class="presshub-source-actions" style="display: flex; gap: 6px; justify-content: flex-end;">' +
@@ -1762,6 +1765,7 @@ jQuery(document).ready(function($) {
         $('#source-form-id').val('');
         $('#source-form-type').val('text_news');
         $('#source-form-category').val('General');
+        $('#source-form-max-articles').val('5');
         $('#source-form-enabled').prop('checked', true);
         $('#presshub-source-modal-title').text('Add News Source');
         $('#presshub-source-form-notice').hide().empty();
@@ -1784,6 +1788,7 @@ jQuery(document).ready(function($) {
         $('#source-form-url').val(src.url || '');
         $('#source-form-type').val(src.type || 'text_news');
         $('#source-form-category').val(src.category || 'General');
+        $('#source-form-max-articles').val(src.max_articles ? Math.max(1, Math.min(30, parseInt(src.max_articles, 10))) : 5);
         $('#source-form-notes').val(src.notes || '');
         var isEnabled = (src.enabled !== false && src.enabled !== 0 && src.enabled !== '0' && src.enabled !== 'false');
         $('#source-form-enabled').prop('checked', isEnabled);
@@ -1823,13 +1828,19 @@ jQuery(document).ready(function($) {
 
     $(document).on('click', '#presshub-source-form-save', function(e) {
         e.preventDefault();
-        var id       = $('#source-form-id').val();
-        var name     = $('#source-form-name').val().trim();
-        var url      = $('#source-form-url').val().trim();
-        var type     = $('#source-form-type').val();
-        var category = $('#source-form-category').val().trim() || 'General';
-        var notes    = $('#source-form-notes').val().trim();
-        var enabled  = $('#source-form-enabled').is(':checked');
+        var id          = $('#source-form-id').val();
+        var name        = $('#source-form-name').val().trim();
+        var url         = $('#source-form-url').val().trim();
+        var type        = $('#source-form-type').val();
+        var category    = $('#source-form-category').val().trim() || 'General';
+        var maxArticles = parseInt($('#source-form-max-articles').val(), 10) || 5;
+        if (maxArticles < 1) {
+            maxArticles = 1;
+        } else if (maxArticles > 30) {
+            maxArticles = 30;
+        }
+        var notes       = $('#source-form-notes').val().trim();
+        var enabled     = $('#source-form-enabled').is(':checked');
 
         var $notice = $('#presshub-source-form-notice');
 
@@ -1848,12 +1859,13 @@ jQuery(document).ready(function($) {
         if (id) {
             var existing = presshubSourcesState.find(function(s) { return String(s.id) === String(id); });
             if (existing) {
-                existing.name     = name;
-                existing.url      = url;
-                existing.type     = type;
-                existing.category = category;
-                existing.notes    = notes;
-                existing.enabled  = enabled;
+                existing.name         = name;
+                existing.url          = url;
+                existing.type         = type;
+                existing.category     = category;
+                existing.max_articles = maxArticles;
+                existing.notes        = notes;
+                existing.enabled      = enabled;
             }
         } else {
             var newId = 'src_' + Math.random().toString(36).substr(2, 9);
@@ -1863,6 +1875,7 @@ jQuery(document).ready(function($) {
                 url: url,
                 type: type,
                 category: category,
+                max_articles: maxArticles,
                 notes: notes,
                 enabled: enabled
             });

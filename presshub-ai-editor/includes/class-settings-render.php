@@ -1419,13 +1419,14 @@ class PressHub_AI_Settings_Render {
      * @return string HTML table row.
      */
     public function render_source_row( array $source ): string {
-        $id       = esc_attr( $source['id'] ?? '' );
-        $name     = esc_html( $source['name'] ?? '' );
-        $url      = esc_url( $source['url'] ?? '' );
-        $type     = esc_attr( $source['type'] ?? 'text_news' );
-        $enabled  = ! empty( $source['enabled'] );
-        $category = esc_html( $source['category'] ?? 'General' );
-        $notes    = esc_html( $source['notes'] ?? '' );
+        $id           = esc_attr( $source['id'] ?? '' );
+        $name         = esc_html( $source['name'] ?? '' );
+        $url          = esc_url( $source['url'] ?? '' );
+        $type         = esc_attr( $source['type'] ?? 'text_news' );
+        $enabled      = ! empty( $source['enabled'] );
+        $category     = esc_html( $source['category'] ?? 'General' );
+        $notes        = esc_html( $source['notes'] ?? '' );
+        $max_articles = isset( $source['max_articles'] ) ? max( 1, min( 30, (int) $source['max_articles'] ) ) : 5;
 
         $types_info = PressHub_AI_Settings_Storage::get_supported_media_types();
         $type_meta  = $types_info[ $type ] ?? $types_info['text_news'];
@@ -1467,6 +1468,7 @@ class PressHub_AI_Settings_Render {
 
         $html .= '<td style="vertical-align: middle;">';
         $html .= '<span class="presshub-category-pill">' . $category . '</span>';
+        $html .= '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">' . sprintf( esc_html__( 'Quota: %d articles', 'presshub-ai-editor' ), $max_articles ) . '</span></div>';
         $html .= '</td>';
 
         $html .= '<td style="text-align: right; vertical-align: middle;">';
@@ -1513,7 +1515,7 @@ class PressHub_AI_Settings_Render {
                                 <select id="source-form-type" name="type" class="widefat" style="margin-top: 4px;">
                                     <?php foreach ( $types as $t_key => $t_info ) : ?>
                                         <option value="<?php echo esc_attr( $t_key ); ?>">
-                                            <?php echo esc_html( $t_info['label'] ); ?> <?php echo $t_info['active'] ? esc_html__( '[Active Harvester]', 'presshub-ai-editor' ) : esc_html__( '[Planned Multi-Modal]', 'presshub-ai-editor' ); ?>
+                                             <?php echo esc_html( $t_info['label'] ); ?> <?php echo $t_info['active'] ? esc_html__( '[Active Harvester]', 'presshub-ai-editor' ) : esc_html__( '[Planned Multi-Modal]', 'presshub-ai-editor' ); ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -1531,12 +1533,18 @@ class PressHub_AI_Settings_Render {
                                 <label for="source-form-category"><strong><?php echo esc_html__( 'Category / Beat:', 'presshub-ai-editor' ); ?></strong></label>
                                 <input type="text" id="source-form-category" name="category" class="widefat" placeholder="<?php echo esc_attr__( 'e.g. General, Economy, Tech', 'presshub-ai-editor' ); ?>" style="margin-top: 4px;" />
                             </div>
-                            <div class="presshub-form-group" style="flex: 1; display: flex; align-items: flex-end; padding-bottom: 4px;">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
-                                    <input type="checkbox" id="source-form-enabled" name="enabled" value="1" checked="checked" />
-                                    <strong><?php echo esc_html__( 'Enable in Daily Harvest', 'presshub-ai-editor' ); ?></strong>
-                                </label>
+                            <div class="presshub-form-group" style="flex: 1;">
+                                <label for="source-form-max-articles"><strong><?php esc_html_e( 'Max Articles to Harvest', 'presshub-ai-editor' ); ?></strong></label>
+                                <input type="number" id="source-form-max-articles" name="max_articles" min="1" max="30" value="5" class="widefat" style="margin-top: 4px;" />
+                                <p class="description"><?php esc_html_e( 'Maximum top news articles to scrape from this source during each daily briefing harvest (1–30, default: 5).', 'presshub-ai-editor' ); ?></p>
                             </div>
+                        </div>
+
+                        <div class="presshub-form-group" style="margin-bottom: 15px;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                                <input type="checkbox" id="source-form-enabled" name="enabled" value="1" checked="checked" />
+                                <strong><?php echo esc_html__( 'Enable in Daily Harvest', 'presshub-ai-editor' ); ?></strong>
+                            </label>
                         </div>
 
                         <div class="presshub-form-group" style="margin-bottom: 15px;">

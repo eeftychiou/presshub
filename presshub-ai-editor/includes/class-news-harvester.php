@@ -322,11 +322,12 @@ class PressHub_AI_News_Harvester {
     /**
      * Fetch homepage HTML or Feed and extract unique article URLs.
      *
-     * @param string $url Target homepage or feed URL.
+     * @param string|array $source Target homepage, feed URL, or structured source.
+     * @param int|null     $limit  Optional maximum number of articles to return.
      * @return string[] List of absolute article URLs.
      */
-    public function fetch_homepage_links( string $url ): array {
-        $discovery = $this->discover_source_articles( $url );
+    public function fetch_homepage_links( $source, $limit = null ): array {
+        $discovery = $this->discover_source_articles( $source, $limit );
         return $discovery['article_urls'] ?? [];
     }
 
@@ -338,11 +339,16 @@ class PressHub_AI_News_Harvester {
      * 4. If valid feed found, parse clean headlines, canonical URLs, and summaries.
      * 5. Fallback to Semantic HTML & JSON-LD parser.
      *
-     * @param string $url Source homepage URL or Feed endpoint.
+     * @param string|array $source Source homepage URL or structured source array.
+     * @param int|null     $limit  Optional maximum number of articles to sample.
      * @return array Discovery result details.
      */
-    public function discover_source_articles( string $url ): array {
-        $url = trim( $url );
+    public function discover_source_articles( $source, $limit = null ): array {
+        $url             = is_array( $source ) ? trim( (string) ( $source['url'] ?? '' ) ) : trim( (string) $source );
+        $effective_limit = ( is_array( $source ) && isset( $source['max_articles'] ) && (int) $source['max_articles'] > 0 )
+            ? (int) $source['max_articles']
+            : $this->get_max_links_per_source( $limit );
+
         if ( empty( $url ) || ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
             return [
                 'source_url'       => $url,
@@ -436,7 +442,7 @@ class PressHub_AI_News_Harvester {
                     'discovery_method' => 'FEED_DIRECT',
                     'feed_url'         => $url,
                     'raw_links_count'  => count( $feed_items ),
-                    'article_urls'     => array_slice( $urls, 0, $this->get_max_links_per_source() ),
+                    'article_urls'     => array_slice( $urls, 0, $effective_limit ),
                     'feed_items'       => $feed_items,
                     'status_code'      => $code,
                     'latency_ms'       => $latency_ms,
@@ -465,7 +471,7 @@ class PressHub_AI_News_Harvester {
                         'discovery_method' => 'RSS_FEED',
                         'feed_url'         => $discovered_feed_url,
                         'raw_links_count'  => count( $feed_items ),
-                        'article_urls'     => array_slice( $urls, 0, $this->get_max_links_per_source() ),
+                        'article_urls'     => array_slice( $urls, 0, $effective_limit ),
                         'feed_items'       => $feed_items,
                         'status_code'      => $code,
                         'latency_ms'       => $latency_ms,
@@ -487,7 +493,7 @@ class PressHub_AI_News_Harvester {
                 'discovery_method' => 'RSS_FEED',
                 'feed_url'         => $probed_feed['feed_url'],
                 'raw_links_count'  => count( $feed_items ),
-                'article_urls'     => array_slice( $urls, 0, $this->get_max_links_per_source() ),
+                'article_urls'     => array_slice( $urls, 0, $effective_limit ),
                 'feed_items'       => $feed_items,
                 'status_code'      => $code,
                 'latency_ms'       => $latency_ms,
@@ -505,7 +511,7 @@ class PressHub_AI_News_Harvester {
             'discovery_method' => 'HTML_SCRAPER',
             'feed_url'         => null,
             'raw_links_count'  => count( $html_links ),
-            'article_urls'     => array_slice( $html_links, 0, $this->get_max_links_per_source() ),
+            'article_urls'     => array_slice( $html_links, 0, $effective_limit ),
             'feed_items'       => [],
             'status_code'      => $code,
             'latency_ms'       => $latency_ms,
@@ -995,24 +1001,26 @@ class PressHub_AI_News_Harvester {
             if ( is_string( $source ) ) {
                 $url = trim( $source );
                 $source_struct = [
-                    'id'       => 'src_' . substr( md5( $url ), 0, 8 ),
-                    'name'     => (string) ( parse_url( $url, PHP_URL_HOST ) ?: $url ),
-                    'url'      => $url,
-                    'type'     => 'text_news',
-                    'enabled'  => true,
-                    'category' => 'General',
-                    'notes'    => '',
+                    'id'           => 'src_' . substr( md5( $url ), 0, 8 ),
+                    'name'         => (string) ( parse_url( $url, PHP_URL_HOST ) ?: $url ),
+                    'url'          => $url,
+                    'type'         => 'text_news',
+                    'enabled'      => true,
+                    'category'     => 'General',
+                    'notes'        => '',
+                    'max_articles' => 5,
                 ];
             } elseif ( is_array( $source ) ) {
                 $url = (string) ( $source['url'] ?? '' );
                 $source_struct = array_merge( [
-                    'id'       => 'src_' . substr( md5( $url ), 0, 8 ),
-                    'name'     => (string) ( $source['name'] ?? ( parse_url( $url, PHP_URL_HOST ) ?: $url ) ),
-                    'url'      => $url,
-                    'type'     => (string) ( $source['type'] ?? 'text_news' ),
-                    'enabled'  => isset( $source['enabled'] ) ? (bool) $source['enabled'] : true,
-                    'category' => (string) ( $source['category'] ?? 'General' ),
-                    'notes'    => (string) ( $source['notes'] ?? '' ),
+                    'id'           => 'src_' . substr( md5( $url ), 0, 8 ),
+                    'name'         => (string) ( $source['name'] ?? ( parse_url( $url, PHP_URL_HOST ) ?: $url ) ),
+                    'url'          => $url,
+                    'type'         => (string) ( $source['type'] ?? 'text_news' ),
+                    'enabled'      => isset( $source['enabled'] ) ? (bool) $source['enabled'] : true,
+                    'category'     => (string) ( $source['category'] ?? 'General' ),
+                    'notes'        => (string) ( $source['notes'] ?? '' ),
+                    'max_articles' => isset( $source['max_articles'] ) ? (int) $source['max_articles'] : 5,
                 ], $source );
             }
         }
@@ -1032,10 +1040,13 @@ class PressHub_AI_News_Harvester {
             ];
         }
 
-        $source_url  = $source_struct['url'];
-        $source_host = (string) ( parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
-        $src_enabled = ! empty( $source_struct['enabled'] );
-        $src_type    = $source_struct['type'] ?? 'text_news';
+        $source_url   = $source_struct['url'];
+        $source_host  = (string) ( parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
+        $src_enabled  = ! empty( $source_struct['enabled'] );
+        $src_type     = $source_struct['type'] ?? 'text_news';
+        $source_limit = isset( $source_struct['max_articles'] ) && (int) $source_struct['max_articles'] > 0
+            ? (int) $source_struct['max_articles']
+            : $this->get_max_links_per_source();
 
         // Load existing snapshot to preserve existing articles
         $existing = $this->load_snapshot( $date );
@@ -1083,7 +1094,7 @@ class PressHub_AI_News_Harvester {
             $budget_exceeded = true;
         } else {
             try {
-                $discovery = $this->discover_source_articles( $source_url );
+                $discovery = $this->discover_source_articles( $source_struct, $source_limit );
             } catch ( \Throwable $e ) {
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::error( sprintf( 'Discovery failed for source %s: %s', $source_url, $e->getMessage() ), [ 'exception' => $e ] );
@@ -1107,7 +1118,7 @@ class PressHub_AI_News_Harvester {
                     $payload['blocked_sources'][] = $source_url;
                 }
             } else {
-                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, $this->get_max_links_per_source() );
+                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, $source_limit );
 
                 foreach ( $links_to_crawl as $article_url ) {
                     // Check budget before each article fetch
@@ -1293,23 +1304,25 @@ class PressHub_AI_News_Harvester {
             foreach ( (array) $sources as $item ) {
                 if ( is_string( $item ) && preg_match( '/^https?:\/\//i', trim( $item ) ) ) {
                     $structured_sources[] = [
-                        'id'       => 'src_' . substr( md5( trim( $item ) ), 0, 8 ),
-                        'name'     => (string) parse_url( trim( $item ), PHP_URL_HOST ),
-                        'url'      => trim( $item ),
-                        'type'     => 'text_news',
-                        'enabled'  => true,
-                        'category' => 'General',
-                        'notes'    => '',
+                        'id'           => 'src_' . substr( md5( trim( $item ) ), 0, 8 ),
+                        'name'         => (string) parse_url( trim( $item ), PHP_URL_HOST ),
+                        'url'          => trim( $item ),
+                        'type'         => 'text_news',
+                        'enabled'      => true,
+                        'category'     => 'General',
+                        'notes'        => '',
+                        'max_articles' => 5,
                     ];
                 } elseif ( is_array( $item ) && ! empty( $item['url'] ) ) {
                     $structured_sources[] = array_merge( [
-                        'id'       => 'src_' . substr( md5( (string) $item['url'] ), 0, 8 ),
-                        'name'     => (string) ( $item['name'] ?? parse_url( (string) $item['url'], PHP_URL_HOST ) ),
-                        'url'      => (string) $item['url'],
-                        'type'     => (string) ( $item['type'] ?? 'text_news' ),
-                        'enabled'  => isset( $item['enabled'] ) ? (bool) $item['enabled'] : true,
-                        'category' => (string) ( $item['category'] ?? 'General' ),
-                        'notes'    => (string) ( $item['notes'] ?? '' ),
+                        'id'           => 'src_' . substr( md5( (string) $item['url'] ), 0, 8 ),
+                        'name'         => (string) ( $item['name'] ?? parse_url( (string) $item['url'], PHP_URL_HOST ) ),
+                        'url'          => (string) $item['url'],
+                        'type'         => (string) ( $item['type'] ?? 'text_news' ),
+                        'enabled'      => isset( $item['enabled'] ) ? (bool) $item['enabled'] : true,
+                        'category'     => (string) ( $item['category'] ?? 'General' ),
+                        'notes'        => (string) ( $item['notes'] ?? '' ),
+                        'max_articles' => isset( $item['max_articles'] ) ? (int) $item['max_articles'] : 5,
                     ], $item );
                 }
             }
@@ -1385,9 +1398,16 @@ class PressHub_AI_News_Harvester {
             }
         }
 
-        $budget_exceeded = false;
+        $budget_exceeded       = false;
+        $processed_source_urls = [];
 
-        foreach ( $source_urls as $source_url ) {
+        foreach ( $active_text_sources as $source_item ) {
+            $source_url = $source_item['url'] ?? '';
+            if ( empty( $source_url ) || in_array( $source_url, $processed_source_urls, true ) ) {
+                continue;
+            }
+            $processed_source_urls[] = $source_url;
+
             // Check budget before starting next source
             if ( ( microtime( true ) - $start_time ) >= $time_budget ) {
                 $budget_exceeded = true;
@@ -1402,9 +1422,13 @@ class PressHub_AI_News_Harvester {
                 break;
             }
 
-            $source_host = (string) ( parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
+            $source_host  = (string) ( parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
+            $source_limit = isset( $source_item['max_articles'] ) && (int) $source_item['max_articles'] > 0
+                ? (int) $source_item['max_articles']
+                : $this->get_max_links_per_source();
+
             try {
-                $discovery = $this->discover_source_articles( $source_url );
+                $discovery = $this->discover_source_articles( $source_item, $source_limit );
             } catch ( \Throwable $e ) {
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::error( sprintf( 'Discovery failed for source %s: %s', $source_url, $e->getMessage() ), [ 'exception' => $e ] );
@@ -1428,7 +1452,7 @@ class PressHub_AI_News_Harvester {
             if ( $discovery['is_blocked'] ) {
                 $payload['blocked_sources'][] = $source_url;
             } else {
-                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, $this->get_max_links_per_source() );
+                $links_to_crawl = array_slice( $discovery['article_urls'] ?? [], 0, $source_limit );
 
                 // Scrape each discovered article
                 foreach ( $links_to_crawl as $article_url ) {

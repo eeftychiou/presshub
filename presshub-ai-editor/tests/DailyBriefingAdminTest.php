@@ -618,6 +618,104 @@ class DailyBriefingAdminTest
         }
 
         // =========================================================================
+        // Case 15: Per-Source Article Quota Schema Normalization & Modal Rendering (Issue #31)
+        // =========================================================================
+        self::reset_world();
+        
+        // 1. Schema normalization tests
+        $test_sources = [
+            [
+                'id'           => 'src_1',
+                'name'         => 'Default Quota Outlet',
+                'url'          => 'https://www.source1.gr',
+                'type'         => 'text_news',
+                // max_articles omitted -> default 5
+            ],
+            [
+                'id'           => 'src_2',
+                'name'         => 'Custom Quota Outlet',
+                'url'          => 'https://www.source2.gr',
+                'type'         => 'text_news',
+                'max_articles' => 8,
+            ],
+            [
+                'id'           => 'src_3',
+                'name'         => 'Below Range Outlet',
+                'url'          => 'https://www.source3.gr',
+                'type'         => 'text_news',
+                'max_articles' => 0, // Clamped to 1
+            ],
+            [
+                'id'           => 'src_4',
+                'name'         => 'Above Range Outlet',
+                'url'          => 'https://www.source4.gr',
+                'type'         => 'text_news',
+                'max_articles' => 50, // Clamped to 30
+            ],
+            'https://www.legacy-string-source.gr', // Legacy string -> default 5
+        ];
+
+        $normalized = PressHub_AI_Settings_Storage::normalize_sources( $test_sources );
+
+        if ( count( $normalized ) !== 5 ) {
+            $failures[] = 'normalize_sources should normalize all 5 test sources; got: ' . count( $normalized );
+        } else {
+            if ( ( $normalized[0]['max_articles'] ?? null ) !== 5 ) {
+                $failures[] = 'Source 1 default max_articles must be 5; got: ' . json_encode( $normalized[0] );
+            }
+            if ( ( $normalized[1]['max_articles'] ?? null ) !== 8 ) {
+                $failures[] = 'Source 2 custom max_articles must be 8; got: ' . json_encode( $normalized[1] );
+            }
+            if ( ( $normalized[2]['max_articles'] ?? null ) !== 1 ) {
+                $failures[] = 'Source 3 below-range max_articles (0) must be clamped to 1; got: ' . json_encode( $normalized[2] );
+            }
+            if ( ( $normalized[3]['max_articles'] ?? null ) !== 30 ) {
+                $failures[] = 'Source 4 above-range max_articles (50) must be clamped to 30; got: ' . json_encode( $normalized[3] );
+            }
+            if ( ( $normalized[4]['max_articles'] ?? null ) !== 5 ) {
+                $failures[] = 'Legacy string source max_articles must default to 5; got: ' . json_encode( $normalized[4] );
+            }
+        }
+
+        // 2. Modal markup rendering
+        $settings_render = new PressHub_AI_Settings_Render();
+        ob_start();
+        $settings_render->render_source_modal();
+        $modal_html = ob_get_clean();
+
+        if ( false === strpos( $modal_html, 'id="source-form-max-articles"' ) ) {
+            $failures[] = 'render_source_modal() must render #source-form-max-articles input element; got: ' . $modal_html;
+        }
+        if ( false === strpos( $modal_html, 'name="max_articles"' ) ) {
+            $failures[] = 'render_source_modal() must render name="max_articles"; got: ' . $modal_html;
+        }
+        if ( false === strpos( $modal_html, 'min="1"' ) || false === strpos( $modal_html, 'max="30"' ) ) {
+            $failures[] = 'render_source_modal() must enforce min="1" and max="30" on max_articles input; got: ' . $modal_html;
+        }
+        if ( false === strpos( $modal_html, 'Max Articles to Harvest' ) ) {
+            $failures[] = 'render_source_modal() must include "Max Articles to Harvest" label; got: ' . $modal_html;
+        }
+
+        // 3. Source row rendering with quota badge
+        $row_html = $settings_render->render_source_row( [
+            'id'           => 'src_test_quota',
+            'name'         => 'Quota Test Outlet',
+            'url'          => 'https://www.quota-test.gr',
+            'type'         => 'text_news',
+            'enabled'      => true,
+            'category'     => 'General',
+            'notes'        => '',
+            'max_articles' => 12,
+        ] );
+
+        if ( false === strpos( $row_html, 'presshub-source-quota' ) ) {
+            $failures[] = 'render_source_row() must include presshub-source-quota element; got: ' . $row_html;
+        }
+        if ( false === strpos( $row_html, '12 articles' ) ) {
+            $failures[] = 'render_source_row() must display "12 articles" for source with max_articles = 12; got: ' . $row_html;
+        }
+
+        // =========================================================================
         // Summary & Verdict
         // =========================================================================
         if ( $failures ) {
@@ -628,7 +726,7 @@ class DailyBriefingAdminTest
             exit( 1 );
         }
 
-        echo "DailyBriefingAdminTest: OK (60+ checks)\n";
+        echo "DailyBriefingAdminTest: OK (70+ checks)\n";
     }
 
     private static function execute_ajax( callable $callback ): array {
