@@ -93,6 +93,10 @@ class PressHub_AI_Settings {
         PressHub_AI_Settings_Storage::register_options();
     }
 
+    public static function get_harvest_time_budget(): int {
+        return PressHub_AI_Settings_Storage::get_harvest_time_budget();
+    }
+
 
     // ------------------------------------------------------------------
     // Rendering → Render module.

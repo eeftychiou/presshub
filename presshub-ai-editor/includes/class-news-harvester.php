@@ -34,7 +34,7 @@ class PressHub_AI_News_Harvester {
     const REQUEST_TIMEOUT = 15;
 
     /** Default time budget for harvesting in seconds. */
-    const DEFAULT_TIME_BUDGET = 25;
+    const DEFAULT_TIME_BUDGET = 60;
 
     /** User Agent for harvesting. */
     const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 PressHub-AI-Harvester/1.3.1';
@@ -956,11 +956,9 @@ class PressHub_AI_News_Harvester {
         if ( null !== $budget && (float) $budget > 0 ) {
             return (float) $budget;
         }
-        $filtered = apply_filters( 'presshub_ai_harvest_time_budget', self::DEFAULT_TIME_BUDGET );
-        if ( is_numeric( $filtered ) && (float) $filtered > 0 ) {
-            return (float) $filtered;
-        }
-        return self::DEFAULT_TIME_BUDGET;
+        $configured = (int) get_option( 'presshub_ai_harvest_time_budget', 60 );
+        $filtered   = apply_filters( 'presshub_ai_harvest_time_budget', $configured > 0 ? $configured : 60 );
+        return is_numeric( $filtered ) && (float) $filtered > 0 ? (float) $filtered : 60;
     }
 
     /**

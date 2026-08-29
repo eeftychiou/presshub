@@ -56,6 +56,7 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_tts_model',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
+            'presshub_ai_harvest_time_budget',
             'presshub_ai_briefing_text_preset',
             'presshub_ai_briefing_podcast_preset',
             'presshub_ai_briefing_target_duration',
@@ -377,6 +378,68 @@ class DailyBriefingSettingsTest
         }
         if ( array_key_exists( 'presshub_ai_briefing_tts_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
             $failures[] = 'checking remove briefing tts api key should delete the option.';
+        }
+
+        // --- Case 15: Harvest Execution Time Budget (clamping, options map, getter, render) ---
+        self::reset_options();
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 60 ) !== 60 ) {
+            $failures[] = 'harvest time budget 60 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 90 ) !== 90 ) {
+            $failures[] = 'harvest time budget 90 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', '90' ) !== 90 ) {
+            $failures[] = 'harvest time budget string "90" should sanitize to int 90.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', -5 ) !== 10 ) {
+            $failures[] = 'harvest time budget -5 should clamp to min 10.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 5 ) !== 10 ) {
+            $failures[] = 'harvest time budget 5 (below 10) should clamp to min 10.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 500 ) !== 300 ) {
+            $failures[] = 'harvest time budget 500 (above 300) should clamp to max 300.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_harvest_time_budget', 'invalid' ) !== 60 ) {
+            $failures[] = 'non-numeric harvest time budget should fall back to default 60.';
+        }
+
+        // Getter tests
+        self::reset_options();
+        if ( PressHub_AI_Settings_Storage::get_harvest_time_budget() !== 60 ) {
+            $failures[] = 'get_harvest_time_budget() should default to 60.';
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] = 120;
+        if ( PressHub_AI_Settings_Storage::get_harvest_time_budget() !== 120 ) {
+            $failures[] = 'get_harvest_time_budget() should return saved option 120.';
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] = 5;
+        if ( PressHub_AI_Settings_Storage::get_harvest_time_budget() !== 60 ) {
+            $failures[] = 'get_harvest_time_budget() should fallback to 60 for out-of-range option 5.';
+        }
+
+        // Section options map inclusion test
+        $briefing_map = PressHub_AI_Settings_Storage::get_section_options_map( 'briefing' );
+        if ( ! isset( $briefing_map['presshub_ai_harvest_time_budget'] ) || ! is_callable( $briefing_map['presshub_ai_harvest_time_budget'] ) ) {
+            $failures[] = 'presshub_ai_harvest_time_budget must be present and callable in briefing section options map.';
+        }
+
+        // Render test
+        self::reset_options();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] = 75;
+        $renderer = new PressHub_AI_Settings_Render();
+        ob_start();
+        $renderer->render_harvest_time_budget_field();
+        $render_html = ob_get_clean();
+
+        if ( false === strpos( $render_html, 'name="presshub_ai_harvest_time_budget"' ) ) {
+            $failures[] = 'render_harvest_time_budget_field should render input with name="presshub_ai_harvest_time_budget".';
+        }
+        if ( false === strpos( $render_html, 'min="10"' ) || false === strpos( $render_html, 'max="300"' ) ) {
+            $failures[] = 'render_harvest_time_budget_field should render min="10" and max="300".';
+        }
+        if ( false === strpos( $render_html, 'value="75"' ) ) {
+            $failures[] = 'render_harvest_time_budget_field should render value="75".';
         }
 
         if ( $failures ) {

@@ -24,6 +24,7 @@ class PressHub_AI_Ajax_Handlers {
         // Daily News Briefing & AI Podcast AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_briefing_get_status', [ $this, 'briefing_get_status' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_run_harvest', [ $this, 'briefing_run_harvest' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_run_harvest_source', [ $this, 'briefing_run_harvest_source' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_run_curation', [ $this, 'briefing_run_curation' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_curate_text', [ $this, 'briefing_run_curation' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_run_script', [ $this, 'briefing_run_script' ] );
@@ -864,8 +865,11 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
+        require_once __DIR__ . '/class-settings-storage.php';
+        $budget = PressHub_AI_Settings_Storage::get_harvest_time_budget();
+
         if ( function_exists( 'set_time_limit' ) ) {
-            @set_time_limit( 300 );
+            @set_time_limit( (int) $budget + 30 );
         }
         if ( function_exists( 'wp_raise_memory_limit' ) ) {
             wp_raise_memory_limit( 'admin' );
@@ -898,9 +902,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 if ( empty( $target_source ) ) {
                     $target_source = $source_id;
                 }
-                $result = $harvester->harvest_source( $target_source, $date );
+                $result = $harvester->harvest_source( $target_source, $date, $budget );
             } else {
-                $result = $harvester->harvest_all( $sources, $date );
+                $result = $harvester->harvest_all( $sources, $date, $budget );
             }
 
             wp_send_json_success( $result );
@@ -923,6 +927,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'date'      => $date,
             ] );
         }
+    }
+
+    /**
+     * AJAX: presshub_ai_briefing_run_harvest_source — triggers harvesting for a single source.
+     */
+    public function briefing_run_harvest_source() {
+        return $this->briefing_run_harvest();
     }
 
     /**
@@ -1295,6 +1306,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_tts_custom_style'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_custom_style' ],
                 'presshub_ai_briefing_harvest_time'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_harvest_time' ],
                 'presshub_ai_briefing_generation_time'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_generation_time' ],
+                'presshub_ai_harvest_time_budget'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_harvest_time_budget' ],
                 'presshub_ai_briefing_text_preset'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_preset_slug' ],
                 'presshub_ai_briefing_podcast_preset'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_preset_slug' ],
                 'presshub_ai_briefing_target_duration'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_duration' ],

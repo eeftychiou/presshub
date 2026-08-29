@@ -199,6 +199,10 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_generation_time' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_harvest_time_budget', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_harvest_time_budget' ],
+            'type'              => 'integer',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_preset', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_preset_slug' ],
             'type'              => 'string',
@@ -394,6 +398,7 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_tts_model', __( 'Voice Generation AI Model', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_harvest_time_budget', __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ), [ $render, 'render_harvest_time_budget_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_preset', __( 'Text Story Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_preset', __( 'Podcast Dialogue Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_target_duration', __( 'Target Podcast Duration', 'presshub-ai-editor' ), [ $render, 'render_briefing_target_duration_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -781,6 +786,25 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_time_format( $value, self::default_briefing_generation_time() );
     }
 
+    public static function sanitize_harvest_time_budget( $value ): int {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 60;
+        }
+        $n = (int) $value;
+        return max( 10, min( 300, $n ) );
+    }
+
+    /**
+     * Helper to retrieve configured harvest time budget from database (clamped 10–300s, default 60s).
+     *
+     * @return int Configured execution time budget in seconds.
+     */
+    public static function get_harvest_time_budget(): int {
+        $budget = (int) get_option( 'presshub_ai_harvest_time_budget', 60 );
+        return ( $budget >= 10 && $budget <= 300 ) ? $budget : 60;
+    }
+
     private static function sanitize_time_format( $value, $default = '06:30' ): string {
         $value = trim( (string) wp_unslash( $value ) );
         if ( preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', $value, $matches ) ) {
@@ -1104,6 +1128,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_sources'              => [ __CLASS__, 'sanitize_briefing_sources' ],
             'presshub_ai_briefing_harvest_time'         => [ __CLASS__, 'sanitize_harvest_time' ],
             'presshub_ai_briefing_generation_time'      => [ __CLASS__, 'sanitize_generation_time' ],
+            'presshub_ai_harvest_time_budget'           => [ __CLASS__, 'sanitize_harvest_time_budget' ],
             'presshub_ai_briefing_text_category'        => [ __CLASS__, 'sanitize_category_id' ],
             'presshub_ai_briefing_text_status'          => [ __CLASS__, 'sanitize_briefing_status' ],
             'presshub_ai_briefing_text_preset'          => [ __CLASS__, 'sanitize_preset_slug' ],
