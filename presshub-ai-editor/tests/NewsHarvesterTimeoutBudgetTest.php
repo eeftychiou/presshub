@@ -40,13 +40,19 @@ class NewsHarvesterTimeoutBudgetTest
         self::reset_world();
         $harvester = new PressHub_AI_News_Harvester();
 
-        $check( 'Default time budget is 25s', 25 == $harvester->get_time_budget() );
+        $check( 'Default time budget is 60s', 60 == $harvester->get_time_budget() );
         $check( 'Explicit time budget override (10s)', 10 == $harvester->get_time_budget( 10 ) );
+
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] = 90;
+        $check( 'Configured option time budget returns 90s', 90 == $harvester->get_time_budget() );
 
         add_filter( 'presshub_ai_harvest_time_budget', function() { return 18; } );
         $check( 'Filtered time budget returns 18s', 18 == $harvester->get_time_budget() );
+        $check( 'Explicit override takes precedence over filter (12s)', 12 == $harvester->get_time_budget( 12 ) );
         remove_all_filters( 'presshub_ai_harvest_time_budget' );
-        $check( 'Time budget restores to 25s after filter removal', 25 == $harvester->get_time_budget() );
+        $check( 'Time budget restores to option 90s after filter removal', 90 == $harvester->get_time_budget() );
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_harvest_time_budget'] );
+        $check( 'Time budget restores to default 60s when option unset', 60 == $harvester->get_time_budget() );
 
         // =========================================================================
         // Case 2: Time budget enforcement in harvest_all()
@@ -213,6 +219,10 @@ class NewsHarvesterTimeoutBudgetTest
         $response = self::execute_ajax( [ $ajax_handlers, 'briefing_run_harvest' ] );
         $check( 'AJAX briefing_run_harvest: success response', true === ( $response['success'] ?? false ) );
         $check( 'AJAX briefing_run_harvest: returns articles', count( $response['data']['articles'] ?? [] ) >= 1 );
+
+        $response_source = self::execute_ajax( [ $ajax_handlers, 'briefing_run_harvest_source' ] );
+        $check( 'AJAX briefing_run_harvest_source: success response', true === ( $response_source['success'] ?? false ) );
+        $check( 'AJAX briefing_run_harvest_source: returns articles', count( $response_source['data']['articles'] ?? [] ) >= 1 );
 
         // =========================================================================
         // Case 8: AJAX Handler exception resilience (returns structured JSON error)

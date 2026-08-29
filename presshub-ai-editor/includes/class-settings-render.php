@@ -203,6 +203,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_harvest_time_budget"><?php echo __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_harvest_time_budget_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_text_category"><?php echo __( 'Text Briefing Category', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_category_field(); ?>
@@ -1573,6 +1579,18 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
         <p class="description"><?php echo __( 'Time when text story curation and podcast synthesis are triggered. Default 07:15.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_harvest_time_budget_field() {
+        $option = 'presshub_ai_harvest_time_budget';
+        $value  = (int) get_option( $option, 60 );
+        if ( $value < 10 || $value > 300 ) {
+            $value = 60;
+        }
+        ?>
+        <input type="number" min="10" max="300" step="5" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Maximum execution time in seconds allocated for crawling news sources and extracting articles during each briefing cycle (10 to 300 seconds). Default: 60s.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
