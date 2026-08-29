@@ -27,3 +27,11 @@ Thumbs.db
 
 # Local MCP configuration
 mcp_config.json
+
+# Local WordPress Dev Environment
+dev-env/wordpress/
+dev-env/downloads/
+dev-env/bin/wp-cli.phar
+*.sqlite
+*.sqlite3
+*.db
