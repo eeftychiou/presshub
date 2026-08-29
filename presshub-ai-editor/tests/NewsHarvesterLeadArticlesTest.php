@@ -235,6 +235,47 @@ $valid_art = [
 ];
 lead_check( 'is_valid_harvested_article: accepts valid substantive article', $harvester->is_valid_harvested_article( $valid_art ) );
 
+// RSS fallback article with 10-25 words passes when tier is 'rss_description' or 'rss' (Issue #37)
+$rss_concise_art = [
+    'title'   => 'Συνάντηση Κορυφής για την Ελληνική Οικονομία',
+    'content' => 'Υπεγράφη σήμερα νέα συμφωνία οικονομικής συνεργασίας μεταξύ των δύο πλευρών για πράσινη ενέργεια και τεχνολογία.',
+    'tier'    => 'rss_description',
+];
+lead_check( 'is_valid_harvested_article: accepts concise RSS description fallback (14 words) when tier === rss_description', $harvester->is_valid_harvested_article( $rss_concise_art ) );
+
+$rss_tier_art = [
+    'title'   => 'Συνάντηση Κορυφής για την Ελληνική Οικονομία',
+    'content' => 'Υπεγράφη σήμερα νέα συμφωνία οικονομικής συνεργασίας μεταξύ των δύο πλευρών για πράσινη ενέργεια και τεχνολογία.',
+    'tier'    => 'rss',
+];
+lead_check( 'is_valid_harvested_article: accepts concise RSS article (14 words) when tier === rss', $harvester->is_valid_harvested_article( $rss_tier_art ) );
+
+// Regular HTML article with same concise content (< 30 words) is rejected
+$html_concise_art = [
+    'title'   => 'Συνάντηση Κορυφής για την Ελληνική Οικονομία',
+    'content' => 'Υπεγράφη σήμερα νέα συμφωνία οικονομικής συνεργασίας μεταξύ των δύο πλευρών για πράσινη ενέργεια και τεχνολογία.',
+    'tier'    => 'dom',
+];
+lead_check( 'is_valid_harvested_article: rejects concise HTML scraped article (< 30 words) when tier !== rss_description', ! $harvester->is_valid_harvested_article( $html_concise_art ) );
+
+// Very short RSS description (< 8 words) is still rejected
+$rss_too_short = [
+    'title'   => 'Συνάντηση Κορυφής για την Ελληνική Οικονομία',
+    'content' => 'Σύντομη ανακοίνωση τύπου.',
+    'tier'    => 'rss_description',
+];
+lead_check( 'is_valid_harvested_article: rejects RSS article with < 8 words', ! $harvester->is_valid_harvested_article( $rss_too_short ) );
+
+// Custom filter presshub_ai_harvest_min_rss_words override
+add_filter( 'presshub_ai_harvest_min_rss_words', function() { return 5; } );
+$rss_5_words = [
+    'title'   => 'Συνάντηση Κορυφής για την Ελληνική Οικονομία',
+    'content' => 'Πέντε λέξεις στο κείμενο εδώ.',
+    'tier'    => 'rss_description',
+];
+lead_check( 'is_valid_harvested_article: respects presshub_ai_harvest_min_rss_words filter', $harvester->is_valid_harvested_article( $rss_5_words ) );
+remove_all_filters( 'presshub_ai_harvest_min_rss_words' );
+
 
 // =========================================================================
 // 6. Full discover_source_articles() with 4-link sampling

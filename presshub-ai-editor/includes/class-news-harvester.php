@@ -164,7 +164,7 @@ class PressHub_AI_News_Harvester {
 
     /**
      * Determine whether harvested article data meets quality & depth thresholds.
-     * Discards items where title is <= 2 words, matches category names, or word count < 30 words.
+     * Discards items where title is <= 2 words, matches category names, or word count < 30 words (or < 8 words for RSS fallbacks).
      *
      * @param array $article_data Extracted article data array.
      * @return bool True if valid article, false otherwise.
@@ -187,8 +187,14 @@ class PressHub_AI_News_Harvester {
             return false;
         }
 
+        $tier        = (string) ( $article_data['tier'] ?? '' );
+        $is_rss_tier = ( 'rss_description' === $tier || 'rss' === $tier );
+
         $content_word_count = $this->count_words( $content );
-        $min_content_words  = (int) apply_filters( 'presshub_ai_harvest_min_word_count', 30 );
+        $min_content_words  = $is_rss_tier
+            ? (int) apply_filters( 'presshub_ai_harvest_min_rss_words', 8 )
+            : (int) apply_filters( 'presshub_ai_harvest_min_word_count', 30 );
+
         if ( $content_word_count < $min_content_words ) {
             return false;
         }
@@ -1206,10 +1212,16 @@ class PressHub_AI_News_Harvester {
                             $curr_url  = rtrim( (string) $article_url, '/' );
                             if ( $fitem_url === $curr_url || ( $fitem['url'] ?? '' ) === $article_url ) {
                                 $feed_content = ! empty( $fitem['content'] ) ? $fitem['content'] : ( $fitem['description'] ?? '' );
+                                $feed_content = trim( (string) $feed_content );
                                 if ( ! empty( $feed_content ) ) {
+                                    $feed_title = trim( (string) ( $fitem['title'] ?? '' ) );
+                                    // Combine title + description if description is concise so the article maintains rich editorial context.
+                                    if ( ! empty( $feed_title ) && $this->count_words( $feed_content ) < 30 && false === mb_stripos( $feed_content, $feed_title ) ) {
+                                        $feed_content = $feed_title . ' — ' . $feed_content;
+                                    }
                                     $candidate = [
                                         'url'             => $article_url,
-                                        'title'           => $fitem['title'] ?? '',
+                                        'title'           => $feed_title,
                                         'content'         => $feed_content,
                                         'source'          => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
                                         'tier'            => 'rss_description',
@@ -1550,10 +1562,16 @@ class PressHub_AI_News_Harvester {
                             $curr_url  = rtrim( (string) $article_url, '/' );
                             if ( $fitem_url === $curr_url || ( $fitem['url'] ?? '' ) === $article_url ) {
                                 $feed_content = ! empty( $fitem['content'] ) ? $fitem['content'] : ( $fitem['description'] ?? '' );
+                                $feed_content = trim( (string) $feed_content );
                                 if ( ! empty( $feed_content ) ) {
+                                    $feed_title = trim( (string) ( $fitem['title'] ?? '' ) );
+                                    // Combine title + description if description is concise so the article maintains rich editorial context.
+                                    if ( ! empty( $feed_title ) && $this->count_words( $feed_content ) < 30 && false === mb_stripos( $feed_content, $feed_title ) ) {
+                                        $feed_content = $feed_title . ' — ' . $feed_content;
+                                    }
                                     $candidate = [
                                         'url'             => $article_url,
-                                        'title'           => $fitem['title'] ?? '',
+                                        'title'           => $feed_title,
                                         'content'         => $feed_content,
                                         'source'          => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
                                         'tier'            => 'rss_description',

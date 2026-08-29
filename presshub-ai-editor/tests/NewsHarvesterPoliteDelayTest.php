@@ -191,6 +191,65 @@ class NewsHarvesterPoliteDelayTest
         }
 
         // =========================================================================
+        // Case 3b: Concise RSS Description Fallback (Issue #37 - ant1live.com 11-19 words)
+        // =========================================================================
+        self::reset_world();
+        $harvester->reset_host_throttle();
+
+        // Feed XML containing articles with concise description summaries (11-19 words)
+        $ant1_concise_rss = '<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+          <channel>
+            <title>Ant1Live News</title>
+            <link>https://www.ant1live.com</link>
+            <item>
+              <title>Συνάντηση Προέδρου με τον Υπουργό Εξωτερικών</title>
+              <link>https://www.ant1live.com/article-ant1-1</link>
+              <pubDate>Wed, 26 Aug 2026 10:00:00 +0300</pubDate>
+              <description><![CDATA[Συνάντηση με τον Πρόεδρο της Δημοκρατίας πραγματοποίησε σήμερα ο Υπουργός Εξωτερικών για το Κυπριακό.]]></description>
+            </item>
+            <item>
+              <title>Επιχείρηση της Αστυνομίας στη Λεμεσό</title>
+              <link>https://www.ant1live.com/article-ant1-2</link>
+              <pubDate>Wed, 26 Aug 2026 10:30:00 +0300</pubDate>
+              <description><![CDATA[Σε εξέλιξη βρίσκεται μεγάλη επιχείρηση της Αστυνομίας στη Λεμεσό για πάταξη του οργανωμένου εγκλήματος.]]></description>
+            </item>
+          </channel>
+        </rss>';
+
+        $GLOBALS['GET_RESPONSE_FILTER'] = function( $url ) use ( $ant1_concise_rss ) {
+            if ( 'https://www.ant1live.com' === $url || false !== strpos( $url, 'rss' ) ) {
+                return [
+                    'response' => [ 'code' => 200 ],
+                    'body'     => $ant1_concise_rss,
+                ];
+            }
+            // Direct HTML page scraping blocked by Cloudflare 403
+            return [
+                'response' => [ 'code' => 403 ],
+                'body'     => '<html><body>403 Forbidden Cloudflare WAF</body></html>',
+            ];
+        };
+
+        $ant1_harvest = $harvester->harvest_source( 'https://www.ant1live.com', '2026-08-30', 60 );
+
+        $check( 'Concise RSS feed with 403 HTML yields articles via RSS fallback', ! empty( $ant1_harvest['articles'] ) );
+        $check( 'Concise RSS feed yields exactly 2 articles', count( $ant1_harvest['articles'] ?? [] ) === 2 );
+
+        if ( ! empty( $ant1_harvest['articles'][0] ) ) {
+            $ant1_art1 = $ant1_harvest['articles'][0];
+            $check( 'Concise art1 tier is rss_description', 'rss_description' === ( $ant1_art1['tier'] ?? '' ) );
+            $check( 'Concise art1 title preserved', false !== strpos( $ant1_art1['title'] ?? '', 'Συνάντηση Προέδρου' ) );
+            $check( 'Concise art1 content combines title and description', false !== strpos( $ant1_art1['content'] ?? '', 'Συνάντηση Προέδρου με τον Υπουργό Εξωτερικών —' ) );
+            $check( 'Concise art1 fallback_reason is waf_or_http_error', 'waf_or_http_error' === ( $ant1_art1['fallback_reason'] ?? '' ) );
+        }
+        if ( ! empty( $ant1_harvest['articles'][1] ) ) {
+            $ant1_art2 = $ant1_harvest['articles'][1];
+            $check( 'Concise art2 tier is rss_description', 'rss_description' === ( $ant1_art2['tier'] ?? '' ) );
+            $check( 'Concise art2 content preserves description without duplication', false !== strpos( $ant1_art2['content'] ?? '', 'επιχείρηση της Αστυνομίας στη Λεμεσό' ) );
+        }
+
+        // =========================================================================
         // Case 4: Modern Browser Headers & User Agent in PressHub_AI_URL_Fetcher
         // =========================================================================
         self::reset_world();
