@@ -340,39 +340,51 @@ class PressHub_AI_API_Client {
                 $this->set_provider_config( $store_prov );
                 return;
             }
-        }
 
-        // Legacy / default single-provider options fallback
-        $this->provider = ( is_string( $module_or_provider ) && ! empty( $module_or_provider ) )
-            ? $module_or_provider
-            : get_option( 'presshub_ai_provider', 'openai' );
+            // Legacy / default single-provider options fallback
+            $this->provider = ( is_string( $module_or_provider ) && ! empty( $module_or_provider ) )
+                ? $module_or_provider
+                : get_option( 'presshub_ai_provider', 'openai' );
 
-        $this->api_key = get_option( 'presshub_ai_api_key' );
-        $this->google_cloud_api_key = get_option( 'presshub_ai_google_cloud_api_key' );
+            $this->api_key = (string) get_option( 'presshub_ai_api_key', '' );
+            $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
 
-        $gemini_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-        if ( empty( $gemini_key ) ) {
-            $gemini_key = (string) get_option( 'presshub_ai_api_key', '' );
-        }
-        $this->gemini_api_key = $gemini_key;
+            $gemini_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
+            if ( empty( $gemini_key ) ) {
+                $gemini_key = (string) get_option( 'presshub_ai_api_key', '' );
+            }
+            $this->gemini_api_key = $gemini_key;
 
-        $briefing_tts_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-        if ( empty( $briefing_tts_key ) ) {
-            $briefing_tts_key = $this->gemini_api_key;
-        }
-        $this->briefing_tts_api_key = $briefing_tts_key;
+            $briefing_tts_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+            if ( empty( $briefing_tts_key ) ) {
+                $briefing_tts_key = $this->gemini_api_key;
+            }
+            $this->briefing_tts_api_key = $briefing_tts_key;
 
-        $this->model       = $this->resolve_model( $this->provider );
-        $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $this->provider, PressHub_AI_Provider_Defaults::default_temperature() );
-        $this->max_tokens  = (int) get_option( 'presshub_ai_max_tokens_' . $this->provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
-        $this->timeout     = (int) get_option( 'presshub_ai_timeout_' . $this->provider, PressHub_AI_Provider_Defaults::default_timeout( $this->provider ) );
+            // Guard: if API key missing for default OpenAI provider, clear provider to avoid silent fallback.
+            if ( empty( $this->api_key ) && 'openai' === $this->provider ) {
+                $this->provider = '';
+            }
 
-        $configured = PressHub_AI_Provider_Store::get( $this->provider );
-        if ( $configured ) {
-            $this->base_url = $configured['base_url'] ?? '';
-            $this->headers  = $configured['headers'] ?? [];
-            if ( ! empty( $configured['api_key'] ) ) {
-                $this->api_key = $configured['api_key'];
+            $this->model = $this->resolve_model( $this->provider );
+            $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $this->provider, PressHub_AI_Provider_Defaults::default_temperature() );
+            $this->max_tokens = (int) get_option( 'presshub_ai_max_tokens_' . $this->provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
+            $this->timeout = (int) get_option( 'presshub_ai_timeout_' . $this->provider, PressHub_AI_Provider_Defaults::default_timeout( $this->provider ) );
+
+            $configured = PressHub_AI_Provider_Store::get( $this->provider );
+            if ( $configured ) {
+                $this->base_url = $configured['base_url'] ?? '';
+                $this->headers  = $configured['headers'] ?? [];
+                if ( ! empty( $configured['api_key'] ) ) {
+                    $this->api_key = $configured['api_key'];
+                }
+                // Ensure provider‑specific API key variables are sync’d after possible override.
+                if ( 'gemini' === $this->provider ) {
+                    $this->gemini_api_key = $this->api_key;
+                }
+                if ( 'google_cloud_tts' === $this->provider ) {
+                    $this->google_cloud_api_key = $this->api_key;
+                }
             }
         }
     }
