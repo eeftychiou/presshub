@@ -388,7 +388,7 @@ class PressHub_AI_Briefing_Admin {
         $script_created = ( '' !== trim( $script_text ) );
         $turns = $script_created ? $producer->parse_script_turns( $script_text ) : [];
         $word_count = $script_created
-            ? ( preg_match_all( '/\p{L}+/u', $script_text, $w ) ? count( $w[0] ) : str_word_count( strip_tags( $script_text ) ) )
+            ? (int) PressHub_AI_Context_Estimator::utf8_word_count( $script_text )
             : 0;
 
         // 4. Audio Podcast Stage
@@ -805,11 +805,9 @@ class PressHub_AI_Briefing_Admin {
                             $art_source  = (string) ( $article['source'] ?? __( 'Unknown', 'presshub-ai-editor' ) );
                             $art_url     = (string) ( $article['url'] ?? '' );
                             $art_content = (string) ( $article['content'] ?? '' );
-                            $word_count  = str_word_count( strip_tags( $art_content ) );
-                            if ( 0 === $word_count && ! empty( $art_content ) ) {
-                                $word_count = count( preg_split( '/\s+/u', trim( strip_tags( $art_content ) ) ) );
-                            }
+                            $word_count  = (int) PressHub_AI_Context_Estimator::utf8_word_count( $art_content );
                             $char_count  = mb_strlen( $art_content );
+                            $token_count = (int) PressHub_AI_Context_Estimator::estimate_tokens( $art_content );
                         ?>
                             <div class="presshub-inspector-card" data-index="<?php echo esc_attr( $index ); ?>" data-source="<?php echo esc_attr( strtolower( $art_source ) ); ?>" data-title="<?php echo esc_attr( strtolower( $art_title ) ); ?>" data-text="<?php echo esc_attr( strtolower( mb_substr( strip_tags( $art_content ), 0, 500 ) ) ); ?>">
                                 <div class="presshub-inspector-card-header">
@@ -819,6 +817,7 @@ class PressHub_AI_Briefing_Admin {
                                     <div class="inspector-card-meta">
                                         <span class="presshub-article-source-pill"><?php echo esc_html( $art_source ); ?></span>
                                         <span class="presshub-article-words-pill"><?php echo sprintf( esc_html__( '%d words', 'presshub-ai-editor' ), $word_count ); ?></span>
+                                        <span class="presshub-article-tokens-pill"><?php echo sprintf( esc_html__( '~%d tokens', 'presshub-ai-editor' ), $token_count ); ?></span>
                                     </div>
                                     <div class="inspector-card-title">
                                         <label for="inspector-check-<?php echo esc_attr( $index ); ?>">
