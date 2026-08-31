@@ -783,6 +783,270 @@ class PressHub_AI_Settings_Storage {
         return self::normalize_sources( $raw );
     }
 
+    /**
+     * Maximum number of source entries accepted in a single bulk import.
+     */
+    const BULK_IMPORT_MAX_LINES = 100;
+
+    /**
+     * Bulk-import a newline-separated list of news source URLs.
+     *
+     * Accepts three text formats per line (auto-detected):
+     *   1. "Name | URL"  (pipe-delimited; URL may contain additional pipes)
+     *   2. "Name,URL"    (CSV-style)
+     *   3. Bare URL      (https?://...)
+     *
+     * Lines containing non-http(s) schemes, malformed URLs, or empty
+     * content are silently skipped and counted as invalid. Existing
+     * sources are kept untouched; URLs that already exist (normalized
+     * by lowercased + trailing-slash trimmed) are skipped and counted
+     * as duplicates.
+     *
+     * On success, the resulting merged list is persisted to the
+     * `presshub_ai_briefing_sources` option and a configuration audit
+     * entry of type `news_source_bulk_import` is recorded.
+     *
+     * @param string $raw_text  Raw paste content from the bulk-import modal.
+     * @param array  $defaults  Optional defaults: type (text_news|rss_feed),
+     *                          category (string), max_articles (1-30, int),
+     *                          enabled (bool).
+     * @return array{ added: int, skipped_duplicates: int, invalid: int,
+     *                sources: array[], truncated: bool }
+     */
+    public static function bulk_import_sources( string $raw_text, array $defaults = [] ): array {
+        $existing = self::get_briefing_sources();
+
+        $default_type     = isset( $defaults['type'] ) && is_string( $defaults['type'] )
+            ? sanitize_key( (string) $defaults['type'] )
+            : 'text_news';
+        $supported_types  = array_keys( self::get_supported_media_types() );
+        if ( ! in_array( $default_type, $supported_types, true ) ) {
+            $default_type = 'text_news';
+        }
+
+        $default_category = isset( $defaults['category'] ) && is_string( $defaults['category'] )
+            ? sanitize_text_field( (string) $defaults['category'] )
+            : 'General';
+        if ( '' === trim( $default_category ) ) {
+            $default_category = 'General';
+        }
+
+        $default_max_articles = isset( $defaults['max_articles'] )
+            ? max( 1, min( 30, (int) $defaults['max_articles'] ) )
+            : 5;
+
+        $default_enabled = true;
+        if ( array_key_exists( 'enabled', $defaults ) ) {
+            $val = $defaults['enabled'];
+            $default_enabled = ( true === $val || 1 === $val || '1' === $val || 'true' === $val );
+        }
+
+        $candidates = self::parse_bulk_source_lines( $raw_text );
+
+        $truncated      = false;
+        $invalid_count  = 0;
+        $added_count    = 0;
+        $dup_count      = 0;
+
+        // Build a lookup of existing normalized URLs for fast dedup.
+        $existing_keys = [];
+        foreach ( $existing as $src ) {
+            if ( empty( $src['url'] ) ) {
+                continue;
+            }
+            $norm = strtolower( rtrim( (string) $src['url'], '/' ) );
+            if ( '' !== $norm ) {
+                $existing_keys[ $norm ] = true;
+            }
+        }
+
+        $merged = $existing;
+
+        $line_count = 0;
+        foreach ( $candidates as $candidate ) {
+            $line_count++;
+            if ( $line_count > self::BULK_IMPORT_MAX_LINES ) {
+                $truncated = true;
+                break;
+            }
+
+            $raw_url  = isset( $candidate['url'] ) ? trim( (string) $candidate['url'] ) : '';
+            $raw_name = isset( $candidate['name'] ) ? trim( (string) $candidate['name'] ) : '';
+
+            if ( '' === $raw_url || ! preg_match( '/^https?:\/\/[^\s]+$/i', $raw_url ) || ! filter_var( $raw_url, FILTER_VALIDATE_URL ) ) {
+                $invalid_count++;
+                continue;
+            }
+
+            $url     = esc_url_raw( $raw_url );
+            $norm_url = strtolower( rtrim( $url, '/' ) );
+
+            if ( isset( $existing_keys[ $norm_url ] ) ) {
+                $dup_count++;
+                continue;
+            }
+            $existing_keys[ $norm_url ] = true;
+
+            $host      = (string) parse_url( $url, PHP_URL_HOST );
+            $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
+
+            $name = sanitize_text_field( $raw_name );
+            if ( '' === $name ) {
+                $name = $host_name ?: $url;
+            }
+
+            $type = $default_type;
+
+            $merged[] = [
+                'id'           => 'src_' . substr( md5( $norm_url ), 0, 8 ),
+                'name'         => $name,
+                'url'          => $url,
+                'type'         => $type,
+                'enabled'      => $default_enabled,
+                'category'     => $default_category,
+                'notes'        => '',
+                'max_articles' => $default_max_articles,
+            ];
+            $added_count++;
+        }
+
+        if ( $added_count > 0 ) {
+            update_option( 'presshub_ai_briefing_sources', array_values( $merged ), false );
+
+            if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+                $details = [
+                    'added'              => $added_count,
+                    'skipped_duplicates' => $dup_count,
+                    'invalid'            => $invalid_count,
+                    'default_type'       => $default_type,
+                    'default_category'   => $default_category,
+                    'max_articles'       => $default_max_articles,
+                    'enabled_default'    => $default_enabled,
+                    'truncated'          => $truncated,
+                    'lines_submitted'    => $line_count,
+                ];
+                PressHub_AI_Audit_Logger::log(
+                    'news_source_bulk_import',
+                    'news_source',
+                    'bulk_' . ( function_exists( 'current_time' ) ? current_time( 'timestamp' ) : time() ),
+                    $details
+                );
+            }
+        }
+
+        return [
+            'added'              => $added_count,
+            'skipped_duplicates' => $dup_count,
+            'invalid'            => $invalid_count,
+            'sources'            => array_values( $merged ),
+            'truncated'          => $truncated,
+        ];
+    }
+
+    /**
+     * Parse a bulk-import paste buffer into structured {name,url} candidates.
+     *
+     * Supports three formats per non-empty line:
+     *   1. "Name | URL"  — pipe delimiter; the rightmost segment containing
+     *                      http(s):// is treated as the URL.
+     *   2. "Name,URL"    — CSV with the URL segment containing http(s)://.
+     *   3. Bare URL      — the entire line.
+     *
+     * @param string $raw_text Raw paste content.
+     * @return array<int, array{name?: string, url?: string}> Ordered candidates.
+     */
+    public static function parse_bulk_source_lines( string $raw_text ): array {
+        if ( '' === trim( $raw_text ) ) {
+            return [];
+        }
+
+        $candidates = [];
+        // Split on newlines or commas that appear OUTSIDE of obvious URL segments.
+        $lines = preg_split( '/[\r\n]+/', $raw_text );
+        if ( ! is_array( $lines ) ) {
+            return [];
+        }
+
+        foreach ( $lines as $line ) {
+            $line = (string) $line;
+            $trimmed = trim( strip_tags( $line ) );
+            if ( '' === $trimmed ) {
+                continue;
+            }
+
+            // Format 1: "Name | URL" — URL must contain http(s)://.
+            if ( strpos( $trimmed, '|' ) !== false ) {
+                $parts = explode( '|', $trimmed );
+                // Find first segment containing http(s):// — that's the URL;
+                // everything before it (joined by '|') is the name.
+                $url_idx = -1;
+                foreach ( $parts as $idx => $segment ) {
+                    if ( preg_match( '/https?:\/\/[^\s]+/i', $segment ) ) {
+                        $url_idx = $idx;
+                        break;
+                    }
+                }
+                if ( $url_idx > 0 ) {
+                    $name_parts = array_slice( $parts, 0, $url_idx );
+                    $url_part   = trim( $parts[ $url_idx ] );
+                    $name       = trim( implode( '|', $name_parts ) );
+                    $candidates[] = [
+                        'name' => $name,
+                        'url'  => $url_part,
+                    ];
+                    continue;
+                }
+                if ( $url_idx === 0 ) {
+                    // Leading pipe with URL after: "| URL" — skip name.
+                    $candidates[] = [
+                        'name' => '',
+                        'url'  => trim( $parts[0] ),
+                    ];
+                    continue;
+                }
+                // No http(s) in any segment — fall through and treat as
+                // single URL candidate (will fail validation if invalid).
+            }
+
+            // Format 2: "Name,URL" — first segment containing http(s):// is URL.
+            if ( strpos( $trimmed, ',' ) !== false ) {
+                $parts = explode( ',', $trimmed );
+                $url_idx = -1;
+                foreach ( $parts as $idx => $segment ) {
+                    if ( preg_match( '/https?:\/\/[^\s]+/i', $segment ) ) {
+                        $url_idx = $idx;
+                        break;
+                    }
+                }
+                if ( $url_idx > 0 ) {
+                    $name_parts = array_slice( $parts, 0, $url_idx );
+                    $url_part   = trim( $parts[ $url_idx ] );
+                    $name       = trim( implode( ',', $name_parts ) );
+                    $candidates[] = [
+                        'name' => $name,
+                        'url'  => $url_part,
+                    ];
+                    continue;
+                }
+                if ( $url_idx === 0 ) {
+                    $candidates[] = [
+                        'name' => '',
+                        'url'  => trim( $parts[0] ),
+                    ];
+                    continue;
+                }
+            }
+
+            // Format 3: bare URL.
+            $candidates[] = [
+                'name' => '',
+                'url'  => $trimmed,
+            ];
+        }
+
+        return $candidates;
+    }
+
     public static function sanitize_harvest_time( $value ) {
         return self::sanitize_time_format( $value, self::default_briefing_harvest_time() );
     }

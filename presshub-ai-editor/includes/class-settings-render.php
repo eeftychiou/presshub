@@ -480,6 +480,7 @@ class PressHub_AI_Settings_Render {
 
             <?php $this->render_provider_modal(); ?>
             <?php $this->render_source_modal(); ?>
+            <?php $this->render_bulk_sources_modal(); ?>
         </div>
         <?php
     }
@@ -1373,7 +1374,10 @@ class PressHub_AI_Settings_Render {
                         <?php echo esc_html__( 'Configure editorial outlets, RSS feeds, and multi-modal streams for daily morning harvesting.', 'presshub-ai-editor' ); ?>
                     </span>
                 </div>
-                <div>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="button" id="presshub-bulk-import-sources-btn">
+                        <span class="dashicons dashicons-list-view" style="vertical-align: text-bottom; margin-right: 4px;"></span><?php echo esc_html__( 'Bulk Import', 'presshub-ai-editor' ); ?>
+                    </button>
                     <button type="button" class="button button-primary" id="presshub-add-source-btn">
                         <span class="dashicons dashicons-plus-alt2" style="vertical-align: text-bottom; margin-right: 4px;"></span><?php echo esc_html__( 'Add News Source', 'presshub-ai-editor' ); ?>
                     </button>
@@ -1565,6 +1569,89 @@ class PressHub_AI_Settings_Render {
                     <div style="display: flex; gap: 8px;">
                         <button type="button" class="button button-secondary presshub-modal-cancel"><?php echo esc_html__( 'Cancel', 'presshub-ai-editor' ); ?></button>
                         <button type="button" id="presshub-source-form-save" class="button button-primary"><?php echo esc_html__( 'Save Source', 'presshub-ai-editor' ); ?></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render the modal for pasting a newline-delimited list of news source URLs.
+     *
+     * Supports three paste shapes per non-empty line:
+     *   - "Name | URL" (pipe-delimited)
+     *   - "Name,URL"   (CSV-style)
+     *   - bare URL     (https?://...)
+     *
+     * Optional defaults (media type, category, max articles, enabled)
+     * are applied to every successfully imported source.
+     */
+    public function render_bulk_sources_modal(): void {
+        $types = PressHub_AI_Settings_Storage::get_supported_media_types();
+        ?>
+        <div id="presshub-bulk-import-modal" class="presshub-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="presshub-bulk-import-modal-title" style="display:none;">
+            <div class="presshub-modal presshub-bulk-import-modal-content">
+                <div class="presshub-modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid #dcdcde;">
+                    <h2 id="presshub-bulk-import-modal-title" style="margin:0; font-size: 16px;"><?php echo esc_html__( 'Bulk Import News Sources', 'presshub-ai-editor' ); ?></h2>
+                    <button type="button" class="presshub-modal-close" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;" aria-label="<?php echo esc_attr__( 'Close', 'presshub-ai-editor' ); ?>">&times;</button>
+                </div>
+                <div class="presshub-modal-body" style="padding: 20px; max-height: 70vh; overflow-y: auto;">
+                    <p class="description" style="margin-top: 0;">
+                        <?php echo esc_html__( 'Paste up to 100 news source URLs (one per line). Each line may use "Name | URL", "Name,URL", or a bare URL. Names are optional; if omitted, the source hostname is used.', 'presshub-ai-editor' ); ?>
+                    </p>
+
+                    <form id="presshub-bulk-import-form">
+                        <div class="presshub-form-group" style="margin-bottom: 15px;">
+                            <label for="presshub-bulk-import-urls"><strong><?php echo esc_html__( 'URLs:', 'presshub-ai-editor' ); ?></strong></label>
+                            <textarea id="presshub-bulk-import-urls" name="urls" rows="10" class="widefat code" placeholder="Η Καθημερινή | https://www.kathimerini.gr&#10;https://www.naftemporiki.gr&#10;CNN,https://www.cnn.com" style="margin-top: 4px; font-family: monospace;"></textarea>
+                        </div>
+
+                        <fieldset style="border: 1px solid #dcdcde; padding: 12px 14px; margin-bottom: 12px; border-radius: 4px;">
+                            <legend style="font-weight: 600; padding: 0 6px;"><?php echo esc_html__( 'Defaults applied to every imported source:', 'presshub-ai-editor' ); ?></legend>
+
+                            <div class="presshub-form-row" style="display: flex; gap: 15px; margin-bottom: 12px;">
+                                <div class="presshub-form-group" style="flex: 1;">
+                                    <label for="presshub-bulk-import-type"><strong><?php echo esc_html__( 'Media Type:', 'presshub-ai-editor' ); ?></strong></label>
+                                    <select id="presshub-bulk-import-type" name="type" class="widefat" style="margin-top: 4px;">
+                                        <?php foreach ( $types as $t_key => $t_info ) : ?>
+                                            <option value="<?php echo esc_attr( $t_key ); ?>" <?php selected( 'text_news', $t_key ); ?>>
+                                                <?php echo esc_html( $t_info['label'] ); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="presshub-form-group" style="flex: 1;">
+                                    <label for="presshub-bulk-import-category"><strong><?php echo esc_html__( 'Category:', 'presshub-ai-editor' ); ?></strong></label>
+                                    <input type="text" id="presshub-bulk-import-category" name="category" class="widefat" value="General" placeholder="<?php echo esc_attr__( 'e.g. General, Economy', 'presshub-ai-editor' ); ?>" style="margin-top: 4px;" />
+                                </div>
+                                <div class="presshub-form-group" style="flex: 1;">
+                                    <label for="presshub-bulk-import-max-articles"><strong><?php esc_html_e( 'Max Articles:', 'presshub-ai-editor' ); ?></strong></label>
+                                    <input type="number" id="presshub-bulk-import-max-articles" name="max_articles" min="1" max="30" value="5" class="widefat" style="margin-top: 4px;" />
+                                </div>
+                            </div>
+
+                            <div class="presshub-form-group">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;">
+                                    <input type="checkbox" id="presshub-bulk-import-enabled" name="enabled" value="1" checked="checked" />
+                                    <strong><?php echo esc_html__( 'Enable in Daily Harvest', 'presshub-ai-editor' ); ?></strong>
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        <div id="presshub-bulk-import-notice" style="display: none; margin-top: 10px;"></div>
+                    </form>
+                </div>
+                <div class="presshub-modal-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-top: 1px solid #dcdcde; background: #f6f7f7;">
+                    <div style="color: #646970; font-size: 12px;">
+                        <?php echo esc_html__( 'Duplicates (matching URLs already configured) are skipped silently.', 'presshub-ai-editor' ); ?>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span id="presshub-bulk-import-spinner" class="spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                        <button type="button" class="button button-secondary presshub-modal-cancel"><?php echo esc_html__( 'Cancel', 'presshub-ai-editor' ); ?></button>
+                        <button type="button" id="presshub-bulk-import-submit" class="button button-primary">
+                            <span class="dashicons dashicons-upload" style="vertical-align: text-bottom; margin-right: 4px;"></span><?php echo esc_html__( 'Import Sources', 'presshub-ai-editor' ); ?>
+                        </button>
                     </div>
                 </div>
             </div>
