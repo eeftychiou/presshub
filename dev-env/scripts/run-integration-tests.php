@@ -230,6 +230,55 @@ run_test( 'PressHub_AI_Audit_Logger records mutation to DB', function() {
     return true;
 } );
 
+// Test 16: Issue #45 - UTF-8 word counter on Greek article (regression)
+run_test( 'Issue #45 UTF-8: Greek article >=500 words (not 36)', function() {
+    if ( ! class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+        return 'Class PressHub_AI_Context_Estimator not loaded';
+    }
+    $dictionary = [ 'Ελλάδα', 'Κύπρος', 'ιστορία', 'πολιτισμός', 'γλώσσα', 'λέξεις', 'άρθρο', 'δοκιμή' ];
+    $text = trim( str_repeat( implode( ' ', $dictionary ) . ' ', 100 ) );
+    $count = PressHub_AI_Context_Estimator::utf8_word_count( $text );
+    if ( $count < 500 ) {
+        return "Greek regression: expected >=500 words, got {$count}";
+    }
+    return true;
+} );
+
+// Test 17: Context estimator constants + clamp
+run_test( 'Issue #45 UTF-8: clamp_max_context_tokens clamps out-of-range', function() {
+    if ( ! class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+        return 'Class PressHub_AI_Context_Estimator not loaded';
+    }
+    if ( 40000 !== PressHub_AI_Context_Estimator::clamp_max_context_tokens( null ) ) {
+        return 'Default fallback failed';
+    }
+    if ( 5000 !== PressHub_AI_Context_Estimator::clamp_max_context_tokens( 100 ) ) {
+        return 'Min clamp failed';
+    }
+    if ( 200000 !== PressHub_AI_Context_Estimator::clamp_max_context_tokens( 999999 ) ) {
+        return 'Max clamp failed';
+    }
+    return true;
+} );
+
+// Test 18: Context estimator summarize() returns both word + token counts
+run_test( 'Issue #45 UTF-8: summarize() returns words + tokens', function() {
+    if ( ! class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+        return 'Class PressHub_AI_Context_Estimator not loaded';
+    }
+    $summary = PressHub_AI_Context_Estimator::summarize( 'Hello brave new world' );
+    if ( ! is_array( $summary ) || ! isset( $summary['words'], $summary['tokens'] ) ) {
+        return 'Missing words/tokens keys';
+    }
+    if ( 4 !== $summary['words'] ) {
+        return 'words should be 4';
+    }
+    if ( $summary['tokens'] < 1 ) {
+        return 'tokens should be >=1';
+    }
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";

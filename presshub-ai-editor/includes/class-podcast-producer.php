@@ -580,7 +580,7 @@ class PressHub_AI_Podcast_Producer {
         $this->save_script( $date, $response );
 
         // 6. Calculate word count
-        $word_count = preg_match_all( '/\p{L}+/u', $response, $words ) ? count( $words[0] ) : str_word_count( strip_tags( $response ) );
+        $word_count = (int) PressHub_AI_Context_Estimator::utf8_word_count( $response );
 
         return [
             'date'         => $date,
