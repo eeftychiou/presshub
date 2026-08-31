@@ -342,6 +342,27 @@ class PressHub_AI_API_Client {
             }
         }
 
+        // No explicit module / ID supplied — Issue #44: route through the
+        // Provider Store's first enabled entry, but ONLY when the legacy
+        // global options are also empty. That way:
+        //   * Fresh installs that have migrated to the Provider Store get
+        //     the active provider instead of falling through to defaults.
+        //   * Existing installs (and tests) that still configure the legacy
+        //     `presshub_ai_provider` / `presshub_ai_api_key` options keep
+        //     their existing behavior — we never silently override an
+        //     operator's existing configuration.
+        if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            $has_legacy_provider = (bool) get_option( 'presshub_ai_provider', '' );
+            $has_legacy_api_key  = (bool) get_option( 'presshub_ai_api_key', '' );
+            if ( ! $has_legacy_provider && ! $has_legacy_api_key ) {
+                $enabled = PressHub_AI_Provider_Store::get_all( true );
+                if ( ! empty( $enabled ) && is_array( $enabled ) ) {
+                    $this->set_provider_config( $enabled[0] );
+                    return;
+                }
+            }
+        }
+
         // Legacy / default single-provider options fallback
         $this->provider = ( is_string( $module_or_provider ) && ! empty( $module_or_provider ) )
             ? $module_or_provider
@@ -378,6 +399,36 @@ class PressHub_AI_API_Client {
     }
 
     /**
+     * Issue #44 diagnostic helper.
+     *
+     * Records a 'no_api_key' dispatch attempt in the token-log activity
+     * table so admins can see why a request never went out, instead of
+     * being left to wonder why no row was logged at all. Best-effort:
+     * silently no-ops when the logger class is not loaded (isolated unit
+     * tests).
+     *
+     * @param string $action Logical action name, e.g. 'coauthor_draft'.
+     */
+    private function log_missing_api_key( string $action ): void {
+        if ( ! class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            return;
+        }
+        $provider = (string) ( $this->provider ?? '' );
+        $model    = (string) ( $this->model ?? '' );
+        PressHub_AI_Token_Logger::log_dispatch_error(
+            $action,
+            $provider,
+            $model,
+            'no_api_key',
+            array(
+                'stage'           => 'pre_dispatch',
+                'request_action'  => $this->current_action,
+                'has_api_key'     => ! empty( $this->api_key ),
+            )
+        );
+    }
+
+    /**
      * Set the current functional module context on this API client.
      *
      * @param string $module 'coauthor'|'briefing_text'|'briefing_podcast'|'copilot'|'tts'
@@ -387,6 +438,34 @@ class PressHub_AI_API_Client {
         $this->module = $module;
         $config = self::resolve_module_config( $module );
         $this->set_provider_config( $config );
+
+        // Issue #44 follow-up (defence-in-depth): the same API client
+        // instance is reused across intents in handlers like
+        // handle_chat_routing(). After classify_intent() resolves to
+        // 'image' or 'report' the next call hits Imagen / Cloud TTS, which
+        // read $this->google_cloud_api_key. The module-specific provider
+        // config above does NOT populate that key when the module is
+        // 'copilot' (it only does so for 'google_cloud_tts'), so without
+        // this hydration step the dispatch returns "Google Cloud API key
+        // is missing." even when the operator has configured one globally.
+        if ( empty( $this->google_cloud_api_key ) ) {
+            $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
+            if ( empty( $this->google_cloud_api_key ) ) {
+                $this->google_cloud_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+            }
+        }
+        if ( empty( $this->gemini_api_key ) ) {
+            $this->gemini_api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
+            if ( empty( $this->gemini_api_key ) ) {
+                $this->gemini_api_key = (string) get_option( 'presshub_ai_api_key', '' );
+            }
+        }
+        if ( empty( $this->briefing_tts_api_key ) ) {
+            $this->briefing_tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+            if ( empty( $this->briefing_tts_api_key ) ) {
+                $this->briefing_tts_api_key = $this->gemini_api_key;
+            }
+        }
         return $this;
     }
 
@@ -525,6 +604,8 @@ class PressHub_AI_API_Client {
         }
 
         if ( empty( $this->api_key ) && 'ollama_local' !== $this->provider ) {
+            // Issue #44: log the missing-key state before returning.
+            $this->log_missing_api_key( 'custom_test' );
             return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
@@ -545,6 +626,9 @@ class PressHub_AI_API_Client {
     public function generate_draft( $sources, $instructions, $uploaded_files = [], $preset_slug = '' ) {
         $this->current_action = 'coauthor_draft';
         if ( empty( $this->api_key ) ) {
+            // Issue #44: log the missing-key state before returning so the
+            // operator can see *why* the request never went out.
+            $this->log_missing_api_key( 'coauthor_draft' );
             return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
@@ -601,6 +685,8 @@ class PressHub_AI_API_Client {
     public function generate_scorecard( $content ) {
         $this->current_action = 'coauthor_scorecard';
         if ( empty( $this->api_key ) ) {
+            // Issue #44: log the missing-key state before returning.
+            $this->log_missing_api_key( 'coauthor_scorecard' );
             return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
