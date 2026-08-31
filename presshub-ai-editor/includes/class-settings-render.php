@@ -1811,44 +1811,49 @@ class PressHub_AI_Settings_Render {
     public function render_briefing_text_category_field() {
         $option   = 'presshub_ai_briefing_text_category';
         $selected = (int) get_option( $option, 0 );
-        $terms    = function_exists( 'get_terms' ) ? get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] ) : [];
-        ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <option value="0" <?php echo 0 === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'None (Default Category)', 'presshub-ai-editor' ); ?></option>
-            <?php if ( ! is_wp_error( $terms ) && is_array( $terms ) ) : ?>
-                <?php foreach ( $terms as $term ) : ?>
-                    <?php if ( is_object( $term ) && isset( $term->term_id ) ) : ?>
-                        <option value="<?php echo (int) $term->term_id; ?>" <?php echo $selected === (int) $term->term_id ? 'selected="selected"' : ''; ?>>
-                            <?php echo self::esc_html_safe( $term->name ); ?>
-                        </option>
-                    <?php endif; ?>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </select>
-        <p class="description"><?php echo __( 'WordPress post category assigned to text briefing posts.', 'presshub-ai-editor' ); ?></p>
-        <?php
+        if ( function_exists( 'wp_dropdown_categories' ) ) {
+            wp_dropdown_categories( [
+                'taxonomy'          => 'category',
+                'hide_empty'        => false,
+                'name'              => $option,
+                'id'                => $option,
+                'selected'          => $selected,
+                'hierarchical'      => true,
+                'show_option_none'  => __( 'None (Default Category)', 'presshub-ai-editor' ),
+                'class'             => 'presshub-category-dropdown',
+            ] );
+        } else {
+            // Simple fallback for unit tests where WordPress functions are unavailable
+            echo '<select name="' . esc_attr( $option ) . '" id="' . esc_attr( $option ) . '" class="presshub-category-dropdown">';
+            echo '<option value="0">' . esc_html__( 'None (Default Category)', 'presshub-ai-editor' ) . '</option>';
+            echo '</select>';
+        }
+        echo '<p class="description">' . esc_html__( 'WordPress post category assigned to text briefing posts.', 'presshub-ai-editor' ) . '</p>';
     }
 
     public function render_briefing_podcast_category_field() {
         $option   = 'presshub_ai_briefing_podcast_category';
         $selected = (int) get_option( $option, 0 );
-        $terms    = function_exists( 'get_terms' ) ? get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] ) : [];
-        ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <option value="0" <?php echo 0 === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'None (Default Category)', 'presshub-ai-editor' ); ?></option>
-            <?php if ( ! is_wp_error( $terms ) && is_array( $terms ) ) : ?>
-                <?php foreach ( $terms as $term ) : ?>
-                    <?php if ( is_object( $term ) && isset( $term->term_id ) ) : ?>
-                        <option value="<?php echo (int) $term->term_id; ?>" <?php echo $selected === (int) $term->term_id ? 'selected="selected"' : ''; ?>>
-                            <?php echo self::esc_html_safe( $term->name ); ?>
-                        </option>
-                    <?php endif; ?>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </select>
-        <p class="description"><?php echo __( 'WordPress post category assigned to synthesized podcast posts.', 'presshub-ai-editor' ); ?></p>
-        <?php
+        if ( function_exists( 'wp_dropdown_categories' ) ) {
+            wp_dropdown_categories( [
+                'taxonomy'          => 'category',
+                'hide_empty'        => false,
+                'name'              => $option,
+                'id'                => $option,
+                'selected'          => $selected,
+                'hierarchical'      => true,
+                'show_option_none'  => __( 'None (Default Category)', 'presshub-ai-editor' ),
+                'class'             => 'presshub-category-dropdown',
+            ] );
+        } else {
+            // Simple fallback for unit tests where WordPress functions are unavailable
+            echo '<select name="' . esc_attr( $option ) . '" id="' . esc_attr( $option ) . '" class="presshub-category-dropdown">';
+            echo '<option value="0">' . esc_html__( 'None (Default Category)', 'presshub-ai-editor' ) . '</option>';
+            echo '</select>';
+        }
+        echo '<p class="description">' . esc_html__( 'WordPress post category assigned to synthesized podcast posts.', 'presshub-ai-editor' ) . '</p>';
     }
+
 
     public function render_briefing_text_status_field() {
         $option   = 'presshub_ai_briefing_text_status';
