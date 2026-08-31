@@ -1053,15 +1053,6 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                     } ) );
                     return $before - count( $this->tables[ $tbl ] );
                 }
-                // Equality filter: action_trigger = 'foo'.
-                if ( preg_match( "/action_trigger = '([^']+)'/i", $where, $wm ) ) {
-                    $target = $wm[1];
-                    $before = count( $this->tables[ $tbl ] ?? [] );
-                    $this->tables[ $tbl ] = array_values( array_filter( $this->tables[ $tbl ] ?? [], function( $r ) use ( $target ) {
-                        return ( $r['action_trigger'] ?? '' ) !== $target;
-                    } ) );
-                    return $before - count( $this->tables[ $tbl ] );
-                }
                 return 1;
             }
             return 1;
@@ -1133,19 +1124,6 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
             return array_values( array_filter( $rows, function( $row ) use ( $where ) {
                 if ( preg_match( "/action_trigger = '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['action_trigger'] ?? '' ) !== $m[1] ) return false;
-                }
-                // Negative equality: action_trigger != 'foo' or action_trigger <> 'foo'.
-                if ( preg_match( "/action_trigger\s+(!=|<>)\s+'([^']+)'/", $where, $m ) ) {
-                    if ( ( $row['action_trigger'] ?? '' ) === $m[2] ) return false;
-                }
-                // Negated IN-list: action_trigger NOT IN ('a','b','c').
-                if ( preg_match( "/action_trigger\s+NOT\s+IN\s*\(([^)]+)\)/i", $where, $m ) ) {
-                    if ( preg_match_all( "/'([^']+)'/", $m[1], $in_matches ) ) {
-                        $excluded = $in_matches[1];
-                        if ( in_array( (string) ( $row['action_trigger'] ?? '' ), $excluded, true ) ) {
-                            return false;
-                        }
-                    }
                 }
                 if ( preg_match( "/provider = '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['provider'] ?? '' ) !== $m[1] ) return false;
