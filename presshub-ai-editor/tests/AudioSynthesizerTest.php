@@ -167,12 +167,27 @@ $GLOBALS['CAPTURED_REQUESTS'] = [];
 $api_client = new PressHub_AI_API_Client();
 
 // Test 5a: Missing API key error
+// Issue #43: The deprecated `presshub_ai_google_cloud_api_key` option is now
+// migrated into a Gemini Provider Store record. To exercise the "no key →
+// WP_Error" path we must clear both the legacy option AND the Provider Store
+// record so that hydration has no source to draw from.
 $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = '';
+$GLOBALS['OPTIONS_STORE'][ PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDERS ] = [];
 $no_key_client = new PressHub_AI_API_Client();
 $err_no_key = $no_key_client->synthesize_speech_with_options( 'Δοκιμή φωνής' );
 as_check( 'api_client: missing key returns WP_Error', is_wp_error( $err_no_key ) && 'no_gc_key' === $err_no_key->get_error_code() );
 
-// Test 5b: Successful synthesis request encoding
+// Re-populate the Provider Store with the test key for Test 5b (success path).
+// Issue #43: the Gemini Provider Store record is now the canonical source.
+$GLOBALS['OPTIONS_STORE'][ PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDERS ] = [
+    [
+        'id'      => 'gemini-main',
+        'type'    => 'gemini',
+        'name'    => 'Google Gemini',
+        'api_key' => 'test-gcloud-key',
+        'enabled' => true,
+    ],
+];
 $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'test-gcloud-key';
 $GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) {
     list( $url, $args ) = $req;

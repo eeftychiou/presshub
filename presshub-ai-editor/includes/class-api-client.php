@@ -358,6 +358,36 @@ class PressHub_AI_API_Client {
                 $enabled = PressHub_AI_Provider_Store::get_all( true );
                 if ( ! empty( $enabled ) && is_array( $enabled ) ) {
                     $this->set_provider_config( $enabled[0] );
+
+                    // Issue #43 defence-in-depth: `set_provider_config()`
+                    // only sets $this->google_cloud_api_key when the
+                    // provider type is 'google_cloud_tts'. When the first
+                    // enabled Provider Store record is Gemini (e.g. one
+                    // seeded from the deprecated gcloud key), the gcloud
+                    // key is parked in $this->api_key and
+                    // $this->gemini_api_key — but synthesize_speech_with_options()
+                    // reads $this->google_cloud_api_key. Mirror the
+                    // cross-cutting hydration that `set_module()` performs
+                    // so legacy TTS handlers keep working when the
+                    // constructor's no-arg branch is taken.
+                    if ( empty( $this->google_cloud_api_key ) ) {
+                        $gemini_key = self::lookup_provider_key_by_type( 'gemini' );
+                        if ( '' !== $gemini_key ) {
+                            $this->google_cloud_api_key = $gemini_key;
+                        }
+                    }
+                    if ( empty( $this->google_cloud_api_key ) ) {
+                        $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
+                        if ( empty( $this->google_cloud_api_key ) ) {
+                            $this->google_cloud_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+                        }
+                    }
+                    if ( empty( $this->briefing_tts_api_key ) ) {
+                        $this->briefing_tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+                        if ( empty( $this->briefing_tts_api_key ) ) {
+                            $this->briefing_tts_api_key = $this->gemini_api_key;
+                        }
+                    }
                     return;
                 }
             }
@@ -439,7 +469,7 @@ class PressHub_AI_API_Client {
         $config = self::resolve_module_config( $module );
         $this->set_provider_config( $config );
 
-        // Issue #44 follow-up (defence-in-depth): the same API client
+        // Issue #43 + Issue #44 defence-in-depth: the same API client
         // instance is reused across intents in handlers like
         // handle_chat_routing(). After classify_intent() resolves to
         // 'image' or 'report' the next call hits Imagen / Cloud TTS, which
@@ -448,10 +478,28 @@ class PressHub_AI_API_Client {
         // 'copilot' (it only does so for 'google_cloud_tts'), so without
         // this hydration step the dispatch returns "Google Cloud API key
         // is missing." even when the operator has configured one globally.
+        //
+        // Issue #43 also wants Provider Store to be the primary source
+        // for these cross-cutting keys (so a Gemini record seeded from
+        // the deprecated gcloud key still drives TTS). The Provider
+        // Store lookup runs first; legacy options remain as a final
+        // fallback chain (Issue #44 contract).
+        if ( empty( $this->google_cloud_api_key ) ) {
+            $gemini_key = self::lookup_provider_key_by_type( 'gemini' );
+            if ( '' !== $gemini_key ) {
+                $this->google_cloud_api_key = $gemini_key;
+            }
+        }
         if ( empty( $this->google_cloud_api_key ) ) {
             $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             if ( empty( $this->google_cloud_api_key ) ) {
                 $this->google_cloud_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+            }
+        }
+        if ( empty( $this->gemini_api_key ) ) {
+            $gemini_key = self::lookup_provider_key_by_type( 'gemini' );
+            if ( '' !== $gemini_key ) {
+                $this->gemini_api_key = $gemini_key;
             }
         }
         if ( empty( $this->gemini_api_key ) ) {
@@ -528,6 +576,45 @@ class PressHub_AI_API_Client {
             $this->google_cloud_api_key = $this->api_key;
         }
         return $this;
+    }
+
+    /**
+     * Find an unmasked API key from the Provider Store by `type` field.
+     *
+     * Issue #43 cross-cutting hydration needs the Gemini record's
+     * API key even when the first enabled Provider Store record is a
+     * different provider — but Provider Store IDs are not stable
+     * across migrations (e.g. `gemini-main` vs `gemini`), so a direct
+     * `PressHub_AI_Provider_Store::get( 'gemini' )` call would silently
+     * return null. This helper iterates every record and matches on
+     * the stable `type` field instead.
+     *
+     * Returns an empty string when no record matches OR the matched
+     * record's key is masked (`•`) so callers can fall through to
+     * legacy option lookups.
+     *
+     * @param string $type Provider type slug ('gemini', 'openai', 'anthropic', etc.)
+     * @return string Unmasked API key, or '' when not found / masked.
+     */
+    private static function lookup_provider_key_by_type( string $type ): string {
+        if ( ! class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            return '';
+        }
+        $records = PressHub_AI_Provider_Store::get_all( false );
+        foreach ( $records as $record ) {
+            if ( ! is_array( $record ) ) {
+                continue;
+            }
+            if ( ( $record['type'] ?? '' ) !== $type ) {
+                continue;
+            }
+            $candidate = (string) ( $record['api_key'] ?? '' );
+            if ( '' === $candidate || false !== strpos( $candidate, '•' ) ) {
+                continue;
+            }
+            return $candidate;
+        }
+        return '';
     }
 
     /**
