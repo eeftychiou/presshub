@@ -91,7 +91,16 @@ run_test( 'PressHub_AI_Token_Logger records entry to DB', function() {
         null,
         [ 'test' => true, 'runner' => 'integration' ]
     );
-    return is_numeric( $id ) && $id > 0;
+    $valid = is_numeric( $id ) && $id > 0;
+
+    // Always purge the synthetic row inserted by this test so that successive
+    // runs (and any user-facing token-log query) never see synthetic data.
+    // See: https://github.com/eeftychiou/presshub/issues/40
+    if ( $valid ) {
+        PressHub_AI_Token_Logger::delete_logs_by_action( 'integration_test' );
+    }
+
+    return $valid;
 } );
 
 // Test 6: Token Logger Stats Calculation
@@ -228,6 +237,18 @@ run_test( 'PressHub_AI_Audit_Logger records mutation to DB', function() {
         return 'Audit log entry details contains unmasked secret API key';
     }
     return true;
+} );
+
+// Test 16: No leftover integration_test rows in token logs
+// Verifies that the synthetic row inserted by Test 5 was properly cleaned up.
+// See: https://github.com/eeftychiou/presshub/issues/40
+run_test( 'No leftover integration_test rows in token logs (Fixes #40)', function() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'presshub_ai_token_logs';
+    $count = (int) $wpdb->get_var(
+        "SELECT COUNT(*) FROM {$table} WHERE action_trigger = 'integration_test'"
+    );
+    return 0 === $count;
 } );
 
 echo "\n=================================================================\n";
