@@ -321,28 +321,16 @@ class PressHub_AI_Provider_Store {
         $templates = PressHub_AI_Provider_Defaults::get_templates();
         $providers = [];
 
-        // 1. Google Gemini
-        $gemini_key          = ( 'gemini' === $legacy_provider ) ? $legacy_api_key : '';
-        $gemini_custom_model = get_option( 'presshub_ai_model_gemini', null );
-        if ( '' !== $gemini_key || ( null !== $gemini_custom_model && '' !== trim( (string) $gemini_custom_model ) ) ) {
-            $providers[] = [
-                'id'               => 'gemini-main',
-                'type'             => 'gemini',
-                'name'             => 'Google Gemini',
-                'api_key'          => $gemini_key,
-                'base_url'         => $templates['gemini']['base_url'],
-                'default_model'    => (string) ( $gemini_custom_model ?? $templates['gemini']['default_model'] ),
-                'available_models' => $templates['gemini']['available_models'],
-                'timeout'          => (int) get_option( 'presshub_ai_timeout_gemini', 300 ),
-                'temperature'      => (float) get_option( 'presshub_ai_temperature_gemini', 0.7 ),
-                'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_gemini', PressHub_AI_Provider_Defaults::default_max_tokens() ),
-                'headers'          => [],
-                'enabled'          => true,
-                'is_system'        => true,
-            ];
-        }
+        // Provider seeding order is intentional: OpenAI first, then Gemini,
+        // then Anthropic. This preserves the legacy OpenAI-first behaviour
+        // for installs that have a legacy OpenAI key — `get_all( true )[0]`
+        // continues to return OpenAI, which is what
+        // `PressHub_AI_API_Client::__construct()` and
+        // `resolve_module_config()` rely on as their first-enabled fallback.
+        // (See Issue #43: gcloud-key migration still seeds Gemini, just
+        // into slot 1 or 2 instead of slot 0.)
 
-        // 2. OpenAI
+        // 1. OpenAI
         $openai_key          = ( 'openai' === $legacy_provider ) ? $legacy_api_key : '';
         $openai_custom_model = get_option( 'presshub_ai_model_openai', null );
         if ( '' !== $openai_key || '' !== $openai_org || ( null !== $openai_custom_model && '' !== trim( (string) $openai_custom_model ) ) ) {
@@ -362,6 +350,34 @@ class PressHub_AI_Provider_Store {
                 'temperature'      => (float) get_option( 'presshub_ai_temperature_openai', 0.7 ),
                 'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_openai', PressHub_AI_Provider_Defaults::default_max_tokens() ),
                 'headers'          => $openai_headers,
+                'enabled'          => true,
+                'is_system'        => true,
+            ];
+        }
+
+        // 2. Google Gemini
+        $gemini_key          = ( 'gemini' === $legacy_provider ) ? $legacy_api_key : '';
+        $gemini_custom_model = get_option( 'presshub_ai_model_gemini', null );
+        $legacy_gcloud_trim  = trim( (string) ( $legacy_gcloud_key ?? '' ) );
+        // Issue #43: also accept the legacy Google Cloud API key as the
+        // Gemini credential when the operator never set the modern
+        // presshub_ai_provider=gemini key but did set the gcloud key.
+        if ( '' === $gemini_key && '' !== $legacy_gcloud_trim ) {
+            $gemini_key = $legacy_gcloud_trim;
+        }
+        if ( '' !== $gemini_key || ( null !== $gemini_custom_model && '' !== trim( (string) $gemini_custom_model ) ) ) {
+            $providers[] = [
+                'id'               => 'gemini-main',
+                'type'             => 'gemini',
+                'name'             => 'Google Gemini',
+                'api_key'          => $gemini_key,
+                'base_url'         => $templates['gemini']['base_url'],
+                'default_model'    => (string) ( $gemini_custom_model ?? $templates['gemini']['default_model'] ),
+                'available_models' => $templates['gemini']['available_models'],
+                'timeout'          => (int) get_option( 'presshub_ai_timeout_gemini', 300 ),
+                'temperature'      => (float) get_option( 'presshub_ai_temperature_gemini', 0.7 ),
+                'max_tokens'       => (int) get_option( 'presshub_ai_max_tokens_gemini', PressHub_AI_Provider_Defaults::default_max_tokens() ),
+                'headers'          => [],
                 'enabled'          => true,
                 'is_system'        => true,
             ];
@@ -403,6 +419,17 @@ class PressHub_AI_Provider_Store {
 
         update_option( self::OPTION_CONFIGURED_PROVIDERS, $clean_providers, false );
         update_option( self::OPTION_MIGRATED, 1, false );
+
+        // Issue #43: remove the deprecated legacy Google Cloud Media &
+        // Vision credential now that it has been folded into a Gemini
+        // provider record (or determined to be absent). Log a masked
+        // notice so operators can verify the migration in debug logs.
+        if ( null !== $legacy_gcloud_key && '' !== trim( (string) $legacy_gcloud_key ) ) {
+            delete_option( 'presshub_ai_google_cloud_api_key' );
+            if ( function_exists( 'error_log' ) ) {
+                error_log( '[PressHub AI] Migrated deprecated presshub_ai_google_cloud_api_key (masked: ' . self::mask_key( $legacy_gcloud_key ) . ') into the configured Gemini provider.' );
+            }
+        }
     }
 
     /**

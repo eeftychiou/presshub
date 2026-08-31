@@ -52,8 +52,16 @@ class ProviderStoreTest {
         PressHub_AI_Provider_Store::migrate_legacy_options();
 
         $migrated = PressHub_AI_Provider_Store::get_all( false );
-        if ( count( $migrated ) !== 1 ) {
-            $failures[] = "Migration with legacy OpenAI key should migrate only the configured provider (1). Got: " . count( $migrated );
+        if ( count( $migrated ) !== 2 ) {
+            $failures[] = "Migration with legacy OpenAI key should migrate the configured provider AND seed a Gemini provider from the legacy gcloud key (Issue #43). Expected 2, got: " . count( $migrated );
+        }
+
+        // Issue #43: gemini-main must be seeded from the legacy gcloud key.
+        $gemini_seeded = PressHub_AI_Provider_Store::get( 'gemini-main' );
+        if ( ! $gemini_seeded ) {
+            $failures[] = "Migration should seed 'gemini-main' from legacy presshub_ai_google_cloud_api_key (Issue #43).";
+        } elseif ( ( $gemini_seeded['api_key'] ?? '' ) !== 'gcloud-key-999' ) {
+            $failures[] = "Seeded gemini-main api_key should equal legacy gcloud key. Got: " . var_export( $gemini_seeded['api_key'] ?? null, true );
         }
 
         // Check OpenAI migrated record
