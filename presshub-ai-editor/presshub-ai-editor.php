@@ -110,6 +110,15 @@ add_filter(
 function presshub_ai_activate() {
     PressHub_AI_Token_Logger::create_table();
     PressHub_AI_Audit_Logger::create_table();
+
+    // One-time purge: remove synthetic `integration_test` rows that older
+    // integration-test versions left behind in the token logs table. After
+    // this activation runs, the table starts clean and the new defensive
+    // NOT IN clause (see {@see PressHub_AI_Token_Logger::get_excluded_actions()})
+    // keeps user-facing queries free of test pollution.
+    // See: https://github.com/eeftychiou/presshub/issues/40
+    PressHub_AI_Token_Logger::delete_integration_test_logs();
+
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
     }
