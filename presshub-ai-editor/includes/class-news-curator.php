@@ -29,6 +29,18 @@ class PressHub_AI_News_Curator {
     const OPTION_STATUS = 'presshub_ai_briefing_text_status';
 
     /**
+     * @internal Tracks whether the most recent format_articles_context() call
+     * truncated the input set (either by article count or per-article char cap).
+     */
+    private static $last_context_truncated = false;
+
+    /**
+     * @internal Tracks the original number of articles passed to the most recent
+     * format_articles_context() call (before max-articles truncation).
+     */
+    private static $last_original_articles_count = 0;
+
+    /**
      * Get the base curation prompt with template placeholders.
      *
      * @return string Base system prompt with placeholders.
@@ -74,6 +86,39 @@ class PressHub_AI_News_Curator {
             return __( 'Δεν υπάρχουν διαθέσιμα άρθρα.', 'presshub-ai-editor' );
         }
 
+        /**
+         * Filters the maximum number of articles to forward to the LLM in the curation prompt.
+         *
+         * Returning a smaller number protects against runaway context lengths when the
+         * harvester collected dozens of articles (Fixes #39 — 30s AJAX timeout / 500).
+         *
+         * @param int $max_articles Default 40.
+         */
+        $max_articles = (int) apply_filters( 'presshub_ai_curation_max_articles', 40 );
+        if ( $max_articles < 1 ) {
+            $max_articles = 1;
+        }
+
+        /**
+         * Filters the maximum number of characters allowed per article body in the prompt.
+         *
+         * Prevents a single unusually long article from blowing the LLM context budget.
+         *
+         * @param int $max_chars Default 800.
+         */
+        $max_chars = (int) apply_filters( 'presshub_ai_curation_max_chars_per_article', 800 );
+        if ( $max_chars < 100 ) {
+            $max_chars = 100;
+        }
+
+        $original_count = count( $articles );
+        $truncated      = false;
+        $truncation_suffix = __( '…[περικομμένο]', 'presshub-ai-editor' );
+        if ( $original_count > $max_articles ) {
+            $articles  = array_slice( $articles, 0, $max_articles );
+            $truncated = true;
+        }
+
         $blocks = [];
         foreach ( $articles as $index => $article ) {
             $num     = $index + 1;
@@ -88,13 +133,48 @@ class PressHub_AI_News_Curator {
                 $block .= " | **URL:** {$url}";
             }
             if ( ! empty( $content ) ) {
+                if ( function_exists( 'mb_strlen' ) && function_exists( 'mb_substr' ) ) {
+                    if ( mb_strlen( $content ) > $max_chars ) {
+                        $content = mb_substr( $content, 0, $max_chars ) . $truncation_suffix;
+                        $truncated = true;
+                    }
+                } else {
+                    if ( strlen( $content ) > $max_chars ) {
+                        $content = substr( $content, 0, $max_chars ) . $truncation_suffix;
+                        $truncated = true;
+                    }
+                }
                 $block .= "\n\n{$content}";
             }
 
             $blocks[] = $block;
         }
 
+        self::$last_context_truncated       = $truncated;
+        self::$last_original_articles_count = $original_count;
+
         return implode( "\n\n---\n\n", $blocks );
+    }
+
+    /**
+     * Returns whether the most recent format_articles_context() call truncated the input set.
+     * The flag is updated inside the method via a static stash so callers (e.g. generate_briefing)
+     * can surface a notice when the LLM received a reduced prompt.
+     *
+     * @return bool
+     */
+    public function was_context_truncated(): bool {
+        return ! empty( self::$last_context_truncated );
+    }
+
+    /**
+     * Returns the original number of articles that were considered for the most recent
+     * format_articles_context() call (before max-articles truncation).
+     *
+     * @return int
+     */
+    public function last_original_articles_count(): int {
+        return (int) ( self::$last_original_articles_count ?? 0 );
     }
 
     /**
@@ -499,12 +579,14 @@ class PressHub_AI_News_Curator {
         }
 
         return [
-            'post_id'        => $post_id,
-            'date'           => $date,
-            'headline'       => $headline,
-            'html_content'   => $html_content,
-            'raw_response'   => $response,
-            'articles_count' => $used_articles_count,
+            'post_id'                  => $post_id,
+            'date'                     => $date,
+            'headline'                 => $headline,
+            'html_content'             => $html_content,
+            'raw_response'             => $response,
+            'articles_count'           => $used_articles_count,
+            'articles_count_original'  => $this->last_original_articles_count(),
+            'articles_truncated'       => $this->was_context_truncated(),
         ];
     }
 
