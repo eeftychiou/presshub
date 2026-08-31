@@ -21,42 +21,6 @@ class PressHub_AI_Token_Logger {
     const DB_VERSION_OPTION = 'presshub_ai_token_logs_db_version';
 
     /**
-     * Reserved action identifier used exclusively by automated test runners
-     * (e.g. {@see dev-env/scripts/run-integration-tests.php}) and unit tests.
-     * Rows with this action_trigger are synthetic placeholders used to verify
-     * the database insertion path; they are excluded by default from
-     * user-facing queries (admin logs panel, summary stats, CSV exports) and
-     * should be deleted from the table once the test that inserted them
-     * completes.
-     */
-    const INTEGRATION_TEST_ACTION = 'integration_test';
-
-    /**
-     * Default list of action_trigger values that the user-facing log query
-     * APIs (get_logs(), get_summary_stats(), export_csv()) must filter out.
-     * Filterable via {@see 'presshub_ai_token_logs_excluded_actions'} so that
-     * site maintainers can extend or shorten the exclusion list as needed.
-     *
-     * @return string[]
-     */
-    public static function get_excluded_actions(): array {
-        $default = [ self::INTEGRATION_TEST_ACTION ];
-        $filtered = apply_filters( 'presshub_ai_token_logs_excluded_actions', $default );
-        if ( ! is_array( $filtered ) ) {
-            return $default;
-        }
-        $clean = [];
-        foreach ( $filtered as $action ) {
-            $action = (string) $action;
-            if ( '' === $action ) {
-                continue;
-            }
-            $clean[] = $action;
-        }
-        return $clean;
-    }
-
-    /**
      * Get table name with WordPress prefix.
      *
      * @return string Table name.
@@ -349,20 +313,6 @@ class PressHub_AI_Token_Logger {
         $where_clauses = [ '1=1' ];
         $params = [];
 
-        // Synthetic test rows (action_trigger = integration_test) and any
-        // other caller-defined excluded actions must NEVER surface in
-        // editorial / admin log views. We always exclude them server-side,
-        // even when the caller doesn't pass an `action_exclude` arg, to keep
-        // production logs free of test pollution from past runs.
-        $excluded_actions = self::get_excluded_actions();
-        if ( ! empty( $excluded_actions ) ) {
-            $placeholders = implode( ',', array_fill( 0, count( $excluded_actions ), '%s' ) );
-            $where_clauses[] = 'action_trigger NOT IN (' . $placeholders . ')';
-            foreach ( $excluded_actions as $ex_action ) {
-                $params[] = $ex_action;
-            }
-        }
-
         if ( '' !== $action ) {
             $where_clauses[] = 'action_trigger = %s';
             $params[] = $action;
@@ -455,7 +405,7 @@ class PressHub_AI_Token_Logger {
         }
 
         $table_name = self::get_table_name();
-        $where_parts = [ '1=1' ];
+        $where_sql  = '1=1';
         $params     = [];
 
         if ( 'all' !== $range ) {
@@ -468,22 +418,9 @@ class PressHub_AI_Token_Logger {
             } else {
                 $cutoff = gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
             }
-            $where_parts[] = 'created_at >= %s';
-            $params[]      = $cutoff;
+            $where_sql = 'created_at >= %s';
+            $params[]  = $cutoff;
         }
-
-        // Mirror the get_logs() exclusion so summary statistics are never
-        // polluted by integration_test or any other synthetic action_trigger.
-        $excluded_actions = self::get_excluded_actions();
-        if ( ! empty( $excluded_actions ) ) {
-            $placeholders = implode( ',', array_fill( 0, count( $excluded_actions ), '%s' ) );
-            $where_parts[] = 'action_trigger NOT IN (' . $placeholders . ')';
-            foreach ( $excluded_actions as $ex_action ) {
-                $params[] = $ex_action;
-            }
-        }
-
-        $where_sql = implode( ' AND ', $where_parts );
 
         $query = "SELECT * FROM {$table_name} WHERE {$where_sql}";
         if ( ! empty( $params ) ) {
@@ -659,43 +596,5 @@ class PressHub_AI_Token_Logger {
         $result = $wpdb->query( "DELETE FROM {$table_name}" );
 
         return false !== $result;
-    }
-
-    /**
-     * Delete every token-log row whose action_trigger matches $action.
-     *
-     * Used by automated test runners to clean up synthetic placeholders
-     * (see {@see INTEGRATION_TEST_ACTION}) immediately after insertion, and
-     * by the plugin activation hook to one-time purge pre-existing rows
-     * left behind by older integration test versions.
-     *
-     * @param string $action Action identifier to match (exact equality).
-     * @return int Number of deleted rows (0 if no rows matched).
-     */
-    public static function delete_logs_by_action( string $action ): int {
-        global $wpdb;
-        if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
-            return 0;
-        }
-
-        $action = trim( $action );
-        if ( '' === $action ) {
-            return 0;
-        }
-
-        $table_name = self::get_table_name();
-        $sql        = $wpdb->prepare( "DELETE FROM {$table_name} WHERE action_trigger = %s", $action );
-        $deleted    = $wpdb->query( $sql );
-
-        return is_numeric( $deleted ) ? (int) $deleted : 0;
-    }
-
-    /**
-     * Convenience wrapper that purges all synthetic integration test rows.
-     *
-     * @return int Number of deleted rows.
-     */
-    public static function delete_integration_test_logs(): int {
-        return self::delete_logs_by_action( self::INTEGRATION_TEST_ACTION );
     }
 }
