@@ -203,7 +203,10 @@ class PressHub_AI_Ajax_Handlers {
             }
         }
 
-        $api = new PressHub_AI_API_Client();
+        // Issue #44: pass the explicit module name so the API client
+        // resolves the coauthor provider/model/keys deterministically
+        // instead of relying on the no-args constructor's fallback chain.
+        $api = new PressHub_AI_API_Client( 'coauthor' );
         $draft = $api->generate_draft( $sources, $instructions, $uploaded_files, $preset_slug );
 
         // Clean up temporary uploads so we don't clutter the server unnecessarily
@@ -237,7 +240,10 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $this->enforce_rate_limit();
-        $api = new PressHub_AI_API_Client();
+        // Issue #44: pass the explicit module name so the API client
+        // resolves the coauthor provider/model/keys deterministically.
+        // generate_scorecard() itself sets current_action = 'coauthor_scorecard'.
+        $api = new PressHub_AI_API_Client( 'coauthor' );
         $scorecard = $api->generate_scorecard( $content );
 
         if ( is_wp_error( $scorecard ) ) {
@@ -307,7 +313,10 @@ class PressHub_AI_Ajax_Handlers {
         // gate is already the first line of defence.
         $this->enforce_rate_limit();
 
-        $api = new PressHub_AI_API_Client();
+        // Issue #44: pass the explicit module name so the API client
+        // resolves the copilot provider/model/keys deterministically for
+        // the chat routing / intent classification flow.
+        $api = new PressHub_AI_API_Client( 'copilot' );
         $intent = $api->classify_intent( $prompt );
 
         // Defence in depth: even if the LLM classifier resolves to an

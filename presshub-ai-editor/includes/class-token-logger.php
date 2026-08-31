@@ -125,6 +125,45 @@ class PressHub_AI_Token_Logger {
     }
 
     /**
+     * Log a pre-dispatch error (e.g. missing API key, invalid provider).
+     *
+     * Issue #44: the API client used to silently clear its provider when the
+     * API key was missing, leaving downstream AI calls to fail with no
+     * diagnostic visibility. This helper lets the API client record such
+     * failures in the same token-log table as real LLM requests so an
+     * operator can see *why* a request never went out.
+     *
+     * @param string      $action    Action identifier (e.g. 'coauthor_draft', 'copilot_chat', 'coauthor_scorecard').
+     * @param string      $provider  Provider name (e.g. 'openai', 'anthropic', 'gemini', '' if unresolved).
+     * @param string      $model     Model identifier ('' if unresolved).
+     * @param string      $error     Short error reason (e.g. 'no_api_key', 'invalid_provider').
+     * @param array       $metadata  Optional extra details (resolved module, request stage, etc.).
+     * @param int         $user_id   WordPress user ID (0 defaults to current user).
+     * @return int|null Inserted log ID, or null on failure.
+     */
+    public static function log_dispatch_error(
+        string $action,
+        string $provider,
+        string $model,
+        string $error,
+        array $metadata = [],
+        int $user_id = 0
+    ): ?int {
+        return self::log_llm_request(
+            $action,
+            $provider,
+            $model,
+            0,
+            0,
+            0,
+            'error',
+            $error,
+            $metadata,
+            $user_id
+        );
+    }
+
+    /**
      * Log a Text-to-Speech (TTS) audio synthesis request.
      *
      * @param string      $action      Action identifier (e.g. 'podcast_audio', 'briefing_audio').
