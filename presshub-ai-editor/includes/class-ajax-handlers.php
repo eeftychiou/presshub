@@ -45,6 +45,7 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_save_news_source', [ $this, 'save_news_source' ] );
         add_action( 'wp_ajax_presshub_ai_delete_news_source', [ $this, 'delete_news_source' ] );
         add_action( 'wp_ajax_presshub_ai_toggle_news_source', [ $this, 'toggle_news_source' ] );
+        add_action( 'wp_ajax_presshub_ai_bulk_import_sources', [ $this, 'bulk_import_sources' ] );
         // Token & Usage Analytics AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_fetch_token_logs', [ $this, 'fetch_token_logs' ] );
         add_action( 'wp_ajax_presshub_ai_export_token_csv', [ $this, 'export_token_csv' ] );
@@ -2245,6 +2246,68 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'duration_ms' => $duration_ms,
             'links_found' => $links_found,
             'message'     => sprintf( __( 'Connected successfully (HTTP %d, %dms). Discovered %d article links.', 'presshub-ai-editor' ), $code, $duration_ms, $links_found ),
+        ] );
+    }
+
+    /**
+     * AJAX endpoint to bulk-import a paste buffer of news source URLs.
+     *
+     * Expects POST fields:
+     *   - urls:    newline-delimited text (pipe / CSV / bare URL).
+     *   - defaults: optional array (type, category, max_articles, enabled).
+     *
+     * Returns the merged sources list plus per-row outcome counters
+     * (added / skipped_duplicates / invalid / truncated).
+     */
+    public function bulk_import_sources(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        $raw = isset( $_POST['urls'] ) ? sanitize_textarea_field( wp_unslash( (string) $_POST['urls'] ) ) : '';
+
+        $defaults = [];
+        if ( isset( $_POST['defaults'] ) ) {
+            $raw_defaults = wp_unslash( $_POST['defaults'] );
+            if ( is_string( $raw_defaults ) ) {
+                $decoded = json_decode( $raw_defaults, true );
+                if ( is_array( $decoded ) ) {
+                    $defaults = $decoded;
+                }
+            } elseif ( is_array( $raw_defaults ) ) {
+                $defaults = $raw_defaults;
+            }
+        }
+
+        if ( '' === trim( $raw ) ) {
+            wp_send_json_error( [ 'message' => __( 'Please paste at least one URL.', 'presshub-ai-editor' ) ] );
+        }
+
+        try {
+            $result = PressHub_AI_Settings_Storage::bulk_import_sources( $raw, $defaults );
+        } catch ( Throwable $t ) {
+            wp_send_json_error( [
+                'message' => __( 'Bulk import failed: ', 'presshub-ai-editor' ) . $t->getMessage(),
+            ] );
+        }
+
+        $message = sprintf(
+            /* translators: 1: added, 2: duplicates skipped, 3: invalid */
+            __( 'Imported %1$d source(s). Skipped %2$d duplicate(s). Ignored %3$d invalid line(s).', 'presshub-ai-editor' ),
+            (int) $result['added'],
+            (int) $result['skipped_duplicates'],
+            (int) $result['invalid']
+        );
+
+        wp_send_json_success( [
+            'message'           => $message,
+            'added'             => (int) $result['added'],
+            'skipped_duplicates'=> (int) $result['skipped_duplicates'],
+            'invalid'           => (int) $result['invalid'],
+            'truncated'         => (bool) $result['truncated'],
+            'sources'           => $result['sources'],
         ] );
     }
 }

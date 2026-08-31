@@ -1979,8 +1979,119 @@ jQuery(document).ready(function($) {
             if ($('#presshub-source-modal').is(':visible')) {
                 $('body').removeClass('presshub-modal-open');
                 $('#presshub-source-modal').fadeOut(150);
+            } else if ($('#presshub-bulk-import-modal').is(':visible')) {
+                $('body').removeClass('presshub-modal-open');
+                $('#presshub-bulk-import-modal').fadeOut(150);
             }
         }
+    });
+
+    // ------------------------------------------------------------------
+    // Bulk Import Sources (Issue #41)
+    // ------------------------------------------------------------------
+    $(document).on('click', '#presshub-bulk-import-sources-btn', function(e) {
+        e.preventDefault();
+        var $modal = $('#presshub-bulk-import-modal');
+        if (!$modal.length) {
+            return;
+        }
+        var $form = $('#presshub-bulk-import-form');
+        if ($form.length) {
+            $form[0].reset();
+        }
+        $('#presshub-bulk-import-type').val('text_news');
+        $('#presshub-bulk-import-category').val('General');
+        $('#presshub-bulk-import-max-articles').val('5');
+        $('#presshub-bulk-import-enabled').prop('checked', true);
+        $('#presshub-bulk-import-notice').hide().empty();
+        $('#presshub-bulk-import-spinner').removeClass('is-active');
+        $('#presshub-bulk-import-submit').prop('disabled', false);
+        $('body').addClass('presshub-modal-open');
+        $modal.fadeIn(150);
+        $('#presshub-bulk-import-urls').focus();
+    });
+
+    $(document).on('click', '#presshub-bulk-import-modal .presshub-modal-close, #presshub-bulk-import-modal .presshub-modal-cancel', function(e) {
+        e.preventDefault();
+        $('body').removeClass('presshub-modal-open');
+        $('#presshub-bulk-import-modal').fadeOut(150);
+    });
+
+    $(document).on('click', '#presshub-bulk-import-modal', function(e) {
+        if ($(e.target).is('#presshub-bulk-import-modal')) {
+            $('body').removeClass('presshub-modal-open');
+            $('#presshub-bulk-import-modal').fadeOut(150);
+        }
+    });
+
+    $(document).on('click', '#presshub-bulk-import-submit', function(e) {
+        e.preventDefault();
+
+        var raw = $('#presshub-bulk-import-urls').val() || '';
+        if (!raw.trim()) {
+            $('#presshub-bulk-import-notice')
+                .html('<div class="notice notice-error"><p>Please paste at least one URL.</p></div>')
+                .show();
+            $('#presshub-bulk-import-urls').focus();
+            return;
+        }
+
+        var defaults = {
+            type:         $('#presshub-bulk-import-type').val() || 'text_news',
+            category:     ($('#presshub-bulk-import-category').val() || 'General').trim(),
+            max_articles: parseInt($('#presshub-bulk-import-max-articles').val(), 10) || 5,
+            enabled:      $('#presshub-bulk-import-enabled').is(':checked')
+        };
+
+        var $btn     = $(this);
+        var $spinner = $('#presshub-bulk-import-spinner');
+        var $notice  = $('#presshub-bulk-import-notice');
+
+        $btn.prop('disabled', true);
+        $spinner.addClass('is-active');
+        $notice.hide().empty();
+
+        $.ajax({
+            url:    presshubAI.ajax_url,
+            type:   'POST',
+            data: {
+                action:   'presshub_ai_bulk_import_sources',
+                nonce:    presshubAI.nonce,
+                urls:     raw,
+                defaults: JSON.stringify(defaults)
+            },
+            dataType: 'json'
+        }).done(function(res) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+
+            if (res && res.success) {
+                var d = res.data || {};
+                var html = '<div class="notice notice-success"><p>✓ ' + presshubEsc(d.message || 'Imported') + '</p></div>';
+                if (d.truncated) {
+                    html += '<div class="notice notice-warning"><p>' + presshubEsc('Import truncated at 100 lines. Submit remaining URLs in another batch.') + '</p></div>';
+                }
+                $notice.html(html).show();
+
+                if (Array.isArray(d.sources)) {
+                    presshubSourcesState = d.sources;
+                    syncSourcesInput();
+                    renderSourcesTable();
+                }
+
+                setTimeout(function() {
+                    $('body').removeClass('presshub-modal-open');
+                    $('#presshub-bulk-import-modal').fadeOut(150);
+                }, 900);
+            } else {
+                var msg = (res && res.data && res.data.message) ? res.data.message : 'Bulk import failed.';
+                $notice.html('<div class="notice notice-error"><p>✗ ' + presshubEsc(msg) + '</p></div>').show();
+            }
+        }).fail(function(xhr, status, error) {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+            $notice.html('<div class="notice notice-error"><p>✗ ' + presshubEsc(error || status || 'Error') + '</p></div>').show();
+        });
     });
 
     // ------------------------------------------------------------------
