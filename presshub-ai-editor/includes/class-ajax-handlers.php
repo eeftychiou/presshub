@@ -976,16 +976,46 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $this->enforce_rate_limit();
 
-        require_once __DIR__ . '/class-news-curator.php';
-        $curator = new PressHub_AI_News_Curator();
-        $result  = $curator->generate_briefing( $date, null, $preset_id, $selected_articles );
+        require_once __DIR__ . '/class-settings-storage.php';
+        $budget = PressHub_AI_Settings_Storage::get_curation_time_budget();
 
-        if ( is_wp_error( $result ) ) {
-            wp_send_json_error( $result->get_error_message() );
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( (int) $budget + 60 );
+        }
+        if ( function_exists( 'wp_raise_memory_limit' ) ) {
+            wp_raise_memory_limit( 'admin' );
         }
 
-        $this->record_rate_limit();
-        wp_send_json_success( $result );
+        try {
+            require_once __DIR__ . '/class-news-curator.php';
+            $curator = new PressHub_AI_News_Curator();
+            $result  = $curator->generate_briefing( $date, null, $preset_id, $selected_articles );
+
+            if ( is_wp_error( $result ) ) {
+                wp_send_json_error( $result->get_error_message() );
+            }
+
+            $this->record_rate_limit();
+            wp_send_json_success( $result );
+        } catch ( \Throwable $e ) {
+            if ( $e instanceof \RuntimeException && 0 === strpos( $e->getMessage(), 'wp_send_json' ) ) {
+                throw $e;
+            }
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Unhandled exception during text story curation: ' . $e->getMessage(), [
+                    'exception' => $e->getMessage(),
+                    'trace'     => $e->getTraceAsString(),
+                    'date'      => $date,
+                    'preset_id' => $preset_id,
+                ] );
+            }
+
+            wp_send_json_error( [
+                'message'   => sprintf( __( 'Text curation failed: %s', 'presshub-ai-editor' ), $e->getMessage() ),
+                'exception' => $e->getMessage(),
+                'date'      => $date,
+            ] );
+        }
     }
 
     /**
@@ -1041,16 +1071,48 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $this->enforce_rate_limit();
 
-        require_once __DIR__ . '/class-podcast-producer.php';
-        $producer = new PressHub_AI_Podcast_Producer();
-        $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration, $context_mode, $selected_articles );
+        require_once __DIR__ . '/class-settings-storage.php';
+        $budget = PressHub_AI_Settings_Storage::get_curation_time_budget();
 
-        if ( is_wp_error( $result ) ) {
-            wp_send_json_error( $result->get_error_message() );
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( (int) $budget + 60 );
+        }
+        if ( function_exists( 'wp_raise_memory_limit' ) ) {
+            wp_raise_memory_limit( 'admin' );
         }
 
-        $this->record_rate_limit();
-        wp_send_json_success( $result );
+        try {
+            require_once __DIR__ . '/class-podcast-producer.php';
+            $producer = new PressHub_AI_Podcast_Producer();
+            $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration, $context_mode, $selected_articles );
+
+            if ( is_wp_error( $result ) ) {
+                wp_send_json_error( $result->get_error_message() );
+            }
+
+            $this->record_rate_limit();
+            wp_send_json_success( $result );
+        } catch ( \Throwable $e ) {
+            if ( $e instanceof \RuntimeException && 0 === strpos( $e->getMessage(), 'wp_send_json' ) ) {
+                throw $e;
+            }
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Unhandled exception during podcast script generation: ' . $e->getMessage(), [
+                    'exception'    => $e->getMessage(),
+                    'trace'        => $e->getTraceAsString(),
+                    'date'         => $date,
+                    'preset_id'    => $preset_id,
+                    'duration'     => $duration,
+                    'context_mode' => $context_mode,
+                ] );
+            }
+
+            wp_send_json_error( [
+                'message'   => sprintf( __( 'Podcast script generation failed: %s', 'presshub-ai-editor' ), $e->getMessage() ),
+                'exception' => $e->getMessage(),
+                'date'      => $date,
+            ] );
+        }
     }
 
     /**
@@ -1131,15 +1193,44 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $script = sanitize_textarea_field( wp_unslash( $_POST['script'] ) );
         }
 
-        require_once __DIR__ . '/class-audio-synthesizer.php';
-        $synthesizer = new PressHub_AI_Audio_Synthesizer();
-        $result      = $synthesizer->synthesize_podcast( $date, $script );
+        require_once __DIR__ . '/class-settings-storage.php';
+        $budget = PressHub_AI_Settings_Storage::get_curation_audio_time_budget();
 
-        if ( is_wp_error( $result ) ) {
-            wp_send_json_error( $result->get_error_message() );
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( (int) $budget + 60 );
+        }
+        if ( function_exists( 'wp_raise_memory_limit' ) ) {
+            wp_raise_memory_limit( 'admin' );
         }
 
-        wp_send_json_success( $result );
+        try {
+            require_once __DIR__ . '/class-audio-synthesizer.php';
+            $synthesizer = new PressHub_AI_Audio_Synthesizer();
+            $result      = $synthesizer->synthesize_podcast( $date, $script );
+
+            if ( is_wp_error( $result ) ) {
+                wp_send_json_error( $result->get_error_message() );
+            }
+
+            wp_send_json_success( $result );
+        } catch ( \Throwable $e ) {
+            if ( $e instanceof \RuntimeException && 0 === strpos( $e->getMessage(), 'wp_send_json' ) ) {
+                throw $e;
+            }
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Unhandled exception during podcast audio synthesis: ' . $e->getMessage(), [
+                    'exception' => $e->getMessage(),
+                    'trace'     => $e->getTraceAsString(),
+                    'date'      => $date,
+                ] );
+            }
+
+            wp_send_json_error( [
+                'message'   => sprintf( __( 'Audio synthesis failed: %s', 'presshub-ai-editor' ), $e->getMessage() ),
+                'exception' => $e->getMessage(),
+                'date'      => $date,
+            ] );
+        }
     }
 
     /**

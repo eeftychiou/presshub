@@ -801,6 +801,26 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Helper to retrieve configured curation time budget from database (clamped 30–600s, default 120s).
+     *
+     * @return int Configured execution time budget in seconds for curation/script generation.
+     */
+    public static function get_curation_time_budget(): int {
+        $budget = (int) get_option( 'presshub_ai_curation_time_budget', 120 );
+        return ( $budget >= 30 && $budget <= 600 ) ? $budget : 120;
+    }
+
+    /**
+     * Helper to retrieve configured audio synthesis time budget from database (clamped 30–900s, default 180s).
+     *
+     * @return int Configured execution time budget in seconds for TTS audio synthesis.
+     */
+    public static function get_curation_audio_time_budget(): int {
+        $budget = (int) get_option( 'presshub_ai_curation_audio_time_budget', 180 );
+        return ( $budget >= 30 && $budget <= 900 ) ? $budget : 180;
+    }
+
+    /**
      * Helper to retrieve configured harvest time budget from database (clamped 10–900s, default 60s).
      *
      * @return int Configured execution time budget in seconds.

@@ -72,7 +72,11 @@ if ( ! function_exists( 'update_post_meta' ) ) {
 if ( ! function_exists( 'get_option' ) ) {
     function get_option( $key, $default = false ) {
         $opts = $GLOBALS['OPTIONS_STORE'] ?? [];
-        return array_key_exists( $key, $opts ) ? $opts[ $key ] : $default;
+        $value = array_key_exists( $key, $opts ) ? $opts[ $key ] : $default;
+        if ( function_exists( 'apply_filters' ) ) {
+            $value = apply_filters( 'pre_option_' . $key, $value, $key );
+        }
+        return $value;
     }
 }
 
