@@ -2961,6 +2961,20 @@ jQuery(document).ready(function($) {
         }
     });
 
+    function updateBriefingHostRows() {
+        var count = parseInt($('#presshub_ai_briefing_host_count').val(), 10) || 2;
+        if (count === 1) {
+            $('#presshub-host-male-row, #presshub-voice-male-row, #presshub-host-tertiary-row, #presshub-voice-tertiary-row').hide();
+        } else if (count === 2) {
+            $('#presshub-host-male-row, #presshub-voice-male-row').show();
+            $('#presshub-host-tertiary-row, #presshub-voice-tertiary-row').hide();
+        } else {
+            $('#presshub-host-male-row, #presshub-voice-male-row, #presshub-host-tertiary-row, #presshub-voice-tertiary-row').show();
+        }
+    }
+    $(document).on('change', '#presshub_ai_briefing_host_count', updateBriefingHostRows);
+    updateBriefingHostRows();
+
     // ------------------------------------------------------------------
     // Diagnostic Log Viewer Handlers.
     // ------------------------------------------------------------------

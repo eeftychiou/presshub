@@ -63,12 +63,16 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_text_preset',
             'presshub_ai_briefing_podcast_preset',
             'presshub_ai_briefing_target_duration',
+            'presshub_ai_briefing_host_count',
             'presshub_ai_briefing_host_female',
             'presshub_ai_briefing_host_male',
+            'presshub_ai_briefing_host_tertiary',
             'presshub_ai_briefing_voice_female',
             'presshub_ai_briefing_voice_male',
+            'presshub_ai_briefing_voice_tertiary',
             'presshub_ai_briefing_voice_speed',
             'presshub_ai_briefing_voice_pitch',
+            'presshub_ai_briefing_audio_split_by_topic',
             'presshub_ai_briefing_tts_style',
             'presshub_ai_briefing_tts_custom_style',
             'presshub_ai_briefing_text_category',
@@ -279,6 +283,41 @@ class DailyBriefingSettingsTest
         }
         if ( PressHub_AI_Settings_Storage::get_briefing_tts_timeout() !== 300 ) {
             $failures[] = 'default get_briefing_tts_timeout should return 300s when option empty.';
+        }
+
+        // --- Case 7d: Issue #71: Host count, tertiary host persona, and topic split settings ---
+        self::reset_options();
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_host_count', 2 ) !== 2 ) {
+            $failures[] = 'host count 2 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_host_count', 0 ) !== 1 ) {
+            $failures[] = 'host count 0 should clamp to 1; got: ' . self::sanitize( $cbs, 'presshub_ai_briefing_host_count', 0 );
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_host_count', 5 ) !== 3 ) {
+            $failures[] = 'host count 5 should clamp to 3; got: ' . self::sanitize( $cbs, 'presshub_ai_briefing_host_count', 5 );
+        }
+        if ( PressHub_AI_Settings_Storage::get_briefing_host_count() !== 2 ) {
+            $failures[] = 'default get_briefing_host_count should return 2.';
+        }
+
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_host_tertiary', '  Κώστας  ' ) !== 'Κώστας' ) {
+            $failures[] = 'host_tertiary should be trimmed.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_tertiary', 'Puck' ) !== 'Puck' ) {
+            $failures[] = 'valid tertiary voice Puck should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_voice_tertiary', 'InvalidVoice' ) !== 'Puck' ) {
+            $failures[] = 'invalid tertiary voice should fall back to default Puck.';
+        }
+
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_audio_split_by_topic', 1 ) !== 1 ) {
+            $failures[] = 'audio_split_by_topic 1 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_audio_split_by_topic', 0 ) !== 0 ) {
+            $failures[] = 'audio_split_by_topic 0 should pass through.';
+        }
+        if ( PressHub_AI_Settings_Storage::get_briefing_audio_split_by_topic() !== true ) {
+            $failures[] = 'default get_briefing_audio_split_by_topic should return true (1).';
         }
 
         // --- Case 8: Sanitization of post status & category ---

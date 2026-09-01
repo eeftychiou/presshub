@@ -514,6 +514,105 @@ as_check( 'issue_69: fallback podcast synthesis succeeds', is_array( $pod_fallba
 as_check( 'issue_69: fallback audio is valid WAV', isset( $pod_fallback['audio_data'] ) && 0 === strpos( $pod_fallback['audio_data'], 'RIFF' ) );
 
 
+// =========================================================================
+// 10. Issue #71: Topic-Based Synthesis and 1/2/3 Host Voice Mapping
+// =========================================================================
+
+// Test 10a: Tertiary host voice resolution
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_tertiary'] = 'Κώστας';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_tertiary'] = 'Puck';
+as_check( 'issue_71: get_voice_for_speaker resolves tertiary host name to Puck', $synthesizer->get_voice_for_speaker( 'Κώστας' ) === 'Puck' );
+as_check( 'issue_71: get_voice_for_speaker resolves host3 alias to Puck', $synthesizer->get_voice_for_speaker( 'host3' ) === 'Puck' );
+as_check( 'issue_71: get_voice_for_speaker resolves tertiary alias to Puck', $synthesizer->get_voice_for_speaker( 'tertiary' ) === 'Puck' );
+
+// Test 10b: Topic-based podcast synthesis with markers
+$topic_test_script = <<<SCRIPT
+[TOPIC_START: Εισαγωγή]
+[Μαρία]: Καλωσήρθατε στην Πρωινή Ενημέρωση.
+[Νίκος]: Καλημέρα Μαρία, ας δούμε τις ειδήσεις.
+[TOPIC_END]
+
+[TOPIC_START: Οικονομία]
+[Μαρία]: Στην οικονομία έχουμε θετικές εξελίξεις.
+[Νίκος]: Πράγματι, η αγορά σημειώνει σημαντική άνοδο.
+[TOPIC_END]
+SCRIPT;
+
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_female'] = 'Μαρία';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_male']   = 'Νίκος';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_audio_split_by_topic'] = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 2;
+$topic_calls = [];
+$GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$topic_calls ) {
+    list( $url, $args ) = $req;
+    $body = json_decode( $args['body'] ?? '{}', true );
+    $topic_calls[] = [
+        'url'  => $url,
+        'body' => $body,
+    ];
+    $fake_pcm = str_repeat( "\x00\x00", 2400 );
+    return [
+        'response' => [ 'code' => 200, 'message' => 'OK' ],
+        'body'     => json_encode( [
+            'candidates' => [
+                [
+                    'content' => [
+                        'parts' => [
+                            [
+                                'inlineData' => [
+                                    'mimeType' => 'audio/pcm;rate=24000',
+                                    'data'     => base64_encode( $fake_pcm ),
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ] ),
+    ];
+};
+
+$topic_pod_result = $synthesizer->synthesize_podcast( '2026-09-02', $topic_test_script, null );
+as_check( 'issue_71: topic splitting produces 2 separate synthesis calls (1 per topic)', count( $topic_calls ) === 2 );
+as_check( 'issue_71: topic podcast synthesis succeeds', is_array( $topic_pod_result ) && ( $topic_pod_result['success'] ?? false ) );
+as_check( 'issue_71: topic stitched audio is valid WAV', isset( $topic_pod_result['audio_data'] ) && 0 === strpos( $topic_pod_result['audio_data'], 'RIFF' ) );
+
+// Test 10c: 1-Host podcast synthesis
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_audio_split_by_topic'] = 0;
+$solo_calls = [];
+$GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$solo_calls ) {
+    list( $url, $args ) = $req;
+    $body = json_decode( $args['body'] ?? '{}', true );
+    $solo_calls[] = $body;
+    $fake_pcm = str_repeat( "\x00\x00", 1200 );
+    return [
+        'response' => [ 'code' => 200, 'message' => 'OK' ],
+        'body'     => json_encode( [
+            'candidates' => [
+                [
+                    'content' => [
+                        'parts' => [
+                            [
+                                'inlineData' => [
+                                    'mimeType' => 'audio/pcm;rate=24000',
+                                    'data'     => base64_encode( $fake_pcm ),
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ] ),
+    ];
+};
+$solo_script = "[Μαρία]: Μονόλογος πρώτος.\n[Μαρία]: Μονόλογος δεύτερος.";
+$solo_res = $synthesizer->synthesize_podcast( '2026-09-02', $solo_script, null );
+as_check( 'issue_71: 1 host synthesis uses single voiceConfig without multiSpeakerVoiceConfig', isset( $solo_calls[0]['generationConfig']['speechConfig']['voiceConfig'] ) && ! isset( $solo_calls[0]['generationConfig']['speechConfig']['multiSpeakerVoiceConfig'] ) );
+as_check( 'issue_71: solo podcast synthesis succeeds', is_array( $solo_res ) && ( $solo_res['success'] ?? false ) );
+
+
+
 if ( is_dir( $test_upload_dir ) ) {
     $files = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator( $test_upload_dir, RecursiveDirectoryIterator::SKIP_DOTS ),
@@ -530,4 +629,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "AudioSynthesizerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "AudioSynthesizerTest: OK (67 checks)\n";
+echo "AudioSynthesizerTest: OK (75 checks)\n";

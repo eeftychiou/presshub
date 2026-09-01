@@ -288,15 +288,28 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_host_female"><?php echo __( 'Female Host Name', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_host_count"><?php echo __( 'Podcast Presenters Count', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_host_count_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_host_female"><?php echo __( 'Lead Presenter Name', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_host_female_field(); ?>
                                 </td>
                             </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_host_male"><?php echo __( 'Male Host Name', 'presshub-ai-editor' ); ?></label></th>
+                            <?php $cur_host_count = PressHub_AI_Settings_Storage::get_briefing_host_count(); ?>
+                            <tr id="presshub-host-male-row" style="<?php echo ( $cur_host_count >= 2 ) ? '' : 'display: none;'; ?>">
+                                <th scope="row"><label for="presshub_ai_briefing_host_male"><?php echo __( 'Secondary Co-Host Name', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_host_male_field(); ?>
+                                </td>
+                            </tr>
+                            <tr id="presshub-host-tertiary-row" style="<?php echo ( $cur_host_count >= 3 ) ? '' : 'display: none;'; ?>">
+                                <th scope="row"><label for="presshub_ai_briefing_host_tertiary"><?php echo __( 'Third Host Name', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_host_tertiary_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -307,6 +320,12 @@ class PressHub_AI_Settings_Render {
                                         <?php echo self::get_speech_providers_options( $cur_tts_prov, __( '-- Use Active Gemini Provider --', 'presshub-ai-editor' ) ); ?>
                                     </select>
                                     <p class="description"><?php echo __( 'Select which AI provider powers neural speech generation (Google Gemini / AI Studio configured in the AI Providers tab).', 'presshub-ai-editor' ); ?></p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_split_by_topic"><?php echo __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_split_by_topic_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -328,15 +347,21 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo __( 'Lead Host Voice Persona (Female)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo __( 'Lead Host Voice Persona', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_female_field(); ?>
                                 </td>
                             </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_voice_male"><?php echo __( 'Secondary Host Voice Persona (Male)', 'presshub-ai-editor' ); ?></label></th>
+                            <tr id="presshub-voice-male-row" style="<?php echo ( $cur_host_count >= 2 ) ? '' : 'display: none;'; ?>">
+                                <th scope="row"><label for="presshub_ai_briefing_voice_male"><?php echo __( 'Secondary Host Voice Persona', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_male_field(); ?>
+                                </td>
+                            </tr>
+                            <tr id="presshub-voice-tertiary-row" style="<?php echo ( $cur_host_count >= 3 ) ? '' : 'display: none;'; ?>">
+                                <th scope="row"><label for="presshub_ai_briefing_voice_tertiary"><?php echo __( 'Third Host Voice Persona', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_voice_tertiary_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1856,6 +1881,27 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    public function render_briefing_host_count_field() {
+        $option = 'presshub_ai_briefing_host_count';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_host_count();
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <option value="1" <?php echo 1 === $value ? 'selected="selected"' : ''; ?>>
+                <?php echo esc_html__( '1 Presenter (Solo Anchor / Monologue)', 'presshub-ai-editor' ); ?>
+            </option>
+            <option value="2" <?php echo 2 === $value ? 'selected="selected"' : ''; ?>>
+                <?php echo esc_html__( '2 Presenters (Co-Hosts Duo - Default)', 'presshub-ai-editor' ); ?>
+            </option>
+            <option value="3" <?php echo 3 === $value ? 'selected="selected"' : ''; ?>>
+                <?php echo esc_html__( '3 Presenters (Roundtable Panel)', 'presshub-ai-editor' ); ?>
+            </option>
+        </select>
+        <p class="description">
+            <?php echo esc_html__( 'Select the number of presenters for podcast dialogue synthesis.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
     public function render_briefing_host_female_field() {
         $option = 'presshub_ai_briefing_host_female';
         $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_host_female() );
@@ -1871,6 +1917,29 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
         <p class="description"><?php echo __( 'Name of the co-host / male commentator (e.g. Νίκος). Default Νίκος.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_host_tertiary_field() {
+        $option = 'presshub_ai_briefing_host_tertiary';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_host_tertiary();
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Name of the third presenter/commentator (e.g. Κώστας). Default Κώστας.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_audio_split_by_topic_field() {
+        $option = 'presshub_ai_briefing_audio_split_by_topic';
+        $checked = PressHub_AI_Settings_Storage::get_briefing_audio_split_by_topic();
+        ?>
+        <label>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
+            <?php echo esc_html__( 'Generate audio separately for each topic and stitch seamlessly (Recommended)', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description">
+            <?php echo esc_html__( 'Splits the podcast script by topic markers ([TOPIC_START] ... [TOPIC_END]), synthesizes each section with fresh neural context, and stitches them with natural transitions. Prevents voice drift and host persona convergence on longer podcasts.', 'presshub-ai-editor' ); ?>
+        </p>
         <?php
     }
 
@@ -1905,6 +1974,24 @@ class PressHub_AI_Settings_Render {
             <?php endforeach; ?>
         </select>
         <p class="description"><?php echo __( 'Voice model used for the co-host / commentator (Νίκος). Default: Fenrir / Φένριρ.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_voice_tertiary_field() {
+        $option   = 'presshub_ai_briefing_voice_tertiary';
+        $selected = PressHub_AI_Settings_Storage::get_voice_tertiary();
+        $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
+        $gemini_voices = $synthesizer ? $synthesizer->get_available_voices( 'gemini' ) : [];
+        $all_voices = array_merge( $gemini_voices['male'] ?? [], $gemini_voices['female'] ?? [] );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php foreach ( $all_voices as $key => $v ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'Voice persona for the third presenter. Default: Puck.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

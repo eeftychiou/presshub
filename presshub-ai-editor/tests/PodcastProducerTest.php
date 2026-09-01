@@ -373,6 +373,80 @@ pp_check( 'harvested_articles: filtering includes only selected article in user_
 pp_check( 'harvested_articles: system_prompt has no duplicate raw article context', false === strpos( $filtered_pod_prompt['system_prompt'], 'Κείμενο 2' ) );
 
 
+// =========================================================================
+// 10. Issue #71: Topic Markers, parse_script_topics(), and 1/2/3 Host Prompts
+// =========================================================================
+
+// Test 10a: Explicit Topic Markers parsing
+$topic_script = <<<SCRIPT
+[TOPIC_START: Εισαγωγή & Τίτλοι Ειδήσεων]
+[Μαρία]: Καλωσήρθατε στην Πρωινή Ενημέρωση του PressHub.
+[Νίκος]: Καλημέρα Μαρία, ας δούμε τα πρωτοσέλιδα.
+[TOPIC_END]
+
+[TOPIC_START: Οικονομία & Αγορές]
+[Μαρία]: Στην οικονομία έχουμε θετικά νέα για τον πληθωρισμό.
+[Νίκος]: Πράγματι, η αποκλιμάκωση συνεχίζεται με ταχείς ρυθμούς.
+[TOPIC_END]
+
+[TOPIC_START: Διεθνή Γεγονότα]
+[Μαρία]: Στα διεθνή, εξελίξεις έχουμε στην Ευρωπαϊκή Ένωση.
+[Νίκος]: Σημαντικές αποφάσεις αναμένονται στη σύνοδο κορυφής.
+[TOPIC_END]
+SCRIPT;
+
+$topics = $producer->parse_script_topics( $topic_script, 'Μαρία', 'Νίκος' );
+pp_check( 'issue_71: parse_script_topics returns 3 topic blocks', count( $topics ) === 3 );
+pp_check( 'issue_71: topic 1 title is Εισαγωγή & Τίτλοι Ειδήσεων', ( $topics[0]['title'] ?? '' ) === 'Εισαγωγή & Τίτλοι Ειδήσεων' );
+pp_check( 'issue_71: topic 1 has 2 turns', count( $topics[0]['turns'] ?? [] ) === 2 );
+pp_check( 'issue_71: topic 2 title is Οικονομία & Αγορές', ( $topics[1]['title'] ?? '' ) === 'Οικονομία & Αγορές' );
+pp_check( 'issue_71: topic 3 title is Διεθνή Γεγονότα', ( $topics[2]['title'] ?? '' ) === 'Διεθνή Γεγονότα' );
+pp_check( 'issue_71: topic 1 script contains only topic 1 dialogue', false !== strpos( $topics[0]['script'], 'Καλωσήρθατε' ) && false === strpos( $topics[0]['script'], 'πληθωρισμό' ) );
+
+// Test 10b: Fallback chunking when script lacks explicit topic markers
+$unmarked_script = <<<SCRIPT
+[Μαρία]: Ατάκα 1.
+[Νίκος]: Ατάκα 2.
+[Μαρία]: Ατάκα 3.
+[Νίκος]: Ατάκα 4.
+[Μαρία]: Ατάκα 5.
+[Νίκος]: Ατάκα 6.
+[Μαρία]: Ατάκα 7.
+[Νίκος]: Ατάκα 8.
+[Μαρία]: Ατάκα 9.
+[Νίκος]: Ατάκα 10.
+SCRIPT;
+
+$fallback_topics = $producer->parse_script_topics( $unmarked_script, 'Μαρία', 'Νίκος' );
+pp_check( 'issue_71: fallback chunking splits 10 turns into multiple chunks', count( $fallback_topics ) >= 2 );
+pp_check( 'issue_71: each fallback chunk contains turns', ! empty( $fallback_topics[0]['turns'] ) );
+
+// Test 10c: 3-Host turn parsing
+$three_host_script = <<<SCRIPT
+[Μαρία]: Καλωσήρθατε στην εκπομπή.
+[Νίκος]: Καλημέρα Μαρία.
+[Κώστας]: Καλημέρα σε όλους, έχουμε ενδιαφέρουσα ανάλυση σήμερα.
+SCRIPT;
+
+$three_turns = $producer->parse_script_turns( $three_host_script, 'Μαρία', 'Νίκος', 'Κώστας' );
+pp_check( 'issue_71: parse_script_turns supports 3 speakers', count( $three_turns ) === 3 );
+pp_check( 'issue_71: speaker 1 is female Μαρία', ( $three_turns[0]['speaker'] ?? '' ) === 'female' );
+pp_check( 'issue_71: speaker 2 is male Νίκος', ( $three_turns[1]['speaker'] ?? '' ) === 'male' );
+pp_check( 'issue_71: speaker 3 is tertiary Κώστας', ( $three_turns[2]['speaker'] ?? '' ) === 'tertiary' && ( $three_turns[2]['speaker_name'] ?? '' ) === 'Κώστας' );
+
+// Test 10d: Host count prompt generation
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 1;
+$solo_prompt = $producer->build_dialogue_prompt( [], '', '3_min', '2026-09-01' );
+pp_check( 'issue_71: 1 host prompt focuses on solo presenter', false !== strpos( $solo_prompt['system_prompt'], 'έναν κεντρικό παρουσιαστή' ) || false !== strpos( $solo_prompt['system_prompt'], 'μονόλογο' ) || false !== strpos( $solo_prompt['system_prompt'], 'έναν παρουσιαστή' ) );
+
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 3;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_tertiary'] = 'Κώστας';
+$panel_prompt = $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-01' );
+pp_check( 'issue_71: 3 host prompt mentions 3 presenters including tertiary host', false !== strpos( $panel_prompt['system_prompt'], 'Κώστας' ) && false !== strpos( $panel_prompt['system_prompt'], 'τρεις' ) );
+pp_check( 'issue_71: system prompt instructs topic markers', false !== strpos( $panel_prompt['system_prompt'], 'TOPIC_START' ) );
+
+
+
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
     $files = new RecursiveIteratorIterator(
@@ -390,4 +464,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PodcastProducerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PodcastProducerTest: OK (57 checks)\n";
+echo "PodcastProducerTest: OK (71 checks)\n";
