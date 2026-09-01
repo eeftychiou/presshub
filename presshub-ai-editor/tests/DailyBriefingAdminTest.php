@@ -214,6 +214,110 @@ class DailyBriefingAdminTest
         }
 
         // =========================================================================
+        // Case 3b: Issue #57 — Aggregate word/token totals must be PHP-computed
+        //          on initial render (first paint, even with JS disabled).
+        // =========================================================================
+        // Regression for issue #57: previously the milestone card and inspector
+        // toolbar displayed hard-coded "Total: 0 words" / "~0 tokens" placeholders
+        // because the JS recompute (updateSelectedCountBadge) was never invoked
+        // during $(document).ready boot. The fix adds:
+        //   (a) a server-side fallback that computes totals from $status['articles']
+        //   (b) a JS boot call to updateSelectedCountBadge().
+        self::reset_world();
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+
+        $agg_test_date    = '2026-08-27';
+        $agg_known_content = 'Ελληνική είδηση με πολλές λέπτομέρειες για να μετρηθεί σωστά το μήκος του κειμένου και να ελεγχθεί ο υπολογισμός λέξεων.';
+
+        ( new PressHub_AI_News_Harvester() )->save_snapshot( $agg_test_date, [
+            'date'     => $agg_test_date,
+            'articles' => [
+                [
+                    'url'          => 'https://www.example.gr/aggregate-test',
+                    'title'        => 'Test Aggregate Article',
+                    'content'      => $agg_known_content,
+                    'source'       => 'example.gr',
+                    'is_manual'    => false,
+                    'harvested_at' => '2026-08-27T06:30:00Z',
+                ],
+            ],
+        ] );
+
+        $agg_admin = new PressHub_AI_Briefing_Admin();
+        ob_start();
+        $agg_admin->render_hub_page( $agg_test_date );
+        $agg_html = ob_get_clean();
+
+        $expected_words  = PressHub_AI_Context_Estimator::utf8_word_count( $agg_known_content );
+        $expected_tokens = PressHub_AI_Context_Estimator::estimate_tokens( $agg_known_content );
+
+        $expected_words_text  = 'Total: ' . number_format_i18n( $expected_words ) . ' words';
+        $expected_tokens_text = '~' . number_format_i18n( $expected_tokens ) . ' tokens';
+
+        // Milestone card span
+        if ( false === strpos( $agg_html, 'id="presshub-selected-words-total"' ) ) {
+            $failures[] = 'Expected milestone card span #presshub-selected-words-total is missing.';
+        } elseif ( ! self::span_contains_text( $agg_html, 'presshub-selected-words-total', $expected_words_text ) ) {
+            $failures[] = sprintf(
+                'Milestone card #presshub-selected-words-total must be PHP-computed (first paint, no JS). Expected "%s", got surrounding: %s',
+                $expected_words_text,
+                self::surrounding( $agg_html, 'presshub-selected-words-total', 60 )
+            );
+        }
+        if ( false === strpos( $agg_html, 'id="presshub-selected-tokens-total"' ) ) {
+            $failures[] = 'Expected milestone card span #presshub-selected-tokens-total is missing.';
+        } elseif ( ! self::span_contains_text( $agg_html, 'presshub-selected-tokens-total', $expected_tokens_text ) ) {
+            $failures[] = sprintf(
+                'Milestone card #presshub-selected-tokens-total must be PHP-computed (first paint, no JS). Expected "%s", got surrounding: %s',
+                $expected_tokens_text,
+                self::surrounding( $agg_html, 'presshub-selected-tokens-total', 60 )
+            );
+        }
+
+        // Inspector toolbar span
+        if ( false === strpos( $agg_html, 'id="presshub-inspector-words-total"' ) ) {
+            $failures[] = 'Expected inspector toolbar span #presshub-inspector-words-total is missing.';
+        } elseif ( ! self::span_contains_text( $agg_html, 'presshub-inspector-words-total', $expected_words_text ) ) {
+            $failures[] = sprintf(
+                'Inspector toolbar #presshub-inspector-words-total must be PHP-computed (first paint, no JS). Expected "%s", got surrounding: %s',
+                $expected_words_text,
+                self::surrounding( $agg_html, 'presshub-inspector-words-total', 60 )
+            );
+        }
+        if ( false === strpos( $agg_html, 'id="presshub-inspector-tokens-total"' ) ) {
+            $failures[] = 'Expected inspector toolbar span #presshub-inspector-tokens-total is missing.';
+        } elseif ( ! self::span_contains_text( $agg_html, 'presshub-inspector-tokens-total', $expected_tokens_text ) ) {
+            $failures[] = sprintf(
+                'Inspector toolbar #presshub-inspector-tokens-total must be PHP-computed (first paint, no JS). Expected "%s", got surrounding: %s',
+                $expected_tokens_text,
+                self::surrounding( $agg_html, 'presshub-inspector-tokens-total', 60 )
+            );
+        }
+
+        // Must not contain the placeholder strings when there is real content.
+        if ( false !== strpos( $agg_html, 'Total: 0 words' ) ) {
+            $failures[] = "Aggregate spans must not fall back to literal 'Total: 0 words' when articles have content.";
+        }
+        if ( false !== strpos( $agg_html, '~0 tokens' ) ) {
+            $failures[] = "Aggregate spans must not fall back to literal '~0 tokens' when articles have content.";
+        }
+
+        // JS boot call: ensure briefing-admin.js contains a top-level invocation
+        // of updateSelectedCountBadge so the live path also fills the spans
+        // (the defensive PHP fallback alone would not refresh the live state
+        // after an incremental AJAX refresh with new totals).
+        $js_path  = __DIR__ . '/../assets/briefing-admin.js';
+        $js_boot_marker   = "if (typeof updateSelectedCountBadge === 'function') {";
+        if ( ! is_file( $js_path ) ) {
+            $failures[] = "briefing-admin.js missing at {$js_path}.";
+        } else {
+            $js_contents = file_get_contents( $js_path );
+            if ( false === strpos( $js_contents, $js_boot_marker ) ) {
+                $failures[] = "briefing-admin.js must invoke updateSelectedCountBadge() at boot so first paint recomputes aggregate totals (#57).";
+            }
+        }
+
+        // =========================================================================
         // Case 4: get_briefing_status( $date ) Method
         // =========================================================================
         self::reset_world();
@@ -733,6 +837,39 @@ class DailyBriefingAdminTest
         }
 
         echo "DailyBriefingAdminTest: OK (80+ checks)\n";
+    }
+
+    /**
+     * Returns true if the text appears between <span id="X"> ... </span> on
+     * the same span node (allowing arbitrary leading/trailing whitespace
+     * produced by the PHP heredoc template indentation).
+     */
+    private static function span_contains_text( string $haystack, string $span_id, string $text ): bool {
+        $open  = 'id="' . $span_id . '"';
+        $open_pos = strpos( $haystack, $open );
+        if ( false === $open_pos ) {
+            return false;
+        }
+        // Find the closing </span> after the opener.
+        $close_pos = strpos( $haystack, '</span>', $open_pos );
+        if ( false === $close_pos ) {
+            return false;
+        }
+        $inner = substr( $haystack, $open_pos, $close_pos - $open_pos );
+        return false !== strpos( $inner, $text );
+    }
+
+    /**
+     * Extract a substring around a keyword for friendlier failure messages.
+     */
+    private static function surrounding( string $haystack, string $needle, int $radius = 60 ): string {
+        $pos = strpos( $haystack, $needle );
+        if ( false === $pos ) {
+            return '';
+        }
+        $start = max( 0, $pos - $radius );
+        $end   = min( strlen( $haystack ), $pos + strlen( $needle ) + $radius );
+        return '...' . substr( $haystack, $start, $end - $start ) . '...';
     }
 
     private static function execute_ajax( callable $callback ): array {
