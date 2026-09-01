@@ -252,7 +252,7 @@ $harvester->save_snapshot( $test_date_e2e, [
 
 class Mock_Podcast_API_Client extends PressHub_AI_API_Client {
     public function __construct() {}
-    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null ) {
+    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null, array $metadata = [] ) {
         return "[Μαρία]: Καλημέρα σας! Σήμερα ξεκινάμε με μια μεγάλη επένδυση στην τεχνολογία.\n"
             . "[Νίκος]: Πράγματι Μαρία, ανακοινώθηκε το νέο τεχνολογικό πάρκο στην Αθήνα.\n"
             . "[Μαρία]: Μια επένδυση ύψους 50 εκατομμυρίων ευρώ.\n"
@@ -280,7 +280,7 @@ pp_check( 'e2e: returns WP_Error when snapshot missing', is_wp_error( $err_no_sn
 // Test 7c: Error handling when AI response is unparseable
 class Mock_Bad_Dialogue_API_Client extends PressHub_AI_API_Client {
     public function __construct() {}
-    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null ) {
+    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null, array $metadata = [] ) {
         return "Αυτό είναι ένα απλό κείμενο χωρίς ετικέτες ομιλητών.";
     }
 }

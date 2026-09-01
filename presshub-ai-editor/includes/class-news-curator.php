@@ -568,7 +568,53 @@ class PressHub_AI_News_Curator {
             $api_client->set_action( 'briefing_curation' );
         }
 
-        $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [] );
+        // Issue #61 — surface pool-vs-LLM observability. Compute the
+        // un-capped pool totals over the same article set the curator will
+        // use downstream so the token-log metadata can show
+        // "Of N pool tokens, M were sent to the LLM (cap: X × Y)".
+        // The capped totals were already recorded by build_prompt() →
+        // format_articles_context() above (last_capped_chars() /
+        // last_capped_tokens_estimate()).
+        $pool_chars           = 0;
+        $pool_tokens_estimate = 0;
+        if ( class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+            foreach ( $articles as $_art ) {
+                $_content = (string) ( $_art['content'] ?? '' );
+                if ( '' === $_content ) {
+                    continue;
+                }
+                if ( function_exists( 'mb_strlen' ) ) {
+                    $pool_chars += (int) mb_strlen( $_content );
+                } else {
+                    $pool_chars += (int) strlen( $_content );
+                }
+                $pool_tokens_estimate += (int) PressHub_AI_Context_Estimator::estimate_tokens( $_content );
+            }
+        }
+
+        $cap_articles          = (int) apply_filters( 'presshub_ai_curation_max_articles', 40 );
+        $cap_chars_per_article = (int) apply_filters( 'presshub_ai_curation_max_chars_per_article', 800 );
+        if ( $cap_articles < 1 ) {
+            $cap_articles = 1;
+        }
+        if ( $cap_chars_per_article < 100 ) {
+            $cap_chars_per_article = 100;
+        }
+
+        // Issue #61 — write the pool-vs-LLM comparison into the
+        // wp_presshub_ai_token_logs.metadata JSON column of the SAME
+        // briefing_curation row that call_provider() logs on success, so
+        // the structured token log is the single source of truth.
+        $curation_metadata = [
+            'pool_chars'             => (int) $pool_chars,
+            'pool_tokens_estimate'   => (int) $pool_tokens_estimate,
+            'capped_chars'           => (int) $this->last_capped_chars(),
+            'capped_tokens_estimate' => (int) $this->last_capped_tokens_estimate(),
+            'cap_articles'           => (int) $cap_articles,
+            'cap_chars_per_article'  => (int) $cap_chars_per_article,
+        ];
+
+        $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $curation_metadata );
 
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
             presshub_ai_log_prompts(
@@ -637,36 +683,10 @@ class PressHub_AI_News_Curator {
             }
         }
 
-        // Issue #61 — surface pool-vs-LLM observability. Compute the
-        // un-capped pool totals over the *post-selected-article-ids* set so the
-        // Inspector card and the token log metadata can both show
-        // "Of N pool tokens, M were sent to the LLM (cap: X × Y)".
-        $pool_chars           = 0;
-        $pool_tokens_estimate = 0;
-        if ( class_exists( 'PressHub_AI_Context_Estimator' ) ) {
-            foreach ( $articles as $_art ) {
-                $_content = (string) ( $_art['content'] ?? '' );
-                if ( '' === $_content ) {
-                    continue;
-                }
-                if ( function_exists( 'mb_strlen' ) ) {
-                    $pool_chars += (int) mb_strlen( $_content );
-                } else {
-                    $pool_chars += (int) strlen( $_content );
-                }
-                $pool_tokens_estimate += (int) PressHub_AI_Context_Estimator::estimate_tokens( $_content );
-            }
-        }
-
-        $cap_articles           = (int) apply_filters( 'presshub_ai_curation_max_articles', 40 );
-        $cap_chars_per_article  = (int) apply_filters( 'presshub_ai_curation_max_chars_per_article', 800 );
-        if ( $cap_articles < 1 ) {
-            $cap_articles = 1;
-        }
-        if ( $cap_chars_per_article < 100 ) {
-            $cap_chars_per_article = 100;
-        }
-
+        // Issue #61 — the pool/cap totals were computed before the provider
+        // call (see above) so they could ride on the briefing_curation
+        // token-log row; the same values are mirrored in the payload below
+        // so the AJAX handler / Inspector card can render them too.
         return [
             'post_id'                  => $post_id,
             'date'                     => $date,

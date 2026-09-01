@@ -127,13 +127,16 @@ $harvester->save_snapshot( $test_date, [
 ] );
 
 class CCO_Mock_API_Client extends PressHub_AI_API_Client {
+    public $last_metadata = [];
     public function __construct() {}
-    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null ) {
+    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null, array $metadata = [] ) {
+        $this->last_metadata = $metadata;
         return "# Test Briefing\n\nGenerated for cap observability test.";
     }
 }
 
-$result = $curator3->generate_briefing( $test_date, new CCO_Mock_API_Client() );
+$cco_mock = new CCO_Mock_API_Client();
+$result = $curator3->generate_briefing( $test_date, $cco_mock );
 
 cco_check( 'payload: generate_briefing() returns array (not WP_Error)', is_array( $result ) );
 cco_check( 'payload: result has pool_chars', isset( $result['pool_chars'] ) );
@@ -142,6 +145,46 @@ cco_check( 'payload: result has capped_chars', isset( $result['capped_chars'] ) 
 cco_check( 'payload: result has capped_tokens_estimate', isset( $result['capped_tokens_estimate'] ) );
 cco_check( 'payload: result has cap_articles', isset( $result['cap_articles'] ) );
 cco_check( 'payload: result has cap_chars_per_article', isset( $result['cap_chars_per_article'] ) );
+
+// Issue #61 — real-flow wiring: the pool-vs-LLM metadata must be handed to
+// call_provider() (and therefore written onto the briefing_curation
+// token-log row by the API client) — not just echoed in the payload.
+$expected_meta_keys = [ 'cap_articles', 'cap_chars_per_article', 'capped_chars', 'capped_tokens_estimate', 'pool_chars', 'pool_tokens_estimate' ];
+$actual_meta_keys   = array_keys( $cco_mock->last_metadata );
+sort( $expected_meta_keys );
+sort( $actual_meta_keys );
+cco_check(
+    'real-flow: call_provider() received all 6 pool/cap metadata keys',
+    $actual_meta_keys === $expected_meta_keys
+);
+cco_check(
+    'real-flow: metadata[pool_chars] is a positive integer',
+    is_numeric( $cco_mock->last_metadata['pool_chars'] ?? null ) && (int) $cco_mock->last_metadata['pool_chars'] > 0
+);
+cco_check(
+    'real-flow: metadata[pool_tokens_estimate] is a positive integer',
+    is_numeric( $cco_mock->last_metadata['pool_tokens_estimate'] ?? null ) && (int) $cco_mock->last_metadata['pool_tokens_estimate'] > 0
+);
+cco_check(
+    'real-flow: metadata[capped_chars] is a positive integer',
+    is_numeric( $cco_mock->last_metadata['capped_chars'] ?? null ) && (int) $cco_mock->last_metadata['capped_chars'] > 0
+);
+cco_check(
+    'real-flow: metadata[capped_tokens_estimate] is a positive integer',
+    is_numeric( $cco_mock->last_metadata['capped_tokens_estimate'] ?? null ) && (int) $cco_mock->last_metadata['capped_tokens_estimate'] > 0
+);
+cco_check(
+    'real-flow: metadata[cap_articles] >= 1',
+    (int) ( $cco_mock->last_metadata['cap_articles'] ?? 0 ) >= 1
+);
+cco_check(
+    'real-flow: metadata[cap_chars_per_article] >= 100',
+    (int) ( $cco_mock->last_metadata['cap_chars_per_article'] ?? 0 ) >= 100
+);
+cco_check(
+    'real-flow: metadata capped < pool when truncation occurs (Issue #61 invariant)',
+    (int) ( $cco_mock->last_metadata['capped_tokens_estimate'] ?? PHP_INT_MAX ) < (int) ( $cco_mock->last_metadata['pool_tokens_estimate'] ?? 0 )
+);
 
 if ( is_array( $result ) ) {
     cco_check( 'payload: cap_articles defaults to 40', ( $result['cap_articles'] ?? 0 ) === 40 );
@@ -206,9 +249,12 @@ remove_filter( 'presshub_ai_curation_max_articles', $cap_filter );
 // Issue #61 - Test 4b: Token-log metadata shape (S7a).
 // The issue's acceptance criteria explicitly require the new pool/cap
 // observability fields to land in the wp_presshub_ai_token_logs.metadata
-// JSON column. The AJAX handler in this codebase already does the
-// gluing; this test exercises the same entry point directly so the
-// contract is locked down for any future change to the metadata path.
+// JSON column. The wiring lives in generate_briefing() (curator computes
+// the six pool/cap keys and passes them to call_provider(), which writes
+// them onto the briefing_curation success row) — this test locks down the
+// logger contract directly so any future change to the metadata path is
+// caught, while Test 3 above asserts the real-flow wiring via the mock
+// API client's captured $metadata argument.
 // =========================================================================
 
 if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
