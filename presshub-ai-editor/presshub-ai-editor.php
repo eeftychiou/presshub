@@ -216,7 +216,7 @@ add_action( 'init', function() {
 } );
 
 
-add_action( 'enqueue_block_editor_assets', function() {
+add_action('enqueue_block_editor_assets', function() {
     wp_enqueue_script(
         'presshub-ai-sidebar',
         PRESSHUB_AI_URL . 'assets/sidebar.js',
@@ -228,6 +228,17 @@ add_action( 'enqueue_block_editor_assets', function() {
         'ajax_url' => admin_url( 'admin-ajax.php' ),
         'nonce'    => wp_create_nonce( 'presshub_ai_nonce' )
     ] );
+    // Issue #59 part B: the sidebar container width and the resize
+    // handle styles live in assets/admin.css. Enqueue the file in the
+    // block editor context so those rules actually reach the
+    // Gutenberg sidebar (admin.css was previously only loaded on the
+    // classic-metabox and settings pages, never on the post editor).
+    wp_enqueue_style(
+        'presshub-ai-admin-css',
+        PRESSHUB_AI_URL . 'assets/admin.css',
+        [],
+        PRESSHUB_AI_VERSION
+    );
 });
 
 add_action( 'presshub_ai_do_research', 'presshub_ai_execute_research_job' );

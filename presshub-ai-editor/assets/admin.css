@@ -155,13 +155,63 @@ body.presshub-modal-open {
     overflow: hidden;
 }
 
-/* Sidebar (sibling-owned markup; shared file keeps its rules). */
+/* Sidebar (sibling-owned markup; shared file keeps its rules).
+ * Issue #59 part B: bumped the default width to 520px so the
+ * Proposed Revision textarea doesn't wrap aggressively on a 1280px
+ * laptop viewport. A 6px-wide absolutely-positioned drag handle on
+ * the inner (left) edge lets the user resize live; the handle is
+ * keyboard-accessible (Tab + Arrow keys) and persists the chosen
+ * width in localStorage, scoped per post id.
+ */
 .presshub-sidebar-container {
     display: flex;
     flex-direction: column;
     height: calc(100vh - 90px);
+    width: 520px;
+    min-width: 320px;
+    max-width: 960px;
     background: #fbfbfb;
     border-left: 1px solid #e0e0e0;
+    position: relative;
+    transition: width 80ms ease-out;
+    box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .presshub-sidebar-container {
+        transition: none;
+    }
+}
+
+/* On WordPress's mobile breakpoint the sidebar collapses below the
+ * editor as a full-width panel — width rules don't apply.
+ */
+@media (max-width: 781px) {
+    .presshub-sidebar-container {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+}
+
+/* Drag handle on the inner (left) edge of the sidebar.
+ * The JS in assets/sidebar.js attaches mousedown / mousemove / mouseup
+ * listeners to this element to resize the container live.
+ */
+.presshub-sidebar-resize-handle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+    cursor: ew-resize;
+    background: transparent;
+    z-index: 10;
+}
+.presshub-sidebar-resize-handle:hover,
+.presshub-sidebar-resize-handle:focus {
+    background: rgba(34, 113, 177, 0.35);
+    outline: none;
 }
 
 .presshub-chat-messages {
