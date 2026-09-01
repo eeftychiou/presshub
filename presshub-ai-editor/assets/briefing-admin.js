@@ -69,12 +69,84 @@
             return selected;
         }
 
+        function jsStripHtml(html) {
+            if (!html) return '';
+            // Use a detached DOM node to strip tags safely (avoids regex pitfalls).
+            var div = document.createElement('div');
+            div.innerHTML = String(html);
+            return (div.textContent || div.innerText || '').trim();
+        }
+
+        // Mirror of PressHub_AI_Context_Estimator::utf8_word_count().
+        // - Strip HTML tags first
+        // - Whitespace-split tokens
+        // - For CJK-heavy tokens, count each codepoint as a word
+        function jsWordCount(text) {
+            var plain = jsStripHtml(text);
+            if (!plain) return 0;
+            var rawTokens = plain.split(/\s+/).filter(function(t) { return t.length > 0; });
+            var cjkPattern = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF]/;
+            var count = 0;
+            for (var i = 0; i < rawTokens.length; i++) {
+                var tok = rawTokens[i];
+                if (cjkPattern.test(tok)) {
+                    // Count codepoints (handles surrogate pairs / emoji correctly).
+                    count += Array.from(tok).length;
+                } else {
+                    count += 1;
+                }
+            }
+            return count;
+        }
+
+        // Mirror of PressHub_AI_Context_Estimator::estimate_tokens().
+        // Heuristic: max(1, intdiv(codepoint_length, 3)).
+        function jsEstimateTokens(text) {
+            var plain = jsStripHtml(text);
+            if (!plain) return 0;
+            var codepoints = Array.from(plain).length;
+            if (codepoints === 0) return 0;
+            return Math.max(1, Math.floor(codepoints / 3));
+        }
+
+        function formatCount(n) {
+            // Thousands separator matching PHP's number_format() output for editor consistency.
+            return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        }
+
+        function computeAggregateTotals() {
+            var totalWords = 0;
+            var totalTokens = 0;
+            $('.presshub-article-checkbox:checked').each(function() {
+                var $card = $(this).closest('.presshub-inspector-card');
+                var w = parseInt($card.attr('data-words'), 10);
+                var t = parseInt($card.attr('data-tokens'), 10);
+                if (!isNaN(w) && w > 0) totalWords += w;
+                if (!isNaN(t) && t > 0) totalTokens += t;
+            });
+            return { words: totalWords, tokens: totalTokens };
+        }
+
+        function writeAggregateTotals(totals) {
+            var wordsLabel = 'Total: ' + formatCount(totals.words) + ' words';
+            var tokensLabel = '~' + formatCount(totals.tokens) + ' tokens';
+            $('#presshub-selected-words-total').text(wordsLabel);
+            $('#presshub-selected-tokens-total').text(tokensLabel);
+            $('#presshub-inspector-words-total').text(wordsLabel);
+            $('#presshub-inspector-tokens-total').text(tokensLabel);
+        }
+
         function updateSelectedCountBadge() {
             var total = $('.presshub-article-checkbox').length;
             var selected = $('.presshub-article-checkbox:checked').length;
             var text = 'Selected: ' + selected + ' / ' + total;
             $('#presshub-selected-articles-count').text(text);
             $('#presshub-inspector-count-badge').text(text);
+
+            // Live aggregate word/token totals reflect all selected articles,
+            // independent of filter visibility (selection drives the briefing,
+            // not what's currently rendered).
+            writeAggregateTotals(computeAggregateTotals());
 
             if (total > 0 && selected === total) {
                 $('#presshub-select-all-checkbox').prop('checked', true).prop('indeterminate', false);
@@ -116,7 +188,8 @@
                         var src = art.source || 'Unknown';
                         var url = art.url || '';
                         var content = art.content || '';
-                        var words = content ? content.trim().split(/\s+/).length : 0;
+                        var words = jsWordCount(content);
+                        var tokens = jsEstimateTokens(content);
                         var chars = content ? content.length : 0;
                         sourcesSet[src] = true;
 
@@ -125,14 +198,15 @@
                         var escUrl = $('<div>').text(url).html();
                         var escContent = $('<div>').text(content).html().replace(/\n/g, '<br>');
 
-                        cardsHtml += '<div class="presshub-inspector-card" data-index="' + idx + '" data-source="' + $('<div>').text(src.toLowerCase()).html() + '" data-title="' + $('<div>').text(title.toLowerCase()).html() + '" data-text="' + $('<div>').text(content.toLowerCase().substring(0, 500)).html() + '">' +
+                        cardsHtml += '<div class="presshub-inspector-card" data-index="' + idx + '" data-source="' + $('<div>').text(src.toLowerCase()).html() + '" data-title="' + $('<div>').text(title.toLowerCase()).html() + '" data-text="' + $('<div>').text(content.toLowerCase().substring(0, 500)).html() + '" data-words="' + words + '" data-tokens="' + tokens + '">' +
                             '<div class="presshub-inspector-card-header">' +
                                 '<div class="inspector-card-check">' +
                                     '<input type="checkbox" class="presshub-article-checkbox" value="' + idx + '" checked="checked" id="inspector-check-' + idx + '" />' +
                                 '</div>' +
                                 '<div class="inspector-card-meta">' +
                                     '<span class="presshub-article-source-pill">' + escSrc + '</span>' +
-                                    '<span class="presshub-article-words-pill">' + words + ' words</span>' +
+                                    '<span class="presshub-article-words-pill">' + formatCount(words) + ' words</span>' +
+                                    '<span class="presshub-article-tokens-pill">~' + formatCount(tokens) + ' tokens</span>' +
                                 '</div>' +
                                 '<div class="inspector-card-title">' +
                                     '<label for="inspector-check-' + idx + '"><strong>' + escTitle + '</strong></label>' +

@@ -164,6 +164,12 @@ class DailyBriefingAdminTest
             'presshub-inspector-toolbar',
             'presshub-inspector-card',
             'presshub-selected-articles-count',
+            'presshub-selected-words-total',
+            'presshub-selected-tokens-total',
+            'presshub-inspector-count-badge',
+            'presshub-inspector-words-total',
+            'presshub-inspector-tokens-total',
+            'presshub-aggregate-totals',
             'btn-inspector-select-all',
             'btn-inspector-deselect-all',
             'presshub-article-checkbox',
@@ -726,7 +732,7 @@ class DailyBriefingAdminTest
             exit( 1 );
         }
 
-        echo "DailyBriefingAdminTest: OK (70+ checks)\n";
+        echo "DailyBriefingAdminTest: OK (80+ checks)\n";
     }
 
     private static function execute_ajax( callable $callback ): array {
