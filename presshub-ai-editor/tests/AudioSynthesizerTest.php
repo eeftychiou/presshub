@@ -278,7 +278,7 @@ $producer->save_script( $test_date_e2e, $script_content );
 class Mock_Audio_API_Client extends PressHub_AI_API_Client {
     public $synthesized_calls = [];
     public function __construct() {}
-    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal' ) {
+    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal', $speaker_configs = null ) {
         $this->synthesized_calls[] = [
             'engine'     => 'gemini',
             'text'       => $text,
@@ -398,7 +398,122 @@ $turn_res_custom = $synthesizer->synthesize_turn( '[Μαρία]: Δοκιμή π
 as_check( 'tts_module: custom briefing_tts_model option is used over general provider model', ! empty( $captured_models ) && 'gemini-2.5-flash-preview-tts' === end( $captured_models ) );
 
 
-// Cleanup test uploads dir
+// =========================================================================
+// 9. Issue #69: Multi-Speaker Persona Mapping & Resilient Fallback
+// =========================================================================
+
+$captured_requests = [];
+$GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$captured_requests ) {
+    list( $url, $args ) = $req;
+    $body = json_decode( $args['body'] ?? '{}', true );
+    $captured_requests[] = [
+        'url'  => $url,
+        'args' => $args,
+        'body' => $body,
+    ];
+    $fake_pcm = str_repeat( "\x12\x34", 1200 );
+    return [
+        'response' => [ 'code' => 200 ],
+        'body'     => json_encode( [
+            'candidates' => [
+                [
+                    'content' => [
+                        'parts' => [
+                            [
+                                'inlineData' => [
+                                    'mimeType' => 'audio/pcm;rate=24000',
+                                    'data'     => base64_encode( $fake_pcm ),
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ] ),
+    ];
+};
+
+// Test 9a: Multi-speaker dialogue sends multiSpeakerVoiceConfig with female & male voices
+$captured_requests = [];
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_female'] = 'Μαρία';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_male']   = 'Νίκος';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'Kore';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male']   = 'Fenrir';
+
+$dialogue_script = "[Μαρία]: Καλημέρα σε όλους!\n[Νίκος]: Καλημέρα Μαρία, ας δούμε τις ειδήσεις.";
+$pod_multi = $synthesizer->synthesize_podcast( '2026-08-27', $dialogue_script, null );
+
+as_check( 'issue_69: synthesize_podcast succeeds with 2 speakers', is_array( $pod_multi ) && ( $pod_multi['success'] ?? false ) );
+as_check( 'issue_69: captured at least one request', ! empty( $captured_requests ) );
+
+$last_req_body = end( $captured_requests )['body'] ?? [];
+$speech_cfg    = $last_req_body['generationConfig']['speechConfig'] ?? [];
+as_check( 'issue_69: multiSpeakerVoiceConfig present in speechConfig', isset( $speech_cfg['multiSpeakerVoiceConfig'] ) );
+
+$speakers = $speech_cfg['multiSpeakerVoiceConfig']['speakerVoiceConfigs'] ?? [];
+as_check( 'issue_69: 2 speakerVoiceConfigs configured', count( $speakers ) === 2 );
+as_check( 'issue_69: speaker 1 is Μαρία with Kore', isset( $speakers[0]['speaker'] ) && 'Μαρία' === $speakers[0]['speaker'] && ( $speakers[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Kore' );
+as_check( 'issue_69: speaker 2 is Νίκος with Fenrir', isset( $speakers[1]['speaker'] ) && 'Νίκος' === $speakers[1]['speaker'] && ( $speakers[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Fenrir' );
+
+// Test 9b: Custom host names & personas dynamically map into multiSpeakerVoiceConfig
+$captured_requests = [];
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_female'] = 'Ελένη';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_male']   = 'Γιώργος';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'Aoede';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male']   = 'Charon';
+
+$custom_script = "[Ελένη]: Καλωσήρθατε στο μαγκαζίνο!\n[Γιώργος]: Καλησπέρα Ελένη.";
+$pod_custom = $synthesizer->synthesize_podcast( '2026-08-27', $custom_script, null );
+
+$last_custom_body = end( $captured_requests )['body'] ?? [];
+$custom_speakers  = $last_custom_body['generationConfig']['speechConfig']['multiSpeakerVoiceConfig']['speakerVoiceConfigs'] ?? [];
+as_check( 'issue_69: custom female speaker Ελένη with Aoede', isset( $custom_speakers[0]['speaker'] ) && 'Ελένη' === $custom_speakers[0]['speaker'] && ( $custom_speakers[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Aoede' );
+as_check( 'issue_69: custom male speaker Γιώργος with Charon', isset( $custom_speakers[1]['speaker'] ) && 'Γιώργος' === $custom_speakers[1]['speaker'] && ( $custom_speakers[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Charon' );
+
+// Test 9c: get_voice_for_speaker recognizes custom host names
+as_check( 'issue_69: get_voice_for_speaker recognises custom female name', $synthesizer->get_voice_for_speaker( 'Ελένη' ) === 'Aoede' );
+as_check( 'issue_69: get_voice_for_speaker recognises custom male name', $synthesizer->get_voice_for_speaker( 'Γιώργος' ) === 'Charon' );
+
+// Test 9d: Resilient fallback to turn-by-turn stitching when single-pass fails
+$fail_count = 0;
+$GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$fail_count ) {
+    list( $url, $args ) = $req;
+    $body = json_decode( $args['body'] ?? '{}', true );
+    // Fail single-pass if multiSpeakerVoiceConfig is requested (simulate timeout/error)
+    if ( isset( $body['generationConfig']['speechConfig']['multiSpeakerVoiceConfig'] ) ) {
+        $fail_count++;
+        return new WP_Error( 'http_request_failed', 'cURL error 28: Operation timed out after 90010 milliseconds with 0 bytes received' );
+    }
+    // Individual turns succeed
+    $fake_pcm = str_repeat( "\x12\x34", 1200 );
+    return [
+        'response' => [ 'code' => 200 ],
+        'body'     => json_encode( [
+            'candidates' => [
+                [
+                    'content' => [
+                        'parts' => [
+                            [
+                                'inlineData' => [
+                                    'mimeType' => 'audio/pcm;rate=24000',
+                                    'data'     => base64_encode( $fake_pcm ),
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ] ),
+    ];
+};
+
+$fallback_script = "[Ελένη]: Πρώτη είδηση.\n[Γιώργος]: Δεύτερη είδηση.";
+$pod_fallback = $synthesizer->synthesize_podcast( '2026-08-27', $fallback_script, null );
+as_check( 'issue_69: single-pass failure triggers fallback to turn-by-turn', $fail_count >= 1 );
+as_check( 'issue_69: fallback podcast synthesis succeeds', is_array( $pod_fallback ) && ( $pod_fallback['success'] ?? false ) );
+as_check( 'issue_69: fallback audio is valid WAV', isset( $pod_fallback['audio_data'] ) && 0 === strpos( $pod_fallback['audio_data'], 'RIFF' ) );
+
+
 if ( is_dir( $test_upload_dir ) ) {
     $files = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator( $test_upload_dir, RecursiveDirectoryIterator::SKIP_DOTS ),
@@ -415,4 +530,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "AudioSynthesizerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "AudioSynthesizerTest: OK (55 checks)\n";
+echo "AudioSynthesizerTest: OK (67 checks)\n";
