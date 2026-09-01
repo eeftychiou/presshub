@@ -916,5 +916,17 @@
             });
         });
 
+    // -------------------------------------------------------------------------
+        // Initial Paint: recompute aggregate totals from server-rendered cards
+        // -------------------------------------------------------------------------
+        // updateSelectedCountBadge() reads the data-words / data-tokens of the
+        // already-rendered cards and writes the live aggregate spans. Without
+        // this boot call the milestone card and inspector toolbar display the
+        // PHP placeholder values (0 words / ~0 tokens) until the first
+        // checkbox toggle or Scrape AJAX completes. Fixes #57.
+        if (typeof updateSelectedCountBadge === 'function') {
+            updateSelectedCountBadge();
+        }
+
     });
 })(jQuery);

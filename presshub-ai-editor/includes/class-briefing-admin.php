@@ -457,6 +457,38 @@ class PressHub_AI_Briefing_Admin {
 
         $status = $this->get_briefing_status( $date );
         $settings_url = admin_url( 'options-general.php?page=presshub-ai' );
+
+        // ---------------------------------------------------------------------
+        // Defensive PHP fallback for aggregate word/token totals (#57).
+        // The milestone card and inspector toolbar pre-render placeholders
+        // ("Total: 0 words" / "~0 tokens") in HTML; the JS recompute hook
+        // (updateSelectedCountBadge on DOMContentLoaded) normally fills them
+        // in. If JS is disabled, blocked, slow, or fails for any reason, we
+        // still want the editor to see real numbers on first paint. Mirror
+        // the JS computation here so server-side rendering matches client.
+        // ---------------------------------------------------------------------
+        $initial_words  = 0;
+        $initial_tokens = 0;
+        if ( ! empty( $status['articles'] ) && is_array( $status['articles'] ) ) {
+            foreach ( $status['articles'] as $_art ) {
+                $art_text = (string) ( $_art['content'] ?? '' );
+                if ( '' === $art_text ) {
+                    continue;
+                }
+                $initial_words  += (int) PressHub_AI_Context_Estimator::utf8_word_count( $art_text );
+                $initial_tokens += (int) PressHub_AI_Context_Estimator::estimate_tokens( $art_text );
+            }
+        }
+        $initial_words_label  = sprintf(
+            /* translators: %s: localized total word count */
+            __( 'Total: %s words', 'presshub-ai-editor' ),
+            number_format_i18n( $initial_words )
+        );
+        $initial_tokens_label = sprintf(
+            /* translators: %s: localized total token estimate */
+            __( '~%s tokens', 'presshub-ai-editor' ),
+            number_format_i18n( $initial_tokens )
+        );
         ?>
         <div class="wrap presshub-briefing-hub-wrap" id="presshub-briefing-hub-wrap" data-date="<?php echo esc_attr( $date ); ?>">
             <header class="presshub-hub-header">
@@ -612,10 +644,10 @@ class PressHub_AI_Briefing_Admin {
                                     ?>
                                 </span>
                                 <span id="presshub-selected-words-total" class="presshub-aggregate-totals presshub-aggregate-words-pill" style="font-size: 11px; display: inline-block;" aria-label="<?php echo esc_attr__( 'Aggregate word count for selected articles', 'presshub-ai-editor' ); ?>">
-                                    <?php echo esc_html__( 'Total: 0 words', 'presshub-ai-editor' ); ?>
+                                    <?php echo esc_html( $initial_words_label ); ?>
                                 </span>
                                 <span id="presshub-selected-tokens-total" class="presshub-aggregate-totals presshub-aggregate-tokens-pill" style="font-size: 11px; display: inline-block;" aria-label="<?php echo esc_attr__( 'Aggregate token estimate for selected articles', 'presshub-ai-editor' ); ?>">
-                                    <?php echo esc_html__( '~0 tokens', 'presshub-ai-editor' ); ?>
+                                    <?php echo esc_html( $initial_tokens_label ); ?>
                                 </span>
                             </p>
                             <a href="#presshub-harvest-inspector-section" class="button button-primary button-small" id="btn-scroll-to-inspector" style="width: 100%; text-align: center; justify-content: center; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;">
@@ -802,10 +834,10 @@ class PressHub_AI_Briefing_Admin {
                             ?>
                         </span>
                         <span id="presshub-inspector-words-total" class="presshub-aggregate-totals presshub-aggregate-words-pill" aria-label="<?php echo esc_attr__( 'Aggregate word count for selected articles', 'presshub-ai-editor' ); ?>">
-                            <?php echo esc_html__( 'Total: 0 words', 'presshub-ai-editor' ); ?>
+                            <?php echo esc_html( $initial_words_label ); ?>
                         </span>
                         <span id="presshub-inspector-tokens-total" class="presshub-aggregate-totals presshub-aggregate-tokens-pill" aria-label="<?php echo esc_attr__( 'Aggregate token estimate for selected articles', 'presshub-ai-editor' ); ?>">
-                            <?php echo esc_html__( '~0 tokens', 'presshub-ai-editor' ); ?>
+                            <?php echo esc_html( $initial_tokens_label ); ?>
                         </span>
                     </div>
                 </div>
