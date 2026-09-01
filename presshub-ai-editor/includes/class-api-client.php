@@ -195,7 +195,7 @@ class PressHub_AI_API_Client {
         $model = '';
         if ( 'tts' === $module || 'podcast_tts' === $module ) {
             $model = (string) get_option( 'presshub_ai_briefing_tts_model', '' );
-            if ( '' === $model && ! empty( $provider_record['default_model'] ) ) {
+            if ( '' === $model && ! empty( $provider_record['default_model'] ) && ( 'gemini' !== $type || false !== strpos( (string) $provider_record['default_model'], 'tts' ) ) ) {
                 $model = $provider_record['default_model'];
             }
             if ( '' === $model ) {
@@ -1203,8 +1203,10 @@ class PressHub_AI_API_Client {
         $prompt_text = $instruction . "\n\"" . $clean_text . "\"";
 
         // 3. Resolve Model cascade
-        $configured_model = ! empty( $this->model ) && 'gemini' === $this->provider ? $this->model : (string) get_option( 'presshub_ai_briefing_tts_model', '' );
-        if ( empty( $configured_model ) && ! empty( $provider_record['default_model'] ) ) {
+        $configured_model = ! empty( $this->model ) && 'gemini' === $this->provider && ( 'tts' === $this->module || false !== strpos( (string) $this->model, 'tts' ) )
+            ? $this->model
+            : (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+        if ( empty( $configured_model ) && ! empty( $provider_record['default_model'] ) && ( 'gemini' !== ( $provider_record['type'] ?? '' ) || false !== strpos( (string) $provider_record['default_model'], 'tts' ) ) ) {
             $configured_model = $provider_record['default_model'];
         }
         if ( empty( $configured_model ) || 'journey' === $configured_model ) {

@@ -377,7 +377,7 @@ class PressHub_AI_Audio_Synthesizer {
      */
     public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null, string $style = 'formal' ) {
         if ( null === $api_client ) {
-            $api_client = new PressHub_AI_API_Client();
+            $api_client = new PressHub_AI_API_Client( 'tts' );
         }
 
         if ( empty( $voice_model ) ) {
@@ -593,7 +593,7 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         if ( null === $api_client ) {
-            $api_client = new PressHub_AI_API_Client();
+            $api_client = new PressHub_AI_API_Client( 'tts' );
         }
 
         // 1. Resolve script
