@@ -338,6 +338,154 @@ $null_content = $curator->get_briefing_content( '1980-01-01' );
 nc_check( 'get_briefing_content: non-existent date returns null', null === $null_content );
 
 
+// =========================================================================
+// 9. Issue #65 — duplicate-title (Bug A) & body-h1 strip
+// =========================================================================
+//
+// The curator's `<h1>` block must not be duplicated into the post title
+// and must not be left in the post body. The title prefix and date
+// format are configured via Settings-First options
+// (presshub_ai_briefing_text_title_prefix and
+// presshub_ai_briefing_text_title_date_format).
+
+// Reset post store between sub-tests so test posts don't bleed.
+$GLOBALS['WP_INSERTED_POSTS'] = [];
+$GLOBALS['POST_META_STORE'] = [];
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_prefix'] );
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_date_format'] );
+
+// Test 9a: Default Settings produce a clean title with the prefix +
+// headline + date suffix, and the body has the leading <h1> stripped.
+$post_id_default = $curator->create_wordpress_post(
+    "<h1>Πρωινή Ενημέρωση – 26/08/2026: Ιστορική Συμφωνία στην Αθήνα</h1>\n<h2>Πολιτική</h2>\n<p>Αναλυτική κάλυψη της συμφωνίας.</p>",
+    '2026-08-26'
+);
+$default_post = end( $GLOBALS['WP_INSERTED_POSTS'] );
+nc_check(
+    'issue65/9a: title contains headline exactly once (no duplicate prefix)',
+    false === strpos( $default_post['post_title'], 'Πρωινή Ενημέρωση: Πρωινή Ενημέρωση' )
+    && false !== strpos( $default_post['post_title'], 'Πρωινή Ενημέρωση' )
+    && false !== strpos( $default_post['post_title'], 'Ιστορική Συμφωνία στην Αθήνα' )
+    && false !== strpos( $default_post['post_title'], '26/08/2026' )
+);
+nc_check(
+    'issue65/9a: body does not start with the duplicate <h1> block',
+    false === strpos( $default_post['post_content'], '<h1>Πρωινή Ενημέρωση' )
+);
+nc_check(
+    'issue65/9a: body starts with the first <h2> or <p> after the strip',
+    ( false !== strpos( $default_post['post_content'], '<h2>Πολιτική</h2>' ) || false !== strpos( $default_post['post_content'], 'Αναλυτική κάλυψη' ) )
+);
+nc_check(
+    'issue65/9a: post meta _presshub_text_title_prefix_applied is recorded',
+    get_post_meta( $post_id_default, '_presshub_text_title_prefix_applied', true ) === 'Πρωινή Ενημέρωση:'
+);
+nc_check(
+    'issue65/9a: post meta _presshub_text_title_date_format_applied is recorded',
+    get_post_meta( $post_id_default, '_presshub_text_title_date_format_applied', true ) === 'd/m/Y'
+);
+
+// Test 9b: Setting an empty prefix disables the prefix in the title.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_prefix'] = '';
+$GLOBALS['WP_INSERTED_POSTS'] = [];
+$post_id_empty_prefix = $curator->create_wordpress_post(
+    "<h1>Σύντομη Είδηση Χωρίς Πρόθεμα</h1>\n<p>Σώμα άρθρου.</p>",
+    '2026-08-26'
+);
+$empty_prefix_post = end( $GLOBALS['WP_INSERTED_POSTS'] );
+nc_check(
+    'issue65/9b: empty prefix yields title without "Πρωινή Ενημέρωση"',
+    false === strpos( $empty_prefix_post['post_title'], 'Πρωινή Ενημέρωση' )
+    && false !== strpos( $empty_prefix_post['post_title'], 'Σύντομη Είδηση' )
+    && false !== strpos( $empty_prefix_post['post_title'], '26/08/2026' )
+);
+
+// Test 9c: Custom prefix "BREAKING:" produces "BREAKING: <hl> - DD/MM/YYYY".
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_prefix'] = 'BREAKING:';
+$GLOBALS['WP_INSERTED_POSTS'] = [];
+$post_id_breaking = $curator->create_wordpress_post(
+    "<h1>Σεισμός 5.8R στην Κρήτη</h1>\n<p>Σώμα.</p>",
+    '2026-08-26'
+);
+$breaking_post = end( $GLOBALS['WP_INSERTED_POSTS'] );
+nc_check(
+    'issue65/9c: custom prefix "BREAKING:" yields "BREAKING: <hl> - DD/MM/YYYY"',
+    false !== strpos( $breaking_post['post_title'], 'BREAKING: Σεισμός 5.8R στην Κρήτη - 26/08/2026' )
+);
+
+// Test 9d: Empty date format omits the date suffix.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_prefix'] = 'Πρωινή Ενημέρωση:';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_date_format'] = '';
+$GLOBALS['WP_INSERTED_POSTS'] = [];
+$post_id_no_date = $curator->create_wordpress_post(
+    "<h1>Είδηση Χωρίς Ημερομηνία</h1>\n<p>Σώμα.</p>",
+    '2026-08-26'
+);
+$no_date_post = end( $GLOBALS['WP_INSERTED_POSTS'] );
+nc_check(
+    'issue65/9d: empty date format omits the date suffix',
+    false === strpos( $no_date_post['post_title'], '26/08/2026' )
+    && false === strpos( $no_date_post['post_title'], '/2026' )
+    && false !== strpos( $no_date_post['post_title'], 'Είδηση Χωρίς Ημερομηνία' )
+);
+
+// Test 9e: Headline without leading <h1> still strips the first <h2> defensively.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_prefix'] = 'Πρωινή Ενημέρωση:';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_date_format'] = 'd/m/Y';
+$GLOBALS['WP_INSERTED_POSTS'] = [];
+$post_id_no_h1 = $curator->create_wordpress_post(
+    "<h2>Κύρια Ενότητα</h2>\n<p>Σώμα.</p>",
+    '2026-08-26',
+    'Κύρια Είδηση Χωρίς H1'
+);
+$no_h1_post = end( $GLOBALS['WP_INSERTED_POSTS'] );
+nc_check(
+    'issue65/9e: leading <h2> stripped defensively when no <h1> present',
+    false === strpos( $no_h1_post['post_content'], '<h2>Κύρια Ενότητα</h2>' )
+    && false !== strpos( $no_h1_post['post_content'], 'Σώμα.' )
+);
+
+// Test 9f: get_briefing_status() exposes the new masthead fields
+// (Issue #65 acceptance: "get_briefing_status() includes the new
+// text_title_prefix_applied, text_title_date_applied flags").
+$admin = new PressHub_AI_Briefing_Admin();
+$status_payload = $admin->get_briefing_status( '2026-08-26' );
+nc_check(
+    'issue65/9f: get_briefing_status includes text_title_prefix_applied',
+    is_array( $status_payload ) && array_key_exists( 'text_title_prefix_applied', $status_payload )
+);
+nc_check(
+    'issue65/9f: get_briefing_status includes text_title_date_format_applied',
+    is_array( $status_payload ) && array_key_exists( 'text_title_date_format_applied', $status_payload )
+);
+nc_check(
+    'issue65/9f: get_briefing_status includes text_title_prefix_current',
+    is_array( $status_payload ) && array_key_exists( 'text_title_prefix_current', $status_payload )
+);
+nc_check(
+    'issue65/9f: get_briefing_status includes text_title_date_format_current',
+    is_array( $status_payload ) && array_key_exists( 'text_title_date_format_current', $status_payload )
+);
+
+// Test 9g: sanitize_briefing_text_title_prefix / sanitize_briefing_text_title_date_format
+// are exported and behave per the documented contract.
+$prefix_helper = PressHub_AI_Settings_Storage::sanitize_briefing_text_title_prefix( 'BREAKING:' );
+nc_check( 'issue65/9g: sanitize_briefing_text_title_prefix echoes valid input', 'BREAKING:' === $prefix_helper );
+$prefix_long = str_repeat( 'x', 100 );
+$prefix_clamped = PressHub_AI_Settings_Storage::sanitize_briefing_text_title_prefix( $prefix_long );
+nc_check( 'issue65/9g: sanitize_briefing_text_title_prefix clamps to 60 chars', strlen( $prefix_clamped ) === 60 );
+
+$df_valid = PressHub_AI_Settings_Storage::sanitize_briefing_text_title_date_format( 'Y-m-d' );
+nc_check( 'issue65/9g: sanitize_briefing_text_title_date_format accepts valid token', 'Y-m-d' === $df_valid );
+$df_invalid = PressHub_AI_Settings_Storage::sanitize_briefing_text_title_date_format( '<?php exit;' );
+nc_check(
+    'issue65/9g: sanitize_briefing_text_title_date_format rejects invalid token',
+    'd/m/Y' === $df_invalid
+);
+$df_empty = PressHub_AI_Settings_Storage::sanitize_briefing_text_title_date_format( '' );
+nc_check( 'issue65/9g: sanitize_briefing_text_title_date_format accepts empty (disables suffix)', '' === $df_empty );
+
+
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
     $files = new RecursiveIteratorIterator(

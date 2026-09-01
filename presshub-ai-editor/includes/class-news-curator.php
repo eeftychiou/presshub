@@ -30,6 +30,24 @@ class PressHub_AI_News_Curator {
     const OPTION_STATUS = 'presshub_ai_briefing_text_status';
 
     /**
+     * Issue #65 — Settings-First: editorial prefix prepended to the
+     * generated Text Story post title (e.g. "Πρωινή Ενημέρωση:"). The
+     * value is read through PressHub_AI_Settings_Storage::get_briefing_text_title_prefix()
+     * which clamps it to a documented safe length. An empty string disables
+     * the prefix so the curator's headline is used verbatim.
+     */
+    const OPTION_TITLE_PREFIX = 'presshub_ai_briefing_text_title_prefix';
+
+    /**
+     * Issue #65 — Settings-First: date() format token appended after the
+     * title prefix and headline (default "d/m/Y"). The value is read through
+     * PressHub_AI_Settings_Storage::get_briefing_text_title_date_format()
+     * which validates it as a documented date() format token. An empty
+     * string disables the date suffix.
+     */
+    const OPTION_TITLE_DATE_FORMAT = 'presshub_ai_briefing_text_title_date_format';
+
+    /**
      * @internal Tracks whether the most recent format_articles_context() call
      * truncated the input set (either by article count or per-article char cap).
      */
@@ -69,11 +87,20 @@ class PressHub_AI_News_Curator {
      * @return string Base system prompt with placeholders.
      */
     public function get_default_curation_prompt(): string {
+        // Issue #65 — Bug A (long-term fix): instruct the LLM to emit ONLY
+        // the editorial headline in the opening `<h1>`, not the full masthead
+        // (e.g. "Πρωινή Ενημέρωση – <date>: …"). The masthead is assembled in
+        // create_wordpress_post() from the operator-configurable
+        // presshub_ai_briefing_text_title_prefix and date-format Settings,
+        // and a duplicate-prefix guard prevents the same prefix from being
+        // applied twice. This means the <h1> in the LLM output now matches
+        // the curator's extracted headline exactly, and the post body
+        // starts cleanly at the first <h2> section.
         return "Είσαι ένας έμπειρος αρχισυντάκτης και δημοσιογράφος ειδήσεων. "
             . "Αποστολή σου είναι να συνθέσεις μία ολοκληρωμένη, αντικειμενική και ευανάγνωστη Πρωινή Ενημέρωση (Daily News Briefing) "
             . "στα Ελληνικά για την ημερομηνία {date}, αξιοποιώντας {articles_count} άρθρα από τις παρακάτω πηγές: {sources_list}.\n\n"
             . "Οδηγίες Σύνταξης:\n"
-            . "1. Ξεκίνα με έναν σαφή και ελκυστικό κύριο τίτλο σε μορφή Markdown (# Τίτλος) που συνοψίζει το κορυφαίο γεγονός της ημέρας.\n"
+            . "1. Ξεκίνα με έναν σαφή και ελκυστικό κύριο τίτλο σε μορφή Markdown (# Τίτλος) που συνοψίζει το κορυφαίο γεγονός της ημέρας — ΜΟΝΟ τον τίτλο, χωρίς πρόθεμα «Πρωινή Ενημέρωση» ή ημερομηνία. Το πρόθεμα και η ημερομηνία θα προστεθούν αυτόματα από το σύστημα στον τίτλο του άρθρου.\n"
             . "2. Χώρισε την ενημέρωση σε ευδιάκριτες θεματικές ενότητες με μεσότιτλους (## Πολιτική & Οικονομία, ## Διεθνή, ## Κοινωνία & Επικαιρότητα).\n"
             . "3. Για κάθε είδηση, ανάδειξε τα βασικά γεγονότα με σαφήνεια και ροή, αναφέροντας την πηγή όπου κρίνεται απαραίτητο, διατηρώντας δημοσιογραφική ουδετερότητα.\n"
             . "4. Μην επινοείς γεγονότα ή λεπτομέρειες που δεν αναφέρονται στο παρεχόμενο υλικό.\n"
@@ -469,7 +496,102 @@ class PressHub_AI_News_Curator {
     }
 
     /**
+     * Issue #65 — Strip the leading `<h1>` / `<h2>` block from a post body
+     * when it duplicates the title. The curator's LLM is instructed to
+     * emit a masthead-style `<h1>` like "Πρωινή Ενημέρωση – <date>: <hl>".
+     * Since the same text now lives in the post title field, the body should
+     * start with the next section heading (typically `<h2>`) or the first
+     * paragraph. This helper removes the first `<h[1-2]>...</h[1-2]>` block
+     * it finds, including any leading whitespace, leaving the rest of the
+     * body untouched.
+     *
+     * Defensive: only matches the FIRST `<h1>` or `<h2>` block; if no such
+     * block exists at the start, the body is returned unchanged.
+     *
+     * @param string $html_content HTML body produced by PressHub_AI_Markdown::to_html().
+     * @return string Body with the leading `<h[1-2]>` block removed.
+     */
+    private function strip_leading_heading_block( string $html_content ): string {
+        // Match a leading h1/h2 block (and any whitespace before/after it).
+        // Patterns: optional leading whitespace + <h[1-2]...>...</h[1-2]> + optional trailing whitespace.
+        $stripped = preg_replace( '/^\s*<h[1-2][^>]*>.*?<\/h[1-2]>\s*/is', '', $html_content, 1 );
+        return ( null !== $stripped ) ? $stripped : $html_content;
+    }
+
+    /**
+     * Issue #65 — Compose the WordPress post title for a Text Story from
+     * the curator's headline, the operator-configurable title prefix, and
+     * the operator-configurable date format. The defensive
+     * prefix-collision check avoids producing a duplicated "Πρωινή
+     * Ενημέρωση: Πρωινή Ενημέρωση: …" title when the LLM's headline already
+     * contains the masthead prefix.
+     *
+     * @param string $headline       Headline extracted from the curator output.
+     * @param string $formatted_date Locale-formatted date string (e.g. "26/08/2026").
+     * @return string Composed post title (no surrounding whitespace).
+     */
+    private function compose_text_story_title( string $headline, string $formatted_date ): string {
+        $headline = trim( $headline );
+
+        $prefix = PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
+        $prefix = trim( (string) $prefix );
+
+        $date_format = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
+        $date_format = trim( (string) $date_format );
+
+        // Defensive: if the headline already contains the masthead prefix
+        // word at the start (e.g. "Πρωινή Ενημέρωση – 26/08/2026: …",
+        // "Πρωινή Ενημέρωση: …", or "Πρωινή Ενημέρωση …"), don't re-prepend
+        // it — just append the date suffix. We compare the *headline word*
+        // (the prefix trimmed of trailing punctuation) so we catch the
+        // collision regardless of which separator the LLM emitted.
+        $prefix_word = trim( $prefix, " \t\n\r\0\x0B:-–—" );
+        $headline_starts_with_prefix = ( '' !== $prefix_word )
+            && ( '' !== $headline )
+            && ( 0 === stripos( $headline, $prefix_word ) )
+            && ( strlen( $headline ) > strlen( $prefix_word ) )
+            && in_array( substr( $headline, strlen( $prefix_word ), 1 ), [ ' ', ':', '-', '–', '—', "\t" ], true );
+
+        // When the prefix already starts with itself (collision detected) we
+        // keep the headline as-is. Otherwise, the prefix is a masthead label
+        // such as "Πρωινή Ενημέρωση:" and must be separated from the headline
+        // by a single space. If the prefix already ends with a separator
+        // (space, colon, dash, en-dash, em-dash) we use it verbatim; otherwise
+        // we append " " so the resulting title reads
+        //     "<prefix> <headline>"
+        // and not "<prefix><headline>".
+        if ( $headline_starts_with_prefix ) {
+            $title = $headline;
+        } elseif ( '' !== $prefix ) {
+            $sep = in_array( substr( $prefix, -1 ), [ ' ', ':', '-', '–', '—' ], true ) ? ' ' : '';
+            $title = $prefix . $sep . $headline;
+        } else {
+            $title = $headline;
+        }
+
+        $title = trim( $title );
+
+        if ( '' !== $date_format && '' !== $formatted_date ) {
+            // Append the date suffix. Use " - " as the separator unless the
+            // title already ends with one of the conventional separators.
+            $sep = in_array( substr( $title, -1 ), [ ' ', '-', '–', '—' ], true ) ? '' : ' - ';
+            $title = $title . $sep . $formatted_date;
+        }
+
+        return trim( $title );
+    }
+
+    /**
      * Create WordPress post for the briefing with proper title, category, status, and meta.
+     *
+     * Issue #65 — duplicate-title & body-h1 fix:
+     *   - Post title is now composed via compose_text_story_title(), which
+     *     reads the title prefix and date format from Settings-First options
+     *     and skips re-prepending the prefix when the headline already
+     *     begins with it.
+     *   - The leading `<h1>` or `<h2>` block is stripped from the body via
+     *     strip_leading_heading_block() so the headline is not duplicated
+     *     between the title field and the post body.
      *
      * @param string $story_content HTML or Markdown content of the story.
      * @param string $date          Briefing date (YYYY-MM-DD).
@@ -487,13 +609,16 @@ class PressHub_AI_News_Curator {
         }
         $headline = trim( $headline );
 
-        // Format date for title: d/m/Y (e.g. 26/08/2026) or fallback to raw date
+        // Format date for title (e.g. 26/08/2026) or fallback to raw date.
         $timestamp = strtotime( $date );
         $formatted_date = ( false !== $timestamp )
             ? ( function_exists( 'date_i18n' ) ? date_i18n( 'd/m/Y', $timestamp ) : date( 'd/m/Y', $timestamp ) )
             : $date;
 
-        $post_title = sprintf( 'Πρωινή Ενημέρωση: %s - %s', $headline, $formatted_date );
+        // Issue #65 — compose title via the Settings-First helper, which
+        // applies the prefix-collision guard and reads the prefix/date
+        // format from operator-configurable Settings (not hard-coded).
+        $post_title = $this->compose_text_story_title( $headline, $formatted_date );
 
         // Read category setting
         $category_id = (int) get_option( self::OPTION_CATEGORY, 0 );
@@ -507,6 +632,10 @@ class PressHub_AI_News_Curator {
 
         // Ensure content is valid HTML
         $html_content = PressHub_AI_Markdown::to_html( $story_content );
+
+        // Issue #65 — strip the leading <h1>/<h2> block so the body does
+        // not duplicate the headline that now lives in the title field.
+        $html_content = $this->strip_leading_heading_block( $html_content );
 
         $postarr = [
             'post_title'   => $post_title,
@@ -538,6 +667,14 @@ class PressHub_AI_News_Curator {
         // Persist meta explicitly in addition to meta_input
         update_post_meta( $post_id, '_presshub_briefing_date', $date );
         update_post_meta( $post_id, '_presshub_briefing_type', 'text' );
+
+        // Issue #65 — stash the prefix/date-format state used to compose
+        // this title so downstream observers (token log, integration
+        // tests) can confirm whether the prefix was applied as configured.
+        $applied_prefix = PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
+        $applied_date_format = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
+        update_post_meta( $post_id, '_presshub_text_title_prefix_applied', (string) $applied_prefix );
+        update_post_meta( $post_id, '_presshub_text_title_date_format_applied', (string) $applied_date_format );
 
         return $post_id;
     }

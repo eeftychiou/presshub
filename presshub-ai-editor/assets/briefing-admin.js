@@ -424,10 +424,26 @@
                 $('#milestone-curation').removeClass('card-pending').addClass('card-complete');
                 $('#status-badge-curation').removeClass('badge-secondary').addClass('badge-success').text('Story Created');
                 $('#btn-run-curation').text('✍️ Re-generate Story');
+
+                // Issue #65 — Bug B: refresh the "WP Status: <code>" subtitle
+                // in place so operators see the post's WP publish state (pending
+                // /draft/publish) without a page reload. The label uses the
+                // localized template from presshubBriefingAdmin.i18n.wp_status_label.
+                var $wpStatus = $('#presshub-text-post-status');
+                if ($wpStatus.length) {
+                    var statusLabel = (window.presshubBriefingAdmin && presshubBriefingAdmin.i18n && presshubBriefingAdmin.i18n.wp_status_label)
+                        ? presshubBriefingAdmin.i18n.wp_status_label
+                        : 'WP Status: %s';
+                    $wpStatus.html(
+                        statusLabel.replace('%s', '<code>' + (status.text_post_status || 'pending') + '</code>')
+                    );
+                }
             } else {
                 $('#milestone-curation').removeClass('card-complete').addClass('card-pending');
                 $('#status-badge-curation').removeClass('badge-success').addClass('badge-secondary').text('Pending Generation');
                 $('#btn-run-curation').text('✍️ Generate Text Story');
+                // Remove the WP status subtitle when there's no post yet.
+                $('#presshub-text-post-status').remove();
             }
 
             // 3. Podcast Script Status
