@@ -1130,13 +1130,18 @@ class PressHub_AI_API_Client {
     /**
      * Synthesize natural Greek speech using Google AI Studio Gemini Flash Audio (logosAI replication).
      *
-     * @param string $text        Spoken dialogue or turn text.
-     * @param string $voice_name  Gemini prebuilt voice name ('Kore', 'Fenrir', 'Puck', 'Charon', 'Zephyr', 'Aoede', etc.).
-     * @param bool   $as_wav      Whether to return complete WAV container (default true) or raw PCM.
-     * @param string $style       Delivery style ('formal', 'natural', 'cheerful', 'storyteller', 'calm', etc.) or custom instruction.
+     * @param string      $text            Spoken dialogue or turn text.
+     * @param string      $voice_name      Gemini prebuilt voice name ('Kore', 'Fenrir', 'Puck', 'Charon', 'Zephyr', 'Aoede', etc.).
+     * @param bool        $as_wav          Whether to return complete WAV container (default true) or raw PCM.
+     * @param string      $style           Delivery style ('formal', 'natural', 'cheerful', 'storyteller', 'calm', etc.) or custom instruction.
+     * @param array|null  $speaker_configs Optional multi-speaker configuration:
+     *                                     [
+     *                                         [ 'speaker' => 'Μαρία', 'voice' => 'Kore' ],
+     *                                         [ 'speaker' => 'Νίκος', 'voice' => 'Fenrir' ],
+     *                                     ]
      * @return string|WP_Error Binary audio data or WP_Error on failure.
      */
-    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal' ) {
+    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal', $speaker_configs = null ) {
         // 1. Resolve Provider and API Key from Provider Store or dedicated option
         $tts_provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
         $provider_record = null;
@@ -1200,7 +1205,32 @@ class PressHub_AI_API_Client {
 
         $instruction = $style_instructions[ $style ] ?? ( ! empty( $style ) && strlen( $style ) > 15 ? $style : $style_instructions['formal'] );
         $clean_text  = trim( $text );
-        $prompt_text = $instruction . "\n\"" . $clean_text . "\"";
+
+        $is_multi_speaker = false;
+        $multi_speakers   = [];
+        if ( ! empty( $speaker_configs ) && is_array( $speaker_configs ) && count( $speaker_configs ) >= 2 ) {
+            foreach ( $speaker_configs as $sc ) {
+                if ( ! empty( $sc['speaker'] ) && ! empty( $sc['voice'] ) ) {
+                    $multi_speakers[] = [
+                        'speaker'     => (string) $sc['speaker'],
+                        'voiceConfig' => [
+                            'prebuiltVoiceConfig' => [
+                                'voiceName' => (string) $sc['voice'],
+                            ],
+                        ],
+                    ];
+                }
+            }
+            if ( count( $multi_speakers ) === 2 ) {
+                $is_multi_speaker = true;
+            }
+        }
+
+        if ( $is_multi_speaker ) {
+            $prompt_text = $instruction . "\n\n" . $clean_text;
+        } else {
+            $prompt_text = $instruction . "\n\"" . $clean_text . "\"";
+        }
 
         // 3. Resolve Model cascade
         $configured_model = ! empty( $this->model ) && 'gemini' === $this->provider && ( 'tts' === $this->module || false !== strpos( (string) $this->model, 'tts' ) )
@@ -1226,11 +1256,40 @@ class PressHub_AI_API_Client {
         $start_time    = microtime( true );
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Initiating TTS: target_model="%s", voice="%s", style="%s", chars=%d', $configured_model, $voice_name, $style, mb_strlen( $clean_text ) ) );
+            if ( $is_multi_speaker ) {
+                $sp_desc = implode( ', ', array_map( function( $s ) {
+                    return $s['speaker'] . '=' . ( $s['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' );
+                }, $multi_speakers ) );
+                PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Initiating Multi-Speaker TTS: target_model="%s", speakers="%s", style="%s", chars=%d', $configured_model, $sp_desc, $style, mb_strlen( $clean_text ) ) );
+            } else {
+                PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Initiating TTS: target_model="%s", voice="%s", style="%s", chars=%d', $configured_model, $voice_name, $style, mb_strlen( $clean_text ) ) );
+            }
         }
+
+        require_once __DIR__ . '/class-settings-storage.php';
+        $http_timeout = max(
+            180,
+            (int) $this->timeout,
+            PressHub_AI_Settings_Storage::get_briefing_tts_timeout()
+        );
 
         foreach ( $tts_models as $model ) {
             $gen_url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
+
+            $speech_config = $is_multi_speaker
+                ? [
+                    'multiSpeakerVoiceConfig' => [
+                        'speakerVoiceConfigs' => $multi_speakers,
+                    ],
+                ]
+                : [
+                    'voiceConfig' => [
+                        'prebuiltVoiceConfig' => [
+                            'voiceName' => $voice_name,
+                        ],
+                    ],
+                ];
+
             $gen_body = [
                 'contents' => [
                     [
@@ -1242,13 +1301,7 @@ class PressHub_AI_API_Client {
                 ],
                 'generationConfig' => [
                     'responseModalities' => [ 'AUDIO' ],
-                    'speechConfig'       => [
-                        'voiceConfig' => [
-                            'prebuiltVoiceConfig' => [
-                                'voiceName' => $voice_name,
-                            ],
-                        ],
-                    ],
+                    'speechConfig'       => $speech_config,
                 ],
             ];
 
@@ -1263,10 +1316,13 @@ class PressHub_AI_API_Client {
                     'User-Agent'     => 'aistudio-build',
                 ],
                 'body'    => wp_json_encode( $gen_body ),
-                'timeout' => 90,
+                'timeout' => $http_timeout,
             ] );
 
             if ( ! is_wp_error( $gen_res ) ) {
+                if ( function_exists( 'wp_raise_memory_limit' ) ) {
+                    wp_raise_memory_limit( 'admin' );
+                }
                 $code     = wp_remote_retrieve_response_code( $gen_res );
                 $res_body = json_decode( wp_remote_retrieve_body( $gen_res ), true );
 

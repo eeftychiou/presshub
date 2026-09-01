@@ -310,6 +310,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_timeout"><?php echo __( 'Speech AI Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_timeout_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo __( 'Speaking Delivery Style (logosAI)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_style_field(); ?>
@@ -1835,6 +1841,17 @@ class PressHub_AI_Settings_Render {
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="gemini-3.1-flash-tts-preview" />
         <p class="description">
             <?php echo esc_html__( 'Model ID used for speech synthesis (e.g. gemini-3.1-flash-tts-preview, gemini-2.5-flash-preview-tts, or custom endpoint).', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_briefing_tts_timeout_field() {
+        $option = 'presshub_ai_briefing_tts_timeout';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_tts_timeout();
+        ?>
+        <input type="number" min="60" max="900" step="10" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description">
+            <?php echo esc_html__( 'Maximum time in seconds to wait for speech synthesis response (60 to 900 seconds). Default 300s. Increase for lengthy multi-topic podcast scripts.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

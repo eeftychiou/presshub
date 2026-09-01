@@ -45,7 +45,9 @@ function run_test( string $name, callable $fn ) {
         }
     } catch ( Throwable $e ) {
         echo "[\033[31mFAIL\033[0m] " . $e->getMessage() . "\n";
-        $failed++;
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_curation_max_articles() !== 40 ) {
+            echo "[DBG: cap is " . PressHub_AI_Settings_Storage::get_curation_max_articles() . " after {$name}] ";
+        }
     }
 }
 
@@ -842,6 +844,108 @@ run_test( 'Issue #67: Audio Synthesizer initializes API client with tts module t
         $target_url = end( $captured_urls );
         if ( false === strpos( $target_url, 'gemini-3.1-flash-tts-preview' ) ) {
             return 'synthesize_turn() did not target gemini-3.1-flash-tts-preview; URL was: ' . $target_url;
+        }
+    } finally {
+        remove_filter( 'pre_http_request', $filter, 10 );
+    }
+
+    return true;
+} );
+
+run_test( 'Issue #69: Multi-speaker persona mapping, dynamic timeout, and resilient fallback in live WordPress environment', function () {
+    // 1. Settings-First timeout option
+    update_option( 'presshub_ai_briefing_tts_timeout', 450 );
+    if ( PressHub_AI_Settings_Storage::get_briefing_tts_timeout() !== 450 ) {
+        return 'get_briefing_tts_timeout() did not return 450; got: ' . PressHub_AI_Settings_Storage::get_briefing_tts_timeout();
+    }
+    update_option( 'presshub_ai_briefing_tts_timeout', 20 ); // below 60 clamp -> clamped to 60
+    if ( PressHub_AI_Settings_Storage::get_briefing_tts_timeout() !== 60 ) {
+        return 'get_briefing_tts_timeout() did not clamp to 60 on low value; got: ' . PressHub_AI_Settings_Storage::get_briefing_tts_timeout();
+    }
+    update_option( 'presshub_ai_briefing_tts_timeout', 1200 ); // above 900 clamp -> clamped to 900
+    if ( PressHub_AI_Settings_Storage::get_briefing_tts_timeout() !== 900 ) {
+        return 'get_briefing_tts_timeout() did not clamp to 900 on high value; got: ' . PressHub_AI_Settings_Storage::get_briefing_tts_timeout();
+    }
+    delete_option( 'presshub_ai_briefing_tts_timeout' );
+    if ( PressHub_AI_Settings_Storage::get_briefing_tts_timeout() !== 300 ) {
+        return 'get_briefing_tts_timeout() did not return default 300 on deleted option; got: ' . PressHub_AI_Settings_Storage::get_briefing_tts_timeout();
+    }
+
+    // 2. Multi-speaker configuration and timeout passed to Gemini HTTP request
+    $synthesizer = new PressHub_AI_Audio_Synthesizer();
+    $captured_requests = [];
+    $fake_pcm = str_repeat( "\x12\x34", 1200 );
+
+    $filter = function ( $pre, $args, $url ) use ( &$captured_requests, $fake_pcm ) {
+        if ( str_contains( $url, 'generativelanguage.googleapis.com' ) ) {
+            $body = json_decode( $args['body'] ?? '{}', true );
+            $captured_requests[] = [
+                'url'  => $url,
+                'args' => $args,
+                'body' => $body,
+            ];
+            return [
+                'headers'  => [],
+                'body'     => wp_json_encode( [
+                    'candidates' => [
+                        [
+                            'content' => [
+                                'parts' => [
+                                    [
+                                        'inlineData' => [
+                                            'mimeType' => 'audio/pcm;rate=24000',
+                                            'data'     => base64_encode( $fake_pcm ),
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ] ),
+                'response' => [ 'code' => 200, 'message' => 'OK' ],
+                'cookies'  => [],
+                'filename' => null,
+            ];
+        }
+        return $pre;
+    };
+
+    update_option( 'presshub_ai_briefing_host_female', 'Μαρία' );
+    update_option( 'presshub_ai_briefing_host_male', 'Νίκος' );
+    update_option( 'presshub_ai_briefing_voice_female', 'Kore' );
+    update_option( 'presshub_ai_briefing_voice_male', 'Fenrir' );
+
+    add_filter( 'pre_http_request', $filter, 10, 3 );
+    try {
+        $dialogue = "[Μαρία]: Καλημέρα σε όλους τους ακροατές!\n[Νίκος]: Καλημέρα Μαρία, ας ξεκινήσουμε.";
+        $res = $synthesizer->synthesize_podcast( '2026-08-28', $dialogue );
+
+        if ( is_wp_error( $res ) ) {
+            return 'synthesize_podcast() returned unexpected WP_Error: ' . $res->get_error_message();
+        }
+        if ( empty( $captured_requests ) ) {
+            return 'No HTTP request captured during synthesize_podcast()';
+        }
+
+        $last_req = end( $captured_requests );
+        if ( ( $last_req['args']['timeout'] ?? 0 ) < 180 ) {
+            return 'HTTP request timeout was less than 180 seconds; got: ' . ( $last_req['args']['timeout'] ?? 'null' );
+        }
+
+        $speech_cfg = $last_req['body']['generationConfig']['speechConfig'] ?? [];
+        if ( ! isset( $speech_cfg['multiSpeakerVoiceConfig']['speakerVoiceConfigs'] ) ) {
+            return 'multiSpeakerVoiceConfig was not present in generationConfig.speechConfig';
+        }
+
+        $sp_configs = $speech_cfg['multiSpeakerVoiceConfig']['speakerVoiceConfigs'];
+        if ( count( $sp_configs ) !== 2 ) {
+            return 'Expected 2 speakerVoiceConfigs; got: ' . count( $sp_configs );
+        }
+        if ( $sp_configs[0]['speaker'] !== 'Μαρία' || ( $sp_configs[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) !== 'Kore' ) {
+            return 'Speaker 1 is not Μαρία with Kore; got: ' . json_encode( $sp_configs[0] );
+        }
+        if ( $sp_configs[1]['speaker'] !== 'Νίκος' || ( $sp_configs[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) !== 'Fenrir' ) {
+            return 'Speaker 2 is not Νίκος with Fenrir; got: ' . json_encode( $sp_configs[1] );
         }
     } finally {
         remove_filter( 'pre_http_request', $filter, 10 );

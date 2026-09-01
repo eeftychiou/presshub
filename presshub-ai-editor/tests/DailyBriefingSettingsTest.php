@@ -54,6 +54,7 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_tts_engine',
             'presshub_ai_briefing_tts_api_key',
             'presshub_ai_briefing_tts_model',
+            'presshub_ai_briefing_tts_timeout',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
             'presshub_ai_harvest_time_budget',
@@ -263,6 +264,21 @@ class DailyBriefingSettingsTest
         }
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_custom_style', '  Custom speaking prompt  ' ) !== 'Custom speaking prompt' ) {
             $failures[] = 'custom style prompt should be trimmed.';
+        }
+
+        // --- Case 7c: Sanitization of speech generation timeout (clamped 60–900s, default 300s) ---
+        self::reset_options();
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_timeout', 300 ) !== 300 ) {
+            $failures[] = '300s valid timeout should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_timeout', 15 ) !== 60 ) {
+            $failures[] = 'timeout 15s (below min 60s) should clamp to 60s; got: ' . self::sanitize( $cbs, 'presshub_ai_briefing_tts_timeout', 15 );
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_timeout', 1500 ) !== 900 ) {
+            $failures[] = 'timeout 1500s (above max 900s) should clamp to 900s; got: ' . self::sanitize( $cbs, 'presshub_ai_briefing_tts_timeout', 1500 );
+        }
+        if ( PressHub_AI_Settings_Storage::get_briefing_tts_timeout() !== 300 ) {
+            $failures[] = 'default get_briefing_tts_timeout should return 300s when option empty.';
         }
 
         // --- Case 8: Sanitization of post status & category ---
