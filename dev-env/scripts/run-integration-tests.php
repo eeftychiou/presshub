@@ -279,6 +279,90 @@ run_test( 'Issue #45 UTF-8: summarize() returns words + tokens', function() {
     return true;
 } );
 
+// Test 19: Issue #59 — sidebar.js revision-transfer fix invariants.
+run_test( 'Issue #59: sidebar.js no longer uses .replace() for revisions; uses split().join() + applyBlockLevelReplacement', function() {
+    $path = WP_PLUGIN_DIR . '/presshub-ai-editor/assets/sidebar.js';
+    if ( ! is_file( $path ) ) {
+        return 'sidebar.js not found';
+    }
+    $src = (string) file_get_contents( $path );
+    // Strip comments so JSDoc references to the old patterns don't false-positive.
+    $code = preg_replace( '#/\*.*?\*/#s', '', $src );
+    $code = preg_replace( '#(?<![:"\'])//[^\n]*#', '', $code );
+
+    if ( false !== strpos( $code, 'currentContent.replace(originalText,' ) ) {
+        return 'Buggy pattern `currentContent.replace(originalText,` still in code';
+    }
+    if ( false !== strpos( $code, 'wp.blocks.serialize([b])' ) ) {
+        return 'Buggy pattern `wp.blocks.serialize([b])` still in code';
+    }
+    if ( false === strpos( $code, 'replaceAllSafe(' ) ) {
+        return 'Helper `replaceAllSafe(` not present in sidebar.js';
+    }
+    if ( false === strpos( $code, 'applyBlockLevelReplacement' ) ) {
+        return 'Helper `applyBlockLevelReplacement` not present in sidebar.js';
+    }
+    if ( false === strpos( $code, 'escapeReplacementString' ) ) {
+        return 'Helper `escapeReplacementString` not present in sidebar.js';
+    }
+    return true;
+} );
+
+// Test 20: Issue #59 — admin.css sidebar-width fix invariants.
+run_test( 'Issue #59: admin.css sidebar container has default width and drag-handle styles', function() {
+    $path = WP_PLUGIN_DIR . '/presshub-ai-editor/assets/admin.css';
+    if ( ! is_file( $path ) ) {
+        return 'admin.css not found';
+    }
+    $css = (string) file_get_contents( $path );
+    if ( ! preg_match( '/\.presshub-sidebar-container\s*\{[^}]*(?:min-)?width\s*:\s*(\d+)px/s', $css, $m ) ) {
+        return '.presshub-sidebar-container has no width / min-width rule';
+    }
+    if ( (int) $m[1] < 320 ) {
+        return 'Sidebar declared width too narrow: ' . $m[1] . 'px';
+    }
+    if ( false === strpos( $css, '.presshub-sidebar-resize-handle' ) ) {
+        return '.presshub-sidebar-resize-handle styles missing';
+    }
+    return true;
+} );
+
+// Test 21: Issue #59 part B — admin.css is enqueued in the block editor.
+// Without this enqueue the .presshub-sidebar-container width rules and
+// the drag handle styles never reach the Gutenberg editor (admin.css
+// is only loaded on the classic-metabox / settings pages by default),
+// so the bug as filed would silently come back.
+run_test( 'Issue #59: admin.css is enqueued for the block editor (sidebar CSS reaches Gutenberg)', function() {
+    $main = WP_PLUGIN_DIR . '/presshub-ai-editor/presshub-ai-editor.php';
+    if ( ! is_file( $main ) ) {
+        return 'presshub-ai-editor.php not found';
+    }
+    $src = (string) file_get_contents( $main );
+    // Strip comments first so JSDoc / PHPDoc references don't false-positive.
+    $code = preg_replace( '#/\*.*?\*/#s', '', $src );
+    $code = preg_replace( '#(?<![:"\'])//[^\n]*#', '', $code );
+    // Look for an enqueue_block_editor_assets callback that enqueues
+    // admin.css. The simplest form is a wp_enqueue_style call with
+    // 'assets/admin.css' inside an enqueue_block_editor_assets action.
+    if ( false === strpos( $code, 'enqueue_block_editor_assets' ) ) {
+        return 'No enqueue_block_editor_assets action found';
+    }
+    if ( false === strpos( $code, "wp_enqueue_style" ) ) {
+        return 'No wp_enqueue_style call found in plugin main file';
+    }
+    if ( false === strpos( $code, "assets/admin.css" ) ) {
+        return 'admin.css is not enqueued anywhere in the plugin main file';
+    }
+    // Both must appear inside the same callback — we just confirm both
+    // substrings are present in the file (a stricter regex match would
+    // couple the test to indentation / quoting style).
+    if ( false === strpos( $code, "PRESSHUB_AI_URL . 'assets/admin.css'" )
+         && false === strpos( $code, 'PRESSHUB_AI_URL . "assets/admin.css"' ) ) {
+        return 'admin.css enqueue call does not use PRESSHUB_AI_URL — likely wrong path';
+    }
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";

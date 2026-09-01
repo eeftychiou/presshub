@@ -46,6 +46,14 @@ const getCurrentPostId = () => {
 /** localStorage key for a post's conversation; 'global' when no post. */
 const chatStorageKey = (postId) => 'presshub_ai_chat_' + (postId ? postId : 'global');
 
+/** localStorage key for a post's preferred sidebar width; 'global' when no post. */
+const sidebarWidthStorageKey = (postId) => 'presshub_ai_sidebar_width_' + (postId ? postId : 'global');
+
+/** Sidebar resize bounds (Issue #59 part B). */
+const SIDEBAR_WIDTH_MIN = 320;
+const SIDEBAR_WIDTH_MAX = 960;
+const SIDEBAR_WIDTH_DEFAULT = 520;
+
 /** Restore a stored conversation, or null when nothing is saved. */
 const loadStoredMessages = (postId) => {
     try {
@@ -68,6 +76,94 @@ const saveMessages = (postId, msgs) => {
 };
 
 /**
+ * Escape literal `$` characters in a replacement string so that
+ * `String.prototype.replace()` does not interpret `$&`, `$1`, `$$` etc.
+ * as special tokens (Issue #59 revision-transfer bug).
+ */
+const escapeReplacementString = (s) => String(s == null ? '' : s).replace(/\$/g, '$$$$');
+
+/**
+ * Replace ALL occurrences of `needle` in `haystack` with `replacement`.
+ * Implemented with `split().join()` so it:
+ *   1. Replaces every match (not just the first).
+ *   2. Has no `$`-special-token semantics — the caller is expected to
+ *      have already pre-escaped `$` via escapeReplacementString().
+ * Returning the haystack unchanged when needle is empty keeps this
+ * helper safe for the "snippet not found" fallback path.
+ */
+const replaceAllSafe = (haystack, needle, replacement) => {
+    if (haystack == null || needle == null || needle === '') {
+        return haystack;
+    }
+    return String(haystack).split(needle).join(replacement);
+};
+
+/**
+ * Block-level replacement fallback for applyReplacementInEditor().
+ *
+ * Scans the editor's blocks for the first block whose serialized HTML
+ * (or, for blocks that store content under attributes.content, that
+ * string directly) contains `originalText`, and replaces only the
+ * matching occurrences inside THAT block — leaving every other block
+ * untouched.
+ *
+ * The previous implementation used `wp.blocks.serialize([b])` followed
+ * by `wp.blocks.parse(updatedHtml)`, which round-trips EVERY block
+ * through serialization and silently corrupts nested block markup
+ * (image captions, list-item nesting, inner blocks). The new helper
+ * mutates only the targeted block's content, then asks the editor to
+ * `resetBlocks([newBlocks])` with the unchanged siblings preserved.
+ *
+ * Returns true if a replacement was made, false otherwise.
+ */
+const applyBlockLevelReplacement = (originalText, revisedText) => {
+    if (!wp.data || !wp.data.select('core/editor') || !wp.data.dispatch('core/editor')) {
+        return false;
+    }
+    const blocks = wp.data.select('core/editor').getBlocks() || [];
+    if (!originalText || blocks.length === 0) {
+        return false;
+    }
+    const safeRevised = escapeReplacementString(revisedText);
+
+    let replaced = false;
+    const newBlocks = blocks.map((b) => {
+        if (replaced) {
+            return b;
+        }
+        // Prefer direct attribute mutation (lossless). For classic,
+        // freeform, html, and shortcode blocks the editable payload
+        // lives in attributes.content / attributes.text / innerBlocks.
+        if (b && b.attributes && typeof b.attributes.content === 'string' && b.attributes.content.indexOf(originalText) !== -1) {
+            replaced = true;
+            return {
+                ...b,
+                attributes: {
+                    ...b.attributes,
+                    content: replaceAllSafe(b.attributes.content, originalText, safeRevised)
+                }
+            };
+        }
+        if (b && b.attributes && typeof b.attributes.text === 'string' && b.attributes.text.indexOf(originalText) !== -1) {
+            replaced = true;
+            return {
+                ...b,
+                attributes: {
+                    ...b.attributes,
+                    text: replaceAllSafe(b.attributes.text, originalText, safeRevised)
+                }
+            };
+        }
+        return b;
+    });
+
+    if (replaced) {
+        wp.data.dispatch('core/editor').resetBlocks(newBlocks);
+    }
+    return replaced;
+};
+
+/**
  * Slug of the preset selected in the post metabox, '' when none is
  * selected or the metabox is absent. The '__plugin_default__' sentinel
  * maps to '' so the server resolves the author's default preset.
@@ -87,6 +183,29 @@ const AICoPilotSidebar = () => {
     const [inputValue, setInputValue] = useState('');
     const [loading, setLoading] = useState(false);
     const messagesEndRef = useRef(null);
+    // Ref to the sidebar container — the resize handle's drag listeners
+    // resize this element (Issue #59 part B).
+    const sidebarContainerRef = useRef(null);
+    // Drag state captured in a ref so the move/up listeners (attached
+    // on document for the duration of the drag) don't go stale across
+    // re-renders.
+    const dragStateRef = useRef(null);
+
+    // Current sidebar width. Loaded from localStorage on mount /
+    // post-switch; falls back to SIDEBAR_WIDTH_DEFAULT.
+    const [sidebarWidth, setSidebarWidth] = useState(() => {
+        try {
+            const raw = window.localStorage.getItem(sidebarWidthStorageKey(getCurrentPostId()));
+            if (!raw) return SIDEBAR_WIDTH_DEFAULT;
+            const n = parseInt(raw, 10);
+            if (!Number.isFinite(n) || n < SIDEBAR_WIDTH_MIN || n > SIDEBAR_WIDTH_MAX) {
+                return SIDEBAR_WIDTH_DEFAULT;
+            }
+            return n;
+        } catch (e) {
+            return SIDEBAR_WIDTH_DEFAULT;
+        }
+    });
     // Active research-poll intervals, cleared on unmount so a closed
     // sidebar never keeps polling (or leaking timers) in the background.
     const researchIntervalsRef = useRef([]);
@@ -95,6 +214,83 @@ const AICoPilotSidebar = () => {
     // Skips the post-switch effect's first run (mount is handled by the
     // lazy useState initializer above).
     const didMountRef = useRef(false);
+
+    // Persist the chosen width when it changes (per-post key).
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(sidebarWidthStorageKey(getCurrentPostId()), String(sidebarWidth));
+        } catch (e) { /* Storage unavailable — the next reload falls back to the default. */ }
+    }, [sidebarWidth]);
+
+    // Attach mousedown / keydown listeners to the drag handle. The
+    // handle lives inside the sidebar container rendered below; we
+    // find it after the first render with a small effect that targets
+    // its stable className so the listeners are cleaned up on unmount.
+    useEffect(() => {
+        const container = sidebarContainerRef.current;
+        if (!container) return undefined;
+        const handle = container.querySelector('.presshub-sidebar-resize-handle');
+        if (!handle) return undefined;
+
+        const clamp = (n) => Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, n));
+        const applyWidth = (n) => setSidebarWidth(clamp(n));
+
+        const onMouseMove = (e) => {
+            const state = dragStateRef.current;
+            if (!state) return;
+            const dx = e.clientX - state.startX;
+            applyWidth(state.startWidth + dx);
+        };
+        const onMouseUp = () => {
+            dragStateRef.current = null;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+        const onMouseDown = (e) => {
+            if (e.button !== 0) return;
+            const containerRect = container.getBoundingClientRect();
+            dragStateRef.current = {
+                startX: e.clientX,
+                startWidth: containerRect.width
+            };
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = 'ew-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        };
+        const onKeyDown = (e) => {
+            // Arrow keys resize by 16px, Shift+Arrow by 64px, Home/End
+            // jump to the bounds. Keyboard-accessible per WAI-ARIA
+            // "separator" pattern.
+            const cur = sidebarContainerRef.current
+                ? sidebarContainerRef.current.getBoundingClientRect().width
+                : sidebarWidth;
+            let next = cur;
+            const step = e.shiftKey ? 64 : 16;
+            if (e.key === 'ArrowLeft') next = cur - step;
+            else if (e.key === 'ArrowRight') next = cur + step;
+            else if (e.key === 'Home') next = SIDEBAR_WIDTH_MIN;
+            else if (e.key === 'End') next = SIDEBAR_WIDTH_MAX;
+            else return;
+            e.preventDefault();
+            applyWidth(next);
+        };
+
+        handle.addEventListener('mousedown', onMouseDown);
+        handle.addEventListener('keydown', onKeyDown);
+        return () => {
+            handle.removeEventListener('mousedown', onMouseDown);
+            handle.removeEventListener('keydown', onKeyDown);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const scrollToBottom = () => {
         if (messagesEndRef.current) {
@@ -133,8 +329,9 @@ const AICoPilotSidebar = () => {
     }, []);
 
     // Post switch (editor opened a different post): swap to that post's
-    // stored history (or a fresh greeting), and resume any in-flight
-    // research polling from the restored conversation.
+    // stored history (or a fresh greeting), resume any in-flight
+    // research polling from the restored conversation, and reload the
+    // saved sidebar width for the new post.
     const currentPostId = getCurrentPostId();
     useEffect(() => {
         if (!didMountRef.current) {
@@ -149,6 +346,18 @@ const AICoPilotSidebar = () => {
                 startPollingResearch(msg.researchId);
             }
         });
+        // Reload the saved width for the new post (or the default).
+        try {
+            const raw = window.localStorage.getItem(sidebarWidthStorageKey(currentPostId));
+            const n = raw ? parseInt(raw, 10) : NaN;
+            setSidebarWidth(
+                Number.isFinite(n) && n >= SIDEBAR_WIDTH_MIN && n <= SIDEBAR_WIDTH_MAX
+                    ? n
+                    : SIDEBAR_WIDTH_DEFAULT
+            );
+        } catch (e) {
+            setSidebarWidth(SIDEBAR_WIDTH_DEFAULT);
+        }
     }, [currentPostId]);
 
     const sendPrompt = (promptText) => {
@@ -391,48 +600,84 @@ const AICoPilotSidebar = () => {
         researchIntervalsRef.current.push(interval);
     };
 
+    /**
+     * Transfer a single LLM-proposed revision into the Gutenberg editor.
+     *
+     * Issues fixed (Issue #59):
+     *   1. Replaces ALL matches, not just the first (split().join()).
+     *   2. Survives literal `$` characters in the revised text
+     *      (escapeReplacementString pre-escapes `$$` -> `$$$$`).
+     *   3. Falls back to a block-level replacement that ONLY mutates
+     *      the matching block's `attributes.content` / `attributes.text`
+     *      (applyBlockLevelReplacement) — no more wp.blocks.serialize
+     *      round-trip that corrupts nested block markup.
+     *   4. If neither path can locate the snippet, surfaces an in-chat
+     *      error card (instead of silently appending `revisedText` to
+     *      the article and corrupting it further).
+     *
+     * Returns true if a replacement was made, false otherwise. The
+     * single-revision and accept-all callers use this to gate the
+     * "Accepted" badge flip.
+     */
     const applyReplacementInEditor = (originalText, revisedText) => {
         try {
             if (!wp.data || !wp.data.select('core/editor') || !wp.data.dispatch('core/editor')) {
                 return false;
             }
             const currentContent = wp.data.select('core/editor').getEditedPostContent() || '';
-            if (originalText && currentContent.includes(originalText)) {
-                const updated = currentContent.replace(originalText, revisedText);
+            const safeRevised = escapeReplacementString(revisedText);
+
+            // Primary path: serialized post content contains the
+            // substring verbatim. replaceAllSafe replaces ALL matches
+            // and never interprets `$` tokens in `safeRevised`.
+            if (originalText && currentContent && currentContent.indexOf(originalText) !== -1) {
+                const updated = replaceAllSafe(currentContent, originalText, safeRevised);
                 wp.data.dispatch('core/editor').editPost({ content: updated });
-                return true;
-            }
-
-            // Block-level replacement fallback:
-            const blocks = wp.data.select('core/editor').getBlocks() || [];
-            let replaced = false;
-            const newBlocks = blocks.map(b => {
-                const rawHtml = wp.blocks.serialize([b]);
-                if (originalText && rawHtml.includes(originalText)) {
-                    const updatedHtml = rawHtml.replace(originalText, revisedText);
-                    const parsed = wp.blocks.parse(updatedHtml);
-                    if (parsed && parsed.length > 0) {
-                        replaced = true;
-                        return parsed[0];
-                    }
+                // Verify the replacement actually landed before we
+                // claim success — guards against silent no-ops when
+                // currentContent changes between the includes() check
+                // and the editPost() dispatch.
+                const after = wp.data.select('core/editor').getEditedPostContent() || '';
+                if (after.indexOf(revisedText) !== -1) {
+                    return true;
                 }
-                return b;
-            });
-
-            if (replaced) {
-                wp.data.dispatch('core/editor').resetBlocks(newBlocks);
-                return true;
             }
 
-            // If exact match not found (e.g. slight formatting diff), append to content
-            if (currentContent) {
-                wp.data.dispatch('core/editor').editPost({ content: currentContent + '\n\n' + revisedText });
-                return true;
+            // Fallback: walk the block tree, mutate only the matching
+            // block's content. Returns true on success.
+            if (applyBlockLevelReplacement(originalText, revisedText)) {
+                const after = wp.data.select('core/editor').getEditedPostContent() || '';
+                if (after.indexOf(revisedText) !== -1) {
+                    return true;
+                }
             }
+
+            // Could not locate the snippet — append a localized error
+            // message to the chat instead of silently appending
+            // `revisedText` to the article (which was corrupting
+            // unrelated content).
+            const errMsg = sprintf(
+                /* translators: %s: the original text snippet that could not be located in the article. */
+                __('Could not locate the original text in the article: "%s". The article may have been edited since this revision was proposed. Re-run the prompt against the current article.', 'presshub-ai-editor'),
+                String(originalText || '').slice(0, 120)
+            );
+            setMessages(prev => [...prev, {
+                role: 'ai',
+                type: 'text',
+                isError: true,
+                content: errMsg
+            }]);
+            return false;
         } catch (err) {
             console.error('PressHub AI: Error applying revision', err);
+            setMessages(prev => [...prev, {
+                role: 'ai',
+                type: 'text',
+                isError: true,
+                content: __('PressHub AI: Error applying revision. See browser console for details.', 'presshub-ai-editor')
+            }]);
+            return false;
         }
-        return false;
     };
 
     const updateRevisionDraft = (msgIndex, revId, newDraftText) => {
@@ -452,15 +697,21 @@ const AICoPilotSidebar = () => {
         if (!rev) return;
 
         const revisedText = rev.editedRevised !== undefined ? rev.editedRevised : rev.revised;
-        applyReplacementInEditor(rev.original, revisedText);
+        const ok = applyReplacementInEditor(rev.original, revisedText);
 
-        setMessages(prev => prev.map((m, i) => {
-            if (i !== msgIndex || !m.revisions) return m;
-            return {
-                ...m,
-                revisions: m.revisions.map(r => r.id === revId ? { ...r, status: 'accepted' } : r)
-            };
-        }));
+        // Only flip the badge to 'accepted' when the editor confirmed
+        // the revised text actually landed in the post. A failed
+        // transfer (snippet not found, dispatch error) leaves the
+        // revision 'pending' and surfaces an in-chat error card.
+        if (ok) {
+            setMessages(prev => prev.map((m, i) => {
+                if (i !== msgIndex || !m.revisions) return m;
+                return {
+                    ...m,
+                    revisions: m.revisions.map(r => r.id === revId ? { ...r, status: 'accepted' } : r)
+                };
+            }));
+        }
     };
 
     const denySingleRevision = (msgIndex, revId) => {
@@ -477,10 +728,21 @@ const AICoPilotSidebar = () => {
         const msg = messages[msgIndex];
         if (!msg || !msg.revisions) return;
 
-        msg.revisions.forEach(rev => {
-            if (rev.status === 'pending') {
-                const revisedText = rev.editedRevised !== undefined ? rev.editedRevised : rev.revised;
-                applyReplacementInEditor(rev.original, revisedText);
+        // Iterate sequentially with a functional update so each
+        // replacement re-reads the CURRENT post content. This keeps
+        // the operation idempotent — a prior accepted revision that
+        // shifted line indexes no longer breaks the next one. Each
+        // call still goes through applyReplacementInEditor's
+        // split().join() path which is order-independent anyway, but
+        // the sequential read prevents stale-snapshot bugs when the
+        // editor dispatches its own state updates between calls.
+        const pending = msg.revisions.filter(r => r.status === 'pending');
+        const succeeded = new Set();
+        pending.forEach(rev => {
+            const revisedText = rev.editedRevised !== undefined ? rev.editedRevised : rev.revised;
+            const ok = applyReplacementInEditor(rev.original, revisedText);
+            if (ok) {
+                succeeded.add(rev.id);
             }
         });
 
@@ -488,7 +750,7 @@ const AICoPilotSidebar = () => {
             if (i !== msgIndex || !m.revisions) return m;
             return {
                 ...m,
-                revisions: m.revisions.map(r => r.status === 'pending' ? { ...r, status: 'accepted' } : r)
+                revisions: m.revisions.map(r => succeeded.has(r.id) ? { ...r, status: 'accepted' } : r)
             };
         }));
     };
@@ -662,7 +924,26 @@ const AICoPilotSidebar = () => {
         name: 'presshub-ai-copilot',
         icon: 'format-chat',
         title: __('AI Co-Pilot', 'presshub-ai-editor'),
-    }, el('div', { className: 'presshub-sidebar-container' },
+    }, el('div', {
+        ref: sidebarContainerRef,
+        className: 'presshub-sidebar-container',
+        // Inline width so the persisted preference always wins over
+        // the CSS default. min/max clamp to the bounds in CSS as well.
+        style: { width: sidebarWidth + 'px' }
+    },
+        // Resize handle on the inner (left) edge. The drag/keyboard
+        // listeners are attached by the effect above, which targets
+        // this element by its stable className.
+        el('div', {
+            className: 'presshub-sidebar-resize-handle',
+            tabIndex: 0,
+            role: 'separator',
+            'aria-orientation': 'vertical',
+            'aria-label': __('Resize AI Co-Pilot sidebar', 'presshub-ai-editor'),
+            'aria-valuemin': SIDEBAR_WIDTH_MIN,
+            'aria-valuemax': SIDEBAR_WIDTH_MAX,
+            'aria-valuenow': sidebarWidth
+        }),
         el('div', { className: 'presshub-quick-actions', style: { display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap' } },
             el(Button, { isSecondary: true, isSmall: true, onClick: () => applyQuickAction('research') }, __('🔍 Research', 'presshub-ai-editor')),
             el(Button, { isSecondary: true, isSmall: true, onClick: () => applyQuickAction('draft') }, __('✍️ Draft', 'presshub-ai-editor')),
