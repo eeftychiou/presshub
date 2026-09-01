@@ -609,10 +609,13 @@ class PressHub_AI_News_Curator {
         }
         $headline = trim( $headline );
 
-        // Format date for title (e.g. 26/08/2026) or fallback to raw date.
+        // Format date for title using the operator-configurable date()
+        // format token from Settings (default "d/m/Y" e.g. 26/08/2026),
+        // or fallback to the raw date when the token is empty/invalid.
         $timestamp = strtotime( $date );
-        $formatted_date = ( false !== $timestamp )
-            ? ( function_exists( 'date_i18n' ) ? date_i18n( 'd/m/Y', $timestamp ) : date( 'd/m/Y', $timestamp ) )
+        $date_format_token = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
+        $formatted_date = ( false !== $timestamp && '' !== $date_format_token )
+            ? ( function_exists( 'date_i18n' ) ? date_i18n( $date_format_token, $timestamp ) : date( $date_format_token, $timestamp ) )
             : $date;
 
         // Issue #65 — compose title via the Settings-First helper, which

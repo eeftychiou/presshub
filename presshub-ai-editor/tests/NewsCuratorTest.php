@@ -485,6 +485,31 @@ nc_check(
 $df_empty = PressHub_AI_Settings_Storage::sanitize_briefing_text_title_date_format( '' );
 nc_check( 'issue65/9g: sanitize_briefing_text_title_date_format accepts empty (disables suffix)', '' === $df_empty );
 
+// Test 9h: a NON-EMPTY, NON-DEFAULT date format token is honored when
+// composing the title. This guards the regression where
+// create_wordpress_post() hard-coded 'd/m/Y' and the
+// presshub_ai_briefing_text_title_date_format setting only gated
+// *whether* the suffix appeared — never *how* it was formatted.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_prefix'] = 'Πρωινή Ενημέρωση:';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_date_format'] = 'Y-m-d';
+$GLOBALS['WP_INSERTED_POSTS'] = [];
+$post_id_ymd = $curator->create_wordpress_post(
+    "<h1>Είδηση Με ISO Ημερομηνία</h1>\n<p>Σώμα.</p>",
+    '2026-08-26'
+);
+$ymd_post = end( $GLOBALS['WP_INSERTED_POSTS'] );
+nc_check(
+    'issue65/9h: custom date format "Y-m-d" is honored (2026-08-26, not 26/08/2026)',
+    false !== strpos( $ymd_post['post_title'], '2026-08-26' )
+    && false === strpos( $ymd_post['post_title'], '26/08/2026' )
+);
+nc_check(
+    'issue65/9h: custom date format meta records the applied token',
+    get_post_meta( $post_id_ymd, '_presshub_text_title_date_format_applied', true ) === 'Y-m-d'
+);
+// Restore defaults for any subsequent tests.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_title_date_format'] = 'd/m/Y';
+
 
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {

@@ -759,6 +759,26 @@ run_test( 'Issue #65: Text Story Settings-First prefix + h1-strip end-to-end', f
         return 'sanitize_briefing_text_title_date_format rejected a valid token';
     }
 
+    // 8b. A NON-EMPTY, NON-DEFAULT date format token is honored when
+    //     composing the title. This guards the regression where
+    //     create_wordpress_post() hard-coded 'd/m/Y' and the setting only
+    //     gated *whether* the suffix appeared — never *how* it was formatted.
+    update_option( 'presshub_ai_briefing_text_title_date_format', 'Y-m-d' );
+    $post_id_ymd = $curator->create_wordpress_post( $html_body, $test_date );
+    if ( ! is_int( $post_id_ymd ) || $post_id_ymd <= 0 ) {
+        return 'create_wordpress_post() returned a non-positive ID for Y-m-d phase';
+    }
+    $title_ymd = (string) get_post_field( 'post_title', $post_id_ymd );
+    if ( false === strpos( $title_ymd, '2026-09-03' ) ) {
+        return "Custom date format 'Y-m-d' not honored — expected 2026-09-03 in title: {$title_ymd}";
+    }
+    if ( preg_match( '/\d{2}\/\d{2}\/\d{4}/', $title_ymd ) ) {
+        return "Title has hard-coded d/m/Y date despite Y-m-d setting: {$title_ymd}";
+    }
+    if ( (string) get_post_meta( $post_id_ymd, '_presshub_text_title_date_format_applied', true ) !== 'Y-m-d' ) {
+        return '_presshub_text_title_date_format_applied meta mismatch (should be Y-m-d)';
+    }
+
     // Reset Settings so subsequent test runs are isolated.
     delete_option( 'presshub_ai_briefing_text_title_prefix' );
     delete_option( 'presshub_ai_briefing_text_title_date_format' );
