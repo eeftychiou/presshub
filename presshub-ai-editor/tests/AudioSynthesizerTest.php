@@ -329,6 +329,75 @@ $err_invalid_script = $synthesizer->synthesize_podcast( $test_date_e2e, 'Απλ�
 as_check( 'e2e: script without turns returns WP_Error', is_wp_error( $err_invalid_script ) && 'invalid_script' === $err_invalid_script->get_error_code() );
 
 
+// =========================================================================
+// 8. Issue #67: Default API Client Instantiation Uses 'tts' Module
+// =========================================================================
+
+$GLOBALS['OPTIONS_STORE'] = [
+    'presshub_ai_provider'           => 'gemini',
+    'presshub_ai_gemini_api_key'     => 'test-gemini-key',
+    'presshub_ai_model_gemini'       => 'gemini-3.7-flash',
+    'presshub_ai_briefing_tts_model' => '',
+];
+$GLOBALS['OPTIONS_STORE'][ PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDERS ] = [
+    [
+        'id'            => 'gemini-main',
+        'type'          => 'gemini',
+        'name'          => 'Google Gemini',
+        'api_key'       => 'test-gemini-key',
+        'default_model' => 'gemini-3.7-flash',
+        'enabled'       => true,
+    ],
+];
+
+$captured_models = [];
+$GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$captured_models ) {
+    list( $url, $args ) = $req;
+    if ( preg_match( '#/models/([^:]+):generateContent#', $url, $m ) ) {
+        $captured_models[] = $m[1];
+        $fake_pcm = str_repeat( "\x12\x34", 1200 );
+        return [
+            'response' => [ 'code' => 200 ],
+            'body'     => json_encode( [
+                'candidates' => [
+                    [
+                        'content' => [
+                            'parts' => [
+                                [
+                                    'inlineData' => [
+                                        'mimeType' => 'audio/pcm;rate=24000',
+                                        'data'     => base64_encode( $fake_pcm ),
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ] ),
+        ];
+    }
+    return null;
+};
+
+// Test 8a: synthesize_turn with null api_client resolves tts model (gemini-3.1-flash-tts-preview)
+$captured_models = [];
+$turn_res = $synthesizer->synthesize_turn( '[Μαρία]: Γεια σας!', 'Kore', 1.0, 0.0, null, 'formal' );
+as_check( 'tts_module: synthesize_turn succeeds with null api_client', ! is_wp_error( $turn_res ) && is_string( $turn_res ) );
+as_check( 'tts_module: synthesize_turn with null api_client targets gemini-3.1-flash-tts-preview', ! empty( $captured_models ) && 'gemini-3.1-flash-tts-preview' === end( $captured_models ) );
+
+// Test 8b: synthesize_podcast with null api_client resolves tts model (gemini-3.1-flash-tts-preview)
+$captured_models = [];
+$podcast_res = $synthesizer->synthesize_podcast( '2026-08-26', "[Μαρία]: Γεια σας!\n[Νίκος]: Καλημέρα!", null );
+as_check( 'tts_module: synthesize_podcast succeeds with null api_client', is_array( $podcast_res ) && ( $podcast_res['success'] ?? false ) );
+as_check( 'tts_module: synthesize_podcast with null api_client targets gemini-3.1-flash-tts-preview', ! empty( $captured_models ) && 'gemini-3.1-flash-tts-preview' === end( $captured_models ) );
+
+// Test 8c: Custom presshub_ai_briefing_tts_model option is respected by default client
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = 'gemini-2.5-flash-preview-tts';
+$captured_models = [];
+$turn_res_custom = $synthesizer->synthesize_turn( '[Μαρία]: Δοκιμή προσαρμοσμένου μοντέλου', 'Kore', 1.0, 0.0, null, 'formal' );
+as_check( 'tts_module: custom briefing_tts_model option is used over general provider model', ! empty( $captured_models ) && 'gemini-2.5-flash-preview-tts' === end( $captured_models ) );
+
+
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
     $files = new RecursiveIteratorIterator(
@@ -346,4 +415,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "AudioSynthesizerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "AudioSynthesizerTest: OK (50 checks)\n";
+echo "AudioSynthesizerTest: OK (55 checks)\n";

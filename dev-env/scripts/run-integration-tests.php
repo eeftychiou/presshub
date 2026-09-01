@@ -786,6 +786,70 @@ run_test( 'Issue #65: Text Story Settings-First prefix + h1-strip end-to-end', f
     return true;
 } );
 
+run_test( 'Issue #67: Audio Synthesizer initializes API client with tts module targeting dedicated TTS preview model', function () {
+    $synthesizer = new PressHub_AI_Audio_Synthesizer();
+
+    $client = new PressHub_AI_API_Client( 'tts' );
+    if ( $client->get_module() !== 'tts' ) {
+        return 'PressHub_AI_API_Client("tts") module property was not set to "tts"';
+    }
+
+    $prov_config = $client->get_provider_config();
+    if ( empty( $prov_config['model'] ) || false === strpos( $prov_config['model'], 'tts' ) ) {
+        return 'PressHub_AI_API_Client("tts") model does not resolve to a dedicated TTS model; got: ' . ( $prov_config['model'] ?? 'empty' );
+    }
+
+    $captured_urls = [];
+    $fake_pcm = str_repeat( "\x12\x34", 1200 );
+    $filter = function ( $pre, $args, $url ) use ( &$captured_urls, $fake_pcm ) {
+        if ( str_contains( $url, 'generativelanguage.googleapis.com' ) ) {
+            $captured_urls[] = $url;
+            return [
+                'headers'  => [],
+                'body'     => wp_json_encode( [
+                    'candidates' => [
+                        [
+                            'content' => [
+                                'parts' => [
+                                    [
+                                        'inlineData' => [
+                                            'mimeType' => 'audio/pcm;rate=24000',
+                                            'data'     => base64_encode( $fake_pcm ),
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ] ),
+                'response' => [ 'code' => 200, 'message' => 'OK' ],
+                'cookies'  => [],
+                'filename' => null,
+            ];
+        }
+        return $pre;
+    };
+
+    add_filter( 'pre_http_request', $filter, 10, 3 );
+    try {
+        $result = $synthesizer->synthesize_turn( '[Μαρία]: Δοκιμαστικό κείμενο ήχου.', 'Kore', 1.0, 0.0, null, 'formal' );
+        if ( is_wp_error( $result ) ) {
+            return 'synthesize_turn() failed unexpectedly: ' . $result->get_error_message();
+        }
+        if ( empty( $captured_urls ) ) {
+            return 'No HTTP request captured during synthesize_turn()';
+        }
+        $target_url = end( $captured_urls );
+        if ( false === strpos( $target_url, 'gemini-3.1-flash-tts-preview' ) ) {
+            return 'synthesize_turn() did not target gemini-3.1-flash-tts-preview; URL was: ' . $target_url;
+        }
+    } finally {
+        remove_filter( 'pre_http_request', $filter, 10 );
+    }
+
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";
