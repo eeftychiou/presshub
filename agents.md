@@ -159,6 +159,54 @@ All code contributions must strictly adhere to WordPress security best practices
 
 ---
 
+## ⚙️ Settings-First Principle (Anti-Pattern Guard)
+
+> **No operational limit, threshold, cap, time budget, batch size, retry count, or rate limit that affects user-visible behavior may be hard-coded as a default inside business logic.** Every such value **must** be a WordPress option exposed in the **Settings** page (`PressHub AI → Settings`), with:
+>
+> 1. A registered option key (e.g. `presshub_ai_<scope>_<knob>`).
+> 2. A `register_setting()` call with a `sanitize_callback` that clamps the value to documented safe bounds.
+> 3. A `sanitize_<knob>` static method on `PressHub_AI_Settings_Storage`.
+> 4. A `get_<knob>` static helper on `PressHub_AI_Settings_Storage` returning the clamped value with a documented default.
+> 5. An `add_settings_field()` row on the relevant settings section.
+> 6. A `render_<knob>_field()` method on the settings render class.
+>
+> Consumers must read the value via the storage helper, **not** via `get_option()` + `apply_filters()` defaults.
+
+### Rationale
+
+Hard-coded `apply_filters( 'presshub_ai_*_max_*', N )` defaults in business logic are a **silent anti-pattern**: the limit is invisible to the operator, the value drifts from one another (max-articles vs max-chars vs time-budget), and a regression like the 2026-08-29 380k-token curation run (Issue #39) cannot be diagnosed without grepping the code. The plugin already has the correct pattern (see `presshub_ai_harvest_time_budget` + `PressHub_AI_Settings_Storage::get_harvest_time_budget()` as a reference implementation). All new operational knobs must follow it.
+
+### Examples of *what* this rule applies to
+
+- Article / token / character caps on LLM prompts (e.g. `presshub_ai_curation_max_articles`, `presshub_ai_curation_max_chars_per_article`).
+- HTTP timeouts, retry counts, backoff windows.
+- Per-user rate-limit thresholds and windows.
+- Token log retention days, batch sizes for TTS, model temperature defaults.
+- Any new value matching the regex `/max_|min_|_limit|_threshold|_timeout|_retries|_budget/`.
+
+### What this rule does **not** apply to
+
+- Pure constants that are part of a protocol (e.g. `RESEARCH_POLL_MAX_ATTEMPTS = 40` in `assets/sidebar.js` is a polling-safety fallback, not a user-tunable limit — but it should be documented in the class docblock and a Settings option must back it if the operator asks to change it).
+- Truly internal magic numbers with no user-visible effect (e.g. array sort flags, regex flags, file-lock retry counts inside `WP_Filesystem`).
+- Defaults inside `PressHub_AI_*` classes that are *immediately* re-read by a Settings helper — those defaults are the *fallback* for a missing option, not the authoritative value.
+
+### Enforcement
+
+When reviewing a PR, look for any of these patterns in `presshub-ai-editor/includes/`:
+
+```php
+// 🚫 Forbidden
+$value = apply_filters( 'presshub_ai_some_max_knob', 40 );
+$value = (int) get_option( 'presshub_ai_some_max_knob', 40 ); // without a sanitize_/get_ helper
+
+// ✅ Required
+$value = PressHub_AI_Settings_Storage::get_some_max_knob();
+```
+
+If a PR introduces a new operational knob without the full six-step registration, request changes citing this section.
+
+---
+
 ## 🧪 Verification & Testing Protocol
 
 Before marking any task, bugfix, or feature as complete, you **MUST** run all verification test suites:
