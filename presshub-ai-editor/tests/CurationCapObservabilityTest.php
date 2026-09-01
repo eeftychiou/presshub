@@ -203,6 +203,73 @@ cco_check(
 remove_filter( 'presshub_ai_curation_max_articles', $cap_filter );
 
 // =========================================================================
+// Issue #61 - Test 4b: Token-log metadata shape (S7a).
+// The issue's acceptance criteria explicitly require the new pool/cap
+// observability fields to land in the wp_presshub_ai_token_logs.metadata
+// JSON column. The AJAX handler in this codebase already does the
+// gluing; this test exercises the same entry point directly so the
+// contract is locked down for any future change to the metadata path.
+// =========================================================================
+
+if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+    global $wpdb;
+    $log_table = $wpdb ? ( isset( $wpdb->prefix ) ? $wpdb->prefix . 'presshub_ai_token_logs' : 'wp_presshub_ai_token_logs' ) : 'wp_presshub_ai_token_logs';
+    $issue_61_metadata = [
+        'pool_chars'             => 548366,
+        'pool_tokens_estimate'   => 182788,
+        'capped_chars'           => 30770,
+        'capped_tokens_estimate' => 10256,
+        'cap_articles'           => 40,
+        'cap_chars_per_article'  => 800,
+    ];
+    $issue_61_log_id = PressHub_AI_Token_Logger::log_llm_request(
+        'briefing_curation',
+        'gemini',
+        'gemini-2.5-flash',
+        35237,
+        2915,
+        12345,
+        'success',
+        null,
+        $issue_61_metadata,
+        1
+    );
+    cco_check( 'log: log_llm_request() returns a numeric row id', is_numeric( $issue_61_log_id ) && (int) $issue_61_log_id > 0 );
+
+    // Pull the just-inserted row from the test wpdb and assert the
+    // metadata JSON contains the new keys verbatim.
+    $inserted_row = null;
+    if ( isset( $wpdb->tables[ $log_table ] ) && is_array( $wpdb->tables[ $log_table ] ) ) {
+        foreach ( $wpdb->tables[ $log_table ] as $_row ) {
+            if ( (int) ( $_row['id'] ?? 0 ) === (int) $issue_61_log_id ) {
+                $inserted_row = $_row;
+                break;
+            }
+        }
+    }
+    cco_check( 'log: row is queryable from the test wpdb', null !== $inserted_row );
+
+    if ( null !== $inserted_row ) {
+        $decoded_meta = json_decode( (string) ( $inserted_row['metadata'] ?? '' ), true );
+        cco_check( 'log: row metadata decodes to an array', is_array( $decoded_meta ) );
+        cco_check( 'log: metadata contains pool_tokens_estimate (Issue #61 contract)', (int) ( $decoded_meta['pool_tokens_estimate'] ?? 0 ) === 182788 );
+        cco_check( 'log: metadata contains capped_tokens_estimate', (int) ( $decoded_meta['capped_tokens_estimate'] ?? 0 ) === 10256 );
+        cco_check( 'log: metadata contains pool_chars', (int) ( $decoded_meta['pool_chars'] ?? 0 ) === 548366 );
+        cco_check( 'log: metadata contains capped_chars', (int) ( $decoded_meta['capped_chars'] ?? 0 ) === 30770 );
+        cco_check( 'log: metadata contains cap_articles', (int) ( $decoded_meta['cap_articles'] ?? 0 ) === 40 );
+        cco_check( 'log: metadata contains cap_chars_per_article', (int) ( $decoded_meta['cap_chars_per_article'] ?? 0 ) === 800 );
+        // The Issue #61 invariant: capped < pool whenever truncation occurs.
+        cco_check(
+            'log: capped_tokens_estimate < pool_tokens_estimate (Issue #61 invariant)',
+            (int) ( $decoded_meta['capped_tokens_estimate'] ?? 0 ) < (int) ( $decoded_meta['pool_tokens_estimate'] ?? 0 )
+        );
+    }
+} else {
+    cco_check( 'log: PressHub_AI_Token_Logger class available', false );
+}
+
+
+// =========================================================================
 // Issue #61 - Test 5: render_hub_page() emits the "Of N pool tokens, M were
 // sent to the LLM" subtext in the milestone card and the Inspector toolbar
 // when the harvested pool exceeds the cap. This is the server-side
@@ -244,6 +311,23 @@ cco_check( 'render: subtext contains "800 chars/article"', false !== strpos( $re
 cco_check( 'render: subtext contains the data-cap-articles attribute', false !== strpos( $rendered_html, 'data-cap-articles="40"' ) );
 cco_check( 'render: subtext contains the data-cap-chars attribute', false !== strpos( $rendered_html, 'data-cap-chars="800"' ) );
 cco_check( 'render: subtext element has the title attribute for the hover tooltip', false !== strpos( $rendered_html, 'title="Pool tokens vs. tokens actually sent to the LLM' ) );
+
+// Issue #61 (S1) — the server-rendered card attributes must include
+// data-capped-tokens so the JS mirror sums the cap-aware numbers
+// instead of the uncapped data-tokens. We assert that for an article
+// much longer than the 800-char cap, the capped value is strictly
+// smaller than the uncapped value.
+preg_match( '/data-tokens="(\d+)" data-capped-tokens="(\d+)"/', $rendered_html, $card_attr_matches );
+cco_check( 'render: each card has data-tokens + data-capped-tokens attributes', ! empty( $card_attr_matches ) );
+if ( ! empty( $card_attr_matches ) ) {
+    $uncapped = (int) $card_attr_matches[1];
+    $capped   = (int) $card_attr_matches[2];
+    cco_check(
+        "render: card data-capped-tokens ({$capped}) <= card data-tokens ({$uncapped}) (cap respected)",
+        $capped <= $uncapped
+    );
+}
+cco_check( 'render: card attribute data-cap-chars="800" is present', false !== strpos( $rendered_html, 'data-cap-chars="800"' ) );
 
 
 // =========================================================================

@@ -697,7 +697,7 @@ class PressHub_AI_Briefing_Admin {
                                 </span>
                             </p>
                             <?php if ( '' !== $llm_subtext_label ) : ?>
-                                <p id="presshub-milestone-llm-subtext" class="presshub-llm-subtext description" style="margin: 4px 0 0; font-size: 11px; color: #555;" data-cap-articles="<?php echo esc_attr( (int) $cap_articles_server ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>" title="<?php echo esc_attr__( 'Pool tokens vs. tokens actually sent to the LLM (capped by max articles × max chars/article).', 'presshub-ai-editor' ); ?>">
+                                <p id="presshub-milestone-llm-subtext" class="presshub-llm-subtext presshub-milestone-llm-subtext description" data-cap-articles="<?php echo esc_attr( (int) $cap_articles_server ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>" title="<?php echo esc_attr__( 'Pool tokens vs. tokens actually sent to the LLM (capped by max articles × max chars/article).', 'presshub-ai-editor' ); ?>">
                                     <?php echo esc_html( $llm_subtext_label ); ?>
                                 </p>
                             <?php endif; ?>
@@ -892,7 +892,7 @@ class PressHub_AI_Briefing_Admin {
                         </span>
                     </div>
                     <?php if ( '' !== $llm_subtext_label ) : ?>
-                        <p id="presshub-inspector-llm-subtext" class="presshub-llm-subtext description" style="margin: 6px 0 0; font-size: 11px; color: #555;" data-cap-articles="<?php echo esc_attr( (int) $cap_articles_server ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>" title="<?php echo esc_attr__( 'Pool tokens vs. tokens actually sent to the LLM (capped by max articles × max chars/article).', 'presshub-ai-editor' ); ?>">
+                        <p id="presshub-inspector-llm-subtext" class="presshub-llm-subtext presshub-inspector-llm-subtext description" data-cap-articles="<?php echo esc_attr( (int) $cap_articles_server ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>" title="<?php echo esc_attr__( 'Pool tokens vs. tokens actually sent to the LLM (capped by max articles × max chars/article).', 'presshub-ai-editor' ); ?>">
                             <?php echo esc_html( $llm_subtext_label ); ?>
                         </p>
                     <?php endif; ?>
@@ -908,8 +908,24 @@ class PressHub_AI_Briefing_Admin {
                             $word_count  = (int) PressHub_AI_Context_Estimator::utf8_word_count( $art_content );
                             $char_count  = mb_strlen( $art_content );
                             $token_count = (int) PressHub_AI_Context_Estimator::estimate_tokens( $art_content );
+                            // Issue #61 (S1) — also compute the per-article *capped* token
+                            // estimate the LLM will see (truncated to the same
+                            // cap_chars_per_article value the curator uses in
+                            // format_articles_context()). The JS sums these
+                            // for the first cap_articles selected cards so the
+                            // "Of N pool tokens, M were sent to the LLM" subtext
+                            // matches the server-rendered numbers exactly.
+                            $capped_card_text = $art_content;
+                            if ( function_exists( 'mb_strlen' ) && function_exists( 'mb_substr' ) ) {
+                                if ( mb_strlen( $capped_card_text ) > $cap_chars_per_article_server ) {
+                                    $capped_card_text = mb_substr( $capped_card_text, 0, $cap_chars_per_article_server );
+                                }
+                            } elseif ( strlen( $capped_card_text ) > $cap_chars_per_article_server ) {
+                                $capped_card_text = substr( $capped_card_text, 0, $cap_chars_per_article_server );
+                            }
+                            $capped_token_count = (int) PressHub_AI_Context_Estimator::estimate_tokens( $capped_card_text );
                         ?>
-                            <div class="presshub-inspector-card" data-index="<?php echo esc_attr( $index ); ?>" data-source="<?php echo esc_attr( strtolower( $art_source ) ); ?>" data-title="<?php echo esc_attr( strtolower( $art_title ) ); ?>" data-text="<?php echo esc_attr( strtolower( mb_substr( strip_tags( $art_content ), 0, 500 ) ) ); ?>" data-words="<?php echo esc_attr( $word_count ); ?>" data-tokens="<?php echo esc_attr( $token_count ); ?>">
+                            <div class="presshub-inspector-card" data-index="<?php echo esc_attr( $index ); ?>" data-source="<?php echo esc_attr( strtolower( $art_source ) ); ?>" data-title="<?php echo esc_attr( strtolower( $art_title ) ); ?>" data-text="<?php echo esc_attr( strtolower( mb_substr( strip_tags( $art_content ), 0, 500 ) ) ); ?>" data-words="<?php echo esc_attr( $word_count ); ?>" data-tokens="<?php echo esc_attr( $token_count ); ?>" data-capped-tokens="<?php echo esc_attr( $capped_token_count ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>">
                                 <div class="presshub-inspector-card-header">
                                     <div class="inspector-card-check">
                                         <input type="checkbox" class="presshub-article-checkbox" value="<?php echo esc_attr( $index ); ?>" checked="checked" id="inspector-check-<?php echo esc_attr( $index ); ?>" />

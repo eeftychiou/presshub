@@ -559,6 +559,20 @@
     border: 1px solid #d9c8ee;
 }
 
+/* Issue #61 (S6) — pool-vs-LLM cap observability subtext. Used both in
+   the milestone card and the Inspector toolbar. The margin is overridden
+   by the .presshub-milestone-llm-subtext and
+   .presshub-inspector-llm-subtext modifier classes below. */
+.presshub-llm-subtext {
+    font-size: 11px;
+    color: #555;
+    margin: 4px 0 0;
+}
+
+.presshub-inspector-llm-subtext {
+    margin: 6px 0 0;
+}
+
 .presshub-inspector-articles-list {
     display: flex;
     flex-direction: column;
