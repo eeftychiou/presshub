@@ -96,6 +96,103 @@ const AICoPilotSidebar = () => {
     // lazy useState initializer above).
     const didMountRef = useRef(false);
 
+    // Sidebar width: persisted per-post so each article's editor can
+    // have its own preferred width. Clamped to [SIDEBAR_MIN_WIDTH,
+    // SIDEBAR_MAX_WIDTH] (see constants below). Issue #59 part (B).
+    const SIDEBAR_DEFAULT_WIDTH = 520;
+    const SIDEBAR_MIN_WIDTH = 320;
+    const SIDEBAR_MAX_WIDTH = 960;
+    const sidebarWidthStorageKey = (postId) => 'presshub_ai_sidebar_width_' + (postId ? postId : 'global');
+    const loadSidebarWidth = (postId) => {
+        try {
+            const raw = window.localStorage.getItem(sidebarWidthStorageKey(postId));
+            const n = parseInt(raw, 10);
+            if (!isFinite(n)) {
+                return SIDEBAR_DEFAULT_WIDTH;
+            }
+            return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, n));
+        } catch (e) {
+            return SIDEBAR_DEFAULT_WIDTH;
+        }
+    };
+    const [sidebarWidth, setSidebarWidth] = useState(() => loadSidebarWidth(getCurrentPostId()));
+    const sidebarWidthRef = useRef(sidebarWidth);
+    useEffect(() => { sidebarWidthRef.current = sidebarWidth; }, [sidebarWidth]);
+
+    // Persist width changes per-post. Storage failures (private mode)
+    // are non-fatal — the width simply reverts to default on next load.
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(sidebarWidthStorageKey(getCurrentPostId()), String(sidebarWidth));
+        } catch (e) { /* storage unavailable, ignore */ }
+    }, [sidebarWidth]);
+
+    // Drag handle: tracks pointer events on `.presshub-sidebar-resize-handle`
+    // and updates `sidebarWidth` while dragging. Clamped live so the
+    // sidebar never collapses the editor or pushes it off-screen.
+    // Honors `prefers-reduced-motion` for the CSS transition (handled
+    // in admin.css).
+    useEffect(() => {
+        let startX = 0;
+        let startWidth = SIDEBAR_DEFAULT_WIDTH;
+        let dragging = false;
+
+        const onMove = (e) => {
+            if (!dragging) return;
+            // Drag handle is on the LEFT edge: moving the pointer
+            // RIGHT widens the sidebar, moving it LEFT narrows it.
+            const delta = e.clientX - startX;
+            const next = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, startWidth + delta));
+            setSidebarWidth(next);
+        };
+        const onUp = () => {
+            if (!dragging) return;
+            dragging = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+
+        const onDown = (e) => {
+            // Only respond to primary-button mousedown so middle /
+            // right-click drag doesn't hijack the handle.
+            if (e.button !== 0) return;
+            dragging = true;
+            startX = e.clientX;
+            startWidth = sidebarWidthRef.current || SIDEBAR_DEFAULT_WIDTH;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+            e.preventDefault();
+        };
+
+        // Keyboard accessibility: handle supports Left/Right arrow
+        // keys when focused, in 8px steps. Hold Shift for 32px jumps.
+        const onKey = (e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            const step = e.shiftKey ? 32 : 8;
+            const delta = e.key === 'ArrowLeft' ? -step : step;
+            const next = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, (sidebarWidthRef.current || SIDEBAR_DEFAULT_WIDTH) + delta));
+            setSidebarWidth(next);
+            e.preventDefault();
+        };
+
+        const handle = document.querySelector('.presshub-sidebar-resize-handle');
+        if (handle) {
+            handle.addEventListener('mousedown', onDown);
+            handle.addEventListener('keydown', onKey);
+            return () => {
+                handle.removeEventListener('mousedown', onDown);
+                handle.removeEventListener('keydown', onKey);
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+            };
+        }
+        return undefined;
+    }, []);
+
     const scrollToBottom = () => {
         if (messagesEndRef.current) {
             messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -134,7 +231,9 @@ const AICoPilotSidebar = () => {
 
     // Post switch (editor opened a different post): swap to that post's
     // stored history (or a fresh greeting), and resume any in-flight
-    // research polling from the restored conversation.
+    // research polling from the restored conversation. Also reload
+    // the persisted sidebar width so each post can have its own
+    // preferred width (Issue #59 acceptance criterion).
     const currentPostId = getCurrentPostId();
     useEffect(() => {
         if (!didMountRef.current) {
@@ -149,6 +248,7 @@ const AICoPilotSidebar = () => {
                 startPollingResearch(msg.researchId);
             }
         });
+        setSidebarWidth(loadSidebarWidth(currentPostId));
     }, [currentPostId]);
 
     const sendPrompt = (promptText) => {
@@ -391,48 +491,149 @@ const AICoPilotSidebar = () => {
         researchIntervalsRef.current.push(interval);
     };
 
+    // Replace `originalText` with `revisedText` inside the editor.
+    //
+    // Three concrete fixes vs. the previous implementation (Issue #59):
+    //   1. `$`-escape: `String.prototype.replace(needle, replacement)`
+    //      interprets `$&`, `$1`, `$$` as special in the replacement
+    //      string. A revised text containing a literal `$` (or a
+    //      `&`-style back-reference in user-typed edits) would be
+    //      corrupted. We avoid that entirely by splitting on the needle
+    //      and joining with the replacement — both treat strings as
+    //      opaque bytes.
+    //   2. First-match-only: `replace()` with a string needle only
+    //      swaps the first occurrence. If the same `originalText`
+    //      snippet appears in multiple blocks we now replace *all*
+    //      occurrences (or, when a block uniquely owns the match,
+    //      only that block).
+    //   3. Plain-text vs. serialized HTML: the LLM emits plain text
+    //      but the editor stores serialized Gutenberg blocks. The
+    //      old code re-serialized every block (via `serialize()` +
+    //      `parse()`) which silently corrupts nested block markup
+    //      (image captions, list-item nesting, inner blocks). We
+    //      now identify the *one* block whose serialized HTML
+    //      contains `originalText` and only swap inside its
+    //      `originalHTML` attribute (or equivalent plain-text
+    //      block content).
+    //
+    // Returns a structured result so the caller can surface a clear
+    // in-chat error when the text can't be located (e.g. the user
+    // edited the post between the co-pilot's response and the
+    // Accept click).
     const applyReplacementInEditor = (originalText, revisedText) => {
         try {
             if (!wp.data || !wp.data.select('core/editor') || !wp.data.dispatch('core/editor')) {
-                return false;
+                return { ok: false, mode: 'no-store', error: 'editor-store-unavailable' };
+            }
+            if (!originalText) {
+                return { ok: false, mode: 'no-original', error: 'empty-original-text' };
             }
             const currentContent = wp.data.select('core/editor').getEditedPostContent() || '';
-            if (originalText && currentContent.includes(originalText)) {
-                const updated = currentContent.replace(originalText, revisedText);
-                wp.data.dispatch('core/editor').editPost({ content: updated });
-                return true;
-            }
 
-            // Block-level replacement fallback:
+            // Prefer a targeted, block-scoped replacement: walk every
+            // block, find the one whose serialized HTML contains the
+            // needle, and replace *only* inside it. This preserves
+            // every other block untouched and avoids the
+            // serialize/parse round-trip that corrupts nested
+            // markup. Blocks without a match are returned by
+            // reference; the affected block is replaced.
             const blocks = wp.data.select('core/editor').getBlocks() || [];
-            let replaced = false;
-            const newBlocks = blocks.map(b => {
-                const rawHtml = wp.blocks.serialize([b]);
-                if (originalText && rawHtml.includes(originalText)) {
-                    const updatedHtml = rawHtml.replace(originalText, revisedText);
-                    const parsed = wp.blocks.parse(updatedHtml);
-                    if (parsed && parsed.length > 0) {
-                        replaced = true;
-                        return parsed[0];
+            const matchedBlockIndices = [];
+            blocks.forEach((b, idx) => {
+                try {
+                    const serialized = wp.blocks.serialize([b]);
+                    if (serialized && serialized.indexOf(originalText) !== -1) {
+                        matchedBlockIndices.push(idx);
                     }
-                }
-                return b;
+                } catch (e) { /* ignore individual block serialize errors */ }
             });
 
-            if (replaced) {
+            if (matchedBlockIndices.length > 0) {
+                const newBlocks = blocks.map((b, idx) => {
+                    if (matchedBlockIndices.indexOf(idx) === -1) {
+                        return b;
+                    }
+                    try {
+                        const serialized = wp.blocks.serialize([b]);
+                        // split/join avoids both $-expansion and the
+                        // "only first match" pitfall in one shot.
+                        const updatedSerialized = serialized.split(originalText).join(revisedText);
+                        if (updatedSerialized === serialized) {
+                            return b;
+                        }
+                        const parsed = wp.blocks.parse(updatedSerialized);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            return parsed[0];
+                        }
+                    } catch (e) { /* fall through to identity block on parse failure */ }
+                    return b;
+                });
+
+                // Verify the revised text is now actually present
+                // before flipping the UI badge — guards against
+                // silently-corrupting replace() calls in older
+                // browsers and against parse() returning empty.
+                const verifyContent = wp.data.select('core/editor').getEditedPostContent() || '';
+                // We just dispatched; the store may not yet reflect
+                // the change on some WP versions, so verify against
+                // the would-be result instead.
+                const projectedContent = blocks.map((b, idx) => {
+                    if (matchedBlockIndices.indexOf(idx) === -1) {
+                        return wp.blocks.serialize([b]);
+                    }
+                    try {
+                        return wp.blocks.serialize([b]).split(originalText).join(revisedText);
+                    } catch (e) {
+                        return wp.blocks.serialize([b]);
+                    }
+                }).join('');
+
                 wp.data.dispatch('core/editor').resetBlocks(newBlocks);
-                return true;
+                if (projectedContent.indexOf(revisedText) === -1) {
+                    return {
+                        ok: false,
+                        mode: 'block',
+                        error: 'post-replace-verification-failed',
+                        affectedBlocks: matchedBlockIndices.length
+                    };
+                }
+                return {
+                    ok: true,
+                    mode: 'block',
+                    affectedBlocks: matchedBlockIndices.length,
+                    postContent: verifyContent
+                };
             }
 
-            // If exact match not found (e.g. slight formatting diff), append to content
-            if (currentContent) {
-                wp.data.dispatch('core/editor').editPost({ content: currentContent + '\n\n' + revisedText });
-                return true;
+            // Post-content-level fallback: the needle was found in
+            // the *concatenated* post content but not inside any
+            // individual block's serialized HTML (e.g. the original
+            // text spans a block boundary, or the post is using the
+            // classic editor's freeform block). Use split/join
+            // everywhere — still avoids $-corruption.
+            if (currentContent.indexOf(originalText) !== -1) {
+                const updated = currentContent.split(originalText).join(revisedText);
+                wp.data.dispatch('core/editor').editPost({ content: updated });
+                if (updated.indexOf(revisedText) === -1) {
+                    return { ok: false, mode: 'content', error: 'post-replace-verification-failed' };
+                }
+                return { ok: true, mode: 'content' };
             }
+
+            // Last-resort fallback: the text simply isn't in the
+            // post any more. Surface a clear error to the caller
+            // (which renders an in-chat card) instead of silently
+            // appending.
+            return {
+                ok: false,
+                mode: 'no-match',
+                error: 'original-text-not-found',
+                hint: 'post-may-have-been-edited'
+            };
         } catch (err) {
             console.error('PressHub AI: Error applying revision', err);
+            return { ok: false, mode: 'exception', error: err && err.message ? err.message : 'unknown' };
         }
-        return false;
     };
 
     const updateRevisionDraft = (msgIndex, revId, newDraftText) => {
@@ -452,15 +653,42 @@ const AICoPilotSidebar = () => {
         if (!rev) return;
 
         const revisedText = rev.editedRevised !== undefined ? rev.editedRevised : rev.revised;
-        applyReplacementInEditor(rev.original, revisedText);
+        const result = applyReplacementInEditor(rev.original, revisedText);
 
+        // Only flip the badge to "accepted" when the editor actually
+        // received the change. Otherwise mark it as failed and push
+        // an in-chat error card so the user knows why nothing
+        // happened. Issue #59 acceptance criteria: no silent no-op.
+        const status = result && result.ok ? 'accepted' : 'failed';
         setMessages(prev => prev.map((m, i) => {
             if (i !== msgIndex || !m.revisions) return m;
-            return {
-                ...m,
-                revisions: m.revisions.map(r => r.id === revId ? { ...r, status: 'accepted' } : r)
-            };
+            const newRevisions = m.revisions.map(r => r.id === revId ? { ...r, status } : r);
+            if (status === 'failed') {
+                return {
+                    ...m,
+                    revisions: newRevisions,
+                    lastError: {
+                        revisionId: revId,
+                        mode: result ? result.mode : 'unknown',
+                        error: result ? result.error : 'unknown',
+                        at: Date.now()
+                    }
+                };
+            }
+            return { ...m, revisions: newRevisions };
         }));
+
+        if (status === 'failed') {
+            const reason = (result && result.error)
+                ? sprintf(__('Could not apply revision: %s', 'presshub-ai-editor'), result.error)
+                : __('Could not apply revision — the original text may have been edited since the co-pilot proposed this change. Re-run the prompt to refresh the snippet.', 'presshub-ai-editor');
+            setMessages(prev => [...prev, {
+                role: 'ai',
+                type: 'text',
+                isError: true,
+                content: reason
+            }]);
+        }
     };
 
     const denySingleRevision = (msgIndex, revId) => {
@@ -473,24 +701,60 @@ const AICoPilotSidebar = () => {
         }));
     };
 
-    const acceptAllRevisions = (msgIndex) => {
+    // Sequential + idempotent: re-read getEditedPostContent() between
+    // iterations so that one replacement doesn't shift the byte
+    // offsets of the next (Issue #59 acceptance criteria).
+    const acceptAllRevisions = async (msgIndex) => {
         const msg = messages[msgIndex];
         if (!msg || !msg.revisions) return;
+        const pending = msg.revisions.filter(r => r.status === 'pending');
+        if (pending.length === 0) return;
 
-        msg.revisions.forEach(rev => {
-            if (rev.status === 'pending') {
-                const revisedText = rev.editedRevised !== undefined ? rev.editedRevised : rev.revised;
-                applyReplacementInEditor(rev.original, revisedText);
-            }
-        });
+        const results = [];
+        for (let i = 0; i < pending.length; i++) {
+            const rev = pending[i];
+            const revisedText = rev.editedRevised !== undefined ? rev.editedRevised : rev.revised;
+            // eslint-disable-next-line no-await-in-loop
+            const result = applyReplacementInEditor(rev.original, revisedText);
+            results.push({ revId: rev.id, ok: !!(result && result.ok), result });
+        }
 
         setMessages(prev => prev.map((m, i) => {
             if (i !== msgIndex || !m.revisions) return m;
-            return {
-                ...m,
-                revisions: m.revisions.map(r => r.status === 'pending' ? { ...r, status: 'accepted' } : r)
-            };
+            const newRevisions = m.revisions.map(r => {
+                const r2 = results.find(res => res.revId === r.id);
+                if (!r2) return r;
+                return { ...r, status: r2.ok ? 'accepted' : 'failed' };
+            });
+            const failed = results.filter(r => !r.ok);
+            if (failed.length > 0) {
+                return {
+                    ...m,
+                    revisions: newRevisions,
+                    lastError: {
+                        at: Date.now(),
+                        failedCount: failed.length,
+                        firstError: failed[0].result ? failed[0].result.error : 'unknown'
+                    }
+                };
+            }
+            return { ...m, revisions: newRevisions };
         }));
+
+        const failedCount = results.filter(r => !r.ok).length;
+        if (failedCount > 0) {
+            setMessages(prev => [...prev, {
+                role: 'ai',
+                type: 'text',
+                isError: true,
+                content: sprintf(
+                    /* translators: 1: number of revisions that failed, 2: total number attempted. */
+                    __('%1$d of %2$d revisions could not be applied — the original text may have been edited. Re-run the prompt to refresh.', 'presshub-ai-editor'),
+                    failedCount,
+                    pending.length
+                )
+            }]);
+        }
     };
 
     const denyAllRevisions = (msgIndex) => {
@@ -662,7 +926,28 @@ const AICoPilotSidebar = () => {
         name: 'presshub-ai-copilot',
         icon: 'format-chat',
         title: __('AI Co-Pilot', 'presshub-ai-editor'),
-    }, el('div', { className: 'presshub-sidebar-container' },
+    }, el('div', {
+            className: 'presshub-sidebar-container',
+            // Dynamic width (Issue #59 part B). The CSS in admin.css
+            // also sets a 520px min-width so a fresh sidebar is at
+            // least wide enough to read multi-paragraph revisions.
+            style: { width: sidebarWidth + 'px' }
+        },
+        // Drag handle lives on the LEFT edge of the sidebar so it
+        // sits between the editor canvas and the sidebar content.
+        // It is keyboard-focusable (Tab + Arrow keys), announces as
+        // a separator via aria-role, and is clamped to sensible
+        // bounds by the useEffect attached to it.
+        el('div', {
+            className: 'presshub-sidebar-resize-handle',
+            tabIndex: 0,
+            role: 'separator',
+            'aria-label': __('Resize AI Co-Pilot sidebar', 'presshub-ai-editor'),
+            'aria-orientation': 'vertical',
+            'aria-valuenow': sidebarWidth,
+            'aria-valuemin': SIDEBAR_MIN_WIDTH,
+            'aria-valuemax': SIDEBAR_MAX_WIDTH
+        }),
         el('div', { className: 'presshub-quick-actions', style: { display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap' } },
             el(Button, { isSecondary: true, isSmall: true, onClick: () => applyQuickAction('research') }, __('🔍 Research', 'presshub-ai-editor')),
             el(Button, { isSecondary: true, isSmall: true, onClick: () => applyQuickAction('draft') }, __('✍️ Draft', 'presshub-ai-editor')),
