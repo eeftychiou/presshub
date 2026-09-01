@@ -525,6 +525,40 @@
     white-space: nowrap;
 }
 
+.presshub-article-tokens-pill {
+    display: inline-block;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 10px;
+    background: #f4ecfd;
+    color: #5b2b8a;
+    border: 1px solid #d9c8ee;
+    white-space: nowrap;
+}
+
+.presshub-aggregate-totals {
+    display: inline-block;
+    padding: 3px 9px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 12px;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.presshub-aggregate-words-pill {
+    background: #e7f3fe;
+    color: #135e96;
+    border: 1px solid #c5d9ed;
+}
+
+.presshub-aggregate-tokens-pill {
+    background: #f4ecfd;
+    color: #5b2b8a;
+    border: 1px solid #d9c8ee;
+}
+
 .presshub-inspector-articles-list {
     display: flex;
     flex-direction: column;

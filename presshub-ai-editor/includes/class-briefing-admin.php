@@ -599,7 +599,7 @@ class PressHub_AI_Briefing_Admin {
                         <?php endif; ?>
 
                         <div class="presshub-articles-summary-box" style="<?php echo empty( $status['articles'] ) ? 'display:none;' : ''; ?>">
-                            <p style="margin: 8px 0;">
+                            <p style="margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
                                 <span id="presshub-selected-articles-count" class="presshub-selected-count-badge" style="font-size: 12px; display: inline-block;">
                                     <?php
                                     $total_articles = count( $status['articles'] );
@@ -610,6 +610,12 @@ class PressHub_AI_Briefing_Admin {
                                         $total_articles
                                     );
                                     ?>
+                                </span>
+                                <span id="presshub-selected-words-total" class="presshub-aggregate-totals presshub-aggregate-words-pill" style="font-size: 11px; display: inline-block;" aria-label="<?php echo esc_attr__( 'Aggregate word count for selected articles', 'presshub-ai-editor' ); ?>">
+                                    <?php echo esc_html__( 'Total: 0 words', 'presshub-ai-editor' ); ?>
+                                </span>
+                                <span id="presshub-selected-tokens-total" class="presshub-aggregate-totals presshub-aggregate-tokens-pill" style="font-size: 11px; display: inline-block;" aria-label="<?php echo esc_attr__( 'Aggregate token estimate for selected articles', 'presshub-ai-editor' ); ?>">
+                                    <?php echo esc_html__( '~0 tokens', 'presshub-ai-editor' ); ?>
                                 </span>
                             </p>
                             <a href="#presshub-harvest-inspector-section" class="button button-primary button-small" id="btn-scroll-to-inspector" style="width: 100%; text-align: center; justify-content: center; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;">
@@ -795,6 +801,12 @@ class PressHub_AI_Briefing_Admin {
                             );
                             ?>
                         </span>
+                        <span id="presshub-inspector-words-total" class="presshub-aggregate-totals presshub-aggregate-words-pill" aria-label="<?php echo esc_attr__( 'Aggregate word count for selected articles', 'presshub-ai-editor' ); ?>">
+                            <?php echo esc_html__( 'Total: 0 words', 'presshub-ai-editor' ); ?>
+                        </span>
+                        <span id="presshub-inspector-tokens-total" class="presshub-aggregate-totals presshub-aggregate-tokens-pill" aria-label="<?php echo esc_attr__( 'Aggregate token estimate for selected articles', 'presshub-ai-editor' ); ?>">
+                            <?php echo esc_html__( '~0 tokens', 'presshub-ai-editor' ); ?>
+                        </span>
                     </div>
                 </div>
 
@@ -809,7 +821,7 @@ class PressHub_AI_Briefing_Admin {
                             $char_count  = mb_strlen( $art_content );
                             $token_count = (int) PressHub_AI_Context_Estimator::estimate_tokens( $art_content );
                         ?>
-                            <div class="presshub-inspector-card" data-index="<?php echo esc_attr( $index ); ?>" data-source="<?php echo esc_attr( strtolower( $art_source ) ); ?>" data-title="<?php echo esc_attr( strtolower( $art_title ) ); ?>" data-text="<?php echo esc_attr( strtolower( mb_substr( strip_tags( $art_content ), 0, 500 ) ) ); ?>">
+                            <div class="presshub-inspector-card" data-index="<?php echo esc_attr( $index ); ?>" data-source="<?php echo esc_attr( strtolower( $art_source ) ); ?>" data-title="<?php echo esc_attr( strtolower( $art_title ) ); ?>" data-text="<?php echo esc_attr( strtolower( mb_substr( strip_tags( $art_content ), 0, 500 ) ) ); ?>" data-words="<?php echo esc_attr( $word_count ); ?>" data-tokens="<?php echo esc_attr( $token_count ); ?>">
                                 <div class="presshub-inspector-card-header">
                                     <div class="inspector-card-check">
                                         <input type="checkbox" class="presshub-article-checkbox" value="<?php echo esc_attr( $index ); ?>" checked="checked" id="inspector-check-<?php echo esc_attr( $index ); ?>" />
