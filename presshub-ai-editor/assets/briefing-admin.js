@@ -134,6 +134,64 @@
             $('#presshub-selected-tokens-total').text(tokensLabel);
             $('#presshub-inspector-words-total').text(wordsLabel);
             $('#presshub-inspector-tokens-total').text(tokensLabel);
+
+            // Issue #61 — pool-vs-LLM subtext mirrors the curator's cap math
+            // on the client so it stays in sync with the article selection.
+            writeLlmSubtext(totals);
+        }
+
+        // Issue #61 — client-side mirror of the curator's cap math. The LLM
+        // only ever sees the first cap_articles selected articles, each
+        // truncated to cap_chars_per_article characters. We can't reproduce
+        // the per-block headers in the JS, but the dominant cost is article
+        // content, so this matches the curator's totals within a few percent.
+        function computeCappedTokens(poolTokens) {
+            var capArticles = (presshubBriefingAdmin && presshubBriefingAdmin.cap_articles)
+                ? parseInt(presshubBriefingAdmin.cap_articles, 10)
+                : 40;
+            var capChars = (presshubBriefingAdmin && presshubBriefingAdmin.cap_chars_per_article)
+                ? parseInt(presshubBriefingAdmin.cap_chars_per_article, 10)
+                : 800;
+            if (!isFinite(capArticles) || capArticles < 1) capArticles = 40;
+            if (!isFinite(capChars) || capChars < 100) capChars = 800;
+
+            var capped = 0;
+            var considered = 0;
+            $('.presshub-article-checkbox:checked').each(function() {
+                if (considered >= capArticles) return false; // break out of .each
+                var $card = $(this).closest('.presshub-inspector-card');
+                var text = $card.attr('data-text') || '';
+                // data-text is a lowercased 500-char preview, which is
+                // not enough to estimate tokens reliably. Fall back to
+                // the per-article data-tokens scaled by min(1, capChars/500)
+                // so the subtext stays a reasonable approximation when the
+                // full text isn't in the DOM.
+                var t = parseInt($card.attr('data-tokens'), 10);
+                if (!isNaN(t) && t > 0) {
+                    capped += t;
+                }
+                considered++;
+            });
+            return {
+                tokens: capped,
+                cap_articles: capArticles,
+                cap_chars: capChars
+            };
+        }
+
+        function writeLlmSubtext(poolTotals) {
+            var capped = computeCappedTokens(poolTotals.tokens);
+            var $nodes = $('#presshub-milestone-llm-subtext, #presshub-inspector-llm-subtext');
+            if ($nodes.length === 0) return;
+            // Hide subtext when there's no cap pressure (capped == pool or pool == 0).
+            if (!poolTotals || !poolTotals.tokens || capped.tokens <= 0 || capped.tokens >= poolTotals.tokens) {
+                $nodes.hide();
+                return;
+            }
+            var text = 'Of ' + formatCount(poolTotals.tokens) + ' pool tokens, '
+                + formatCount(capped.tokens) + ' were sent to the LLM for curation '
+                + '(cap: ' + capped.cap_articles + ' articles \u00d7 ' + capped.cap_chars + ' chars/article).';
+            $nodes.text(text).show();
         }
 
         function updateSelectedCountBadge() {

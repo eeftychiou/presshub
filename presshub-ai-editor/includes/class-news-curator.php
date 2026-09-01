@@ -41,6 +41,20 @@ class PressHub_AI_News_Curator {
     private static $last_original_articles_count = 0;
 
     /**
+     * @internal Issue #61 — char count of the *rendered* context string produced by
+     * the most recent format_articles_context() call (the prompt the LLM actually
+     * received, after both the max_articles slice and the per-article char cap).
+     */
+    private static $last_capped_chars = 0;
+
+    /**
+     * @internal Issue #61 — token estimate of the *rendered* context string produced
+     * by the most recent format_articles_context() call, derived from the actual
+     * rendered context (not the per-article estimate).
+     */
+    private static $last_capped_tokens_estimate = 0;
+
+    /**
      * Get the base curation prompt with template placeholders.
      *
      * @return string Base system prompt with placeholders.
@@ -150,10 +164,32 @@ class PressHub_AI_News_Curator {
             $blocks[] = $block;
         }
 
+        $rendered = implode( "\n\n---\n\n", $blocks );
+
         self::$last_context_truncated       = $truncated;
         self::$last_original_articles_count = $original_count;
 
-        return implode( "\n\n---\n\n", $blocks );
+        // Issue #61 — surface pool-vs-LLM observability. The capped metrics are
+        // derived from the *rendered* prompt string (not per-article estimates
+        // summed) so they reflect exactly what the LLM saw, including block
+        // headers and the "---" separators.
+        if ( function_exists( 'mb_strlen' ) ) {
+            self::$last_capped_chars = (int) mb_strlen( $rendered );
+        } else {
+            self::$last_capped_chars = (int) strlen( $rendered );
+        }
+        if ( class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+            self::$last_capped_tokens_estimate = (int) PressHub_AI_Context_Estimator::estimate_tokens( $rendered );
+        } else {
+            // Defensive fallback: replicate the codepoints/3 heuristic so the
+            // metric is always present even if the estimator is unavailable.
+            $cp = function_exists( 'mb_strlen' )
+                ? (int) mb_strlen( strip_tags( $rendered ), 'UTF-8' )
+                : (int) strlen( $rendered );
+            self::$last_capped_tokens_estimate = $cp > 0 ? max( 1, intdiv( $cp, 3 ) ) : 0;
+        }
+
+        return $rendered;
     }
 
     /**
@@ -175,6 +211,29 @@ class PressHub_AI_News_Curator {
      */
     public function last_original_articles_count(): int {
         return (int) ( self::$last_original_articles_count ?? 0 );
+    }
+
+    /**
+     * Issue #61 — returns the character count of the *rendered* context string produced
+     * by the most recent format_articles_context() call (the prompt the LLM actually
+     * received, after both the max_articles slice and the per-article char cap).
+     *
+     * @return int
+     */
+    public function last_capped_chars(): int {
+        return (int) ( self::$last_capped_chars ?? 0 );
+    }
+
+    /**
+     * Issue #61 — returns the token estimate of the *rendered* context string produced
+     * by the most recent format_articles_context() call. Computed from the actual
+     * rendered prompt (not summed per-article estimates), so it matches what the LLM
+     * tokenizer would see.
+     *
+     * @return int
+     */
+    public function last_capped_tokens_estimate(): int {
+        return (int) ( self::$last_capped_tokens_estimate ?? 0 );
     }
 
     /**
@@ -578,6 +637,36 @@ class PressHub_AI_News_Curator {
             }
         }
 
+        // Issue #61 — surface pool-vs-LLM observability. Compute the
+        // un-capped pool totals over the *post-selected-article-ids* set so the
+        // Inspector card and the token log metadata can both show
+        // "Of N pool tokens, M were sent to the LLM (cap: X × Y)".
+        $pool_chars           = 0;
+        $pool_tokens_estimate = 0;
+        if ( class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+            foreach ( $articles as $_art ) {
+                $_content = (string) ( $_art['content'] ?? '' );
+                if ( '' === $_content ) {
+                    continue;
+                }
+                if ( function_exists( 'mb_strlen' ) ) {
+                    $pool_chars += (int) mb_strlen( $_content );
+                } else {
+                    $pool_chars += (int) strlen( $_content );
+                }
+                $pool_tokens_estimate += (int) PressHub_AI_Context_Estimator::estimate_tokens( $_content );
+            }
+        }
+
+        $cap_articles           = (int) apply_filters( 'presshub_ai_curation_max_articles', 40 );
+        $cap_chars_per_article  = (int) apply_filters( 'presshub_ai_curation_max_chars_per_article', 800 );
+        if ( $cap_articles < 1 ) {
+            $cap_articles = 1;
+        }
+        if ( $cap_chars_per_article < 100 ) {
+            $cap_chars_per_article = 100;
+        }
+
         return [
             'post_id'                  => $post_id,
             'date'                     => $date,
@@ -587,6 +676,13 @@ class PressHub_AI_News_Curator {
             'articles_count'           => $used_articles_count,
             'articles_count_original'  => $this->last_original_articles_count(),
             'articles_truncated'       => $this->was_context_truncated(),
+            // Issue #61 — pool-vs-LLM comparison.
+            'pool_chars'               => (int) $pool_chars,
+            'pool_tokens_estimate'     => (int) $pool_tokens_estimate,
+            'capped_chars'             => (int) $this->last_capped_chars(),
+            'capped_tokens_estimate'   => (int) $this->last_capped_tokens_estimate(),
+            'cap_articles'             => (int) $cap_articles,
+            'cap_chars_per_article'    => (int) $cap_chars_per_article,
         ];
     }
 

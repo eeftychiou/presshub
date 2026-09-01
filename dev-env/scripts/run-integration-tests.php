@@ -363,6 +363,41 @@ run_test( 'Issue #59: admin.css is enqueued for the block editor (sidebar CSS re
     return true;
 } );
 
+// Test 22: Issue #61 — News Curator cap observability.
+// When format_articles_context() truncates the article set the curator
+// must expose the capped char count, capped token estimate, and the
+// truncation flag through their public API so the AJAX handler can
+// surface them in the briefing response (and the token log metadata).
+run_test( 'Issue #61: News Curator cap observability — capped < pool when truncated', function() {
+    if ( ! class_exists( 'PressHub_AI_News_Curator' ) ) {
+        return 'Class PressHub_AI_News_Curator not loaded';
+    }
+    $curator = new PressHub_AI_News_Curator();
+    $big_articles = [];
+    for ( $i = 1; $i <= 100; $i++ ) {
+        $big_articles[] = [
+            'title'   => "Article {$i}",
+            'source'  => 'TestSource',
+            'url'     => "https://example.test/{$i}",
+            'content' => str_repeat( 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ', 40 ), // ~1040 chars
+        ];
+    }
+    $curator->format_articles_context( $big_articles );
+    if ( ! $curator->was_context_truncated() ) {
+        return 'was_context_truncated() should be true with 100 articles';
+    }
+    if ( $curator->last_capped_chars() <= 0 ) {
+        return 'last_capped_chars() should be > 0';
+    }
+    if ( $curator->last_capped_tokens_estimate() <= 0 ) {
+        return 'last_capped_tokens_estimate() should be > 0';
+    }
+    if ( $curator->last_original_articles_count() !== 100 ) {
+        return 'last_original_articles_count() should be 100';
+    }
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";

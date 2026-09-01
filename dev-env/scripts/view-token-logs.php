@@ -37,6 +37,9 @@ if ( isset( $options['help'] ) ) {
     echo "  --status=NAME    Filter by status (success, error, rate_limited)\n";
     echo "  --stats          Display aggregate usage statistics\n";
     echo "  --detail=ID      Display full record details and JSON metadata for record ID\n";
+    echo "                   (Issue #61: briefing_curation rows now include\n";
+    echo "                    pool_tokens, capped_tokens, cap_articles,\n";
+    echo "                    cap_chars_per_article for pool-vs-LLM observability)\n";
     echo "  --json           Output raw JSON\n";
     exit( 0 );
 }
