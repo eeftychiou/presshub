@@ -231,12 +231,20 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_duration' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_host_count', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_host_count' ],
+            'type'              => 'integer',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_host_female', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_host_female' ],
             'type'              => 'string',
         ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_host_male', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_host_male' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_host_tertiary', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_host_tertiary' ],
             'type'              => 'string',
         ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_female', [
@@ -246,6 +254,14 @@ class PressHub_AI_Settings_Storage {
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_male', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_male' ],
             'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_tertiary', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_voice_tertiary' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_audio_split_by_topic', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
+            'type'              => 'integer',
         ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_speed', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_speed' ],
@@ -439,12 +455,16 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_text_preset', __( 'Text Story Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_preset', __( 'Podcast Dialogue Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_target_duration', __( 'Target Podcast Duration', 'presshub-ai-editor' ), [ $render, 'render_briefing_target_duration_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_host_count', __( 'Podcast Presenters Count', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_count_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_host_female', __( 'Female Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_host_male', __( 'Male Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_host_tertiary', __( 'Third Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_tertiary_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_female', __( 'Female Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_male', __( 'Male Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_voice_tertiary', __( 'Third Host Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_tertiary_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_speed', __( 'Voice Speaking Rate / Speed', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_speed_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_pitch', __( 'Voice Pitch Tuning', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_pitch_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_audio_split_by_topic', __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ), [ $render, 'render_briefing_audio_split_by_topic_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_style', __( 'Speaking Delivery Style', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_custom_style', __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_custom_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_category', __( 'Text Briefing Category', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1179,6 +1199,54 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Helper to retrieve configured podcast host count (clamped 1–3, default 2).
+     *
+     * @return int Configured number of hosts (1 solo, 2 co-hosts, 3 roundtable).
+     */
+    public static function get_briefing_host_count(): int {
+        $count = (int) get_option( 'presshub_ai_briefing_host_count', 2 );
+        if ( $count < 1 ) {
+            return 1;
+        }
+        if ( $count > 3 ) {
+            return 3;
+        }
+        return $count;
+    }
+
+    /**
+     * Helper to retrieve configured tertiary host name (default 'Κώστας').
+     *
+     * @return string Third host name.
+     */
+    public static function get_briefing_host_tertiary(): string {
+        $host = (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Κώστας' );
+        $host = trim( $host );
+        return ! empty( $host ) ? $host : 'Κώστας';
+    }
+
+    /**
+     * Helper to retrieve configured tertiary voice persona (default 'Puck').
+     *
+     * @return string Third host voice persona.
+     */
+    public static function get_voice_tertiary(): string {
+        $voice = (string) get_option( 'presshub_ai_briefing_voice_tertiary', 'Puck' );
+        $valid = [ 'Aoede', 'Charon', 'Fenrir', 'Kore', 'Puck', 'Zephyr', 'Orus', 'Leda', 'Callirrhoe', 'Autonoe', 'el-GR-Wavenet-A', 'el-GR-Wavenet-B', 'el-GR-Wavenet-C', 'el-GR-Standard-A' ];
+        return in_array( $voice, $valid, true ) ? $voice : 'Puck';
+    }
+
+    /**
+     * Helper to check if audio synthesis should be split and generated per topic (default true).
+     *
+     * @return bool True if audio should be split by topic, false otherwise.
+     */
+    public static function get_briefing_audio_split_by_topic(): bool {
+        $val = get_option( 'presshub_ai_briefing_audio_split_by_topic', 1 );
+        return (bool) (int) $val;
+    }
+
+    /**
      * Helper to retrieve configured harvest time budget from database (clamped 10–900s, default 60s).
      *
      * @return int Configured execution time budget in seconds.
@@ -1344,6 +1412,47 @@ class PressHub_AI_Settings_Storage {
     public static function sanitize_briefing_host_male( $value ): string {
         $clean = self::sanitize_text( $value );
         return '' !== $clean ? substr( $clean, 0, 50 ) : self::default_briefing_host_male();
+    }
+
+    public static function sanitize_briefing_host_count( $value ): int {
+        $val = (int) $value;
+        if ( $val < 1 ) {
+            return 1;
+        }
+        if ( $val > 3 ) {
+            return 3;
+        }
+        return $val;
+    }
+
+    public static function sanitize_briefing_host_tertiary( $value ): string {
+        $clean = self::sanitize_text( $value );
+        return '' !== $clean ? substr( $clean, 0, 50 ) : 'Κώστας';
+    }
+
+    public static function sanitize_voice_tertiary( $value ): string {
+        $allowed = [
+            'Fenrir',
+            'Puck',
+            'Charon',
+            'Zephyr',
+            'Orus',
+            'Aoede',
+            'Kore',
+            'Leda',
+            'Callirrhoe',
+            'Autonoe',
+            'el-GR-Wavenet-A',
+            'el-GR-Wavenet-B',
+            'el-GR-Wavenet-C',
+            'el-GR-Standard-A',
+        ];
+        $value = trim( (string) wp_unslash( $value ) );
+        return in_array( $value, $allowed, true ) ? $value : 'Puck';
+    }
+
+    public static function sanitize_briefing_audio_split_by_topic( $value ): int {
+        return ! empty( $value ) ? 1 : 0;
     }
 
     public static function sanitize_briefing_tts_engine( $value ): string {
@@ -1668,14 +1777,18 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_podcast_tts_provider' => [ __CLASS__, 'sanitize_provider_id' ],
             'presshub_ai_briefing_podcast_model'        => [ __CLASS__, 'sanitize_model_string' ],
             'presshub_ai_briefing_target_duration'      => [ __CLASS__, 'sanitize_briefing_duration' ],
+            'presshub_ai_briefing_host_count'            => [ __CLASS__, 'sanitize_briefing_host_count' ],
             'presshub_ai_briefing_host_female'          => [ __CLASS__, 'sanitize_briefing_host_female' ],
             'presshub_ai_briefing_host_male'            => [ __CLASS__, 'sanitize_briefing_host_male' ],
+            'presshub_ai_briefing_host_tertiary'         => [ __CLASS__, 'sanitize_briefing_host_tertiary' ],
             'presshub_ai_briefing_tts_style'            => [ __CLASS__, 'sanitize_briefing_tts_style' ],
             'presshub_ai_briefing_tts_custom_style'     => [ __CLASS__, 'sanitize_briefing_tts_custom_style' ],
             'presshub_ai_briefing_voice_female'         => [ __CLASS__, 'sanitize_voice_female' ],
             'presshub_ai_briefing_voice_male'           => [ __CLASS__, 'sanitize_voice_male' ],
+            'presshub_ai_briefing_voice_tertiary'        => [ __CLASS__, 'sanitize_voice_tertiary' ],
             'presshub_ai_briefing_voice_speed'          => [ __CLASS__, 'sanitize_voice_speed' ],
             'presshub_ai_briefing_voice_pitch'          => [ __CLASS__, 'sanitize_voice_pitch' ],
+            'presshub_ai_briefing_audio_split_by_topic'  => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
             'presshub_ai_briefing_podcast_category'     => [ __CLASS__, 'sanitize_category_id' ],
             'presshub_ai_briefing_podcast_status'       => [ __CLASS__, 'sanitize_briefing_status' ],
             'presshub_ai_briefing_podcast_preset'       => [ __CLASS__, 'sanitize_preset_slug' ],

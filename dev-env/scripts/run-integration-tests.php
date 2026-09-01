@@ -914,6 +914,7 @@ run_test( 'Issue #69: Multi-speaker persona mapping, dynamic timeout, and resili
     update_option( 'presshub_ai_briefing_host_male', 'Νίκος' );
     update_option( 'presshub_ai_briefing_voice_female', 'Kore' );
     update_option( 'presshub_ai_briefing_voice_male', 'Fenrir' );
+    update_option( 'presshub_ai_briefing_host_count', 2 );
 
     add_filter( 'pre_http_request', $filter, 10, 3 );
     try {
@@ -950,6 +951,84 @@ run_test( 'Issue #69: Multi-speaker persona mapping, dynamic timeout, and resili
     } finally {
         remove_filter( 'pre_http_request', $filter, 10 );
     }
+
+    return true;
+} );
+
+// Test 39: Issue #71 — Topic-based audio generation and configurable host count.
+run_test( 'Issue #71: Topic-based audio generation and configurable host count settings and parsing', function() {
+    // 1. Test Settings getters and clamping
+    update_option( 'presshub_ai_briefing_host_count', 3 );
+    if ( PressHub_AI_Settings_Storage::get_briefing_host_count() !== 3 ) {
+        return 'get_briefing_host_count() did not return 3';
+    }
+
+    update_option( 'presshub_ai_briefing_host_count', 99 );
+    if ( PressHub_AI_Settings_Storage::get_briefing_host_count() !== 3 ) {
+        return 'get_briefing_host_count() did not clamp out-of-bounds 99 to 3';
+    }
+
+    update_option( 'presshub_ai_briefing_host_count', 0 );
+    if ( PressHub_AI_Settings_Storage::get_briefing_host_count() !== 1 ) {
+        return 'get_briefing_host_count() did not clamp out-of-bounds 0 to 1';
+    }
+
+    update_option( 'presshub_ai_briefing_host_tertiary', 'Κώστας' );
+    if ( PressHub_AI_Settings_Storage::get_briefing_host_tertiary() !== 'Κώστας' ) {
+        return 'get_briefing_host_tertiary() did not return Κώστας';
+    }
+
+    update_option( 'presshub_ai_briefing_voice_tertiary', 'Puck' );
+    if ( PressHub_AI_Settings_Storage::get_voice_tertiary() !== 'Puck' ) {
+        return 'get_voice_tertiary() did not return Puck';
+    }
+
+    update_option( 'presshub_ai_briefing_audio_split_by_topic', 1 );
+    if ( ! PressHub_AI_Settings_Storage::get_briefing_audio_split_by_topic() ) {
+        return 'get_briefing_audio_split_by_topic() did not return true';
+    }
+
+    // 2. Test producer topic parsing and speaker parsing with 3 hosts
+    $producer = new PressHub_AI_Podcast_Producer();
+    $script = <<<SCRIPT
+[TOPIC_START: Εισαγωγικά Νέα]
+[Μαρία]: Καλωσήρθατε στην εκπομπή.
+[Νίκος]: Καλημέρα Μαρία, ας δούμε την πρώτη είδηση.
+[Κώστας]: Καλημέρα και από μένα!
+[TOPIC_END]
+
+[TOPIC_START: Οικονομία]
+[Μαρία]: Στα οικονομικά νέα σήμερα...
+[Νίκος]: Θετικό πρόσημο στις αγορές.
+[TOPIC_END]
+SCRIPT;
+
+    $topics = $producer->parse_script_topics( $script, 'Μαρία', 'Νίκος', 'Κώστας' );
+    if ( count( $topics ) !== 2 ) {
+        return 'parse_script_topics() did not return 2 topics; got ' . count( $topics );
+    }
+    if ( $topics[0]['title'] !== 'Εισαγωγικά Νέα' ) {
+        return 'Topic 1 title mismatch: ' . ( $topics[0]['title'] ?? '' );
+    }
+    if ( count( $topics[0]['turns'] ) !== 3 ) {
+        return 'Topic 1 turns count mismatch: expected 3, got ' . count( $topics[0]['turns'] );
+    }
+    if ( ( $topics[0]['turns'][2]['speaker'] ?? '' ) !== 'tertiary' ) {
+        return 'Topic 1 turn 3 speaker mismatch: expected tertiary, got ' . ( $topics[0]['turns'][2]['speaker'] ?? '' );
+    }
+
+    // 3. Test synthesizer speaker voice resolution
+    $synthesizer = new PressHub_AI_Audio_Synthesizer();
+    if ( $synthesizer->get_voice_for_speaker( 'tertiary' ) !== 'Puck' ) {
+        return 'get_voice_for_speaker( tertiary ) did not return Puck';
+    }
+    if ( $synthesizer->get_voice_for_speaker( 'Κώστας' ) !== 'Puck' ) {
+        return 'get_voice_for_speaker( Κώστας ) did not return Puck';
+    }
+
+    // Reset back to defaults for clean isolation
+    update_option( 'presshub_ai_briefing_host_count', 2 );
+    update_option( 'presshub_ai_briefing_audio_split_by_topic', 1 );
 
     return true;
 } );
