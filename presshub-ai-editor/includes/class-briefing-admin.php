@@ -318,6 +318,10 @@ class PressHub_AI_Briefing_Admin {
                     'error'              => __( 'Παρουσιάστηκε σφάλμα κατά την επεξεργασία.', 'presshub-ai-editor' ),
                     'confirm_harvest'    => __( 'Εκτέλεση ανάκτησης ειδήσεων τώρα; Θα σαρωθούν οι διαμορφωμένες πηγές.', 'presshub-ai-editor' ),
                     'confirm_synthesis'  => __( 'Εκτέλεση σύνθεσης ήχου podcast τώρα μέσω Google Cloud TTS;', 'presshub-ai-editor' ),
+                    // Issue #65 — Bug B: localized "WP Status: %s" label used
+                    // by updateUIFromStatus() to refresh the subtitle after a
+                    // curation completes without a page reload.
+                    'wp_status_label'    => __( 'WP Status: %s', 'presshub-ai-editor' ),
                 ],
             ]
         );
@@ -417,6 +421,17 @@ class PressHub_AI_Briefing_Admin {
 
         $pipeline_completed = ( $is_harvested && $text_created && $script_created && $audio_created );
 
+        // Issue #65 — surface the Settings-First title prefix / date-format
+        // state that was applied to the most recent post. Used by the JS
+        // status refresh and integration tests to verify the
+        // operator-configured masthead shape matches expectations.
+        $latest_post_meta_prefix = $text_created
+            ? (string) get_post_meta( $text_post_id, '_presshub_text_title_prefix_applied', true )
+            : '';
+        $latest_post_meta_date_format = $text_created
+            ? (string) get_post_meta( $text_post_id, '_presshub_text_title_date_format_applied', true )
+            : '';
+
         return [
             'date'                => $date,
             'formatted_date'      => $formatted_date,
@@ -434,6 +449,15 @@ class PressHub_AI_Briefing_Admin {
             'text_post_status'    => $text_post_status,
             'text_edit_url'       => $text_edit_url,
             'text_permalink'      => $text_permalink,
+            // Issue #65 — Settings-First masthead state surfaced to the JS
+            // and integration tests. Values come from post meta recorded at
+            // create_wordpress_post() time so the AJAX payload always
+            // reflects what was actually applied to the latest post (not
+            // the current Settings value, which may have since changed).
+            'text_title_prefix_applied'      => $latest_post_meta_prefix,
+            'text_title_date_format_applied' => $latest_post_meta_date_format,
+            'text_title_prefix_current'      => PressHub_AI_Settings_Storage::get_briefing_text_title_prefix(),
+            'text_title_date_format_current' => PressHub_AI_Settings_Storage::get_briefing_text_title_date_format(),
             'script_created'      => $script_created,
             'script_text'         => $script_text,
             'script_turns_count'  => count( $turns ),
@@ -738,8 +762,16 @@ class PressHub_AI_Briefing_Admin {
                     <div class="presshub-card-body">
                         <?php if ( $status['text_created'] ) : ?>
                             <p class="card-title-preview"><strong><?php echo esc_html( $status['text_post_title'] ); ?></strong></p>
-                            <p class="card-subtext">
-                                <?php echo sprintf( esc_html__( 'Status: %s', 'presshub-ai-editor' ), '<code>' . esc_html( $status['text_post_status'] ) . '</code>' ); ?>
+                            <p class="card-subtext" id="presshub-text-post-status">
+                                <?php
+                                // Issue #65 — Bug B: the previous label "Status:"
+                                // conflated the WP editorial publish status with
+                                // the pipeline step status. "WP Status:" makes
+                                // clear this is the post's position in the WP
+                                // editorial-review queue (pending/draft/publish),
+                                // not the pipeline step.
+                                echo sprintf( esc_html__( 'WP Status: %s', 'presshub-ai-editor' ), '<code>' . esc_html( $status['text_post_status'] ) . '</code>' );
+                                ?>
                             </p>
                         <?php else : ?>
                             <p class="card-empty-desc"><?php echo esc_html__( 'Synthesizes top Greek news stories into an editorial morning briefing post using selected Preset.', 'presshub-ai-editor' ); ?></p>

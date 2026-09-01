@@ -234,6 +234,18 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_title_prefix"><?php echo __( 'Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_text_title_prefix_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_title_date_format"><?php echo __( 'Text Story Title Date Format', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_text_title_date_format_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_text_preset"><?php echo __( 'Text Instruction Preset', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_preset_field(); ?>
@@ -1995,6 +2007,35 @@ class PressHub_AI_Settings_Render {
             <option value="publish" <?php echo 'publish' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'Publish Immediately', 'presshub-ai-editor' ); ?></option>
         </select>
         <p class="description"><?php echo __( 'Default status for newly generated morning text briefing posts.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Issue #65 — Settings-First: editor for the title prefix prepended to
+     * the generated Text Story post title. The prefix is read via
+     * PressHub_AI_Settings_Storage::get_briefing_text_title_prefix() in
+     * PressHub_AI_News_Curator::compose_text_story_title().
+     */
+    public function render_briefing_text_title_prefix_field() {
+        $option = 'presshub_ai_briefing_text_title_prefix';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Πρωινή Ενημέρωση:', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Text Story post title (e.g. "Πρωινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Πρωινή Ενημέρωση:". A duplicate-prefix collision guard prevents the same prefix from appearing twice when the curator\'s <h1> already contains it.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Issue #65 — Settings-First: editor for the date() format token
+     * appended after the title prefix and headline. Empty string disables
+     * the date suffix.
+     */
+    public function render_briefing_text_title_date_format_field() {
+        $option = 'presshub_ai_briefing_text_title_date_format';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" maxlength="30" placeholder="<?php echo esc_attr__( 'e.g. d/m/Y', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo __( 'date() format appended after the title prefix and headline (e.g. "d/m/Y" → 26/08/2026). Leave blank to omit the date. Default: "d/m/Y". Tokens are validated by PHP\'s date() function before being saved.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

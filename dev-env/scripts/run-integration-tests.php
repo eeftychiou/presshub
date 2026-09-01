@@ -628,6 +628,164 @@ run_test( 'Issue #61 AC#2: reduced curation cap (10 articles) reflected in metad
     }
 } );
 
+// =========================================================================
+// Test 25: Issue #65 — Text Story Settings-First title composition
+// =========================================================================
+//
+// Validates the live WordPress flow:
+//   - presshub_ai_briefing_text_title_prefix / ..._date_format options are
+//     registered as form options with callable sanitize callbacks.
+//   - PressHub_AI_News_Curator::create_wordpress_post() composes the title
+//     using the Settings values (no duplicate "Πρωινή Ενημέρωση:" prefix).
+//   - The leading <h1>/<h2> block is stripped from the post body.
+//   - The post meta _presshub_text_title_prefix_applied / ..._date_format_applied
+//     are recorded for downstream observability.
+//   - get_briefing_status() surfaces the prefix/date-format state to AJAX.
+run_test( 'Issue #65: Text Story Settings-First prefix + h1-strip end-to-end', function() {
+    global $wpdb;
+
+    if ( ! class_exists( 'PressHub_AI_News_Curator' ) ) {
+        return 'Class PressHub_AI_News_Curator not loaded';
+    }
+    if ( ! class_exists( 'PressHub_AI_Briefing_Admin' ) ) {
+        return 'Class PressHub_AI_Briefing_Admin not loaded';
+    }
+
+    // Ensure clean Settings baseline.
+    delete_option( 'presshub_ai_briefing_text_title_prefix' );
+    delete_option( 'presshub_ai_briefing_text_title_date_format' );
+
+    // 1. The two new Settings options must be registered and readable.
+    //    WordPress tracks registered settings in the $wp_registered_settings
+    //    super-global once the plugin's register_setting() calls have run.
+    //    The integration test boots WP without firing admin_init, so we
+    //    trigger it explicitly here.
+    do_action( 'admin_init' );
+    global $wp_registered_settings;
+    $registered = is_array( $wp_registered_settings ?? null ) ? $wp_registered_settings : [];
+    if ( empty( $registered['presshub_ai_briefing_text_title_prefix'] ) ) {
+        return 'Option presshub_ai_briefing_text_title_prefix is not registered';
+    }
+    if ( empty( $registered['presshub_ai_briefing_text_title_date_format'] ) ) {
+        return 'Option presshub_ai_briefing_text_title_date_format is not registered';
+    }
+
+    // 2. Defaults match the documented contract.
+    if ( PressHub_AI_Settings_Storage::get_briefing_text_title_prefix() !== 'Πρωινή Ενημέρωση:' ) {
+        return 'Default title prefix should be "Πρωινή Ενημέρωση:"';
+    }
+    if ( PressHub_AI_Settings_Storage::get_briefing_text_title_date_format() !== 'd/m/Y' ) {
+        return 'Default date format should be "d/m/Y"';
+    }
+
+    // 3. Set a BREAKING: prefix and an empty date suffix to exercise both.
+    update_option( 'presshub_ai_briefing_text_title_prefix', 'BREAKING:' );
+    update_option( 'presshub_ai_briefing_text_title_date_format', '' );
+
+    $curator = new PressHub_AI_News_Curator();
+    $test_date = '2026-09-03';
+    $html_body = "<h1>BREAKING: Σεισμός 5.8R στην Κρήτη</h1>\n<h2>Κοινωνία</h2>\n<p>Αναλυτική κάλυψη.</p>";
+
+    $post_id = $curator->create_wordpress_post( $html_body, $test_date );
+    if ( ! is_int( $post_id ) || $post_id <= 0 ) {
+        return 'create_wordpress_post() returned a non-positive ID';
+    }
+
+    // 4. Title should be "BREAKING: Σεισμός 5.8R στην Κρήτη" (no duplicate
+    //    prefix, no date suffix because the date format is empty).
+    $title = (string) get_post_field( 'post_title', $post_id );
+    if ( false !== strpos( $title, 'BREAKING: BREAKING:' ) ) {
+        return "Title has duplicate prefix: {$title}";
+    }
+    if ( false === strpos( $title, 'BREAKING:' ) ) {
+        return "Title missing BREAKING prefix: {$title}";
+    }
+    if ( false === strpos( $title, 'Σεισμός 5.8R στην Κρήτη' ) ) {
+        return "Title missing headline: {$title}";
+    }
+    if ( preg_match( '/\d{2}\/\d{2}\/\d{4}/', $title ) ) {
+        return "Title has unexpected date suffix (format was empty): {$title}";
+    }
+
+    // 5. Body should NOT start with the leading <h1>.
+    $content = (string) get_post_field( 'post_content', $post_id );
+    if ( false !== strpos( $content, '<h1>BREAKING: Σεισμός' ) ) {
+        return "Body still contains the duplicate <h1> block: " . substr( $content, 0, 200 );
+    }
+    if ( false === strpos( $content, 'Αναλυτική κάλυψη' ) ) {
+        return "Body missing expected paragraph: " . substr( $content, 0, 200 );
+    }
+
+    // 6. Post meta records the applied Settings state.
+    if ( (string) get_post_meta( $post_id, '_presshub_text_title_prefix_applied', true ) !== 'BREAKING:' ) {
+        return '_presshub_text_title_prefix_applied meta mismatch';
+    }
+    if ( (string) get_post_meta( $post_id, '_presshub_text_title_date_format_applied', true ) !== '' ) {
+        return '_presshub_text_title_date_format_applied meta mismatch (should be empty)';
+    }
+
+    // 7. get_briefing_status() surfaces the new keys to the AJAX layer.
+    $admin     = new PressHub_AI_Briefing_Admin();
+    $status    = $admin->get_briefing_status( $test_date );
+    if ( ! is_array( $status ) ) {
+        return 'get_briefing_status() returned a non-array';
+    }
+    foreach ( [
+        'text_title_prefix_applied',
+        'text_title_date_format_applied',
+        'text_title_prefix_current',
+        'text_title_date_format_current',
+    ] as $key ) {
+        if ( ! array_key_exists( $key, $status ) ) {
+            return "get_briefing_status() missing key: {$key}";
+        }
+    }
+    if ( (string) $status['text_title_prefix_applied'] !== 'BREAKING:' ) {
+        return 'get_briefing_status() text_title_prefix_applied mismatch';
+    }
+    if ( (string) $status['text_title_prefix_current'] !== 'BREAKING:' ) {
+        return 'get_briefing_status() text_title_prefix_current mismatch';
+    }
+
+    // 8. Sanitize helpers reject invalid date format tokens and clamp the
+    //    prefix to the documented 60-character cap.
+    if ( PressHub_AI_Settings_Storage::sanitize_briefing_text_title_prefix( str_repeat( 'x', 100 ) ) !== str_repeat( 'x', 60 ) ) {
+        return 'sanitize_briefing_text_title_prefix did not clamp to 60 chars';
+    }
+    if ( PressHub_AI_Settings_Storage::sanitize_briefing_text_title_date_format( '<?php exit;' ) !== 'd/m/Y' ) {
+        return 'sanitize_briefing_text_title_date_format accepted an invalid token';
+    }
+    if ( PressHub_AI_Settings_Storage::sanitize_briefing_text_title_date_format( 'Y-m-d' ) !== 'Y-m-d' ) {
+        return 'sanitize_briefing_text_title_date_format rejected a valid token';
+    }
+
+    // 8b. A NON-EMPTY, NON-DEFAULT date format token is honored when
+    //     composing the title. This guards the regression where
+    //     create_wordpress_post() hard-coded 'd/m/Y' and the setting only
+    //     gated *whether* the suffix appeared — never *how* it was formatted.
+    update_option( 'presshub_ai_briefing_text_title_date_format', 'Y-m-d' );
+    $post_id_ymd = $curator->create_wordpress_post( $html_body, $test_date );
+    if ( ! is_int( $post_id_ymd ) || $post_id_ymd <= 0 ) {
+        return 'create_wordpress_post() returned a non-positive ID for Y-m-d phase';
+    }
+    $title_ymd = (string) get_post_field( 'post_title', $post_id_ymd );
+    if ( false === strpos( $title_ymd, '2026-09-03' ) ) {
+        return "Custom date format 'Y-m-d' not honored — expected 2026-09-03 in title: {$title_ymd}";
+    }
+    if ( preg_match( '/\d{2}\/\d{2}\/\d{4}/', $title_ymd ) ) {
+        return "Title has hard-coded d/m/Y date despite Y-m-d setting: {$title_ymd}";
+    }
+    if ( (string) get_post_meta( $post_id_ymd, '_presshub_text_title_date_format_applied', true ) !== 'Y-m-d' ) {
+        return '_presshub_text_title_date_format_applied meta mismatch (should be Y-m-d)';
+    }
+
+    // Reset Settings so subsequent test runs are isolated.
+    delete_option( 'presshub_ai_briefing_text_title_prefix' );
+    delete_option( 'presshub_ai_briefing_text_title_date_format' );
+
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";

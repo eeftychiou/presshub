@@ -179,6 +179,10 @@ class SettingsPageTest
             'presshub_ai_briefing_text_category',
             'presshub_ai_briefing_podcast_category',
             'presshub_ai_briefing_text_status',
+            // Issue #65 — Settings-First: title prefix and date format
+            // for the generated Text Story post.
+            'presshub_ai_briefing_text_title_prefix',
+            'presshub_ai_briefing_text_title_date_format',
             'presshub_ai_briefing_podcast_status',
             'presshub_ai_briefing_text_prompt',
             'presshub_ai_briefing_podcast_prompt',

@@ -1420,6 +1420,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_text_category'      => [ 'PressHub_AI_Settings_Storage', 'sanitize_category_id' ],
                 'presshub_ai_briefing_podcast_category'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_category_id' ],
                 'presshub_ai_briefing_text_status'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_status' ],
+                // Issue #65 — Settings-First: title prefix and date format
+                // for the generated Text Story post.
+                'presshub_ai_briefing_text_title_prefix'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_text_title_prefix' ],
+                'presshub_ai_briefing_text_title_date_format'  => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_text_title_date_format' ],
                 'presshub_ai_briefing_podcast_status'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_status' ],
                 'presshub_ai_briefing_text_prompt'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_prompt' ],
                 'presshub_ai_briefing_podcast_prompt'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_prompt' ],

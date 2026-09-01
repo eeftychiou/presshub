@@ -271,6 +271,21 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_status' ],
             'type'              => 'string',
         ] );
+        // Issue #65 — Settings-First: operator-configurable title prefix
+        // prepended to the generated Text Story post title (e.g. "Πρωινή
+        // Ενημέρωση:"). Empty string disables the prefix so the curator's
+        // headline is used verbatim.
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_title_prefix', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_text_title_prefix' ],
+            'type'              => 'string',
+        ] );
+        // Issue #65 — Settings-First: date() format token appended after
+        // the title prefix and headline (default "d/m/Y"). Empty string
+        // disables the date suffix.
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_title_date_format', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_text_title_date_format' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_status', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_status' ],
             'type'              => 'string',
@@ -430,6 +445,13 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_text_category', __( 'Text Briefing Category', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_category', __( 'Podcast Category', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_status', __( 'Text Briefing Post Status', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        // Issue #65 — Settings-First: operator-configurable title prefix
+        // and date format for the generated Text Story post. Both fields
+        // live in the Daily Briefing section immediately after the
+        // existing post-status row so operators can adjust masthead shape
+        // without touching code.
+        add_settings_field( 'presshub_ai_briefing_text_title_prefix', __( 'Text Story Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_text_title_date_format', __( 'Text Story Title Date Format', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_date_format_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_status', __( 'Podcast Post Status', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_prompt', __( 'Text Story System Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_prompt', __( 'Podcast Dialogue System Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1176,6 +1198,108 @@ class PressHub_AI_Settings_Storage {
         return ( $value >= 100 && $value <= 400000 ) ? $value : 3000;
     }
 
+    /**
+     * Issue #65 — Sanitize the operator-configurable title prefix prepended
+     * to the generated Text Story post title. Clamps to a 60-character
+     * max so a runaway value can't break the post title field; falls back
+     * to the documented default "Πρωινή Ενημέρωση:" for empty or non-string
+     * input. An explicitly empty string disables the prefix (the curator's
+     * headline is then used verbatim).
+     *
+     * @param mixed $value Raw input value.
+     * @return string Sanitized prefix (0–60 chars).
+     */
+    public static function sanitize_briefing_text_title_prefix( $value ): string {
+        if ( ! is_string( $value ) ) {
+            return self::default_briefing_text_title_prefix();
+        }
+        $clean = sanitize_text_field( wp_unslash( $value ) );
+        return substr( trim( $clean ), 0, 60 );
+    }
+
+    /**
+     * Issue #65 — Sanitize the operator-configurable date() format token
+     * appended after the title prefix and headline. The token is validated
+     * by running it through a sandboxed date() round-trip; anything that
+     * produces output containing characters outside the safe ASCII set
+     * (letters, digits, common separators) is rejected. Empty input is
+     * accepted and disables the date suffix.
+     *
+     * @param mixed $value Raw input value.
+     * @return string Sanitized format token (or empty string).
+     */
+    public static function sanitize_briefing_text_title_date_format( $value ): string {
+        if ( ! is_string( $value ) ) {
+            return self::default_briefing_text_title_date_format();
+        }
+        $clean = trim( (string) wp_unslash( $value ) );
+        if ( '' === $clean ) {
+            return '';
+        }
+        // Accept only printable ASCII letters, digits, and the standard
+        // date() separators. This rejects PHP format injection / control
+        // characters without trying to enumerate every legal token.
+        if ( ! preg_match( '/^[A-Za-z0-9\/\-\.\s,:_]+$/', $clean ) ) {
+            return self::default_briefing_text_title_date_format();
+        }
+        // Round-trip through date() to ensure PHP accepts it. We use the
+        // current timestamp and a known-safe timezone-independent check.
+        $sample = @date( $clean );
+        if ( false === $sample || '' === $sample ) {
+            return self::default_briefing_text_title_date_format();
+        }
+        // Cap at 30 characters so a malicious operator can't blow up the title.
+        return substr( $clean, 0, 30 );
+    }
+
+    /**
+     * Issue #65 — Default title prefix ("Πρωινή Ενημέρωση:"). Used as the
+     * fallback when the option is unset or contains invalid input.
+     */
+    public static function default_briefing_text_title_prefix(): string {
+        return 'Πρωινή Ενημέρωση:';
+    }
+
+    /**
+     * Issue #65 — Default date() format token ("d/m/Y"). Used as the
+     * fallback when the option is unset or contains invalid input.
+     */
+    public static function default_briefing_text_title_date_format(): string {
+        return 'd/m/Y';
+    }
+
+    /**
+     * Issue #65 — Helper to retrieve the operator-configurable title prefix
+     * prepended to the generated Text Story post title. Always returns a
+     * sanitized string in [0, 60] characters; falls back to the documented
+     * default "Πρωινή Ενημέρωση:" when the option is missing or invalid.
+     *
+     * @return string Configured title prefix.
+     */
+    public static function get_briefing_text_title_prefix(): string {
+        $value = get_option( 'presshub_ai_briefing_text_title_prefix', null );
+        if ( null === $value ) {
+            return self::default_briefing_text_title_prefix();
+        }
+        return self::sanitize_briefing_text_title_prefix( $value );
+    }
+
+    /**
+     * Issue #65 — Helper to retrieve the operator-configurable date()
+     * format token appended after the title prefix and headline. Returns
+     * a sanitized token (or empty string to disable). Falls back to the
+     * documented default "d/m/Y" when the option is missing or invalid.
+     *
+     * @return string Configured date format token.
+     */
+    public static function get_briefing_text_title_date_format(): string {
+        $value = get_option( 'presshub_ai_briefing_text_title_date_format', null );
+        if ( null === $value ) {
+            return self::default_briefing_text_title_date_format();
+        }
+        return self::sanitize_briefing_text_title_date_format( $value );
+    }
+
     private static function sanitize_time_format( $value, $default = '06:30' ): string {
         $value = trim( (string) wp_unslash( $value ) );
         if ( preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', $value, $matches ) ) {
@@ -1505,6 +1629,10 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_curation_max_chars_per_article' => [ __CLASS__, 'sanitize_curation_max_chars_per_article' ],
             'presshub_ai_briefing_text_category'        => [ __CLASS__, 'sanitize_category_id' ],
             'presshub_ai_briefing_text_status'          => [ __CLASS__, 'sanitize_briefing_status' ],
+            // Issue #65 — Settings-First: title prefix and date format
+            // for the generated Text Story post.
+            'presshub_ai_briefing_text_title_prefix'       => [ __CLASS__, 'sanitize_briefing_text_title_prefix' ],
+            'presshub_ai_briefing_text_title_date_format'  => [ __CLASS__, 'sanitize_briefing_text_title_date_format' ],
             'presshub_ai_briefing_text_preset'          => [ __CLASS__, 'sanitize_preset_slug' ],
             'presshub_ai_briefing_text_prompt'          => [ __CLASS__, 'sanitize_briefing_prompt' ],
             'presshub_ai_briefing_text_temperature'     => [ __CLASS__, 'sanitize_temperature' ],
