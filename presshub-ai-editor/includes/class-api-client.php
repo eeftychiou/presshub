@@ -1337,12 +1337,18 @@ class PressHub_AI_API_Client {
      *                                lock classify_intent / audio scripts to
      *                                0.0); null uses the provider's configured
      *                                temperature.
+     * @param array      $metadata    Optional structured metadata (e.g. Issue
+     *                                #61 pool-vs-LLM cap observability keys)
+     *                                stored on the success token-log row's
+     *                                metadata JSON column. Empty by default so
+     *                                every existing call site keeps its current
+     *                                behaviour.
      */
-    public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
+    public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null, array $metadata = [] ) {
         if ( $this->provider === 'anthropic' ) {
-            return $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature );
+            return $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature, $metadata );
         } elseif ( $this->provider === 'gemini' ) {
-            return $this->call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature );
+            return $this->call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
         } elseif ( $this->provider === 'custom_openai' || in_array( $this->provider, [ 'groq', 'mistral', 'deepseek', 'ollama_local' ], true ) || ( ! empty( $this->base_url ) && false === strpos( $this->base_url, 'api.openai.com' ) ) ) {
             $config = is_array( $this->provider_config ) ? $this->provider_config : [
                 'type'        => $this->provider,
@@ -1354,9 +1360,9 @@ class PressHub_AI_API_Client {
                 'timeout'     => $this->timeout,
                 'headers'     => $this->headers,
             ];
-            return $this->call_custom_openai( $config, $sys_prompt, $user_prompt, $json_mode, $files, $temperature );
+            return $this->call_custom_openai( $config, $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
         } else {
-            return $this->call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature );
+            return $this->call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
         }
     }
 
@@ -1369,9 +1375,10 @@ class PressHub_AI_API_Client {
      * @param bool        $json_mode       Whether to request JSON object response format.
      * @param array       $files           Uploaded files (not supported in basic OpenAI format).
      * @param float|null  $temperature     Explicit temperature override.
+     * @param array       $metadata        Optional token-log metadata to attach on success.
      * @return string|WP_Error Response text or WP_Error on failure.
      */
-    public function call_custom_openai( $provider_config, $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null ) {
+    public function call_custom_openai( $provider_config, $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null, array $metadata = [] ) {
         if ( ! empty( $files ) ) {
             return new WP_Error( 'file_error', __( 'Custom OpenAI endpoints do not support direct PDF/Audio uploads natively in this integration. Please select Google Gemini for multi-modal files.', 'presshub-ai-editor' ) );
         }
@@ -1474,7 +1481,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null );
+                PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
             }
             return $res_body['choices'][0]['message']['content'];
         }
@@ -1493,7 +1500,7 @@ class PressHub_AI_API_Client {
         return new WP_Error( 'api_error', __( 'Invalid response from custom endpoint.', 'presshub-ai-editor' ) );
     }
 
-    private function call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
+    private function call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null, array $metadata = [] ) {
         if ( ! empty( $files ) ) {
             return new WP_Error( 'file_error', __( 'OpenAI chat completions do not support direct PDF/Audio uploads natively in this basic integration. Please select Google Gemini for multi-modal files.', 'presshub-ai-editor' ) );
         }
@@ -1554,7 +1561,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
             }
             return $body['choices'][0]['message']['content'];
         }
@@ -1572,7 +1579,7 @@ class PressHub_AI_API_Client {
         return new WP_Error( 'api_error', __( 'Invalid response from OpenAI.', 'presshub-ai-editor' ) );
     }
 
-    private function call_anthropic( $sys_prompt, $user_prompt, $files, $temperature = null ) {
+    private function call_anthropic( $sys_prompt, $user_prompt, $files, $temperature = null, array $metadata = [] ) {
         $content_array = [];
         
         foreach ( $files as $file_path ) {
@@ -1646,7 +1653,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
             }
             return $body['content'][0]['text'];
         }
@@ -1664,7 +1671,7 @@ class PressHub_AI_API_Client {
         return new WP_Error( 'api_error', __( 'Invalid response from Anthropic.', 'presshub-ai-editor' ) );
     }
 
-    private function call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
+    private function call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null, array $metadata = [] ) {
         // S-1: the API key travels in the x-goog-api-key header (matching
         // Imagen/TTS), NEVER in the URL query string — URLs end up in
         // server access logs, proxies, CDNs and referer headers.
@@ -1753,7 +1760,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
             }
             return $body['candidates'][0]['content']['parts'][0]['text'];
         }

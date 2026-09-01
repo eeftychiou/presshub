@@ -249,7 +249,7 @@ $harvester->save_snapshot( $test_date_e2e, [
 // Mock API Client
 class Mock_PressHub_AI_API_Client extends PressHub_AI_API_Client {
     public function __construct() {}
-    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null ) {
+    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null, array $metadata = [] ) {
         return "# Εγκαίνια Μετρό: Νέα Εποχή για τις Μετακινήσεις\n\nΣε πανηγυρικό κλίμα πραγματοποιήθηκαν τα εγκαίνια.\n\n## Συγκοινωνίες\n\n- 5 νέοι σταθμοί\n- 100.000 επιβάτες ημερησίως";
     }
 }

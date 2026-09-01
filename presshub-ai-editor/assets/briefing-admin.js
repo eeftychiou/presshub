@@ -3,10 +3,22 @@
  *
  * Handles AJAX pipeline actions: scraping, text story curation, podcast dialogue script
  * generation & saving, multi-voice audio synthesis, and Cloudflare blocked source manual uploads.
+ *
+ * Issue #61 (S4) — the cap-observability subtext is translatable so the JS
+ * stays consistent with the server-rendered (Greek-first) wording.
  */
 
 (function($) {
     'use strict';
+
+    // Pull wp.i18n helpers from the global namespace. Falls back to identity
+    // functions when wp.i18n is not yet available (e.g. during the brief
+    // window between script enqueue and wp-i18n runtime ready).
+    var __  = (window.wp && window.wp.i18n && window.wp.i18n.__)       || function (s) { return s; };
+    var sprintf = (window.wp && window.wp.i18n && window.wp.i18n.sprintf) || function (fmt) {
+        var args = Array.prototype.slice.call(arguments, 1);
+        return fmt.replace(/%[sd]/g, function () { return args.shift(); });
+    };
 
     $(document).ready(function() {
         var config = window.presshubBriefingAdmin || {};
@@ -109,6 +121,28 @@
             return Math.max(1, Math.floor(codepoints / 3));
         }
 
+        // Issue #61 (S1) — cap-aware mirror used by the JS card builder
+        // so cards rebuilt from a status refresh expose the same
+        // data-capped-tokens value the server pre-computed on first paint.
+        // Falls back to jsEstimateTokens() when the cap value is missing
+        // (older config object, pre-Issue-61 deployments, etc.).
+        function jsEstimateCappedTokens(text) {
+            var capChars = (window.presshubBriefingAdmin && presshubBriefingAdmin.cap_chars_per_article)
+                ? parseInt(presshubBriefingAdmin.cap_chars_per_article, 10)
+                : 800;
+            if (!isFinite(capChars) || capChars < 100) capChars = 800;
+            var plain = jsStripHtml(text || '');
+            if (!plain) return 0;
+            // Array.from(...) counts UTF-16 code units, not codepoints. We
+            // approximate by truncating by character count; for Greek
+            // (BMP) this matches PHP's mb_substr() closely. Codepoint-based
+            // truncation would require a grapheme-aware helper that the
+            // server side also approximates, so a tiny drift on CJK /
+            // emoji-heavy text is acceptable.
+            var truncated = Array.from(plain).slice(0, capChars).join('');
+            return jsEstimateTokens(truncated);
+        }
+
         function formatCount(n) {
             // Thousands separator matching PHP's number_format() output for editor consistency.
             return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -134,6 +168,76 @@
             $('#presshub-selected-tokens-total').text(tokensLabel);
             $('#presshub-inspector-words-total').text(wordsLabel);
             $('#presshub-inspector-tokens-total').text(tokensLabel);
+
+            // Issue #61 — pool-vs-LLM subtext mirrors the curator's cap math
+            // on the client so it stays in sync with the article selection.
+            writeLlmSubtext(totals);
+        }
+
+        // Issue #61 (S1) — client-side mirror of the curator's cap math.
+        // Each inspector card now carries a server-computed
+        // data-capped-tokens attribute (the LLM-facing token estimate for
+        // that article, truncated to the curator's per-article char cap).
+        // We just sum the first cap_articles selected cards' values, so
+        // the JS subtext matches the server-rendered numbers exactly —
+        // no heuristic, no scaling, no client/server drift.
+        function computeCappedTokens(poolTokens) {
+            var capArticles = (presshubBriefingAdmin && presshubBriefingAdmin.cap_articles)
+                ? parseInt(presshubBriefingAdmin.cap_articles, 10)
+                : 40;
+            var capChars = (presshubBriefingAdmin && presshubBriefingAdmin.cap_chars_per_article)
+                ? parseInt(presshubBriefingAdmin.cap_chars_per_article, 10)
+                : 800;
+            if (!isFinite(capArticles) || capArticles < 1) capArticles = 40;
+            if (!isFinite(capChars) || capChars < 100) capChars = 800;
+
+            var capped = 0;
+            var considered = 0;
+            $('.presshub-article-checkbox:checked').each(function() {
+                if (considered >= capArticles) return false; // break out of .each
+                var $card = $(this).closest('.presshub-inspector-card');
+                // data-capped-tokens is computed server-side in the same loop
+                // that builds the article card (PressHub_AI_Context_Estimator
+                // over the truncated text). Falls back to data-tokens when
+                // the attribute is missing (e.g. cards built by older JS
+                // paths that haven't re-rendered yet).
+                var t = parseInt($card.attr('data-capped-tokens'), 10);
+                if (isNaN(t) || t < 0) {
+                    t = parseInt($card.attr('data-tokens'), 10);
+                }
+                if (!isNaN(t) && t > 0) {
+                    capped += t;
+                }
+                considered++;
+            });
+            return {
+                tokens: capped,
+                cap_articles: capArticles,
+                cap_chars: capChars
+            };
+        }
+
+        function writeLlmSubtext(poolTotals) {
+            var capped = computeCappedTokens(poolTotals.tokens);
+            var $nodes = $('#presshub-milestone-llm-subtext, #presshub-inspector-llm-subtext');
+            if ($nodes.length === 0) return;
+            // Hide subtext when there's no cap pressure (capped == pool or pool == 0).
+            if (!poolTotals || !poolTotals.tokens || capped.tokens <= 0 || capped.tokens >= poolTotals.tokens) {
+                $nodes.hide();
+                return;
+            }
+            // Issue #61 (S4) — translatable so the JS-side recompute stays
+            // consistent with the server-rendered (Greek-first) wording. The
+            // matching server string lives in class-briefing-admin.php
+            // (__('Of %1$s pool tokens...', 'presshub-ai-editor')).
+            var text = sprintf(
+                __('Of %1$s pool tokens, %2$s were sent to the LLM for curation (cap: %3$d articles × %4$d chars/article).', 'presshub-ai-editor'),
+                formatCount(poolTotals.tokens),
+                formatCount(capped.tokens),
+                capped.cap_articles,
+                capped.cap_chars
+            );
+            $nodes.text(text).show();
         }
 
         function updateSelectedCountBadge() {
@@ -190,7 +294,12 @@
                         var content = art.content || '';
                         var words = jsWordCount(content);
                         var tokens = jsEstimateTokens(content);
+                        var cappedTokens = jsEstimateCappedTokens(content);
                         var chars = content ? content.length : 0;
+                        var capChars = (window.presshubBriefingAdmin && presshubBriefingAdmin.cap_chars_per_article)
+                            ? parseInt(presshubBriefingAdmin.cap_chars_per_article, 10)
+                            : 800;
+                        if (!isFinite(capChars) || capChars < 100) capChars = 800;
                         sourcesSet[src] = true;
 
                         var escTitle = $('<div>').text(title).html();
@@ -198,7 +307,7 @@
                         var escUrl = $('<div>').text(url).html();
                         var escContent = $('<div>').text(content).html().replace(/\n/g, '<br>');
 
-                        cardsHtml += '<div class="presshub-inspector-card" data-index="' + idx + '" data-source="' + $('<div>').text(src.toLowerCase()).html() + '" data-title="' + $('<div>').text(title.toLowerCase()).html() + '" data-text="' + $('<div>').text(content.toLowerCase().substring(0, 500)).html() + '" data-words="' + words + '" data-tokens="' + tokens + '">' +
+                        cardsHtml += '<div class="presshub-inspector-card" data-index="' + idx + '" data-source="' + $('<div>').text(src.toLowerCase()).html() + '" data-title="' + $('<div>').text(title.toLowerCase()).html() + '" data-text="' + $('<div>').text(content.toLowerCase().substring(0, 500)).html() + '" data-words="' + words + '" data-tokens="' + tokens + '" data-capped-tokens="' + cappedTokens + '" data-cap-chars="' + capChars + '">' +
                             '<div class="presshub-inspector-card-header">' +
                                 '<div class="inspector-card-check">' +
                                     '<input type="checkbox" class="presshub-article-checkbox" value="' + idx + '" checked="checked" id="inspector-check-' + idx + '" />' +

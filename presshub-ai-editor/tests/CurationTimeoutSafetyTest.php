@@ -253,7 +253,7 @@ class CurationTimeoutSafetyTest {
         $api_mock = new class extends PressHub_AI_API_Client {
             public function __construct() { /* skip parent */ }
             public function set_action( string $action ): self { return $this; }
-            public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null ) {
+            public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null, array $metadata = [] ) {
                 return "# Top Headline\n\nBriefing body.";
             }
             public static function current_request_meta(): string { return ''; }

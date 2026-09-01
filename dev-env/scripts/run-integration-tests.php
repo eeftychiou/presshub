@@ -363,6 +363,147 @@ run_test( 'Issue #59: admin.css is enqueued for the block editor (sidebar CSS re
     return true;
 } );
 
+// Test 22: Issue #61 — News Curator cap observability.
+// When format_articles_context() truncates the article set the curator
+// must expose the capped char count, capped token estimate, and the
+// truncation flag through their public API so the AJAX handler can
+// surface them in the briefing response (and the token log metadata).
+run_test( 'Issue #61: News Curator cap observability — capped < pool when truncated', function() {
+    if ( ! class_exists( 'PressHub_AI_News_Curator' ) ) {
+        return 'Class PressHub_AI_News_Curator not loaded';
+    }
+    $curator = new PressHub_AI_News_Curator();
+    $big_articles = [];
+    for ( $i = 1; $i <= 100; $i++ ) {
+        $big_articles[] = [
+            'title'   => "Article {$i}",
+            'source'  => 'TestSource',
+            'url'     => "https://example.test/{$i}",
+            'content' => str_repeat( 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ', 40 ), // ~1040 chars
+        ];
+    }
+    $curator->format_articles_context( $big_articles );
+    if ( ! $curator->was_context_truncated() ) {
+        return 'was_context_truncated() should be true with 100 articles';
+    }
+    if ( $curator->last_capped_chars() <= 0 ) {
+        return 'last_capped_chars() should be > 0';
+    }
+    if ( $curator->last_capped_tokens_estimate() <= 0 ) {
+        return 'last_capped_tokens_estimate() should be > 0';
+    }
+    if ( $curator->last_original_articles_count() !== 100 ) {
+        return 'last_original_articles_count() should be 100';
+    }
+    return true;
+} );
+
+// Test 23: Issue #61 AC#4 - briefing_curation metadata JSON column.
+// Full real-flow check: generate_briefing() -> real call_provider() ->
+// real log_llm_request() -> SQLite row. HTTP is intercepted via
+// pre_http_request so no external network call is made.
+run_test( 'Issue #61 AC#4: briefing_curation row metadata contains pool/cap keys', function() {
+    global $wpdb;
+    if ( ! class_exists( 'PressHub_AI_News_Curator' ) || ! class_exists( 'PressHub_AI_API_Client' ) || ! class_exists( 'PressHub_AI_Token_Logger' ) ) {
+        return 'Required classes not loaded';
+    }
+
+    // Seed a snapshot (unique date to avoid clashing with other tests).
+    $test_date = '2026-09-02';
+    $articles  = [];
+    for ( $i = 1; $i <= 60; $i++ ) {
+        $articles[] = [
+            'id'      => "meta-art-{$i}",
+            'title'   => "Meta Article {$i}",
+            'source'  => 'MetaSource',
+            'url'     => "https://example.test/meta/{$i}",
+            'content' => str_repeat( "Greek meta content {$i} ", 60 ),
+        ];
+    }
+    ( new PressHub_AI_News_Harvester() )->save_snapshot( $test_date, [
+        'date'            => $test_date,
+        'harvested_at'    => gmdate( 'c' ),
+        'sources'         => [ 'https://example.test' ],
+        'blocked_sources' => [],
+        'articles'        => $articles,
+    ] );
+
+    // Real API client with a deterministic provider config.
+    $api_client = new PressHub_AI_API_Client( [
+        'id'            => 'integration-meta-prov',
+        'type'          => 'openai',
+        'name'          => 'Integration Meta Provider',
+        'api_key'       => 'sk-integration-meta-key-12345',
+        'model'         => 'gpt-4o-meta',
+        'default_model' => 'gpt-4o-meta',
+        'temperature'   => 0.2,
+        'max_tokens'    => 1024,
+        'timeout'       => 15,
+        'headers'       => [],
+    ] );
+    if ( method_exists( $api_client, 'set_action' ) ) {
+        $api_client->set_action( 'briefing_curation' );
+    }
+
+    // Intercept the HTTP request and return a deterministic success body.
+    add_filter( 'pre_http_request', function ( $pre, $args, $url ) {
+        return [
+            'headers'  => [],
+            'body'     => wp_json_encode( [
+                'choices' => [ [ 'message' => [ 'content' => "# Meta Briefing\n\nContent." ], 'finish_reason' => 'stop' ] ],
+                'usage'   => [ 'prompt_tokens' => 1200, 'completion_tokens' => 200 ],
+            ] ),
+            'response' => [ 'code' => 200, 'message' => 'OK' ],
+            'cookies'  => [],
+            'filename' => null,
+        ];
+    }, 10, 3 );
+
+    try {
+        $result = ( new PressHub_AI_News_Curator() )->generate_briefing( $test_date, $api_client );
+    } finally {
+        remove_all_filters( 'pre_http_request' );
+    }
+
+    if ( is_wp_error( $result ) ) {
+        return 'generate_briefing() failed: ' . $result->get_error_message();
+    }
+
+    // Query the latest briefing_curation success row written by this run.
+    $table = $wpdb->prefix . 'presshub_ai_token_logs';
+    //nolint:sql
+    $rows = $wpdb->get_results(
+        $wpdb->prepare( "SELECT * FROM {$table} WHERE action_trigger = %s AND status = 'success' ORDER BY id DESC LIMIT 5", 'briefing_curation' ),
+        ARRAY_A
+    );
+    if ( empty( $rows ) ) {
+        return 'No briefing_curation success row found in token log';
+    }
+    $row = $rows[0];
+    $meta = json_decode( (string) ( $row['metadata'] ?? '' ), true );
+    if ( ! is_array( $meta ) ) {
+        return 'briefing_curation row metadata is not a JSON object: ' . var_export( $row['metadata'], true );
+    }
+    foreach ( [ 'pool_chars', 'pool_tokens_estimate', 'capped_chars', 'capped_tokens_estimate', 'cap_articles', 'cap_chars_per_article' ] as $key ) {
+        if ( ! array_key_exists( $key, $meta ) ) {
+            return "metadata missing key: {$key}. Full metadata: " . wp_json_encode( $meta );
+        }
+    }
+    if ( (int) $meta['pool_chars'] <= 0 || (int) $meta['pool_tokens_estimate'] <= 0 ) {
+        return 'pool_chars / pool_tokens_estimate must be positive, got: ' . wp_json_encode( $meta );
+    }
+    if ( (int) $meta['capped_chars'] <= 0 || (int) $meta['capped_tokens_estimate'] <= 0 ) {
+        return 'capped_chars / capped_tokens_estimate must be positive, got: ' . wp_json_encode( $meta );
+    }
+    if ( (int) $meta['cap_articles'] < 1 || (int) $meta['cap_chars_per_article'] < 100 ) {
+        return 'cap_articles / cap_chars_per_article out of range, got: ' . wp_json_encode( $meta );
+    }
+    if ( (int) $meta['capped_tokens_estimate'] >= (int) $meta['pool_tokens_estimate'] ) {
+        return 'Expected capped_tokens_estimate < pool_tokens_estimate (truncation), got: ' . wp_json_encode( $meta );
+    }
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";
