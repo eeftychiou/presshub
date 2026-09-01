@@ -203,6 +203,18 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_harvest_time_budget' ],
             'type'              => 'integer',
         ] );
+        // Issue #61 — Settings-First: the curation LLM context cap (max articles
+        // and max chars per article) must be operator-configurable, not
+        // hard-coded apply_filters() defaults. Both knobs follow the same
+        // six-step registration pattern as presshub_ai_harvest_time_budget.
+        register_setting( 'presshub_ai_options', 'presshub_ai_curation_max_articles', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_curation_max_articles' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_curation_max_chars_per_article', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_curation_max_chars_per_article' ],
+            'type'              => 'integer',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_preset', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_preset_slug' ],
             'type'              => 'string',
@@ -399,6 +411,11 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_harvest_time_budget', __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ), [ $render, 'render_harvest_time_budget_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        // Issue #61 — Settings-First: curation LLM context cap knobs. These
+        // rows live in the Daily Briefing section next to the harvest budget
+        // and reference the News Pool Inspector in their descriptions.
+        add_settings_field( 'presshub_ai_curation_max_articles', __( 'Maximum Articles Sent to Curation LLM', 'presshub-ai-editor' ), [ $render, 'render_curation_max_articles_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_curation_max_chars_per_article', __( 'Maximum Characters per Article (Curation)', 'presshub-ai-editor' ), [ $render, 'render_curation_max_chars_per_article_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_preset', __( 'Text Story Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_preset', __( 'Podcast Dialogue Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_target_duration', __( 'Target Podcast Duration', 'presshub-ai-editor' ), [ $render, 'render_briefing_target_duration_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1065,6 +1082,46 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Sanitize the maximum number of articles forwarded to the curation LLM.
+     *
+     * Clamps to the documented safe bounds [1, 200]; falls back to the
+     * default (40) for non-numeric input. Issue #61 — Settings-First: the
+     * cap must be operator-configurable, and the bounds live here so
+     * business logic never re-implements floor/ceiling guards.
+     *
+     * @param mixed $value Raw input value.
+     * @return int Clamped integer within [1, 200], default 40.
+     */
+    public static function sanitize_curation_max_articles( $value ): int {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 40;
+        }
+        $n = (int) $value;
+        return max( 1, min( 200, $n ) );
+    }
+
+    /**
+     * Sanitize the per-article character cap inside the curation prompt.
+     *
+     * Clamps to the documented safe bounds [100, 400000]; falls back to the
+     * default (3000) for non-numeric input. The wide upper bound lets
+     * operators with very large context models (e.g. Gemini Pro 1M,
+     * Claude Sonnet 4.5) feed a single article in full. Issue #61.
+     *
+     * @param mixed $value Raw input value.
+     * @return int Clamped integer within [100, 400000], default 3000.
+     */
+    public static function sanitize_curation_max_chars_per_article( $value ): int {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 3000;
+        }
+        $n = (int) $value;
+        return max( 100, min( 400000, $n ) );
+    }
+
+    /**
      * Helper to retrieve configured curation time budget from database (clamped 30–600s, default 120s).
      *
      * @return int Configured execution time budget in seconds for curation/script generation.
@@ -1092,6 +1149,31 @@ class PressHub_AI_Settings_Storage {
     public static function get_harvest_time_budget(): int {
         $budget = (int) get_option( 'presshub_ai_harvest_time_budget', 60 );
         return ( $budget >= 10 && $budget <= 900 ) ? $budget : 60;
+    }
+
+    /**
+     * Helper to retrieve the maximum number of articles forwarded to the
+     * curation LLM (clamped 1–200, default 40). Issue #61 — Settings-First:
+     * the authoritative value lives in the WordPress option; this helper is
+     * the single read path for all consumers (curator, briefing admin UI,
+     * AJAX token-log metadata, and the News Pool Inspector mirror).
+     *
+     * @return int Configured curation max-articles cap.
+     */
+    public static function get_curation_max_articles(): int {
+        $value = (int) get_option( 'presshub_ai_curation_max_articles', 40 );
+        return ( $value >= 1 && $value <= 200 ) ? $value : 40;
+    }
+
+    /**
+     * Helper to retrieve the per-article character cap inside the curation
+     * prompt (clamped 100–400000, default 3000). Issue #61 — Settings-First.
+     *
+     * @return int Configured curation per-article char cap.
+     */
+    public static function get_curation_max_chars_per_article(): int {
+        $value = (int) get_option( 'presshub_ai_curation_max_chars_per_article', 3000 );
+        return ( $value >= 100 && $value <= 400000 ) ? $value : 3000;
     }
 
     private static function sanitize_time_format( $value, $default = '06:30' ): string {
@@ -1418,6 +1500,9 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_harvest_time'         => [ __CLASS__, 'sanitize_harvest_time' ],
             'presshub_ai_briefing_generation_time'      => [ __CLASS__, 'sanitize_generation_time' ],
             'presshub_ai_harvest_time_budget'           => [ __CLASS__, 'sanitize_harvest_time_budget' ],
+            // Issue #61 — Settings-First: curation LLM context cap knobs.
+            'presshub_ai_curation_max_articles'          => [ __CLASS__, 'sanitize_curation_max_articles' ],
+            'presshub_ai_curation_max_chars_per_article' => [ __CLASS__, 'sanitize_curation_max_chars_per_article' ],
             'presshub_ai_briefing_text_category'        => [ __CLASS__, 'sanitize_category_id' ],
             'presshub_ai_briefing_text_status'          => [ __CLASS__, 'sanitize_briefing_status' ],
             'presshub_ai_briefing_text_preset'          => [ __CLASS__, 'sanitize_preset_slug' ],

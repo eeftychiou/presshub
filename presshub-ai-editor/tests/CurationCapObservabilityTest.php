@@ -149,12 +149,12 @@ cco_check( 'payload: result has cap_chars_per_article', isset( $result['cap_char
 // Issue #61 — real-flow wiring: the pool-vs-LLM metadata must be handed to
 // call_provider() (and therefore written onto the briefing_curation
 // token-log row by the API client) — not just echoed in the payload.
-$expected_meta_keys = [ 'cap_articles', 'cap_chars_per_article', 'capped_chars', 'capped_tokens_estimate', 'pool_chars', 'pool_tokens_estimate' ];
+$expected_meta_keys = [ 'cap_articles', 'cap_chars_per_article', 'capped_chars', 'capped_tokens_estimate', 'pool_chars', 'pool_tokens_estimate', 'articles_count', 'articles_count_original', 'articles_truncated' ];
 $actual_meta_keys   = array_keys( $cco_mock->last_metadata );
 sort( $expected_meta_keys );
 sort( $actual_meta_keys );
 cco_check(
-    'real-flow: call_provider() received all 6 pool/cap metadata keys',
+    'real-flow: call_provider() received all 9 pool/cap metadata keys',
     $actual_meta_keys === $expected_meta_keys
 );
 cco_check(
@@ -188,7 +188,7 @@ cco_check(
 
 if ( is_array( $result ) ) {
     cco_check( 'payload: cap_articles defaults to 40', ( $result['cap_articles'] ?? 0 ) === 40 );
-    cco_check( 'payload: cap_chars_per_article defaults to 800', ( $result['cap_chars_per_article'] ?? 0 ) === 800 );
+    cco_check( 'payload: cap_chars_per_article defaults to 3000', ( $result['cap_chars_per_article'] ?? 0 ) === 3000 );
     cco_check(
         'payload: pool_tokens_estimate > 0 (50 articles x ~280 tokens)',
         ( $result['pool_tokens_estimate'] ?? 0 ) > 0
@@ -211,39 +211,45 @@ if ( is_array( $result ) ) {
         ( $result['articles_count_original'] ?? 0 ) === 50
     );
     cco_check(
+        'payload: articles_count = 40 (kept count, cap_articles sliced)',
+        ( $result['articles_count'] ?? 0 ) === 40
+    );
+    cco_check(
         'payload: articles_truncated = true',
         ( $result['articles_truncated'] ?? false ) === true
     );
 }
 
 
-// Test 4: filterable cap (presshub_ai_curation_max_articles)
+// Test 4: Settings-First cap override (presshub_ai_curation_max_articles
+// read through PressHub_AI_Settings_Storage::get_curation_max_articles()).
+// Issue #61 — the apply_filters() escape hatch is gone; the authoritative
+// value lives in the WordPress option, so tests must seed OPTIONS_STORE.
 $curator4 = new PressHub_AI_News_Curator();
 
-$cap_filter = function () { return 5; };
-add_filter( 'presshub_ai_curation_max_articles', $cap_filter );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'] = 5;
 
 $rendered_filtered = $curator4->format_articles_context( $big_articles );
 
-cco_check( 'filter: cap=5 keeps last_original_articles_count() = 100 (input count, not kept count)', 100 === $curator4->last_original_articles_count() );
-cco_check( 'filter: article #1 included in rendered prompt', false !== strpos( $rendered_filtered, 'Article 1' ) );
-cco_check( 'filter: article #5 included in rendered prompt', false !== strpos( $rendered_filtered, 'Article 5' ) );
-cco_check( 'filter: article #6 excluded from rendered prompt', false === strpos( $rendered_filtered, 'Article 6' ) );
-cco_check( 'filter: was_context_truncated() is true with cap=5', $curator4->was_context_truncated() );
-// The filter only changes the cap; the rendered string must shrink
+cco_check( 'option cap=5 keeps last_original_articles_count() = 100 (input count, not kept count)', 100 === $curator4->last_original_articles_count() );
+cco_check( 'option cap=5: article #1 included in rendered prompt', false !== strpos( $rendered_filtered, 'Article 1' ) );
+cco_check( 'option cap=5: article #5 included in rendered prompt', false !== strpos( $rendered_filtered, 'Article 5' ) );
+cco_check( 'option cap=5: article #6 excluded from rendered prompt', false === strpos( $rendered_filtered, 'Article 6' ) );
+cco_check( 'option cap=5: was_context_truncated() is true with cap=5', $curator4->was_context_truncated() );
+// The option only changes the cap; the rendered string must shrink
 // proportionally to reflect the smaller cap.
 $expected_max = 5 * $per_block_max + 4 * 5;
 $actual_filtered_len = function_exists( 'mb_strlen' ) ? mb_strlen( $rendered_filtered ) : strlen( $rendered_filtered );
 cco_check(
-    "filter: cap=5 rendered length ({$actual_filtered_len}) << cap=40 length ({$actual_len})",
+    "option cap=5 rendered length ({$actual_filtered_len}) << cap=40 length ({$actual_len})",
     $actual_filtered_len < $actual_len / 4
 );
 cco_check(
-    "filter: cap=5 rendered length ({$actual_filtered_len}) <= expected max ({$expected_max})",
+    "option cap=5 rendered length ({$actual_filtered_len}) <= expected max ({$expected_max})",
     $actual_filtered_len <= $expected_max
 );
 
-remove_filter( 'presshub_ai_curation_max_articles', $cap_filter );
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'] );
 
 // =========================================================================
 // Issue #61 - Test 4b: Token-log metadata shape (S7a).
@@ -266,7 +272,10 @@ if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
         'capped_chars'           => 30770,
         'capped_tokens_estimate' => 10256,
         'cap_articles'           => 40,
-        'cap_chars_per_article'  => 800,
+        'cap_chars_per_article'  => 3000,
+        'articles_count'         => 40,
+        'articles_count_original'=> 60,
+        'articles_truncated'     => true,
     ];
     $issue_61_log_id = PressHub_AI_Token_Logger::log_llm_request(
         'briefing_curation',
@@ -303,7 +312,10 @@ if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
         cco_check( 'log: metadata contains pool_chars', (int) ( $decoded_meta['pool_chars'] ?? 0 ) === 548366 );
         cco_check( 'log: metadata contains capped_chars', (int) ( $decoded_meta['capped_chars'] ?? 0 ) === 30770 );
         cco_check( 'log: metadata contains cap_articles', (int) ( $decoded_meta['cap_articles'] ?? 0 ) === 40 );
-        cco_check( 'log: metadata contains cap_chars_per_article', (int) ( $decoded_meta['cap_chars_per_article'] ?? 0 ) === 800 );
+        cco_check( 'log: metadata contains cap_chars_per_article', (int) ( $decoded_meta['cap_chars_per_article'] ?? 0 ) === 3000 );
+        cco_check( 'log: metadata contains articles_count', (int) ( $decoded_meta['articles_count'] ?? 0 ) === 40 );
+        cco_check( 'log: metadata contains articles_count_original', (int) ( $decoded_meta['articles_count_original'] ?? 0 ) === 60 );
+        cco_check( 'log: metadata contains articles_truncated', true === ( $decoded_meta['articles_truncated'] ?? false ) );
         // The Issue #61 invariant: capped < pool whenever truncation occurs.
         cco_check(
             'log: capped_tokens_estimate < pool_tokens_estimate (Issue #61 invariant)',
@@ -353,9 +365,9 @@ cco_check( 'render: inspector toolbar subtext element is present', false !== str
 cco_check( 'render: subtext contains "pool tokens" wording', false !== strpos( $rendered_html, 'pool tokens' ) );
 cco_check( 'render: subtext contains "cap:" wording', false !== strpos( $rendered_html, 'cap:' ) );
 cco_check( 'render: subtext contains "40 articles"', false !== strpos( $rendered_html, '40 articles' ) );
-cco_check( 'render: subtext contains "800 chars/article"', false !== strpos( $rendered_html, '800 chars/article' ) );
+cco_check( 'render: subtext contains "3000 chars/article"', false !== strpos( $rendered_html, '3000 chars/article' ) );
 cco_check( 'render: subtext contains the data-cap-articles attribute', false !== strpos( $rendered_html, 'data-cap-articles="40"' ) );
-cco_check( 'render: subtext contains the data-cap-chars attribute', false !== strpos( $rendered_html, 'data-cap-chars="800"' ) );
+cco_check( 'render: subtext contains the data-cap-chars attribute', false !== strpos( $rendered_html, 'data-cap-chars="3000"' ) );
 cco_check( 'render: subtext element has the title attribute for the hover tooltip', false !== strpos( $rendered_html, 'title="Pool tokens vs. tokens actually sent to the LLM' ) );
 
 // Issue #61 (S1) — the server-rendered card attributes must include
@@ -373,7 +385,7 @@ if ( ! empty( $card_attr_matches ) ) {
         $capped <= $uncapped
     );
 }
-cco_check( 'render: card attribute data-cap-chars="800" is present', false !== strpos( $rendered_html, 'data-cap-chars="800"' ) );
+cco_check( 'render: card attribute data-cap-chars="3000" is present', false !== strpos( $rendered_html, 'data-cap-chars="3000"' ) );
 
 
 // =========================================================================

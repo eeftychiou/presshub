@@ -187,9 +187,9 @@
                 : 40;
             var capChars = (presshubBriefingAdmin && presshubBriefingAdmin.cap_chars_per_article)
                 ? parseInt(presshubBriefingAdmin.cap_chars_per_article, 10)
-                : 800;
+                : 3000;
             if (!isFinite(capArticles) || capArticles < 1) capArticles = 40;
-            if (!isFinite(capChars) || capChars < 100) capChars = 800;
+            if (!isFinite(capChars) || capChars < 100) capChars = 3000;
 
             var capped = 0;
             var considered = 0;
@@ -237,7 +237,10 @@
                 capped.cap_articles,
                 capped.cap_chars
             );
-            $nodes.text(text).show();
+            // .text() destroys child elements, so the server-rendered
+            // "Configure cap in Settings" anchor must be re-appended after
+            // the rewrite (Issue #61 — link points to the Settings page).
+            $nodes.text(text).append(' <a href="' + (presshubBriefingAdmin && presshubBriefingAdmin.curation_settings_url || '#') + '" class="presshub-llm-subtext-link">' + __('Configure cap in Settings → Daily Briefing.', 'presshub-ai-editor') + '</a>').show();
         }
 
         function updateSelectedCountBadge() {

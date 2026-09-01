@@ -301,9 +301,12 @@ class PressHub_AI_Briefing_Admin {
                 'date'     => gmdate( 'Y-m-d' ),
                 // Issue #61 — expose the cap values to the JS so the
                 // "Of N pool tokens, M were sent to the LLM" subtext
-                // mirrors the curator's prompt-build math.
-                'cap_articles'          => (int) apply_filters( 'presshub_ai_curation_max_articles', 40 ),
-                'cap_chars_per_article' => (int) apply_filters( 'presshub_ai_curation_max_chars_per_article', 800 ),
+                // mirrors the curator's prompt-build math. Values come from
+                // the Settings-First helpers so JS always reflects the
+                // operator's current configuration.
+                'cap_articles'          => PressHub_AI_Settings_Storage::get_curation_max_articles(),
+                'cap_chars_per_article' => PressHub_AI_Settings_Storage::get_curation_max_chars_per_article(),
+                'curation_settings_url' => admin_url( 'options-general.php?page=presshub-ai#briefing' ),
                 'i18n'     => [
                     'harvesting'         => __( 'Συλλογή ειδήσεων σε εξέλιξη...', 'presshub-ai-editor' ),
                     'curating'           => __( 'Σύνταξη κειμένου ενημέρωσης...', 'presshub-ai-editor' ),
@@ -462,6 +465,11 @@ class PressHub_AI_Briefing_Admin {
 
         $status = $this->get_briefing_status( $date );
         $settings_url = admin_url( 'options-general.php?page=presshub-ai' );
+        // Issue #61 — deep link into the Daily Briefing tab where the
+        // curation cap knobs (Maximum Articles Sent to Curation LLM /
+        // Maximum Characters per Article) live. The settings page uses
+        // hash-based tabs, so the fragment activates the briefing pane.
+        $curation_settings_url = admin_url( 'options-general.php?page=presshub-ai#briefing' );
 
         // ---------------------------------------------------------------------
         // Defensive PHP fallback for aggregate word/token totals (#57).
@@ -480,8 +488,8 @@ class PressHub_AI_Briefing_Admin {
         // cap math here so the milestone card and the Inspector toolbar
         // show "Of N pool tokens, M were sent to the LLM" on first paint,
         // even before the JS recompute hook fires.
-        $cap_articles_server          = max( 1, (int) apply_filters( 'presshub_ai_curation_max_articles', 40 ) );
-        $cap_chars_per_article_server = max( 100, (int) apply_filters( 'presshub_ai_curation_max_chars_per_article', 800 ) );
+        $cap_articles_server          = PressHub_AI_Settings_Storage::get_curation_max_articles();
+        $cap_chars_per_article_server = PressHub_AI_Settings_Storage::get_curation_max_chars_per_article();
         $capped_words  = 0;
         $capped_tokens = 0;
         $capped_articles_considered = 0;
@@ -699,6 +707,9 @@ class PressHub_AI_Briefing_Admin {
                             <?php if ( '' !== $llm_subtext_label ) : ?>
                                 <p id="presshub-milestone-llm-subtext" class="presshub-llm-subtext presshub-milestone-llm-subtext description" data-cap-articles="<?php echo esc_attr( (int) $cap_articles_server ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>" title="<?php echo esc_attr__( 'Pool tokens vs. tokens actually sent to the LLM (capped by max articles × max chars/article).', 'presshub-ai-editor' ); ?>">
                                     <?php echo esc_html( $llm_subtext_label ); ?>
+                                    <a href="<?php echo esc_url( $curation_settings_url ); ?>" class="presshub-llm-subtext-link">
+                                        <?php echo esc_html__( 'Configure cap in Settings → Daily Briefing.', 'presshub-ai-editor' ); ?>
+                                    </a>
                                 </p>
                             <?php endif; ?>
                             <a href="#presshub-harvest-inspector-section" class="button button-primary button-small" id="btn-scroll-to-inspector" style="width: 100%; text-align: center; justify-content: center; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;">
@@ -894,6 +905,9 @@ class PressHub_AI_Briefing_Admin {
                     <?php if ( '' !== $llm_subtext_label ) : ?>
                         <p id="presshub-inspector-llm-subtext" class="presshub-llm-subtext presshub-inspector-llm-subtext description" data-cap-articles="<?php echo esc_attr( (int) $cap_articles_server ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>" title="<?php echo esc_attr__( 'Pool tokens vs. tokens actually sent to the LLM (capped by max articles × max chars/article).', 'presshub-ai-editor' ); ?>">
                             <?php echo esc_html( $llm_subtext_label ); ?>
+                            <a href="<?php echo esc_url( $curation_settings_url ); ?>" class="presshub-llm-subtext-link">
+                                <?php echo esc_html__( 'Configure cap in Settings → Daily Briefing.', 'presshub-ai-editor' ); ?>
+                            </a>
                         </p>
                     <?php endif; ?>
                 </div>

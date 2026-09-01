@@ -163,6 +163,8 @@ class SettingsPageTest
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
             'presshub_ai_harvest_time_budget',
+            'presshub_ai_curation_max_articles',
+            'presshub_ai_curation_max_chars_per_article',
             'presshub_ai_briefing_text_preset',
             'presshub_ai_briefing_podcast_preset',
             'presshub_ai_briefing_target_duration',
