@@ -57,6 +57,8 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
             'presshub_ai_harvest_time_budget',
+            'presshub_ai_curation_max_articles',
+            'presshub_ai_curation_max_chars_per_article',
             'presshub_ai_briefing_text_preset',
             'presshub_ai_briefing_podcast_preset',
             'presshub_ai_briefing_target_duration',
@@ -450,6 +452,137 @@ class DailyBriefingSettingsTest
         }
         if ( false === strpos( $render_html, 'value="75"' ) ) {
             $failures[] = 'render_harvest_time_budget_field should render value="75".';
+        }
+
+        // --- Case 15b: Issue #61 — Curation LLM context cap options ---
+        // Settings-First: max articles (1..200, default 40) and max chars
+        // per article (100..400000, default 3000) are registered, clamped by
+        // sanitize callbacks, readable via get_* helpers, present in the
+        // briefing section options map, and rendered with matching min/max.
+        self::reset_options();
+
+        // Sanitizer: max articles.
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_articles', 40 ) !== 40 ) {
+            $failures[] = 'curation max articles 40 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_articles', '10' ) !== 10 ) {
+            $failures[] = 'curation max articles string "10" should sanitize to int 10.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_articles', 0 ) !== 1 ) {
+            $failures[] = 'curation max articles 0 should clamp to min 1.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_articles', -5 ) !== 1 ) {
+            $failures[] = 'curation max articles -5 should clamp to min 1.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_articles', 200 ) !== 200 ) {
+            $failures[] = 'curation max articles 200 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_articles', 201 ) !== 200 ) {
+            $failures[] = 'curation max articles 201 should clamp to max 200.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_articles', 'invalid' ) !== 40 ) {
+            $failures[] = 'non-numeric curation max articles should fall back to default 40.';
+        }
+
+        // Sanitizer: max chars per article.
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_chars_per_article', 3000 ) !== 3000 ) {
+            $failures[] = 'curation max chars 3000 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_chars_per_article', '1500' ) !== 1500 ) {
+            $failures[] = 'curation max chars string "1500" should sanitize to int 1500.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_chars_per_article', 99 ) !== 100 ) {
+            $failures[] = 'curation max chars 99 should clamp to min 100.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_chars_per_article', 0 ) !== 100 ) {
+            $failures[] = 'curation max chars 0 should clamp to min 100.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_chars_per_article', 400000 ) !== 400000 ) {
+            $failures[] = 'curation max chars 400000 should pass through.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_chars_per_article', 500000 ) !== 400000 ) {
+            $failures[] = 'curation max chars 500000 should clamp to max 400000.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_curation_max_chars_per_article', 'invalid' ) !== 3000 ) {
+            $failures[] = 'non-numeric curation max chars should fall back to default 3000.';
+        }
+
+        // Getters: defaults apply when options are absent.
+        self::reset_options();
+        if ( PressHub_AI_Settings_Storage::get_curation_max_articles() !== 40 ) {
+            $failures[] = 'get_curation_max_articles() should default to 40.';
+        }
+        if ( PressHub_AI_Settings_Storage::get_curation_max_chars_per_article() !== 3000 ) {
+            $failures[] = 'get_curation_max_chars_per_article() should default to 3000.';
+        }
+
+        // Getters: saved in-range options pass through.
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'] = 10;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_chars_per_article'] = 2500;
+        if ( PressHub_AI_Settings_Storage::get_curation_max_articles() !== 10 ) {
+            $failures[] = 'get_curation_max_articles() should return saved option 10.';
+        }
+        if ( PressHub_AI_Settings_Storage::get_curation_max_chars_per_article() !== 2500 ) {
+            $failures[] = 'get_curation_max_chars_per_article() should return saved option 2500.';
+        }
+
+        // Getters: out-of-range options fall back to defaults.
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'] = 0;
+        if ( PressHub_AI_Settings_Storage::get_curation_max_articles() !== 40 ) {
+            $failures[] = 'get_curation_max_articles() should fall back to 40 for out-of-range option 0.';
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'] = 500;
+        if ( PressHub_AI_Settings_Storage::get_curation_max_articles() !== 40 ) {
+            $failures[] = 'get_curation_max_articles() should fall back to 40 for out-of-range option 500.';
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_chars_per_article'] = 50;
+        if ( PressHub_AI_Settings_Storage::get_curation_max_chars_per_article() !== 3000 ) {
+            $failures[] = 'get_curation_max_chars_per_article() should fall back to 3000 for out-of-range option 50.';
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_chars_per_article'] = 999999;
+        if ( PressHub_AI_Settings_Storage::get_curation_max_chars_per_article() !== 3000 ) {
+            $failures[] = 'get_curation_max_chars_per_article() should fall back to 3000 for out-of-range option 999999.';
+        }
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'], $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_chars_per_article'] );
+
+        // Section options map inclusion.
+        if ( ! isset( $briefing_map['presshub_ai_curation_max_articles'] ) || ! is_callable( $briefing_map['presshub_ai_curation_max_articles'] ) ) {
+            $failures[] = 'presshub_ai_curation_max_articles must be present and callable in briefing section options map.';
+        }
+        if ( ! isset( $briefing_map['presshub_ai_curation_max_chars_per_article'] ) || ! is_callable( $briefing_map['presshub_ai_curation_max_chars_per_article'] ) ) {
+            $failures[] = 'presshub_ai_curation_max_chars_per_article must be present and callable in briefing section options map.';
+        }
+
+        // Render: max articles field.
+        self::reset_options();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'] = 10;
+        ob_start();
+        $renderer->render_curation_max_articles_field();
+        $render_articles_html = ob_get_clean();
+        if ( false === strpos( $render_articles_html, 'name="presshub_ai_curation_max_articles"' ) ) {
+            $failures[] = 'render_curation_max_articles_field should render input with name="presshub_ai_curation_max_articles".';
+        }
+        if ( false === strpos( $render_articles_html, 'min="1"' ) || false === strpos( $render_articles_html, 'max="200"' ) ) {
+            $failures[] = 'render_curation_max_articles_field should render min="1" and max="200".';
+        }
+        if ( false === strpos( $render_articles_html, 'value="10"' ) ) {
+            $failures[] = 'render_curation_max_articles_field should render value="10".';
+        }
+
+        // Render: max chars per article field.
+        self::reset_options();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_chars_per_article'] = 2500;
+        ob_start();
+        $renderer->render_curation_max_chars_per_article_field();
+        $render_chars_html = ob_get_clean();
+        if ( false === strpos( $render_chars_html, 'name="presshub_ai_curation_max_chars_per_article"' ) ) {
+            $failures[] = 'render_curation_max_chars_per_article_field should render input with name="presshub_ai_curation_max_chars_per_article".';
+        }
+        if ( false === strpos( $render_chars_html, 'min="100"' ) || false === strpos( $render_chars_html, 'max="400000"' ) ) {
+            $failures[] = 'render_curation_max_chars_per_article_field should render min="100" and max="400000".';
+        }
+        if ( false === strpos( $render_chars_html, 'value="2500"' ) ) {
+            $failures[] = 'render_curation_max_chars_per_article_field should render value="2500".';
         }
 
         if ( $failures ) {

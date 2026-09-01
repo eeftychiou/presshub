@@ -19,6 +19,7 @@ require_once __DIR__ . '/class-preset-store.php';
 require_once __DIR__ . '/class-preset-resolver.php';
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-api-client.php';
+require_once __DIR__ . '/class-settings-storage.php';
 
 class PressHub_AI_News_Curator {
 
@@ -39,6 +40,14 @@ class PressHub_AI_News_Curator {
      * format_articles_context() call (before max-articles truncation).
      */
     private static $last_original_articles_count = 0;
+
+    /**
+     * @internal Issue #61 — tracks how many articles were actually rendered
+     * into the context string by the most recent format_articles_context()
+     * call (after the max_articles cap slice). Distinct from the original
+     * count so token-log metadata can show pool-vs-sent article counts.
+     */
+    private static $last_kept_articles_count = 0;
 
     /**
      * @internal Issue #61 — char count of the *rendered* context string produced by
@@ -101,29 +110,19 @@ class PressHub_AI_News_Curator {
         }
 
         /**
-         * Filters the maximum number of articles to forward to the LLM in the curation prompt.
-         *
-         * Returning a smaller number protects against runaway context lengths when the
-         * harvester collected dozens of articles (Fixes #39 — 30s AJAX timeout / 500).
-         *
-         * @param int $max_articles Default 40.
+         * Issue #61 — Settings-First: the curation context cap is an
+         * operator-configurable WordPress option, read through the storage
+         * helper (clamped 1–200, default 40). The floor guard that used to
+         * live here is removed — bounds enforcement is the responsibility of
+         * PressHub_AI_Settings_Storage::sanitize_curation_max_articles().
          */
-        $max_articles = (int) apply_filters( 'presshub_ai_curation_max_articles', 40 );
-        if ( $max_articles < 1 ) {
-            $max_articles = 1;
-        }
+        $max_articles = PressHub_AI_Settings_Storage::get_curation_max_articles();
 
         /**
-         * Filters the maximum number of characters allowed per article body in the prompt.
-         *
-         * Prevents a single unusually long article from blowing the LLM context budget.
-         *
-         * @param int $max_chars Default 800.
+         * Issue #61 — Settings-First: per-article char cap, read through the
+         * storage helper (clamped 100–400000, default 3000).
          */
-        $max_chars = (int) apply_filters( 'presshub_ai_curation_max_chars_per_article', 800 );
-        if ( $max_chars < 100 ) {
-            $max_chars = 100;
-        }
+        $max_chars = PressHub_AI_Settings_Storage::get_curation_max_chars_per_article();
 
         $original_count = count( $articles );
         $truncated      = false;
@@ -168,6 +167,7 @@ class PressHub_AI_News_Curator {
 
         self::$last_context_truncated       = $truncated;
         self::$last_original_articles_count = $original_count;
+        self::$last_kept_articles_count     = count( $articles );
 
         // Issue #61 — surface pool-vs-LLM observability. The capped metrics are
         // derived from the *rendered* prompt string (not per-article estimates
@@ -211,6 +211,18 @@ class PressHub_AI_News_Curator {
      */
     public function last_original_articles_count(): int {
         return (int) ( self::$last_original_articles_count ?? 0 );
+    }
+
+    /**
+     * Issue #61 — returns the number of articles that were actually rendered
+     * into the most recent format_articles_context() output (after the
+     * max_articles cap slice). When no truncation occurred this equals
+     * last_original_articles_count(); when the cap kicked in it is smaller.
+     *
+     * @return int
+     */
+    public function last_kept_articles_count(): int {
+        return (int) ( self::$last_kept_articles_count ?? 0 );
     }
 
     /**
@@ -592,14 +604,19 @@ class PressHub_AI_News_Curator {
             }
         }
 
-        $cap_articles          = (int) apply_filters( 'presshub_ai_curation_max_articles', 40 );
-        $cap_chars_per_article = (int) apply_filters( 'presshub_ai_curation_max_chars_per_article', 800 );
-        if ( $cap_articles < 1 ) {
-            $cap_articles = 1;
-        }
-        if ( $cap_chars_per_article < 100 ) {
-            $cap_chars_per_article = 100;
-        }
+        // Issue #61 — Settings-First: the curation cap values come from the
+        // operator-configurable WordPress options (read through the storage
+        // helpers), never from hard-coded apply_filters defaults.
+        $cap_articles          = PressHub_AI_Settings_Storage::get_curation_max_articles();
+        $cap_chars_per_article = PressHub_AI_Settings_Storage::get_curation_max_chars_per_article();
+
+        // Issue #61 — the number of articles actually rendered into the
+        // LLM prompt (after the max_articles cap) comes from the curator's
+        // own kept-count stash, which format_articles_context() populated
+        // during build_prompt(). The optional selection filter and the cap
+        // are both applied inside build_prompt(), so the pool count above
+        // stays the un-capped reference and this is the sent value.
+        $used_articles_count = $this->last_kept_articles_count();
 
         // Issue #61 — write the pool-vs-LLM comparison into the
         // wp_presshub_ai_token_logs.metadata JSON column of the SAME
@@ -612,6 +629,9 @@ class PressHub_AI_News_Curator {
             'capped_tokens_estimate' => (int) $this->last_capped_tokens_estimate(),
             'cap_articles'           => (int) $cap_articles,
             'cap_chars_per_article'  => (int) $cap_chars_per_article,
+            'articles_count'         => (int) $used_articles_count,
+            'articles_count_original'=> (int) $this->last_original_articles_count(),
+            'articles_truncated'     => (bool) $this->was_context_truncated(),
         ];
 
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $curation_metadata );
@@ -664,23 +684,6 @@ class PressHub_AI_News_Curator {
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info( sprintf( 'Created daily briefing text post #%d for %s ("%s")', $post_id, $date, $headline ) );
-        }
-
-        $used_articles_count = count( $articles );
-        if ( ! empty( $selected_article_ids ) && is_array( $selected_article_ids ) ) {
-            $used_articles_count = 0;
-            foreach ( $articles as $idx => $art ) {
-                $id      = $art['id'] ?? null;
-                $url     = $art['url'] ?? null;
-                $str_idx = (string) $idx;
-                foreach ( $selected_article_ids as $target_id ) {
-                    $target_str = (string) $target_id;
-                    if ( ( null !== $id && (string) $id === $target_str ) || ( null !== $url && (string) $url === $target_str ) || $str_idx === $target_str ) {
-                        $used_articles_count++;
-                        break;
-                    }
-                }
-            }
         }
 
         // Issue #61 — the pool/cap totals were computed before the provider

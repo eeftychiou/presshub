@@ -22,6 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/class-provider-defaults.php';
 require_once __DIR__ . '/class-provider-store.php';
+require_once __DIR__ . '/class-settings-storage.php';
 
 class PressHub_AI_Settings_Render {
 
@@ -206,6 +207,18 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_harvest_time_budget"><?php echo __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_harvest_time_budget_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_curation_max_articles"><?php echo __( 'Maximum Articles Sent to Curation LLM', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_curation_max_articles_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_curation_max_chars_per_article"><?php echo __( 'Maximum Characters per Article (Curation)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_curation_max_chars_per_article_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1686,6 +1699,36 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="number" min="10" max="900" step="15" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
         <p class="description"><?php echo __( 'Maximum execution time in seconds allocated for crawling news sources and extracting articles during each briefing cycle (10 to 900 seconds / 15 minutes). Default: 60s.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Issue #61 — Settings-First: maximum number of harvested articles
+     * forwarded to the Daily Briefing curation LLM. The News Pool Inspector
+     * still shows every harvested article; only the first N (by snapshot
+     * order) are included in the curation prompt.
+     */
+    public function render_curation_max_articles_field() {
+        $option = 'presshub_ai_curation_max_articles';
+        $value  = PressHub_AI_Settings_Storage::get_curation_max_articles();
+        ?>
+        <input type="number" min="1" max="200" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Upper bound on the number of harvested articles forwarded to the Daily Briefing curation LLM. The News Pool Inspector still shows every harvested article; only the first N (by snapshot order) are included in the curation prompt. Range: 1 to 200. Default: 40.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Issue #61 — Settings-First: per-article body character cap inside the
+     * curation prompt. Articles longer than this are truncated with the
+     * "…[περικομμένο]" marker. The wide upper bound supports very large
+     * context models (Gemini Pro 1M, Claude Sonnet 4.5).
+     */
+    public function render_curation_max_chars_per_article_field() {
+        $option = 'presshub_ai_curation_max_chars_per_article';
+        $value  = PressHub_AI_Settings_Storage::get_curation_max_chars_per_article();
+        ?>
+        <input type="number" min="100" max="400000" step="500" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Per-article body character cap inside the curation prompt. Articles longer than this are truncated with the "…[περικομμένο]" marker. Range: 100 to 400,000. Default: 3000.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

@@ -573,6 +573,20 @@
     margin: 6px 0 0;
 }
 
+/* Issue #61 — the "Configure cap in Settings" deep-link inside the
+   pool-vs-LLM subtext (milestone card + Inspector toolbar). */
+.presshub-llm-subtext-link {
+    color: #2271b1;
+    text-decoration: underline;
+    white-space: nowrap;
+    margin-left: 4px;
+}
+
+.presshub-llm-subtext-link:hover,
+.presshub-llm-subtext-link:focus {
+    color: #135e96;
+}
+
 .presshub-inspector-articles-list {
     display: flex;
     flex-direction: column;

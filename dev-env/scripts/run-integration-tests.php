@@ -484,7 +484,7 @@ run_test( 'Issue #61 AC#4: briefing_curation row metadata contains pool/cap keys
     if ( ! is_array( $meta ) ) {
         return 'briefing_curation row metadata is not a JSON object: ' . var_export( $row['metadata'], true );
     }
-    foreach ( [ 'pool_chars', 'pool_tokens_estimate', 'capped_chars', 'capped_tokens_estimate', 'cap_articles', 'cap_chars_per_article' ] as $key ) {
+    foreach ( [ 'pool_chars', 'pool_tokens_estimate', 'capped_chars', 'capped_tokens_estimate', 'cap_articles', 'cap_chars_per_article', 'articles_count', 'articles_count_original', 'articles_truncated' ] as $key ) {
         if ( ! array_key_exists( $key, $meta ) ) {
             return "metadata missing key: {$key}. Full metadata: " . wp_json_encode( $meta );
         }
@@ -498,10 +498,134 @@ run_test( 'Issue #61 AC#4: briefing_curation row metadata contains pool/cap keys
     if ( (int) $meta['cap_articles'] < 1 || (int) $meta['cap_chars_per_article'] < 100 ) {
         return 'cap_articles / cap_chars_per_article out of range, got: ' . wp_json_encode( $meta );
     }
+    if ( (int) $meta['articles_count'] < 1 || (int) $meta['articles_count'] > (int) $meta['articles_count_original'] ) {
+        return 'articles_count must be >= 1 and <= articles_count_original, got: ' . wp_json_encode( $meta );
+    }
+    if ( (int) $meta['articles_truncated'] !== 1 ) {
+        return 'articles_truncated must be true with a 60-article pool and default cap, got: ' . wp_json_encode( $meta );
+    }
     if ( (int) $meta['capped_tokens_estimate'] >= (int) $meta['pool_tokens_estimate'] ) {
         return 'Expected capped_tokens_estimate < pool_tokens_estimate (truncation), got: ' . wp_json_encode( $meta );
     }
     return true;
+} );
+
+// Test 24: Issue #61 AC#2 - changing presshub_ai_curation_max_articles from
+// the default 40 to 10 causes the next curation to send <= 10 articles and
+// the briefing_curation metadata row reflects cap_articles = 10 with a
+// smaller capped_tokens_estimate.
+run_test( 'Issue #61 AC#2: reduced curation cap (10 articles) reflected in metadata', function() {
+    global $wpdb;
+    if ( ! class_exists( 'PressHub_AI_News_Curator' ) || ! class_exists( 'PressHub_AI_API_Client' ) || ! class_exists( 'PressHub_AI_Token_Logger' ) || ! class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+        return 'Required classes not loaded';
+    }
+
+    // Save the reduced cap (Settings-First read path).
+    update_option( 'presshub_ai_curation_max_articles', 10 );
+    $cap_readback = PressHub_AI_Settings_Storage::get_curation_max_articles();
+    if ( 10 !== $cap_readback ) {
+        delete_option( 'presshub_ai_curation_max_articles' );
+        return "get_curation_max_articles() did not return saved 10, got: {$cap_readback}";
+    }
+
+    try {
+        // Seed a fresh snapshot (unique date to avoid clashing).
+        $test_date = '2026-09-03';
+        $articles  = [];
+        for ( $i = 1; $i <= 40; $i++ ) {
+            $articles[] = [
+                'id'      => "cap-art-{$i}",
+                'title'   => "Cap Article {$i}",
+                'source'  => 'CapSource',
+                'url'     => "https://example.test/cap/{$i}",
+                'content' => str_repeat( "Capped Greek content {$i} ", 40 ),
+            ];
+        }
+        ( new PressHub_AI_News_Harvester() )->save_snapshot( $test_date, [
+            'date'            => $test_date,
+            'harvested_at'    => gmdate( 'c' ),
+            'sources'         => [ 'https://example.test' ],
+            'blocked_sources' => [],
+            'articles'        => $articles,
+        ] );
+
+        $api_client = new PressHub_AI_API_Client( [
+            'id'            => 'integration-cap-prov',
+            'type'          => 'openai',
+            'name'          => 'Integration Cap Provider',
+            'api_key'       => 'sk-integration-cap-key-12345',
+            'model'         => 'gpt-4o-cap',
+            'default_model' => 'gpt-4o-cap',
+            'temperature'   => 0.2,
+            'max_tokens'    => 1024,
+            'timeout'       => 15,
+            'headers'       => [],
+        ] );
+        if ( method_exists( $api_client, 'set_action' ) ) {
+            $api_client->set_action( 'briefing_curation' );
+        }
+
+        add_filter( 'pre_http_request', function ( $pre, $args, $url ) {
+            return [
+                'headers'  => [],
+                'body'     => wp_json_encode( [
+                    'choices' => [ [ 'message' => [ 'content' => "# Cap Briefing\n\nContent." ], 'finish_reason' => 'stop' ] ],
+                    'usage'   => [ 'prompt_tokens' => 600, 'completion_tokens' => 100 ],
+                ] ),
+                'response' => [ 'code' => 200, 'message' => 'OK' ],
+                'cookies'  => [],
+                'filename' => null,
+            ];
+        }, 10, 3 );
+
+        try {
+            $result = ( new PressHub_AI_News_Curator() )->generate_briefing( $test_date, $api_client );
+        } finally {
+            remove_all_filters( 'pre_http_request' );
+        }
+
+        if ( is_wp_error( $result ) ) {
+            return 'generate_briefing() failed with reduced cap: ' . $result->get_error_message();
+        }
+
+        // The payload must expose cap_articles = 10 and <= 10 articles.
+        if ( (int) ( $result['cap_articles'] ?? 0 ) !== 10 ) {
+            return 'payload cap_articles should be 10, got: ' . wp_json_encode( $result );
+        }
+        if ( (int) ( $result['articles_count'] ?? 0 ) > 10 ) {
+            return 'payload articles_count should be <= 10, got: ' . wp_json_encode( $result );
+        }
+
+        // The briefing_curation metadata row must reflect the reduced cap.
+        $table = $wpdb->prefix . 'presshub_ai_token_logs';
+        //nolint:sql
+        $rows = $wpdb->get_results(
+            $wpdb->prepare( "SELECT * FROM {$table} WHERE action_trigger = %s AND status = 'success' ORDER BY id DESC LIMIT 3", 'briefing_curation' ),
+            ARRAY_A
+        );
+        if ( empty( $rows ) ) {
+            return 'No briefing_curation success row found after reduced-cap run';
+        }
+        $meta = json_decode( (string) ( $rows[0]['metadata'] ?? '' ), true );
+        if ( ! is_array( $meta ) ) {
+            return 'briefing_curation row metadata is not a JSON object: ' . var_export( $rows[0]['metadata'], true );
+        }
+        if ( (int) ( $meta['cap_articles'] ?? 0 ) !== 10 ) {
+            return 'metadata cap_articles should be 10, got: ' . wp_json_encode( $meta );
+        }
+        if ( (int) ( $meta['articles_count'] ?? 0 ) > 10 ) {
+            return 'metadata articles_count should be <= 10, got: ' . wp_json_encode( $meta );
+        }
+        if ( (int) ( $meta['articles_count_original'] ?? 0 ) !== 40 ) {
+            return 'metadata articles_count_original should be 40 (pool size), got: ' . wp_json_encode( $meta );
+        }
+        if ( (int) ( $meta['articles_truncated'] ?? 0 ) !== 1 ) {
+            return 'metadata articles_truncated should be true with 40-article pool and cap=10, got: ' . wp_json_encode( $meta );
+        }
+        return true;
+    } finally {
+        delete_option( 'presshub_ai_curation_max_articles' );
+    }
 } );
 
 echo "\n=================================================================\n";

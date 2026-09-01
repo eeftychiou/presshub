@@ -40,7 +40,9 @@ if ( isset( $options['help'] ) ) {
     echo "                   (Issue #61: briefing_curation rows include\n";
     echo "                    pool_chars, pool_tokens_estimate,\n";
     echo "                    capped_chars, capped_tokens_estimate,\n";
-    echo "                    cap_articles, cap_chars_per_article\n";
+    echo "                    cap_articles, cap_chars_per_article,\n";
+    echo "                    articles_count, articles_count_original,\n";
+    echo "                    articles_truncated\n";
     echo "                    for pool-vs-LLM observability)\n";
     echo "  --json           Output raw JSON\n";
     exit( 0 );

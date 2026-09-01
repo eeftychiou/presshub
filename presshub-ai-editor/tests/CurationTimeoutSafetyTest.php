@@ -114,8 +114,10 @@ class CurationTimeoutSafetyTest {
 
         $curator = new PressHub_AI_News_Curator();
 
-        // Force max_articles=5 via filter to make a small, deterministic test fixture
-        add_filter( 'presshub_ai_curation_max_articles', function() { return 5; } );
+        // Force max_articles=5 via the Settings-First option (Issue #61 —
+        // the apply_filters() escape hatch was removed; the authoritative
+        // value lives in the WordPress option read through the helper).
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'] = 5;
 
         // 12-article fixture (will be truncated to 5)
         $articles = [];
@@ -146,15 +148,17 @@ class CurationTimeoutSafetyTest {
             false !== strpos( $ctx, '### 5. Title 5' ) && false === strpos( $ctx, '### 11.' )
         );
 
-        remove_all_filters( 'presshub_ai_curation_max_articles' );
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_articles'] );
 
         // =========================================================================
         // Case 4: format_articles_context() truncates long bodies via max_chars
         // =========================================================================
         self::reset_world();
 
-        // Tight max_chars via filter
-        add_filter( 'presshub_ai_curation_max_chars_per_article', function() { return 50; } );
+        // Tight max_chars via the Settings-First option (Issue #61).
+        // 100 is the sanitizer's documented minimum; any lower value would
+        // be clamped away by get_curation_max_chars_per_article().
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_chars_per_article'] = 100;
 
         $long_articles = [
             [
@@ -179,7 +183,7 @@ class CurationTimeoutSafetyTest {
             false !== strpos( $long_ctx, '…[περικομμένο]' )
         );
 
-        remove_all_filters( 'presshub_ai_curation_max_chars_per_article' );
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_chars_per_article'] );
 
         // =========================================================================
         // Case 5: format_articles_context() leaves state untouched when within budget
@@ -300,9 +304,11 @@ class CurationTimeoutSafetyTest {
         // Inject a fault via a sentinel global consumed by a stub override below.
         // Since we cannot override the curator class directly, we trigger a fault by
         // requesting a date that has no snapshot — this returns WP_Error, which is
-        // already handled. We then exercise the Throwable path by hooking into an
-        // existing filter that fires during generate_briefing.
-        add_filter( 'presshub_ai_curation_max_articles', function() {
+        // already handled. We then exercise the Throwable path by hooking into the
+        // pre_option_* filter that fires inside get_option() when
+        // PressHub_AI_Settings_Storage::get_curation_max_articles() reads the
+        // cap (Issue #61 — the old apply_filters() escape hatch is gone).
+        add_filter( 'pre_option_presshub_ai_curation_max_articles', function() {
             throw new \RuntimeException( 'Simulated catastrophic LLM socket fault' );
         } );
 
@@ -322,7 +328,7 @@ class CurationTimeoutSafetyTest {
             isset( $response['data']['exception'] ) && false !== strpos( $response['data']['exception'], 'Simulated catastrophic LLM socket fault' )
         );
 
-        remove_all_filters( 'presshub_ai_curation_max_articles' );
+        remove_all_filters( 'pre_option_presshub_ai_curation_max_articles' );
 
         // =========================================================================
         // Case 8: AJAX briefing_run_script() catches generic Throwable
