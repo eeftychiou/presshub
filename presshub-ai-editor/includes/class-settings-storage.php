@@ -318,7 +318,15 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
             'type'              => 'string',
         ] );
-        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt', [
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt_1', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt_2', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt_3', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
             'type'              => 'string',
         ] );
@@ -483,7 +491,9 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_text_title_date_format', __( 'Text Story Title Date Format', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_date_format_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_status', __( 'Podcast Post Status', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_prompt', __( 'Text Story System Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_podcast_prompt', __( 'Podcast Dialogue System Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_prompt_1', __( 'Podcast Dialogue System Prompt (1 Host)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_1_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_prompt_2', __( 'Podcast Dialogue System Prompt (2 Hosts)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_2_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_prompt_3', __( 'Podcast Dialogue System Prompt (3 Hosts)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_3_field' ], 'presshub-ai', 'presshub_ai_briefing' );
     }
 
 
@@ -1256,9 +1266,19 @@ class PressHub_AI_Settings_Storage {
      * @return string SFX identifier.
      */
     public static function get_briefing_audio_transition_sfx(): string {
-        $val = get_option( 'presshub_ai_briefing_audio_transition_sfx', 'silence' );
-        $valid = [ 'silence', 'chime', 'whoosh', 'synth' ];
-        return in_array( $val, $valid, true ) ? $val : 'silence';
+        return (string) get_option( 'presshub_ai_briefing_audio_transition_sfx', 'silence' );
+    }
+
+    public static function get_podcast_prompt_1(): string {
+        return (string) get_option( 'presshub_ai_briefing_podcast_prompt_1', '' );
+    }
+
+    public static function get_podcast_prompt_2(): string {
+        return (string) get_option( 'presshub_ai_briefing_podcast_prompt_2', '' );
+    }
+
+    public static function get_podcast_prompt_3(): string {
+        return (string) get_option( 'presshub_ai_briefing_podcast_prompt_3', '' );
     }
 
     /**
@@ -1476,10 +1496,11 @@ class PressHub_AI_Settings_Storage {
         
         $audio_dir = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/';
         if ( is_dir( $audio_dir ) ) {
-            $files = glob( $audio_dir . '*.wav' );
+            // Scan for both WAV and MP3
+            $files = array_merge( (array) glob( $audio_dir . '*.wav' ), (array) glob( $audio_dir . '*.mp3' ) );
             if ( $files ) {
                 foreach ( $files as $file ) {
-                    $valid[] = basename( $file, '.wav' );
+                    $valid[] = basename( $file ); // keep extension for exact matching later
                 }
             }
         }
@@ -1825,7 +1846,9 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_podcast_category'     => [ __CLASS__, 'sanitize_category_id' ],
             'presshub_ai_briefing_podcast_status'       => [ __CLASS__, 'sanitize_briefing_status' ],
             'presshub_ai_briefing_podcast_preset'       => [ __CLASS__, 'sanitize_preset_slug' ],
-            'presshub_ai_briefing_podcast_prompt'       => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'presshub_ai_briefing_podcast_prompt_1'     => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'presshub_ai_briefing_podcast_prompt_2'     => [ __CLASS__, 'sanitize_briefing_prompt' ],
+            'presshub_ai_briefing_podcast_prompt_3'     => [ __CLASS__, 'sanitize_briefing_prompt' ],
             'presshub_ai_briefing_podcast_temperature'  => [ __CLASS__, 'sanitize_temperature' ],
             'presshub_ai_briefing_podcast_max_tokens'   => [ __CLASS__, 'sanitize_max_tokens' ],
             'presshub_ai_briefing_podcast_timeout'      => [ __CLASS__, 'sanitize_timeout' ],

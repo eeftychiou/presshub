@@ -115,7 +115,9 @@ class SettingsPageTest
             'presshub_ai_briefing_text_status',
             'presshub_ai_briefing_podcast_status',
             'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt',
+            'presshub_ai_briefing_podcast_prompt_1',
+            'presshub_ai_briefing_podcast_prompt_2',
+            'presshub_ai_briefing_podcast_prompt_3',
         ] as $field ) {
             if ( ! in_array( $field, $briefing, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_briefing; got: " . implode( ', ', $briefing );
@@ -191,7 +193,9 @@ class SettingsPageTest
             'presshub_ai_briefing_text_title_date_format',
             'presshub_ai_briefing_podcast_status',
             'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt',
+            'presshub_ai_briefing_podcast_prompt_1',
+            'presshub_ai_briefing_podcast_prompt_2',
+            'presshub_ai_briefing_podcast_prompt_3',
             'presshub_ai_coauthor_provider',
             'presshub_ai_coauthor_model',
             'presshub_ai_coauthor_temperature',

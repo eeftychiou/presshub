@@ -80,7 +80,9 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_text_status',
             'presshub_ai_briefing_podcast_status',
             'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt',
+            'presshub_ai_briefing_podcast_prompt_1',
+            'presshub_ai_briefing_podcast_prompt_2',
+            'presshub_ai_briefing_podcast_prompt_3',
         ];
 
         foreach ( $expected_fields as $expected_field ) {

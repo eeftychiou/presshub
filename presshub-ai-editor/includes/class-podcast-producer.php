@@ -313,7 +313,20 @@ class PressHub_AI_Podcast_Producer {
         $host3 = apply_filters( 'presshub_ai_podcast_host3_name', $host3 );
 
         // 1. Base dialogue prompt & filter (system prompt defines persona, rules, speaker tags only)
-        $base_prompt = $this->get_default_dialogue_prompt( $host_count );
+        $base_prompt = '';
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            if ( 1 === $host_count ) {
+                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_1();
+            } elseif ( 3 === $host_count ) {
+                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_3();
+            } else {
+                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_2();
+            }
+        }
+
+        if ( empty( trim( $base_prompt ) ) ) {
+            $base_prompt = $this->get_default_dialogue_prompt( $host_count );
+        }
         $base_prompt = apply_filters( 'presshub_ai_podcast_producer_system_prompt', $base_prompt );
 
         // 2. Hydrate placeholders

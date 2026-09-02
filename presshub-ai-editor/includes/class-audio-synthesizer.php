@@ -814,10 +814,26 @@ class PressHub_AI_Audio_Synthesizer {
                     $sfx_setting = PressHub_AI_Settings_Storage::get_briefing_audio_transition_sfx();
                     $sfx_pcm     = '';
                     if ( 'silence' !== $sfx_setting ) {
-                        $sfx_file = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/' . $sfx_setting . '.wav';
+                        $sfx_file = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/' . $sfx_setting;
                         if ( file_exists( $sfx_file ) ) {
-                            $sfx_wav = file_get_contents( $sfx_file );
-                            if ( strlen( $sfx_wav ) >= 44 && 'RIFF' === substr( $sfx_wav, 0, 4 ) ) {
+                            $is_mp3 = ( strtolower( pathinfo( $sfx_file, PATHINFO_EXTENSION ) ) === 'mp3' );
+                            $sfx_wav = '';
+
+                            if ( $is_mp3 ) {
+                                $tmp_wav = wp_temp_dir() . '/sfx_tmp_' . uniqid() . '.wav';
+                                $cmd = 'ffmpeg -i ' . escapeshellarg( $sfx_file ) . ' -ar 24000 -ac 1 -c:a pcm_s16le -f wav -y ' . escapeshellarg( $tmp_wav ) . ' 2>&1';
+                                @shell_exec( $cmd );
+                                if ( file_exists( $tmp_wav ) ) {
+                                    $sfx_wav = file_get_contents( $tmp_wav );
+                                    @unlink( $tmp_wav );
+                                } else {
+                                    error_log( 'PressHub AI: Failed to decode MP3 SFX using ffmpeg. Is ffmpeg installed on the server?' );
+                                }
+                            } else {
+                                $sfx_wav = file_get_contents( $sfx_file );
+                            }
+
+                            if ( ! empty( $sfx_wav ) && strlen( $sfx_wav ) >= 44 && 'RIFF' === substr( $sfx_wav, 0, 4 ) ) {
                                 $pos = strpos( $sfx_wav, 'data' );
                                 if ( false !== $pos && strlen( $sfx_wav ) >= $pos + 8 ) {
                                     $data_size = unpack( 'V', substr( $sfx_wav, $pos + 4, 4 ) )[1] ?? 0;
