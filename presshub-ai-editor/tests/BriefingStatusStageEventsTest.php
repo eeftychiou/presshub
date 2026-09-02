@@ -308,6 +308,62 @@ class BriefingStatusStageEventsTest {
         }
 
         // =========================================================================
+        // Case 8 (regression — PR #82 review): blocked sources must be
+        // resolved BEFORE the active-sources filter runs, AND duplicate
+        // active hosts must be deduplicated. Previously the filter checked
+        // $blocked_source_labels while it was still empty (because the
+        // blocked loop ran afterwards), so any overlap host rendered twice
+        // (active + blocked) and any repeated host in `sources` produced
+        // duplicate chips.
+        // =========================================================================
+        self::reset_world();
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        ( new PressHub_AI_News_Harvester() )->save_snapshot( '2026-09-02', [
+            'date'         => '2026-09-02',
+            'articles'     => [],
+            // Two distinct hosts, plus a duplicate of the second.
+            'sources'      => [
+                'https://www.example.gr/article-a',
+                'https://www.philenews.com/article-b',
+                'https://www.philenews.com/article-c',
+            ],
+            // One blocked host that ALSO appears in `sources` above.
+            'blocked_sources' => [ 'https://www.philenews.com/feed' ],
+        ] );
+        $status = ( new PressHub_AI_Briefing_Admin() )->get_briefing_status( '2026-09-02' );
+
+        // a) Philenews must NOT appear in active_source_labels because it
+        //    is in blocked_sources — regardless of the loop ordering bug.
+        if ( in_array( 'Philenews.com', $status['active_source_labels'], true )
+            || in_array( 'Philenews', $status['active_source_labels'], true )
+        ) {
+            $failures[] = 'Bug fix #82: active_source_labels must exclude blocked host Philenews; got ' . implode( ', ', $status['active_source_labels'] );
+        }
+        // b) Philenews must appear in blocked_source_labels (one entry, not
+        //    three duplicates).
+        $blocked_count = count( array_filter(
+            $status['blocked_source_labels'],
+            static fn( $l ) => strtolower( $l ) === 'philenews.com' || strtolower( $l ) === 'philenews'
+        ) );
+        if ( $blocked_count !== 1 ) {
+            $failures[] = "blocked_source_labels must dedupe Philenews (expected 1); got {$blocked_count}";
+        }
+        // c) Example.gr must appear exactly once in active_source_labels.
+        $example_count = count( array_filter(
+            $status['active_source_labels'],
+            static fn( $l ) => strtolower( $l ) === 'example.gr' || strtolower( $l ) === 'example'
+        ) );
+        if ( $example_count !== 1 ) {
+            $failures[] = "active_source_labels must dedupe Example.gr (expected 1); got {$example_count}";
+        }
+        // d) Philenews (the duplicate host in `sources`) must appear in
+        //    active_source_labels at most once if at all, and never more
+        //    than once because dedupe is required.
+        if ( $blocked_count > 1 || $example_count > 1 ) {
+            $failures[] = 'active/blocked_source_labels should be deduped by hostname.';
+        }
+
+        // =========================================================================
         // Result.
         // =========================================================================
         if ( empty( $failures ) ) {

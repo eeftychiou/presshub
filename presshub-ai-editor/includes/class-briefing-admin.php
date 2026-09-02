@@ -651,25 +651,47 @@ class PressHub_AI_Briefing_Admin {
         // ("Kathimerini, Philenews, ANT1 Live"). Falls back to hostname-only
         // labels when source hostnames can't be resolved (e.g. unit tests
         // that pass only article URLs).
-        $active_source_labels = [];
+        //
+        // Bug fix (PR #82 review): the original implementation checked
+        // `$blocked_source_labels` while iterating the active-sources loop,
+        // but populated that array in a *separate* loop that ran after.
+        // Because of that ordering, the `! in_array(...)` condition always
+        // evaluated against an empty array, so any host present in both
+        // `snapshot.sources` and `$blocked_sources` would render twice
+        // (once as active, once as blocked). Reorder: resolve blocked
+        // labels first, then resolve + dedupe + filter actives.
+        $active_source_labels  = [];
         $blocked_source_labels = [];
-        foreach ( $snapshot['sources'] ?? [] as $src ) {
-            $host = (string) parse_url( (string) $src, PHP_URL_HOST );
-            if ( '' !== $host ) {
-                $label = ucfirst( preg_replace( '/^www\./i', '', $host ) );
-                if ( ! in_array( $label, $blocked_source_labels, true ) ) {
-                    $active_source_labels[] = $label;
-                }
-            }
-        }
+
+        // 1. Resolve blocked source labels first so the active filter below
+        //    has a fully-populated blocklist to compare against.
         foreach ( $blocked_sources as $blocked_url ) {
             $host = (string) parse_url( (string) $blocked_url, PHP_URL_HOST );
             if ( '' !== $host ) {
                 $blocked_source_labels[] = ucfirst( preg_replace( '/^www\./i', '', $host ) );
             }
         }
-        $active_source_labels   = array_slice( $active_source_labels, 0, 5 );
-        $blocked_source_labels  = array_slice( $blocked_source_labels, 0, 5 );
+
+        // 2. Resolve active sources, deduplicating across multiple articles
+        //    from the same host and excluding any host that appears in the
+        //    already-populated blocklist.
+        foreach ( $snapshot['sources'] ?? [] as $src ) {
+            $host  = (string) parse_url( (string) $src, PHP_URL_HOST );
+            if ( '' === $host ) {
+                continue;
+            }
+            $label = ucfirst( preg_replace( '/^www\./i', '', $host ) );
+            if ( in_array( $label, $blocked_source_labels, true ) ) {
+                continue;
+            }
+            if ( in_array( $label, $active_source_labels, true ) ) {
+                continue;
+            }
+            $active_source_labels[] = $label;
+        }
+
+        $active_source_labels  = array_slice( $active_source_labels, 0, 5 );
+        $blocked_source_labels = array_slice( $blocked_source_labels, 0, 5 );
 
         return [
             'date'                => $date,
