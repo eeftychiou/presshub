@@ -711,6 +711,54 @@ class PressHub_AI_Audio_Synthesizer {
                         ) );
                     }
 
+                    // Issue #80 — Settings-First: emit a structured
+                    // "topic" payload log entry for every iteration of the
+                    // topic loop when the operator has enabled the TTS
+                    // payload debug toggle. This mirrors the per-topic
+                    // metadata (index, title, turn-by-turn speaker →
+                    // voice mapping, character count, sample rate) so
+                    // investigators can correlate voice drift against
+                    // which topic / speaker turn was active.
+                    if ( class_exists( 'PressHub_AI_Settings_Storage' )
+                        && class_exists( 'PressHub_AI_API_Client' )
+                        && PressHub_AI_Settings_Storage::get_log_tts_payloads()
+                    ) {
+                        $turn_assignments = [];
+                        foreach ( $topic_turns as $turn_idx => $t ) {
+                            $speaker_id = (string) ( $t['speaker'] ?? '' );
+                            $speaker_voice = ( 'tertiary' === $speaker_id )
+                                ? $tertiary_voice
+                                : ( ( 'female' === $speaker_id ) ? $female_voice : $male_voice );
+                            $turn_assignments[] = [
+                                'turn'   => $turn_idx + 1,
+                                'speaker' => $speaker_id,
+                                'voice'   => $speaker_voice,
+                                'chars'   => mb_strlen( (string) ( $t['text'] ?? '' ) ),
+                            ];
+                        }
+                        $topic_log_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
+                            'topic',
+                            [
+                                'date'              => $date,
+                                'topic_index'       => $topic_idx + 1,
+                                'topic_total'       => count( $topics ),
+                                'topic_title'       => (string) ( $topic['title'] ?? '' ),
+                                'turns_count'       => count( $topic_turns ),
+                                'chars'             => mb_strlen( $topic_script ),
+                                'host_count'        => $host_count,
+                                'female_host'       => $female_host,
+                                'male_host'         => $male_host,
+                                'tertiary_host'     => $tertiary_host,
+                                'female_voice'      => $female_voice,
+                                'male_voice'        => $male_voice,
+                                'tertiary_voice'    => $tertiary_voice,
+                                'style'             => $used_style,
+                                'turn_assignments'  => $turn_assignments,
+                            ]
+                        );
+                        PressHub_AI_API_Client::write_tts_payload_log( $topic_log_entry );
+                    }
+
                     if ( 1 === $host_count ) {
                         // Solo anchor
                         $dialogue_lines = [];
@@ -835,6 +883,41 @@ class PressHub_AI_Audio_Synthesizer {
 
                     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                         PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', 'topic_stitched', $total_chars, $duration_ms, 'success', count( $topic_wavs ) . '_topics' );
+                    }
+
+                    // Issue #80 — Settings-First: when the TTS payload debug
+                    // toggle is enabled, emit a "stitched" entry that captures
+                    // the final assembled audio metrics (total bytes,
+                    // duration_ms, sample rate, topic count, intro/outro
+                    // presence, transition SFX). This makes the issue's
+                    // "stitched audio metrics" requirement explicit and
+                    // matches the per-topic entries emitted above.
+                    if ( class_exists( 'PressHub_AI_Settings_Storage' )
+                        && class_exists( 'PressHub_AI_API_Client' )
+                        && PressHub_AI_Settings_Storage::get_log_tts_payloads()
+                    ) {
+                        $stitched_metrics_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
+                            'stitched',
+                            [
+                                'date'             => $date,
+                                'phase'            => 'topic_stitched',
+                                'topic_count'      => count( $topics ),
+                                'chunks_count'     => count( $topic_wavs ),
+                                'total_chars'      => $total_chars,
+                                'duration_ms'      => $duration_ms,
+                                'audio_bytes'      => strlen( (string) $stitched_audio ),
+                                'sample_rate_hz'   => 24000,
+                                'pause_ms'         => 600,
+                                'has_intro_sfx'    => ! empty( $intro_pcm ),
+                                'has_outro_sfx'    => ! empty( $outro_pcm ),
+                                'has_transition_sfx' => ! empty( $trans_pcm ),
+                                'female_voice'     => $female_voice,
+                                'male_voice'       => $male_voice,
+                                'tertiary_voice'   => $tertiary_voice,
+                                'host_count'       => $host_count,
+                            ]
+                        );
+                        PressHub_AI_API_Client::write_tts_payload_log( $stitched_metrics_entry );
                     }
                 }
             }

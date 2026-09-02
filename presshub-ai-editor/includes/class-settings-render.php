@@ -1928,6 +1928,28 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    /**
+     * Issue #80 — Settings-First: granular TTS payload debug toggle.
+     * When enabled, every Gemini TTS API call appends a JSON entry to
+     * wp-content/uploads/presshub-ai-tts-debug.log via the
+     * `presshub_ai_tts_payload_log` action, so operators can diagnose
+     * voice drift and unexpected voice allocation without code changes.
+     * Default off so production log size is preserved.
+     */
+    public function render_log_tts_payloads_field() {
+        $option = 'presshub_ai_log_tts_payloads';
+        $value  = PressHub_AI_Settings_Storage::get_log_tts_payloads();
+        ?>
+        <label>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to wp-content/uploads/presshub-ai-tts-debug.log.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description">
+            <?php echo esc_html__( 'Use only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
     public function render_briefing_host_count_field() {
         $option = 'presshub_ai_briefing_host_count';
         $value  = PressHub_AI_Settings_Storage::get_briefing_host_count();
