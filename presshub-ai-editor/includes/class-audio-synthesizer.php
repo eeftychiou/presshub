@@ -1036,15 +1036,31 @@ class PressHub_AI_Audio_Synthesizer {
             return '';
         }
 
-        $sfx_file = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/' . $sfx_setting;
+        $sfx_file = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/' . basename( $sfx_setting );
         if ( ! file_exists( $sfx_file ) ) {
             return '';
         }
 
         $is_mp3 = ( strtolower( pathinfo( $sfx_file, PATHINFO_EXTENSION ) ) === 'mp3' );
+        $needs_ffmpeg = $is_mp3;
+
+        if ( ! $needs_ffmpeg ) {
+            $header = file_get_contents( $sfx_file, false, null, 0, 44 );
+            if ( strlen( $header ) >= 44 && 'RIFF' === substr( $header, 0, 4 ) ) {
+                $fmt_chunk = substr( $header, 12, 4 );
+                if ( 'fmt ' === $fmt_chunk ) {
+                    $channels = unpack( 'v', substr( $header, 22, 2 ) )[1] ?? 0;
+                    $sample_rate = unpack( 'V', substr( $header, 24, 4 ) )[1] ?? 0;
+                    if ( 1 !== $channels || 24000 !== $sample_rate ) {
+                        $needs_ffmpeg = true;
+                    }
+                }
+            }
+        }
+
         $sfx_wav = '';
 
-        if ( $is_mp3 ) {
+        if ( $needs_ffmpeg ) {
             $tmp_wav = wp_temp_dir() . '/sfx_tmp_' . uniqid() . '.wav';
             $cmd = 'ffmpeg -i ' . escapeshellarg( $sfx_file ) . ' -ar 24000 -ac 1 -c:a pcm_s16le -f wav -y ' . escapeshellarg( $tmp_wav ) . ' 2>&1';
             @shell_exec( $cmd );
@@ -1052,17 +1068,24 @@ class PressHub_AI_Audio_Synthesizer {
                 $sfx_wav = file_get_contents( $tmp_wav );
                 @unlink( $tmp_wav );
             } else {
-                error_log( 'PressHub AI: Failed to decode MP3 SFX using ffmpeg.' );
+                error_log( 'PressHub AI: Failed to decode/resample SFX using ffmpeg.' );
             }
         } else {
             $sfx_wav = file_get_contents( $sfx_file );
         }
 
         if ( ! empty( $sfx_wav ) && strlen( $sfx_wav ) >= 44 && 'RIFF' === substr( $sfx_wav, 0, 4 ) ) {
-            $pos = strpos( $sfx_wav, 'data' );
-            if ( false !== $pos && strlen( $sfx_wav ) >= $pos + 8 ) {
-                $data_size = unpack( 'V', substr( $sfx_wav, $pos + 4, 4 ) )[1] ?? 0;
-                return substr( $sfx_wav, $pos + 8, $data_size > 0 ? $data_size : null );
+            $offset = 12;
+            $len = strlen( $sfx_wav );
+            while ( $offset + 8 <= $len ) {
+                $chunk_id = substr( $sfx_wav, $offset, 4 );
+                $chunk_size = unpack( 'V', substr( $sfx_wav, $offset + 4, 4 ) )[1] ?? 0;
+                
+                if ( 'data' === $chunk_id ) {
+                    return substr( $sfx_wav, $offset + 8, $chunk_size > 0 ? $chunk_size : null );
+                }
+                
+                $offset += 8 + $chunk_size;
             }
             return substr( $sfx_wav, 44 );
         }
