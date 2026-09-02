@@ -662,11 +662,14 @@ class PressHub_AI_Podcast_Producer {
     /**
      * Save generated podcast dialogue script to briefing storage directory.
      *
-     * @param string $date   Briefing date (YYYY-MM-DD).
-     * @param string $script Dialogue script text.
+     * @param string $date             Briefing date (YYYY-MM-DD).
+     * @param string $script           Dialogue script text.
+     * @param string $context_mode     Optional — 'curated_briefing' or 'harvested_articles' (Issue #79).
+     * @param int    $source_post_id   Optional source WP post ID (curated mode).
+     * @param string $attempted_at     Optional ISO 8601 attempted timestamp.
      * @return bool True on success, false on failure.
      */
-    public function save_script( string $date, string $script ): bool {
+    public function save_script( string $date, string $script, string $context_mode = '', int $source_post_id = 0, string $attempted_at = '' ): bool {
         if ( empty( $date ) ) {
             $date = gmdate( 'Y-m-d' );
         }
@@ -685,7 +688,82 @@ class PressHub_AI_Podcast_Producer {
         $path = trailingslashit( $dir ) . 'podcast-script.txt';
         $saved = ( false !== @file_put_contents( $path, $script ) );
 
+        // Issue #79 — persist execution lifecycle metadata for the Briefing
+        // Hub stage card. Kept in a sibling JSON file (no WP post) so the
+        // aggregator can rebuild "Curated Morning Briefing" vs "Direct
+        // Harvested Articles" without parsing the script body. Schema is
+        // additive and forward-compatible: missing/old files simply yield
+        // null/empty values in the aggregator.
+        $normalized_context = in_array( $context_mode, [ 'curated_briefing', 'harvested_articles' ], true ) ? $context_mode : '';
+        $meta_path          = trailingslashit( $dir ) . 'podcast-script.meta.json';
+        $sidecar_exists     = file_exists( $meta_path );
+        // Persistence rule: write the sidecar only when (a) the caller
+        // explicitly supplied a recognized context_mode (or non-zero source
+        // post id), OR (b) no sidecar exists yet. This prevents a follow-up
+        // call with a bogus context_mode from erasing a previously-persisted
+        // valid mode while still allowing an existing-script re-save to
+        // stamp completed_at and attempted_at on the first invocation.
+        if ( $saved && ( '' !== $normalized_context || $source_post_id > 0 || ( '' !== (string) $attempted_at && ! $sidecar_exists ) ) ) {
+            $meta = [
+                'context_mode'   => $normalized_context,
+                'source_post_id' => max( 0, $source_post_id ),
+                'attempted_at'   => (string) $attempted_at,
+                'completed_at'   => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
+            ];
+            @file_put_contents( $meta_path, wp_json_encode( $meta, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) );
+        }
+
         return $saved;
+    }
+
+    /**
+     * Issue #79 — Read podcast-script lifecycle metadata (context mode,
+     * source post ID, attempted/completed timestamps) previously written
+     * by save_script(). Returns an empty array when no metadata file
+     * exists (legacy runs).
+     *
+     * @param string $date Briefing date (YYYY-MM-DD).
+     * @return array{context_mode:string,source_post_id:int,attempted_at:string,completed_at:string}
+     */
+    public function get_script_meta( string $date ): array {
+        if ( empty( $date ) ) {
+            $date = gmdate( 'Y-m-d' );
+        }
+
+        $defaults = [
+            'context_mode'   => '',
+            'source_post_id' => 0,
+            'attempted_at'   => '',
+            'completed_at'   => '',
+        ];
+
+        $harvester = new PressHub_AI_News_Harvester();
+        $path      = trailingslashit( $harvester->get_snapshot_dir( $date ) ) . 'podcast-script.meta.json';
+
+        if ( ! file_exists( $path ) ) {
+            return $defaults;
+        }
+
+        $content = @file_get_contents( $path );
+        if ( false === $content || '' === trim( $content ) ) {
+            return $defaults;
+        }
+
+        $decoded = json_decode( $content, true );
+        if ( ! is_array( $decoded ) ) {
+            return $defaults;
+        }
+
+        $mode = isset( $decoded['context_mode'] ) && in_array( $decoded['context_mode'], [ 'curated_briefing', 'harvested_articles' ], true )
+            ? $decoded['context_mode']
+            : '';
+
+        return [
+            'context_mode'   => $mode,
+            'source_post_id' => isset( $decoded['source_post_id'] ) ? (int) $decoded['source_post_id'] : 0,
+            'attempted_at'   => isset( $decoded['attempted_at'] ) ? (string) $decoded['attempted_at'] : '',
+            'completed_at'   => isset( $decoded['completed_at'] ) ? (string) $decoded['completed_at'] : '',
+        ];
     }
 
     /**
@@ -808,8 +886,35 @@ class PressHub_AI_Podcast_Producer {
             PressHub_AI_Logger::info( sprintf( 'Generated podcast script for %s: %d turns parsed', $date, count( $turns ) ) );
         }
 
+        // Issue #79 — record the timestamp when script generation was *attempted*
+        // so the Briefing Hub stage card can later show "Attempted at HH:MM:SS"
+        // even if the LLM call later fails. Mirrors the spec's request for
+        // start-and-finish timestamps per pipeline stage.
+        $script_attempted_at = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+
         // 5. Persist script to daily briefing directory
-        $this->save_script( $date, $response );
+        // Issue #79 — pass through context mode + source post id + attempted
+        // timestamp so get_script_meta() can later rebuild "Curated Morning
+        // Briefing vs Direct Harvested Articles" without parsing the body.
+        // We deliberately avoid importing PressHub_AI_Briefing_Admin here
+        // (cross-class include would risk a circular require chain). Inline
+        // a small get_posts() lookup mirroring its find_briefing_post() logic.
+        $briefing_source_post_id = 0;
+        if ( 'curated_briefing' === $context_mode && function_exists( 'get_posts' ) ) {
+            $briefing_posts = get_posts( [
+                'post_type'      => 'post',
+                'post_status'    => 'any',
+                'posts_per_page' => 1,
+                'meta_query'     => [
+                    [ 'key' => '_presshub_briefing_date', 'value' => $date ],
+                    [ 'key' => '_presshub_briefing_type', 'value' => 'text' ],
+                ],
+            ] );
+            if ( ! empty( $briefing_posts ) ) {
+                $briefing_source_post_id = (int) $briefing_posts[0]->ID;
+            }
+        }
+        $this->save_script( $date, $response, $context_mode, $briefing_source_post_id, $script_attempted_at );
 
         // 6. Calculate word count
         $word_count = (int) PressHub_AI_Context_Estimator::utf8_word_count( $response );

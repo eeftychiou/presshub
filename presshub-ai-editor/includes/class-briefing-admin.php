@@ -359,9 +359,163 @@ class PressHub_AI_Briefing_Admin {
                     // by updateUIFromStatus() to refresh the subtitle after a
                     // curation completes without a page reload.
                     'wp_status_label'    => __( 'WP Status: %s', 'presshub-ai-editor' ),
+                    // Issue #79 — labels for the new stage-status boxes. The
+                    // JS updateUIFromStatus() renderer uses these to compose
+                    // timestamp chips, source chips, and audio stat pills.
+                    'ts_attempted'       => __( 'Attempted: %s', 'presshub-ai-editor' ),
+                    'ts_completed'       => __( 'Completed: %s', 'presshub-ai-editor' ),
+                    'ts_duration_sec'    => __( 'Duration: %ss', 'presshub-ai-editor' ),
+                    'ts_duration_hms'    => __( 'Duration: %s', 'presshub-ai-editor' ),
+                    'stage_in_progress'  => __( 'In Progress', 'presshub-ai-editor' ),
+                    'stage_completed'    => __( 'Completed', 'presshub-ai-editor' ),
+                    'stage_failed'       => __( 'Failed', 'presshub-ai-editor' ),
+                    'stage_pending'      => __( 'Awaiting previous stage', 'presshub-ai-editor' ),
+                    'source_type_curated'=> __( 'All Harvested Articles (%d)', 'presshub-ai-editor' ),
+                    'source_type_filter' => __( 'Selected Articles Filter (%d)', 'presshub-ai-editor' ),
+                    'source_type_manual' => __( 'Manual Notes / Uploads', 'presshub-ai-editor' ),
+                    'script_mode_curated'=> __( 'Curated Morning Briefing', 'presshub-ai-editor' ),
+                    'script_mode_harvest'=> __( 'Direct Harvested Articles', 'presshub-ai-editor' ),
+                    'audio_duration'     => __( '%s min', 'presshub-ai-editor' ),
+                    'audio_filesize'     => __( '%s', 'presshub-ai-editor' ),
+                    'audio_format'       => __( '%s / %s Hz', 'presshub-ai-editor' ),
+                    'audio_engine_ms_gemini'    => __( 'Gemini Multi-Speaker', 'presshub-ai-editor' ),
+                    'audio_engine_solo_gemini'  => __( 'Gemini Single-Voice', 'presshub-ai-editor' ),
+                    'audio_engine_google_cloud' => __( 'Google Cloud TTS', 'presshub-ai-editor' ),
+                    'audio_mode_topic'         => __( 'Topic-Stitched (%d topics)', 'presshub-ai-editor' ),
+                    'audio_mode_single_pass'   => __( 'Single-Pass', 'presshub-ai-editor' ),
+                    'voice_female_chip'  => __( '%s (Female)', 'presshub-ai-editor' ),
+                    'voice_male_chip'    => __( '%s (Male)', 'presshub-ai-editor' ),
+                    'voice_separator'    => __( ' + ', 'presshub-ai-editor' ),
                 ],
             ]
         );
+    }
+
+    /**
+     * Issue #79 — Collect per-stage execution lifecycle events from
+     * `wp_presshub_ai_token_logs` for the canonical four action_triggers.
+     *
+     * Each returned stage array is composed from the most recent log row for
+     * that action_trigger on the supplied date, plus optional second-most-recent
+     * `started_at` evidence stashed in `metadata.started_at` by callers that
+     * record the begin-of-call timestamp explicitly. Missing logs gracefully
+     * yield empty arrays so the Briefing Hub stage cards never error.
+     *
+     * @param string $date Date string YYYY-MM-DD.
+     * @return array{
+     *   harvest:   array{attempted_at:string,completed_at:string,status:string,duration_ms:int,metric_units:int,sources_count:int,error_message:string},
+     *   curation:  array{attempted_at:string,completed_at:string,status:string,duration_ms:int,error_message:string},
+     *   script:    array{attempted_at:string,completed_at:string,status:string,duration_ms:int,error_message:string},
+     *   audio:     array{attempted_at:string,completed_at:string,status:string,duration_ms:int,error_message:string}
+     * } Per-stage execution event dictionary.
+     */
+    public static function collect_stage_execution_events( string $date ): array {
+        $stages = [
+            'harvest'  => 'scrape_harvest',
+            'curation' => 'briefing_curation',
+            'script'   => 'podcast_script',
+            'audio'    => 'podcast_audio',
+        ];
+
+        $empty = [
+            'attempted_at'   => '',
+            'completed_at'   => '',
+            'status'         => '',
+            'duration_ms'    => 0,
+            'metric_units'   => 0,
+            'sources_count'  => 0,
+            'error_message'  => '',
+        ];
+
+        $out = [];
+        foreach ( $stages as $stage_key => $action_trigger ) {
+            if ( ! class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                $out[ $stage_key ] = $empty;
+                continue;
+            }
+            $logs = PressHub_AI_Token_Logger::get_logs( [
+                'action'     => $action_trigger,
+                'start_date' => $date,
+                'end_date'   => $date,
+                'orderby'    => 'id',
+                'order'      => 'DESC',
+                'per_page'   => 25, // bounded — one log row per stage attempt.
+            ] );
+            $items = is_array( $logs['items'] ?? null ) ? $logs['items'] : [];
+            if ( empty( $items ) ) {
+                $out[ $stage_key ] = $empty;
+                continue;
+            }
+
+            // Prefer the most recent successful log; fall back to the most
+            // recent log of any status. This mirrors a typical "what's the
+            // last state of this stage" mental model.
+            $row  = null;
+            foreach ( $items as $candidate ) {
+                if ( isset( $candidate['status'] ) && 'success' === $candidate['status'] ) {
+                    $row = $candidate;
+                    break;
+                }
+            }
+            if ( null === $row ) {
+                $row = $items[0];
+            }
+
+            $completed_at = (string) ( $row['created_at'] ?? '' );
+            $duration_ms  = (int) ( $row['duration_ms'] ?? 0 );
+            $started_at   = self::infer_stage_attempted_at( $row, $completed_at, $duration_ms );
+
+            $meta = [];
+            if ( ! empty( $row['metadata'] ) ) {
+                $decoded = is_string( $row['metadata'] ) ? json_decode( $row['metadata'], true ) : ( is_array( $row['metadata'] ) ? $row['metadata'] : [] );
+                if ( is_array( $decoded ) ) {
+                    $meta = $decoded;
+                }
+            }
+
+            $sources_count = isset( $meta['sources_count'] ) ? (int) $meta['sources_count'] : 0;
+            $error_message = isset( $row['error_message'] ) ? (string) $row['error_message'] : '';
+
+            $out[ $stage_key ] = [
+                'attempted_at'   => $started_at,
+                'completed_at'   => $completed_at,
+                'status'         => (string) ( $row['status'] ?? '' ),
+                'duration_ms'    => $duration_ms,
+                'metric_units'   => (int) ( $row['metric_units'] ?? 0 ),
+                'sources_count'  => $sources_count,
+                'error_message'  => $error_message,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Issue #79 — Compute the best-effort attempted_at timestamp for a stage
+     * log row. Preference order:
+     *   1. metadata.started_at (when callers explicitly record it).
+     *   2. created_at − duration_ms (back-compat for older rows without metadata).
+     *   3. created_at (when duration is unknown).
+     *
+     * @param array<string,mixed> $row
+     * @param string              $completed_at
+     * @param int                 $duration_ms
+     */
+    private static function infer_stage_attempted_at( array $row, string $completed_at, int $duration_ms ): string {
+        if ( ! empty( $row['metadata'] ) ) {
+            $decoded = is_string( $row['metadata'] ) ? json_decode( $row['metadata'], true ) : ( is_array( $row['metadata'] ) ? $row['metadata'] : [] );
+            if ( is_array( $decoded ) && ! empty( $decoded['started_at'] ) ) {
+                return (string) $decoded['started_at'];
+            }
+        }
+        if ( '' === $completed_at || $duration_ms <= 0 ) {
+            return $completed_at;
+        }
+        $ts_completed = strtotime( $completed_at );
+        if ( false === $ts_completed ) {
+            return $completed_at;
+        }
+        return gmdate( 'Y-m-d H:i:s', $ts_completed - (int) round( $duration_ms / 1000 ) );
     }
 
     /**
@@ -458,16 +612,64 @@ class PressHub_AI_Briefing_Admin {
 
         $pipeline_completed = ( $is_harvested && $text_created && $script_created && $audio_created );
 
-        // Issue #65 — surface the Settings-First title prefix / date-format
-        // state that was applied to the most recent post. Used by the JS
-        // status refresh and integration tests to verify the
-        // operator-configured masthead shape matches expectations.
+        // Issue #65 — Settings-First masthead state surfaced to the JS
+        // and integration tests. Values come from post meta recorded at
+        // create_wordpress_post() time so the AJAX payload always
+        // reflects what was actually applied to the latest post (not
+        // the current Settings value, which may have since changed).
         $latest_post_meta_prefix = $text_created
             ? (string) get_post_meta( $text_post_id, '_presshub_text_title_prefix_applied', true )
             : '';
         $latest_post_meta_date_format = $text_created
             ? (string) get_post_meta( $text_post_id, '_presshub_text_title_date_format_applied', true )
             : '';
+
+        // Issue #79 — surface per-stage execution lifecycle + post-meta context
+        // so the JS can render the new stage status boxes without re-querying
+        // token logs / post meta on every AJAX refresh. All four sub-keys are
+        // safe to expose and never leak API keys (verified by integration
+        // tests in BriefingStatusStageEventsTest).
+        $stage_events = self::collect_stage_execution_events( $date );
+        $text_source_context = $text_created
+            ? ( class_exists( 'PressHub_AI_News_Curator' )
+                ? PressHub_AI_News_Curator::get_source_context( (int) $text_post_id )
+                : [ 'type' => '', 'count' => 0, 'preset' => '' ] )
+            : [ 'type' => '', 'count' => 0, 'preset' => '' ];
+        $script_meta = class_exists( 'PressHub_AI_Podcast_Producer' )
+            ? ( new PressHub_AI_Podcast_Producer() )->get_script_meta( $date )
+            : [ 'context_mode' => '', 'source_post_id' => 0, 'attempted_at' => '', 'completed_at' => '' ];
+        $audio_meta  = ( $audio_created && class_exists( 'PressHub_AI_Audio_Synthesizer' ) )
+            ? PressHub_AI_Audio_Synthesizer::get_audio_meta( (int) $podcast_post_id )
+            : [
+                'duration_sec'   => 0.0, 'filesize' => 0, 'sample_rate' => 0, 'format' => '',
+                'engine' => '', 'female_voice' => '', 'male_voice' => '', 'tertiary_voice' => '',
+                'host_count' => 0, 'split_by_topic' => 0, 'topic_count' => 0,
+                'attempted_at' => '', 'completed_at' => '',
+            ];
+
+        // Issue #79 — compute harvest source labels for the Stage 1 chip row
+        // ("Kathimerini, Philenews, ANT1 Live"). Falls back to hostname-only
+        // labels when source hostnames can't be resolved (e.g. unit tests
+        // that pass only article URLs).
+        $active_source_labels = [];
+        $blocked_source_labels = [];
+        foreach ( $snapshot['sources'] ?? [] as $src ) {
+            $host = (string) parse_url( (string) $src, PHP_URL_HOST );
+            if ( '' !== $host ) {
+                $label = ucfirst( preg_replace( '/^www\./i', '', $host ) );
+                if ( ! in_array( $label, $blocked_source_labels, true ) ) {
+                    $active_source_labels[] = $label;
+                }
+            }
+        }
+        foreach ( $blocked_sources as $blocked_url ) {
+            $host = (string) parse_url( (string) $blocked_url, PHP_URL_HOST );
+            if ( '' !== $host ) {
+                $blocked_source_labels[] = ucfirst( preg_replace( '/^www\./i', '', $host ) );
+            }
+        }
+        $active_source_labels   = array_slice( $active_source_labels, 0, 5 );
+        $blocked_source_labels  = array_slice( $blocked_source_labels, 0, 5 );
 
         return [
             'date'                => $date,
@@ -507,6 +709,29 @@ class PressHub_AI_Briefing_Admin {
             'audio_url'           => $audio_url,
             'audio_attachment_id' => $audio_attachment_id,
             'pipeline_completed'  => $pipeline_completed,
+            // Issue #79 — per-stage execution lifecycle events consumed by
+            // the JS updateUIFromStatus() renderer to populate the new
+            // .presshub-stage-status-box containers on each milestone card.
+            // Each sub-key (harvest, curation, script, audio) maps to the
+            // canonical action_trigger name and follows the schema documented
+            // in collect_stage_execution_events() below.
+            'stage_events'        => $stage_events,
+            // Issue #79 — source context + audio stats + script meta surfaced
+            // directly so the JS does not have to re-resolve post-meta keys.
+            'text_source_context' => $text_source_context,
+            'script_meta'         => $script_meta,
+            'audio_meta'          => $audio_meta,
+            // Issue #79 — active/blocked source labels for Stage 1's chip row
+            // (capped at 5 to keep the card compact).
+            'active_source_labels'    => $active_source_labels,
+            'blocked_source_labels'   => $blocked_source_labels,
+            // Issue #79 — duration derived from completed_at − attempted_at so
+            // the server-rendered HTML shows a stable wall-clock duration even
+            // if the JS layer fails.
+            'harvest_total_ms'    => (int) ( $stage_events['harvest']['duration_ms'] ?? 0 ),
+            'curation_total_ms'   => (int) ( $stage_events['curation']['duration_ms'] ?? 0 ),
+            'script_total_ms'     => (int) ( $stage_events['script']['duration_ms'] ?? 0 ),
+            'audio_total_ms'      => (int) ( $stage_events['audio']['duration_ms'] ?? 0 ),
         ];
     }
 
@@ -745,6 +970,56 @@ class PressHub_AI_Briefing_Admin {
                             <p class="card-subtext"><?php echo sprintf( esc_html__( 'Scraped: %s', 'presshub-ai-editor' ), esc_html( $status['harvested_at'] ) ); ?></p>
                         <?php endif; ?>
 
+                        <?php
+                        // Issue #79 — pre-rendered Stage 1 status box. The JS
+                        // layer refreshes these chips on every AJAX poll, but
+                        // server-rendering them ensures the box is meaningful
+                        // even when JS is disabled, slow, or has thrown an
+                        // error.
+                        $harv_evt       = (array) ( $status['stage_events']['harvest'] ?? [] );
+                        $harv_attempted = trim( (string) ( $harv_evt['attempted_at'] ?? '' ) );
+                        $harv_completed = trim( (string) ( $harv_evt['completed_at'] ?? '' ) );
+                        $harv_status    = strtolower( (string) ( $harv_evt['status'] ?? '' ) );
+                        $harv_duration  = (int) ( $status['harvest_total_ms'] ?? ( $harv_evt['duration_ms'] ?? 0 ) );
+                        $harv_active    = (array) ( $status['active_source_labels'] ?? [] );
+                        $harv_blocked   = (array) ( $status['blocked_source_labels'] ?? [] );
+                        ?>
+                        <div class="presshub-stage-status-box" id="stage-harvest-status-box" data-stage="harvest">
+                            <div class="presshub-status-row">
+                                <?php if ( '' !== $harv_attempted ) : ?>
+                                    <span class="presshub-timestamp-chip" title="<?php echo esc_attr__( 'Pipeline stage start timestamp', 'presshub-ai-editor' ); ?>">
+                                        ⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $harv_attempted ) ); ?>
+                                    </span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $harv_completed ) : ?>
+                                    <span class="presshub-timestamp-chip" title="<?php echo esc_attr__( 'Pipeline stage completion timestamp', 'presshub-ai-editor' ); ?>">
+                                        ✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $harv_completed ) ); ?>
+                                    </span>
+                                <?php endif; ?>
+                                <?php if ( $harv_duration > 0 ) : ?>
+                                    <span class="presshub-stat-pill">⏳ <?php
+                                        $h = (int) floor( $harv_duration / 3600000 );
+                                        $m = (int) floor( ( $harv_duration % 3600000 ) / 60000 );
+                                        $s = (int) floor( ( $harv_duration % 60000 ) / 1000 );
+                                        echo esc_html( sprintf( '%02d:%02d:%02d', $h, $m, $s ) );
+                                    ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <?php if ( 'error' === $harv_status && ! empty( $harv_evt['error_message'] ) ) : ?>
+                                <p class="presshub-stage-error description">⚠️ <?php echo esc_html( (string) $harv_evt['error_message'] ); ?></p>
+                            <?php endif; ?>
+                            <?php if ( ! empty( $harv_active ) || ! empty( $harv_blocked ) ) : ?>
+                                <div class="presshub-status-row" style="margin-top: 4px;">
+                                    <?php foreach ( $harv_active as $src_label ) : ?>
+                                        <span class="presshub-source-tag">📰 <?php echo esc_html( $src_label ); ?></span>
+                                    <?php endforeach; ?>
+                                    <?php foreach ( $harv_blocked as $src_label ) : ?>
+                                        <span class="presshub-source-tag presshub-source-blocked" title="<?php echo esc_attr__( 'Blocked / failed source', 'presshub-ai-editor' ); ?>">⛔ <?php echo esc_html( $src_label ); ?></span>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
                         <div class="presshub-articles-summary-box" style="<?php echo empty( $status['articles'] ) ? 'display:none;' : ''; ?>">
                             <p style="margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
                                 <span id="presshub-selected-articles-count" class="presshub-selected-count-badge" style="font-size: 12px; display: inline-block;">
@@ -797,6 +1072,18 @@ class PressHub_AI_Briefing_Admin {
                         </span>
                     </div>
                     <div class="presshub-card-body">
+                        <?php
+                        // Issue #79 — pre-rendered Stage 2 (curation) status box.
+                        $cur_evt           = (array) ( $status['stage_events']['curation'] ?? [] );
+                        $cur_attempted     = trim( (string) ( $cur_evt['attempted_at'] ?? '' ) );
+                        $cur_completed     = trim( (string) ( $cur_evt['completed_at'] ?? '' ) );
+                        $cur_status        = strtolower( (string) ( $cur_evt['status'] ?? '' ) );
+                        $cur_duration_ms   = (int) ( $status['curation_total_ms'] ?? ( $cur_evt['duration_ms'] ?? 0 ) );
+                        $tsc               = (array) ( $status['text_source_context'] ?? [] );
+                        $tsc_type          = (string) ( $tsc['type'] ?? '' );
+                        $tsc_count         = (int) ( $tsc['count'] ?? 0 );
+                        $tsc_preset        = (string) ( $tsc['preset'] ?? '' );
+                        ?>
                         <?php if ( $status['text_created'] ) : ?>
                             <p class="card-title-preview"><strong><?php echo esc_html( $status['text_post_title'] ); ?></strong></p>
                             <p class="card-subtext" id="presshub-text-post-status">
@@ -813,6 +1100,58 @@ class PressHub_AI_Briefing_Admin {
                         <?php else : ?>
                             <p class="card-empty-desc"><?php echo esc_html__( 'Synthesizes top Greek news stories into an editorial morning briefing post using selected Preset.', 'presshub-ai-editor' ); ?></p>
                         <?php endif; ?>
+
+                        <div class="presshub-stage-status-box" id="stage-curation-status-box" data-stage="curation">
+                            <div class="presshub-status-row">
+                                <?php if ( '' !== $cur_attempted ) : ?>
+                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $cur_attempted ) ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $cur_completed ) : ?>
+                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $cur_completed ) ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( $cur_duration_ms > 0 ) : ?>
+                                    <span class="presshub-stat-pill">⏳ <?php echo esc_html( sprintf( '%01.1fs', $cur_duration_ms / 1000 ) ); ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="presshub-status-row" style="margin-top: 4px;">
+                                <?php
+                                $wp_status_label = ucfirst( (string) ( $status['text_post_status'] ?? '' ) );
+                                $wp_status_cls   = 'badge-secondary';
+                                if ( 'publish' === $status['text_post_status'] ) {
+                                    $wp_status_cls = 'badge-success';
+                                } elseif ( 'pending' === $status['text_post_status'] ) {
+                                    $wp_status_cls = 'badge-warning';
+                                } elseif ( 'trash' === $status['text_post_status'] ) {
+                                    $wp_status_cls = 'badge-danger';
+                                }
+                                if ( '' !== $wp_status_label ) : ?>
+                                    <span class="presshub-status-pill <?php echo esc_attr( $wp_status_cls ); ?>" id="presshub-curation-post-status-pill">
+                                        📰 <?php echo esc_html( sprintf( __( 'Post #%1$d · %2$s', 'presshub-ai-editor' ), (int) $status['text_post_id'], $wp_status_label ) ); ?>
+                                    </span>
+                                <?php endif; ?>
+                                <?php if ( 'curated_briefing' === $tsc_type ) : ?>
+                                    <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Source material fed to the LLM', 'presshub-ai-editor' ); ?>">
+                                        📦 <?php echo esc_html( sprintf( __( 'All Harvested Articles (%d)', 'presshub-ai-editor' ), max( 0, $tsc_count ) ) ); ?>
+                                    </span>
+                                <?php elseif ( 'harvested_articles' === $tsc_type ) : ?>
+                                    <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Source material fed to the LLM', 'presshub-ai-editor' ); ?>">
+                                        🔎 <?php echo esc_html( sprintf( __( 'Selected Articles Filter (%d)', 'presshub-ai-editor' ), max( 0, $tsc_count ) ) ); ?>
+                                    </span>
+                                <?php elseif ( 'manual_notes' === $tsc_type ) : ?>
+                                    <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Source material fed to the LLM', 'presshub-ai-editor' ); ?>">
+                                        📎 <?php echo esc_html__( 'Manual Notes / Uploads', 'presshub-ai-editor' ); ?>
+                                    </span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $tsc_preset ) : ?>
+                                    <span class="presshub-source-tag presshub-preset-tag" title="<?php echo esc_attr__( 'Author preset applied', 'presshub-ai-editor' ); ?>">
+                                        🎯 <?php echo esc_html( $tsc_preset ); ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <?php if ( 'error' === $cur_status && ! empty( $cur_evt['error_message'] ) ) : ?>
+                                <p class="presshub-stage-error description">⚠️ <?php echo esc_html( (string) $cur_evt['error_message'] ); ?></p>
+                            <?php endif; ?>
+                        </div>
                     </div>
                     <div class="presshub-card-footer">
                         <button type="button" class="button button-secondary" id="btn-run-curation">
@@ -843,6 +1182,41 @@ class PressHub_AI_Briefing_Admin {
                             <strong><span id="script-words-count"><?php echo (int) $status['script_word_count']; ?></span></strong> <?php echo esc_html__( 'words', 'presshub-ai-editor' ); ?>
                         </p>
                         <p class="card-subtext"><?php echo esc_html__( 'Dual-host dialogue formatted with speaker tags for multi-voice synthesis.', 'presshub-ai-editor' ); ?></p>
+
+                        <?php
+                        // Issue #79 — pre-rendered Stage 3 (script) status box.
+                        $sc_evt        = (array) ( $status['stage_events']['script'] ?? [] );
+                        $sc_attempted  = trim( (string) ( $sc_evt['attempted_at'] ?? '' ) );
+                        $sc_completed  = trim( (string) ( $sc_evt['completed_at'] ?? '' ) );
+                        $sc_status     = strtolower( (string) ( $sc_evt['status'] ?? '' ) );
+                        $sc_duration   = (int) ( $status['script_total_ms'] ?? ( $sc_evt['duration_ms'] ?? 0 ) );
+                        $sc_meta       = (array) ( $status['script_meta'] ?? [] );
+                        $sc_mode       = (string) ( $sc_meta['context_mode'] ?? '' );
+                        $sc_source_post= (int) ( $sc_meta['source_post_id'] ?? 0 );
+                        ?>
+                        <div class="presshub-stage-status-box" id="stage-script-status-box" data-stage="script">
+                            <div class="presshub-status-row">
+                                <?php if ( '' !== $sc_attempted ) : ?>
+                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $sc_attempted ) ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $sc_completed ) : ?>
+                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $sc_completed ) ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( $sc_duration > 0 ) : ?>
+                                    <span class="presshub-stat-pill">⏳ <?php echo esc_html( sprintf( '%01.1fs', $sc_duration / 1000 ) ); ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="presshub-status-row" style="margin-top: 4px;">
+                                <?php if ( 'curated_briefing' === $sc_mode ) : ?>
+                                    <span class="presshub-source-tag">📰 <?php echo esc_html__( 'Curated Morning Briefing', 'presshub-ai-editor' ); ?><?php if ( $sc_source_post > 0 ) : ?> · <code>#<?php echo (int) $sc_source_post; ?></code><?php endif; ?></span>
+                                <?php elseif ( 'harvested_articles' === $sc_mode ) : ?>
+                                    <span class="presshub-source-tag">🌐 <?php echo esc_html__( 'Direct Harvested Articles', 'presshub-ai-editor' ); ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <?php if ( 'error' === $sc_status && ! empty( $sc_evt['error_message'] ) ) : ?>
+                                <p class="presshub-stage-error description">⚠️ <?php echo esc_html( (string) $sc_evt['error_message'] ); ?></p>
+                            <?php endif; ?>
+                        </div>
 
                         <div class="presshub-context-mode-group">
                             <fieldset>
@@ -883,6 +1257,129 @@ class PressHub_AI_Briefing_Admin {
                         <?php else : ?>
                             <p class="card-empty-desc"><?php echo esc_html__( 'Stitches dual-voice Google Cloud TTS Greek audio and creates podcast post with native audio player.', 'presshub-ai-editor' ); ?></p>
                         <?php endif; ?>
+
+                        <?php
+                        // Issue #79 — pre-rendered Stage 4 (audio) status box.
+                        $au_evt         = (array) ( $status['stage_events']['audio'] ?? [] );
+                        $au_attempted   = trim( (string) ( $au_evt['attempted_at'] ?? '' ) );
+                        $au_completed   = trim( (string) ( $au_evt['completed_at'] ?? '' ) );
+                        $au_status      = strtolower( (string) ( $au_evt['status'] ?? '' ) );
+                        $au_duration_ms = (int) ( $status['audio_total_ms'] ?? ( $au_evt['duration_ms'] ?? 0 ) );
+                        $au             = (array) ( $status['audio_meta'] ?? [] );
+                        $au_dur_sec     = (float) ( $au['duration_sec'] ?? 0 );
+                        $au_filesize    = (int) ( $au['filesize'] ?? 0 );
+                        $au_sample_rate = (int) ( $au['sample_rate'] ?? 0 );
+                        $au_format      = strtoupper( (string) ( $au['format'] ?? '' ) );
+                        $au_engine      = (string) ( $au['engine'] ?? '' );
+                        $au_fem         = (string) ( $au['female_voice'] ?? '' );
+                        $au_mal         = (string) ( $au['male_voice'] ?? '' );
+                        $au_ter         = (string) ( $au['tertiary_voice'] ?? '' );
+                        $au_split       = (int) ( $au['split_by_topic'] ?? 0 );
+                        $au_topics      = (int) ( $au['topic_count'] ?? 0 );
+                        // Format helpers
+                        $audio_min_secs = '';
+                        if ( $au_dur_sec > 0 ) {
+                            $audio_min_secs = sprintf( '%02d:%02d', (int) floor( $au_dur_sec / 60 ), (int) floor( $au_dur_sec ) % 60 );
+                        } elseif ( $au_duration_ms > 0 ) {
+                            $audio_min_secs = sprintf( '%02d:%02d', (int) floor( $au_duration_ms / 60000 ), (int) floor( ( $au_duration_ms / 1000 ) ) % 60 );
+                        }
+                        $audio_filesize_str = '';
+                        if ( $au_filesize > 0 ) {
+                            if ( $au_filesize >= 1048576 ) {
+                                $audio_filesize_str = sprintf( '%.1f MB', $au_filesize / 1048576 );
+                            } else {
+                                $audio_filesize_str = sprintf( '%.0f KB', $au_filesize / 1024 );
+                            }
+                        }
+                        $audio_engine_label = '';
+                        if ( 'gemini' === $au_engine ) {
+                            $audio_engine_label = 'Gemini Multi-Speaker';
+                        } elseif ( 'google_cloud' === $au_engine || 'google_cloud_tts' === $au_engine ) {
+                            $audio_engine_label = 'Google Cloud TTS';
+                        }
+                        $audio_mode_label = $au_split && $au_topics > 0
+                            ? sprintf( 'Topic-Stitched (%d topics)', $au_topics )
+                            : 'Single-Pass';
+                        $voice_chips = [];
+                        if ( '' !== $au_fem ) {
+                            $voice_chips[] = sprintf( '%s (Female)', $au_fem );
+                        }
+                        if ( '' !== $au_mal ) {
+                            $voice_chips[] = sprintf( '%s (Male)', $au_mal );
+                        }
+                        if ( '' !== $au_ter ) {
+                            $voice_chips[] = sprintf( '%s (Tertiary)', $au_ter );
+                        }
+                        ?>
+                        <div class="presshub-stage-status-box" id="stage-audio-status-box" data-stage="audio">
+                            <div class="presshub-status-row">
+                                <?php if ( '' !== $au_attempted ) : ?>
+                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $au_attempted ) ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $au_completed ) : ?>
+                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $au_completed ) ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( $au_duration_ms > 0 ) : ?>
+                                    <span class="presshub-stat-pill">⏳ <?php
+                                        $h = (int) floor( $au_duration_ms / 3600000 );
+                                        $m = (int) floor( ( $au_duration_ms % 3600000 ) / 60000 );
+                                        $s = (int) floor( ( $au_duration_ms % 60000 ) / 1000 );
+                                        echo esc_html( sprintf( '%02d:%02d:%02d', $h, $m, $s ) );
+                                    ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="presshub-status-row" style="margin-top: 4px; flex-wrap: wrap;">
+                                <?php if ( '' !== $audio_min_secs ) : ?>
+                                    <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'Playback duration', 'presshub-ai-editor' ); ?>">⏱ <?php echo esc_html( sprintf( __( '%s min', 'presshub-ai-editor' ), $audio_min_secs ) ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $audio_filesize_str ) : ?>
+                                    <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'File size', 'presshub-ai-editor' ); ?>">📦 <?php echo esc_html( $audio_filesize_str ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $au_format && $au_sample_rate > 0 ) : ?>
+                                    <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'Audio format & sample rate', 'presshub-ai-editor' ); ?>">🎚 <?php echo esc_html( sprintf( __( '%1$s / %2$s Hz', 'presshub-ai-editor' ), $au_format, number_format_i18n( $au_sample_rate ) ) ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $audio_engine_label ) : ?>
+                                    <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Synthesis engine', 'presshub-ai-editor' ); ?>">⚙ <?php echo esc_html( $audio_engine_label ); ?></span>
+                                <?php endif; ?>
+                                <?php if ( '' !== $audio_mode_label ) : ?>
+                                    <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Generation mode', 'presshub-ai-editor' ); ?>">🧩 <?php echo esc_html( $audio_mode_label ); ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <?php if ( ! empty( $voice_chips ) ) : ?>
+                                <div class="presshub-status-row" style="margin-top: 4px;">
+                                    <?php foreach ( $voice_chips as $chip ) : ?>
+                                        <span class="presshub-voice-chip">🎙 <?php echo esc_html( $chip ); ?></span>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php
+                            if ( $status['audio_created'] ) : ?>
+                                <div class="presshub-status-row" style="margin-top: 4px;">
+                                    <?php
+                                    $pod_status_label = ucfirst( (string) ( $status['podcast_post_status'] ?? '' ) );
+                                    $pod_status_cls   = 'badge-secondary';
+                                    if ( 'publish' === $status['podcast_post_status'] ) {
+                                        $pod_status_cls = 'badge-success';
+                                    } elseif ( 'pending' === $status['podcast_post_status'] ) {
+                                        $pod_status_cls = 'badge-warning';
+                                    } elseif ( 'trash' === $status['podcast_post_status'] ) {
+                                        $pod_status_cls = 'badge-danger';
+                                    }
+                                    ?>
+                                    <span class="presshub-status-pill <?php echo esc_attr( $pod_status_cls ); ?>" id="presshub-podcast-post-status-pill">
+                                        🎙 <?php echo esc_html( sprintf( __( 'Post #%1$d · %2$s', 'presshub-ai-editor' ), (int) $status['podcast_post_id'], $pod_status_label ) ); ?>
+                                    </span>
+                                    <?php if ( ! empty( $status['audio_attachment_id'] ) ) : ?>
+                                        <span class="presshub-status-pill" id="presshub-podcast-attachment-pill">
+                                            📎 <?php echo esc_html( sprintf( __( 'Attachment #%d', 'presshub-ai-editor' ), (int) $status['audio_attachment_id'] ) ); ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php if ( 'error' === $au_status && ! empty( $au_evt['error_message'] ) ) : ?>
+                                <p class="presshub-stage-error description">⚠️ <?php echo esc_html( (string) $au_evt['error_message'] ); ?></p>
+                            <?php endif; ?>
+                        </div>
                     </div>
                     <div class="presshub-card-footer">
                         <button type="button" class="button button-primary" id="btn-synthesize-audio">

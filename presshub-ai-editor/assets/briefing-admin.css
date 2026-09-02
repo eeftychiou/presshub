@@ -764,3 +764,94 @@
     color: #41464b;
     border: 1px solid #d3d6d8;
 }
+
+/* Issue #79 — Per-stage status boxes, timestamp chips, source tags,
+   voice chips, stat pills, status pills, and stage-error highlight. */
+.presshub-stage-status-box {
+    margin: 6px 0 4px;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.025);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.presshub-stage-status-box .presshub-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+.presshub-timestamp-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #f0f6fc;
+    border: 1px solid #c4d9ed;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #1f3a5f;
+    line-height: 1.4;
+}
+.presshub-source-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #eef7ee;
+    border: 1px solid #c6e3c6;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #1f5a1f;
+    line-height: 1.4;
+}
+.presshub-source-tag.presshub-source-blocked {
+    background: #fdecec;
+    border-color: #e6b6b6;
+    color: #6a1f1f;
+}
+.presshub-source-tag.presshub-preset-tag {
+    background: #f3eafa;
+    border-color: #d4c1ed;
+    color: #4a2a7d;
+}
+.presshub-voice-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #fdf5e6;
+    border: 1px solid #e8d2a8;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #6a4a1f;
+    line-height: 1.4;
+}
+.presshub-stat-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #f1f1f1;
+    border: 1px solid #d4d4d4;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #333;
+    line-height: 1.4;
+    font-weight: 500;
+}
+.presshub-status-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    line-height: 1.4;
+    font-weight: 500;
+}
+.presshub-status-pill.badge-success { background: #46b450; color: #fff; }
+.presshub-status-pill.badge-warning { background: #ffb900; color: #fff; }
+.presshub-status-pill.badge-danger  { background: #dc3232; color: #fff; }
+.presshub-status-pill.badge-secondary { background: #6c757d; color: #fff; }
+.presshub-stage-error {
+    color: #721c24;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 3px;
+    padding: 4px 8px;
+    margin: 4px 0 0 0;
+    font-size: 12px;
+}

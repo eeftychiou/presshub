@@ -68,6 +68,18 @@ class PressHub_AI_News_Curator {
     private static $last_kept_articles_count = 0;
 
     /**
+     * @internal Issue #79 — tracks the source-context the curator used to feed
+     * the LLM for the most recent generate_briefing() call (curated_briefing
+     * vs harvested_articles vs manual_notes), along with article count and
+     * resolved author preset slug. Consumed by create_wordpress_post() to
+     * persist meta and by PressHub_AI_Briefing_Admin::get_briefing_status()
+     * via ::get_source_context() to surface the source in the Hub stage card.
+     *
+     * @var array{type:string,count:int,preset:string}|null
+     */
+    private static $last_source_context = null;
+
+    /**
      * @internal Issue #61 — char count of the *rendered* context string produced by
      * the most recent format_articles_context() call (the prompt the LLM actually
      * received, after both the max_articles slice and the per-article char cap).
@@ -679,7 +691,98 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_text_title_prefix_applied', (string) $applied_prefix );
         update_post_meta( $post_id, '_presshub_text_title_date_format_applied', (string) $applied_date_format );
 
+        // Issue #79 — surface the source-context the LLM was actually fed so
+        // the Briefing Hub stage card can show "All Harvested Articles (N)"
+        // vs "Selected Articles Filter" vs "Manual Notes / Uploads" plus the
+        // author preset that was applied. generate_briefing() populates these
+        // stashes via presshub_ai_curator_set_source_context() before
+        // calling create_wordpress_post(); call sites that bypass
+        // generate_briefing() (e.g. unit tests, manual triggers) fall back
+        // to "curated_briefing" so cards are never blank.
+        $source_context = self::last_source_context();
+        if ( empty( $source_context ) ) {
+            $source_context = [
+                'type'  => 'curated_briefing',
+                'count' => (int) $this->last_kept_articles_count(),
+                'preset' => '',
+            ];
+        }
+        if ( empty( $source_context['preset'] ) ) {
+            $source_context['preset'] = (string) $applied_prefix;
+        }
+        update_post_meta( $post_id, '_presshub_source_context_type', (string) $source_context['type'] );
+        update_post_meta( $post_id, '_presshub_source_context_count', (int) $source_context['count'] );
+        update_post_meta( $post_id, '_presshub_source_context_preset', (string) $source_context['preset'] );
+
         return $post_id;
+    }
+
+    /**
+     * Issue #79 — Resolve and persist source-context for the post being created.
+     *
+     * Called by generate_briefing() immediately before create_wordpress_post()
+     * so the post meta reflects *which* input the LLM was actually fed
+     * (curated_briefing vs harvested_articles vs manual_notes) along with
+     * the article count and author preset slug. create_wordpress_post() then
+     * reads the stash via self::last_source_context() and persists it.
+     *
+     * @param string $type          'curated_briefing' | 'harvested_articles' | 'manual_notes'.
+     * @param int    $count         Number of articles fed into the prompt.
+     * @param string $preset_slug   Optional resolved author preset slug.
+     */
+    public static function set_source_context( string $type, int $count, string $preset_slug = '' ): void {
+        $allowed = [ 'curated_briefing', 'harvested_articles', 'manual_notes' ];
+        if ( ! in_array( $type, $allowed, true ) ) {
+            $type = 'curated_briefing';
+        }
+        self::$last_source_context = [
+            'type'   => $type,
+            'count'  => max( 0, $count ),
+            'preset' => $preset_slug,
+        ];
+    }
+
+    /**
+     * Issue #79 — Return the most recent source-context stash for the curator
+     * singleton. Consumed by create_wordpress_post() and the Briefing Hub
+     * aggregator.
+     *
+     * @return array{type:string,count:int,preset:string}|array{} Empty array when no context has been set.
+     */
+    public static function last_source_context(): array {
+        return is_array( self::$last_source_context ) ? self::$last_source_context : [];
+    }
+
+    /**
+     * Issue #79 — Read source-context for a previously created briefing post
+     * (used by the Briefing Hub aggregator to display which input the LLM saw).
+     *
+     * @param int $post_id WordPress post ID.
+     * @return array{type:string,count:int,preset:string}|array{type:string,count:int,preset:string} Structured source context (empty-string slots are replaced with safe fallbacks).
+     */
+    public static function get_source_context( int $post_id ): array {
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) ) {
+            return [
+                'type'   => 'curated_briefing',
+                'count'  => 0,
+                'preset' => '',
+            ];
+        }
+
+        $type   = (string) get_post_meta( $post_id, '_presshub_source_context_type', true );
+        $count  = (int) get_post_meta( $post_id, '_presshub_source_context_count', true );
+        $preset = (string) get_post_meta( $post_id, '_presshub_source_context_preset', true );
+
+        $allowed = [ 'curated_briefing', 'harvested_articles', 'manual_notes' ];
+        if ( ! in_array( $type, $allowed, true ) ) {
+            $type = 'curated_briefing';
+        }
+
+        return [
+            'type'   => $type,
+            'count'  => max( 0, $count ),
+            'preset' => $preset,
+        ];
     }
 
     /**
@@ -813,6 +916,19 @@ class PressHub_AI_News_Curator {
 
         // 5. Extract headline and create WordPress post
         $headline = $this->extract_top_headline( $response );
+
+        // Issue #79 — record the source-context the LLM was actually fed so
+        // create_wordpress_post() can persist it as post meta and the Briefing
+        // Hub stage card can later surface "All Harvested Articles (N)" vs
+        // "Selected Articles Filter" vs "Manual Notes / Uploads" along with
+        // the resolved author preset. A non-empty selection filter overrides
+        // the default harvested_articles type.
+        $source_type = 'harvested_articles';
+        if ( ! empty( $selected_article_ids ) ) {
+            $source_type = 'curated_briefing'; // operator pre-selected subset
+        }
+        self::set_source_context( $source_type, (int) $used_articles_count, (string) $preset_id );
+
         $post_id  = $this->create_wordpress_post( $html_content, $date, $headline );
 
         if ( is_wp_error( $post_id ) ) {

@@ -475,6 +475,175 @@
                 $('#status-badge-audio').removeClass('badge-success').addClass('badge-secondary').text('Pending Audio');
                 $('#btn-synthesize-audio').text('🔊 Synthesize Audio Podcast');
             }
+
+            // -----------------------------------------------------------------
+            // Issue #79 — Per-stage status boxes. The server renders initial
+            // values; this block refreshes the chips/pills/badges on every
+            // AJAX poll without a page reload. Idempotent (overwrites the
+            // same DOM nodes).
+            // -----------------------------------------------------------------
+            renderStageStatusBoxes(status);
+
+            // Issue #79 — Stage 2 source-context + post status pills.
+            renderCurationStatusPills(status);
+
+            // Issue #79 — Stage 3 script context-mode + source post id pill.
+            renderScriptStatusPills(status);
+
+            // Issue #79 — Stage 4 audio stats (duration, filesize, format,
+            // engine, mode, voices, post status, attachment id).
+            renderAudioStatusPills(status);
+        }
+
+        /**
+         * Issue #79 — Render the four `.presshub-stage-status-box` containers
+         * using the `status.stage_events` dictionary the server provides.
+         *
+         * Each box has up to three children:
+         *   - timestamp row (attempted + completed + duration pill),
+         *   - context row (sources / post status / engine / voice chips),
+         *   - error line (when stage status === 'error').
+         */
+        function renderStageStatusBoxes(status) {
+            if (!status || !status.stage_events) return;
+            var events = status.stage_events;
+            var stageKeys = ['harvest', 'curation', 'script', 'audio'];
+            for (var i = 0; i < stageKeys.length; i++) {
+                var key   = stageKeys[i];
+                var event = events[key] || {};
+                var box   = $('#stage-' + key + '-status-box');
+                if (!box.length) continue;
+                // Replace inner HTML idempotently — server may have added
+                // new sub-pills since the last AJAX tick.
+                box.empty();
+                var row = $('<div class="presshub-status-row"></div>');
+                if (event.attempted_at) {
+                    var chip = $('<span class="presshub-timestamp-chip">⏱ Attempted: ' + escapeHtml(event.attempted_at) + '</span>');
+                    chip.attr('title', 'Pipeline stage start timestamp');
+                    row.append(chip);
+                }
+                if (event.completed_at) {
+                    var chip2 = $('<span class="presshub-timestamp-chip">✅ Completed: ' + escapeHtml(event.completed_at) + '</span>');
+                    chip2.attr('title', 'Pipeline stage completion timestamp');
+                    row.append(chip2);
+                }
+                if (event.duration_ms && event.duration_ms > 0) {
+                    row.append('<span class="presshub-stat-pill">⏳ ' + formatDuration(event.duration_ms) + '</span>');
+                }
+                box.append(row);
+
+                if (event.status === 'error' && event.error_message) {
+                    box.append('<p class="presshub-stage-error description">⚠️ ' + escapeHtml(event.error_message) + '</p>');
+                }
+            }
+        }
+
+        /**
+         * Issue #79 — Render Stage 2 (curation) post-status pill + source
+         * type + preset chips.
+         */
+        function renderCurationStatusPills(status) {
+            if (!status || !status.text_created) return;
+            var pill = $('#presshub-curation-post-status-pill');
+            if (!pill.length) return;
+            var statusText = (status.text_post_status || '').replace(/^./, function (c) {
+                return c.toUpperCase();
+            });
+            var cls = 'badge-secondary';
+            if (status.text_post_status === 'publish') cls = 'badge-success';
+            else if (status.text_post_status === 'pending') cls = 'badge-warning';
+            else if (status.text_post_status === 'trash') cls = 'badge-danger';
+            pill.removeClass('badge-success badge-warning badge-danger badge-secondary')
+                .addClass(cls)
+                .html('📰 Post #' + (status.text_post_id || 0) + ' · ' + escapeHtml(statusText));
+        }
+
+        /**
+         * Issue #79 — Render Stage 3 (script) context-mode pill.
+         */
+        function renderScriptStatusPills(status) {
+            if (!status || !status.script_meta) return;
+            var mode = status.script_meta.context_mode;
+            if (!mode) return;
+            var box = $('#stage-script-status-box .presshub-status-row').eq(1);
+            if (!box.length) return;
+            box.empty();
+            if (mode === 'curated_briefing') {
+                var html = '📰 Curated Morning Briefing';
+                if (status.script_meta.source_post_id) {
+                    html += ' · <code>#' + status.script_meta.source_post_id + '</code>';
+                }
+                box.append('<span class="presshub-source-tag">' + html + '</span>');
+            } else if (mode === 'harvested_articles') {
+                box.append('<span class="presshub-source-tag">🌐 Direct Harvested Articles</span>');
+            }
+        }
+
+        /**
+         * Issue #79 — Render Stage 4 (audio) stat pills, engine/mode chips,
+         * voice chips, post status pill, attachment pill.
+         */
+        function renderAudioStatusPills(status) {
+            if (!status || !status.audio_meta) return;
+            var audio = status.audio_meta;
+            var box = $('#stage-audio-status-box');
+            if (!box.length) return;
+            // Remove any prior injected sub-rows (idempotent).
+            box.find('.presshub-status-row').slice(1).remove();
+            // Voice chips row
+            var voiceRow = $('<div class="presshub-status-row"></div>');
+            var voices = [];
+            if (audio.female_voice) voices.push('🎙 ' + audio.female_voice + ' (Female)');
+            if (audio.male_voice)   voices.push('🎙 ' + audio.male_voice + ' (Male)');
+            if (audio.tertiary_voice) voices.push('🎙 ' + audio.tertiary_voice + ' (Tertiary)');
+            if (voices.length) {
+                voiceRow.css('margin-top', '4px');
+                for (var i = 0; i < voices.length; i++) {
+                    voiceRow.append('<span class="presshub-voice-chip">' + escapeHtml(voices[i]) + '</span>');
+                }
+                box.append(voiceRow);
+            }
+            // Post status pill (refresh; preserve original styling).
+            if (status.audio_created) {
+                var podStatus = (status.podcast_post_status || '').replace(/^./, function (c) {
+                    return c.toUpperCase();
+                });
+                var podCls = 'badge-secondary';
+                if (status.podcast_post_status === 'publish') podCls = 'badge-success';
+                else if (status.podcast_post_status === 'pending') podCls = 'badge-warning';
+                else if (status.podcast_post_status === 'trash') podCls = 'badge-danger';
+                var postPill = $('#presshub-podcast-post-status-pill');
+                if (postPill.length) {
+                    postPill.removeClass('badge-success badge-warning badge-danger badge-secondary')
+                        .addClass(podCls)
+                        .html('🎙 Post #' + (status.podcast_post_id || 0) + ' · ' + escapeHtml(podStatus));
+                }
+                // Attachment pill already server-rendered; nothing to refresh.
+            }
+        }
+
+        /**
+         * Issue #79 — Format ms duration as HH:MM:SS or MM:SS for compactness.
+         */
+        function formatDuration(ms) {
+            var totalSec = Math.floor(ms / 1000);
+            var h = Math.floor(totalSec / 3600);
+            var m = Math.floor((totalSec % 3600) / 60);
+            var s = totalSec % 60;
+            function pad(n) { return n < 10 ? '0' + n : '' + n; }
+            if (h > 0) return pad(h) + ':' + pad(m) + ':' + pad(s);
+            return pad(m) + ':' + pad(s);
+        }
+
+        /**
+         * Issue #79 — Escape HTML special characters to prevent XSS in
+         * chip rendering. Falls back to a noop when the value is undefined.
+         */
+        function escapeHtml(value) {
+            if (value === undefined || value === null) return '';
+            return String(value).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
         }
 
         // -------------------------------------------------------------------------
