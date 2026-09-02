@@ -192,6 +192,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_schedule_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_harvest_time"><?php echo __( 'Morning Harvest Time', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_harvest_time_field(); ?>
@@ -329,6 +335,24 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_intro_sfx"><?php echo __( 'Podcast Intro SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_intro_sfx_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_transition_sfx"><?php echo __( 'Topic Transition SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_transition_sfx_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_outro_sfx"><?php echo __( 'Podcast Outro SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_outro_sfx_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_tts_timeout"><?php echo __( 'Speech AI Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_timeout_field(); ?>
@@ -388,10 +412,22 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_podcast_preset_field(); ?>
                                 </td>
                             </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_prompt"><?php echo __( 'Podcast System Prompt', 'presshub-ai-editor' ); ?></label></th>
+                            <tr id="presshub-prompt-1-row">
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_prompt_1"><?php echo __( 'Podcast System Prompt (1 Host)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $this->render_briefing_podcast_prompt_field(); ?>
+                                    <?php $this->render_briefing_podcast_prompt_1_field(); ?>
+                                </td>
+                            </tr>
+                            <tr id="presshub-prompt-2-row">
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_prompt_2"><?php echo __( 'Podcast System Prompt (2 Hosts)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_prompt_2_field(); ?>
+                                </td>
+                            </tr>
+                            <tr id="presshub-prompt-3-row">
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_prompt_3"><?php echo __( 'Podcast System Prompt (3 Hosts)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_prompt_3_field(); ?>
                                 </td>
                             </tr>
                         </tbody>
@@ -1715,6 +1751,17 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    public function render_briefing_schedule_enabled_field() {
+        $option = 'presshub_ai_briefing_schedule_enabled';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_schedule_enabled();
+        ?>
+        <label>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
+            <?php echo __( 'Enable automated morning news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
+        </label>
+        <?php
+    }
+
     public function render_briefing_harvest_time_field() {
         $option = 'presshub_ai_briefing_harvest_time';
         $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_harvest_time() );
@@ -1940,6 +1987,57 @@ class PressHub_AI_Settings_Render {
         <p class="description">
             <?php echo esc_html__( 'Splits the podcast script by topic markers ([TOPIC_START] ... [TOPIC_END]), synthesizes each section with fresh neural context, and stitches them with natural transitions. Prevents voice drift and host persona convergence on longer podcasts.', 'presshub-ai-editor' ); ?>
         </p>
+        <?php
+    }
+
+    public function render_briefing_audio_intro_sfx_field() {
+        $option = 'presshub_ai_briefing_audio_intro_sfx';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_audio_intro_sfx();
+        $this->render_sfx_dropdown( $option, $value, __( 'Play at the very beginning of the podcast.', 'presshub-ai-editor' ) );
+    }
+
+    public function render_briefing_audio_transition_sfx_field() {
+        $option = 'presshub_ai_briefing_audio_transition_sfx';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_audio_transition_sfx();
+        $this->render_sfx_dropdown( $option, $value, __( 'Inject an audio sound effect (instead of just silence) when transitioning between topics.', 'presshub-ai-editor' ) );
+    }
+
+    public function render_briefing_audio_outro_sfx_field() {
+        $option = 'presshub_ai_briefing_audio_outro_sfx';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_audio_outro_sfx();
+        $this->render_sfx_dropdown( $option, $value, __( 'Play at the very end of the podcast.', 'presshub-ai-editor' ) );
+    }
+
+    private function render_sfx_dropdown( $option, $value, $desc ) {
+        $audio_dir = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/';
+        $audio_url = plugin_dir_url( dirname( __FILE__ ) ) . 'assets/audio/';
+        $available_sfx = [
+            'silence' => __( 'None', 'presshub-ai-editor' )
+        ];
+
+        if ( is_dir( $audio_dir ) ) {
+            $files = array_merge( (array) glob( $audio_dir . '*.wav' ), (array) glob( $audio_dir . '*.mp3' ) );
+            if ( $files ) {
+                foreach ( $files as $file ) {
+                    $basename = basename( $file );
+                    $name_only = pathinfo( $file, PATHINFO_FILENAME );
+                    $label    = ucwords( str_replace( [ '-', '_' ], ' ', $name_only ) ) . ' (' . strtoupper( pathinfo( $file, PATHINFO_EXTENSION ) ) . ')';
+                    $available_sfx[ $basename ] = $label;
+                }
+            }
+        }
+        ?>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text presshub-sfx-select" data-audio-url="<?php echo esc_url( $audio_url ); ?>">
+                <?php foreach ( $available_sfx as $sfx_key => $sfx_label ) : ?>
+                    <option value="<?php echo self::esc_attr_safe( $sfx_key ); ?>" <?php selected( $value, $sfx_key ); ?>>
+                        <?php echo self::esc_html_safe( $sfx_label ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <button type="button" class="button button-secondary presshub-sfx-preview-btn">▶ Preview</button>
+        </div>
+        <p class="description"><?php echo esc_html( $desc ) . ' ' . esc_html__( 'Note: Custom files must be placed in the plugin assets/audio/ folder.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2176,12 +2274,28 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
-    public function render_briefing_podcast_prompt_field() {
-        $option  = 'presshub_ai_briefing_podcast_prompt';
+    public function render_briefing_podcast_prompt_1_field() {
+        $option  = 'presshub_ai_briefing_podcast_prompt_1';
+        $value   = PressHub_AI_Settings_Storage::get_podcast_prompt_1();
+        $this->render_prompt_textarea( $option, $value, 1 );
+    }
+
+    public function render_briefing_podcast_prompt_2_field() {
+        $option  = 'presshub_ai_briefing_podcast_prompt_2';
+        $value   = PressHub_AI_Settings_Storage::get_podcast_prompt_2();
+        $this->render_prompt_textarea( $option, $value, 2 );
+    }
+
+    public function render_briefing_podcast_prompt_3_field() {
+        $option  = 'presshub_ai_briefing_podcast_prompt_3';
+        $value   = PressHub_AI_Settings_Storage::get_podcast_prompt_3();
+        $this->render_prompt_textarea( $option, $value, 3 );
+    }
+
+    private function render_prompt_textarea( $option, $value, $host_count ) {
         $default = class_exists( 'PressHub_AI_Podcast_Producer' )
-            ? ( new PressHub_AI_Podcast_Producer() )->get_default_dialogue_prompt()
+            ? ( new PressHub_AI_Podcast_Producer() )->get_default_dialogue_prompt( $host_count )
             : '';
-        $value   = (string) get_option( $option, '' );
         ?>
         <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use standard Greek conversational podcast prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
         <p>
@@ -2192,7 +2306,7 @@ class PressHub_AI_Settings_Render {
                 <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
             </button>
         </p>
-        <p class="description"><?php echo __( 'Custom system prompt for Greek podcast dialogue generation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}, {host1_name}, {host2_name}.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Custom system prompt for Greek podcast dialogue generation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}, {host1_name}, {host2_name}, {host3_name}.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

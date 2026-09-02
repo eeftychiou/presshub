@@ -353,6 +353,7 @@ function presshub_ai_execute_research_job( $research_id ) {
 
 add_action( 'presshub_daily_news_harvest', 'presshub_ai_execute_harvest_cron' );
 add_action( 'presshub_daily_news_generate', 'presshub_ai_execute_generation_cron' );
+add_action( 'update_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 register_activation_hook( __FILE__, 'presshub_ai_schedule_briefing_crons' );
@@ -391,30 +392,24 @@ function presshub_ai_get_cron_timestamp( $time_str, $now = null ) {
     $hours   = (int) $matches[1];
     $minutes = (int) $matches[2];
 
+    // Determine today's target timestamp in the site's local timezone.
+    // get_option('timezone_string') or get_option('gmt_offset') applies.
     if ( function_exists( 'wp_timezone' ) ) {
-        $tz = wp_timezone();
+        $site_tz = wp_timezone();
     } else {
-        $tz = new DateTimeZone( 'UTC' );
+        $site_tz = new DateTimeZone( 'UTC' );
     }
-
-    try {
-        $today = new DateTime( '@' . $now );
-        $today->setTimezone( $tz );
-        $today->setTime( $hours, $minutes, 0 );
-        $target = $today->getTimestamp();
-        if ( $target <= $now ) {
-            $today->modify( '+1 day' );
-            $target = $today->getTimestamp();
-        }
-        return $target;
-    } catch ( Throwable $e ) {
-        $today_date = date( 'Y-m-d', $now );
-        $target     = strtotime( sprintf( '%s %02d:%02d:00', $today_date, $hours, $minutes ) );
-        if ( $target <= $now ) {
-            $target += 86400; // DAY_IN_SECONDS
-        }
-        return $target;
+    
+    $target = (new DateTime('now', $site_tz))
+        ->setTimestamp($now) // Start from explicit now (essential for testing)
+        ->setTime($hours, $minutes, 0);
+        
+    // If target time today has already passed, schedule for tomorrow
+    if ( $target->getTimestamp() <= $now ) {
+        $target->modify('+1 day');
     }
+    
+    return $target->getTimestamp();
 }
 
 /**
@@ -422,11 +417,16 @@ function presshub_ai_get_cron_timestamp( $time_str, $now = null ) {
  */
 function presshub_ai_schedule_briefing_crons() {
     try {
-        $harvest_time    = (string) get_option( 'presshub_ai_briefing_harvest_time', '06:30' );
-        $generation_time = (string) get_option( 'presshub_ai_briefing_generation_time', '07:15' );
-
         wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
         wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
+
+        $is_enabled = (int) get_option( 'presshub_ai_briefing_schedule_enabled', 1 );
+        if ( ! $is_enabled ) {
+            return;
+        }
+
+        $harvest_time    = (string) get_option( 'presshub_ai_briefing_harvest_time', '06:30' );
+        $generation_time = (string) get_option( 'presshub_ai_briefing_generation_time', '07:15' );
 
         $harvest_timestamp    = presshub_ai_get_cron_timestamp( $harvest_time );
         $generation_timestamp = presshub_ai_get_cron_timestamp( $generation_time );

@@ -96,6 +96,7 @@ class SettingsPageTest
         foreach ( [
             'presshub_ai_briefing_sources',
             'presshub_ai_briefing_tts_engine',
+            'presshub_ai_briefing_schedule_enabled',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
             'presshub_ai_harvest_time_budget',
@@ -115,7 +116,9 @@ class SettingsPageTest
             'presshub_ai_briefing_text_status',
             'presshub_ai_briefing_podcast_status',
             'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt',
+            'presshub_ai_briefing_podcast_prompt_1',
+            'presshub_ai_briefing_podcast_prompt_2',
+            'presshub_ai_briefing_podcast_prompt_3',
         ] as $field ) {
             if ( ! in_array( $field, $briefing, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_briefing; got: " . implode( ', ', $briefing );
@@ -161,6 +164,7 @@ class SettingsPageTest
             'presshub_ai_briefing_tts_model',
             'presshub_ai_briefing_tts_timeout',
             'presshub_ai_briefing_sources',
+            'presshub_ai_briefing_schedule_enabled',
             'presshub_ai_briefing_harvest_time',
             'presshub_ai_briefing_generation_time',
             'presshub_ai_harvest_time_budget',
@@ -179,6 +183,9 @@ class SettingsPageTest
             'presshub_ai_briefing_voice_speed',
             'presshub_ai_briefing_voice_pitch',
             'presshub_ai_briefing_audio_split_by_topic',
+            'presshub_ai_briefing_audio_transition_sfx',
+            'presshub_ai_briefing_audio_intro_sfx',
+            'presshub_ai_briefing_audio_outro_sfx',
             'presshub_ai_briefing_tts_style',
             'presshub_ai_briefing_tts_custom_style',
             'presshub_ai_briefing_text_category',
@@ -190,7 +197,9 @@ class SettingsPageTest
             'presshub_ai_briefing_text_title_date_format',
             'presshub_ai_briefing_podcast_status',
             'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt',
+            'presshub_ai_briefing_podcast_prompt_1',
+            'presshub_ai_briefing_podcast_prompt_2',
+            'presshub_ai_briefing_podcast_prompt_3',
             'presshub_ai_coauthor_provider',
             'presshub_ai_coauthor_model',
             'presshub_ai_coauthor_temperature',
