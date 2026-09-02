@@ -195,6 +195,10 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_sources' ],
             'type'              => 'array',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_schedule_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_boolean' ],
+            'type'              => 'integer',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_harvest_time', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_harvest_time' ],
             'type'              => 'string',
@@ -464,6 +468,7 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_tts_api_key', __( 'Speech Generation API Key (Google AI Studio / Gemini)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_api_key_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_model', __( 'Voice Generation AI Model', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_timeout', __( 'Speech Generation Request Timeout (seconds)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_timeout_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_schedule_enabled', __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ), [ $render, 'render_briefing_schedule_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_harvest_time_budget', __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ), [ $render, 'render_harvest_time_budget_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1761,6 +1766,10 @@ class PressHub_AI_Settings_Storage {
         return PressHub_AI_Provider_Defaults::default_temperature();
     }
 
+    public static function get_briefing_schedule_enabled(): int {
+        return (int) get_option( 'presshub_ai_briefing_schedule_enabled', 1 );
+    }
+
     public static function default_briefing_harvest_time(): string {
         return '06:30';
     }
@@ -1825,6 +1834,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_text_provider'        => [ __CLASS__, 'sanitize_provider_id' ],
             'presshub_ai_briefing_text_model'           => [ __CLASS__, 'sanitize_model_string' ],
             'presshub_ai_briefing_sources'              => [ __CLASS__, 'sanitize_briefing_sources' ],
+            'presshub_ai_briefing_schedule_enabled'     => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_briefing_harvest_time'         => [ __CLASS__, 'sanitize_harvest_time' ],
             'presshub_ai_briefing_generation_time'      => [ __CLASS__, 'sanitize_generation_time' ],
             'presshub_ai_harvest_time_budget'           => [ __CLASS__, 'sanitize_harvest_time_budget' ],

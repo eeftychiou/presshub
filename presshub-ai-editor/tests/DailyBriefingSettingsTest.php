@@ -51,6 +51,7 @@ class DailyBriefingSettingsTest
         $field_ids = array_column( $fields, 'id' );
         $expected_fields = [
             'presshub_ai_briefing_sources',
+            'presshub_ai_briefing_schedule_enabled',
             'presshub_ai_briefing_tts_engine',
             'presshub_ai_briefing_tts_api_key',
             'presshub_ai_briefing_tts_model',

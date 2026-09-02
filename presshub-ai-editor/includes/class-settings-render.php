@@ -192,6 +192,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_schedule_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_harvest_time"><?php echo __( 'Morning Harvest Time', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_harvest_time_field(); ?>
@@ -1742,6 +1748,17 @@ class PressHub_AI_Settings_Render {
                 </div>
             </div>
         </div>
+        <?php
+    }
+
+    public function render_briefing_schedule_enabled_field() {
+        $option = 'presshub_ai_briefing_schedule_enabled';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_schedule_enabled();
+        ?>
+        <label>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
+            <?php echo __( 'Enable automated morning news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
+        </label>
         <?php
     }
 
