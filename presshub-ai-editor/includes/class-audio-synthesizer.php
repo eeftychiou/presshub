@@ -606,6 +606,64 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
+     * Issue #79 — Read audio-stats meta previously persisted on a podcast
+     * post by synthesize_podcast(). Returns a structured array the Briefing
+     * Hub aggregator uses to render the Stage 4 status box.
+     *
+     * Missing/legacy posts gracefully yield empty-string slots so the UI can
+     * render "—" or "Unknown" without throwing.
+     *
+     * @param int $post_id WordPress post ID.
+     * @return array{duration_sec:float,filesize:int,sample_rate:int,format:string,engine:string,
+     *               female_voice:string,male_voice:string,tertiary_voice:string,
+     *               host_count:int,split_by_topic:int,topic_count:int,
+     *               attempted_at:string,completed_at:string} Structured audio meta.
+     */
+    public static function get_audio_meta( int $post_id ): array {
+        $defaults = [
+            'duration_sec'    => 0.0,
+            'filesize'        => 0,
+            'sample_rate'     => 0,
+            'format'          => '',
+            'engine'          => '',
+            'female_voice'    => '',
+            'male_voice'      => '',
+            'tertiary_voice'  => '',
+            'host_count'      => 0,
+            'split_by_topic'  => 0,
+            'topic_count'     => 0,
+            'attempted_at'    => '',
+            'completed_at'    => '',
+        ];
+
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) ) {
+            return $defaults;
+        }
+
+        $engine_value = (string) get_post_meta( $post_id, '_presshub_audio_engine', true );
+        $allowed_engines = [ 'gemini', 'google_cloud', 'google_cloud_tts' ];
+        if ( ! in_array( $engine_value, $allowed_engines, true ) ) {
+            $engine_value = '';
+        }
+
+        return [
+            'duration_sec'    => round( (float) get_post_meta( $post_id, '_presshub_audio_duration_sec', true ), 2 ),
+            'filesize'        => (int) get_post_meta( $post_id, '_presshub_audio_filesize', true ),
+            'sample_rate'     => (int) get_post_meta( $post_id, '_presshub_audio_sample_rate', true ),
+            'format'          => strtolower( (string) get_post_meta( $post_id, '_presshub_audio_format', true ) ),
+            'engine'          => $engine_value,
+            'female_voice'    => (string) get_post_meta( $post_id, '_presshub_audio_female_voice', true ),
+            'male_voice'      => (string) get_post_meta( $post_id, '_presshub_audio_male_voice', true ),
+            'tertiary_voice'  => (string) get_post_meta( $post_id, '_presshub_audio_tertiary_voice', true ),
+            'host_count'      => (int) get_post_meta( $post_id, '_presshub_audio_host_count', true ),
+            'split_by_topic'  => (int) get_post_meta( $post_id, '_presshub_audio_split_by_topic', true ),
+            'topic_count'     => (int) get_post_meta( $post_id, '_presshub_audio_topic_count', true ),
+            'attempted_at'    => (string) get_post_meta( $post_id, '_presshub_audio_attempted_at', true ),
+            'completed_at'    => (string) get_post_meta( $post_id, '_presshub_audio_completed_at', true ),
+        ];
+    }
+
+    /**
      * Synthesize Greek daily news briefing podcast end-to-end.
      *
      * In Gemini mode (logosAI replication), performs single-pass natural speech synthesis
@@ -679,6 +737,12 @@ class PressHub_AI_Audio_Synthesizer {
         $style_key      = (string) get_option( self::OPTION_STYLE, 'formal' );
         $custom_style   = (string) get_option( self::OPTION_CUSTOM_STYLE, '' );
         $used_style     = ( 'custom' === $style_key && ! empty( $custom_style ) ) ? $custom_style : $style_key;
+
+        // Issue #79 — record the timestamp when audio synthesis was *attempted* so
+        // the Briefing Hub stage card can later show "Synthesis Start Attempt"
+        // even when the actual synthesis fails partway. completed_at is set
+        // once the podcast post is created (i.e. the pipeline finished).
+        $podcast_audio_attempted_at = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
 
         $stitched_audio = '';
 
@@ -1102,15 +1166,74 @@ class PressHub_AI_Audio_Synthesizer {
             return $post_id;
         }
 
+        // Issue #79 — persist audio-stats meta on the podcast post so the
+        // Briefing Hub stage card can surface playback duration, file size,
+        // sample rate, format, voice personas, engine, mode, and topic count.
+        // Skipped silently if update_post_meta is unavailable (e.g. unit
+        // tests that mock only sideload/create). All values come from
+        // Settings-First helpers (PressHub_AI_Settings_Storage::get_*) so
+        // operators can re-tune without code changes.
+        if ( function_exists( 'update_post_meta' ) && $post_id > 0 ) {
+            $audio_bytes    = strlen( (string) $stitched_audio );
+            $audio_sample   = 24000; // Gemini TTS default — see synthesize_speech_via_gemini / stitch_wav_chunks
+            // PCM = 16-bit signed, mono, so 2 bytes per sample; duration in
+            // seconds for raw PCM (24 kHz mono). MP3 fallback uses an
+            // estimated 32 kbps ≈ 4000 bytes/sec when bytesize mode heuristic
+            // is needed. For WAV filesize, header is 44 bytes.
+            $is_wav   = ( strlen( $stitched_audio ) >= 4 && 'RIFF' === substr( $stitched_audio, 0, 4 ) );
+            $is_mp3   = ( strlen( $stitched_audio ) >= 3 && 'ID3' === substr( $stitched_audio, 0, 3 ) )
+                     || ( strlen( $stitched_audio ) >= 2 && "\xFF\xFB" === substr( $stitched_audio, 0, 2 ) );
+            $format   = $is_wav ? 'wav' : ( $is_mp3 ? 'mp3' : ( $ext ? ltrim( $ext, '.' ) : 'wav' ) );
+            if ( $format === 'wav' ) {
+                $pcm_seconds    = max( 0.0, ( $audio_bytes - 44 ) / ( $audio_sample * 2 ) );
+                $duration_sec   = $pcm_seconds;
+            } else {
+                $duration_sec   = max( 0.0, $audio_bytes / 4000.0 );
+            }
+
+            $host_count_value = class_exists( 'PressHub_AI_Settings_Storage' ) ? (int) PressHub_AI_Settings_Storage::get_briefing_host_count() : (int) ( 1 === (int) $host_count ? 1 : 2 );
+            $engine_value     = (string) $engine;
+            $split_by_topic_v = $split_by_topic ? 1 : 0;
+            $topic_count_v    = ! empty( $topics ) ? count( $topics ) : 0;
+            $completed_at_v   = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+
+            update_post_meta( (int) $post_id, '_presshub_audio_duration_sec', round( (float) $duration_sec, 2 ) );
+            update_post_meta( (int) $post_id, '_presshub_audio_filesize', (int) $audio_bytes );
+            update_post_meta( (int) $post_id, '_presshub_audio_sample_rate', (int) $audio_sample );
+            update_post_meta( (int) $post_id, '_presshub_audio_format', (string) $format );
+            update_post_meta( (int) $post_id, '_presshub_audio_engine', $engine_value );
+            update_post_meta( (int) $post_id, '_presshub_audio_female_voice', (string) $female_voice );
+            update_post_meta( (int) $post_id, '_presshub_audio_male_voice', (string) $male_voice );
+            update_post_meta( (int) $post_id, '_presshub_audio_tertiary_voice', (string) $tertiary_voice );
+            update_post_meta( (int) $post_id, '_presshub_audio_host_count', (int) $host_count_value );
+            update_post_meta( (int) $post_id, '_presshub_audio_split_by_topic', (int) $split_by_topic_v );
+            update_post_meta( (int) $post_id, '_presshub_audio_topic_count', (int) $topic_count_v );
+            update_post_meta( (int) $post_id, '_presshub_audio_attempted_at', (string) $podcast_audio_attempted_at );
+            update_post_meta( (int) $post_id, '_presshub_audio_completed_at', (string) $completed_at_v );
+        }
+
+        $podcast_audio_completed_at = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+
         return [
-            'success'       => true,
-            'post_id'       => $post_id,
-            'attachment_id' => $attachment_id,
-            'audio_url'     => $audio_url,
-            'date'          => $date,
-            'turns_count'   => count( $turns ),
-            'audio_size'    => strlen( $stitched_audio ),
-            'audio_data'    => $stitched_audio,
+            'success'         => true,
+            'post_id'         => $post_id,
+            'attachment_id'   => $attachment_id,
+            'audio_url'       => $audio_url,
+            'date'            => $date,
+            'turns_count'     => count( $turns ),
+            'audio_size'      => strlen( $stitched_audio ),
+            'audio_data'      => $stitched_audio,
+            // Issue #79 — surface audio stats in the result payload so the AJAX
+            // handler can echo them into the response without re-querying.
+            'engine'          => (string) $engine,
+            'female_voice'    => (string) $female_voice,
+            'male_voice'      => (string) $male_voice,
+            'tertiary_voice'  => (string) $tertiary_voice,
+            'host_count'      => (int) $host_count,
+            'sample_rate'     => 24000,
+            'format'          => (string) ( $is_wav ? 'wav' : ( $is_mp3 ? 'mp3' : ltrim( $ext, '.' ) ) ),
+            'attempted_at'    => (string) $podcast_audio_attempted_at,
+            'completed_at'    => (string) $podcast_audio_completed_at,
         ];
     }
 
