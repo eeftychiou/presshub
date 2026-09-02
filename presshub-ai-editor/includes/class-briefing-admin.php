@@ -254,14 +254,51 @@ class PressHub_AI_Briefing_Admin {
     }
 
     /**
-     * Register Daily Briefing Hub submenu page under Settings.
+     * Register Daily Briefing Hub as its own top-level operational menu.
+     *
+     * Previously this page was filed under Settings → Daily Briefing Hub, which
+     * violated the UX convention that Settings hosts static configuration only.
+     * The hub orchestrates harvest → curate → generate script → synthesize audio,
+     * so it is promoted to a top-level sibling of Posts / Media (Issue #73).
+     *
+     * Layout:
+     *   Daily Briefing Hub                  ← top-level entry (dashicons-microphone)
+     *     └─ Daily Briefing Hub             ← same page, registered as its own
+     *                                        first submenu so WP keeps the
+     *                                        rendered link visible under its
+     *                                        own parent in the sidebar.
+     *
+     * The PressHub AI settings page (options-general.php?page=presshub-ai) is
+     * deliberately left untouched. Editors reach it via the existing
+     * `curation_settings_url` deep-link exposed in the JS payload.
+     *
+     * Capability gating is preserved verbatim: the hub uses
+     * {@see self::capability()} (filterable `presshub_ai_briefing_cap`,
+     * default `edit_posts`).
      */
     public function add_admin_menu() {
-        add_submenu_page(
-            'options-general.php',
+        $cap      = $this->capability();
+        $icon     = 'dashicons-microphone';
+        $position = 26; // After Comments (25), before Appearance (60).
+
+        // 1) Top-level entry.
+        add_menu_page(
             __( 'PressHub AI — Daily Briefing Hub', 'presshub-ai-editor' ),
             __( 'Daily Briefing Hub', 'presshub-ai-editor' ),
-            $this->capability(),
+            $cap,
+            'presshub-ai-briefing-hub',
+            [ $this, 'render_hub_page' ],
+            $icon,
+            $position
+        );
+
+        // 2) Same page registered explicitly as a submenu of itself so the
+        //    rendered sidebar entry survives any future top-level reshuffling.
+        add_submenu_page(
+            'presshub-ai-briefing-hub',
+            __( 'PressHub AI — Daily Briefing Hub', 'presshub-ai-editor' ),
+            __( 'Daily Briefing Hub', 'presshub-ai-editor' ),
+            $cap,
             'presshub-ai-briefing-hub',
             [ $this, 'render_hub_page' ]
         );

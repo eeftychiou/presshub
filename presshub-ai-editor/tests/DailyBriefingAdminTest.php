@@ -31,30 +31,58 @@ class DailyBriefingAdminTest
         $failures = [];
 
         // =========================================================================
-        // Case 1: Admin Menu Registration
+        // Case 1: Admin Menu Registration (Issue #73 — top-level menu)
         // =========================================================================
         self::reset_world();
         $admin = new PressHub_AI_Briefing_Admin();
         $admin->add_admin_menu();
 
-        $submenus = $GLOBALS['SUBMENU_PAGES']['options-general.php'] ?? [];
-        $briefing_menu = null;
-        foreach ( $submenus as $m ) {
+        // 1a) The hub must NOT live under Settings anymore.
+        $general_subs = $GLOBALS['SUBMENU_PAGES']['options-general.php'] ?? [];
+        foreach ( $general_subs as $m ) {
             if ( ( $m['menu_slug'] ?? '' ) === 'presshub-ai-briefing-hub' ) {
-                $briefing_menu = $m;
+                $failures[] = 'Daily Briefing Hub must no longer be registered under options-general.php; found: ' . json_encode( $general_subs );
+            }
+        }
+
+        // 1b) The hub must be registered as a TOP-level admin menu entry.
+        $top_level = $GLOBALS['MENU_PAGES'] ?? [];
+        $briefing_top = null;
+        foreach ( $top_level as $m ) {
+            if ( ( $m['menu_slug'] ?? '' ) === 'presshub-ai-briefing-hub' ) {
+                $briefing_top = $m;
                 break;
             }
         }
 
-        if ( ! $briefing_menu ) {
-            $failures[] = 'Daily Briefing Hub submenu (presshub-ai-briefing-hub) must be registered under options-general.php; got: ' . json_encode( $submenus );
+        if ( ! $briefing_top ) {
+            $failures[] = 'Daily Briefing Hub must be registered as a top-level admin menu (MENU_PAGES); got: ' . json_encode( $top_level );
         } else {
-            if ( false === strpos( $briefing_menu['page_title'], 'Daily Briefing Hub' ) ) {
-                $failures[] = 'Submenu page title should contain "Daily Briefing Hub"; got: ' . $briefing_menu['page_title'];
+            if ( false === strpos( $briefing_top['page_title'], 'Daily Briefing Hub' ) ) {
+                $failures[] = 'Top-level page title should contain "Daily Briefing Hub"; got: ' . $briefing_top['page_title'];
             }
-            if ( $briefing_menu['capability'] !== 'edit_posts' ) {
-                $failures[] = 'Submenu capability should default to edit_posts; got: ' . $briefing_menu['capability'];
+            if ( false === strpos( $briefing_top['menu_title'], 'Daily Briefing Hub' ) ) {
+                $failures[] = 'Top-level menu title should contain "Daily Briefing Hub"; got: ' . $briefing_top['menu_title'];
             }
+            if ( $briefing_top['capability'] !== 'edit_posts' ) {
+                $failures[] = 'Top-level capability should default to edit_posts; got: ' . $briefing_top['capability'];
+            }
+            if ( empty( $briefing_top['icon_url'] ) ) {
+                $failures[] = 'Top-level icon_url must be set (dashicons-* expected); got: ' . ( $briefing_top['icon_url'] ?? '' );
+            }
+        }
+
+        // 1c) The same page should also be registered as a submenu of itself.
+        $hub_subs = $GLOBALS['SUBMENU_PAGES']['presshub-ai-briefing-hub'] ?? [];
+        $found_self_sub = false;
+        foreach ( $hub_subs as $m ) {
+            if ( ( $m['menu_slug'] ?? '' ) === 'presshub-ai-briefing-hub' ) {
+                $found_self_sub = true;
+                break;
+            }
+        }
+        if ( ! $found_self_sub ) {
+            $failures[] = 'Daily Briefing Hub must also be registered as a submenu of its new top-level slug; got: ' . json_encode( $hub_subs );
         }
 
         // =========================================================================
@@ -62,7 +90,9 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $admin = new PressHub_AI_Briefing_Admin();
-        $admin->enqueue_assets( 'settings_page_presshub-ai-briefing-hub' );
+        // add_menu_page() returns 'toplevel_page_<slug>'; the enqueue matcher
+        // uses strpos() on the slug, so this still triggers asset loading.
+        $admin->enqueue_assets( 'toplevel_page_presshub-ai-briefing-hub' );
 
         $scripts = $GLOBALS['ENQUEUED_SCRIPTS'] ?? [];
         $styles  = $GLOBALS['ENQUEUED_STYLES'] ?? [];
