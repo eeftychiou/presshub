@@ -1472,7 +1472,18 @@ class PressHub_AI_Settings_Storage {
 
     public static function sanitize_briefing_audio_transition_sfx( $value ): string {
         $clean = is_string( $value ) ? sanitize_text_field( trim( wp_unslash( $value ) ) ) : 'silence';
-        $valid = [ 'silence', 'chime', 'whoosh', 'synth' ];
+        $valid = [ 'silence' ];
+        
+        $audio_dir = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/';
+        if ( is_dir( $audio_dir ) ) {
+            $files = glob( $audio_dir . '*.wav' );
+            if ( $files ) {
+                foreach ( $files as $file ) {
+                    $valid[] = basename( $file, '.wav' );
+                }
+            }
+        }
+        
         return in_array( $clean, $valid, true ) ? $clean : 'silence';
     }
 

@@ -1952,12 +1952,28 @@ class PressHub_AI_Settings_Render {
     public function render_briefing_audio_transition_sfx_field() {
         $option = 'presshub_ai_briefing_audio_transition_sfx';
         $value  = PressHub_AI_Settings_Storage::get_briefing_audio_transition_sfx();
+        $audio_dir = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/';
+        $available_sfx = [
+            'silence' => __( 'None (600ms Silence)', 'presshub-ai-editor' )
+        ];
+
+        if ( is_dir( $audio_dir ) ) {
+            $files = glob( $audio_dir . '*.wav' );
+            if ( $files ) {
+                foreach ( $files as $file ) {
+                    $basename = basename( $file, '.wav' );
+                    $label    = ucwords( str_replace( [ '-', '_' ], ' ', $basename ) );
+                    $available_sfx[ $basename ] = $label;
+                }
+            }
+        }
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
-            <option value="silence" <?php selected( $value, 'silence' ); ?>><?php esc_html_e( 'None (600ms Silence)', 'presshub-ai-editor' ); ?></option>
-            <option value="chime" <?php selected( $value, 'chime' ); ?>><?php esc_html_e( 'News Chime', 'presshub-ai-editor' ); ?></option>
-            <option value="whoosh" <?php selected( $value, 'whoosh' ); ?>><?php esc_html_e( 'Deep Whoosh', 'presshub-ai-editor' ); ?></option>
-            <option value="synth" <?php selected( $value, 'synth' ); ?>><?php esc_html_e( 'Modern Synth', 'presshub-ai-editor' ); ?></option>
+            <?php foreach ( $available_sfx as $sfx_key => $sfx_label ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $sfx_key ); ?>" <?php selected( $value, $sfx_key ); ?>>
+                    <?php echo self::esc_html_safe( $sfx_label ); ?>
+                </option>
+            <?php endforeach; ?>
         </select>
         <p class="description"><?php echo esc_html__( 'Inject an audio sound effect (instead of just silence) when transitioning between topics. Note: Custom .wav files (24kHz 16-bit mono) must be placed in the plugin assets/audio/ folder.', 'presshub-ai-editor' ); ?></p>
         <?php
