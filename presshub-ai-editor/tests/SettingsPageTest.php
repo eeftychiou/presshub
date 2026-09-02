@@ -179,6 +179,7 @@ class SettingsPageTest
             'presshub_ai_briefing_voice_speed',
             'presshub_ai_briefing_voice_pitch',
             'presshub_ai_briefing_audio_split_by_topic',
+            'presshub_ai_briefing_audio_transition_sfx',
             'presshub_ai_briefing_tts_style',
             'presshub_ai_briefing_tts_custom_style',
             'presshub_ai_briefing_text_category',

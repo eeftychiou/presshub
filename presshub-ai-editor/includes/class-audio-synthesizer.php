@@ -343,12 +343,13 @@ class PressHub_AI_Audio_Synthesizer {
     /**
      * Stitch multiple WAV/PCM audio buffers together with silent intervals.
      *
-     * @param array $wav_or_pcm_buffers List of WAV or raw PCM binary buffers.
-     * @param int   $pause_ms           Pause duration in milliseconds between turns (default 400).
-     * @param int   $sample_rate        Sample rate in Hz (default 24000).
+     * @param array  $wav_or_pcm_buffers List of WAV or raw PCM binary buffers.
+     * @param int    $pause_ms           Pause duration in milliseconds between turns (default 400).
+     * @param int    $sample_rate        Sample rate in Hz (default 24000).
+     * @param string $interstitial_pcm   Optional raw PCM binary to inject between chunks (e.g. SFX).
      * @return string Valid RIFF/WAV binary data.
      */
-    public function stitch_wav_chunks( array $wav_or_pcm_buffers, int $pause_ms = 400, int $sample_rate = 24000 ): string {
+    public function stitch_wav_chunks( array $wav_or_pcm_buffers, int $pause_ms = 400, int $sample_rate = 24000, string $interstitial_pcm = '' ): string {
         if ( empty( $wav_or_pcm_buffers ) ) {
             return '';
         }
@@ -380,8 +381,15 @@ class PressHub_AI_Audio_Synthesizer {
         // Generate silence PCM frames (zero bytes: 48 bytes per ms at 24kHz 16-bit mono)
         $bytes_per_ms = (int) ( $sample_rate * 2 / 1000 );
         $silence_bytes = str_repeat( "\x00", max( 0, $pause_ms * $bytes_per_ms ) );
+        
+        $separator = $silence_bytes;
+        if ( '' !== $interstitial_pcm ) {
+            // Pad the SFX with a small buffer of silence on both sides (e.g., 150ms)
+            $short_silence = str_repeat( "\x00", 150 * $bytes_per_ms );
+            $separator = $short_silence . $interstitial_pcm . $short_silence;
+        }
 
-        $combined_pcm = implode( $silence_bytes, $raw_pcm_chunks );
+        $combined_pcm = implode( $separator, $raw_pcm_chunks );
         return PressHub_AI_API_Client::pcm_to_wav( $combined_pcm, $sample_rate );
     }
 
@@ -761,7 +769,7 @@ class PressHub_AI_Audio_Synthesizer {
                         $dialogue_lines = [];
                         foreach ( $topic_turns as $t ) {
                             $label = ( 'female' === $t['speaker'] ) ? $female_host : $male_host;
-                            $dialogue_lines[] = $label . ': ' . $t['text'];
+                            $dialogue_lines[] = '[' . $label . ']: ' . $t['text'];
                         }
                         $formatted_topic_script = implode( "\n\n", $dialogue_lines );
 
@@ -803,7 +811,25 @@ class PressHub_AI_Audio_Synthesizer {
                 }
 
                 if ( ! empty( $topic_wavs ) ) {
-                    $stitched_audio = $this->stitch_wav_chunks( $topic_wavs, 600, 24000 );
+                    $sfx_setting = PressHub_AI_Settings_Storage::get_briefing_audio_transition_sfx();
+                    $sfx_pcm     = '';
+                    if ( 'silence' !== $sfx_setting ) {
+                        $sfx_file = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/' . $sfx_setting . '.wav';
+                        if ( file_exists( $sfx_file ) ) {
+                            $sfx_wav = file_get_contents( $sfx_file );
+                            if ( strlen( $sfx_wav ) >= 44 && 'RIFF' === substr( $sfx_wav, 0, 4 ) ) {
+                                $pos = strpos( $sfx_wav, 'data' );
+                                if ( false !== $pos && strlen( $sfx_wav ) >= $pos + 8 ) {
+                                    $data_size = unpack( 'V', substr( $sfx_wav, $pos + 4, 4 ) )[1] ?? 0;
+                                    $sfx_pcm = substr( $sfx_wav, $pos + 8, $data_size > 0 ? $data_size : null );
+                                } else {
+                                    $sfx_pcm = substr( $sfx_wav, 44 );
+                                }
+                            }
+                        }
+                    }
+
+                    $stitched_audio = $this->stitch_wav_chunks( $topic_wavs, 600, 24000, $sfx_pcm );
                     $duration_ms    = (int) round( ( microtime( true ) - $overall_start ) * 1000 );
 
                     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
@@ -872,7 +898,7 @@ class PressHub_AI_Audio_Synthesizer {
                 $dialogue_lines = [];
                 foreach ( $turns as $t ) {
                     $speaker_label    = ( 'female' === $t['speaker'] ) ? $female_host : $male_host;
-                    $dialogue_lines[] = $speaker_label . ': ' . $t['text'];
+                    $dialogue_lines[] = '[' . $speaker_label . ']: ' . $t['text'];
                 }
                 $formatted_script = implode( "\n\n", $dialogue_lines );
 

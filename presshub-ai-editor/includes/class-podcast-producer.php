@@ -533,6 +533,7 @@ class PressHub_AI_Podcast_Producer {
         // Check for [TOPIC_START: <title>] ... [TOPIC_END] or HTML/Markdown markers
         $has_explicit_topics = (
             false !== stripos( $raw_script, 'TOPIC_START' )
+            || false !== stripos( $raw_script, 'TOPICSTART' )
             || false !== stripos( $raw_script, 'TOPIC:' )
         );
 
@@ -544,8 +545,8 @@ class PressHub_AI_Podcast_Producer {
             foreach ( $lines as $line ) {
                 $trimmed = trim( $line );
 
-                // Match [TOPIC_START: Title] or <!-- TOPIC_START: Title --> or === TOPIC: Title === or ### TOPIC: Title
-                if ( preg_match( '/^(?:\[|\<\!\-\-|\={2,3}|\#{2,3})\s*TOPIC(?:_START)?\s*:\s*([^\]\>\=]+)(?:\]|\-\-\>|\={2,3})?/iu', $trimmed, $m ) ) {
+                // Match [TOPIC_START: Title] or <!-- TOPIC_START: Title --> or === TOPIC: Title === or ### TOPIC: Title or TOPICSTART: Title
+                if ( preg_match( '/^(?:\[|\<\!\-\-|\={2,3}|\#{2,3})?\s*TOPIC(?:_?START)?\s*:\s*([^\]\>\=]+)(?:\]|\-\-\>|\={2,3})?/iu', $trimmed, $m ) ) {
                     // Flush previous topic if any
                     if ( null !== $current_title || ! empty( $current_topic_lines ) ) {
                         $topic_text = trim( implode( "\n", $current_topic_lines ) );
@@ -566,8 +567,8 @@ class PressHub_AI_Podcast_Producer {
                     continue;
                 }
 
-                // Match [TOPIC_END] or <!-- TOPIC_END -->
-                if ( preg_match( '/^(?:\[|\<\!\-\-)\s*TOPIC_END\s*(?:\]|\-\-\>)?/iu', $trimmed ) ) {
+                // Match [TOPIC_END] or <!-- TOPIC_END --> or TOPICEND]
+                if ( preg_match( '/^(?:\[|\<\!\-\-)?\s*TOPIC_?END\s*(?:\]|\-\-\>)?/iu', $trimmed ) ) {
                     if ( ! empty( $current_topic_lines ) ) {
                         $topic_text = trim( implode( "\n", $current_topic_lines ) );
                         if ( '' !== $topic_text ) {

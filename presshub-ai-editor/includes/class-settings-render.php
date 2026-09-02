@@ -329,6 +329,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_transition_sfx"><?php echo __( 'Topic Transition SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_transition_sfx_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_tts_timeout"><?php echo __( 'Speech AI Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_timeout_field(); ?>
@@ -1940,6 +1946,20 @@ class PressHub_AI_Settings_Render {
         <p class="description">
             <?php echo esc_html__( 'Splits the podcast script by topic markers ([TOPIC_START] ... [TOPIC_END]), synthesizes each section with fresh neural context, and stitches them with natural transitions. Prevents voice drift and host persona convergence on longer podcasts.', 'presshub-ai-editor' ); ?>
         </p>
+        <?php
+    }
+
+    public function render_briefing_audio_transition_sfx_field() {
+        $option = 'presshub_ai_briefing_audio_transition_sfx';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_audio_transition_sfx();
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <option value="silence" <?php selected( $value, 'silence' ); ?>><?php esc_html_e( 'None (600ms Silence)', 'presshub-ai-editor' ); ?></option>
+            <option value="chime" <?php selected( $value, 'chime' ); ?>><?php esc_html_e( 'News Chime', 'presshub-ai-editor' ); ?></option>
+            <option value="whoosh" <?php selected( $value, 'whoosh' ); ?>><?php esc_html_e( 'Deep Whoosh', 'presshub-ai-editor' ); ?></option>
+            <option value="synth" <?php selected( $value, 'synth' ); ?>><?php esc_html_e( 'Modern Synth', 'presshub-ai-editor' ); ?></option>
+        </select>
+        <p class="description"><?php echo esc_html__( 'Inject an audio sound effect (instead of just silence) when transitioning between topics. Note: Custom .wav files (24kHz 16-bit mono) must be placed in the plugin assets/audio/ folder.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

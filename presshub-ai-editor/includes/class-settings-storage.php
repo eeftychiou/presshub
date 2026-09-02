@@ -263,6 +263,10 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
             'type'              => 'integer',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_audio_transition_sfx', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_speed', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_speed' ],
             'type'              => 'number',
@@ -1247,6 +1251,17 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Helper to get the selected sound effect to inject between topics (default 'silence').
+     *
+     * @return string SFX identifier.
+     */
+    public static function get_briefing_audio_transition_sfx(): string {
+        $val = get_option( 'presshub_ai_briefing_audio_transition_sfx', 'silence' );
+        $valid = [ 'silence', 'chime', 'whoosh', 'synth' ];
+        return in_array( $val, $valid, true ) ? $val : 'silence';
+    }
+
+    /**
      * Helper to retrieve configured harvest time budget from database (clamped 10–900s, default 60s).
      *
      * @return int Configured execution time budget in seconds.
@@ -1453,6 +1468,12 @@ class PressHub_AI_Settings_Storage {
 
     public static function sanitize_briefing_audio_split_by_topic( $value ): int {
         return ! empty( $value ) ? 1 : 0;
+    }
+
+    public static function sanitize_briefing_audio_transition_sfx( $value ): string {
+        $clean = is_string( $value ) ? sanitize_text_field( trim( wp_unslash( $value ) ) ) : 'silence';
+        $valid = [ 'silence', 'chime', 'whoosh', 'synth' ];
+        return in_array( $clean, $valid, true ) ? $clean : 'silence';
     }
 
     public static function sanitize_briefing_tts_engine( $value ): string {
@@ -1789,6 +1810,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_voice_speed'          => [ __CLASS__, 'sanitize_voice_speed' ],
             'presshub_ai_briefing_voice_pitch'          => [ __CLASS__, 'sanitize_voice_pitch' ],
             'presshub_ai_briefing_audio_split_by_topic'  => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
+            'presshub_ai_briefing_audio_transition_sfx'  => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
             'presshub_ai_briefing_podcast_category'     => [ __CLASS__, 'sanitize_category_id' ],
             'presshub_ai_briefing_podcast_status'       => [ __CLASS__, 'sanitize_briefing_status' ],
             'presshub_ai_briefing_podcast_preset'       => [ __CLASS__, 'sanitize_preset_slug' ],
