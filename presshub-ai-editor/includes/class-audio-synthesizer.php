@@ -811,41 +811,26 @@ class PressHub_AI_Audio_Synthesizer {
                 }
 
                 if ( ! empty( $topic_wavs ) ) {
-                    $sfx_setting = PressHub_AI_Settings_Storage::get_briefing_audio_transition_sfx();
-                    $sfx_pcm     = '';
-                    if ( 'silence' !== $sfx_setting ) {
-                        $sfx_file = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/' . $sfx_setting;
-                        if ( file_exists( $sfx_file ) ) {
-                            $is_mp3 = ( strtolower( pathinfo( $sfx_file, PATHINFO_EXTENSION ) ) === 'mp3' );
-                            $sfx_wav = '';
+                    $intro_sfx_setting = PressHub_AI_Settings_Storage::get_briefing_audio_intro_sfx();
+                    $trans_sfx_setting = PressHub_AI_Settings_Storage::get_briefing_audio_transition_sfx();
+                    $outro_sfx_setting = PressHub_AI_Settings_Storage::get_briefing_audio_outro_sfx();
 
-                            if ( $is_mp3 ) {
-                                $tmp_wav = wp_temp_dir() . '/sfx_tmp_' . uniqid() . '.wav';
-                                $cmd = 'ffmpeg -i ' . escapeshellarg( $sfx_file ) . ' -ar 24000 -ac 1 -c:a pcm_s16le -f wav -y ' . escapeshellarg( $tmp_wav ) . ' 2>&1';
-                                @shell_exec( $cmd );
-                                if ( file_exists( $tmp_wav ) ) {
-                                    $sfx_wav = file_get_contents( $tmp_wav );
-                                    @unlink( $tmp_wav );
-                                } else {
-                                    error_log( 'PressHub AI: Failed to decode MP3 SFX using ffmpeg. Is ffmpeg installed on the server?' );
-                                }
-                            } else {
-                                $sfx_wav = file_get_contents( $sfx_file );
-                            }
+                    $intro_pcm = $this->get_sfx_pcm( $intro_sfx_setting );
+                    $trans_pcm = $this->get_sfx_pcm( $trans_sfx_setting );
+                    $outro_pcm = $this->get_sfx_pcm( $outro_sfx_setting );
 
-                            if ( ! empty( $sfx_wav ) && strlen( $sfx_wav ) >= 44 && 'RIFF' === substr( $sfx_wav, 0, 4 ) ) {
-                                $pos = strpos( $sfx_wav, 'data' );
-                                if ( false !== $pos && strlen( $sfx_wav ) >= $pos + 8 ) {
-                                    $data_size = unpack( 'V', substr( $sfx_wav, $pos + 4, 4 ) )[1] ?? 0;
-                                    $sfx_pcm = substr( $sfx_wav, $pos + 8, $data_size > 0 ? $data_size : null );
-                                } else {
-                                    $sfx_pcm = substr( $sfx_wav, 44 );
-                                }
-                            }
-                        }
+                    // Prepend intro if present
+                    if ( ! empty( $intro_pcm ) && ! empty( $topic_wavs ) ) {
+                        // We wrap it in a mock WAV header so it can be stitched as a chunk
+                        $topic_wavs = array_merge( [ $this->wrap_pcm_in_wav( $intro_pcm ) ], $topic_wavs );
+                    }
+                    
+                    // Append outro if present
+                    if ( ! empty( $outro_pcm ) && ! empty( $topic_wavs ) ) {
+                        $topic_wavs[] = $this->wrap_pcm_in_wav( $outro_pcm );
                     }
 
-                    $stitched_audio = $this->stitch_wav_chunks( $topic_wavs, 600, 24000, $sfx_pcm );
+                    $stitched_audio = $this->stitch_wav_chunks( $topic_wavs, 600, 24000, $trans_pcm );
                     $duration_ms    = (int) round( ( microtime( true ) - $overall_start ) * 1000 );
 
                     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
@@ -1044,5 +1029,76 @@ class PressHub_AI_Audio_Synthesizer {
             'audio_size'    => strlen( $stitched_audio ),
             'audio_data'    => $stitched_audio,
         ];
+    }
+
+    private function get_sfx_pcm( string $sfx_setting ): string {
+        if ( empty( $sfx_setting ) || 'silence' === $sfx_setting ) {
+            return '';
+        }
+
+        $sfx_file = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/' . $sfx_setting;
+        if ( ! file_exists( $sfx_file ) ) {
+            return '';
+        }
+
+        $is_mp3 = ( strtolower( pathinfo( $sfx_file, PATHINFO_EXTENSION ) ) === 'mp3' );
+        $sfx_wav = '';
+
+        if ( $is_mp3 ) {
+            $tmp_wav = wp_temp_dir() . '/sfx_tmp_' . uniqid() . '.wav';
+            $cmd = 'ffmpeg -i ' . escapeshellarg( $sfx_file ) . ' -ar 24000 -ac 1 -c:a pcm_s16le -f wav -y ' . escapeshellarg( $tmp_wav ) . ' 2>&1';
+            @shell_exec( $cmd );
+            if ( file_exists( $tmp_wav ) ) {
+                $sfx_wav = file_get_contents( $tmp_wav );
+                @unlink( $tmp_wav );
+            } else {
+                error_log( 'PressHub AI: Failed to decode MP3 SFX using ffmpeg.' );
+            }
+        } else {
+            $sfx_wav = file_get_contents( $sfx_file );
+        }
+
+        if ( ! empty( $sfx_wav ) && strlen( $sfx_wav ) >= 44 && 'RIFF' === substr( $sfx_wav, 0, 4 ) ) {
+            $pos = strpos( $sfx_wav, 'data' );
+            if ( false !== $pos && strlen( $sfx_wav ) >= $pos + 8 ) {
+                $data_size = unpack( 'V', substr( $sfx_wav, $pos + 4, 4 ) )[1] ?? 0;
+                return substr( $sfx_wav, $pos + 8, $data_size > 0 ? $data_size : null );
+            }
+            return substr( $sfx_wav, 44 );
+        }
+
+        return '';
+    }
+
+    private function wrap_pcm_in_wav( string $pcm_data, int $sample_rate = 24000 ): string {
+        if ( empty( $pcm_data ) ) {
+            return '';
+        }
+
+        $data_len = strlen( $pcm_data );
+        $channels = 1;
+        $bits_per_sample = 16;
+        $byte_rate = $sample_rate * $channels * ( $bits_per_sample / 8 );
+        $block_align = $channels * ( $bits_per_sample / 8 );
+        $chunk_size = 36 + $data_len;
+
+        $header = pack(
+            'A4VA4A4VvvVVvvA4V',
+            'RIFF',
+            $chunk_size,
+            'WAVE',
+            'fmt ',
+            16,
+            1,
+            $channels,
+            $sample_rate,
+            $byte_rate,
+            $block_align,
+            $bits_per_sample,
+            'data',
+            $data_len
+        );
+
+        return $header . $pcm_data;
     }
 }

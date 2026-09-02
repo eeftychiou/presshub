@@ -267,6 +267,14 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_audio_intro_sfx', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_audio_outro_sfx', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_voice_speed', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_speed' ],
             'type'              => 'number',
@@ -1269,6 +1277,14 @@ class PressHub_AI_Settings_Storage {
         return (string) get_option( 'presshub_ai_briefing_audio_transition_sfx', 'silence' );
     }
 
+    public static function get_briefing_audio_intro_sfx(): string {
+        return (string) get_option( 'presshub_ai_briefing_audio_intro_sfx', 'silence' );
+    }
+
+    public static function get_briefing_audio_outro_sfx(): string {
+        return (string) get_option( 'presshub_ai_briefing_audio_outro_sfx', 'silence' );
+    }
+
     public static function get_podcast_prompt_1(): string {
         return (string) get_option( 'presshub_ai_briefing_podcast_prompt_1', '' );
     }
@@ -1842,7 +1858,9 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_voice_speed'          => [ __CLASS__, 'sanitize_voice_speed' ],
             'presshub_ai_briefing_voice_pitch'          => [ __CLASS__, 'sanitize_voice_pitch' ],
             'presshub_ai_briefing_audio_split_by_topic'  => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
-            'presshub_ai_briefing_audio_transition_sfx'  => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
+            'presshub_ai_briefing_audio_transition_sfx' => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
+            'presshub_ai_briefing_audio_intro_sfx'      => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
+            'presshub_ai_briefing_audio_outro_sfx'      => [ __CLASS__, 'sanitize_briefing_audio_transition_sfx' ],
             'presshub_ai_briefing_podcast_category'     => [ __CLASS__, 'sanitize_category_id' ],
             'presshub_ai_briefing_podcast_status'       => [ __CLASS__, 'sanitize_briefing_status' ],
             'presshub_ai_briefing_podcast_preset'       => [ __CLASS__, 'sanitize_preset_slug' ],

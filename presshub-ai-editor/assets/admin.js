@@ -2981,6 +2981,33 @@ jQuery(document).ready(function($) {
     $(document).on('change', '#presshub_ai_briefing_host_count', updateBriefingHostRows);
     updateBriefingHostRows();
 
+    // SFX Preview Player
+    var currentAudio = null;
+    $(document).on('click', '.presshub-sfx-preview-btn', function() {
+        var $btn = $(this);
+        var $select = $btn.siblings('.presshub-sfx-select');
+        var filename = $select.val();
+        var baseUrl = $select.data('audio-url');
+        
+        if (!filename || filename === 'silence') {
+            return;
+        }
+
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+            $('.presshub-sfx-preview-btn').text('▶ Preview');
+        }
+
+        currentAudio = new Audio(baseUrl + filename);
+        $btn.text('⏸ Playing...');
+        currentAudio.play();
+
+        currentAudio.onended = function() {
+            $btn.text('▶ Preview');
+        };
+    });
+
     // ------------------------------------------------------------------
     // Diagnostic Log Viewer Handlers.
     // ------------------------------------------------------------------

@@ -329,9 +329,21 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_intro_sfx"><?php echo __( 'Podcast Intro SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_intro_sfx_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_audio_transition_sfx"><?php echo __( 'Topic Transition SFX', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_audio_transition_sfx_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_outro_sfx"><?php echo __( 'Podcast Outro SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_outro_sfx_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1961,19 +1973,36 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    public function render_briefing_audio_intro_sfx_field() {
+        $option = 'presshub_ai_briefing_audio_intro_sfx';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_audio_intro_sfx();
+        $this->render_sfx_dropdown( $option, $value, __( 'Play at the very beginning of the podcast.', 'presshub-ai-editor' ) );
+    }
+
     public function render_briefing_audio_transition_sfx_field() {
         $option = 'presshub_ai_briefing_audio_transition_sfx';
         $value  = PressHub_AI_Settings_Storage::get_briefing_audio_transition_sfx();
+        $this->render_sfx_dropdown( $option, $value, __( 'Inject an audio sound effect (instead of just silence) when transitioning between topics.', 'presshub-ai-editor' ) );
+    }
+
+    public function render_briefing_audio_outro_sfx_field() {
+        $option = 'presshub_ai_briefing_audio_outro_sfx';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_audio_outro_sfx();
+        $this->render_sfx_dropdown( $option, $value, __( 'Play at the very end of the podcast.', 'presshub-ai-editor' ) );
+    }
+
+    private function render_sfx_dropdown( $option, $value, $desc ) {
         $audio_dir = plugin_dir_path( dirname( __FILE__ ) ) . 'assets/audio/';
+        $audio_url = plugin_dir_url( dirname( __FILE__ ) ) . 'assets/audio/';
         $available_sfx = [
-            'silence' => __( 'None (600ms Silence)', 'presshub-ai-editor' )
+            'silence' => __( 'None', 'presshub-ai-editor' )
         ];
 
         if ( is_dir( $audio_dir ) ) {
             $files = array_merge( (array) glob( $audio_dir . '*.wav' ), (array) glob( $audio_dir . '*.mp3' ) );
             if ( $files ) {
                 foreach ( $files as $file ) {
-                    $basename = basename( $file ); // e.g., 'chime.wav'
+                    $basename = basename( $file );
                     $name_only = pathinfo( $file, PATHINFO_FILENAME );
                     $label    = ucwords( str_replace( [ '-', '_' ], ' ', $name_only ) ) . ' (' . strtoupper( pathinfo( $file, PATHINFO_EXTENSION ) ) . ')';
                     $available_sfx[ $basename ] = $label;
@@ -1981,14 +2010,17 @@ class PressHub_AI_Settings_Render {
             }
         }
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
-            <?php foreach ( $available_sfx as $sfx_key => $sfx_label ) : ?>
-                <option value="<?php echo self::esc_attr_safe( $sfx_key ); ?>" <?php selected( $value, $sfx_key ); ?>>
-                    <?php echo self::esc_html_safe( $sfx_label ); ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-        <p class="description"><?php echo esc_html__( 'Inject an audio sound effect (instead of just silence) when transitioning between topics. Note: Custom .wav files (24kHz 16-bit mono) must be placed in the plugin assets/audio/ folder.', 'presshub-ai-editor' ); ?></p>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text presshub-sfx-select" data-audio-url="<?php echo esc_url( $audio_url ); ?>">
+                <?php foreach ( $available_sfx as $sfx_key => $sfx_label ) : ?>
+                    <option value="<?php echo self::esc_attr_safe( $sfx_key ); ?>" <?php selected( $value, $sfx_key ); ?>>
+                        <?php echo self::esc_html_safe( $sfx_label ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <button type="button" class="button button-secondary presshub-sfx-preview-btn">▶ Preview</button>
+        </div>
+        <p class="description"><?php echo esc_html( $desc ) . ' ' . esc_html__( 'Note: Custom files must be placed in the plugin assets/audio/ folder.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
