@@ -191,6 +191,15 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_timeout' ],
             'type'              => 'integer',
         ] );
+        // Issue #80 — Settings-First: TTS payload debug log toggle. When enabled
+        // every Gemini TTS API call appends detailed request/response JSON
+        // entries to wp-content/uploads/presshub-ai-tts-debug.log via the
+        // `presshub_ai_tts_payload_log` action, so operators can diagnose
+        // voice drift or unexpected voice allocation without touching code.
+        register_setting( 'presshub_ai_options', 'presshub_ai_log_tts_payloads', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_boolean' ],
+            'type'              => 'boolean',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_sources', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_sources' ],
             'type'              => 'array',
@@ -468,6 +477,9 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_tts_api_key', __( 'Speech Generation API Key (Google AI Studio / Gemini)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_api_key_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_model', __( 'Voice Generation AI Model', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_timeout', __( 'Speech Generation Request Timeout (seconds)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_timeout_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        // Issue #80 — granular TTS payload debug toggle, surfaced under
+        // the Daily Briefing section next to the speech timeout knob.
+        add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Log TTS Payload Details', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_schedule_enabled', __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ), [ $render, 'render_briefing_schedule_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1325,6 +1337,21 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Helper to retrieve the operator-configurable "Log TTS Payload Details"
+     * toggle. Issue #80 — Settings-First: when enabled, every Gemini TTS API
+     * call appends a detailed JSON entry (endpoint URL, masked headers,
+     * speaker-voice mapping, prompt text, full request body, response
+     * metadata) to wp-content/uploads/presshub-ai-tts-debug.log via the
+     * `presshub_ai_tts_payload_log` action. Defaults to false so production
+     * log size is preserved.
+     *
+     * @return bool True when TTS payload debug logging is enabled.
+     */
+    public static function get_log_tts_payloads(): bool {
+        return '1' === (string) get_option( 'presshub_ai_log_tts_payloads', '0' );
+    }
+
+    /**
      * Helper to retrieve the maximum number of articles forwarded to the
      * curation LLM (clamped 1–200, default 40). Issue #61 — Settings-First:
      * the authoritative value lives in the WordPress option; this helper is
@@ -1897,6 +1924,8 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_remove_briefing_tts_api_key'   => [ __CLASS__, 'sanitize_remove_briefing_tts_api_key' ],
             'presshub_ai_briefing_tts_model'            => [ __CLASS__, 'sanitize_briefing_tts_model' ],
             'presshub_ai_briefing_tts_timeout'          => [ __CLASS__, 'sanitize_briefing_tts_timeout' ],
+            // Issue #80 — Settings-First: granular TTS payload debug toggle.
+            'presshub_ai_log_tts_payloads'              => [ __CLASS__, 'sanitize_boolean' ],
         ];
 
         $copilot_map = [

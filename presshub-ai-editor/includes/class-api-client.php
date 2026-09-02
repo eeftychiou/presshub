@@ -1128,6 +1128,87 @@ class PressHub_AI_API_Client {
     }
 
     /**
+     * Issue #80 — Build a normalized TTS payload log entry used by both the
+     * "request" and "response" log emissions. The entry is a plain PHP array
+     * that downstream code (log file writer, action listener, CLI inspector)
+     * can render however it prefers.
+     *
+     * @param string $phase One of "request" | "response".
+     * @param array  $data  Phase-specific fields. Kept shallow so the file
+     *                      writer never has to walk deep structures.
+     * @return array{phase:string, timestamp:string, data:array}
+     */
+    public static function build_tts_payload_log_entry( string $phase, array $data ): array {
+        return [
+            'phase'     => $phase,
+            'timestamp' => gmdate( 'Y-m-d H:i:s' ),
+            'data'      => $data,
+        ];
+    }
+
+    /**
+     * Issue #80 — Persist a single TTS payload log entry to
+     * wp-content/uploads/presshub-ai-tts-debug.log and mirror it on the
+     * presshub_ai_tts_payload_log action so developer scripts / CLI tools
+     * can intercept the same payload without parsing the file.
+     *
+     * The action receives the raw entry array so consumers can shape their
+     * own downstream storage (Slack, Sentry, audit table, etc.).
+     *
+     * @param array $entry Entry as produced by {@see self::build_tts_payload_log_entry()}.
+     */
+    public static function write_tts_payload_log( array $entry ): void {
+        $json = wp_json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+        if ( false === $json || '' === $json ) {
+            return;
+        }
+
+        // Mirror via the action hook first so any hooked listener sees the
+        // payload even if the file write is later disabled or restricted.
+        if ( function_exists( 'do_action' ) ) {
+            do_action( 'presshub_ai_tts_payload_log', $entry, $json );
+        }
+
+        $uploads = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
+        if ( empty( $uploads['basedir'] ) ) {
+            return;
+        }
+
+        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
+        if ( ! is_dir( $base_dir ) && function_exists( 'wp_mkdir_p' ) ) {
+            wp_mkdir_p( $base_dir );
+        }
+
+        $log_file = $base_dir . '/presshub-ai-tts-debug.log';
+        $line     = sprintf( "[%s] %s\n", $entry['timestamp'] ?? gmdate( 'Y-m-d H:i:s' ), $json );
+
+        // Auto-rotate if the file grows past 8 MB to avoid filling uploads.
+        if ( file_exists( $log_file ) && filesize( $log_file ) > 8 * 1024 * 1024 ) {
+            $rotated = $log_file . '.' . gmdate( 'Ymd_His' ) . '.old';
+            @rename( $log_file, $rotated );
+        }
+
+        @file_put_contents( $log_file, $line, FILE_APPEND | LOCK_EX );
+    }
+
+    /**
+     * Issue #80 — Mask any `key=` query parameter in a Gemini TTS endpoint
+     * URL so log entries can show the full URL without leaking the API key.
+     * The query string replacement is intentionally narrow (only the `key`
+     * parameter is touched) to preserve every other endpoint detail.
+     *
+     * @param string $url Full Gemini TTS endpoint URL.
+     * @return string URL with `key=...` value replaced by `key=***masked***`.
+     */
+    public static function mask_api_key_in_url( string $url ): string {
+        if ( '' === $url ) {
+            return $url;
+        }
+        $masked = preg_replace( '/([?&])key=[^&\s]+/', '$1key=***masked***', $url );
+        return is_string( $masked ) ? $masked : $url;
+    }
+
+    /**
      * Synthesize natural Greek speech using Google AI Studio Gemini Flash Audio (logosAI replication).
      *
      * @param string      $text            Spoken dialogue or turn text.
@@ -1309,6 +1390,41 @@ class PressHub_AI_API_Client {
                 PressHub_AI_Logger::debug( sprintf( '[LogosAI Speech] POST %s with model "%s"', 'generateContent', $model ) );
             }
 
+            // Issue #80 — Settings-First: capture full TTS request payload
+            // before dispatch when the operator has enabled the debug toggle.
+            // The log file is wp-content/uploads/presshub-ai-tts-debug.log and
+            // the same payload is mirrored on the presshub_ai_tts_payload_log
+            // action so developer scripts / CLI inspectors can intercept it.
+            $tts_payload_log_enabled = class_exists( 'PressHub_AI_Settings_Storage' )
+                && PressHub_AI_Settings_Storage::get_log_tts_payloads();
+            $tts_call_started_at = microtime( true );
+            $tts_request_payload = null;
+            $tts_response_payload = null;
+            if ( $tts_payload_log_enabled ) {
+                $tts_request_payload = self::build_tts_payload_log_entry(
+                    'request',
+                    [
+                        'model'           => $model,
+                        'endpoint_masked' => self::mask_api_key_in_url( $gen_url ),
+                        'headers'         => [
+                            'Content-Type'   => 'application/json',
+                            'x-goog-api-key' => class_exists( 'PressHub_AI_Provider_Store' )
+                                ? PressHub_AI_Provider_Store::mask_key( $tts_api_key )
+                                : '***masked***',
+                            'User-Agent'     => 'aistudio-build',
+                        ],
+                        'speaker_mapping'  => $is_multi_speaker ? $multi_speakers : null,
+                        'voice_name'       => $is_multi_speaker ? null : $voice_name,
+                        'style'            => $style,
+                        'is_multi_speaker' => $is_multi_speaker,
+                        'prompt_text'      => $prompt_text,
+                        'request_body'     => $gen_body,
+                        'chars'            => mb_strlen( $clean_text ),
+                    ]
+                );
+                self::write_tts_payload_log( $tts_request_payload );
+            }
+
             $gen_res = wp_remote_post( $gen_url, [
                 'headers' => [
                     'Content-Type'   => 'application/json',
@@ -1318,6 +1434,26 @@ class PressHub_AI_API_Client {
                 'body'    => wp_json_encode( $gen_body ),
                 'timeout' => $http_timeout,
             ] );
+
+            if ( $tts_payload_log_enabled ) {
+                $tts_latency_ms = (int) round( ( microtime( true ) - $tts_call_started_at ) * 1000 );
+                $tts_log_meta   = [
+                    'model'      => $model,
+                    'endpoint'   => self::mask_api_key_in_url( $gen_url ),
+                    'latency_ms' => $tts_latency_ms,
+                ];
+                if ( is_wp_error( $gen_res ) ) {
+                    $tts_log_meta['wp_error']     = true;
+                    $tts_log_meta['error_code']   = $gen_res->get_error_code();
+                    $tts_log_meta['error_message'] = $gen_res->get_error_message();
+                } else {
+                    $tts_log_meta['http_code'] = wp_remote_retrieve_response_code( $gen_res );
+                    $tts_log_meta['mime_type'] = wp_remote_retrieve_header( $gen_res, 'content-type' );
+                    $tts_log_meta['bytes']     = strlen( (string) wp_remote_retrieve_body( $gen_res ) );
+                }
+                $tts_response_payload = self::build_tts_payload_log_entry( 'response', $tts_log_meta );
+                self::write_tts_payload_log( $tts_response_payload );
+            }
 
             if ( ! is_wp_error( $gen_res ) ) {
                 if ( function_exists( 'wp_raise_memory_limit' ) ) {
