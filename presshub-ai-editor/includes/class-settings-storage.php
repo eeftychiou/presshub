@@ -1291,15 +1291,27 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function get_podcast_prompt_1(): string {
-        return (string) get_option( 'presshub_ai_briefing_podcast_prompt_1', '' );
+        $val = (string) get_option( 'presshub_ai_briefing_podcast_prompt_1', '' );
+        if ( empty( trim( $val ) ) && class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+            return PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( 1 );
+        }
+        return $val;
     }
 
     public static function get_podcast_prompt_2(): string {
-        return (string) get_option( 'presshub_ai_briefing_podcast_prompt_2', '' );
+        $val = (string) get_option( 'presshub_ai_briefing_podcast_prompt_2', '' );
+        if ( empty( trim( $val ) ) && class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+            return PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( 2 );
+        }
+        return $val;
     }
 
     public static function get_podcast_prompt_3(): string {
-        return (string) get_option( 'presshub_ai_briefing_podcast_prompt_3', '' );
+        $val = (string) get_option( 'presshub_ai_briefing_podcast_prompt_3', '' );
+        if ( empty( trim( $val ) ) && class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+            return PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( 3 );
+        }
+        return $val;
     }
 
     /**

@@ -77,7 +77,7 @@ class PressHub_AI_Podcast_Producer {
      * @param int $host_count Number of presenters (1 solo, 2 co-hosts, 3 roundtable).
      * @return string Base system prompt template.
      */
-    public function get_default_dialogue_prompt( int $host_count = 2 ): string {
+    public static function get_default_dialogue_prompt( int $host_count = 2 ): string {
         if ( 1 === $host_count ) {
             $intro = "Είσαι ένας εξειδικευμένος παραγωγός podcast και σεναριογράφος ενημερωτικών εκπομπών. "
                 . "Αποστολή σου είναι να δημιουργήσεις ένα ζωντανό, ευχάριστο, άμεσο και απόλυτα ενημερωτικό podcast ενημέρωσης (μονόλογο) στα Ελληνικά "
@@ -324,9 +324,7 @@ class PressHub_AI_Podcast_Producer {
             }
         }
 
-        if ( empty( trim( $base_prompt ) ) ) {
-            $base_prompt = $this->get_default_dialogue_prompt( $host_count );
-        }
+
         $base_prompt = apply_filters( 'presshub_ai_podcast_producer_system_prompt', $base_prompt );
 
         // 2. Hydrate placeholders
