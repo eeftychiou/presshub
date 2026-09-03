@@ -487,12 +487,72 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
+     * Issue #91 — Strip audio-synthesis topic scaffolding from a script
+     * before it is paragraphized for publication.
+     *
+     * Topic markers exist solely to instruct the synthesizer to split
+     * synthesis per topic; they have no business appearing in the
+     * public-facing transcript. Drop entire lines matching any of the
+     * four variants enumerated in PressHub_AI_Podcast_Producer::parse_script():
+     *   - [TOPIC_START: Title] ... [TOPIC_END]
+     *   - <!-- TOPIC_START: Title --> ... <!-- TOPIC_END -->
+     *   - === TOPIC: Title === ... === END ===
+     *   - ### TOPIC: Title ... ### END
+     * Then collapse runs of blank lines so paragraphization only sees
+     * dialogue lines.
+     *
+     * @param string $script Raw script text (multi-line).
+     * @return string Script with topic-marker lines dropped.
+     */
+    public function strip_topic_markers( string $script ): string {
+        if ( '' === trim( $script ) ) {
+            return $script;
+        }
+
+        $lines = preg_split( '/\r?\n/', $script );
+        $out   = [];
+
+        // Mirrors PressHub_AI_Podcast_Producer::parse_script() patterns
+        // (L570 for TOPIC_START and L592 for TOPIC_END) so the parser
+        // and the stripper recognize the same set of variants.
+        $topic_start_re = '/^\s*(?:\[|\<\!\-\-|\={2,3}|\#{2,3})?\s*TOPIC(?:_?START)?\s*:[^\]\>\=]*(?:\]|\-\-\>|\={2,3})?\s*$/iu';
+        $topic_end_re   = '/^\s*(?:\[|\<\!\-\-)?\s*TOPIC_?END\s*(?:\]|\-\-\>)?\s*$/iu';
+
+        foreach ( $lines as $line ) {
+            $trimmed = trim( $line );
+            if ( '' === $trimmed ) {
+                $out[] = $line;
+                continue;
+            }
+            if ( preg_match( $topic_start_re, $trimmed ) ) {
+                continue;
+            }
+            if ( preg_match( $topic_end_re, $trimmed ) ) {
+                continue;
+            }
+            $out[] = $line;
+        }
+
+        // Collapse runs of 3+ consecutive blank lines into a single blank
+        // line so the resulting paragraphization doesn't leave awkward gaps.
+        $collapsed = preg_replace( '/\n{3,}/', "\n\n", implode( "\n", $out ) );
+        // Trim leading/trailing blank lines.
+        return trim( $collapsed );
+    }
+
+    /**
      * Format raw dialogue transcript into structured HTML paragraphs.
      *
      * @param string $transcript Raw dialogue script.
      * @return string Formatted HTML.
      */
     public function format_transcript_html( string $transcript ): string {
+        // Issue #91 — drop audio-synthesis topic scaffolding before
+        // paragraphization so [TOPIC_START] / [TOPIC_END] markers and
+        // their HTML/Markdown variants never leak into the published
+        // post body.
+        $transcript = $this->strip_topic_markers( $transcript );
+
         $lines = explode( "\n", trim( $transcript ) );
         $paragraphs = [];
 
@@ -557,7 +617,12 @@ class PressHub_AI_Audio_Synthesizer {
         $post_status = ! empty( trim( $status_option ) ) ? trim( $status_option ) : 'pending';
 
         // Content: WordPress Audio Block + Formatted Transcript
-        $formatted_transcript = $this->format_transcript_html( $transcript );
+        // Issue #91 — belt-and-braces: strip audio-synthesis topic scaffolding
+        // (e.g. [TOPIC_START: ...]) BEFORE format_transcript_html(), so any
+        // future entry point that bypasses format_transcript_html() still
+        // inherits the defensive stripping and the markers never leak into
+        // the published post_content.
+        $formatted_transcript = $this->format_transcript_html( $this->strip_topic_markers( $transcript ) );
 
         $post_content = "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
             . "<figure class=\"wp-block-audio\"><audio controls src=\"" . esc_url_raw( $audio_url ) . "\"></audio></figure>\n"
