@@ -65,9 +65,9 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_podcast_preset',
             'presshub_ai_briefing_target_duration',
             'presshub_ai_briefing_host_count',
-            'presshub_ai_briefing_host_female',
-            'presshub_ai_briefing_host_male',
-            'presshub_ai_briefing_host_tertiary',
+            // Issue #90 — host-name fields (host_female/host_male/host_tertiary)
+            // are intentionally hidden from the settings UI. The legacy options
+            // remain in the DB for any code that still reads them.
             'presshub_ai_briefing_voice_female',
             'presshub_ai_briefing_voice_male',
             'presshub_ai_briefing_voice_tertiary',

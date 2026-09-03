@@ -436,6 +436,22 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
             'type'              => 'integer',
         ] );
+        // Issue #90 — Settings-First: podcast dialogue style selector.
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_style', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_podcast_style' ],
+            'type'              => 'string',
+        ] );
+        // Issue #90 — per-style prompt overrides (3 styles × 3 host counts = 9).
+        // Each option key uses the sanitize_briefing_prompt() callback (already in place).
+        $styles_for_settings = [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ];
+        foreach ( $styles_for_settings as $style_key ) {
+            foreach ( [ 1, 2, 3 ] as $host_count_n ) {
+                register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_prompt_' . $host_count_n . '_' . $style_key, [
+                    'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_prompt' ],
+                    'type'              => 'string',
+                ] );
+            }
+        }
 
         // --- P1: sections ---
         add_settings_section( 'presshub_ai_general', __( 'General', 'presshub-ai-editor' ), [ $render, 'render_general_section' ], 'presshub-ai' );
@@ -493,9 +509,13 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_podcast_preset', __( 'Podcast Dialogue Preset', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_preset_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_target_duration', __( 'Target Podcast Duration', 'presshub-ai-editor' ), [ $render, 'render_briefing_target_duration_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_host_count', __( 'Podcast Presenters Count', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_count_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_host_female', __( 'Female Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_host_male', __( 'Male Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_host_tertiary', __( 'Third Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_tertiary_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        // Issue #90 — Hide host-name UI fields. Legacy options remain in the DB
+        // for any code that still reads them; they just don't surface in the UI.
+        // add_settings_field( 'presshub_ai_briefing_host_female', __( 'Female Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        // add_settings_field( 'presshub_ai_briefing_host_male', __( 'Male Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        // add_settings_field( 'presshub_ai_briefing_host_tertiary', __( 'Third Host Name', 'presshub-ai-editor' ), [ $render, 'render_briefing_host_tertiary_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        // Issue #90 — Settings-First: podcast dialogue style selector.
+        add_settings_field( 'presshub_ai_briefing_podcast_style', __( 'Podcast Dialogue Style', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_female', __( 'Female Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_female_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_male', __( 'Male Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_male_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_voice_tertiary', __( 'Third Host Voice Model (TTS)', 'presshub-ai-editor' ), [ $render, 'render_briefing_voice_tertiary_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -519,6 +539,18 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_podcast_prompt_1', __( 'Podcast Dialogue System Prompt (1 Host)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_1_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_prompt_2', __( 'Podcast Dialogue System Prompt (2 Hosts)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_2_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_prompt_3', __( 'Podcast Dialogue System Prompt (3 Hosts)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_3_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+
+        // Issue #90 — Per-style prompt overrides (9 = 3 styles × 3 host counts).
+        // Each style's textareas are rendered via a dedicated render method
+        // that displays all 3 host-count variants together with a collapsible
+        // header for clarity.
+        add_settings_field( 'presshub_ai_briefing_podcast_prompts_default_greek_chat', __( 'Podcast Prompt Overrides: Default Greek Chat', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompts_default_greek_chat_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_prompts_bbc_broadcasting_standards', __( 'Podcast Prompt Overrides: BBC Broadcasting Standards', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompts_bbc_broadcasting_standards_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_prompts_conversational_news_reporting', __( 'Podcast Prompt Overrides: Conversational News Reporting', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompts_conversational_news_reporting_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+
+        // Issue #90 — Live preview block: shows the resolved template after
+        // style + host_count + per-style overrides have been applied.
+        add_settings_field( 'presshub_ai_briefing_podcast_live_preview', __( 'Podcast Dialogue Live Preview', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_live_preview_field' ], 'presshub-ai', 'presshub_ai_briefing' );
     }
 
 
@@ -1303,27 +1335,83 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function get_podcast_prompt_1(): string {
-        $val = (string) get_option( 'presshub_ai_briefing_podcast_prompt_1', '' );
-        if ( empty( trim( $val ) ) && class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
-            return PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( 1 );
-        }
-        return $val;
+        return self::resolve_podcast_prompt( 1, 'presshub_ai_briefing_podcast_prompt_1', '' );
+    }
+
+    /**
+     * Issue #90 — overload of get_podcast_prompt_1() that accepts an explicit
+     * style key. Precedence:
+     *   1. presshub_ai_briefing_podcast_prompt_1_<style> (per-style override)
+     *   2. PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( 1, $style )
+     * The legacy global override (presshub_ai_briefing_podcast_prompt_1)
+     * is no longer consulted when a style is explicitly passed; operators
+     * customize per-style from now on.
+     */
+    public static function get_podcast_prompt_1_for_style( string $style ): string {
+        return self::resolve_podcast_prompt( 1, 'presshub_ai_briefing_podcast_prompt_1', $style );
     }
 
     public static function get_podcast_prompt_2(): string {
-        $val = (string) get_option( 'presshub_ai_briefing_podcast_prompt_2', '' );
-        if ( empty( trim( $val ) ) && class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
-            return PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( 2 );
-        }
-        return $val;
+        return self::resolve_podcast_prompt( 2, 'presshub_ai_briefing_podcast_prompt_2', '' );
+    }
+
+    public static function get_podcast_prompt_2_for_style( string $style ): string {
+        return self::resolve_podcast_prompt( 2, 'presshub_ai_briefing_podcast_prompt_2', $style );
     }
 
     public static function get_podcast_prompt_3(): string {
-        $val = (string) get_option( 'presshub_ai_briefing_podcast_prompt_3', '' );
-        if ( empty( trim( $val ) ) && class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
-            return PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( 3 );
+        return self::resolve_podcast_prompt( 3, 'presshub_ai_briefing_podcast_prompt_3', '' );
+    }
+
+    public static function get_podcast_prompt_3_for_style( string $style ): string {
+        return self::resolve_podcast_prompt( 3, 'presshub_ai_briefing_podcast_prompt_3', $style );
+    }
+
+    /**
+     * Issue #90 — shared resolver for podcast prompt options. Reads
+     * `${prefix}_${style}` first; if empty, falls back to the style-specific
+     * built-in default template via PressHub_AI_Podcast_Producer.
+     *
+     * @param int    $host_count Number of presenters (1, 2, or 3).
+     * @param string $option_prefix e.g. 'presshub_ai_briefing_podcast_prompt_1'.
+     * @param string $style Style key. Empty string = use the active saved style.
+     * @return string The resolved prompt template (never empty).
+     */
+    private static function resolve_podcast_prompt( int $host_count, string $option_prefix, string $style ): string {
+        $style_key = '' !== $style ? $style : self::get_podcast_style();
+
+        $per_style_option = $option_prefix . '_' . $style_key;
+        $val              = (string) get_option( $per_style_option, '' );
+        if ( ! empty( trim( $val ) ) ) {
+            return $val;
         }
-        return $val;
+
+        // Fall back to style-specific built-in default template.
+        if ( class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+            return PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count, $style_key );
+        }
+        return '';
+    }
+
+    /**
+     * Issue #90 — Settings-First: get the active podcast dialogue style.
+     *
+     * @return string One of 'default_greek_chat', 'bbc_broadcasting_standards',
+     *                'conversational_news_reporting'.
+     */
+    public static function get_podcast_style(): string {
+        return (string) get_option( 'presshub_ai_briefing_podcast_style', 'default_greek_chat' );
+    }
+
+    /**
+     * Issue #90 — Settings-First sanitizer for presshub_ai_briefing_podcast_style.
+     * Accepts only one of the three known style keys; falls back to
+     * 'default_greek_chat' for unknown / empty / non-string values.
+     */
+    public static function sanitize_podcast_style( $value ): string {
+        $value = (string) wp_unslash( $value );
+        $allowed = [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ];
+        return in_array( $value, $allowed, true ) ? $value : 'default_greek_chat';
     }
 
     /**
