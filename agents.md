@@ -238,6 +238,9 @@ php -l presshub-ai-editor/presshub-ai-editor.php
 php -l presshub-ai-editor/includes/<modified-file>.php
 ```
 
+### 5. CI Failure Verification During PR Review
+When acting as a PR reviewer, never blindly trust a PR author's claim that a CI failure is a "known issue," "environmental flakiness," or "baseline failure." You **MUST** inspect the actual CI failure logs (e.g., using `gh run view <run-id> --log-failed`) to verify that the specific failed assertions and stack traces exactly match the known baseline issue. If the failure differs, it is a new regression introduced by the PR and must be addressed before the PR can be merged.
+
 ---
 
 ## 👁️ Visual Inspection, Browser Tool & Screenshot Verification
