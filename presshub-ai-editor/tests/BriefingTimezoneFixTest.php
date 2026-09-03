@@ -5,9 +5,28 @@
  * The bug: on the Daily Briefing Hub admin page, the four
  * `.presshub-stage-status-box` containers (Harvest / Curation / Script /
  * Audio) leaked yesterday's UTC-date pipeline status into the early
- * morning of a new local day, because the writer used
- * `current_time('mysql')` (WP-local timezone) while reader defaults used
- * `gmdate('Y-m-d')` (UTC).
+ * morning of a new local day. Root cause: the reader-default date
+ * anchors in `class-briefing-admin.php` and `briefing-admin.js` used
+ * `gmdate('Y-m-d')` / `new Date().toISOString().split('T')[0]` (UTC),
+ * while the writer in `class-token-logger.php` uses
+ * `current_time('mysql')` (WP-local) — so the aggregator queried the
+ * wrong day.
+ *
+ * The fix anchors all four date defaults in `wp_date('Y-m-d')` /
+ * `data-date` from the server (WP-local). An empty-state placeholder
+ * ("Awaiting first run for this date.") is added to the four
+ * `.presshub-stage-status-box` containers (PHP pre-render + JS renderer)
+ * so a freshly-rolled day never silently shows yesterday's chips.
+ *
+ * **Important — what was NOT changed:** `PressHub_AI_Token_Logger::get_logs()`
+ * was deliberately NOT modified to shift its `'Y-m-d' 00:00:00 /
+ * 23:59:59` boundaries by `gmt_offset`. Because `current_time('mysql')`
+ * defaults to `$gmt = false`, the `created_at` column already stores
+ * WP-local timestamps (e.g. Cyprus at 02:00 local writes
+ * `'2026-09-03 02:00:00'`). A simple string comparison against the same
+ * local-time day boundaries is therefore correct — shifting the
+ * boundaries into UTC would have introduced a regression. See PR #84
+ * review comment for the full rationale.
  *
  * @group issue-83
  */
@@ -47,54 +66,31 @@ class BriefingTimezoneFixTest {
             $failures[] = "wp_date('Y-m-d') must return '2026-09-03' for UTC site at noon; got '{$wp_local_today}'.";
         }
 
-        // Case 2: normalize_date_boundary() returns timezone-correct UTC boundaries.
-        self::reset_world();
-        $start = PressHub_AI_Token_Logger::normalize_date_boundary( '2026-09-03', false, 3.0 );
-        $end   = PressHub_AI_Token_Logger::normalize_date_boundary( '2026-09-03', true,  3.0 );
-        if ( '2026-09-02 21:00:00' !== $start ) {
-            $failures[] = "normalize_date_boundary('2026-09-03', false, 3.0) should be '2026-09-02 21:00:00'; got '{$start}'.";
-        }
-        if ( '2026-09-03 20:59:59' !== $end ) {
-            $failures[] = "normalize_date_boundary('2026-09-03', true, 3.0) should be '2026-09-03 20:59:59'; got '{$end}'.";
-        }
-
-        $start_utc = PressHub_AI_Token_Logger::normalize_date_boundary( '2026-09-03', false, 0.0 );
-        $end_utc   = PressHub_AI_Token_Logger::normalize_date_boundary( '2026-09-03', true,  0.0 );
-        if ( '2026-09-03 00:00:00' !== $start_utc ) {
-            $failures[] = "normalize_date_boundary('2026-09-03', false, 0.0) should be '2026-09-03 00:00:00'; got '{$start_utc}'.";
-        }
-        if ( '2026-09-03 23:59:59' !== $end_utc ) {
-            $failures[] = "normalize_date_boundary('2026-09-03', true, 0.0) should be '2026-09-03 23:59:59'; got '{$end_utc}'.";
-        }
-
-        $start_east = PressHub_AI_Token_Logger::normalize_date_boundary( '2026-09-03', false, -5.0 );
-        if ( '2026-09-03 05:00:00' !== $start_east ) {
-            $failures[] = "normalize_date_boundary('2026-09-03', false, -5.0) should be '2026-09-03 05:00:00'; got '{$start_east}'.";
-        }
-
-        if ( '' !== PressHub_AI_Token_Logger::normalize_date_boundary( '', false, 3.0 ) ) {
-            $failures[] = "normalize_date_boundary('', ...) must return empty string.";
-        }
-
-        $passthrough = PressHub_AI_Token_Logger::normalize_date_boundary( '2026-09-03 04:15:00', false, 3.0 );
-        if ( '2026-09-03 04:15:00' !== $passthrough ) {
-            $failures[] = "normalize_date_boundary('Y-m-d H:i:s', ...) must pass through; got '{$passthrough}'.";
-        }
-
-        $start_in = PressHub_AI_Token_Logger::normalize_date_boundary( '2026-09-03', false, 5.5 );
-        if ( '2026-09-02 18:30:00' !== $start_in ) {
-            $failures[] = "normalize_date_boundary('2026-09-03', false, 5.5) should be '2026-09-02 18:30:00'; got '{$start_in}'.";
-        }
-
-        // Case 3: get_logs() filters out rows outside the local day.
+        // Case 2: get_logs() filters by string comparison against the
+        // writer's local-time boundaries. The DB column stores
+        // WP-local timestamps (e.g. Cyprus at 02:00 local =
+        // '2026-09-03 02:00:00'), and the WHERE clause expands
+        // 'Y-m-d' into 'Y-m-d 00:00:00' / 'Y-m-d 23:59:59' in
+        // the same string space — so a row matches when its
+        // local-time created_at falls within the requested local
+        // day.
+        //
+        // Per maintainer feedback on PR #84: the writer uses
+        // current_time('mysql') (default $gmt=false) which
+        // returns the *WP-local* time, not UTC. Do NOT shift the
+        // query boundaries by gmt_offset; the original bare
+        // string concatenation is correct.
         self::reset_world();
         $GLOBALS['WP_GMT_OFFSET'] = 3.0;
         global $wpdb;
         $wpdb->tables['wp_presshub_ai_token_logs'] = [];
         $wpdb->auto_increments['wp_presshub_ai_token_logs'] = 0;
 
+        // Insert three rows directly so we control created_at independent
+        // of current_time('mysql'). All three timestamps are WP-local
+        // (Cyprus, UTC+3).
         $wpdb->insert( 'wp_presshub_ai_token_logs', [
-            'created_at'        => '2026-09-02 22:00:00',
+            'created_at'        => '2026-09-03 02:00:00', // 23:00 UTC Sept 2 → local Cyprus 02:00 Sept 3.
             'action_trigger'    => 'scrape_harvest',
             'provider'          => 'scraper',
             'model'             => 'wp_remote_get',
@@ -109,7 +105,7 @@ class BriefingTimezoneFixTest {
             'metadata'          => null,
         ] );
         $wpdb->insert( 'wp_presshub_ai_token_logs', [
-            'created_at'        => '2026-09-03 04:00:00',
+            'created_at'        => '2026-09-03 18:00:00', // 15:00 UTC Sept 3 → local Cyprus 18:00 Sept 3.
             'action_trigger'    => 'scrape_harvest',
             'provider'          => 'scraper',
             'model'             => 'wp_remote_get',
@@ -124,7 +120,7 @@ class BriefingTimezoneFixTest {
             'metadata'          => null,
         ] );
         $wpdb->insert( 'wp_presshub_ai_token_logs', [
-            'created_at'        => '2026-09-02 20:00:00',
+            'created_at'        => '2026-09-02 22:00:00', // 19:00 UTC Sept 2 → local Cyprus 22:00 Sept 2. Outside!
             'action_trigger'    => 'scrape_harvest',
             'provider'          => 'scraper',
             'model'             => 'wp_remote_get',
@@ -139,6 +135,8 @@ class BriefingTimezoneFixTest {
             'metadata'          => null,
         ] );
 
+        // Query the local '2026-09-03' day. The two in-window rows must
+        // match; the 2026-09-02 22:00 row must NOT.
         $logs = PressHub_AI_Token_Logger::get_logs( [
             'action'     => 'scrape_harvest',
             'start_date' => '2026-09-03',
@@ -147,20 +145,43 @@ class BriefingTimezoneFixTest {
         ] );
         $items = is_array( $logs['items'] ?? null ) ? $logs['items'] : [];
         if ( 2 !== count( $items ) ) {
-            $failures[] = "get_logs() with Cyprus gmt_offset=3 must return 2 in-window rows for local '2026-09-03'; got " . count( $items ) . ".";
+            $failures[] = "get_logs() must return 2 in-window rows for local '2026-09-03' (Cyprus-local timestamps); got " . count( $items ) . '.';
         }
         foreach ( $items as $row ) {
             $ca = (string) ( $row['created_at'] ?? '' );
-            if ( '2026-09-02 20:00:00' === $ca ) {
-                $failures[] = "get_logs() must NOT return the 2026-09-02 20:00:00 UTC row (= 23:00 local Sept 2 Cyprus) when querying local Sept 3.";
+            if ( '2026-09-02 22:00:00' === $ca ) {
+                $failures[] = "get_logs() must NOT return the 2026-09-02 22:00:00 (local Cyprus Sept 2) row when querying local Sept 3.";
             }
             $mu = (int) ( $row['metric_units'] ?? 0 );
             if ( 99 === $mu ) {
-                $failures[] = 'get_logs() must NOT return the metric_units=99 row (Sept 2 local) when querying local Sept 3.';
+                $failures[] = 'get_logs() must NOT return the metric_units=99 (Sept 2 local) row when querying local Sept 3.';
             }
         }
 
-        // Case 4: collect_stage_execution_events() timezone-correct end-to-end.
+        // Negative: query local '2026-09-02'. The 22:00 local Sept 2 row
+        // must match; the two Sept 3 rows must NOT.
+        $logs_yest = PressHub_AI_Token_Logger::get_logs( [
+            'action'     => 'scrape_harvest',
+            'start_date' => '2026-09-02',
+            'end_date'   => '2026-09-02',
+            'per_page'   => 25,
+        ] );
+        $items_yest = is_array( $logs_yest['items'] ?? null ) ? $logs_yest['items'] : [];
+        if ( 1 !== count( $items_yest ) ) {
+            $failures[] = "get_logs() must return exactly 1 row for local '2026-09-02'; got " . count( $items_yest ) . '.';
+        } elseif ( '2026-09-02 22:00:00' !== ( $items_yest[0]['created_at'] ?? '' ) ) {
+            $failures[] = "get_logs() for local '2026-09-02' must return the 22:00 local row; got '" . ( $items_yest[0]['created_at'] ?? 'empty' ) . "'.";
+        }
+
+        // Case 3: collect_stage_execution_events() timezone-correct end-to-end.
+        //         Per maintainer feedback on PR #84: the writer at
+        //         insert_row() uses current_time('mysql') (default
+        //         $gmt=false) which returns WP-local time. So the seeded
+        //         'created_at' must be in Cyprus-local time. A row
+        //         written at Cyprus-local 02:30 on Sept 3 (which is
+        //         23:30 UTC Sept 2) must surface when querying local
+        //         Sept 3, and must NOT surface when querying local
+        //         Sept 2.
         self::reset_world();
         $GLOBALS['WP_GMT_OFFSET'] = 3.0;
         $GLOBALS['OPTIONS_STORE'] = [
@@ -171,7 +192,8 @@ class BriefingTimezoneFixTest {
         $wpdb->tables['wp_presshub_ai_token_logs'] = [];
         $wpdb->auto_increments['wp_presshub_ai_token_logs'] = 0;
         $wpdb->insert( 'wp_presshub_ai_token_logs', [
-            'created_at'        => '2026-09-02 23:30:00',
+            // Cyprus-local time. Equivalent to 2026-09-02 23:30 UTC.
+            'created_at'        => '2026-09-03 02:30:00',
             'action_trigger'    => 'scrape_harvest',
             'provider'          => 'scraper',
             'model'             => 'wp_remote_get',
@@ -183,9 +205,10 @@ class BriefingTimezoneFixTest {
             'status'            => 'success',
             'user_id'           => 1,
             'error_message'     => null,
-            'metadata'          => wp_json_encode( [ 'started_at' => '2026-09-02 23:25:00', 'sources_count' => 3 ] ),
+            'metadata'          => wp_json_encode( [ 'started_at' => '2026-09-03 02:25:00', 'sources_count' => 3 ] ),
         ] );
 
+        // Query local '2026-09-03' — the row (WP-local Sept 3 02:30) MUST match.
         $events = PressHub_AI_Briefing_Admin::collect_stage_execution_events( '2026-09-03' );
         if ( empty( $events['harvest']['attempted_at'] ) ) {
             $failures[] = "harvest.attempted_at should surface the metadata.started_at for Cyprus local '2026-09-03' query; got empty.";
@@ -197,12 +220,13 @@ class BriefingTimezoneFixTest {
             $failures[] = 'harvest.sources_count should be 3 for Cyprus local Sept 3 query; got ' . ( $events['harvest']['sources_count'] ?? 'null' );
         }
 
+        // Query local '2026-09-02' — the row (WP-local Sept 3 02:30) MUST NOT match.
         $events_yest = PressHub_AI_Briefing_Admin::collect_stage_execution_events( '2026-09-02' );
         if ( 0 !== (int) ( $events_yest['harvest']['duration_ms'] ?? -1 ) ) {
-            $failures[] = "harvest.duration_ms must be 0 for Cyprus local '2026-09-02' query (row is on local Sept 3); got " . ( $events_yest['harvest']['duration_ms'] ?? 'null' ) . '.';
+            $failures[] = "harvest.duration_ms must be 0 for Cyprus local '2026-09-02' query (the seeded row is on WP-local Sept 3); got " . ( $events_yest['harvest']['duration_ms'] ?? 'null' ) . '.';
         }
 
-        // Case 5: PHP source has no bare gmdate('Y-m-d') outside wp_date fallback.
+        // Case 4: PHP source has no bare gmdate('Y-m-d') outside wp_date fallback.
         self::reset_world();
         $admin_src = file_get_contents( __DIR__ . '/../includes/class-briefing-admin.php' );
         $stripped = preg_replace(
@@ -215,12 +239,12 @@ class BriefingTimezoneFixTest {
             $failures[] = "class-briefing-admin.php still contains bare gmdate('Y-m-d') outside the wp_date() fallback: {$remaining} occurrence(s).";
         }
 
-        // Case 6: empty-state placeholder present in PHP source.
+        // Case 5: empty-state placeholder present in PHP source.
         if ( false === strpos( $admin_src, 'Awaiting first run for this date.' ) ) {
             $failures[] = "class-briefing-admin.php must include the 'Awaiting first run for this date.' empty-state placeholder string.";
         }
 
-        // Case 7: JS source drops UTC ISO fallback and references the placeholder.
+        // Case 6: JS source drops UTC ISO fallback and references the placeholder.
         $js_src = file_get_contents( __DIR__ . '/../assets/briefing-admin.js' );
         // Strip /* ... */ block comments AND // line comments before
         // checking so any explanatory note about why the UTC fallback
