@@ -10,6 +10,11 @@
  *   5. API client synthesize_speech_with_options() request formatting and response decoding.
  *   6. Media sideloading and WordPress Podcast post creation (Audio block, transcript, category, status, meta).
  *   7. Full end-to-end synthesize_podcast() workflow with mock TTS client and error handling.
+ *   8. Issue #91 — strip_topic_markers() drops [TOPIC_START: ...] / [TOPIC_END] /
+ *      <!-- TOPIC_START: ... --> / <!-- TOPIC_END --> / === TOPIC: ... === /
+ *      ### TOPIC: ... lines, and the resulting format_transcript_html() /
+ *      create_podcast_post() output is free of TOPIC_* markers while preserving
+ *      the speaker dialogue.
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
@@ -612,6 +617,79 @@ as_check( 'issue_71: 1 host synthesis uses single voiceConfig without multiSpeak
 as_check( 'issue_71: solo podcast synthesis succeeds', is_array( $solo_res ) && ( $solo_res['success'] ?? false ) );
 
 
+// =========================================================================
+// 8. Issue #91 — strip_topic_markers() and post-content hygiene
+// =========================================================================
+//
+// All four producer-recognized topic-marker variants must be dropped:
+//   - [TOPIC_START: ...] ... [TOPIC_END]
+//   - <!-- TOPIC_START: ... --> ... <!-- TOPIC_END -->
+//   - === TOPIC: ... === ... [TOPIC_END]
+//   - ### TOPIC: ... ... [TOPIC_END]
+// Speaker dialogue must be preserved verbatim.
+
+$issue91_script = <<<'SCRIPT'
+[TOPIC_START: Εισαγωγή]
+[Μαρία]: Καλημέρα σας, καλώς ήρθατε στο πρωινό μας podcast.
+[Νίκος]: Σήμερα θα μιλήσουμε για τις τελευταίες εξελίξεις.
+[TOPIC_END]
+
+<!-- TOPIC_START: Κύριο Θέμα -->
+**[Μαρία]:** Ας ξεκινήσουμε με την κεντρική είδηση της ημέρας.
+[Νίκος]: Συμφωνώ, πρόκειται για σημαντική εξέλιξη.
+<!-- TOPIC_END -->
+
+=== TOPIC: Κλείσιμο ===
+[Μαρία]: Ευχαριστούμε που μας ακούσατε.
+[TOPIC_END]
+
+### TOPIC: Extra
+[Νίκος]: Καλημέρα.
+[TOPIC_END]
+SCRIPT;
+
+$issue91_stripped = $synthesizer->strip_topic_markers( $issue91_script );
+as_check( 'issue_91: strip_topic_markers drops [TOPIC_START: ...]', false === strpos( $issue91_stripped, '[TOPIC_START:' ) );
+as_check( 'issue_91: strip_topic_markers drops [TOPIC_END]',           false === strpos( $issue91_stripped, '[TOPIC_END]' ) );
+as_check( 'issue_91: strip_topic_markers drops <!-- TOPIC_START -->',   false === strpos( $issue91_stripped, '<!-- TOPIC_START' ) );
+as_check( 'issue_91: strip_topic_markers drops <!-- TOPIC_END -->',      false === strpos( $issue91_stripped, '<!-- TOPIC_END' ) );
+as_check( 'issue_91: strip_topic_markers drops === TOPIC: ... ===',     false === strpos( $issue91_stripped, '=== TOPIC:' ) );
+as_check( 'issue_91: strip_topic_markers drops ### TOPIC: ...',         false === strpos( $issue91_stripped, '### TOPIC:' ) );
+as_check( 'issue_91: strip_topic_markers preserves [Μαρία] line',       false !== strpos( $issue91_stripped, '[Μαρία]: Καλημέρα' ) );
+as_check( 'issue_91: strip_topic_markers preserves [Νίκος] line',       false !== strpos( $issue91_stripped, '[Νίκος]: Σήμερα' ) );
+as_check( 'issue_91: strip_topic_markers preserves **[Μαρία]:** line',  false !== strpos( $issue91_stripped, '**[Μαρία]:**' ) );
+as_check( 'issue_91: strip_topic_markers preserves "Ευχαριστούμε"',     false !== strpos( $issue91_stripped, 'Ευχαριστούμε' ) );
+
+$issue91_html = $synthesizer->format_transcript_html( $issue91_script );
+as_check( 'issue_91: format_transcript_html output free of TOPIC_START',         false === strpos( $issue91_html, 'TOPIC_START' ) );
+as_check( 'issue_91: format_transcript_html output free of TOPIC_END',           false === strpos( $issue91_html, 'TOPIC_END' ) );
+as_check( 'issue_91: format_transcript_html output free of <!-- TOPIC_ markers', false === strpos( $issue91_html, '<!-- TOPIC_' ) );
+as_check( 'issue_91: format_transcript_html output free of === TOPIC:',          false === strpos( $issue91_html, '=== TOPIC:' ) );
+as_check( 'issue_91: format_transcript_html output free of ### TOPIC:',          false === strpos( $issue91_html, '### TOPIC:' ) );
+as_check( 'issue_91: format_transcript_html preserves speaker "Καλημέρα σας"',   false !== strpos( $issue91_html, 'Καλημέρα σας' ) );
+as_check( 'issue_91: format_transcript_html preserves speaker "σημαντική"',      false !== strpos( $issue91_html, 'σημαντική' ) );
+as_check( 'issue_91: format_transcript_html preserves speaker "Ευχαριστούμε"',  false !== strpos( $issue91_html, 'Ευχαριστούμε' ) );
+as_check( 'issue_91: format_transcript_html emits 6 dialogue <p>s',              substr_count( $issue91_html, '<p><strong>' ) === 6 );
+
+// create_podcast_post() belt-and-braces: post_content must also be free of markers.
+$issue91_post_id = $synthesizer->create_podcast_post(
+    'http://example.test/audio.mp3',
+    12345,
+    $issue91_script,
+    '2026-09-02',
+    'Test Podcast Post'
+);
+as_check( 'issue_91: create_podcast_post returns numeric post id', is_numeric( $issue91_post_id ) );
+$issue91_stored = get_post( (int) $issue91_post_id );
+$issue91_content = is_object( $issue91_stored ) ? ( $issue91_stored->post_content ?? '' ) : '';
+as_check( 'issue_91: post_content free of [TOPIC_START',  false === strpos( $issue91_content, '[TOPIC_START' ) );
+as_check( 'issue_91: post_content free of [TOPIC_END]',    false === strpos( $issue91_content, '[TOPIC_END]' ) );
+as_check( 'issue_91: post_content free of <!-- TOPIC_',    false === strpos( $issue91_content, '<!-- TOPIC_' ) );
+as_check( 'issue_91: post_content free of === TOPIC:',     false === strpos( $issue91_content, '=== TOPIC:' ) );
+as_check( 'issue_91: post_content free of ### TOPIC:',     false === strpos( $issue91_content, '### TOPIC:' ) );
+as_check( 'issue_91: post_content preserves dialogue',      false !== strpos( $issue91_content, 'Καλημέρα σας' ) && false !== strpos( $issue91_content, 'Ευχαριστούμε' ) );
+
+
 
 if ( is_dir( $test_upload_dir ) ) {
     $files = new RecursiveIteratorIterator(
@@ -629,4 +707,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "AudioSynthesizerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "AudioSynthesizerTest: OK (75 checks)\n";
+echo "AudioSynthesizerTest: OK (100 checks)\n";

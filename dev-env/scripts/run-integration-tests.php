@@ -1033,6 +1033,69 @@ SCRIPT;
     return true;
 } );
 
+// Issue #91 — live integration test for topic-marker stripping in
+// the published podcast post body. Drive create_podcast_post() with
+// a script containing all four producer-recognized topic-marker
+// variants and assert post_content is free of TOPIC_* markers while
+// preserving the speaker dialogue.
+run_test( 'Issue #91: podcast post body strips [TOPIC_START] / [TOPIC_END] markers', function() {
+    require_once __DIR__ . '/../../presshub-ai-editor/includes/class-audio-synthesizer.php';
+
+    $issue91_script = <<<'SCRIPT'
+[TOPIC_START: Εισαγωγή]
+[Μαρία]: Καλημέρα σας.
+[Νίκος]: Σήμερα μιλάμε για τεχνολογία.
+[TOPIC_END]
+
+<!-- TOPIC_START: Κύριο Θέμα -->
+**[Μαρία]:** Πρώτη είδηση.
+[Νίκος]: Συμφωνώ απόλυτα.
+<!-- TOPIC_END -->
+
+=== TOPIC: Κλείσιμο ===
+[Μαρία]: Ευχαριστούμε.
+[TOPIC_END]
+
+### TOPIC: Extra
+[Νίκος]: Καλημέρα.
+[TOPIC_END]
+SCRIPT;
+
+    $synth = new PressHub_AI_Audio_Synthesizer();
+    $post_id = $synth->create_podcast_post(
+        'http://example.test/audio.mp3',
+        99999,
+        $issue91_script,
+        '2026-09-02',
+        'Test Podcast'
+    );
+
+    if ( ! is_numeric( $post_id ) ) {
+        return 'create_podcast_post() did not return a numeric post id; got: ' . var_export( $post_id, true );
+    }
+
+    $post = get_post( (int) $post_id );
+    $content = is_object( $post ) ? ( $post->post_content ?? '' ) : '';
+
+    foreach ( [ '[TOPIC_START', '[TOPIC_END]', '<!-- TOPIC_', '=== TOPIC:', '### TOPIC:' ] as $needle ) {
+        if ( false !== stripos( $content, $needle ) ) {
+            return "post_content still contains '$needle' after strip_topic_markers()";
+        }
+    }
+
+    // Speaker dialogue must survive the stripping.
+    foreach ( [ 'Καλημέρα σας', 'Συμφωνώ απόλυτα', 'Ευχαριστούμε' ] as $expected ) {
+        if ( false === stripos( $content, $expected ) ) {
+            return "post_content missing speaker dialogue '$expected'";
+        }
+    }
+
+    // Cleanup test post so the integration runner stays idempotent.
+    wp_delete_post( (int) $post_id, true );
+
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";
