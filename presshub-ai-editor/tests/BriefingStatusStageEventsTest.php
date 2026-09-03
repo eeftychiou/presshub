@@ -63,6 +63,12 @@ class BriefingStatusStageEventsTest {
         //         aggregator exposes them via stage_events + get_briefing_status().
         // =========================================================================
         self::reset_world();
+        // Issue #83 — pin CURRENT_TEST_TIME to a time on 2026-09-02 so the
+        // stubbed current_time('mysql') writer produces '2026-09-02 HH:MM:SS'
+        // timestamps. Without this, the stub falls back to gmdate() which
+        // writes today's date — a UTC/WP-local mismatch where the seeded
+        // rows never match the aggregator's '2026-09-02' filter window.
+        $GLOBALS['CURRENT_TEST_TIME'] = '2026-09-02 06:55:00';
         global $wpdb;
         $wpdb->tables['wp_presshub_ai_token_logs'] = [];
         $wpdb->auto_increments['wp_presshub_ai_token_logs'] = 0;
@@ -147,6 +153,9 @@ class BriefingStatusStageEventsTest {
         //         if multiple rows exist for the same action_trigger.
         // =========================================================================
         self::reset_world();
+        // Issue #83 — pin CURRENT_TEST_TIME so the seeded rows fall within
+        // the '2026-09-02' filter window the aggregator uses below.
+        $GLOBALS['CURRENT_TEST_TIME'] = '2026-09-02 07:00:00';
         $wpdb->tables['wp_presshub_ai_token_logs'] = [];
         $wpdb->auto_increments['wp_presshub_ai_token_logs'] = 0;
         // First failed attempt.

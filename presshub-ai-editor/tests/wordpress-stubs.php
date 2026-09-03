@@ -939,6 +939,40 @@ if ( ! function_exists( 'current_time' ) ) {
     }
 }
 
+// Issue #83 — wp_date() stub. Mirrors WordPress' production behaviour:
+// formats a timestamp in the site's *local* timezone (offset by
+// gmt_offset). Honours $GLOBALS['CURRENT_TEST_TIME'] for deterministic
+// time injection, and $GLOBALS['WP_GMT_OFFSET'] for offset injection.
+// Without this stub, code paths using wp_date('Y-m-d') would fall back
+// to gmdate() and reintroduce the UTC vs. WP-local mismatch.
+if ( ! function_exists( 'wp_date' ) ) {
+    function wp_date( $format, $timestamp = null, ?DateTimeZone $timezone = null ) {
+        if ( null === $timestamp ) {
+            $timestamp = $GLOBALS['CURRENT_TEST_TIME'] ?? time();
+            if ( is_string( $timestamp ) ) {
+                $timestamp = strtotime( $timestamp );
+            }
+        }
+        $offset_hours = (float) ( $GLOBALS['WP_GMT_OFFSET'] ?? get_option( 'gmt_offset', 0 ) );
+        // PHP DateTimeZone only accepts whole-hour or :15/:30/:45 fractional
+        // offsets in the form ±HH:MM. Round to nearest minute and emit a
+        // valid zone identifier. Use 'UTC' for 0-offset for clarity.
+        $offset_seconds = (int) round( $offset_hours * 3600 );
+        if ( 0 === $offset_seconds ) {
+            $tz = new DateTimeZone( 'UTC' );
+        } else {
+            $sign     = ( $offset_seconds >= 0 ) ? '+' : '-';
+            $abs_sec  = abs( $offset_seconds );
+            $hh       = (int) floor( $abs_sec / 3600 );
+            $mm       = (int) floor( ( $abs_sec % 3600 ) / 60 );
+            $tz = new DateTimeZone( sprintf( '%s%02d:%02d', $sign, $hh, $mm ) );
+        }
+        $dt = new DateTime( '@' . (int) $timestamp );
+        $dt->setTimezone( $tz );
+        return $dt->format( $format );
+    }
+}
+
 if ( ! function_exists( 'get_current_user_id' ) ) {
     function get_current_user_id() {
         return $GLOBALS['CURRENT_USER_ID'] ?? 1;
