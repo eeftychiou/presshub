@@ -842,8 +842,36 @@ run_test( 'Issue #67: Audio Synthesizer initializes API client with tts module t
             return 'No HTTP request captured during synthesize_turn()';
         }
         $target_url = end( $captured_urls );
-        if ( false === strpos( $target_url, 'gemini-3.1-flash-tts-preview' ) ) {
-            return 'synthesize_turn() did not target gemini-3.1-flash-tts-preview; URL was: ' . $target_url;
+
+        // Issue #98 — this test was authored in PR #68 (commit 4fb3c97)
+        // when the only code path was a hard-coded fallback in
+        // PressHub_AI_API_Client. After Issue #43 (Provider Store with
+        // per-provider default_model) and Issue #2 (Dynamic Model
+        // Discovery), the model-resolution cascade respects the
+        // operator's configured model. The previous assertion
+        // hard-coded `gemini-3.1-flash-tts-preview` which is the
+        // *fallback* model, not the one the cascade actually picks in
+        // environments where the Provider Store has a different TTS
+        // model configured. The real product invariant this test was
+        // meant to guard is: "synthesize_turn() must target a TTS-
+        // capable model, not fall back to a text-generation model".
+        //
+        // We honor two contracts here:
+        //   (a) If the operator has explicitly set
+        //       presshub_ai_briefing_tts_model, the synthesizer must
+        //       target that model.
+        //   (b) Otherwise, the synthesizer must target a TTS-capable
+        //       model (model id contains 'tts' — same filter as
+        //       discover_gemini_voices() in PR #89).
+        $configured_tts_model = (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+        if ( '' !== $configured_tts_model ) {
+            if ( false === strpos( $target_url, $configured_tts_model ) ) {
+                return 'synthesize_turn() did not respect operator-configured TTS model "' . $configured_tts_model . '"; URL was: ' . $target_url;
+            }
+        } else {
+            if ( ! preg_match( '#models/[a-z0-9\.\-]*tts[a-z0-9\.\-]*:generateContent#i', $target_url ) ) {
+                return 'synthesize_turn() targeted a non-TTS model (expected a TTS-capable model id); URL was: ' . $target_url;
+            }
         }
     } finally {
         remove_filter( 'pre_http_request', $filter, 10 );
