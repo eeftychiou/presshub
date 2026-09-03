@@ -355,9 +355,9 @@ class CurationTimeoutSafetyTest {
             ] )
         );
 
-        // presshub_ai_podcast_host1_name fires inside build_dialogue_prompt() which
+        // presshub_ai_podcast_producer_system_prompt fires inside build_dialogue_prompt() which
         // generate_dialogue_script() invokes before reaching the LLM call.
-        add_filter( 'presshub_ai_podcast_host1_name', function() {
+        add_filter( 'presshub_ai_podcast_producer_system_prompt', function() {
             throw new \RuntimeException( 'Simulated podcast script LLM fault' );
         } );
 
@@ -377,7 +377,7 @@ class CurationTimeoutSafetyTest {
             isset( $response['data']['exception'] ) && false !== strpos( $response['data']['exception'], 'Simulated podcast script LLM fault' )
         );
 
-        remove_all_filters( 'presshub_ai_podcast_host1_name' );
+        remove_all_filters( 'presshub_ai_podcast_producer_system_prompt' );
 
         // =========================================================================
         // Case 9: AJAX briefing_generate_audio() catches generic Throwable
