@@ -214,7 +214,7 @@ class PressHub_AI_Podcast_Producer {
      */
     public function hydrate_prompt( string $template, string $date, array $articles = [], string $duration = '', string $host1 = 'Μαρία', string $host2 = 'Νίκος', string $host3 = 'Κώστας' ): string {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $specs = $this->get_duration_specs( $duration );
@@ -247,7 +247,7 @@ class PressHub_AI_Podcast_Producer {
      */
     public function build_dialogue_prompt( array $articles, string $preset_id = '', string $duration = '', string $date = '', string $context_mode = 'curated_briefing', array $selected_article_ids = [], ?string $briefing_text = null ): array {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         if ( empty( $duration ) ) {
@@ -671,7 +671,7 @@ class PressHub_AI_Podcast_Producer {
      */
     public function save_script( string $date, string $script, string $context_mode = '', int $source_post_id = 0, string $attempted_at = '' ): bool {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $harvester = new PressHub_AI_News_Harvester();
@@ -727,7 +727,7 @@ class PressHub_AI_Podcast_Producer {
      */
     public function get_script_meta( string $date ): array {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $defaults = [
@@ -774,7 +774,7 @@ class PressHub_AI_Podcast_Producer {
      */
     public function get_script( string $date ): ?string {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $harvester = new PressHub_AI_News_Harvester();
@@ -805,7 +805,7 @@ class PressHub_AI_Podcast_Producer {
      */
     public function generate_dialogue_script( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', string $duration = '', string $context_mode = 'curated_briefing', array $selected_article_ids = [] ) {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         // 1. Load snapshot from harvester

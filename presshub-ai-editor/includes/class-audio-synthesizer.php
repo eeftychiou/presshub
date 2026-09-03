@@ -531,7 +531,7 @@ class PressHub_AI_Audio_Synthesizer {
      */
     public function create_podcast_post( string $audio_url, int $attachment_id, string $transcript, string $date, string $title = '' ) {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         // Format title if empty
@@ -676,7 +676,7 @@ class PressHub_AI_Audio_Synthesizer {
      */
     public function synthesize_podcast( string $date = '', string $custom_script = '', ?PressHub_AI_API_Client $api_client = null ) {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         if ( null === $api_client ) {
