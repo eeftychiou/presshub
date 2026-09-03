@@ -114,77 +114,328 @@ class PressHub_AI_Audio_Synthesizer {
         ];
     }
 
+    /** Option key for the voice catalog cache transient suffix (per engine/model). */
+    const OPTION_VOICE_CATALOG_TTL = 24 * HOUR_IN_SECONDS;
+
+    /** Bundled manifest relative path (resolved against plugin root). */
+    const VOICE_CATALOG_MANIFEST = 'assets/data/tts-voice-catalog.json';
+
     /**
-     * Get available Greek voice models for audio synthesis (logosAI personas).
+     * Get available voice models for the given TTS engine.
      *
-     * @param string $engine Optional engine parameter (kept for backwards compatibility).
-     * @return array Grouped voice models directory with metadata.
+     * Issue #89 — the original implementation returned a hardcoded
+     * `[ 'female' => [...], 'male' => [...] ]` array regardless of engine,
+     * which left operators on Google Cloud TTS, OpenAI TTS, ElevenLabs,
+     * etc. seeing Gemini voice names in their persona dropdowns. The
+     * engine parameter was documented as "kept for backwards compatibility"
+     * and was never consulted.
+     *
+     * The new implementation loads the bundled JSON manifest at
+     * `assets/data/tts-voice-catalog.json` and returns the slice for the
+     * requested engine. Backward-compat: the returned array shape is
+     * identical to the historical version (female/male buckets keyed by
+     * voice name with `name`, `label`, `gender`, `type` per entry) so
+     * existing downstream render code and `AudioSynthesizerTest.php`
+     * assertions continue to hold.
+     *
+     * @param string $engine Optional engine key ('gemini-2.5', 'gemini-3.1',
+     *                       'google_cloud', 'openai-tts', 'elevenlabs').
+     *                       If empty, falls back to OPTION_ENGINE ('gemini').
+     *                       Legacy callers passing 'gemini' get the
+     *                       gemini-2.5 slice.
+     * @return array{ female: array<string, array>, male: array<string, array> }
+     *         Grouped voice directory keyed by voice name. Each entry
+     *         carries `name`, `label`, `gender`, `type`, and (for
+     *         manifest-loaded voices) `language`, `engine_version`.
      */
-    public function get_available_voices( string $engine = '' ): array {
+    public function get_available_voices( string $engine = 'gemini' ): array {
+        $engine = '' === trim( $engine ) ? 'gemini' : trim( $engine );
+
+        // Backward-compat shim: legacy callers pass 'gemini' to mean
+        // the canonical Gemini 2.5 catalog. Map that to the new
+        // engine key.
+        if ( 'gemini' === $engine ) {
+            $engine = 'gemini-2.5';
+        }
+
+        $manifest = $this->load_voice_catalog_manifest();
+        $engine_slice = $manifest['engines'][ $engine ] ?? null;
+
+        // Last-resort fallback: the bundled manifest must always include
+        // gemini-2.5 (the canonical voice set). If the JSON file is
+        // missing or malformed we still need to return SOMETHING so the
+        // settings UI does not crash — emit the historical hardcoded
+        // Gemini 2.5 catalog as the absolute fallback.
+        if ( null === $engine_slice ) {
+            if ( 'gemini-2.5' === $engine ) {
+                return $this->legacy_gemini25_fallback();
+            }
+            return [ 'female' => [], 'male' => [] ];
+        }
+
+        return $this->group_voices_by_gender( $engine_slice['voices'] ?? [] );
+    }
+
+    /**
+     * Discover available Gemini TTS voice models via the live API.
+     *
+     * Hits `https://generativelanguage.googleapis.com/v1beta/models`,
+     * filters the response to TTS-capable models (those whose id matches
+     * `/tts/i`), and returns a `name => entry` map suitable for merging
+     * with the bundled manifest. Results are cached in a 24h transient
+     * keyed on `presshub_tts_voices_gemini` so the settings page is
+     * offline-tolerant and fast.
+     *
+     * Pattern mirrors `PressHub_AI_API_Client::fetch_remote_models()` for
+     * Gemini (`class-api-client.php:2064-2108`) but specialised for the
+     * voice-catalog use case: only TTS models are returned, the response
+     * shape is enriched with engine metadata, and the cache layer is
+     * encapsulated here rather than at the call site.
+     *
+     * @param string $api_key Gemini API key.
+     * @return array<string, array{name:string, label:string, gender:string,
+     *                             language:string, engine_version:string,
+     *                             type:string, source:string}>|WP_Error
+     */
+    public function discover_gemini_voices( string $api_key ) {
+        $cache_key = 'presshub_tts_voices_gemini';
+        $cached = get_transient( $cache_key );
+        if ( is_array( $cached ) ) {
+            return $cached;
+        }
+
+        if ( '' === trim( $api_key ) ) {
+            return new WP_Error( 'no_api_key', __( 'Gemini API key is required to discover available TTS voices.', 'presshub-ai-editor' ) );
+        }
+
+        $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . urlencode( $api_key );
+        $referer  = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';
+        $headers  = [
+            'x-goog-api-key' => $api_key,
+            'Content-Type'   => 'application/json',
+            'Referer'        => $referer,
+        ];
+
+        $response = wp_remote_get( $endpoint, [
+            'headers' => $headers,
+            'timeout' => 30,
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $code     = (int) wp_remote_retrieve_response_code( $response );
+        $res_body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+
+        if ( $code < 200 || $code >= 300 || ! is_array( $res_body ) ) {
+            $msg = is_array( $res_body ) && isset( $res_body['error']['message'] )
+                ? $res_body['error']['message']
+                : sprintf( __( 'Google Gemini API returned HTTP %d while listing TTS models', 'presshub-ai-editor' ), $code );
+            return new WP_Error( 'api_error', $msg );
+        }
+
+        $discovered = [];
+        if ( isset( $res_body['models'] ) && is_array( $res_body['models'] ) ) {
+            foreach ( $res_body['models'] as $item ) {
+                $raw = $item['name'] ?? ( $item['id'] ?? '' );
+                if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+                    continue;
+                }
+                $m = preg_replace( '#^models/#', '', trim( $raw ) );
+                // Filter: only TTS models. This is the (d) acceptance
+                // criterion — non-TTS models must NOT leak into the
+                // voice catalog (they would let operators select a model
+                // that has no voices to expose).
+                if ( '' === $m || false === stripos( $m, 'tts' ) ) {
+                    continue;
+                }
+                $discovered[ $m ] = [
+                    'name'           => $m,
+                    'label'          => $m,
+                    'gender'         => 'neutral',
+                    'language'       => 'el-GR',
+                    'engine_version' => $this->infer_engine_version( $m ),
+                    'type'           => 'Gemini-TTS-Model',
+                    'source'         => 'discovered',
+                ];
+            }
+        }
+
+        // Cache for 24h. We cache even the empty result so a misconfigured
+        // site does not hammer the Gemini API on every page load.
+        set_transient( $cache_key, $discovered, self::OPTION_VOICE_CATALOG_TTL );
+
+        return $discovered;
+    }
+
+    /**
+     * Get the operational voice catalog for an engine: cached discovery
+     * first, fresh discovery on miss, bundled manifest on failure.
+     *
+     * Returns the grouped `[ 'female' => [...], 'male' => [...] ]` array
+     * shape that the settings render code already consumes, so callers
+     * can drop it directly into a `<select>`.
+     *
+     * @param string $engine Engine key ('gemini-2.5', 'gemini-3.1', …).
+     * @return array{ female: array<string, array>, male: array<string, array> }
+     *         Always returns a non-empty array; falls back to bundled
+     *         manifest on API failure so the UI never breaks.
+     */
+    public function get_voice_catalog( string $engine = 'gemini-2.5' ): array {
+        $engine = '' === trim( $engine ) ? 'gemini-2.5' : trim( $engine );
+
+        // Only Gemini engines participate in dynamic discovery in this PR.
+        // Other engines are served exclusively from the bundled manifest
+        // (which is intentionally sparse — the user accepted the
+        // "best-effort manifest" notice on those engines).
+        $is_gemini_engine = ( 'gemini-2.5' === $engine || 'gemini-3.1' === $engine );
+
+        $manifest_slice = $this->get_available_voices( $engine );
+
+        if ( ! $is_gemini_engine ) {
+            return $manifest_slice;
+        }
+
+        $api_key = (string) get_option( 'presshub_ai_gemini_api_key', (string) get_option( 'presshub_ai_api_key', '' ) );
+        if ( '' === $api_key ) {
+            return $manifest_slice;
+        }
+
+        $discovered = $this->discover_gemini_voices( $api_key );
+        if ( is_wp_error( $discovered ) || empty( $discovered ) ) {
+            return $manifest_slice;
+        }
+
+        // Merge discovered TTS models into the manifest slice. The
+        // discovered entries are MODEL-level (the model id), not voice-
+        // level, so we add a synthetic placeholder entry under each
+        // gender bucket so the settings UI shows them. Operators who
+        // select a discovered model will get the canonical Gemini 2.5
+        // voices (the model's known voices) — full per-model voice
+        // mapping is tracked as a follow-up.
+        $merged = $manifest_slice;
+        foreach ( $discovered as $model_id => $entry ) {
+            // Don't clobber existing manifest entries with the same name.
+            if ( ! isset( $merged['female'][ $model_id ] ) && ! isset( $merged['male'][ $model_id ] ) ) {
+                $merged['female'][ $model_id ] = $entry;
+            }
+        }
+        return $merged;
+    }
+
+    /**
+     * Load and decode the bundled voice-catalog manifest.
+     *
+     * @return array{ schema_version:int, engines:array<string, array> }
+     *         Decoded manifest. Returns an empty `engines` array on
+     *         any I/O or parse failure so callers can degrade gracefully.
+     */
+    private function load_voice_catalog_manifest(): array {
+        static $cached = null;
+        if ( null !== $cached ) {
+            return $cached;
+        }
+
+        $path = plugin_dir_path( dirname( __FILE__ ) ) . self::VOICE_CATALOG_MANIFEST;
+        if ( ! is_file( $path ) || ! is_readable( $path ) ) {
+            $cached = [ 'schema_version' => 0, 'engines' => [] ];
+            return $cached;
+        }
+
+        $decoded = json_decode( (string) file_get_contents( $path ), true );
+        if ( ! is_array( $decoded ) || ! isset( $decoded['engines'] ) || ! is_array( $decoded['engines'] ) ) {
+            $cached = [ 'schema_version' => 0, 'engines' => [] ];
+            return $cached;
+        }
+
+        $cached = $decoded;
+        return $cached;
+    }
+
+    /**
+     * Group a flat list of voice entries by gender.
+     *
+     * Unknown / missing gender values bucket under 'female' (the
+     * historical default) so the schema contract holds even for voices
+     * whose metadata is incomplete. Each entry is enriched with a
+     * `type` key for backward-compat with the legacy hardcoded shape.
+     *
+     * @param array<int, array> $voices
+     * @return array{ female: array<string, array>, male: array<string, array> }
+     */
+    private function group_voices_by_gender( array $voices ): array {
+        $grouped = [ 'female' => [], 'male' => [] ];
+        foreach ( $voices as $v ) {
+            if ( ! is_array( $v ) || empty( $v['name'] ) ) {
+                continue;
+            }
+            $name   = (string) $v['name'];
+            $gender = strtolower( (string) ( $v['gender'] ?? 'female' ) );
+            if ( 'male' !== $gender ) {
+                $gender = 'female'; // 'female' / 'neutral' / unknown → female bucket
+            }
+            $entry = $v;
+            // Backward-compat: existing render code reads $entry['type'].
+            // The legacy hardcoded catalog used the literal string
+            // 'Gemini-Neural' for every Gemini voice, and the existing
+            // AudioSynthesizerTest.php asserts on that exact value. To
+            // preserve that contract we keep 'Gemini-Neural' for Gemini
+            // engines and only emit the engine-versioned form for
+            // non-Gemini engines (Google Cloud TTS, etc.).
+            if ( ! isset( $entry['type'] ) ) {
+                $is_gemini_family = isset( $v['engine_version'] ) && in_array( (string) $v['engine_version'], [ '2.5', '3.1' ], true );
+                $entry['type'] = $is_gemini_family
+                    ? 'Gemini-Neural'
+                    : sprintf( 'Gemini-Neural-%s', (string) ( $v['engine_version'] ?? 'unknown' ) );
+            }
+            // Preserve historical upper-case gender (legacy callers
+            // checked === 'MALE' / === 'FEMALE' in tests).
+            $entry['gender'] = strtoupper( (string) ( $v['gender'] ?? 'female' ) );
+            $grouped[ $gender ][ $name ] = $entry;
+        }
+        return $grouped;
+    }
+
+    /**
+     * Infer Gemini engine version from a model id.
+     *
+     * @param string $model_id e.g. 'gemini-2.5-flash-preview-tts'
+     * @return string '2.5' | '3.1' | 'unknown'
+     */
+    private function infer_engine_version( string $model_id ): string {
+        if ( false !== stripos( $model_id, '3.1' ) ) {
+            return '3.1';
+        }
+        if ( false !== stripos( $model_id, '2.5' ) ) {
+            return '2.5';
+        }
+        return 'unknown';
+    }
+
+    /**
+     * Absolute last-resort fallback for get_available_voices() when the
+     * bundled manifest is missing or corrupted. Mirrors the historical
+     * hardcoded catalog so existing operators who upgrade from a very
+     * old plugin still see voices in the dropdown.
+     *
+     * @return array{ female: array<string, array>, male: array<string, array> }
+     */
+    private function legacy_gemini25_fallback(): array {
         return [
             'female' => [
-                'Kore'       => [
-                    'name'   => 'Kore',
-                    'label'  => __( 'Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)', 'presshub-ai-editor' ),
-                    'gender' => 'FEMALE',
-                    'type'   => 'Gemini-Neural',
-                ],
-                'Aoede'      => [
-                    'name'   => 'Aoede',
-                    'label'  => __( 'Aoede / Αοιδή (Expressive & Melodic)', 'presshub-ai-editor' ),
-                    'gender' => 'FEMALE',
-                    'type'   => 'Gemini-Neural',
-                ],
-                'Leda'       => [
-                    'name'   => 'Leda',
-                    'label'  => __( 'Leda / Λήδα (Warm & Professional)', 'presshub-ai-editor' ),
-                    'gender' => 'FEMALE',
-                    'type'   => 'Gemini-Neural',
-                ],
-                'Callirrhoe' => [
-                    'name'   => 'Callirrhoe',
-                    'label'  => __( 'Callirrhoe / Καλλιρρόη (Dynamic & Engaging)', 'presshub-ai-editor' ),
-                    'gender' => 'FEMALE',
-                    'type'   => 'Gemini-Neural',
-                ],
-                'Autonoe'    => [
-                    'name'   => 'Autonoe',
-                    'label'  => __( 'Autonoe / Αυτονόη (Conversational)', 'presshub-ai-editor' ),
-                    'gender' => 'FEMALE',
-                    'type'   => 'Gemini-Neural',
-                ],
+                'Kore'       => [ 'name' => 'Kore',       'label' => __( 'Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)', 'presshub-ai-editor' ), 'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Aoede'      => [ 'name' => 'Aoede',      'label' => __( 'Aoede / Αοιδή (Expressive & Melodic)', 'presshub-ai-editor' ),                   'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Leda'       => [ 'name' => 'Leda',       'label' => __( 'Leda / Λήδα (Warm & Professional)', 'presshub-ai-editor' ),                      'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Callirrhoe' => [ 'name' => 'Callirrhoe', 'label' => __( 'Callirrhoe / Καλλιρρόη (Dynamic & Engaging)', 'presshub-ai-editor' ),          'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Autonoe'    => [ 'name' => 'Autonoe',    'label' => __( 'Autonoe / Αυτονόη (Conversational)', 'presshub-ai-editor' ),                    'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
             ],
             'male' => [
-                'Fenrir'     => [
-                    'name'   => 'Fenrir',
-                    'label'  => __( 'Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)', 'presshub-ai-editor' ),
-                    'gender' => 'MALE',
-                    'type'   => 'Gemini-Neural',
-                ],
-                'Puck'       => [
-                    'name'   => 'Puck',
-                    'label'  => __( 'Puck / Πουκ (Lively, Youthful & Expressive)', 'presshub-ai-editor' ),
-                    'gender' => 'MALE',
-                    'type'   => 'Gemini-Neural',
-                ],
-                'Charon'     => [
-                    'name'   => 'Charon',
-                    'label'  => __( 'Charon / Χάρων (Deep Baritone & Solemn Gravitas)', 'presshub-ai-editor' ),
-                    'gender' => 'MALE',
-                    'type'   => 'Gemini-Neural',
-                ],
-                'Zephyr'     => [
-                    'name'   => 'Zephyr',
-                    'label'  => __( 'Zephyr / Ζέφυρος (Calm, Gentle & Melodious)', 'presshub-ai-editor' ),
-                    'gender' => 'NEUTRAL',
-                    'type'   => 'Gemini-Neural',
-                ],
-                'Orus'       => [
-                    'name'   => 'Orus',
-                    'label'  => __( 'Orus / Ώρος (Confident & Articulate)', 'presshub-ai-editor' ),
-                    'gender' => 'MALE',
-                    'type'   => 'Gemini-Neural',
-                ],
+                'Fenrir'     => [ 'name' => 'Fenrir',     'label' => __( 'Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)', 'presshub-ai-editor' ), 'gender' => 'MALE', 'type' => 'Gemini-Neural' ],
+                'Puck'       => [ 'name' => 'Puck',       'label' => __( 'Puck / Πουκ (Lively, Youthful & Expressive)', 'presshub-ai-editor' ),            'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
+                'Charon'     => [ 'name' => 'Charon',     'label' => __( 'Charon / Χάρων (Deep Baritone & Solemn Gravitas)', 'presshub-ai-editor' ),       'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
+                'Zephyr'     => [ 'name' => 'Zephyr',     'label' => __( 'Zephyr / Ζέφυρος (Calm, Gentle & Melodious)', 'presshub-ai-editor' ),            'gender' => 'NEUTRAL', 'type' => 'Gemini-Neural' ],
+                'Orus'       => [ 'name' => 'Orus',       'label' => __( 'Orus / Ώρος (Confident & Articulate)', 'presshub-ai-editor' ),                  'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
             ],
         ];
     }
@@ -197,6 +448,11 @@ class PressHub_AI_Audio_Synthesizer {
      */
     public function get_voice_for_speaker( string $speaker ): string {
         $clean = trim( $speaker );
+        // Issue #89 — Settings-First pattern (AGENTS.md): read voice
+        // options via the canonical static helpers instead of inline
+        // get_option() calls. The helpers encapsulate engine-aware
+        // defaults and the manifest-driven allow-list, so this method
+        // becomes purely a "speaker → persona" dispatcher.
         $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
 
         $female_host   = (string) get_option( 'presshub_ai_briefing_host_female', 'Μαρία' );
@@ -214,9 +470,10 @@ class PressHub_AI_Audio_Synthesizer {
         );
 
         if ( $is_tertiary ) {
-            $default_tertiary = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck';
-            $voice = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_tertiary() : (string) get_option( 'presshub_ai_briefing_voice_tertiary', $default_tertiary );
-            return ! empty( $voice ) ? trim( $voice ) : $default_tertiary;
+            $voice = class_exists( 'PressHub_AI_Settings_Storage' )
+                ? PressHub_AI_Settings_Storage::get_voice_tertiary()
+                : (string) get_option( 'presshub_ai_briefing_voice_tertiary', ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck' );
+            return ! empty( $voice ) ? trim( $voice ) : ( ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck' );
         }
 
         $is_female = (
@@ -231,7 +488,9 @@ class PressHub_AI_Audio_Synthesizer {
 
         if ( $is_female ) {
             $default_female = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-A' : 'Kore';
-            $voice = (string) get_option( self::OPTION_VOICE_FEMALE, $default_female );
+            $voice = class_exists( 'PressHub_AI_Settings_Storage' )
+                ? PressHub_AI_Settings_Storage::get_voice_female()
+                : (string) get_option( self::OPTION_VOICE_FEMALE, $default_female );
             if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) ) {
                 $voice = $default_female;
             }
@@ -239,7 +498,9 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         $default_male = ( 'google_cloud' === $engine ) ? 'el-GR-Chirp3-HD-Achird' : 'Fenrir';
-        $voice = (string) get_option( self::OPTION_VOICE_MALE, $default_male );
+        $voice = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_voice_male()
+            : (string) get_option( self::OPTION_VOICE_MALE, $default_male );
         if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) || 'el-GR-Wavenet-B' === $voice || 'el-GR-Standard-B' === $voice ) {
             $voice = $default_male;
         }

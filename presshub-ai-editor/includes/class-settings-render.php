@@ -2067,10 +2067,20 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_voice_female';
         $selected = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_voice_female() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
-        $gemini_voices = $synthesizer ? ( $synthesizer->get_available_voices( 'gemini' )['female'] ?? [] ) : [];
+        // Issue #89 — read the engine-aware catalog (was hardcoded 'gemini'
+        // which produced a stale dropdown for Google Cloud TTS operators).
+        // We guard the engine lookup with class_exists() because some
+        // tests load class-settings-render.php without the audio
+        // synthesizer class — in that case we fall back to the legacy
+        // 'gemini' engine id which still resolves to gemini-2.5 via the
+        // synthesizer's own shim.
+        $engine_key = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? PressHub_AI_Audio_Synthesizer::OPTION_ENGINE : 'presshub_ai_briefing_tts_engine';
+        $engine    = (string) get_option( $engine_key, 'gemini' );
+        $engine_id = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
+        $voices    = $synthesizer ? ( $synthesizer->get_available_voices( $engine_id )['female'] ?? [] ) : [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php foreach ( $gemini_voices as $key => $v ) : ?>
+            <?php foreach ( $voices as $key => $v ) : ?>
                 <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
                     <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
                 </option>
@@ -2084,10 +2094,16 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_voice_male';
         $selected = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_voice_male() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
-        $gemini_voices = $synthesizer ? ( $synthesizer->get_available_voices( 'gemini' )['male'] ?? [] ) : [];
+        // Issue #89 — engine-aware (was hardcoded 'gemini'). Guarded for
+        // test environments that load Settings_Render without the
+        // Audio_Synthesizer class.
+        $engine_key = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? PressHub_AI_Audio_Synthesizer::OPTION_ENGINE : 'presshub_ai_briefing_tts_engine';
+        $engine    = (string) get_option( $engine_key, 'gemini' );
+        $engine_id = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
+        $voices    = $synthesizer ? ( $synthesizer->get_available_voices( $engine_id )['male'] ?? [] ) : [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php foreach ( $gemini_voices as $key => $v ) : ?>
+            <?php foreach ( $voices as $key => $v ) : ?>
                 <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
                     <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
                 </option>
@@ -2101,8 +2117,14 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_voice_tertiary';
         $selected = PressHub_AI_Settings_Storage::get_voice_tertiary();
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
-        $gemini_voices = $synthesizer ? $synthesizer->get_available_voices( 'gemini' ) : [];
-        $all_voices = array_merge( $gemini_voices['male'] ?? [], $gemini_voices['female'] ?? [] );
+        // Issue #89 — engine-aware (was hardcoded 'gemini'). Guarded for
+        // test environments that load Settings_Render without the
+        // Audio_Synthesizer class.
+        $engine_key = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? PressHub_AI_Audio_Synthesizer::OPTION_ENGINE : 'presshub_ai_briefing_tts_engine';
+        $engine    = (string) get_option( $engine_key, 'gemini' );
+        $engine_id = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
+        $voices    = $synthesizer ? $synthesizer->get_available_voices( $engine_id ) : [];
+        $all_voices = array_merge( $voices['male'] ?? [], $voices['female'] ?? [] );
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
             <?php foreach ( $all_voices as $key => $v ) : ?>
