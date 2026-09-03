@@ -335,7 +335,13 @@ class PressHub_AI_Briefing_Admin {
             [
                 'ajax_url' => admin_url( 'admin-ajax.php' ),
                 'nonce'    => wp_create_nonce( 'presshub_ai_nonce' ),
-                'date'     => gmdate( 'Y-m-d' ),
+                // Issue #83 — anchor "today" in the WP-local timezone used
+                // by the token-log writer (class-token-logger.php uses
+                // current_time('mysql')), so the JS bootstrap date matches
+                // the server's notion of "today" instead of UTC. For any
+                // operator east of UTC this prevents the Briefing Hub from
+                // opening with yesterday's UTC date in the early morning.
+                'date'     => function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ),
                 // Issue #61 — expose the cap values to the JS so the
                 // "Of N pool tokens, M were sent to the LLM" subtext
                 // mirrors the curator's prompt-build math. Values come from
@@ -563,7 +569,13 @@ class PressHub_AI_Briefing_Admin {
      */
     public function get_briefing_status( string $date = '' ): array {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            // Issue #83 — anchor "today" in the WP-local timezone used by
+            // the token-log writer (class-token-logger.php writes
+            // created_at via current_time('mysql')). For any operator
+            // east of UTC this prevents the Briefing Hub from aggregating
+            // yesterday's UTC-date stage events on the early morning of
+            // a new local day.
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $harvester = new PressHub_AI_News_Harvester();
@@ -768,7 +780,11 @@ class PressHub_AI_Briefing_Admin {
         }
 
         if ( empty( $date ) ) {
-            $date = isset( $_GET['briefing_date'] ) ? sanitize_text_field( wp_unslash( $_GET['briefing_date'] ) ) : gmdate( 'Y-m-d' );
+            $raw_date = isset( $_GET['briefing_date'] ) ? sanitize_text_field( wp_unslash( $_GET['briefing_date'] ) ) : '';
+            // Issue #83 — anchor the page-default in the WP-local timezone
+            // used by the token-log writer so the page does not open on
+            // yesterday's UTC date for operators east of UTC.
+            $date = ( '' !== $raw_date ) ? $raw_date : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         }
 
         $status = $this->get_briefing_status( $date );
@@ -1007,6 +1023,9 @@ class PressHub_AI_Briefing_Admin {
                         $harv_blocked   = (array) ( $status['blocked_source_labels'] ?? [] );
                         ?>
                         <div class="presshub-stage-status-box" id="stage-harvest-status-box" data-stage="harvest">
+                            <?php if ( '' === $harv_attempted && '' === $harv_completed && 'error' !== $harv_status && empty( $harv_active ) && empty( $harv_blocked ) ) : ?>
+                                <p class="description presshub-stage-empty">⏳ <?php echo esc_html__( 'Awaiting first run for this date.', 'presshub-ai-editor' ); ?></p>
+                            <?php else : ?>
                             <div class="presshub-status-row">
                                 <?php if ( '' !== $harv_attempted ) : ?>
                                     <span class="presshub-timestamp-chip" title="<?php echo esc_attr__( 'Pipeline stage start timestamp', 'presshub-ai-editor' ); ?>">
@@ -1027,6 +1046,7 @@ class PressHub_AI_Briefing_Admin {
                                     ?></span>
                                 <?php endif; ?>
                             </div>
+                            <?php endif; ?>
                             <?php if ( 'error' === $harv_status && ! empty( $harv_evt['error_message'] ) ) : ?>
                                 <p class="presshub-stage-error description">⚠️ <?php echo esc_html( (string) $harv_evt['error_message'] ); ?></p>
                             <?php endif; ?>
@@ -1124,6 +1144,9 @@ class PressHub_AI_Briefing_Admin {
                         <?php endif; ?>
 
                         <div class="presshub-stage-status-box" id="stage-curation-status-box" data-stage="curation">
+                            <?php if ( '' === $cur_attempted && '' === $cur_completed && 'error' !== $cur_status && '' === $tsc_type && '' === $tsc_preset && ! $status['text_created'] ) : ?>
+                                <p class="description presshub-stage-empty">⏳ <?php echo esc_html__( 'Awaiting first run for this date.', 'presshub-ai-editor' ); ?></p>
+                            <?php else : ?>
                             <div class="presshub-status-row">
                                 <?php if ( '' !== $cur_attempted ) : ?>
                                     <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $cur_attempted ) ); ?></span>
@@ -1135,6 +1158,7 @@ class PressHub_AI_Briefing_Admin {
                                     <span class="presshub-stat-pill">⏳ <?php echo esc_html( sprintf( '%01.1fs', $cur_duration_ms / 1000 ) ); ?></span>
                                 <?php endif; ?>
                             </div>
+                            <?php endif; ?>
                             <div class="presshub-status-row" style="margin-top: 4px;">
                                 <?php
                                 $wp_status_label = ucfirst( (string) ( $status['text_post_status'] ?? '' ) );
@@ -1217,6 +1241,9 @@ class PressHub_AI_Briefing_Admin {
                         $sc_source_post= (int) ( $sc_meta['source_post_id'] ?? 0 );
                         ?>
                         <div class="presshub-stage-status-box" id="stage-script-status-box" data-stage="script">
+                            <?php if ( '' === $sc_attempted && '' === $sc_completed && 'error' !== $sc_status && '' === $sc_mode && ! $status['script_created'] ) : ?>
+                                <p class="description presshub-stage-empty">⏳ <?php echo esc_html__( 'Awaiting first run for this date.', 'presshub-ai-editor' ); ?></p>
+                            <?php else : ?>
                             <div class="presshub-status-row">
                                 <?php if ( '' !== $sc_attempted ) : ?>
                                     <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $sc_attempted ) ); ?></span>
@@ -1228,6 +1255,7 @@ class PressHub_AI_Briefing_Admin {
                                     <span class="presshub-stat-pill">⏳ <?php echo esc_html( sprintf( '%01.1fs', $sc_duration / 1000 ) ); ?></span>
                                 <?php endif; ?>
                             </div>
+                            <?php endif; ?>
                             <div class="presshub-status-row" style="margin-top: 4px;">
                                 <?php if ( 'curated_briefing' === $sc_mode ) : ?>
                                     <span class="presshub-source-tag">📰 <?php echo esc_html__( 'Curated Morning Briefing', 'presshub-ai-editor' ); ?><?php if ( $sc_source_post > 0 ) : ?> · <code>#<?php echo (int) $sc_source_post; ?></code><?php endif; ?></span>
@@ -1334,6 +1362,9 @@ class PressHub_AI_Briefing_Admin {
                         }
                         ?>
                         <div class="presshub-stage-status-box" id="stage-audio-status-box" data-stage="audio">
+                            <?php if ( '' === $au_attempted && '' === $au_completed && 'error' !== $au_status && empty( $voice_chips ) && empty( $audio_min_secs ) && empty( $audio_filesize_str ) && ! $status['audio_created'] ) : ?>
+                                <p class="description presshub-stage-empty">⏳ <?php echo esc_html__( 'Awaiting first run for this date.', 'presshub-ai-editor' ); ?></p>
+                            <?php else : ?>
                             <div class="presshub-status-row">
                                 <?php if ( '' !== $au_attempted ) : ?>
                                     <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $au_attempted ) ); ?></span>
@@ -1350,6 +1381,7 @@ class PressHub_AI_Briefing_Admin {
                                     ?></span>
                                 <?php endif; ?>
                             </div>
+                            <?php endif; ?>
                             <div class="presshub-status-row" style="margin-top: 4px; flex-wrap: wrap;">
                                 <?php if ( '' !== $audio_min_secs ) : ?>
                                     <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'Playback duration', 'presshub-ai-editor' ); ?>">⏱ <?php echo esc_html( sprintf( __( '%s min', 'presshub-ai-editor' ), $audio_min_secs ) ); ?></span>

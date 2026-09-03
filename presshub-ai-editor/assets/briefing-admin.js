@@ -25,7 +25,13 @@
         var ajaxUrl = config.ajax_url || window.ajaxurl;
         var nonce = config.nonce || '';
         var i18n = config.i18n || {};
-        var currentDate = $('#presshub-briefing-hub-wrap').data('date') || config.date || new Date().toISOString().split('T')[0];
+        // Issue #83 — prefer the server-provided WP-local date stamp
+        // (PHP wp_date('Y-m-d')) over the UTC ISO date so the JS
+        // bootstrap matches the timezone the token-log writer uses.
+        // `new Date().toISOString().split('T')[0]` is intentionally
+        // avoided as a final fallback because it always returns UTC
+        // and leaks yesterday's date for operators east of UTC.
+        var currentDate = $('#presshub-briefing-hub-wrap').data('date') || config.date || '';
 
         // -------------------------------------------------------------------------
         // Notice Display System
@@ -508,6 +514,13 @@
             if (!status || !status.stage_events) return;
             var events = status.stage_events;
             var stageKeys = ['harvest', 'curation', 'script', 'audio'];
+            // Issue #83 — placeholder text used when a stage has no
+            // recorded activity for the selected date. Translates via
+            // the standard __() helper so the wording mirrors the PHP
+            // pre-render on first paint.
+            var emptyText = (window.wp && window.wp.i18n && window.wp.i18n.__)
+                ? window.wp.i18n.__('Awaiting first run for this date.', 'presshub-ai-editor')
+                : 'Awaiting first run for this date.';
             for (var i = 0; i < stageKeys.length; i++) {
                 var key   = stageKeys[i];
                 var event = events[key] || {};
@@ -516,6 +529,14 @@
                 // Replace inner HTML idempotently — server may have added
                 // new sub-pills since the last AJAX tick.
                 box.empty();
+                // Issue #83 — defense-in-depth: when the server returned
+                // no log rows for this stage on this date, paint a small
+                // placeholder line so the editor sees an explicit empty
+                // state instead of a bare empty container.
+                if (!event.attempted_at && !event.completed_at && (!event.duration_ms || event.duration_ms <= 0) && event.status !== 'error') {
+                    box.append('<p class="description presshub-stage-empty">⏳ ' + escapeHtml(emptyText) + '</p>');
+                    continue;
+                }
                 var row = $('<div class="presshub-status-row"></div>');
                 if (event.attempted_at) {
                     var chip = $('<span class="presshub-timestamp-chip">⏱ Attempted: ' + escapeHtml(event.attempted_at) + '</span>');

@@ -364,13 +364,27 @@ class PressHub_AI_Token_Logger {
             $where_clauses[] = 'status = %s';
             $params[] = $status;
         }
+        // Issue #83 — normalize the date filters so the WHERE clause
+        // expands 'Y-m-d' boundaries into the same timezone the writer
+        // used (current_time('mysql')). Without this normalization the
+        // day boundaries are implicitly 00:00–23:59 in the PHP process's
+        // local time, which can leak yesterday's logs for operators
+        // east of UTC (i.e. when WP-local "today" is already Sept 3 but
+        // UTC is still Sept 2).
+        $date_tz_offset_hours = 0.0;
+        if ( isset( $GLOBALS['WP_GMT_OFFSET'] ) ) {
+            // Test-only override (mirrors the wp_date() stub).
+            $date_tz_offset_hours = (float) $GLOBALS['WP_GMT_OFFSET'];
+        } elseif ( function_exists( 'get_option' ) ) {
+            $date_tz_offset_hours = (float) get_option( 'gmt_offset', 0 );
+        }
         if ( '' !== $start_date ) {
             $where_clauses[] = 'created_at >= %s';
-            $params[] = ( false === strpos( $start_date, ' ' ) ) ? $start_date . ' 00:00:00' : $start_date;
+            $params[] = self::normalize_date_boundary( $start_date, false, $date_tz_offset_hours );
         }
         if ( '' !== $end_date ) {
             $where_clauses[] = 'created_at <= %s';
-            $params[] = ( false === strpos( $end_date, ' ' ) ) ? $end_date . ' 23:59:59' : $end_date;
+            $params[] = self::normalize_date_boundary( $end_date, true, $date_tz_offset_hours );
         }
         if ( '' !== $search ) {
             $esc_search = method_exists( $wpdb, 'esc_like' ) ? $wpdb->esc_like( $search ) : addcslashes( $search, '_%\\' );
@@ -418,6 +432,61 @@ class PressHub_AI_Token_Logger {
             'page'     => $page,
             'per_page' => $per_page,
         ];
+    }
+
+    /**
+     * Issue #83 — Expand a 'Y-m-d' filter boundary into a UTC timestamp
+     * matching the timezone used by current_time('mysql') when the writer
+     * stored created_at. This guarantees the WHERE clause in get_logs()
+     * selects rows whose created_at falls inside the requested local day.
+     *
+     * Without this normalization, callers that pass a 'Y-m-d' string end
+     * up with an implicit 00:00:00–23:59:59 window in the PHP connection's
+     * local timezone — which on a UTC PHP process means "00:00–23:59 UTC",
+     * mismatching the WP-local day used by current_time('mysql') for
+     * operators east of UTC.
+     *
+     * Examples (PHP running in UTC, gmt_offset = 3 — Cyprus):
+     *   normalize_date_boundary('2026-09-03', false, 3)
+     *     → '2026-09-02 21:00:00'  (start of local Sept 3 = UTC Sept 2 21:00)
+     *   normalize_date_boundary('2026-09-03', true,  3)
+     *     → '2026-09-03 20:59:59'  (end of local Sept 3 = UTC Sept 3 20:59:59)
+     *
+     * @param string $date             'Y-m-d' or 'Y-m-d H:i:s' input boundary.
+     * @param bool   $is_end_boundary  True for the inclusive end-of-day,
+     *                                 false for the start-of-day.
+     * @param float  $gmt_offset_hours WP gmt_offset option (e.g. 3.0 for
+     *                                 Asia/Nicosia). 0.0 falls back to UTC.
+     * @return string UTC 'Y-m-d H:i:s' boundary suitable for SQL comparison.
+     */
+    public static function normalize_date_boundary( string $date, bool $is_end_boundary, float $gmt_offset_hours = 0.0 ): string {
+        $date = trim( $date );
+        if ( '' === $date ) {
+            return $date;
+        }
+        // Already includes time — pass through (assume caller knew what
+        // they were doing with the timezone).
+        if ( false !== strpos( $date, ' ' ) ) {
+            return $date;
+        }
+        // Interpret the 'Y-m-d' input as a WP-local day, then shift into
+        // UTC by subtracting the gmt_offset (so 00:00 local becomes the
+        // matching UTC instant). For the end boundary we want the LAST
+        // second of the local day (23:59:59), so we shift the start-of-day
+        // backwards by one full day minus 1 second — i.e. (24*3600 - 1)
+        // seconds into the previous UTC day after the offset shift.
+        $local_start_ts = strtotime( $date . ' 00:00:00' );
+        if ( false === $local_start_ts ) {
+            // Fallback: keep the old behaviour if the input is malformed.
+            return $is_end_boundary ? ( $date . ' 23:59:59' ) : ( $date . ' 00:00:00' );
+        }
+        $offset_seconds = (int) round( $gmt_offset_hours * 3600 );
+        if ( $is_end_boundary ) {
+            $utc_ts = ( $local_start_ts + ( 24 * 3600 - 1 ) ) - $offset_seconds;
+        } else {
+            $utc_ts = $local_start_ts - $offset_seconds;
+        }
+        return gmdate( 'Y-m-d H:i:s', $utc_ts );
     }
 
     /**
