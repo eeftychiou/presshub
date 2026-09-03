@@ -310,6 +310,23 @@ class SettingsSanitizeTest
             $failures[] = "copilot max tokens 15000 should pass through.";
         }
 
+        // --- Case 22: Issue #90 — podcast dialogue style sanitizer ---
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_podcast_style', 'default_greek_chat' ) !== 'default_greek_chat' ) {
+            $failures[] = "style 'default_greek_chat' should pass through.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_podcast_style', 'bbc_broadcasting_standards' ) !== 'bbc_broadcasting_standards' ) {
+            $failures[] = "style 'bbc_broadcasting_standards' should pass through.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_podcast_style', 'conversational_news_reporting' ) !== 'conversational_news_reporting' ) {
+            $failures[] = "style 'conversational_news_reporting' should pass through.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_podcast_style', 'unknown_style' ) !== 'default_greek_chat' ) {
+            $failures[] = "unknown style should fall back to 'default_greek_chat'.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_podcast_style', '' ) !== 'default_greek_chat' ) {
+            $failures[] = "empty style should fall back to 'default_greek_chat'.";
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {

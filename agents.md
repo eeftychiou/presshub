@@ -273,6 +273,7 @@ Before creating any GitHub issue, thoroughly examine the problem in the local de
    - Inspect database token & activity records: `php dev-env/scripts/view-token-logs.php --status=error` or `--detail=<id>`
    - Query relevant tables/options: `php dev-env/scripts/query-db.php "SELECT ..."`
 3. **Identify Root Cause**: Pinpoint the exact file, class, function, or SQL query responsible.
+4. **Line-number drift between issue body and current source**: Issue bodies cite line numbers that matched the file at the time the issue was filed. After any commit touches that file, the line numbers shift. Always re-locate the exact code in the **current** file via `grep_search` or `view_file` before editing — issue bodies are authoritative on intent, not on line numbers. When opening a PR, explicitly state in the description when the cited line numbers have shifted.
 
 ### 2. Issue Categorization & Severity Taxonomy
 
@@ -428,6 +429,13 @@ digraph SDLC {
    - Test UI in WordPress Admin: `http://127.0.0.1:8888/wp-admin/`
    - Capture screenshots for any modified UI views.
 
+#### Scope expansion beyond an issue's literal list
+When `replace_file_content` with `AllowMultiple=true` (or any other auto-expanding tool) matches more sites than the issue body explicitly enumerated:
+1. **Verify** each additional match is the same defect (byte-identical or semantically identical pattern).
+2. **Verify** the additional sites are required to actually resolve the bug, not just convenient to bundle.
+3. **Disclose** the expansion explicitly in the PR body under a "Scope note" or similar heading, citing the additional sites and the reason for inclusion.
+4. **Never** silently expand scope beyond what an issue cites without disclosure.
+
 ---
 
 ### Step 3: Mandatory Pre-Commit Verification Gate
@@ -517,6 +525,20 @@ git commit -m "fix(settings): prevent pre-populating active providers on clean i
    ```bash
    php dev-env/scripts/run-integration-tests.php
    ```
+
+---
+
+## 🪟 Windows / PowerShell Quoting & Tooling Discipline
+
+PressHub development runs on Windows PowerShell. The following pitfalls
+recur and must be avoided:
+
+1. **Never chain commands with `&&` / `||` / `;` in `run_command`.** PowerShell parses these as separate statements and rejects them with `The token '&&' is not a valid statement separator`. Run one command per `run_command` invocation, or write a `.ps1` script file via `write_to_file` and invoke it.
+2. **Never use Bash-isms (`grep`, `sed`, `awk`, `cat`, `&&`, `$VAR`).** Use PowerShell-native equivalents: `Select-String`, `Get-Content`, `Set-Content`, `Where-Object`, `ForEach-Object`, etc.
+3. **Never pass PHP / shell scripts with `$variable` references through `php -r "..."`.** The `$` is expanded by PowerShell *before* PHP sees the source, producing a `PHP Parse error: syntax error, unexpected token '\\'`. Write the script to a scratch file under `<appDataDir>/brain/<conversation-id>/scratch/` and invoke it as `php <scratch-file>.php`.
+4. **Long / multi-line / multi-paragraph strings to CLI tools must be passed via `--body-file <path>` or stdin pipe (`-c -`), not as inline `-c "..."`.** PowerShell splits long quoted arguments at whitespace. The `--body-file` and stdin-pipe patterns both work; inline does not.
+5. **`gh issue close` accepts `-c <comment>` (not `--comment-file`).** For multi-line comments, pipe the file via stdin: `Get-Content -Raw file.md | gh issue close N -c -`.
+6. **`gh pr create` accepts `--body-file <path>`.** Always use this for PR bodies longer than a few lines.
 
 ---
 

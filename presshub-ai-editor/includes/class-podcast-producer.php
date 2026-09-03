@@ -72,19 +72,47 @@ class PressHub_AI_Podcast_Producer {
     }
 
     /**
-     * Get the base Greek podcast producer system prompt with placeholders.
+     * Issue #90 — Get the base podcast producer system prompt template for a
+     * given (style, host_count) combination. Three styles are shipped:
+     * default_greek_chat (current Greek NotebookLM-style chat, kept for
+     * back-compat), bbc_broadcasting_standards (formal, neutral,
+     * third-person English house style), and conversational_news_reporting
+     * (informal, first-person, opinionated co-host conversation). All
+     * templates use the generic [SPEAKER_N]: label convention rather than
+     * concrete presenter names.
      *
-     * @param int $host_count Number of presenters (1 solo, 2 co-hosts, 3 roundtable).
+     * @param int    $host_count Number of presenters (1 solo, 2 co-hosts, 3 roundtable).
+     * @param string $style      Style key. Unknown values fall back to 'default_greek_chat'.
      * @return string Base system prompt template.
      */
-    public static function get_default_dialogue_prompt( int $host_count = 2 ): string {
+    public static function get_default_dialogue_prompt( int $host_count = 2, string $style = 'default_greek_chat' ): string {
+        // Issue #90 — validate the $style argument and dispatch to the
+        // appropriate style-specific template helper.
+        $style = in_array( $style, [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ], true )
+            ? $style
+            : 'default_greek_chat';
+
+        if ( 'bbc_broadcasting_standards' === $style ) {
+            return self::get_bbc_broadcasting_standards_prompt( $host_count );
+        }
+        if ( 'conversational_news_reporting' === $style ) {
+            return self::get_conversational_news_reporting_prompt( $host_count );
+        }
+        return self::get_default_greek_chat_prompt( $host_count );
+    }
+
+    /**
+     * Issue #90 — Internal helper: get the default Greek NotebookLM-style
+     * chat template (rewritten to use [SPEAKER_N]: generic labels).
+     */
+    private static function get_default_greek_chat_prompt( int $host_count ): string {
         if ( 1 === $host_count ) {
             $intro = "Είσαι ένας εξειδικευμένος παραγωγός podcast και σεναριογράφος ενημερωτικών εκπομπών. "
                 . "Αποστολή σου είναι να δημιουργήσεις ένα ζωντανό, ευχάριστο, άμεσο και απόλυτα ενημερωτικό podcast ενημέρωσης (μονόλογο) στα Ελληνικά "
-                . "για την ημερομηνία {date}, με έναν κεντρικό παρουσιαστή/δημοσιογράφο: την {host1_name}.\n\n";
+                . "για την ημερομηνία {date}, με έναν κεντρικό παρουσιαστή/δημοσιογράφο που θα αποκαλείται στο σενάριο ως [SPEAKER_1].\n\n";
             $speaker_rule = "2. Αυστηρή Μορφή Ομιλητή (Speaker Tags):\n"
-                . "   - Κάθε ατάκα/παράγραφος ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του παρουσιαστή: [{host1_name}]:\n"
-                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός του [{host1_name}]:.\n";
+                . "   - Κάθε ατάκα/παράγραφος ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του παρουσιαστή: [SPEAKER_1]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός του [SPEAKER_1]:.\n";
             $flow_rule = "3. Ροή & Ύφος Παρουσίασης (Φυσικό & Αφηγηματικό - NotebookLM Style):\n"
                 . "   - Ο παρουσιαστής μεταδίδει τις ειδήσεις με έναν εξαιρετικά φυσικό, άμεσο, ζεστό και αφηγηματικό τόνο (storytelling).\n"
                 . "   - Χρησιμοποίησε λέξεις 'γεμίσματος' (π.χ. 'Λοιπόν...', 'Σκεφτείτε το...', 'Και εδώ είναι το ενδιαφέρον...') για να σπάσεις τον ξύλινο, στημένο δημοσιογραφικό λόγο.\n"
@@ -93,11 +121,11 @@ class PressHub_AI_Podcast_Producer {
         } elseif ( 3 === $host_count ) {
             $intro = "Είσαι ένας εξειδικευμένος παραγωγός podcast και σεναριογράφος ενημερωτικών εκπομπών. "
                 . "Αποστολή σου είναι να δημιουργήσεις ένα ζωντανό, ευχάριστο, άμεσο και απόλυτα ενημερωτικό διάλογο podcast στα Ελληνικά "
-                . "για την ημερομηνία {date}, ανάμεσα σε τρεις δημοσιογράφους/παρουσιαστές: την {host1_name} (κεντρική παρουσιάστρια/συντονίστρια), "
-                . "τον {host2_name} (σχολιαστής/αναλυτής ειδήσεων) και τον {host3_name} (ειδικός αναλυτής επικαιρότητας).\n\n";
+                . "για την ημερομηνία {date}, ανάμεσα σε τρεις δημοσιογράφους/παρουσιαστές που θα αποκαλούνται στο σενάριο ως [SPEAKER_1] (κεντρικός/συντονιστής), "
+                . "[SPEAKER_2] (σχολιαστής/αναλυτής ειδήσεων) και [SPEAKER_3] (ειδικός αναλυτής επικαιρότητας).\n\n";
             $speaker_rule = "2. Αυστηρή Μορφή Ομιλητών (Speaker Tags):\n"
-                . "   - Κάθε ατάκα ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του ομιλητή: [{host1_name}]:, [{host2_name}]: ή [{host3_name}]:\n"
-                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός των [{host1_name}]:, [{host2_name}]: και [{host3_name}]:.\n";
+                . "   - Κάθε ατάκα ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του ομιλητή: [SPEAKER_1]:, [SPEAKER_2]: ή [SPEAKER_3]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός των [SPEAKER_1]:, [SPEAKER_2]: και [SPEAKER_3]:.\n";
             $flow_rule = "3. Ροή & Ύφος Διαλόγου (Εξαιρετικά Φυσικό & Διαδραστικό - NotebookLM Audio Overview Style):\n"
                 . "   - Οι τρεις παρουσιαστές συζητούν, αναλύουν και διαφωνούν φιλικά σαν μια χαλαρή ραδιοφωνική παρέα.\n"
                 . "   - Χρησιμοποίησε εξαιρετικά φυσικό, καθημερινό και σχεδόν αδόμητο προφορικό λόγο.\n"
@@ -108,11 +136,11 @@ class PressHub_AI_Podcast_Producer {
             // Default: 2 hosts
             $intro = "Είσαι ένας εξειδικευμένος παραγωγός podcast και σεναριογράφος ενημερωτικών εκπομπών. "
                 . "Αποστολή σου είναι να δημιουργήσεις ένα ζωντανό, ευχάριστο, άμεσο και απόλυτα ενημερωτικό διάλογο podcast στα Ελληνικά "
-                . "για την ημερομηνία {date}, ανάμεσα σε δύο δημοσιογράφους/παρουσιαστές: την {host1_name} (κεντρική παρουσιάστρια/δημοσιογράφος) "
-                . "και τον {host2_name} (σχολιαστής/αναλυτής ειδήσεων).\n\n";
+                . "για την ημερομηνία {date}, ανάμεσα σε δύο δημοσιογράφους/παρουσιαστές που θα αποκαλούνται στο σενάριο ως [SPEAKER_1] (κεντρική παρουσιάστρια/δημοσιογράφος) "
+                . "και [SPEAKER_2] (σχολιαστής/αναλυτής ειδήσεων).\n\n";
             $speaker_rule = "2. Αυστηρή Μορφή Ομιλητών (Speaker Tags):\n"
-                . "   - Κάθε ατάκα ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του ομιλητή: [{host1_name}]: ή [{host2_name}]:\n"
-                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός των [{host1_name}]: και [{host2_name}]:.\n";
+                . "   - Κάθε ατάκα ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του ομιλητή: [SPEAKER_1]: ή [SPEAKER_2]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός των [SPEAKER_1]: και [SPEAKER_2]:.\n";
             $flow_rule = "3. Ροή & Ύφος Διαλόγου (Εξαιρετικά Φυσικό & Διαδραστικό - NotebookLM Audio Overview Style):\n"
                 . "   - Οι δύο παρουσιαστές δεν διαβάζουν απλώς ειδήσεις. Συζητούν, αναλύουν και ανακαλύπτουν τα θέματα μαζί σαν να κάθονται σε ένα καφέ.\n"
                 . "   - Χρησιμοποίησε έναν εξαιρετικά φυσικό, καθημερινό και σχεδόν αδόμητο προφορικό λόγο.\n"
@@ -128,7 +156,7 @@ class PressHub_AI_Podcast_Producer {
             . "     [TOPIC_END]\n"
             . "   - Παράδειγμα:\n"
             . "     [TOPIC_START: Εισαγωγή & Τίτλοι Ειδήσεων]\n"
-            . "     [{host1_name}]: Καλωσήρθατε...\n"
+            . "     [SPEAKER_1]: Καλωσήρθατε...\n"
             . "     [TOPIC_END]\n"
             . "     [TOPIC_START: Οικονομία & Αγορές]\n"
             . "     ...\n"
@@ -146,6 +174,163 @@ class PressHub_AI_Podcast_Producer {
             . "   - 'Ενώστε τις τελείες' μεταξύ διαφορετικών ειδήσεων για να βρείτε το ευρύτερο νόημα.\n"
             . "   - Χρησιμοποιήστε απλές, καθημερινές αναλογίες και μεταφορές για να εξηγήσετε πολύπλοκα θέματα (π.χ. οικονομικά ή τεχνολογικά) ώστε να είναι κατανοητά στον μέσο ακροατή.\n"
             . "   - Καλύψτε τα σημαντικότερα θέματα από τις πηγές: {sources_list}."
+            . $topic_rule;
+    }
+
+    /**
+     * Issue #90 - Internal helper: BBC Broadcasting Standards template
+     * (formal, neutral, third-person, no opinions, no first-person
+     * interjections). Operators can translate the user-facing language
+     * to whatever their editorial audience reads. Speaker tags use the
+     * generic [SPEAKER_N]: convention; presenter names are deliberately
+     * omitted.
+     */
+    private static function get_bbc_broadcasting_standards_prompt( int $host_count ): string {
+        if ( 1 === $host_count ) {
+            $intro = "You are the lead anchor of a professional broadcast news podcast for the date {date}. "
+                . "You will be referred to throughout the script as [SPEAKER_1]. "
+                . "Your delivery follows BBC Broadcasting Standards: formal, neutral, third-person, factual, with no opinions and no first-person interjections. "
+                . "You report. You do not editorialize.\n\n";
+            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
+                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]:\n"
+                . "   - No other tags, no narration outside [SPEAKER_1]:.\n";
+            $flow_rule = "3. Flow & Tone of Delivery (BBC Broadcasting Standards):\n"
+                . "   - Tone: formal, measured, neutral, third-person. Address the audience in the third person or with the impersonal 'we' where the editorial voice allows; never use first-person singular ('I think', 'in my opinion').\n"
+                . "   - No filler words ('like', 'you know', 'um', 'er'). Pacing is deliberate and unhurried.\n"
+                . "   - No opinions, no speculation, no rhetorical questions. State the facts; cite the source. Attribute claims to their origin where possible.\n"
+                . "   - Avoid sensationalist adjectives ('shocking', 'incredible', 'unbelievable'). Prefer restrained, descriptive language.\n"
+                . "   - Open with a formal programme greeting (mentioning the date {date} and the PressHub Briefing) and close with a brief, professional sign-off.\n";
+        } elseif ( 3 === $host_count ) {
+            $intro = "You are coordinating a three-person broadcast news podcast panel for the date {date}. "
+                . "The three participants are referred to throughout the script as [SPEAKER_1] (lead anchor / coordinator), "
+                . "[SPEAKER_2] (commentator / news analyst) and [SPEAKER_3] (specialist subject-matter analyst). "
+                . "Delivery follows BBC Broadcasting Standards: formal, neutral, third-person, factual, with no opinions and no first-person interjections.\n\n";
+            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
+                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]:, [SPEAKER_2]: or [SPEAKER_3]:\n"
+                . "   - No other tags, no narration outside the three speaker tags.\n";
+            $flow_rule = "3. Flow & Tone of Delivery (BBC Broadcasting Standards):\n"
+                . "   - Tone: formal, measured, neutral, third-person. Address the audience in the third person or with the impersonal 'we' where the editorial voice allows; never use first-person singular.\n"
+                . "   - No filler words, no casual asides, no banter. The conversation is structured and disciplined.\n"
+                . "   - No opinions, no speculation, no rhetorical questions. State the facts; cite the source; attribute claims to their origin where possible.\n"
+                . "   - Avoid sensationalist adjectives. Prefer restrained, descriptive language.\n"
+                . "   - [SPEAKER_1] moderates turn-taking. [SPEAKER_2] and [SPEAKER_3] respond to direct questions and add factual context; they do not initiate casual asides.\n"
+                . "   - Open with a formal programme greeting (e.g. 'Welcome to the PressHub Briefing for {date}.') and close with a brief, professional sign-off.\n";
+        } else {
+            $intro = "You are coordinating a two-person broadcast news podcast for the date {date}. "
+                . "The two participants are referred to throughout the script as [SPEAKER_1] (lead anchor / coordinator) "
+                . "and [SPEAKER_2] (commentator / news analyst). "
+                . "Delivery follows BBC Broadcasting Standards: formal, neutral, third-person, factual, with no opinions and no first-person interjections.\n\n";
+            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
+                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]: or [SPEAKER_2]:\n"
+                . "   - No other tags, no narration outside the two speaker tags.\n";
+            $flow_rule = "3. Flow & Tone of Delivery (BBC Broadcasting Standards):\n"
+                . "   - Tone: formal, measured, neutral, third-person. Address the audience in the third person or with the impersonal 'we' where the editorial voice allows; never use first-person singular.\n"
+                . "   - No filler words, no casual banter. The conversation is structured and disciplined.\n"
+                . "   - No opinions, no speculation, no rhetorical questions. State the facts; cite the source.\n"
+                . "   - Avoid sensationalist adjectives. Prefer restrained, descriptive language.\n"
+                . "   - [SPEAKER_1] moderates turn-taking. [SPEAKER_2] responds to direct questions and adds factual context.\n"
+                . "   - Open with a formal programme greeting (e.g. 'Welcome to the PressHub Briefing for {date}.') and close with a brief, professional sign-off.\n";
+        }
+
+        $topic_rule = "\n5. Topic Segmentation (Topic Markers):\n"
+            . "   - Divide the script into discrete topic segments using the special tags:\n"
+            . "     [TOPIC_START: Segment Title]\n"
+            . "     (dialogue turns for this topic segment)\n"
+            . "     [TOPIC_END]\n"
+            . "   - Example:\n"
+            . "     [TOPIC_START: Opening & Headlines]\n"
+            . "     [SPEAKER_1]: Welcome to the PressHub Briefing for {date}...\n"
+            . "     [TOPIC_END]\n"
+            . "     [TOPIC_START: Economy & Markets]\n"
+            . "     ...\n"
+            . "     [TOPIC_END]\n";
+
+        return $intro
+            . "Core Script Rules:\n"
+            . "1. Duration & Word Budget:\n"
+            . "   - Target duration: {duration_text}\n"
+            . "   - Word budget: approximately {word_budget} words.\n"
+            . $speaker_rule
+            . $flow_rule
+            . "4. Journalistic Accuracy & Source Attribution:\n"
+            . "   - Base every claim strictly on the provided source material. Do not invent facts, figures, or attributions.\n"
+            . "   - Distinguish clearly between reported fact and reported claim ('according to...', 'officials say...', 'the report states...').\n"
+            . "   - Use simple, accurate language. Avoid colloquialisms, slang, or culturally specific idioms that may not translate across audiences.\n"
+            . "   - Cover the most significant items from the sources: {sources_list}."
+            . $topic_rule;
+    }
+
+    /**
+     * Issue #90 - Internal helper: Conversational News Reporting template
+     * (informal, first-person, opinionated co-host conversation, "improved
+     * by the host(s)" flavor). Speaker tags use the generic [SPEAKER_N]:
+     * convention.
+     */
+    private static function get_conversational_news_reporting_prompt( int $host_count ): string {
+        if ( 1 === $host_count ) {
+            $intro = "You are an experienced radio producer of a news podcast and scriptwriter. "
+                . "Your task is to create a lively, spontaneous, everyday, and 'improved by the host' podcast (monologue) in Greek "
+                . "for the date {date}, with a single anchor/journalist referred to throughout the script as [SPEAKER_1].\n\n";
+            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
+                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]:\n"
+                . "   - No other tags, no narration outside [SPEAKER_1]:.\n";
+            $flow_rule = "3. Flow & Tone of Delivery (Conversational & Opinionated, Improved by the Host):\n"
+                . "   - The anchor speaks in the first person ('I believe', 'I think', 'this strikes me'). Express personal opinions, questions, comments.\n"
+                . "   - The tone is informal, intimate, almost as if talking to a friend over coffee. Humor, irony, rhetorical questions, enthusiastic reactions are welcome.\n"
+                . "   - The anchor 'improves' the news: comments on it, interprets it, enriches it with their own observations, connects items together, makes them more interesting.\n"
+                . "   - Open with a spontaneous, friendly greeting (mentioning the date {date} and the PressHub Briefing) and close with a brief, warm sign-off.\n";
+        } elseif ( 3 === $host_count ) {
+            $intro = "You are an experienced radio producer of a news podcast and scriptwriter. "
+                . "Your task is to create a lively, spontaneous, everyday, and 'improved by the hosts' podcast in Greek "
+                . "for the date {date}, with three journalists/anchors referred to throughout the script as [SPEAKER_1] (lead anchor/coordinator), "
+                . "[SPEAKER_2] (commentator/news analyst) and [SPEAKER_3] (specialist subject-matter analyst).\n\n";
+            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
+                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]:, [SPEAKER_2]: or [SPEAKER_3]:\n"
+                . "   - No other tags, no narration outside the three speaker tags.\n";
+            $flow_rule = "3. Flow & Tone of Delivery (Conversational & Opinionated, Improved by the Hosts):\n"
+                . "   - The three anchors speak in the first person, express personal opinions, react, politely disagree, comment.\n"
+                . "   - The tone is informal, intimate, almost like sitting in a cafe and chatting. Humor, irony, small interruptions, dynamic reactions ('Right!', 'Exactly!', 'Well done!') and spontaneous questions are welcome.\n"
+                . "   - The anchors 'improve' the news: comment on it, interpret it, enrich it with their own observations, connect items together, make them more interesting.\n"
+                . "   - Open with a spontaneous, friendly greeting (e.g. 'Welcome to the PressHub Briefing! Today we will take a deep dive...') and close with a brief, warm sign-off.\n";
+        } else {
+            $intro = "You are an experienced radio producer of a news podcast and scriptwriter. "
+                . "Your task is to create a lively, spontaneous, everyday, and 'improved by the hosts' podcast in Greek "
+                . "for the date {date}, with two journalists/anchors referred to throughout the script as [SPEAKER_1] (lead anchor) "
+                . "and [SPEAKER_2] (commentator/news analyst).\n\n";
+            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
+                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]: or [SPEAKER_2]:\n"
+                . "   - No other tags, no narration outside the two speaker tags.\n";
+            $flow_rule = "3. Flow & Tone of Delivery (Conversational & Opinionated, Improved by the Hosts):\n"
+                . "   - The two anchors speak in the first person, express personal opinions, react, politely disagree, comment.\n"
+                . "   - The tone is informal, intimate, almost like sitting in a cafe. Humor, irony, small interruptions, agreements ('Exactly!', 'Yes, yes!', 'Well done!') and spontaneous questions are welcome.\n"
+                . "   - The anchors 'improve' the news: comment on it, interpret it, enrich it with their own observations, connect items together, make them more interesting.\n"
+                . "   - Open with a spontaneous, friendly greeting (e.g. 'Welcome to the PressHub Briefing! Today we will take a deep dive...') and close with a brief, warm sign-off.\n";
+        }
+
+        $topic_rule = "\n5. Topic Segmentation (Topic Markers):\n"
+            . "   - Divide the script into discrete topic segments using the special tags:\n"
+            . "     [TOPIC_START: Segment Title]\n"
+            . "     (dialogue turns for this topic segment)\n"
+            . "     [TOPIC_END]\n"
+            . "   - Example:\n"
+            . "     [TOPIC_START: Opening & Headlines]\n"
+            . "     [SPEAKER_1]: Welcome to the PressHub Briefing...\n"
+            . "     [TOPIC_END]\n"
+            . "     [TOPIC_START: Economy & Markets]\n"
+            . "     ...\n"
+            . "     [TOPIC_END]\n";
+
+        return $intro
+            . "Core Script Rules:\n"
+            . "1. Duration & Word Budget:\n"
+            . "   - Target duration: {duration_text}\n"
+            . "   - Word budget: approximately {word_budget} words.\n"
+            . $speaker_rule
+            . $flow_rule
+            . "4. Journalistic Accuracy & Deep Dive Analysis:\n"
+            . "   - Base the script strictly on the provided source material, but do not just read it dry. Analyze in depth (Deep Dive), interpret, comment, and connect items.\n"
+            . "   - Use simple, everyday analogies and metaphors to explain complex topics so the average listener can understand them.\n"
+            . "   - Cover the most significant items from the sources: {sources_list}."
             . $topic_rule;
     }
 
@@ -203,16 +388,20 @@ class PressHub_AI_Podcast_Producer {
     /**
      * Hydrate placeholders in a template string with actual briefing & podcast specs.
      *
+     * Issue #90 — Breaking change: the `$host1` / `$host2` / `$host3` parameters
+     * and the `{hostN_name}` placeholders have been removed. All built-in prompt
+     * templates now use the generic `[SPEAKER_N]:` label convention. Operator
+     * custom prompts that still reference `{host1_name}` etc. will retain those
+     * literal tokens in the hydrated output; operators should re-save their
+     * customizations using the new convention.
+     *
      * @param string $template Template string containing {date}, {articles_context}, etc.
      * @param string $date     Briefing date.
      * @param array  $articles Harvested articles.
      * @param string $duration Duration option.
-     * @param string $host1    Lead host name.
-     * @param string $host2    Secondary host name.
-     * @param string $host3    Tertiary host name.
      * @return string Hydrated text.
      */
-    public function hydrate_prompt( string $template, string $date, array $articles = [], string $duration = '', string $host1 = 'Μαρία', string $host2 = 'Νίκος', string $host3 = 'Κώστας' ): string {
+    public function hydrate_prompt( string $template, string $date, array $articles = [], string $duration = '' ): string {
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
@@ -225,9 +414,6 @@ class PressHub_AI_Podcast_Producer {
             '{sources_list}'     => $this->get_sources_list( $articles ),
             '{duration_text}'    => $specs['description'],
             '{word_budget}'      => (string) $specs['target_words'],
-            '{host1_name}'       => $host1,
-            '{host2_name}'       => $host2,
-            '{host3_name}'       => $host3,
         ];
 
         return str_replace( array_keys( $replacements ), array_values( $replacements ), $template );
@@ -288,47 +474,36 @@ class PressHub_AI_Podcast_Producer {
             $articles = array_values( $filtered );
         }
 
-        // Host configuration
+        // Host configuration (Issue #90: only host_count is needed now;
+        // host names are no longer injected into the prompt).
         $host_count = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_count() : (int) get_option( 'presshub_ai_briefing_host_count', 2 );
         if ( $host_count < 1 || $host_count > 3 ) {
             $host_count = 2;
         }
 
-        $host1 = (string) get_option( self::OPTION_HOST_FEMALE, 'Μαρία' );
-        if ( empty( trim( $host1 ) ) ) {
-            $host1 = 'Μαρία';
-        }
-        $host1 = apply_filters( 'presshub_ai_podcast_host1_name', $host1 );
-
-        $host2 = (string) get_option( self::OPTION_HOST_MALE, 'Νίκος' );
-        if ( empty( trim( $host2 ) ) ) {
-            $host2 = 'Νίκος';
-        }
-        $host2 = apply_filters( 'presshub_ai_podcast_host2_name', $host2 );
-
-        $host3 = (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Κώστας' );
-        if ( empty( trim( $host3 ) ) ) {
-            $host3 = 'Κώστας';
-        }
-        $host3 = apply_filters( 'presshub_ai_podcast_host3_name', $host3 );
+        // Issue #90 — Active dialogue style (default_greek_chat |
+        // bbc_broadcasting_standards | conversational_news_reporting).
+        $style = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_podcast_style()
+            : 'default_greek_chat';
 
         // 1. Base dialogue prompt & filter (system prompt defines persona, rules, speaker tags only)
         $base_prompt = '';
         if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
             if ( 1 === $host_count ) {
-                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_1();
+                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_1( $style );
             } elseif ( 3 === $host_count ) {
-                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_3();
+                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_3( $style );
             } else {
-                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_2();
+                $base_prompt = PressHub_AI_Settings_Storage::get_podcast_prompt_2( $style );
             }
         }
 
 
         $base_prompt = apply_filters( 'presshub_ai_podcast_producer_system_prompt', $base_prompt );
 
-        // 2. Hydrate placeholders
-        $system_prompt = $this->hydrate_prompt( $base_prompt, $date, $articles, $duration, $host1, $host2, $host3 );
+        // 2. Hydrate placeholders (Issue #90: no host-name args).
+        $system_prompt = $this->hydrate_prompt( $base_prompt, $date, $articles, $duration );
 
         // 3. Resolve author/org/plugin preset
         $user_id = get_current_user_id();
@@ -349,12 +524,15 @@ class PressHub_AI_Podcast_Producer {
         $system_prompt = apply_filters( 'presshub_ai_composed_podcast_system_prompt', $system_prompt );
 
         // 5. Build user prompt based on context mode & host count
+        // Issue #90 - presenter_mention now uses generic [SPEAKER_N] labels
+        // rather than the operator-configured host names, mirroring the system
+        // prompt's generic-label convention.
         if ( 1 === $host_count ) {
-            $presenter_mention = sprintf( __( 'την παρουσιάστρια [%s]', 'presshub-ai-editor' ), $host1 );
+            $presenter_mention = sprintf( __( 'The script should be delivered by the single presenter labelled [SPEAKER_1].', 'presshub-ai-editor' ) );
         } elseif ( 3 === $host_count ) {
-            $presenter_mention = sprintf( __( 'τους παρουσιαστές [%s], [%s] και [%s]', 'presshub-ai-editor' ), $host1, $host2, $host3 );
+            $presenter_mention = sprintf( __( 'The script should be delivered by the three presenters labelled [SPEAKER_1], [SPEAKER_2] and [SPEAKER_3].', 'presshub-ai-editor' ) );
         } else {
-            $presenter_mention = sprintf( __( 'τους παρουσιαστές [%s] και [%s]', 'presshub-ai-editor' ), $host1, $host2 );
+            $presenter_mention = sprintf( __( 'The script should be delivered by the two presenters labelled [SPEAKER_1] and [SPEAKER_2].', 'presshub-ai-editor' ) );
         }
 
         if ( 'curated_briefing' === $context_mode ) {

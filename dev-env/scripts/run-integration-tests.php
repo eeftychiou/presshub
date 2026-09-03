@@ -1096,6 +1096,69 @@ SCRIPT;
     return true;
 } );
 
+// Issue #90 — live integration test for style-selectable podcast dialogue
+// generation. Drive build_dialogue_prompt() with each of the three styles
+// and verify the resolved template:
+//   1. Contains the expected style-specific language (Greek vs English).
+//   2. Uses the generic [SPEAKER_N]: label convention (no host-name placeholders).
+//   3. Falls back to the style-specific built-in template when no per-style override exists.
+//   4. Honors per-style overrides when saved.
+run_test( 'Issue #90: podcast dialogue style selector resolves correct template per style', function() {
+    require_once __DIR__ . '/../../presshub-ai-editor/includes/class-podcast-producer.php';
+    require_once __DIR__ . '/../../presshub-ai-editor/includes/class-settings-storage.php';
+
+    $producer = new PressHub_AI_Podcast_Producer();
+
+    // Test 1: default_greek_chat style (the legacy template).
+    update_option( 'presshub_ai_briefing_podcast_style', 'default_greek_chat' );
+    update_option( 'presshub_ai_briefing_host_count', 2 );
+    $greek = $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-03' );
+    if ( false === stripos( $greek['system_prompt'], 'Είσαι' ) ) {
+        return 'default_greek_chat style did not return a Greek system prompt';
+    }
+    if ( false === stripos( $greek['system_prompt'], '[SPEAKER_1]:' ) ) {
+        return 'default_greek_chat system prompt missing [SPEAKER_1]: generic label';
+    }
+    if ( false !== stripos( $greek['system_prompt'], '{host1_name}' ) ) {
+        return 'default_greek_chat system prompt still contains legacy {host1_name} placeholder';
+    }
+
+    // Test 2: bbc_broadcasting_standards style (English).
+    update_option( 'presshub_ai_briefing_podcast_style', 'bbc_broadcasting_standards' );
+    $bbc = $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-03' );
+    if ( false === stripos( $bbc['system_prompt'], 'BBC Broadcasting Standards' ) ) {
+        return 'bbc_broadcasting_standards style did not return BBC template';
+    }
+    if ( false === stripos( $bbc['system_prompt'], '[SPEAKER_1]:' ) ) {
+        return 'bbc_broadcasting_standards system prompt missing [SPEAKER_1]: generic label';
+    }
+
+    // Test 3: conversational_news_reporting style (Greek).
+    update_option( 'presshub_ai_briefing_podcast_style', 'conversational_news_reporting' );
+    $convo = $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-03' );
+    if ( false === stripos( $convo['system_prompt'], 'improved by the host' ) ) {
+        return 'conversational_news_reporting style did not return conversational template';
+    }
+    if ( false === stripos( $convo['system_prompt'], '[SPEAKER_1]:' ) ) {
+        return 'conversational_news_reporting system prompt missing [SPEAKER_1]: generic label';
+    }
+
+    // Test 4: per-style override wins over built-in template.
+    update_option( 'presshub_ai_briefing_podcast_style', 'bbc_broadcasting_standards' );
+    update_option( 'presshub_ai_briefing_podcast_prompt_2_bbc_broadcasting_standards', 'CUSTOM BBC OVERRIDE FOR 2 HOSTS' );
+    $custom = $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-03' );
+    if ( false === stripos( $custom['system_prompt'], 'CUSTOM BBC OVERRIDE FOR 2 HOSTS' ) ) {
+        return 'per-style override was not honored; got: ' . substr( $custom['system_prompt'], 0, 200 );
+    }
+
+    // Cleanup: remove the override and reset style to default.
+    delete_option( 'presshub_ai_briefing_podcast_prompt_2_bbc_broadcasting_standards' );
+    update_option( 'presshub_ai_briefing_podcast_style', 'default_greek_chat' );
+    update_option( 'presshub_ai_briefing_host_count', 2 );
+
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";

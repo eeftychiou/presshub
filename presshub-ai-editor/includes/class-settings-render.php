@@ -2321,11 +2321,14 @@ class PressHub_AI_Settings_Render {
     }
 
     private function render_prompt_textarea( $option, $value, $host_count ) {
+        // Issue #90 — default template is style-aware: we load the active style's
+        // default so operators can edit it from the right baseline.
+        $active_style = PressHub_AI_Settings_Storage::get_podcast_style();
         $default = class_exists( 'PressHub_AI_Podcast_Producer' )
-            ? ( new PressHub_AI_Podcast_Producer() )->get_default_dialogue_prompt( $host_count )
+            ? ( new PressHub_AI_Podcast_Producer() )->get_default_dialogue_prompt( $host_count, $active_style )
             : '';
         ?>
-        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use standard Greek conversational podcast prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use the active style\'s default podcast prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
         <p>
             <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="">
                 <?php echo __( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
@@ -2334,7 +2337,141 @@ class PressHub_AI_Settings_Render {
                 <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
             </button>
         </p>
-        <p class="description"><?php echo __( 'Custom system prompt for Greek podcast dialogue generation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}, {host1_name}, {host2_name}, {host3_name}.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php
+            // Issue #90 — host-name placeholders removed; reference the new [SPEAKER_N]: generic labels.
+            echo __( 'Custom system prompt for the podcast dialogue generator. Leave empty to use the active style\'s default template. Supports placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. The script uses generic [SPEAKER_1]: / [SPEAKER_2]: / [SPEAKER_3]: speaker tags.', 'presshub-ai-editor' );
+        ?></p>
+        <?php
+    }
+
+    /**
+     * Issue #90 — Render the podcast dialogue style selector.
+     */
+    public function render_briefing_podcast_style_field() {
+        $option = 'presshub_ai_briefing_podcast_style';
+        $value  = PressHub_AI_Settings_Storage::get_podcast_style();
+        $styles = [
+            'default_greek_chat'             => __( 'Default Greek Chat (NotebookLM-style, conversational)', 'presshub-ai-editor' ),
+            'bbc_broadcasting_standards'     => __( 'BBC Broadcasting Standards (formal, neutral, third-person)', 'presshub-ai-editor' ),
+            'conversational_news_reporting'  => __( 'Conversational News Reporting (informal, first-person, opinionated)', 'presshub-ai-editor' ),
+        ];
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <?php foreach ( $styles as $key => $label ) : ?>
+                <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $value, $key ); ?>>
+                    <?php echo esc_html( $label ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php
+            echo __( 'Selects the dialogue style template that the podcast producer will use. The per-style override textareas below let you customize each style\'s prompts (3 hosts × 3 styles = 9 override fields).', 'presshub-ai-editor' );
+        ?></p>
+        <?php
+    }
+
+    /**
+     * Issue #90 — Render the per-style prompt override block. Renders 3
+     * collapsible textareas (1-host, 2-host, 3-host variants) for the given style.
+     */
+    public function render_briefing_podcast_prompts_for_style_field( string $style ) {
+        if ( ! class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+            return;
+        }
+        $producer = new PressHub_AI_Podcast_Producer();
+        ?>
+        <details class="presshub-podcast-style-block" data-style="<?php echo esc_attr( $style ); ?>" open>
+            <summary style="cursor:pointer;font-weight:600;">
+                <?php
+                /* translators: %s: style key */
+                echo esc_html( sprintf( __( '%s style overrides', 'presshub-ai-editor' ), $style ) );
+                ?>
+            </summary>
+            <p class="description"><?php
+                echo __( 'Leave each textarea empty to use that style\'s built-in default template. Saving will create a per-style override that supersedes the built-in template.', 'presshub-ai-editor' );
+            ?></p>
+            <?php foreach ( [ 1, 2, 3 ] as $host_count_n ) :
+                $option = 'presshub_ai_briefing_podcast_prompt_' . $host_count_n . '_' . $style;
+                $value  = (string) get_option( $option, '' );
+                $default = $producer->get_default_dialogue_prompt( $host_count_n, $style );
+            ?>
+                <h4 style="margin-top:1em;margin-bottom:.25em;">
+                    <?php
+                    /* translators: %d: host count */
+                    echo esc_html( sprintf( __( '%d host(s)', 'presshub-ai-editor' ), $host_count_n ) );
+                    ?>
+                </h4>
+                <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="6" class="large-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use the built-in default...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+                <p>
+                    <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="">
+                        <?php echo esc_html__( 'Clear / Reset', 'presshub-ai-editor' ); ?>
+                    </button>
+                    <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
+                        <?php echo esc_html__( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
+                    </button>
+                </p>
+            <?php endforeach; ?>
+        </details>
+        <?php
+    }
+
+    public function render_briefing_podcast_prompts_default_greek_chat_field() {
+        $this->render_briefing_podcast_prompts_for_style_field( 'default_greek_chat' );
+    }
+
+    public function render_briefing_podcast_prompts_bbc_broadcasting_standards_field() {
+        $this->render_briefing_podcast_prompts_for_style_field( 'bbc_broadcasting_standards' );
+    }
+
+    public function render_briefing_podcast_prompts_conversational_news_reporting_field() {
+        $this->render_briefing_podcast_prompts_for_style_field( 'conversational_news_reporting' );
+    }
+
+    /**
+     * Issue #90 — Render the live preview block: shows the resolved template
+     * after style + host_count + per-style overrides have been applied, and
+     * warns the operator if a legacy {hostN_name} placeholder is still present
+     * in any custom override.
+     */
+    public function render_briefing_podcast_live_preview_field() {
+        $style      = PressHub_AI_Settings_Storage::get_podcast_style();
+        $host_count = (int) get_option( 'presshub_ai_briefing_host_count', 2 );
+        if ( $host_count < 1 || $host_count > 3 ) {
+            $host_count = 2;
+        }
+        $resolved = '';
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            switch ( $host_count ) {
+                case 1: $resolved = PressHub_AI_Settings_Storage::get_podcast_prompt_1_for_style( $style ); break;
+                case 3: $resolved = PressHub_AI_Settings_Storage::get_podcast_prompt_3_for_style( $style ); break;
+                default: $resolved = PressHub_AI_Settings_Storage::get_podcast_prompt_2_for_style( $style ); break;
+            }
+        }
+        $warning = '';
+        foreach ( [ 1, 2, 3 ] as $hc ) {
+            foreach ( [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ] as $st ) {
+                $opt = 'presshub_ai_briefing_podcast_prompt_' . $hc . '_' . $st;
+                $val = (string) get_option( $opt, '' );
+                if ( '' !== trim( $val ) && preg_match( '/\{host[123]_name\}/', $val ) ) {
+                    $warning .= sprintf( '%s contains the legacy {hostN_name} placeholder which is no longer substituted. ', $opt );
+                }
+            }
+        }
+        ?>
+        <div class="presshub-podcast-preview" style="border:1px solid #ccc;padding:12px;background:#fafafa;max-height:400px;overflow:auto;">
+            <p><strong><?php
+                /* translators: 1: style key, 2: host count */
+                echo esc_html( sprintf( __( 'Active resolution: style=%1$s, host_count=%2$d', 'presshub-ai-editor' ), $style, $host_count ) );
+            ?></strong></p>
+            <?php if ( '' !== $warning ) : ?>
+                <div class="notice notice-warning inline" style="padding:8px 12px;margin:8px 0;">
+                    <p><strong><?php echo esc_html__( 'Legacy placeholder warning:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html( $warning ); ?></p>
+                </div>
+            <?php endif; ?>
+            <pre style="white-space:pre-wrap;font-size:12px;line-height:1.4;margin:0;"><?php echo esc_html( $resolved ); ?></pre>
+        </div>
+        <p class="description"><?php
+            echo __( 'Live preview of the resolved podcast dialogue system prompt after applying the active style, host count, and any per-style overrides. Use the controls above to change the style or host count and watch this preview update on Save Settings.', 'presshub-ai-editor' );
+        ?></p>
         <?php
     }
 

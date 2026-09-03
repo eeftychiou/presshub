@@ -145,11 +145,17 @@ $hydrated = $producer->build_dialogue_prompt( $sample_articles, '__none__', '3_m
 $sys_p = $hydrated['system_prompt'];
 $usr_p = $hydrated['user_prompt'];
 
+// Issue #90 — generic [SPEAKER_N]: labels; no host-name placeholders.
 pp_check( 'hydration: {date} replaced', false !== strpos( $sys_p, '2026-08-26' ) && false === strpos( $sys_p, '{date}' ) );
 pp_check( 'hydration: {duration_text} replaced', false !== strpos( $sys_p, '3 λεπτά' ) && false === strpos( $sys_p, '{duration_text}' ) );
 pp_check( 'hydration: {word_budget} replaced with 450', false !== strpos( $sys_p, '450' ) && false === strpos( $sys_p, '{word_budget}' ) );
-pp_check( 'hydration: {host1_name} replaced with Μαρία', false !== strpos( $sys_p, 'Μαρία' ) && false === strpos( $sys_p, '{host1_name}' ) );
-pp_check( 'hydration: {host2_name} replaced with Νίκος', false !== strpos( $sys_p, 'Νίκος' ) && false === strpos( $sys_p, '{host2_name}' ) );
+pp_check( 'hydration: contains [SPEAKER_1]: generic tag', false !== strpos( $sys_p, '[SPEAKER_1]:' ) );
+pp_check( 'hydration: contains [SPEAKER_2]: generic tag', false !== strpos( $sys_p, '[SPEAKER_2]:' ) );
+pp_check( 'hydration: no {host1_name} placeholder', false === strpos( $sys_p, '{host1_name}' ) );
+pp_check( 'hydration: no {host2_name} placeholder', false === strpos( $sys_p, '{host2_name}' ) );
+pp_check( 'hydration: no {host3_name} placeholder', false === strpos( $sys_p, '{host3_name}' ) );
+pp_check( 'hydration: no Μαρία literal in system prompt', false === strpos( $sys_p, 'Μαρία' ) );
+pp_check( 'hydration: no Νίκος literal in system prompt', false === strpos( $sys_p, 'Νίκος' ) );
 pp_check( 'hydration: {sources_list} replaced with Kathimerini, In.gr', false !== strpos( $sys_p, 'Kathimerini, In.gr' ) && false === strpos( $sys_p, '{sources_list}' ) );
 pp_check( 'deduplication: system_prompt does NOT contain raw articles context', false === strpos( $sys_p, 'Νέο φορολογικό νομοσχέδιο' ) && false === strpos( $sys_p, '{articles_context}' ) );
 
@@ -160,7 +166,10 @@ pp_check( 'hydration: custom template with {articles_context} hydrates articles'
 pp_check( 'hydration: user_prompt contains date', false !== strpos( $usr_p, '2026-08-26' ) );
 pp_check( 'hydration: user_prompt contains duration specs', false !== strpos( $usr_p, '3 λεπτά' ) );
 pp_check( 'hydration: user_prompt contains word budget', false !== strpos( $usr_p, '450' ) );
-pp_check( 'hydration: user_prompt contains host names', false !== strpos( $usr_p, 'Μαρία' ) && false !== strpos( $usr_p, 'Νίκος' ) );
+// Issue #90 — user prompt no longer mentions host names (presenter_mention is now English+generic).
+pp_check( 'hydration: user_prompt contains generic [SPEAKER_1] tag', false !== strpos( $usr_p, '[SPEAKER_1]' ) );
+pp_check( 'hydration: user_prompt contains generic [SPEAKER_2] tag', false !== strpos( $usr_p, '[SPEAKER_2]' ) );
+pp_check( 'hydration: user_prompt does NOT contain literal host name', false === strpos( $usr_p, 'Μαρία' ) && false === strpos( $usr_p, 'Νίκος' ) );
 pp_check( 'hydration: user_prompt contains article context', false !== strpos( $usr_p, 'Ψηφιακές υπηρεσίες υγείας' ) );
 
 
@@ -442,7 +451,10 @@ pp_check( 'issue_71: 1 host prompt focuses on solo presenter', false !== strpos(
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 3;
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_tertiary'] = 'Κώστας';
 $panel_prompt = $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-01' );
-pp_check( 'issue_71: 3 host prompt mentions 3 presenters including tertiary host', false !== strpos( $panel_prompt['system_prompt'], 'Κώστας' ) && false !== strpos( $panel_prompt['system_prompt'], 'τρεις' ) );
+// Issue #90 — host names are no longer in the system prompt; expect generic labels instead.
+pp_check( 'issue_71: 3 host prompt contains generic [SPEAKER_3]: tag', false !== strpos( $panel_prompt['system_prompt'], '[SPEAKER_3]:' ) );
+pp_check( 'issue_71: 3 host prompt mentions 3 presenters', false !== strpos( $panel_prompt['system_prompt'], 'τρεις' ) || false !== strpos( $panel_prompt['system_prompt'], 'τριών' ) || false !== strpos( $panel_prompt['system_prompt'], '[SPEAKER_1]:, [SPEAKER_2]' ) );
+pp_check( 'issue_71: 3 host prompt does NOT contain literal host name', false === strpos( $panel_prompt['system_prompt'], 'Κώστας' ) );
 pp_check( 'issue_71: system prompt instructs topic markers', false !== strpos( $panel_prompt['system_prompt'], 'TOPIC_START' ) );
 
 
@@ -464,4 +476,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PodcastProducerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PodcastProducerTest: OK (71 checks)\n";
+echo "PodcastProducerTest: OK (75 checks)\n";
