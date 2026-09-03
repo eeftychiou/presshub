@@ -276,6 +276,22 @@
         function updateUIFromStatus(status) {
             if (!status) return;
 
+            // Issue #88 — publish the latest server status to a JS-visible
+            // surface (window.presshubBriefingAdmin.lastStatus) so that:
+            //   (a) regression tests can assert against the canonical
+            //       status without scraping the DOM, and
+            //   (b) any code path that wants to react to the current
+            //       curation post (e.g. showing the new title in another
+            //       widget) has a single source of truth.
+            // The object is mutated in place to avoid clobbering the
+            // wp_localize_script bag that lives at the same key.
+            var bag = window.presshubBriefingAdmin;
+            if (!bag || typeof bag !== 'object') {
+                bag = {};
+                window.presshubBriefingAdmin = bag;
+            }
+            bag.lastStatus = status;
+
             // 1. Harvesting Status & Articles Table
             if (status.harvested) {
                 $('#milestone-harvest').removeClass('card-pending').addClass('card-complete');
@@ -562,6 +578,14 @@
         /**
          * Issue #79 — Render Stage 2 (curation) post-status pill + source
          * type + preset chips.
+         *
+         * Issue #88 — defense-in-depth: also refresh the
+         * `.card-title-preview strong` text node. The card body is
+         * server-rendered once at page load (class-briefing-admin.php)
+         * with the previous post title; without this line the operator
+         * sees the stale title after clicking "Re-generate Story" until
+         * a full page reload. The pill below already refreshed the
+         * status; we now refresh the title in lockstep.
          */
         function renderCurationStatusPills(status) {
             if (!status || !status.text_created) return;
@@ -577,6 +601,18 @@
             pill.removeClass('badge-success badge-warning badge-danger badge-secondary')
                 .addClass(cls)
                 .html('📰 Post #' + (status.text_post_id || 0) + ' · ' + escapeHtml(statusText));
+
+            // Issue #88 — refresh the bounded-box title preview from the
+            // latest status payload. Guarded by the text_post_title
+            // presence so a partial payload (e.g. a harvest-only refresh)
+            // never blanks the preview. Uses .text() (not .html()) so a
+            // malicious or malformed server payload cannot inject markup.
+            if (typeof status.text_post_title === 'string' && status.text_post_title.length > 0) {
+                var $titlePreview = $('.card-title-preview strong');
+                if ($titlePreview.length) {
+                    $titlePreview.text(status.text_post_title);
+                }
+            }
         }
 
         /**
