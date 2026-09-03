@@ -2245,7 +2245,13 @@ class PressHub_AI_Settings_Render {
         $value  = PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Πρωινή Ενημέρωση:', 'presshub-ai-editor' ); ?>" />
-        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Text Story post title (e.g. "Πρωινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Πρωινή Ενημέρωση:". A duplicate-prefix collision guard prevents the same prefix from appearing twice when the curator\'s <h1> already contains it.', 'presshub-ai-editor' ); ?></p>
+        <!-- Issue #92 — translatable description strings must not contain raw HTML tags.
+             The previous wording mentioned the curator's &lt;h1&gt; tag literally, which the
+             browser parsed as a real heading and which then consumed the rest of the
+             &lt;p&gt; paragraph (rendering "already contains it." as an oversized bold
+             heading). The fix uses the safe inline-code form so the literal renders
+             as documentation, not as a parsed element. -->
+        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Text Story post title (e.g. "Πρωινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Πρωινή Ενημέρωση:". A duplicate-prefix collision guard prevents the same prefix from appearing twice when the curator\'s <code>&lt;h1&gt;</code> headline already contains it.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
