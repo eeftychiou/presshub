@@ -1870,13 +1870,16 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         if ( '' === $start_date && 'all' !== $date_range ) {
             if ( 'today' === $date_range ) {
-                $start_date = gmdate( 'Y-m-d 00:00:00' );
+                // Issue #85 Tier 2: anchor day-boundary cutoff in WP-local TZ so that
+                // "today" matches the writer's current_time('mysql') stamp and the
+                // 7d/30d/90d windows align with WP-local day boundaries, not UTC.
+                $start_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00' ) : gmdate( 'Y-m-d 00:00:00' );
             } elseif ( '7d' === $date_range ) {
-                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
+                $start_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-7 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
             } elseif ( '90d' === $date_range ) {
-                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-90 days' ) );
+                $start_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-90 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-90 days' ) );
             } else {
-                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
+                $start_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-30 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
             }
         }
 
@@ -1922,13 +1925,16 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         if ( '' === $start_date && 'all' !== $date_range ) {
             if ( 'today' === $date_range ) {
-                $start_date = gmdate( 'Y-m-d 00:00:00' );
+                // Issue #85 Tier 2: anchor day-boundary cutoff in WP-local TZ so that
+                // "today" matches the writer's current_time('mysql') stamp and the
+                // 7d/30d/90d windows align with WP-local day boundaries, not UTC.
+                $start_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00' ) : gmdate( 'Y-m-d 00:00:00' );
             } elseif ( '7d' === $date_range ) {
-                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
+                $start_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-7 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
             } elseif ( '90d' === $date_range ) {
-                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-90 days' ) );
+                $start_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-90 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-90 days' ) );
             } else {
-                $start_date = gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
+                $start_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-30 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
             }
         }
 

@@ -49,13 +49,18 @@ class PressHub_AI_Research_Cleanup {
         }
         $days = max( 1, (int) $days );
 
+        // Issue #85 Tier 2: anchor date_query.before cutoff in WP-local TZ so that
+        // the cutoff string matches post_date stamps written via current_time('mysql').
+        // time() returns a TZ-neutral Unix timestamp; only the *formatting* TZ matters.
         $stale = get_posts( [
             'post_type'      => 'presshub_research',
             'post_status'    => 'any',
             'posts_per_page' => 200,
             'date_query'     => [
                 'column' => 'post_date',
-                'before' => gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ),
+                'before' => function_exists( 'wp_date' )
+                    ? wp_date( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS )
+                    : gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ),
             ],
             'meta_query'     => [
                 [
