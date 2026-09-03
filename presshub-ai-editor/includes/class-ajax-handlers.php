@@ -853,9 +853,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
-        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         require_once __DIR__ . '/class-briefing-admin.php';
@@ -885,9 +885,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_raise_memory_limit( 'admin' );
         }
 
-        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $source_id = isset( $_POST['source_id'] ) ? sanitize_text_field( wp_unslash( $_POST['source_id'] ) ) : '';
@@ -956,9 +956,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
-        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $preset_id = isset( $_POST['preset_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preset_id'] ) ) : (string) get_option( 'presshub_ai_briefing_text_preset', '' );
@@ -1045,9 +1045,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
-        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $preset_id = isset( $_POST['preset_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preset_id'] ) ) : (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
@@ -1142,9 +1142,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
-        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $script = '';
@@ -1188,9 +1188,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
-        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $script = '';
@@ -1253,9 +1253,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
-        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : gmdate( 'Y-m-d' );
+        $date = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $source  = isset( $_POST['source'] ) ? sanitize_text_field( wp_unslash( $_POST['source'] ) ) : __( 'Manual Upload', 'presshub-ai-editor' );

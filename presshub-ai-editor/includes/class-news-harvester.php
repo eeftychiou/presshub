@@ -1034,7 +1034,7 @@ class PressHub_AI_News_Harvester {
      */
     public function harvest_source( $source, string $date = '', $time_budget = null ): array {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
         $start_time  = microtime( true );
         $time_budget = $this->get_time_budget( $time_budget );
@@ -1363,7 +1363,7 @@ class PressHub_AI_News_Harvester {
      */
     public function harvest_all( $sources, string $date = '', $time_budget = null ): array {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
         $start_time  = microtime( true );
         $time_budget = $this->get_time_budget( $time_budget );
@@ -1748,7 +1748,7 @@ class PressHub_AI_News_Harvester {
      */
     public function handle_manual_upload( array $uploaded_articles, string $date = '' ): array {
         if ( empty( $date ) ) {
-            $date = gmdate( 'Y-m-d' );
+            $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $payload = $this->load_snapshot( $date );

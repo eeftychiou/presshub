@@ -521,7 +521,12 @@ class PressHub_AI_Briefing_Admin {
         if ( false === $ts_completed ) {
             return $completed_at;
         }
-        return gmdate( 'Y-m-d H:i:s', $ts_completed - (int) round( $duration_ms / 1000 ) );
+        // Issue #85 Tier 1: $completed_at is already in WP-local TZ (writers use
+        // current_time('mysql')), so formatting the derived attempted timestamp
+        // must also use WP-local TZ. date() avoids a redundant TZ conversion
+        // round-trip that gmdate() would perform (and which caused Finding H:
+        // chips showing wall-clock time shifted by the GMT offset).
+        return date( 'Y-m-d H:i:s', $ts_completed - (int) round( $duration_ms / 1000 ) );
     }
 
     /**
