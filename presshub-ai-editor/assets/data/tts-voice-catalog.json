@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "description": "Bundled per-engine TTS voice catalog. Used by PressHub AI Editor to populate the Daily Briefing voice-persona dropdowns and to validate sanitized voice-option values. Gemini entries replicate the historical hardcoded list (so existing operator-set voices remain valid); live discovery (PressHub_AI_Audio_Synthesizer::discover_gemini_voices) layers on top of this manifest for richer catalogs at runtime.",
+  "engines": {
+    "gemini-2.5": {
+      "label": "Gemini 2.5 Flash TTS",
+      "engine_family": "gemini",
+      "voices": [
+        { "name": "Kore",       "label": "Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)", "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Aoede",      "label": "Aoede / Αοιδή (Expressive & Melodic)",                   "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Leda",       "label": "Leda / Λήδα (Warm & Professional)",                      "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Callirrhoe", "label": "Callirrhoe / Καλλιρρόη (Dynamic & Engaging)",          "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Autonoe",    "label": "Autonoe / Αυτονόη (Conversational)",                    "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Fenrir",     "label": "Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)", "gender": "male", "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Puck",       "label": "Puck / Πουκ (Lively, Youthful & Expressive)",            "gender": "male",    "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Charon",     "label": "Charon / Χάρων (Deep Baritone & Solemn Gravitas)",       "gender": "male",    "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Zephyr",     "label": "Zephyr / Ζέφυρος (Calm, Gentle & Melodious)",            "gender": "neutral", "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Orus",       "label": "Orus / Ώρος (Confident & Articulate)",                  "gender": "male",    "language": "el-GR", "engine_version": "2.5" }
+      ]
+    },
+    "gemini-3.1": {
+      "label": "Gemini 3.1 Flash TTS Preview",
+      "engine_family": "gemini",
+      "voices": [
+        { "name": "Kore",       "label": "Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)", "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Aoede",      "label": "Aoede / Αοιδή (Expressive & Melodic)",                   "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Leda",       "label": "Leda / Λήδα (Warm & Professional)",                      "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Callirrhoe", "label": "Callirrhoe / Καλλιρρόη (Dynamic & Engaging)",          "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Autonoe",    "label": "Autonoe / Αυτονόη (Conversational)",                    "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Fenrir",     "label": "Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)", "gender": "male", "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Puck",       "label": "Puck / Πουκ (Lively, Youthful & Expressive)",            "gender": "male",    "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Charon",     "label": "Charon / Χάρων (Deep Baritone & Solemn Gravitas)",       "gender": "male",    "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Zephyr",     "label": "Zephyr / Ζέφυρος (Calm, Gentle & Melodious)",            "gender": "neutral", "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Orus",       "label": "Orus / Ώρος (Confident & Articulate)",                  "gender": "male",    "language": "el-GR", "engine_version": "3.1" }
+      ]
+    },
+    "google_cloud": {
+      "label": "Google Cloud TTS",
+      "engine_family": "google_cloud",
+      "best_effort_manifest": true,
+      "voices": [
+        { "name": "el-GR-Wavenet-A",           "label": "el-GR Wavenet A (Female)",        "gender": "female",  "language": "el-GR", "engine_version": "v1" },
+        { "name": "el-GR-Wavenet-B",           "label": "el-GR Wavenet B (Male)",          "gender": "male",    "language": "el-GR", "engine_version": "v1" },
+        { "name": "el-GR-Wavenet-C",           "label": "el-GR Wavenet C (Neutral)",       "gender": "neutral", "language": "el-GR", "engine_version": "v1" },
+        { "name": "el-GR-Standard-A",          "label": "el-GR Standard A (Female)",       "gender": "female",  "language": "el-GR", "engine_version": "v1" },
+        { "name": "el-GR-Standard-B",          "label": "el-GR Standard B (Male)",         "gender": "male",    "language": "el-GR", "engine_version": "v1" },
+        { "name": "el-GR-Chirp3-HD-Aoede",     "label": "el-GR Chirp3-HD Aoede",           "gender": "female",  "language": "el-GR", "engine_version": "chirp3-hd" },
+        { "name": "el-GR-Chirp3-HD-Achernar",  "label": "el-GR Chirp3-HD Achernar",        "gender": "female",  "language": "el-GR", "engine_version": "chirp3-hd" },
+        { "name": "el-GR-Chirp3-HD-Achird",    "label": "el-GR Chirp3-HD Achird",          "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" },
+        { "name": "el-GR-Chirp3-HD-Algenib",   "label": "el-GR Chirp3-HD Algenib",         "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" },
+        { "name": "el-GR-Chirp3-HD-Algieba",   "label": "el-GR Chirp3-HD Algieba",         "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" },
+        { "name": "el-GR-Chirp3-HD-Alnilam",   "label": "el-GR Chirp3-HD Alnilam",         "gender": "male",    "language": "el-GR", "engine_version": "chirp3-hd" }
+      ]
+    },
+    "openai-tts": {
+      "label": "OpenAI TTS",
+      "engine_family": "openai",
+      "best_effort_manifest": true,
+      "voices": []
+    },
+    "elevenlabs": {
+      "label": "ElevenLabs",
+      "engine_family": "elevenlabs",
+      "best_effort_manifest": true,
+      "voices": []
+    }
+  }
+}

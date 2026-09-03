@@ -1297,14 +1297,130 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Helper to retrieve the configured TTS engine key.
+     *
+     * Issue #89 — Settings-First pattern (AGENTS.md): business logic
+     * must read option values via a static helper, not via direct
+     * get_option() calls. Returns the legacy raw value ('gemini' or
+     * 'google_cloud'); callers that need the new engine-key format
+     * ('gemini-2.5' / 'gemini-3.1') should pass the result through
+     * PressHub_AI_Audio_Synthesizer::get_available_voices() which has
+     * the canonical 'gemini' → 'gemini-2.5' shim.
+     *
+     * @return string Engine key. One of: 'gemini', 'google_cloud'.
+     */
+    public static function get_briefing_tts_engine(): string {
+        $engine = (string) get_option( 'presshub_ai_briefing_tts_engine', 'gemini' );
+        $valid  = [ 'gemini', 'google_cloud' ];
+        return in_array( $engine, $valid, true ) ? $engine : 'gemini';
+    }
+
+    /**
+     * Helper to retrieve configured female voice persona.
+     *
+     * Issue #89 — Settings-First pattern (AGENTS.md): business logic must
+     * read voice options via a static helper, not via direct get_option()
+     * calls. The allow-list is derived from the bundled voice-catalog
+     * manifest at `assets/data/tts-voice-catalog.json` so the helper
+     * stays in sync with shipped voices without hardcoded duplication.
+     *
+     * Default is engine-aware: Gemini 2.5 / 3.1 default to 'Kore';
+     * Google Cloud TTS defaults to 'el-GR-Wavenet-A'. Operators who
+     * upgrade from a pre-#89 plugin keep their stored value as long as
+     * it is present in the manifest.
+     *
+     * @return string Female voice persona identifier.
+     */
+    public static function get_voice_female(): string {
+        $engine = self::get_briefing_tts_engine();
+        $default = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-A' : 'Kore';
+        $voice = (string) get_option( 'presshub_ai_briefing_voice_female', $default );
+        $allowed = self::voice_catalog_allow_list();
+        return in_array( $voice, $allowed, true ) ? $voice : $default;
+    }
+
+    /**
+     * Helper to retrieve configured male voice persona.
+     *
+     * Issue #89 — Settings-First pattern (AGENTS.md). Same allow-list
+     * source as get_voice_female().
+     *
+     * @return string Male voice persona identifier.
+     */
+    public static function get_voice_male(): string {
+        $engine = self::get_briefing_tts_engine();
+        $default = ( 'google_cloud' === $engine ) ? 'el-GR-Chirp3-HD-Achird' : 'Fenrir';
+        $voice = (string) get_option( 'presshub_ai_briefing_voice_male', $default );
+        $allowed = self::voice_catalog_allow_list();
+        return in_array( $voice, $allowed, true ) ? $voice : $default;
+    }
+
+    /**
      * Helper to retrieve configured tertiary voice persona (default 'Puck').
      *
      * @return string Third host voice persona.
      */
     public static function get_voice_tertiary(): string {
-        $voice = (string) get_option( 'presshub_ai_briefing_voice_tertiary', 'Puck' );
-        $valid = [ 'Aoede', 'Charon', 'Fenrir', 'Kore', 'Puck', 'Zephyr', 'Orus', 'Leda', 'Callirrhoe', 'Autonoe', 'el-GR-Wavenet-A', 'el-GR-Wavenet-B', 'el-GR-Wavenet-C', 'el-GR-Standard-A' ];
-        return in_array( $voice, $valid, true ) ? $voice : 'Puck';
+        $engine = self::get_briefing_tts_engine();
+        $default = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck';
+        $voice = (string) get_option( 'presshub_ai_briefing_voice_tertiary', $default );
+        $allowed = self::voice_catalog_allow_list();
+        return in_array( $voice, $allowed, true ) ? $voice : $default;
+    }
+
+    /**
+     * Build the canonical allow-list of voice identifiers from the bundled
+     * voice-catalog manifest. Returns a flat array of `name` strings.
+     *
+     * Issue #89 — the sanitizers used to hardcode their allow-list as
+     * a PHP array literal. That was brittle (any new voice required a
+     * code change) and could drift from the bundled manifest. The
+     * single source of truth is now the JSON manifest; this helper
+     * reads it once and flattens it. If the manifest is unreadable the
+     * helper falls back to the historical hardcoded Gemini 2.5 catalog
+     * so the sanitizers never reject a previously-valid value.
+     *
+     * @return array<int, string> Flat list of permitted voice identifiers.
+     */
+    private static function voice_catalog_allow_list(): array {
+        static $cached = null;
+        if ( null !== $cached ) {
+            return $cached;
+        }
+        $path = dirname( __DIR__ ) . '/assets/data/tts-voice-catalog.json';
+        if ( is_file( $path ) && is_readable( $path ) ) {
+            $decoded = json_decode( (string) file_get_contents( $path ), true );
+            if ( is_array( $decoded ) && isset( $decoded['engines'] ) && is_array( $decoded['engines'] ) ) {
+                $names = [];
+                foreach ( $decoded['engines'] as $engine ) {
+                    if ( ! is_array( $engine ) || empty( $engine['voices'] ) ) {
+                        continue;
+                    }
+                    foreach ( $engine['voices'] as $voice ) {
+                        if ( is_array( $voice ) && ! empty( $voice['name'] ) ) {
+                            $names[] = (string) $voice['name'];
+                        }
+                    }
+                }
+                if ( ! empty( $names ) ) {
+                    $cached = array_values( array_unique( $names ) );
+                    return $cached;
+                }
+            }
+        }
+        // Last-resort fallback mirrors the historical hardcoded list so
+        // operators with pre-#89 stored values keep resolving correctly.
+        $cached = [
+            'Fenrir', 'Puck', 'Charon', 'Zephyr', 'Orus',
+            'Aoede', 'Kore', 'Leda', 'Callirrhoe', 'Autonoe',
+            'el-GR-Wavenet-A', 'el-GR-Wavenet-B', 'el-GR-Wavenet-C',
+            'el-GR-Standard-A', 'el-GR-Standard-B',
+            'el-GR-Chirp3-HD-Aoede', 'el-GR-Chirp3-HD-Achernar',
+            'el-GR-Chirp3-HD-Achird', 'el-GR-Chirp3-HD-Algenib',
+            'el-GR-Chirp3-HD-Algieba', 'el-GR-Chirp3-HD-Alnilam',
+            'el-GR-Neural2-A', 'el-GR-Neural2-B',
+        ];
+        return $cached;
     }
 
     /**
@@ -1614,23 +1730,12 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function sanitize_voice_tertiary( $value ): string {
-        $allowed = [
-            'Fenrir',
-            'Puck',
-            'Charon',
-            'Zephyr',
-            'Orus',
-            'Aoede',
-            'Kore',
-            'Leda',
-            'Callirrhoe',
-            'Autonoe',
-            'el-GR-Wavenet-A',
-            'el-GR-Wavenet-B',
-            'el-GR-Wavenet-C',
-            'el-GR-Standard-A',
-        ];
-        $value = trim( (string) wp_unslash( $value ) );
+        // Issue #89 — allow-list is now derived from the bundled
+        // voice-catalog manifest (see voice_catalog_allow_list()) so the
+        // sanitizer stays in sync with shipped voices without duplicating
+        // the canonical name list in PHP.
+        $value  = trim( (string) wp_unslash( $value ) );
+        $allowed = self::voice_catalog_allow_list();
         return in_array( $value, $allowed, true ) ? $value : 'Puck';
     }
 
@@ -1678,44 +1783,28 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function sanitize_voice_female( $value ): string {
-        $allowed = [
-            'Aoede',
-            'Kore',
-            'Leda',
-            'Callirrhoe',
-            'Autonoe',
-            'el-GR-Wavenet-A',
-            'el-GR-Chirp3-HD-Aoede',
-            'el-GR-Chirp3-HD-Achernar',
-            'el-GR-Standard-A',
-            'el-GR-Neural2-A',
-        ];
-        $value = trim( (string) wp_unslash( $value ) );
+        // Issue #89 — allow-list is now derived from the bundled
+        // voice-catalog manifest. We keep the historical Neural2-A →
+        // Wavenet-A alias below because legacy operators may have that
+        // value stored from a pre-2.x plugin version.
+        $value  = trim( (string) wp_unslash( $value ) );
         if ( 'el-GR-Neural2-A' === $value ) {
             return 'el-GR-Wavenet-A';
         }
+        $allowed = self::voice_catalog_allow_list();
         return in_array( $value, $allowed, true ) ? $value : self::default_briefing_voice_female();
     }
 
     public static function sanitize_voice_male( $value ): string {
-        $allowed = [
-            'Fenrir',
-            'Puck',
-            'Charon',
-            'Zephyr',
-            'Orus',
-            'el-GR-Chirp3-HD-Achird',
-            'el-GR-Chirp3-HD-Algenib',
-            'el-GR-Chirp3-HD-Algieba',
-            'el-GR-Chirp3-HD-Alnilam',
-            'el-GR-Wavenet-B',
-            'el-GR-Standard-B',
-            'el-GR-Neural2-B',
-        ];
+        // Issue #89 — allow-list is now derived from the bundled
+        // voice-catalog manifest. We keep the historical alias mappings
+        // below because legacy operators may have those values stored
+        // from a pre-2.x plugin version.
         $value = trim( (string) wp_unslash( $value ) );
         if ( in_array( $value, [ 'el-GR-Neural2-B', 'el-GR-Wavenet-B', 'el-GR-Standard-B' ], true ) ) {
             return 'el-GR-Chirp3-HD-Achird';
         }
+        $allowed = self::voice_catalog_allow_list();
         return in_array( $value, $allowed, true ) ? $value : self::default_briefing_voice_male();
     }
 
