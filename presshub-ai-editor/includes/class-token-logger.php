@@ -448,14 +448,18 @@ class PressHub_AI_Token_Logger {
         $params     = [];
 
         if ( 'all' !== $range ) {
+            // Issue #85 Tier 2: anchor day-boundary cutoff in WP-local TZ so that
+            // the cutoff string matches the writer's current_time('mysql') stamp.
+            // strtotime() returns a TZ-neutral Unix timestamp; only the *formatting*
+            // TZ matters. wp_date() formats in WP-local TZ, gmdate() in UTC.
             if ( 'today' === $range ) {
-                $cutoff = gmdate( 'Y-m-d 00:00:00' );
+                $cutoff = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00' ) : gmdate( 'Y-m-d 00:00:00' );
             } elseif ( '7d' === $range ) {
-                $cutoff = gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
+                $cutoff = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-7 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-7 days' ) );
             } elseif ( '90d' === $range ) {
-                $cutoff = gmdate( 'Y-m-d 00:00:00', strtotime( '-90 days' ) );
+                $cutoff = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-90 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-90 days' ) );
             } else {
-                $cutoff = gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
+                $cutoff = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d 00:00:00', strtotime( '-30 days' ) ) : gmdate( 'Y-m-d 00:00:00', strtotime( '-30 days' ) );
             }
             $where_sql = 'created_at >= %s';
             $params[]  = $cutoff;
@@ -613,7 +617,12 @@ class PressHub_AI_Token_Logger {
         }
 
         $table_name = self::get_table_name();
-        $cutoff = gmdate( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * ( defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 ) ) );
+        // Issue #85 Tier 2: anchor prune cutoff in WP-local TZ so that the cutoff
+        // string matches the writer's current_time('mysql') stamp. time() returns a
+        // TZ-neutral Unix timestamp; only the *formatting* TZ matters.
+        $cutoff = function_exists( 'wp_date' )
+            ? wp_date( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * ( defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 ) ) )
+            : gmdate( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * ( defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 ) ) );
         $sql = $wpdb->prepare( "DELETE FROM {$table_name} WHERE created_at < %s", $cutoff );
         $deleted = $wpdb->query( $sql );
 
