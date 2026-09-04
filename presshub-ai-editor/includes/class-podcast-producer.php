@@ -606,12 +606,12 @@ class PressHub_AI_Podcast_Producer {
      *   - [Κώστας]: Καλημέρα...
      *
      * @param string $raw_script    Raw dialogue script.
-     * @param string $female_host   Lead host name (default 'Μαρία').
-     * @param string $male_host     Secondary host name (default 'Νίκος').
-     * @param string $tertiary_host Tertiary host name (default 'Κώστας').
+     * @param string $female_host   Primary host name (default 'Presenter 1').
+     * @param string $male_host     Secondary host name (default 'Presenter 2').
+     * @param string $tertiary_host Tertiary host name (default 'Presenter 3').
      * @return array List of structured turns [['speaker' => 'female'|'male'|'tertiary', 'speaker_name' => '...', 'text' => '...'], ...]
      */
-    public function parse_script_turns( string $raw_script, string $female_host = 'Μαρία', string $male_host = 'Νίκος', string $tertiary_host = 'Κώστας' ): array {
+    public function parse_script_turns( string $raw_script, string $female_host = 'Presenter 1', string $male_host = 'Presenter 2', string $tertiary_host = 'Presenter 3' ): array {
         $raw_script = trim( $raw_script );
         if ( empty( $raw_script ) ) {
             return [];
@@ -647,11 +647,11 @@ class PressHub_AI_Podcast_Producer {
 
                 // First-class canonical format: the system prompt (Issue #90) explicitly
                 // tells the LLM to emit [SPEAKER_1]: / [SPEAKER_2]: / [SPEAKER_3]: (also
-                // [HOST_N]: as a tolerated alias) and forbids any other tag. We extract the
-                // numeric index once and bucket by N, falling through to the legacy
-                // Greek-name / English-alias clauses only if no [SPEAKER_N]/[HOST_N] match.
+                // [PRESENTER_N]: and [HOST_N]: as tolerated aliases) and forbids any other tag.
+                // We extract the numeric index once and bucket by N, falling through to the legacy
+                // Greek-name / English-alias clauses only if no [SPEAKER_N]/[PRESENTER_N]/[HOST_N] match.
                 $speaker_idx = null;
-                if ( preg_match( '/^(?:speaker|host)[_\s]?([123])$/iu', $clean_speaker, $idx_match ) ) {
+                if ( preg_match( '/^(?:speaker|presenter|host)[_\s]?([123])$/iu', $clean_speaker, $idx_match ) ) {
                     $speaker_idx = (int) $idx_match[1];
                 }
 
@@ -660,26 +660,26 @@ class PressHub_AI_Podcast_Producer {
                 $matched_name = null;
 
                 if ( 1 === $speaker_idx ) {
-                    // [SPEAKER_1]: or [HOST_1]: -> female lead.
+                    // [SPEAKER_1]:, [PRESENTER_1]:, or [HOST_1]: -> female lead.
                     $matched_type = 'female';
                     $matched_name = $female_host;
                 } elseif ( 2 === $speaker_idx ) {
-                    // [SPEAKER_2]: or [HOST_2]: -> male secondary.
+                    // [SPEAKER_2]:, [PRESENTER_2]:, or [HOST_2]: -> male secondary.
                     $matched_type = 'male';
                     $matched_name = $male_host;
                 } elseif ( 3 === $speaker_idx && ! empty( $tertiary_host ) ) {
-                    // [SPEAKER_3]: or [HOST_3]: -> tertiary roundtable analyst.
+                    // [SPEAKER_3]:, [PRESENTER_3]:, or [HOST_3]: -> tertiary roundtable analyst.
                     $matched_type = 'tertiary';
                     $matched_name = $tertiary_host;
-                } elseif ( false !== mb_stripos( $clean_speaker, $female_host ) || false !== stripos( $clean_speaker, 'maria' ) || false !== stripos( $clean_speaker, 'μαρία' ) || false !== stripos( $clean_speaker, 'female' ) || false !== stripos( $clean_speaker, 'host1' ) || false !== stripos( $clean_speaker, 'host 1' ) ) {
+                } elseif ( false !== mb_stripos( $clean_speaker, $female_host ) || false !== stripos( $clean_speaker, 'maria' ) || false !== mb_stripos( $clean_speaker, 'μαρία' ) || false !== stripos( $clean_speaker, 'female' ) || false !== stripos( $clean_speaker, 'host1' ) || false !== stripos( $clean_speaker, 'host 1' ) || false !== stripos( $clean_speaker, 'presenter 1' ) || false !== stripos( $clean_speaker, 'presenter1' ) ) {
                     // Legacy fallback: Greek-name / English-alias recognition for back-compat
                     // with operators who customized earlier prompts before Issue #90.
                     $matched_type = 'female';
                     $matched_name = $female_host;
-                } elseif ( ! empty( $tertiary_host ) && ( false !== mb_stripos( $clean_speaker, $tertiary_host ) || false !== stripos( $clean_speaker, 'host3' ) || false !== stripos( $clean_speaker, 'host 3' ) || false !== stripos( $clean_speaker, 'tertiary' ) || false !== mb_stripos( $clean_speaker, 'κώστας' ) ) ) {
+                } elseif ( ! empty( $tertiary_host ) && ( false !== mb_stripos( $clean_speaker, $tertiary_host ) || false !== stripos( $clean_speaker, 'host3' ) || false !== stripos( $clean_speaker, 'host 3' ) || false !== stripos( $clean_speaker, 'presenter 3' ) || false !== stripos( $clean_speaker, 'presenter3' ) || false !== stripos( $clean_speaker, 'tertiary' ) || false !== mb_stripos( $clean_speaker, 'κώστας' ) ) ) {
                     $matched_type = 'tertiary';
                     $matched_name = $tertiary_host;
-                } elseif ( false !== mb_stripos( $clean_speaker, $male_host ) || false !== stripos( $clean_speaker, 'nikos' ) || false !== mb_stripos( $clean_speaker, 'νίκος' ) || false !== stripos( $clean_speaker, 'male' ) || false !== stripos( $clean_speaker, 'host2' ) || false !== stripos( $clean_speaker, 'host 2' ) ) {
+                } elseif ( false !== mb_stripos( $clean_speaker, $male_host ) || false !== stripos( $clean_speaker, 'nikos' ) || false !== mb_stripos( $clean_speaker, 'νίκος' ) || false !== stripos( $clean_speaker, 'male' ) || false !== stripos( $clean_speaker, 'host2' ) || false !== stripos( $clean_speaker, 'host 2' ) || false !== stripos( $clean_speaker, 'presenter 2' ) || false !== stripos( $clean_speaker, 'presenter2' ) ) {
                     $matched_type = 'male';
                     $matched_name = $male_host;
                 }
@@ -755,13 +755,13 @@ class PressHub_AI_Podcast_Producer {
      * to prevent neural multi-speaker voice drift.
      *
      * @param string $raw_script     Raw script text.
-     * @param string $female_host    Lead host name.
-     * @param string $male_host      Secondary host name.
-     * @param string $tertiary_host  Tertiary host name.
+     * @param string $female_host    Lead host name (default 'Presenter 1').
+     * @param string $male_host      Secondary host name (default 'Presenter 2').
+     * @param string $tertiary_host  Tertiary host name (default 'Presenter 3').
      * @param int    $fallback_chunk Fallback turn chunk size (default 5).
      * @return array List of topic blocks: [['title' => '...', 'script' => '...', 'turns' => [...]], ...]
      */
-    public function parse_script_topics( string $raw_script, string $female_host = 'Μαρία', string $male_host = 'Νίκος', string $tertiary_host = 'Κώστας', int $fallback_chunk = 5 ): array {
+    public function parse_script_topics( string $raw_script, string $female_host = 'Presenter 1', string $male_host = 'Presenter 2', string $tertiary_host = 'Presenter 3', int $fallback_chunk = 5 ): array {
         $raw_script = trim( $raw_script );
         if ( empty( $raw_script ) ) {
             return [];
@@ -1108,19 +1108,25 @@ class PressHub_AI_Podcast_Producer {
         }
 
         // 4. Parse turns
-        $host1 = (string) get_option( self::OPTION_HOST_FEMALE, 'Μαρία' );
+        $host1 = (string) get_option( self::OPTION_HOST_FEMALE, 'Presenter 1' );
         if ( empty( trim( $host1 ) ) ) {
-            $host1 = 'Μαρία';
+            $host1 = 'Presenter 1';
         }
         $host1 = apply_filters( 'presshub_ai_podcast_host1_name', $host1 );
 
-        $host2 = (string) get_option( self::OPTION_HOST_MALE, 'Νίκος' );
+        $host2 = (string) get_option( self::OPTION_HOST_MALE, 'Presenter 2' );
         if ( empty( trim( $host2 ) ) ) {
-            $host2 = 'Νίκος';
+            $host2 = 'Presenter 2';
         }
         $host2 = apply_filters( 'presshub_ai_podcast_host2_name', $host2 );
 
-        $turns = $this->parse_script_turns( $response, $host1, $host2 );
+        $host3 = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_tertiary() : (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Presenter 3' );
+        if ( empty( trim( $host3 ) ) ) {
+            $host3 = 'Presenter 3';
+        }
+        $host3 = apply_filters( 'presshub_ai_podcast_host3_name', $host3 );
+
+        $turns = $this->parse_script_turns( $response, $host1, $host2, $host3 );
         if ( empty( $turns ) ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::warning( 'Failed parsing dialogue turns from AI script: ' . substr( $response, 0, 300 ) );

@@ -406,6 +406,15 @@ if ( ! function_exists( 'check_ajax_referer' ) ) {
     }
 }
 
+if ( ! function_exists( 'check_admin_referer' ) ) {
+    function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {
+        if ( empty( $GLOBALS['NONCE_VALID'] ) ) {
+            throw new RuntimeException( 'check_admin_referer failed' );
+        }
+        return true;
+    }
+}
+
 if ( ! function_exists( 'wp_send_json_error' ) ) {
     function wp_send_json_error( $data = null, $status_code = null, $options = 0 ) {
         $GLOBALS['JSON_RESPONSES'][] = [ 'success' => false, 'data' => $data ];
@@ -734,6 +743,22 @@ if ( ! function_exists( 'add_settings_field' ) ) {
 if ( ! function_exists( 'do_settings_sections' ) ) {
     function do_settings_sections( $page ) {
         $GLOBALS['RENDERED_SECTIONS'][ $page ] = true;
+    }
+}
+
+if ( ! function_exists( 'do_settings_fields' ) ) {
+    function do_settings_fields( $page, $section ) {
+        $fields = $GLOBALS['FIELDS'][ $page ][ $section ] ?? [];
+        foreach ( $fields as $field ) {
+            echo '<tr class="' . ( isset( $field['id'] ) ? esc_attr( $field['id'] ) : '' ) . '">';
+            echo '<th scope="row">' . ( isset( $field['title'] ) ? esc_html( $field['title'] ) : '' ) . '</th>';
+            echo '<td>';
+            if ( ! empty( $field['callback'] ) && is_callable( $field['callback'] ) ) {
+                call_user_func( $field['callback'], $field['args'] ?? [] );
+            }
+            echo '</td>';
+            echo '</tr>';
+        }
     }
 }
 

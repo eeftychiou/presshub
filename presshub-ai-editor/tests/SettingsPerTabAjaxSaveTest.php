@@ -98,6 +98,7 @@ class SettingsPerTabAjaxSaveTest
         // Pre-set other sections to confirm isolation
         $GLOBALS['OPTIONS_STORE']['presshub_ai_copilot_model'] = 'gpt-4o-copilot-untouched';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] = 0;
 
         $_POST = [
             'tab'   => 'coauthor',
@@ -108,7 +109,6 @@ class SettingsPerTabAjaxSaveTest
             'presshub_ai_coauthor_max_tokens'  => '8192',
             'presshub_ai_coauthor_timeout'     => '120',
             'presshub_ai_fetch_urls'           => '1',
-            'presshub_ai_debug_prompts'        => '1',
         ];
 
         try {
@@ -142,6 +142,9 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( (int) get_option( 'presshub_ai_rate_limit_enabled' ) !== 1 ) {
             $failures[] = 'Isolation failed: presshub_ai_rate_limit_enabled in advanced tab was altered during coauthor tab save.';
+        }
+        if ( (int) get_option( 'presshub_ai_debug_prompts' ) !== 0 ) {
+            $failures[] = 'Isolation failed: presshub_ai_debug_prompts was altered during coauthor tab save.';
         }
 
         $responses = $GLOBALS['JSON_RESPONSES'] ?? [];
@@ -209,10 +212,10 @@ class SettingsPerTabAjaxSaveTest
         if ( (int) get_option( 'presshub_ai_briefing_audio_split_by_topic' ) !== 0 ) {
             $failures[] = 'Unchecked checkbox presshub_ai_briefing_audio_split_by_topic in briefing tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_briefing_audio_split_by_topic' ), true );
         }
-        if ( (int) get_option( 'presshub_ai_log_tts_payloads' ) !== 0 ) {
-            $failures[] = 'Unchecked checkbox presshub_ai_log_tts_payloads in briefing tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_log_tts_payloads' ), true );
-        }
         // Assert section isolation: ensure other section options remain untouched
+        if ( (int) get_option( 'presshub_ai_log_tts_payloads' ) !== 1 ) {
+            $failures[] = 'Isolation failed: presshub_ai_log_tts_payloads was altered during briefing tab save.';
+        }
         if ( (int) get_option( 'presshub_ai_rate_limit_enabled' ) !== 1 ) {
             $failures[] = 'Isolation failed: presshub_ai_rate_limit_enabled was altered during briefing tab save.';
         }
@@ -235,7 +238,6 @@ class SettingsPerTabAjaxSaveTest
             'presshub_ai_briefing_podcast_tts_provider' => 'gemini-speech',
             'presshub_ai_briefing_voice_speed'          => '1.15',
             'presshub_ai_briefing_voice_pitch'          => '1.5',
-            'presshub_ai_log_tts_payloads'              => '1',
         ];
 
         $_POST = [
@@ -262,9 +264,6 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( (float) get_option( 'presshub_ai_briefing_voice_pitch' ) !== 1.5 ) {
             $failures[] = 'presshub_ai_briefing_voice_pitch not saved correctly; got: ' . var_export( get_option( 'presshub_ai_briefing_voice_pitch' ), true );
-        }
-        if ( (int) get_option( 'presshub_ai_log_tts_payloads' ) !== 1 ) {
-            $failures[] = 'presshub_ai_log_tts_payloads not saved correctly; got: ' . var_export( get_option( 'presshub_ai_log_tts_payloads' ), true );
         }
 
         // -------------------------------------------------------------
@@ -333,6 +332,8 @@ class SettingsPerTabAjaxSaveTest
             'presshub_ai_rate_limit_window_seconds' => '1800',
             'presshub_ai_research_retention_days'   => '14',
             'presshub_ai_log_level'                 => 'DEBUG',
+            'presshub_ai_debug_prompts'             => '1',
+            'presshub_ai_log_tts_payloads'          => '1',
             'presshub_ai_gcloud_project_id'         => 'presshub-test-proj',
             'presshub_ai_imagen_region'             => 'europe-west1',
         ];
@@ -356,14 +357,51 @@ class SettingsPerTabAjaxSaveTest
         if ( get_option( 'presshub_ai_log_level' ) !== 'DEBUG' ) {
             $failures[] = 'presshub_ai_log_level not saved correctly.';
         }
+        if ( (int) get_option( 'presshub_ai_debug_prompts' ) !== 1 ) {
+            $failures[] = 'presshub_ai_debug_prompts not saved correctly in advanced section.';
+        }
+        if ( (int) get_option( 'presshub_ai_log_tts_payloads' ) !== 1 ) {
+            $failures[] = 'presshub_ai_log_tts_payloads not saved correctly in advanced section.';
+        }
         if ( get_option( 'presshub_ai_gcloud_project_id' ) !== 'presshub-test-proj' ) {
             $failures[] = 'presshub_ai_gcloud_project_id not saved correctly.';
+        }
+
+        // -------------------------------------------------------------
+        // Case 8b: Advanced Section Checkbox Uncheck Handling (Diagnostic Logging)
+        // -------------------------------------------------------------
+        self::reset_env();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_log_tts_payloads'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
+
+        // Save advanced tab with all checkboxes unchecked
+        $_POST = [
+            'tab'                   => 'advanced',
+            'nonce'                 => 'valid_nonce',
+            'presshub_ai_log_level' => 'INFO',
+        ];
+
+        try {
+            $handlers->save_settings_section();
+        } catch ( Throwable $e ) {}
+
+        if ( (int) get_option( 'presshub_ai_debug_prompts' ) !== 0 ) {
+            $failures[] = 'Unchecked checkbox presshub_ai_debug_prompts in advanced tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_debug_prompts' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_log_tts_payloads' ) !== 0 ) {
+            $failures[] = 'Unchecked checkbox presshub_ai_log_tts_payloads in advanced tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_log_tts_payloads' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_rate_limit_enabled' ) !== 0 ) {
+            $failures[] = 'Unchecked checkbox presshub_ai_rate_limit_enabled in advanced tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_rate_limit_enabled' ), true );
         }
 
         // -------------------------------------------------------------
         // Case 9: Render Output contains per-tab save buttons
         // -------------------------------------------------------------
         self::reset_env();
+        $settings = new PressHub_AI_Settings();
+        $settings->register_settings();
         $renderer = new PressHub_AI_Settings_Render();
         ob_start();
         $renderer->render_settings_page();
@@ -394,6 +432,14 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( false === strpos( $html, 'name="presshub_ai_briefing_audio_split_by_topic" value="0"' ) ) {
             $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_briefing_audio_split_by_topic.';
+        }
+
+        // Verify hidden input fallbacks for logging checkboxes
+        if ( false === strpos( $html, 'name="presshub_ai_debug_prompts" value="0"' ) ) {
+            $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_debug_prompts.';
+        }
+        if ( false === strpos( $html, 'name="presshub_ai_log_tts_payloads" value="0"' ) ) {
+            $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_log_tts_payloads.';
         }
 
         // -------------------------------------------------------------

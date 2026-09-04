@@ -1223,3 +1223,104 @@ body.presshub-modal-open {
     border-radius: 4px;
     font-size: 13px;
 }
+
+/* ------------------------------------------------------------------
+ * Diagnostic Inspector Cards & Badges
+ * ------------------------------------------------------------------ */
+.presshub-log-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    padding: 10px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+.presshub-log-card:last-child {
+    margin-bottom: 0;
+}
+.presshub-log-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.presshub-log-card-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.presshub-log-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.presshub-badge-endpoint {
+    background: #e7f3fe;
+    color: #1d2327;
+    border: 1px solid #72aee6;
+}
+.presshub-badge-timestamp {
+    background: #f0f0f1;
+    color: #50575e;
+}
+.presshub-badge-trace {
+    background: #fcf9e8;
+    color: #8c5b00;
+    border: 1px solid #dba617;
+    cursor: pointer;
+}
+.presshub-badge-trace:hover {
+    background: #fbf3cd;
+    text-decoration: underline;
+}
+.presshub-badge-chars {
+    background: #edfaef;
+    color: #005a1e;
+    border: 1px solid #68de7c;
+}
+.presshub-badge-phase {
+    background: #f6f7f7;
+    color: #2c3338;
+    border: 1px solid #c3c4c7;
+}
+.presshub-badge-model {
+    background: #f0f6fc;
+    color: #0969da;
+    border: 1px solid #c8e1ff;
+}
+.presshub-log-section {
+    margin-top: 6px;
+    border: 1px solid #dcdcde;
+    border-radius: 3px;
+}
+.presshub-log-section-header {
+    background: #f6f7f7;
+    padding: 4px 8px;
+    font-weight: 600;
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.presshub-log-section-header:hover {
+    background: #f0f0f1;
+}
+.presshub-log-section-content {
+    padding: 8px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #fdfdfd;
+    border-top: 1px solid #dcdcde;
+}

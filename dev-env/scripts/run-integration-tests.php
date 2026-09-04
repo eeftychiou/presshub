@@ -970,11 +970,11 @@ run_test( 'Issue #69: Multi-speaker persona mapping, dynamic timeout, and resili
         if ( count( $sp_configs ) !== 2 ) {
             return 'Expected 2 speakerVoiceConfigs; got: ' . count( $sp_configs );
         }
-        if ( $sp_configs[0]['speaker'] !== 'Μαρία' || ( $sp_configs[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) !== 'Kore' ) {
-            return 'Speaker 1 is not Μαρία with Kore; got: ' . json_encode( $sp_configs[0] );
+        if ( $sp_configs[0]['speaker'] !== 'Presenter 1' || ( $sp_configs[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) !== 'Kore' ) {
+            return 'Speaker 1 is not Presenter 1 with Kore; got: ' . json_encode( $sp_configs[0] );
         }
-        if ( $sp_configs[1]['speaker'] !== 'Νίκος' || ( $sp_configs[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) !== 'Fenrir' ) {
-            return 'Speaker 2 is not Νίκος with Fenrir; got: ' . json_encode( $sp_configs[1] );
+        if ( $sp_configs[1]['speaker'] !== 'Presenter 2' || ( $sp_configs[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) !== 'Fenrir' ) {
+            return 'Speaker 2 is not Presenter 2 with Fenrir; got: ' . json_encode( $sp_configs[1] );
         }
     } finally {
         remove_filter( 'pre_http_request', $filter, 10 );

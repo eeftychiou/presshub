@@ -161,14 +161,9 @@ class PressHub_AI_Audio_Synthesizer {
         $manifest = $this->load_voice_catalog_manifest();
         $engine_slice = $manifest['engines'][ $engine ] ?? null;
 
-        // Last-resort fallback: the bundled manifest must always include
-        // gemini-2.5 (the canonical voice set). If the JSON file is
-        // missing or malformed we still need to return SOMETHING so the
-        // settings UI does not crash — emit the historical hardcoded
-        // Gemini 2.5 catalog as the absolute fallback.
-        if ( null === $engine_slice ) {
-            if ( 'gemini-2.5' === $engine ) {
-                return $this->legacy_gemini25_fallback();
+        if ( null === $engine_slice || empty( $manifest['engines'] ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( sprintf( 'TTS voice catalog missing manifest or engine slice for engine: %s', $engine ) );
             }
             return [ 'female' => [], 'male' => [] ];
         }
@@ -414,33 +409,6 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
-     * Absolute last-resort fallback for get_available_voices() when the
-     * bundled manifest is missing or corrupted. Mirrors the historical
-     * hardcoded catalog so existing operators who upgrade from a very
-     * old plugin still see voices in the dropdown.
-     *
-     * @return array{ female: array<string, array>, male: array<string, array> }
-     */
-    private function legacy_gemini25_fallback(): array {
-        return [
-            'female' => [
-                'Kore'       => [ 'name' => 'Kore',       'label' => __( 'Kore (Warm, Crystal Clear & Articulate - Default)', 'presshub-ai-editor' ), 'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Aoede'      => [ 'name' => 'Aoede',      'label' => __( 'Aoede (Expressive & Melodic)', 'presshub-ai-editor' ),                   'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Leda'       => [ 'name' => 'Leda',       'label' => __( 'Leda (Warm & Professional)', 'presshub-ai-editor' ),                      'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Callirrhoe' => [ 'name' => 'Callirrhoe', 'label' => __( 'Callirrhoe (Dynamic & Engaging)', 'presshub-ai-editor' ),          'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Autonoe'    => [ 'name' => 'Autonoe',    'label' => __( 'Autonoe (Conversational)', 'presshub-ai-editor' ),                    'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-            ],
-            'male' => [
-                'Fenrir'     => [ 'name' => 'Fenrir',     'label' => __( 'Fenrir (Bold, Strong & Authoritative - Default)', 'presshub-ai-editor' ), 'gender' => 'MALE', 'type' => 'Gemini-Neural' ],
-                'Puck'       => [ 'name' => 'Puck',       'label' => __( 'Puck (Lively, Youthful & Expressive)', 'presshub-ai-editor' ),            'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
-                'Charon'     => [ 'name' => 'Charon',     'label' => __( 'Charon (Deep Baritone & Solemn Gravitas)', 'presshub-ai-editor' ),       'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
-                'Zephyr'     => [ 'name' => 'Zephyr',     'label' => __( 'Zephyr (Calm, Gentle & Melodious)', 'presshub-ai-editor' ),            'gender' => 'NEUTRAL', 'type' => 'Gemini-Neural' ],
-                'Orus'       => [ 'name' => 'Orus',       'label' => __( 'Orus (Confident & Articulate)', 'presshub-ai-editor' ),                  'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
-            ],
-        ];
-    }
-
-    /**
      * Get the configured voice model for a given speaker identifier.
      *
      * @param string $speaker Speaker identifier ('female', 'male', 'host1', 'host2', or speaker name).
@@ -448,38 +416,62 @@ class PressHub_AI_Audio_Synthesizer {
      */
     public function get_voice_for_speaker( string $speaker ): string {
         $clean = trim( $speaker );
-        // Issue #89 — Settings-First pattern (AGENTS.md): read voice
-        // options via the canonical static helpers instead of inline
-        // get_option() calls. The helpers encapsulate engine-aware
-        // defaults and the manifest-driven allow-list, so this method
-        // becomes purely a "speaker → persona" dispatcher.
-        $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
-
-        $female_host   = (string) get_option( 'presshub_ai_briefing_host_female', 'Μαρία' );
-        $male_host     = (string) get_option( 'presshub_ai_briefing_host_male', 'Νίκος' );
-        $tertiary_host = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_tertiary() : (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Κώστας' );
-
         $lower = strtolower( $clean );
+
+        $engine = (string) get_option( self::OPTION_ENGINE, 'gemini' );
+        $default_p1 = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-A' : 'Kore';
+        $default_p2 = ( 'google_cloud' === $engine ) ? 'el-GR-Chirp3-HD-Achird' : 'Fenrir';
+        $default_p3 = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck';
+
+        $p1_voice = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_presenter_1() : (string) get_option( self::OPTION_VOICE_FEMALE, $default_p1 );
+        $p2_voice = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_presenter_2() : (string) get_option( self::OPTION_VOICE_MALE, $default_p2 );
+        $p3_voice = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_presenter_3() : (string) get_option( 'presshub_ai_briefing_voice_tertiary', $default_p3 );
+
+        if ( empty( $p1_voice ) ) {
+            $p1_voice = $default_p1;
+        }
+        if ( empty( $p2_voice ) ) {
+            $p2_voice = $default_p2;
+        }
+        if ( empty( $p3_voice ) ) {
+            $p3_voice = $default_p3;
+        }
+
+        // Check if custom host names are configured
+        $female_host   = (string) get_option( 'presshub_ai_briefing_host_female', '' );
+        $male_host     = (string) get_option( 'presshub_ai_briefing_host_male', '' );
+        $tertiary_host = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_tertiary() : (string) get_option( 'presshub_ai_briefing_host_tertiary', '' );
 
         // 1. Check tertiary host
         $is_tertiary = (
-            'tertiary' === $lower
+            'speaker_3' === $lower
+            || 'speaker 3' === $lower
+            || 'speaker3' === $lower
+            || 'presenter_3' === $lower
+            || 'presenter 3' === $lower
+            || 'presenter3' === $lower
             || 'host3' === $lower
             || 'host 3' === $lower
+            || 'tertiary' === $lower
+            || ( function_exists( 'mb_stripos' ) && false !== mb_stripos( $clean, 'κώστας' ) )
             || ( ! empty( $tertiary_host ) && function_exists( 'mb_stripos' ) && false !== mb_stripos( $clean, $tertiary_host ) )
         );
 
         if ( $is_tertiary ) {
-            $voice = class_exists( 'PressHub_AI_Settings_Storage' )
-                ? PressHub_AI_Settings_Storage::get_voice_tertiary()
-                : (string) get_option( 'presshub_ai_briefing_voice_tertiary', ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck' );
-            return ! empty( $voice ) ? trim( $voice ) : ( ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck' );
+            return trim( $p3_voice );
         }
 
+        // 2. Check presenter 1 / female lead
         $is_female = (
-            'female' === $lower
+            'speaker_1' === $lower
+            || 'speaker 1' === $lower
+            || 'speaker1' === $lower
+            || 'presenter_1' === $lower
+            || 'presenter 1' === $lower
+            || 'presenter1' === $lower
             || 'host1' === $lower
             || 'host 1' === $lower
+            || 'female' === $lower
             || false !== strpos( $lower, 'female' )
             || false !== strpos( $lower, 'maria' )
             || ( function_exists( 'mb_stripos' ) && false !== mb_stripos( $clean, 'μαρία' ) )
@@ -487,24 +479,10 @@ class PressHub_AI_Audio_Synthesizer {
         );
 
         if ( $is_female ) {
-            $default_female = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-A' : 'Kore';
-            $voice = class_exists( 'PressHub_AI_Settings_Storage' )
-                ? PressHub_AI_Settings_Storage::get_voice_female()
-                : (string) get_option( self::OPTION_VOICE_FEMALE, $default_female );
-            if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) ) {
-                $voice = $default_female;
-            }
-            return trim( $voice );
+            return trim( $p1_voice );
         }
 
-        $default_male = ( 'google_cloud' === $engine ) ? 'el-GR-Chirp3-HD-Achird' : 'Fenrir';
-        $voice = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_voice_male()
-            : (string) get_option( self::OPTION_VOICE_MALE, $default_male );
-        if ( empty( $voice ) || false !== strpos( $voice, 'Neural2' ) || 'el-GR-Wavenet-B' === $voice || 'el-GR-Standard-B' === $voice ) {
-            $voice = $default_male;
-        }
-        return trim( $voice );
+        return trim( $p2_voice );
     }
 
     /**
@@ -668,6 +646,9 @@ class PressHub_AI_Audio_Synthesizer {
     public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null, string $style = 'formal' ) {
         if ( null === $api_client ) {
             $api_client = new PressHub_AI_API_Client( 'tts' );
+        }
+        if ( method_exists( $api_client, 'set_action' ) ) {
+            $api_client->set_action( 'podcast_audio' );
         }
 
         if ( empty( $voice_model ) ) {
@@ -1008,6 +989,9 @@ class PressHub_AI_Audio_Synthesizer {
         if ( null === $api_client ) {
             $api_client = new PressHub_AI_API_Client( 'tts' );
         }
+        if ( method_exists( $api_client, 'set_action' ) ) {
+            $api_client->set_action( 'podcast_audio' );
+        }
 
         // 1. Resolve script
         $script = trim( $custom_script );
@@ -1025,17 +1009,17 @@ class PressHub_AI_Audio_Synthesizer {
 
         // 2. Parse turns for metadata & metrics
         $producer      = new PressHub_AI_Podcast_Producer();
-        $female_host   = (string) get_option( 'presshub_ai_briefing_host_female', 'Μαρία' );
-        $male_host     = (string) get_option( 'presshub_ai_briefing_host_male', 'Νίκος' );
-        $tertiary_host = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_tertiary() : (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Κώστας' );
+        $female_host   = (string) get_option( 'presshub_ai_briefing_host_female', 'Presenter 1' );
+        $male_host     = (string) get_option( 'presshub_ai_briefing_host_male', 'Presenter 2' );
+        $tertiary_host = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_tertiary() : (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Presenter 3' );
         if ( empty( trim( $female_host ) ) ) {
-            $female_host = 'Μαρία';
+            $female_host = 'Presenter 1';
         }
         if ( empty( trim( $male_host ) ) ) {
-            $male_host = 'Νίκος';
+            $male_host = 'Presenter 2';
         }
         if ( empty( trim( $tertiary_host ) ) ) {
-            $tertiary_host = 'Κώστας';
+            $tertiary_host = 'Presenter 3';
         }
 
         $turns = $producer->parse_script_turns( $script, $female_host, $male_host, $tertiary_host );
@@ -1054,9 +1038,12 @@ class PressHub_AI_Audio_Synthesizer {
         $split_by_topic = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_audio_split_by_topic() : (bool) (int) get_option( 'presshub_ai_briefing_audio_split_by_topic', 1 );
         $host_count     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_count() : (int) get_option( 'presshub_ai_briefing_host_count', 2 );
 
-        $female_voice   = $this->get_voice_for_speaker( 'female' );
-        $male_voice     = $this->get_voice_for_speaker( 'male' );
-        $tertiary_voice = $this->get_voice_for_speaker( 'tertiary' );
+        $presenter_1_voice = $this->get_voice_for_speaker( 'presenter_1' );
+        $presenter_2_voice = $this->get_voice_for_speaker( 'presenter_2' );
+        $presenter_3_voice = $this->get_voice_for_speaker( 'presenter_3' );
+        $female_voice      = $presenter_1_voice;
+        $male_voice        = $presenter_2_voice;
+        $tertiary_voice    = $presenter_3_voice;
 
         $speed          = (float) get_option( self::OPTION_VOICE_SPEED, 1.0 );
         $pitch          = (float) get_option( self::OPTION_VOICE_PITCH, 0.0 );
@@ -1117,8 +1104,8 @@ class PressHub_AI_Audio_Synthesizer {
                         foreach ( $topic_turns as $turn_idx => $t ) {
                             $speaker_id = (string) ( $t['speaker'] ?? '' );
                             $speaker_voice = ( 'tertiary' === $speaker_id )
-                                ? $tertiary_voice
-                                : ( ( 'female' === $speaker_id ) ? $female_voice : $male_voice );
+                                ? $presenter_3_voice
+                                : ( ( 'female' === $speaker_id || 'presenter_1' === $speaker_id ) ? $presenter_1_voice : $presenter_2_voice );
                             $turn_assignments[] = [
                                 'turn'   => $turn_idx + 1,
                                 'speaker' => $speaker_id,
@@ -1126,25 +1113,25 @@ class PressHub_AI_Audio_Synthesizer {
                                 'chars'   => mb_strlen( (string) ( $t['text'] ?? '' ) ),
                             ];
                         }
+                        $topic_log_payload = [
+                            'date'              => $date,
+                            'topic_index'       => $topic_idx + 1,
+                            'topic_total'       => count( $topics ),
+                            'topic_title'       => (string) ( $topic['title'] ?? '' ),
+                            'turns_count'       => count( $topic_turns ),
+                            'chars'             => mb_strlen( $topic_script ),
+                            'host_count'        => $host_count,
+                            'female_voice'      => $presenter_1_voice,
+                            'male_voice'        => ( $host_count >= 2 ) ? $presenter_2_voice : '',
+                            'style'             => $used_style,
+                            'turn_assignments'  => $turn_assignments,
+                        ];
+                        if ( $host_count >= 3 ) {
+                            $topic_log_payload['tertiary_voice'] = $presenter_3_voice;
+                        }
                         $topic_log_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
                             'topic',
-                            [
-                                'date'              => $date,
-                                'topic_index'       => $topic_idx + 1,
-                                'topic_total'       => count( $topics ),
-                                'topic_title'       => (string) ( $topic['title'] ?? '' ),
-                                'turns_count'       => count( $topic_turns ),
-                                'chars'             => mb_strlen( $topic_script ),
-                                'host_count'        => $host_count,
-                                'female_host'       => $female_host,
-                                'male_host'         => $male_host,
-                                'tertiary_host'     => $tertiary_host,
-                                'female_voice'      => $female_voice,
-                                'male_voice'        => $male_voice,
-                                'tertiary_voice'    => $tertiary_voice,
-                                'style'             => $used_style,
-                                'turn_assignments'  => $turn_assignments,
-                            ]
+                            $topic_log_payload
                         );
                         PressHub_AI_API_Client::write_tts_payload_log( $topic_log_entry );
                     }
@@ -1153,13 +1140,13 @@ class PressHub_AI_Audio_Synthesizer {
                         // Solo anchor
                         $dialogue_lines = [];
                         foreach ( $topic_turns as $t ) {
-                            $dialogue_lines[] = $female_host . ': ' . $t['text'];
+                            $dialogue_lines[] = 'Presenter 1: ' . $t['text'];
                         }
                         $formatted_topic_script = implode( "\n\n", $dialogue_lines );
 
                         $topic_audio = $api_client->synthesize_speech_via_gemini(
                             $formatted_topic_script,
-                            $female_voice,
+                            $presenter_1_voice,
                             true,
                             $used_style,
                             null
@@ -1171,11 +1158,11 @@ class PressHub_AI_Audio_Synthesizer {
                         foreach ( $topic_turns as $t ) {
                             $speaker = $t['speaker'];
                             if ( 'tertiary' === $speaker ) {
-                                $t_voice = $tertiary_voice;
-                            } elseif ( 'female' === $speaker ) {
-                                $t_voice = $female_voice;
+                                $t_voice = $presenter_3_voice;
+                            } elseif ( 'female' === $speaker || 'presenter_1' === $speaker ) {
+                                $t_voice = $presenter_1_voice;
                             } else {
-                                $t_voice = $male_voice;
+                                $t_voice = $presenter_2_voice;
                             }
                             $turn_res = $this->synthesize_turn( $t['text'], $t_voice, $speed, $pitch, $api_client, $used_style );
                             if ( is_wp_error( $turn_res ) ) {
@@ -1186,34 +1173,31 @@ class PressHub_AI_Audio_Synthesizer {
                         $topic_audio = $this->stitch_wav_chunks( $chunk_wavs, 250, 24000 );
                     } else {
                         // 2 Hosts (Default)
-                        $has_fem = false;
-                        $has_mal = false;
-                        foreach ( $topic_turns as $t ) {
-                            if ( 'female' === $t['speaker'] ) {
-                                $has_fem = true;
-                            } elseif ( 'male' === $t['speaker'] ) {
-                                $has_mal = true;
-                            }
-                        }
-
-                        $speaker_configs = null;
-                        if ( $has_fem && $has_mal ) {
-                            $speaker_configs = [
-                                [ 'speaker' => $female_host, 'voice' => $female_voice ],
-                                [ 'speaker' => $male_host, 'voice' => $male_voice ],
-                            ];
-                        }
+                        $speaker_configs = [
+                            [ 'speaker' => 'Presenter 1', 'voice' => $presenter_1_voice ],
+                            [ 'speaker' => 'Presenter 2', 'voice' => $presenter_2_voice ],
+                        ];
 
                         $dialogue_lines = [];
                         foreach ( $topic_turns as $t ) {
-                            $label = ( 'female' === $t['speaker'] ) ? $female_host : $male_host;
+                            $label = ( 'female' === $t['speaker'] || 'presenter_1' === $t['speaker'] ) ? 'Presenter 1' : 'Presenter 2';
                             $dialogue_lines[] = '[' . $label . ']: ' . $t['text'];
                         }
                         $formatted_topic_script = implode( "\n\n", $dialogue_lines );
 
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::info( sprintf(
+                                '[LogosAI Synthesizer] Topic %d/%d multi-speaker synthesis with speakers="Presenter 1=%s, Presenter 2=%s"',
+                                $topic_idx + 1,
+                                count( $topics ),
+                                $presenter_1_voice,
+                                $presenter_2_voice
+                            ) );
+                        }
+
                         $topic_audio = $api_client->synthesize_speech_via_gemini(
                             $formatted_topic_script,
-                            $female_voice,
+                            $presenter_1_voice,
                             true,
                             $used_style,
                             $speaker_configs
@@ -1230,7 +1214,7 @@ class PressHub_AI_Audio_Synthesizer {
                             }
                             $chunk_wavs = [];
                             foreach ( $topic_turns as $t ) {
-                                $t_voice  = ( 'female' === $t['speaker'] ) ? $female_voice : $male_voice;
+                                $t_voice  = ( 'female' === $t['speaker'] || 'presenter_1' === $t['speaker'] ) ? $presenter_1_voice : $presenter_2_voice;
                                 $turn_res = $this->synthesize_turn( $t['text'], $t_voice, $speed, $pitch, $api_client, $used_style );
                                 if ( is_wp_error( $turn_res ) ) {
                                     return $turn_res;
@@ -1257,18 +1241,29 @@ class PressHub_AI_Audio_Synthesizer {
                     $trans_pcm = $this->get_sfx_pcm( $trans_sfx_setting );
                     $outro_pcm = $this->get_sfx_pcm( $outro_sfx_setting );
 
-                    // Prepend intro if present
-                    if ( ! empty( $intro_pcm ) && ! empty( $topic_wavs ) ) {
-                        // We wrap it in a mock WAV header so it can be stitched as a chunk
-                        $topic_wavs = array_merge( [ $this->wrap_pcm_in_wav( $intro_pcm ) ], $topic_wavs );
-                    }
-                    
-                    // Append outro if present
-                    if ( ! empty( $outro_pcm ) && ! empty( $topic_wavs ) ) {
-                        $topic_wavs[] = $this->wrap_pcm_in_wav( $outro_pcm );
+                    // 1. Stitch topics together with Topic Transition SFX between them
+                    if ( count( $topic_wavs ) > 1 ) {
+                        $stitched_topics = $this->stitch_wav_chunks( $topic_wavs, 600, 24000, $trans_pcm );
+                    } else {
+                        $stitched_topics = $topic_wavs[0];
                     }
 
-                    $stitched_audio = $this->stitch_wav_chunks( $topic_wavs, 600, 24000, $trans_pcm );
+                    // 2. Assemble Intro + Topics + Outro with clean natural silence pause (zero Transition SFX between Intro/Outro and topics)
+                    $final_chunks = [];
+                    if ( ! empty( $intro_pcm ) ) {
+                        $final_chunks[] = $this->wrap_pcm_in_wav( $intro_pcm );
+                    }
+                    $final_chunks[] = $stitched_topics;
+                    if ( ! empty( $outro_pcm ) ) {
+                        $final_chunks[] = $this->wrap_pcm_in_wav( $outro_pcm );
+                    }
+
+                    if ( count( $final_chunks ) > 1 ) {
+                        $stitched_audio = $this->stitch_wav_chunks( $final_chunks, 600, 24000, '' );
+                    } else {
+                        $stitched_audio = $final_chunks[0];
+                    }
+
                     $duration_ms    = (int) round( ( microtime( true ) - $overall_start ) * 1000 );
 
                     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
@@ -1286,26 +1281,29 @@ class PressHub_AI_Audio_Synthesizer {
                         && class_exists( 'PressHub_AI_API_Client' )
                         && PressHub_AI_Settings_Storage::get_log_tts_payloads()
                     ) {
+                        $stitched_metrics_payload = [
+                            'date'               => $date,
+                            'phase'              => 'topic_stitched',
+                            'topic_count'        => count( $topics ),
+                            'chunks_count'       => count( $final_chunks ),
+                            'total_chars'        => $total_chars,
+                            'duration_ms'        => $duration_ms,
+                            'audio_bytes'        => strlen( (string) $stitched_audio ),
+                            'sample_rate_hz'     => 24000,
+                            'pause_ms'           => 600,
+                            'has_intro_sfx'      => ! empty( $intro_pcm ),
+                            'has_outro_sfx'      => ! empty( $outro_pcm ),
+                            'has_transition_sfx' => ! empty( $trans_pcm ),
+                            'female_voice'       => $presenter_1_voice,
+                            'male_voice'         => ( $host_count >= 2 ) ? $presenter_2_voice : '',
+                            'host_count'         => $host_count,
+                        ];
+                        if ( $host_count >= 3 ) {
+                            $stitched_metrics_payload['tertiary_voice'] = $presenter_3_voice;
+                        }
                         $stitched_metrics_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
                             'stitched',
-                            [
-                                'date'             => $date,
-                                'phase'            => 'topic_stitched',
-                                'topic_count'      => count( $topics ),
-                                'chunks_count'     => count( $topic_wavs ),
-                                'total_chars'      => $total_chars,
-                                'duration_ms'      => $duration_ms,
-                                'audio_bytes'      => strlen( (string) $stitched_audio ),
-                                'sample_rate_hz'   => 24000,
-                                'pause_ms'         => 600,
-                                'has_intro_sfx'    => ! empty( $intro_pcm ),
-                                'has_outro_sfx'    => ! empty( $outro_pcm ),
-                                'has_transition_sfx' => ! empty( $trans_pcm ),
-                                'female_voice'     => $female_voice,
-                                'male_voice'       => $male_voice,
-                                'tertiary_voice'   => $tertiary_voice,
-                                'host_count'       => $host_count,
-                            ]
+                            $stitched_metrics_payload
                         );
                         PressHub_AI_API_Client::write_tts_payload_log( $stitched_metrics_entry );
                     }
@@ -1318,13 +1316,13 @@ class PressHub_AI_Audio_Synthesizer {
             if ( 1 === $host_count ) {
                 $dialogue_lines = [];
                 foreach ( $turns as $t ) {
-                    $dialogue_lines[] = $female_host . ': ' . $t['text'];
+                    $dialogue_lines[] = 'Presenter 1: ' . $t['text'];
                 }
                 $formatted_script = implode( "\n\n", $dialogue_lines );
                 $start_time       = microtime( true );
                 $gen_result       = $api_client->synthesize_speech_via_gemini(
                     $formatted_script,
-                    $female_voice,
+                    $presenter_1_voice,
                     true,
                     $used_style,
                     null
@@ -1338,7 +1336,7 @@ class PressHub_AI_Audio_Synthesizer {
                 $char_count  = 0;
                 foreach ( $turns as $turn ) {
                     $speaker    = $turn['speaker'];
-                    $turn_voice = ( 'tertiary' === $speaker ) ? $tertiary_voice : ( ( 'female' === $speaker ) ? $female_voice : $male_voice );
+                    $turn_voice = ( 'tertiary' === $speaker ) ? $presenter_3_voice : ( ( 'female' === $speaker || 'presenter_1' === $speaker ) ? $presenter_1_voice : $presenter_2_voice );
                     $char_count += mb_strlen( $turn['text'] );
                     $turn_res   = $this->synthesize_turn( $turn['text'], $turn_voice, $speed, $pitch, $api_client, $used_style );
                     if ( is_wp_error( $turn_res ) ) {
@@ -1351,40 +1349,25 @@ class PressHub_AI_Audio_Synthesizer {
                 $gen_result     = $stitched_audio;
             } else {
                 // 2 hosts (Default)
-                $has_female = false;
-                $has_male   = false;
-                foreach ( $turns as $t ) {
-                    if ( 'female' === $t['speaker'] ) {
-                        $has_female = true;
-                    } elseif ( 'male' === $t['speaker'] ) {
-                        $has_male = true;
-                    }
-                }
-
-                $speaker_configs = null;
-                if ( $has_female && $has_male ) {
-                    $speaker_configs = [
-                        [ 'speaker' => $female_host, 'voice' => $female_voice ],
-                        [ 'speaker' => $male_host, 'voice' => $male_voice ],
-                    ];
-                }
+                $speaker_configs = [
+                    [ 'speaker' => 'Presenter 1', 'voice' => $presenter_1_voice ],
+                    [ 'speaker' => 'Presenter 2', 'voice' => $presenter_2_voice ],
+                ];
 
                 $dialogue_lines = [];
                 foreach ( $turns as $t ) {
-                    $speaker_label    = ( 'female' === $t['speaker'] ) ? $female_host : $male_host;
+                    $speaker_label    = ( 'female' === $t['speaker'] || 'presenter_1' === $t['speaker'] ) ? 'Presenter 1' : 'Presenter 2';
                     $dialogue_lines[] = '[' . $speaker_label . ']: ' . $t['text'];
                 }
                 $formatted_script = implode( "\n\n", $dialogue_lines );
 
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::info( sprintf(
-                        '[LogosAI Synthesizer] Synthesizing podcast audio for %s (%d turns, lead: %s [%s], co-host: %s [%s], style: %s)',
+                        '[LogosAI Synthesizer] Synthesizing podcast audio for %s (%d turns, speakers="Presenter 1=%s, Presenter 2=%s", style: %s)',
                         $date,
                         count( $turns ),
-                        $female_host,
-                        $female_voice,
-                        $male_host,
-                        $male_voice,
+                        $presenter_1_voice,
+                        $presenter_2_voice,
                         $used_style
                     ) );
                 }
@@ -1392,7 +1375,7 @@ class PressHub_AI_Audio_Synthesizer {
                 $start_time = microtime( true );
                 $gen_result = $api_client->synthesize_speech_via_gemini(
                     $formatted_script,
-                    $female_voice,
+                    $presenter_1_voice,
                     true,
                     $used_style,
                     $speaker_configs
@@ -1414,7 +1397,7 @@ class PressHub_AI_Audio_Synthesizer {
                     // Resilient Fallback: synthesize each turn individually and stitch WAV chunks
                     $turn_wavs = [];
                     foreach ( $turns as $turn_idx => $turn ) {
-                        $turn_voice = ( 'female' === $turn['speaker'] ) ? $female_voice : $male_voice;
+                        $turn_voice = ( 'female' === $turn['speaker'] || 'presenter_1' === $turn['speaker'] ) ? $presenter_1_voice : $presenter_2_voice;
                         $turn_res   = $this->synthesize_turn( $turn['text'], $turn_voice, $speed, $pitch, $api_client, $used_style );
 
                         if ( is_wp_error( $turn_res ) ) {
@@ -1442,11 +1425,11 @@ class PressHub_AI_Audio_Synthesizer {
                     }
 
                     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                        PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $female_voice . '+' . $male_voice, $char_count, $duration_ms, 'success', 'fallback_stitched' );
+                        PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $presenter_1_voice . '+' . $presenter_2_voice, $char_count, $duration_ms, 'success', 'fallback_stitched' );
                     }
                 } else {
                     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                        PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $female_voice . '+' . $male_voice, $char_count, $duration_ms, 'success', null );
+                        PressHub_AI_Token_Logger::log_tts_request( 'podcast_audio', 'gemini', $presenter_1_voice . '+' . $presenter_2_voice, $char_count, $duration_ms, 'success', null );
                     }
                     $stitched_audio = $gen_result;
                 }
@@ -1492,8 +1475,23 @@ class PressHub_AI_Audio_Synthesizer {
             return $post_id;
         }
 
+        // Host-count gating for saved voices
+        if ( 1 === (int) $host_count ) {
+            $saved_p1 = $presenter_1_voice;
+            $saved_p2 = '';
+            $saved_p3 = '';
+        } elseif ( 2 === (int) $host_count ) {
+            $saved_p1 = $presenter_1_voice;
+            $saved_p2 = $presenter_2_voice;
+            $saved_p3 = '';
+        } else {
+            $saved_p1 = $presenter_1_voice;
+            $saved_p2 = $presenter_2_voice;
+            $saved_p3 = $presenter_3_voice;
+        }
+
         // Issue #79 — persist audio-stats meta on the podcast post so the
-        // Briefing Hub stage card can surface playback duration, file size,
+        // Briefing Hub stage card can later surface playback duration, file size,
         // sample rate, format, voice personas, engine, mode, and topic count.
         // Skipped silently if update_post_meta is unavailable (e.g. unit
         // tests that mock only sideload/create). All values come from
@@ -1517,7 +1515,7 @@ class PressHub_AI_Audio_Synthesizer {
                 $duration_sec   = max( 0.0, $audio_bytes / 4000.0 );
             }
 
-            $host_count_value = class_exists( 'PressHub_AI_Settings_Storage' ) ? (int) PressHub_AI_Settings_Storage::get_briefing_host_count() : (int) ( 1 === (int) $host_count ? 1 : 2 );
+            $host_count_value = (int) $host_count;
             $engine_value     = (string) $engine;
             $split_by_topic_v = $split_by_topic ? 1 : 0;
             $topic_count_v    = ! empty( $topics ) ? count( $topics ) : 0;
@@ -1528,9 +1526,9 @@ class PressHub_AI_Audio_Synthesizer {
             update_post_meta( (int) $post_id, '_presshub_audio_sample_rate', (int) $audio_sample );
             update_post_meta( (int) $post_id, '_presshub_audio_format', (string) $format );
             update_post_meta( (int) $post_id, '_presshub_audio_engine', $engine_value );
-            update_post_meta( (int) $post_id, '_presshub_audio_female_voice', (string) $female_voice );
-            update_post_meta( (int) $post_id, '_presshub_audio_male_voice', (string) $male_voice );
-            update_post_meta( (int) $post_id, '_presshub_audio_tertiary_voice', (string) $tertiary_voice );
+            update_post_meta( (int) $post_id, '_presshub_audio_female_voice', (string) $saved_p1 );
+            update_post_meta( (int) $post_id, '_presshub_audio_male_voice', (string) $saved_p2 );
+            update_post_meta( (int) $post_id, '_presshub_audio_tertiary_voice', (string) $saved_p3 );
             update_post_meta( (int) $post_id, '_presshub_audio_host_count', (int) $host_count_value );
             update_post_meta( (int) $post_id, '_presshub_audio_split_by_topic', (int) $split_by_topic_v );
             update_post_meta( (int) $post_id, '_presshub_audio_topic_count', (int) $topic_count_v );
@@ -1552,9 +1550,9 @@ class PressHub_AI_Audio_Synthesizer {
             // Issue #79 — surface audio stats in the result payload so the AJAX
             // handler can echo them into the response without re-querying.
             'engine'          => (string) $engine,
-            'female_voice'    => (string) $female_voice,
-            'male_voice'      => (string) $male_voice,
-            'tertiary_voice'  => (string) $tertiary_voice,
+            'female_voice'    => (string) $saved_p1,
+            'male_voice'      => (string) $saved_p2,
+            'tertiary_voice'  => (string) $saved_p3,
             'host_count'      => (int) $host_count,
             'sample_rate'     => 24000,
             'format'          => (string) ( $is_wav ? 'wav' : ( $is_mp3 ? 'mp3' : ltrim( $ext, '.' ) ) ),

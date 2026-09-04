@@ -81,7 +81,7 @@ class PressHub_AI_Settings_Storage {
         ] );
 
         // Prompt inspection toggle (1.2.5): appends the exact SYSTEM/USER
-        // prompts to wp-content/uploads/presshub-ai-debug.log.
+        // prompts to wp-content/uploads/presshub-ai/presshub-ai-debug.log.
         register_setting( 'presshub_ai_options', 'presshub_ai_debug_prompts', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_fetch_urls' ],
             'type'              => 'boolean',
@@ -199,7 +199,7 @@ class PressHub_AI_Settings_Storage {
         ] );
         // Issue #80 — Settings-First: TTS payload debug log toggle. When enabled
         // every Gemini TTS API call appends detailed request/response JSON
-        // entries to wp-content/uploads/presshub-ai-tts-debug.log via the
+        // entries to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
         // `presshub_ai_tts_payload_log` action, so operators can diagnose
         // voice drift or unexpected voice allocation without touching code.
         register_setting( 'presshub_ai_options', 'presshub_ai_log_tts_payloads', [
@@ -463,14 +463,14 @@ class PressHub_AI_Settings_Storage {
         add_settings_section( 'presshub_ai_general', __( 'General', 'presshub-ai-editor' ), [ $render, 'render_general_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_providers', __( 'Providers', 'presshub-ai-editor' ), [ $render, 'render_providers_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_media', __( 'Media (Google Cloud)', 'presshub-ai-editor' ), [ $render, 'render_media_section' ], 'presshub-ai' );
-        add_settings_section( 'presshub_ai_rate_limits', __( 'Rate Limits', 'presshub-ai-editor' ), [ $render, 'render_rate_limits_section' ], 'presshub-ai' );
+        add_settings_section( 'presshub_ai_rate_limits', __( 'Rate Limits & Research Retention', 'presshub-ai-editor' ), [ $render, 'render_rate_limits_section' ], 'presshub-ai' );
+        add_settings_section( 'presshub_ai_logging', __( 'Diagnostic Logging', 'presshub-ai-editor' ), [ $render, 'render_logging_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_briefing', __( 'Daily Briefing & AI Podcast', 'presshub-ai-editor' ), [ $render, 'render_briefing_section' ], 'presshub-ai' );
         add_settings_section( 'presshub_ai_github', __( 'Plugin Updates & GitHub Integration', 'presshub-ai-editor' ), [ $render, 'render_github_section' ], 'presshub-ai' );
 
         // --- P1: fields ---
         add_settings_field( 'presshub_ai_provider', __( 'AI Provider', 'presshub-ai-editor' ), [ $render, 'render_provider_field' ], 'presshub-ai', 'presshub_ai_general' );
         add_settings_field( 'presshub_ai_fetch_urls', __( 'Fetch source URLs', 'presshub-ai-editor' ), [ $render, 'render_fetch_urls_field' ], 'presshub-ai', 'presshub_ai_general' );
-        add_settings_field( 'presshub_ai_debug_prompts', __( 'Log AI prompts', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_general' );
 
         add_settings_field( 'presshub_ai_api_key', __( 'API Key', 'presshub-ai-editor' ), [ $render, 'render_api_key_field' ], 'presshub-ai', 'presshub_ai_providers' );
         foreach ( self::PROVIDERS as $provider ) {
@@ -492,16 +492,17 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_rate_limit_per_hour', __( 'Requests per Window', 'presshub-ai-editor' ), [ $render, 'render_rate_limit_per_hour_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
         add_settings_field( 'presshub_ai_rate_limit_window_seconds', __( 'Window Length (seconds)', 'presshub-ai-editor' ), [ $render, 'render_rate_limit_window_seconds_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
         add_settings_field( 'presshub_ai_research_retention_days', __( 'Research Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_research_retention_days_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
-        add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $render, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_rate_limits' );
+
+        // Diagnostic Logging fields unified under presshub_ai_logging section
+        add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $render, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_debug_prompts', __( 'Log AI Prompts & Responses', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Log TTS Payload Details', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_logging' );
 
         add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $render, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_engine', __( 'Voice Synthesis Engine', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_engine_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_api_key', __( 'Speech Generation API Key (Google AI Studio / Gemini)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_api_key_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_model', __( 'Voice Generation AI Model', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_timeout', __( 'Speech Generation Request Timeout (seconds)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_timeout_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        // Issue #80 — granular TTS payload debug toggle, surfaced under
-        // the Daily Briefing section next to the speech timeout knob.
-        add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Log TTS Payload Details', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_schedule_enabled', __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ), [ $render, 'render_briefing_schedule_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1301,14 +1302,14 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
-     * Helper to retrieve configured tertiary host name (default 'Κώστας').
+     * Helper to retrieve configured tertiary host name (default 'Presenter 3').
      *
      * @return string Third host name.
      */
     public static function get_briefing_host_tertiary(): string {
-        $host = (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Κώστας' );
+        $host = (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Presenter 3' );
         $host = trim( $host );
-        return ! empty( $host ) ? $host : 'Κώστας';
+        return ! empty( $host ) ? $host : 'Presenter 3';
     }
 
     /**
@@ -1384,20 +1385,42 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Helper to retrieve configured Presenter 1 voice persona (alias for get_voice_female).
+     *
+     * @return string Presenter 1 voice identifier.
+     */
+    public static function get_voice_presenter_1(): string {
+        return self::get_voice_female();
+    }
+
+    /**
+     * Helper to retrieve configured Presenter 2 voice persona (alias for get_voice_male).
+     *
+     * @return string Presenter 2 voice identifier.
+     */
+    public static function get_voice_presenter_2(): string {
+        return self::get_voice_male();
+    }
+
+    /**
+     * Helper to retrieve configured Presenter 3 voice persona (alias for get_voice_tertiary).
+     *
+     * @return string Presenter 3 voice identifier.
+     */
+    public static function get_voice_presenter_3(): string {
+        return self::get_voice_tertiary();
+    }
+
+    /**
      * Build the canonical allow-list of voice identifiers from the bundled
      * voice-catalog manifest. Returns a flat array of `name` strings.
      *
-     * Issue #89 — the sanitizers used to hardcode their allow-list as
-     * a PHP array literal. That was brittle (any new voice required a
-     * code change) and could drift from the bundled manifest. The
-     * single source of truth is now the JSON manifest; this helper
-     * reads it once and flattens it. If the manifest is unreadable the
-     * helper falls back to the historical hardcoded Gemini 2.5 catalog
-     * so the sanitizers never reject a previously-valid value.
+     * The manifest is the sole source of truth. If the manifest cannot be read,
+     * an error is logged and an empty array is returned.
      *
      * @return array<int, string> Flat list of permitted voice identifiers.
      */
-    private static function voice_catalog_allow_list(): array {
+    public static function voice_catalog_allow_list(): array {
         static $cached = null;
         if ( null !== $cached ) {
             return $cached;
@@ -1423,18 +1446,10 @@ class PressHub_AI_Settings_Storage {
                 }
             }
         }
-        // Last-resort fallback mirrors the historical hardcoded list so
-        // operators with pre-#89 stored values keep resolving correctly.
-        $cached = [
-            'Fenrir', 'Puck', 'Charon', 'Zephyr', 'Orus',
-            'Aoede', 'Kore', 'Leda', 'Callirrhoe', 'Autonoe',
-            'el-GR-Wavenet-A', 'el-GR-Wavenet-B', 'el-GR-Wavenet-C',
-            'el-GR-Standard-A', 'el-GR-Standard-B',
-            'el-GR-Chirp3-HD-Aoede', 'el-GR-Chirp3-HD-Achernar',
-            'el-GR-Chirp3-HD-Achird', 'el-GR-Chirp3-HD-Algenib',
-            'el-GR-Chirp3-HD-Algieba', 'el-GR-Chirp3-HD-Alnilam',
-            'el-GR-Neural2-A', 'el-GR-Neural2-B',
-        ];
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( 'TTS voice catalog manifest is missing or unreadable at: ' . $path );
+        }
+        $cached = [];
         return $cached;
     }
 
@@ -1588,7 +1603,7 @@ class PressHub_AI_Settings_Storage {
      * toggle. Issue #80 — Settings-First: when enabled, every Gemini TTS API
      * call appends a detailed JSON entry (endpoint URL, masked headers,
      * speaker-voice mapping, prompt text, full request body, response
-     * metadata) to wp-content/uploads/presshub-ai-tts-debug.log via the
+     * metadata) to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
      * `presshub_ai_tts_payload_log` action. Defaults to false so production
      * log size is preserved.
      *
@@ -1596,6 +1611,15 @@ class PressHub_AI_Settings_Storage {
      */
     public static function get_log_tts_payloads(): bool {
         return '1' === (string) get_option( 'presshub_ai_log_tts_payloads', '0' );
+    }
+
+    /**
+     * Helper to retrieve the operator-configurable "Log AI prompts" toggle.
+     *
+     * @return bool True when debug prompt logging is enabled.
+     */
+    public static function get_debug_prompts(): bool {
+        return '1' === (string) get_option( 'presshub_ai_debug_prompts', '0' );
     }
 
     /**
@@ -2086,7 +2110,6 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_coauthor_max_tokens'  => [ __CLASS__, 'sanitize_max_tokens' ],
             'presshub_ai_coauthor_timeout'     => [ __CLASS__, 'sanitize_timeout' ],
             'presshub_ai_fetch_urls'           => [ __CLASS__, 'sanitize_fetch_urls' ],
-            'presshub_ai_debug_prompts'        => [ __CLASS__, 'sanitize_boolean' ],
         ];
 
         $briefing_map = [
@@ -2155,8 +2178,6 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_remove_briefing_tts_api_key'   => [ __CLASS__, 'sanitize_remove_briefing_tts_api_key' ],
             'presshub_ai_briefing_tts_model'            => [ __CLASS__, 'sanitize_briefing_tts_model' ],
             'presshub_ai_briefing_tts_timeout'          => [ __CLASS__, 'sanitize_briefing_tts_timeout' ],
-            // Issue #80 — Settings-First: granular TTS payload debug toggle.
-            'presshub_ai_log_tts_payloads'              => [ __CLASS__, 'sanitize_boolean' ],
         ];
 
         $copilot_map = [
@@ -2179,12 +2200,13 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_rate_limit_window_seconds'   => [ __CLASS__, 'sanitize_rate_limit_window_seconds' ],
             'presshub_ai_research_retention_days'     => [ __CLASS__, 'sanitize_research_retention_days' ],
             'presshub_ai_log_level'                   => [ __CLASS__, 'sanitize_log_level' ],
+            'presshub_ai_debug_prompts'               => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_log_tts_payloads'             => [ __CLASS__, 'sanitize_boolean' ],
         ];
 
         $general_map = [
             'presshub_ai_provider'      => [ __CLASS__, 'sanitize_provider' ],
             'presshub_ai_fetch_urls'    => [ __CLASS__, 'sanitize_fetch_urls' ],
-            'presshub_ai_debug_prompts' => [ __CLASS__, 'sanitize_boolean' ],
         ];
 
         $providers_map = [
@@ -2215,6 +2237,7 @@ class PressHub_AI_Settings_Storage {
             case 'copilot':
                 return $copilot_map;
             case 'advanced':
+            case 'logging':
                 return $advanced_map;
             case 'general':
                 return $general_map;

@@ -55,8 +55,11 @@ $gemini_voices = $synthesizer->get_available_voices( 'gemini' );
 as_check( 'voices: returns array with female and male sections', is_array( $gemini_voices ) && isset( $gemini_voices['female'], $gemini_voices['male'] ) );
 as_check( 'voices: female voices contains Aoede', isset( $gemini_voices['female']['Aoede'] ) );
 as_check( 'voices: female voices contains Kore', isset( $gemini_voices['female']['Kore'] ) );
+as_check( 'voices: female voices contains Achernar', isset( $gemini_voices['female']['Achernar'] ) );
 as_check( 'voices: male voices contains Fenrir', isset( $gemini_voices['male']['Fenrir'] ) );
 as_check( 'voices: male voices contains Puck', isset( $gemini_voices['male']['Puck'] ) );
+as_check( 'voices: male voices contains Achird', isset( $gemini_voices['male']['Achird'] ) );
+as_check( 'voices: total Gemini voices is 30', ( count( $gemini_voices['female'] ) + count( $gemini_voices['male'] ) ) === 30 );
 
 $sample_voice = $gemini_voices['male']['Fenrir'];
 as_check( 'voices: metadata contains name Fenrir', ( $sample_voice['name'] ?? '' ) === 'Fenrir' );
@@ -389,6 +392,8 @@ $captured_models = [];
 $turn_res = $synthesizer->synthesize_turn( '[Μαρία]: Γεια σας!', 'Kore', 1.0, 0.0, null, 'formal' );
 as_check( 'tts_module: synthesize_turn succeeds with null api_client', ! is_wp_error( $turn_res ) && is_string( $turn_res ) );
 as_check( 'tts_module: synthesize_turn with null api_client targets gemini-2.5-flash-preview-tts', ! empty( $captured_models ) && 'gemini-2.5-flash-preview-tts' === end( $captured_models ) );
+$last_token_log = end( $GLOBALS['wpdb']->tables['wp_presshub_ai_token_logs'] );
+as_check( 'tts_module: audio turn token logging uses action podcast_audio', is_array( $last_token_log ) && ( $last_token_log['action_trigger'] ?? '' ) === 'podcast_audio' );
 
 // Test 8b: synthesize_podcast with null api_client resolves tts model (gemini-2.5-flash-preview-tts)
 $captured_models = [];
@@ -410,6 +415,20 @@ as_check( 'tts_module: synthesize_turn returns missing_tts_model error when no T
 
 // Restore provider default_model for subsequent tests
 $GLOBALS['OPTIONS_STORE'][ PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDERS ][0]['default_model'] = 'gemini-2.5-flash-preview-tts';
+
+// Test 8e: Verify set_module maps functional modules to intended action triggers
+$client_tts = new PressHub_AI_API_Client( 'tts' );
+as_check( 'tts_module: tts module sets current_action to podcast_audio', $client_tts->get_action() === 'podcast_audio' );
+$client_podcast_tts = new PressHub_AI_API_Client( 'podcast_tts' );
+as_check( 'tts_module: podcast_tts module sets current_action to podcast_audio', $client_podcast_tts->get_action() === 'podcast_audio' );
+$client_briefing_podcast = new PressHub_AI_API_Client( 'briefing_podcast' );
+as_check( 'tts_module: briefing_podcast module sets current_action to podcast_script', $client_briefing_podcast->get_action() === 'podcast_script' );
+$client_briefing_text = new PressHub_AI_API_Client( 'briefing_text' );
+as_check( 'tts_module: briefing_text module sets current_action to briefing_curation', $client_briefing_text->get_action() === 'briefing_curation' );
+$client_coauthor = new PressHub_AI_API_Client( 'coauthor' );
+as_check( 'tts_module: coauthor module sets current_action to coauthor_draft', $client_coauthor->get_action() === 'coauthor_draft' );
+$client_copilot = new PressHub_AI_API_Client( 'copilot' );
+as_check( 'tts_module: copilot module sets current_action to copilot_chat', $client_copilot->get_action() === 'copilot_chat' );
 
 
 // =========================================================================
@@ -466,8 +485,8 @@ as_check( 'issue_69: multiSpeakerVoiceConfig present in speechConfig', isset( $s
 
 $speakers = $speech_cfg['multiSpeakerVoiceConfig']['speakerVoiceConfigs'] ?? [];
 as_check( 'issue_69: 2 speakerVoiceConfigs configured', count( $speakers ) === 2 );
-as_check( 'issue_69: speaker 1 is Μαρία with Kore', isset( $speakers[0]['speaker'] ) && 'Μαρία' === $speakers[0]['speaker'] && ( $speakers[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Kore' );
-as_check( 'issue_69: speaker 2 is Νίκος with Fenrir', isset( $speakers[1]['speaker'] ) && 'Νίκος' === $speakers[1]['speaker'] && ( $speakers[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Fenrir' );
+as_check( 'issue_69: speaker 1 is Presenter 1 with Kore', isset( $speakers[0]['speaker'] ) && 'Presenter 1' === $speakers[0]['speaker'] && ( $speakers[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Kore' );
+as_check( 'issue_69: speaker 2 is Presenter 2 with Fenrir', isset( $speakers[1]['speaker'] ) && 'Presenter 2' === $speakers[1]['speaker'] && ( $speakers[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Fenrir' );
 
 // Test 9b: Custom host names & personas dynamically map into multiSpeakerVoiceConfig
 $captured_requests = [];
@@ -481,8 +500,8 @@ $pod_custom = $synthesizer->synthesize_podcast( '2026-08-27', $custom_script, nu
 
 $last_custom_body = end( $captured_requests )['body'] ?? [];
 $custom_speakers  = $last_custom_body['generationConfig']['speechConfig']['multiSpeakerVoiceConfig']['speakerVoiceConfigs'] ?? [];
-as_check( 'issue_69: custom female speaker Ελένη with Aoede', isset( $custom_speakers[0]['speaker'] ) && 'Ελένη' === $custom_speakers[0]['speaker'] && ( $custom_speakers[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Aoede' );
-as_check( 'issue_69: custom male speaker Γιώργος with Charon', isset( $custom_speakers[1]['speaker'] ) && 'Γιώργος' === $custom_speakers[1]['speaker'] && ( $custom_speakers[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Charon' );
+as_check( 'issue_69: custom female speaker Presenter 1 with Aoede', isset( $custom_speakers[0]['speaker'] ) && 'Presenter 1' === $custom_speakers[0]['speaker'] && ( $custom_speakers[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Aoede' );
+as_check( 'issue_69: custom male speaker Presenter 2 with Charon', isset( $custom_speakers[1]['speaker'] ) && 'Presenter 2' === $custom_speakers[1]['speaker'] && ( $custom_speakers[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Charon' );
 
 // Test 9c: get_voice_for_speaker recognizes custom host names
 as_check( 'issue_69: get_voice_for_speaker recognises custom female name', $synthesizer->get_voice_for_speaker( 'Ελένη' ) === 'Aoede' );
@@ -590,6 +609,9 @@ $topic_pod_result = $synthesizer->synthesize_podcast( '2026-09-02', $topic_test_
 as_check( 'issue_71: topic splitting produces 2 separate synthesis calls (1 per topic)', count( $topic_calls ) === 2 );
 as_check( 'issue_71: topic podcast synthesis succeeds', is_array( $topic_pod_result ) && ( $topic_pod_result['success'] ?? false ) );
 as_check( 'issue_71: topic stitched audio is valid WAV', isset( $topic_pod_result['audio_data'] ) && 0 === strpos( $topic_pod_result['audio_data'], 'RIFF' ) );
+as_check( 'issue_71: host_count 2 returns empty tertiary_voice in payload', '' === ( $topic_pod_result['tertiary_voice'] ?? null ) );
+$saved_post_tertiary = get_post_meta( (int) ( $topic_pod_result['post_id'] ?? 0 ), '_presshub_audio_tertiary_voice', true );
+as_check( 'issue_71: host_count 2 saves empty tertiary_voice meta', '' === $saved_post_tertiary );
 
 // Test 10c: 1-Host podcast synthesis
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 1;
@@ -697,6 +719,91 @@ as_check( 'issue_91: post_content free of <!-- TOPIC_',    false === strpos( $is
 as_check( 'issue_91: post_content free of === TOPIC:',     false === strpos( $issue91_content, '=== TOPIC:' ) );
 as_check( 'issue_91: post_content free of ### TOPIC:',     false === strpos( $issue91_content, '### TOPIC:' ) );
 as_check( 'issue_91: post_content preserves dialogue',      false !== strpos( $issue91_content, 'Καλημέρα σας' ) && false !== strpos( $issue91_content, 'Ευχαριστούμε' ) );
+
+
+// =========================================================================
+// 12. Topic SFX Stitching — Zero Transition SFX between Intro/Outro and Topics
+// =========================================================================
+
+// Test 12a: Verify stitch_wav_chunks correctly separates intro, topics, and outro
+$dummy_intro_pcm  = str_repeat( "\x11\x11", 240 ); // 10ms intro
+$dummy_t1_pcm     = str_repeat( "\x22\x22", 240 ); // 10ms topic 1
+$dummy_t2_pcm     = str_repeat( "\x33\x33", 240 ); // 10ms topic 2
+$dummy_outro_pcm  = str_repeat( "\x44\x44", 240 ); // 10ms outro
+$dummy_trans_pcm  = str_repeat( "\x55\x55", 240 ); // 10ms transition sfx
+
+// Step 1: Topics stitched with transition SFX
+$stitched_topics_test = $synthesizer->stitch_wav_chunks( [ $dummy_t1_pcm, $dummy_t2_pcm ], 600, 24000, $dummy_trans_pcm );
+
+// Step 2: Final chunks [intro, topics, outro] stitched with natural silence (no transition SFX)
+$final_test_chunks = [
+    $synthesizer->stitch_wav_chunks( [ $dummy_intro_pcm ] ),
+    $stitched_topics_test,
+    $synthesizer->stitch_wav_chunks( [ $dummy_outro_pcm ] ),
+];
+$assembled_test = $synthesizer->stitch_wav_chunks( $final_test_chunks, 600, 24000, '' );
+
+as_check( 'sfx_stitching: assembled stream is valid WAV', 0 === strpos( $assembled_test, 'RIFF' ) );
+
+// Transition SFX payload must appear exactly ONCE in the entire stream (only between topic 1 and topic 2)
+$trans_count = substr_count( $assembled_test, $dummy_trans_pcm );
+as_check( 'sfx_stitching: transition SFX appears exactly once between topics', 1 === $trans_count );
+
+// Transition SFX must appear AFTER topic 1 and BEFORE topic 2
+$pos_intro = strpos( $assembled_test, $dummy_intro_pcm );
+$pos_t1    = strpos( $assembled_test, $dummy_t1_pcm );
+$pos_trans = strpos( $assembled_test, $dummy_trans_pcm );
+$pos_t2    = strpos( $assembled_test, $dummy_t2_pcm );
+$pos_outro = strpos( $assembled_test, $dummy_outro_pcm );
+
+as_check( 'sfx_stitching: order is Intro -> T1 -> TransSFX -> T2 -> Outro',
+    $pos_intro !== false &&
+    $pos_t1 > $pos_intro &&
+    $pos_trans > $pos_t1 &&
+    $pos_t2 > $pos_trans &&
+    $pos_outro > $pos_t2
+);
+
+// Segment between Intro and T1 must NOT contain transition SFX
+$intro_to_t1 = substr( $assembled_test, $pos_intro + strlen( $dummy_intro_pcm ), $pos_t1 - ( $pos_intro + strlen( $dummy_intro_pcm ) ) );
+as_check( 'sfx_stitching: no transition SFX between Intro and Topic 1', false === strpos( $intro_to_t1, $dummy_trans_pcm ) );
+
+// Segment between T2 and Outro must NOT contain transition SFX
+$t2_to_outro = substr( $assembled_test, $pos_t2 + strlen( $dummy_t2_pcm ), $pos_outro - ( $pos_t2 + strlen( $dummy_t2_pcm ) ) );
+as_check( 'sfx_stitching: no transition SFX between Topic 2 and Outro', false === strpos( $t2_to_outro, $dummy_trans_pcm ) );
+
+
+// =========================================================================
+// 13. Host Count Gating & Presenter Voice Labels
+// =========================================================================
+
+// Test 13a: Host count = 2 gates tertiary voice to empty string
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count']    = 2;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female']   = 'Kore';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male']     = 'Fenrir';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_tertiary'] = 'Puck';
+
+$test_script_2h = "[Presenter 1]: Καλημέρα!\n[Presenter 2]: Καλησπέρα!";
+$res_2h = $synthesizer->synthesize_podcast( '2026-09-03', $test_script_2h, $mock_tts );
+as_check( 'host_count_gating: 2 hosts has tertiary_voice empty string in payload', is_array( $res_2h ) && '' === ( $res_2h['tertiary_voice'] ?? null ) );
+as_check( 'host_count_gating: 2 hosts saves empty string for tertiary_voice meta', '' === get_post_meta( $res_2h['post_id'] ?? 0, '_presshub_audio_tertiary_voice', true ) );
+
+// Test 13b: Host count = 3 retains tertiary voice
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 3;
+$test_script_3h = "[Presenter 1]: Ένα.\n[Presenter 2]: Δύο.\n[Presenter 3]: Τρία.";
+$res_3h = $synthesizer->synthesize_podcast( '2026-09-03', $test_script_3h, $mock_tts );
+as_check( 'host_count_gating: 3 hosts has tertiary_voice Puck in payload', is_array( $res_3h ) && 'Puck' === ( $res_3h['tertiary_voice'] ?? '' ) );
+as_check( 'host_count_gating: 3 hosts saves Puck for tertiary_voice meta', 'Puck' === get_post_meta( $res_3h['post_id'] ?? 0, '_presshub_audio_tertiary_voice', true ) );
+
+// Test 13c: Single-pass multi-speaker formatted script uses [Presenter 1]: and [Presenter 2]:
+$mock_record_tts = new Mock_Audio_API_Client();
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 2;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_audio_split_by_topic'] = 0; // Test non-topic path as well
+$res_p_labels = $synthesizer->synthesize_podcast( '2026-09-03', "[SPEAKER_1]: Καλώς ήρθατε.\n[SPEAKER_2]: Ευχαριστώ.", $mock_record_tts );
+$dispatched_text = $mock_record_tts->synthesized_calls[0]['text'] ?? '';
+as_check( 'presenter_labels: formatted script contains [Presenter 1]:', false !== strpos( $dispatched_text, '[Presenter 1]:' ) );
+as_check( 'presenter_labels: formatted script contains [Presenter 2]:', false !== strpos( $dispatched_text, '[Presenter 2]:' ) );
+as_check( 'presenter_labels: formatted script has no Greek host names', false === strpos( $dispatched_text, '[Μαρία]:' ) && false === strpos( $dispatched_text, '[Νίκος]:' ) );
 
 
 

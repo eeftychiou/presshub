@@ -3048,16 +3048,164 @@ jQuery(document).ready(function($) {
     });
 
     // ------------------------------------------------------------------
-    // Diagnostic Log Viewer Handlers.
+    // Diagnostic Inspector Handlers (Issue #100 / Rationalization).
     // ------------------------------------------------------------------
+    function escapeHtml(str) {
+        if (str === null || str === undefined) {
+            return '';
+        }
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function copyTextToClipboard(text, $btn) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function() {
+                showCopyFeedback($btn);
+            });
+        } else {
+            var $temp = $('<textarea>');
+            $('body').append($temp);
+            $temp.val(text).select();
+            document.execCommand('copy');
+            $temp.remove();
+            showCopyFeedback($btn);
+        }
+    }
+
+    function showCopyFeedback($btn) {
+        var origText = $btn.text();
+        $btn.text('Copied!').prop('disabled', true);
+        setTimeout(function() {
+            $btn.text(origText).prop('disabled', false);
+        }, 1500);
+    }
+
+    function renderPromptCards(entries) {
+        if (!entries || !entries.length) {
+            return '<div style="padding: 24px; text-align: center; color: #646970;">(No prompt log entries found matching criteria)</div>';
+        }
+        var html = '';
+        var reversed = entries.slice().reverse();
+        for (var i = 0; i < reversed.length; i++) {
+            var e = reversed[i];
+            if (e.raw && !e.endpoint) {
+                html += '<div class="presshub-log-card"><div class="presshub-log-section-content">' + escapeHtml(e.raw) + '</div></div>';
+                continue;
+            }
+            var rawJson = JSON.stringify(e, null, 2);
+            var traceBadge = e.trace_id ? '<span class="presshub-log-badge presshub-badge-trace presshub-trace-filter" data-trace="' + escapeHtml(e.trace_id) + '" title="Click to filter by this trace ID">#' + escapeHtml(e.trace_id) + '</span>' : '';
+            var endpointBadge = e.endpoint ? '<span class="presshub-log-badge presshub-badge-endpoint">[' + escapeHtml(e.endpoint.toUpperCase()) + ']</span>' : '';
+            var timeBadge = e.timestamp ? '<span class="presshub-log-badge presshub-badge-timestamp">' + escapeHtml(e.timestamp) + '</span>' : '';
+            var charsBadge = (e.response_chars !== undefined && e.response_chars !== null) ? '<span class="presshub-log-badge presshub-badge-chars">' + escapeHtml(e.response_chars) + ' chars</span>' : '';
+
+            html += '<div class="presshub-log-card" data-raw="' + escapeHtml(rawJson) + '">';
+            html += '<div class="presshub-log-card-header">';
+            html += '<div class="presshub-log-card-badges">' + endpointBadge + ' ' + timeBadge + ' ' + traceBadge + ' ' + charsBadge + '</div>';
+            html += '<div style="display: flex; gap: 4px;">';
+            if (e.user_prompt || e.system_prompt) {
+                html += '<button type="button" class="button button-small presshub-copy-prompt-btn">Copy Prompt</button>';
+            }
+            html += '<button type="button" class="button button-small presshub-copy-json-btn">Copy Raw JSON</button>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '<div class="presshub-log-card-body">';
+            if (e.config) {
+                html += '<div style="margin-bottom: 6px; font-size: 11px; color: #50575e;"><strong>Config:</strong> <code>' + escapeHtml(e.config) + '</code></div>';
+            }
+            if (e.system_prompt) {
+                html += '<div class="presshub-log-section"><div class="presshub-log-section-header"><span>System Prompt</span> <span class="dashicons dashicons-arrow-down-alt2"></span></div><div class="presshub-log-section-content">' + escapeHtml(e.system_prompt) + '</div></div>';
+            }
+            if (e.user_prompt) {
+                html += '<div class="presshub-log-section"><div class="presshub-log-section-header"><span>User Prompt</span> <span class="dashicons dashicons-arrow-down-alt2"></span></div><div class="presshub-log-section-content">' + escapeHtml(e.user_prompt) + '</div></div>';
+            }
+            if (e.response !== null && e.response !== undefined) {
+                html += '<div class="presshub-log-section"><div class="presshub-log-section-header"><span>Response</span> <span class="dashicons dashicons-arrow-down-alt2"></span></div><div class="presshub-log-section-content">' + escapeHtml(e.response) + '</div></div>';
+            }
+            html += '</div>';
+            html += '</div>';
+        }
+        return html;
+    }
+
+    function renderTtsCards(entries) {
+        if (!entries || !entries.length) {
+            return '<div style="padding: 24px; text-align: center; color: #646970;">(No TTS payload log entries found matching criteria)</div>';
+        }
+        var html = '';
+        var reversed = entries.slice().reverse();
+        for (var i = 0; i < reversed.length; i++) {
+            var e = reversed[i];
+            var rawJson = JSON.stringify(e, null, 2);
+            var traceBadge = e.trace_id ? '<span class="presshub-log-badge presshub-badge-trace presshub-trace-filter" data-trace="' + escapeHtml(e.trace_id) + '" title="Click to filter by this trace ID">#' + escapeHtml(e.trace_id) + '</span>' : '';
+            var phaseBadge = e.phase ? '<span class="presshub-log-badge presshub-badge-phase">[' + escapeHtml(e.phase.toUpperCase()) + ']</span>' : '';
+            var timeBadge = e.timestamp ? '<span class="presshub-log-badge presshub-badge-timestamp">' + escapeHtml(e.timestamp) + '</span>' : '';
+            var model = (e.data && e.data.model) ? e.data.model : '';
+            var modelBadge = model ? '<span class="presshub-log-badge presshub-badge-model">' + escapeHtml(model) + '</span>' : '';
+
+            html += '<div class="presshub-log-card" data-raw="' + escapeHtml(rawJson) + '">';
+            html += '<div class="presshub-log-card-header">';
+            html += '<div class="presshub-log-card-badges">' + phaseBadge + ' ' + timeBadge + ' ' + traceBadge + ' ' + modelBadge + '</div>';
+            html += '<div>';
+            html += '<button type="button" class="button button-small presshub-copy-json-btn">Copy Raw JSON</button>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '<div class="presshub-log-card-body">';
+            if (e.data) {
+                if (e.data.endpoint_masked || e.data.endpoint) {
+                    html += '<div style="margin-bottom: 4px; font-size: 11px; word-break: break-all;"><strong>Endpoint:</strong> <code>' + escapeHtml(e.data.endpoint_masked || e.data.endpoint) + '</code></div>';
+                }
+                if (e.data.prompt_text) {
+                    html += '<div class="presshub-log-section"><div class="presshub-log-section-header"><span>Prompt Text</span> <span class="dashicons dashicons-arrow-down-alt2"></span></div><div class="presshub-log-section-content">' + escapeHtml(e.data.prompt_text) + '</div></div>';
+                }
+                if (e.data.speaker_mapping) {
+                    html += '<div class="presshub-log-section"><div class="presshub-log-section-header"><span>Speaker Mapping</span> <span class="dashicons dashicons-arrow-down-alt2"></span></div><div class="presshub-log-section-content">' + escapeHtml(JSON.stringify(e.data.speaker_mapping, null, 2)) + '</div></div>';
+                }
+                if (e.data.latency_ms !== undefined || e.data.bytes !== undefined || e.data.http_code !== undefined) {
+                    html += '<div style="margin-top: 6px; font-size: 11px; color: #50575e;">';
+                    if (e.data.http_code !== undefined) {
+                        html += '<strong>HTTP:</strong> ' + escapeHtml(e.data.http_code) + ' &bull; ';
+                    }
+                    if (e.data.latency_ms !== undefined) {
+                        html += '<strong>Latency:</strong> ' + escapeHtml(e.data.latency_ms) + 'ms &bull; ';
+                    }
+                    if (e.data.bytes !== undefined) {
+                        html += '<strong>Bytes:</strong> ' + escapeHtml(e.data.bytes) + ' &bull; ';
+                    }
+                    if (e.data.mime_type !== undefined) {
+                        html += '<strong>MIME:</strong> ' + escapeHtml(e.data.mime_type);
+                    }
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+            html += '</div>';
+        }
+        return html;
+    }
+
+    var logSearchDebounce = null;
+
     function loadDiagnosticLogs() {
         var $viewer  = $('#presshub-ai-log-viewer');
+        var $cards   = $('#presshub-ai-log-cards');
         var $spinner = $('#presshub-ai-log-spinner');
         var $status  = $('#presshub-ai-log-status');
+        var $info    = $('#presshub-ai-log-file-info');
 
-        if (!$viewer.length) {
+        if (!$viewer.length && !$cards.length) {
             return;
         }
+
+        var target  = $('#presshub-ai-log-target').val() || 'app';
+        var search  = $.trim($('#presshub-ai-log-search').val() || '');
+        var lines   = parseInt($('#presshub-ai-log-lines').val() || '50', 10);
 
         $spinner.addClass('is-active');
         $status.text('Loading logs...');
@@ -3068,18 +3216,40 @@ jQuery(document).ready(function($) {
             dataType: 'json',
             data: {
                 action: 'presshub_ai_get_logs',
-                nonce: presshubAI.nonce
+                nonce: presshubAI.nonce,
+                target: target,
+                search: search,
+                lines: lines
             }
         }).done(function(res) {
             $spinner.removeClass('is-active');
             if (res && res.success && res.data) {
-                var content = res.data.logs || '(No log entries recorded yet)';
-                $viewer.val(content).text(content);
-                if ($viewer[0]) {
-                    $viewer.scrollTop($viewer[0].scrollHeight);
-                }
                 var sizeKb = (res.data.size_bytes / 1024).toFixed(1);
-                $status.text('Level: ' + res.data.level + ' | File: ' + sizeKb + ' KB | Loaded: ' + new Date().toLocaleTimeString());
+                var loadedTime = new Date().toLocaleTimeString();
+                var metaText = 'File: ' + sizeKb + ' KB | Loaded: ' + loadedTime;
+                if (res.data.level) {
+                    metaText = 'Level: ' + res.data.level + ' | ' + metaText;
+                }
+                $info.text(metaText);
+
+                if (target === 'app') {
+                    $cards.hide().empty();
+                    $viewer.show();
+                    var content = res.data.logs || '(No log entries recorded yet)';
+                    $viewer.val(content).text(content);
+                    if ($viewer[0]) {
+                        $viewer.scrollTop($viewer[0].scrollHeight);
+                    }
+                    $status.text('Showing ' + (res.data.entries ? res.data.entries.length : 0) + ' log lines.');
+                } else if (target === 'prompts') {
+                    $viewer.hide();
+                    $cards.show().html(renderPromptCards(res.data.entries));
+                    $status.text('Showing ' + (res.data.entries ? res.data.entries.length : 0) + ' prompt entries.');
+                } else if (target === 'tts') {
+                    $viewer.hide();
+                    $cards.show().html(renderTtsCards(res.data.entries));
+                    $status.text('Showing ' + (res.data.entries ? res.data.entries.length : 0) + ' TTS payload entries.');
+                }
             } else {
                 var err = (res && res.data && res.data.message) ? res.data.message : 'Failed to retrieve logs.';
                 $status.text('Error: ' + err);
@@ -3090,6 +3260,21 @@ jQuery(document).ready(function($) {
         });
     }
 
+    $(document).on('change', '#presshub-ai-log-target', function() {
+        loadDiagnosticLogs();
+    });
+
+    $(document).on('change', '#presshub-ai-log-lines', function() {
+        loadDiagnosticLogs();
+    });
+
+    $(document).on('input', '#presshub-ai-log-search', function() {
+        clearTimeout(logSearchDebounce);
+        logSearchDebounce = setTimeout(function() {
+            loadDiagnosticLogs();
+        }, 350);
+    });
+
     $(document).on('click', '#presshub-ai-refresh-logs', function(e) {
         e.preventDefault();
         loadDiagnosticLogs();
@@ -3097,13 +3282,22 @@ jQuery(document).ready(function($) {
 
     $(document).on('click', '#presshub-ai-clear-logs', function(e) {
         e.preventDefault();
-        if (!confirm('Are you sure you want to clear the diagnostic log file?')) {
+        var clearChoice = $('#presshub-ai-clear-target').val() || 'active';
+        var activeTarget = $('#presshub-ai-log-target').val() || 'app';
+        var finalTarget = ('all' === clearChoice) ? 'all' : activeTarget;
+
+        var confirmMsg = ('all' === finalTarget)
+            ? 'Are you sure you want to clear ALL 3 log files?'
+            : 'Are you sure you want to clear the ' + activeTarget + ' log file?';
+
+        if (!confirm(confirmMsg)) {
             return;
         }
 
         var $spinner = $('#presshub-ai-log-spinner');
         var $status  = $('#presshub-ai-log-status');
         var $viewer  = $('#presshub-ai-log-viewer');
+        var $cards   = $('#presshub-ai-log-cards');
 
         $spinner.addClass('is-active');
         $status.text('Clearing logs...');
@@ -3114,13 +3308,15 @@ jQuery(document).ready(function($) {
             dataType: 'json',
             data: {
                 action: 'presshub_ai_clear_logs',
-                nonce: presshubAI.nonce
+                nonce: presshubAI.nonce,
+                target: finalTarget
             }
         }).done(function(res) {
             $spinner.removeClass('is-active');
             if (res && res.success) {
                 $viewer.val('');
-                $status.text('Log file cleared.');
+                $cards.empty();
+                $status.text(res.data.message || 'Log file cleared.');
             } else {
                 var err = (res && res.data && res.data.message) ? res.data.message : 'Failed to clear logs.';
                 $status.text('Error: ' + err);
@@ -3129,6 +3325,67 @@ jQuery(document).ready(function($) {
             $spinner.removeClass('is-active');
             $status.text('Error clearing logs (' + (xhr.status || 0) + ')');
         });
+    });
+
+    $(document).on('click', '#presshub-ai-download-log', function(e) {
+        e.preventDefault();
+        var downloadChoice = $('#presshub-ai-download-target').val() || 'active';
+        var activeTarget = $('#presshub-ai-log-target').val() || 'app';
+        var finalTarget = ('active' === downloadChoice) ? activeTarget : downloadChoice;
+
+        var downloadUrl = presshubAI.ajax_url + (presshubAI.ajax_url.indexOf('?') >= 0 ? '&' : '?') +
+            'action=presshub_ai_download_log' +
+            '&target=' + encodeURIComponent(finalTarget) +
+            '&nonce=' + encodeURIComponent(presshubAI.nonce);
+
+        window.location.href = downloadUrl;
+    });
+
+    // Trace badge click: filter by trace ID
+    $(document).on('click', '.presshub-trace-filter', function(e) {
+        e.preventDefault();
+        var traceId = $(this).data('trace');
+        if (traceId) {
+            $('#presshub-ai-log-search').val(traceId);
+            loadDiagnosticLogs();
+        }
+    });
+
+    // Card section accordion toggle
+    $(document).on('click', '.presshub-log-section-header', function() {
+        var $content = $(this).next('.presshub-log-section-content');
+        var $icon = $(this).find('.dashicons');
+        $content.slideToggle(150, function() {
+            if ($content.is(':visible')) {
+                $icon.removeClass('dashicons-arrow-right-alt2').addClass('dashicons-arrow-down-alt2');
+            } else {
+                $icon.removeClass('dashicons-arrow-down-alt2').addClass('dashicons-arrow-right-alt2');
+            }
+        });
+    });
+
+    // Copy prompt text button
+    $(document).on('click', '.presshub-copy-prompt-btn', function(e) {
+        e.preventDefault();
+        var $card = $(this).closest('.presshub-log-card');
+        var rawData = $card.attr('data-raw');
+        var textToCopy = '';
+        try {
+            var parsed = JSON.parse(rawData);
+            textToCopy = (parsed.system_prompt ? 'SYSTEM:\n' + parsed.system_prompt + '\n\n' : '') +
+                         (parsed.user_prompt ? 'USER:\n' + parsed.user_prompt : '');
+        } catch (err) {
+            textToCopy = rawData;
+        }
+        copyTextToClipboard(textToCopy, $(this));
+    });
+
+    // Copy raw JSON button
+    $(document).on('click', '.presshub-copy-json-btn', function(e) {
+        e.preventDefault();
+        var $card = $(this).closest('.presshub-log-card');
+        var rawData = $card.attr('data-raw') || '';
+        copyTextToClipboard(rawData, $(this));
     });
 });
 

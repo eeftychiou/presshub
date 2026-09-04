@@ -49,6 +49,7 @@ define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 // Include classes
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-defaults.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-trace.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-logger.php';
 // Concern #2 split: load settings modules in parallel with the
 // legacy facade. Cutover happens in T5; until then the

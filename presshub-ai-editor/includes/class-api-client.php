@@ -43,25 +43,38 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
         if ( ! $debug_enabled ) {
             return;
         }
-        $uploads  = wp_upload_dir();
-        $log_file = trailingslashit( $uploads['basedir'] ) . 'presshub-ai-debug.log';
+        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
+        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
+        if ( ! is_dir( $base_dir ) && function_exists( 'wp_mkdir_p' ) ) {
+            wp_mkdir_p( $base_dir );
+        }
+        $log_file = $base_dir . '/presshub-ai-debug.log';
         $stamp    = gmdate( 'Y-m-d H:i:s' );
-        $entry    = "[$stamp] [$endpoint]";
-        if ( '' !== $meta ) {
-            $entry .= ' CONFIG: ' . $meta;
+        $trace_id = class_exists( 'PressHub_AI_Trace' ) ? PressHub_AI_Trace::get_or_create_trace_id() : '';
+
+        // Auto-rotate if > 8MB
+        if ( file_exists( $log_file ) && filesize( $log_file ) > 8 * 1024 * 1024 ) {
+            $rotated = $log_file . '.' . gmdate( 'Ymd_His' ) . '.old';
+            @rename( $log_file, $rotated );
         }
-        $entry .= " SYSTEM prompt:\n" . $sys_prompt
-            . "\n\n[$stamp] [$endpoint] USER prompt:\n" . $user_prompt;
-        if ( null !== $response ) {
-            $entry .= "\n\n[$stamp] [$endpoint] RESPONSE (" . strlen( (string) $response ) . " chars):\n" . $response;
+
+        $entry = [
+            'trace_id'       => $trace_id,
+            'timestamp'      => $stamp,
+            'endpoint'       => (string) $endpoint,
+            'config'         => (string) $meta,
+            'system_prompt'  => (string) $sys_prompt,
+            'user_prompt'    => (string) $user_prompt,
+            'response'       => null !== $response ? (string) $response : null,
+            'response_chars' => null !== $response ? strlen( (string) $response ) : 0,
+        ];
+
+        $json = wp_json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+        if ( false !== $json ) {
+            @file_put_contents( $log_file, $json . "\n", FILE_APPEND | LOCK_EX );
         }
-        $entry .= "\n\n---\n";
-        // message_type 3 appends to a file directly (no WP filesystem API
-        // needed); @-silenced so a read-only uploads dir can't break the
-        // draft request.
-        // phpcs:ignore WordPress.PHP.NoSilencedErrors
-        @error_log( $entry, 3, $log_file );
-        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt, $response, $meta );
+
+        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt, $response, $meta, $trace_id );
     }
 }
 
@@ -391,7 +404,7 @@ class PressHub_AI_API_Client {
             return;
         }
 
-        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'copilot', 'tts' ], true ) ) {
+        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'copilot', 'tts', 'podcast_tts' ], true ) ) {
             $this->set_module( $module_or_provider );
             return;
         }
@@ -556,6 +569,18 @@ class PressHub_AI_API_Client {
         $this->set_provider_config( $config );
         $this->provider_source = $config['provider_source'] ?? '';
         $this->model_source    = $config['model_source'] ?? '';
+
+        if ( 'tts' === $module || 'podcast_tts' === $module ) {
+            $this->current_action = 'podcast_audio';
+        } elseif ( 'briefing_podcast' === $module ) {
+            $this->current_action = 'podcast_script';
+        } elseif ( 'briefing_text' === $module ) {
+            $this->current_action = 'briefing_curation';
+        } elseif ( 'coauthor' === $module ) {
+            $this->current_action = 'coauthor_draft';
+        } elseif ( 'copilot' === $module ) {
+            $this->current_action = 'copilot_chat';
+        }
 
         // Issue #43 + Issue #44 defence-in-depth: the same API client
         // instance is reused across intents in handlers like
@@ -1299,7 +1324,9 @@ class PressHub_AI_API_Client {
      * @return array{phase:string, timestamp:string, data:array}
      */
     public static function build_tts_payload_log_entry( string $phase, array $data ): array {
+        $trace_id = class_exists( 'PressHub_AI_Trace' ) ? PressHub_AI_Trace::get_or_create_trace_id() : '';
         return [
+            'trace_id'  => $trace_id,
             'phase'     => $phase,
             'timestamp' => gmdate( 'Y-m-d H:i:s' ),
             'data'      => $data,
@@ -1318,6 +1345,10 @@ class PressHub_AI_API_Client {
      * @param array $entry Entry as produced by {@see self::build_tts_payload_log_entry()}.
      */
     public static function write_tts_payload_log( array $entry ): void {
+        if ( empty( $entry['trace_id'] ) && class_exists( 'PressHub_AI_Trace' ) ) {
+            $entry['trace_id'] = PressHub_AI_Trace::get_or_create_trace_id();
+        }
+
         $json = wp_json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
         if ( false === $json || '' === $json ) {
             return;
@@ -1652,6 +1683,9 @@ class PressHub_AI_API_Client {
             }
         }
 
+        $action     = $this->get_action();
+        $log_action = ( ! empty( $action ) && 'coauthor_draft' !== $action ) ? $action : 'podcast_audio';
+
         if ( empty( $audio_base64 ) ) {
             $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
             $err_msg = $last_error ?: __( 'No audio payload received from Gemini Speech model.', 'presshub-ai-editor' );
@@ -1659,7 +1693,7 @@ class PressHub_AI_API_Client {
                 PressHub_AI_Logger::error( sprintf( '[LogosAI Speech] Synthesis failed for all models: %s', $err_msg ) );
             }
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_tts_request( $this->get_action() ?: 'briefing_podcast', 'gemini', $configured_model, mb_strlen( $clean_text ), $duration_ms, 'error', $err_msg );
+                PressHub_AI_Token_Logger::log_tts_request( $log_action, 'gemini', $configured_model, mb_strlen( $clean_text ), $duration_ms, 'error', $err_msg );
             }
             return new WP_Error( 'gemini_audio_error', $err_msg );
         }
@@ -1674,7 +1708,7 @@ class PressHub_AI_API_Client {
             PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Success with model "%s" in %d ms (raw audio: %d bytes)', $used_model, $duration_ms, strlen( $raw_audio ) ) );
         }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-            PressHub_AI_Token_Logger::log_tts_request( $this->get_action() ?: 'briefing_podcast', 'gemini', $used_model ?: $configured_model, mb_strlen( $clean_text ), $duration_ms, 'success', null );
+            PressHub_AI_Token_Logger::log_tts_request( $log_action, 'gemini', $used_model ?: $configured_model, mb_strlen( $clean_text ), $duration_ms, 'success', null );
         }
 
         // If it is PCM data, extract sample rate or default to 24000
