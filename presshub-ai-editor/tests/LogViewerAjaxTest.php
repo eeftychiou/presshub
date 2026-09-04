@@ -37,6 +37,12 @@ if ( ! has_action( 'wp_ajax_presshub_ai_get_logs' ) ) {
 if ( ! has_action( 'wp_ajax_presshub_ai_clear_logs' ) ) {
     $failures[] = 'Action wp_ajax_presshub_ai_clear_logs is not registered.';
 }
+if ( ! has_action( 'wp_ajax_presshub_ai_download_log' ) ) {
+    $failures[] = 'Action wp_ajax_presshub_ai_download_log is not registered.';
+}
+if ( ! has_action( 'admin_post_presshub_ai_download_log' ) ) {
+    $failures[] = 'Action admin_post_presshub_ai_download_log is not registered.';
+}
 
 // 2. Nonce verification rejection
 lva_reset_env();
@@ -61,6 +67,18 @@ try {
     }
 }
 
+lva_reset_env();
+$GLOBALS['NONCE_VALID'] = false;
+$_REQUEST['nonce'] = 'invalid_nonce';
+try {
+    $handlers->download_log();
+    $failures[] = 'download_log() should reject invalid nonce.';
+} catch ( RuntimeException $e ) {
+    if ( false === strpos( $e->getMessage(), 'check_ajax_referer failed' ) ) {
+        $failures[] = 'download_log() threw unexpected exception for nonce: ' . $e->getMessage();
+    }
+}
+
 // 2b. Capability verification
 lva_reset_env();
 $GLOBALS['CURRENT_USER_CAPS'] = [];
@@ -71,6 +89,18 @@ try {
     $last_resp = end( $GLOBALS['JSON_RESPONSES'] );
     if ( empty( $last_resp ) || true === $last_resp['success'] ) {
         $failures[] = 'get_logs() did not send json error on capability rejection.';
+    }
+}
+
+lva_reset_env();
+$GLOBALS['CURRENT_USER_CAPS'] = [];
+$_REQUEST['nonce'] = 'valid_nonce';
+try {
+    $handlers->download_log();
+    $failures[] = 'download_log() should reject user without manage_options.';
+} catch ( RuntimeException $e ) {
+    if ( false === strpos( $e->getMessage(), 'Insufficient permissions' ) ) {
+        $failures[] = 'download_log() threw unexpected exception for caps: ' . $e->getMessage();
     }
 }
 

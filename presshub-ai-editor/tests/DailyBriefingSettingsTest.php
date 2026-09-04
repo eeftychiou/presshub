@@ -670,9 +670,6 @@ class DailyBriefingSettingsTest
         if ( false === strpos( $page_html, 'name="presshub_ai_briefing_podcast_style"' ) ) {
             $failures[] = 'render_settings_page should render briefing podcast style selector.';
         }
-        if ( false === strpos( $page_html, 'name="presshub_ai_log_tts_payloads"' ) ) {
-            $failures[] = 'render_settings_page should render input for presshub_ai_log_tts_payloads.';
-        }
         if ( false === strpos( $page_html, 'name="presshub_ai_briefing_voice_pitch"' ) ) {
             $failures[] = 'render_settings_page should render input for presshub_ai_briefing_voice_pitch.';
         }

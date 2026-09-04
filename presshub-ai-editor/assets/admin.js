@@ -3327,6 +3327,20 @@ jQuery(document).ready(function($) {
         });
     });
 
+    $(document).on('click', '#presshub-ai-download-log', function(e) {
+        e.preventDefault();
+        var downloadChoice = $('#presshub-ai-download-target').val() || 'active';
+        var activeTarget = $('#presshub-ai-log-target').val() || 'app';
+        var finalTarget = ('active' === downloadChoice) ? activeTarget : downloadChoice;
+
+        var downloadUrl = presshubAI.ajax_url + (presshubAI.ajax_url.indexOf('?') >= 0 ? '&' : '?') +
+            'action=presshub_ai_download_log' +
+            '&target=' + encodeURIComponent(finalTarget) +
+            '&nonce=' + encodeURIComponent(presshubAI.nonce);
+
+        window.location.href = downloadUrl;
+    });
+
     // Trace badge click: filter by trace ID
     $(document).on('click', '.presshub-trace-filter', function(e) {
         e.preventDefault();

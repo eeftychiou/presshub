@@ -143,12 +143,9 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><?php echo __( 'Source Processing & Debugging', 'presshub-ai-editor' ); ?></th>
+                                <th scope="row"><?php echo __( 'Source Processing', 'presshub-ai-editor' ); ?></th>
                                 <td>
                                     <?php $this->render_fetch_urls_field(); ?>
-                                    <div style="margin-top: 8px;">
-                                        <?php $this->render_debug_prompts_field(); ?>
-                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -340,15 +337,9 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_timeout"><?php echo __( 'Speech AI Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
+                                 <th scope="row"><label for="presshub_ai_briefing_tts_timeout"><?php echo __( 'Speech AI Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_timeout_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_log_tts_payloads"><?php echo __( 'Log TTS Payload Details', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_log_tts_payloads_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -502,7 +493,10 @@ class PressHub_AI_Settings_Render {
                     <?php $this->render_section_with_fields( 'presshub_ai_media', __( 'Media & Vision Credentials (Google Cloud)', 'presshub-ai-editor' ) ); ?>
                     
                     <hr style="margin: 25px 0;">
-                    <?php $this->render_section_with_fields( 'presshub_ai_rate_limits', __( 'Rate Limits, Research Retention & Logging', 'presshub-ai-editor' ) ); ?>
+                    <?php $this->render_section_with_fields( 'presshub_ai_rate_limits', __( 'Rate Limits & Research Retention', 'presshub-ai-editor' ) ); ?>
+
+                    <hr style="margin: 25px 0;">
+                    <?php $this->render_section_with_fields( 'presshub_ai_logging', __( 'Diagnostic Logging Configuration', 'presshub-ai-editor' ) ); ?>
 
                     <hr style="margin: 25px 0;">
                     <h2><?php echo __( 'Connection Testing & Verification', 'presshub-ai-editor' ); ?></h2>
@@ -548,6 +542,17 @@ class PressHub_AI_Settings_Render {
                                 <span class="dashicons dashicons-update" style="vertical-align: text-top; font-size: 16px; width: 16px; height: 16px;"></span>
                                 <?php esc_html_e( 'Refresh', 'presshub-ai-editor' ); ?>
                             </button>
+                            <button type="button" id="presshub-ai-download-log" class="button button-secondary">
+                                <span class="dashicons dashicons-download" style="vertical-align: text-top; font-size: 16px; width: 16px; height: 16px;"></span>
+                                <?php esc_html_e( 'Download', 'presshub-ai-editor' ); ?>
+                            </button>
+                            <select id="presshub-ai-download-target" class="presshub-no-dirty" style="font-size: 12px; height: 30px;">
+                                <option value="active"><?php esc_html_e( 'Active Target', 'presshub-ai-editor' ); ?></option>
+                                <option value="app"><?php esc_html_e( 'Application Log (.log)', 'presshub-ai-editor' ); ?></option>
+                                <option value="prompts"><?php esc_html_e( 'Prompts & Responses (.jsonl)', 'presshub-ai-editor' ); ?></option>
+                                <option value="tts"><?php esc_html_e( 'TTS Payloads (.jsonl)', 'presshub-ai-editor' ); ?></option>
+                                <option value="all"><?php esc_html_e( 'All 3 Logs (ZIP)', 'presshub-ai-editor' ); ?></option>
+                            </select>
                             <button type="button" id="presshub-ai-clear-logs" class="button button-secondary" style="color: #b32d2e;">
                                 <?php esc_html_e( 'Clear Log', 'presshub-ai-editor' ); ?>
                             </button>
@@ -1242,6 +1247,10 @@ class PressHub_AI_Settings_Render {
         echo '<p>' . __( 'Cap the AI endpoints so a single user cannot rack up unbounded API costs. Disabled by default — opt-in only.', 'presshub-ai-editor' ) . '</p>';
     }
 
+    public function render_logging_section() {
+        echo '<p>' . __( 'Configure diagnostic logging verbosity, prompt/response exchange recording, and speech synthesis payload captures. All logs are stored under <code>wp-content/uploads/presshub-ai/</code> and can be reviewed or downloaded in the Diagnostic Inspector below.', 'presshub-ai-editor' ) . '</p>';
+    }
+
     // ------------------------------------------------------------------
     // Field renderers.
     // ------------------------------------------------------------------
@@ -1274,16 +1283,20 @@ class PressHub_AI_Settings_Render {
 
     /**
      * 1.2.5: prompt inspection toggle. Writes the exact SYSTEM and USER
-     * prompts to wp-content/uploads/presshub-ai/presshub-ai-debug.log (findable via
-     * the host file manager — no wp-config or PHP error log hunting).
+     * prompts to wp-content/uploads/presshub-ai/presshub-ai-debug.log in JSONL format.
      */
     public function render_debug_prompts_field() {
-        $enabled = get_option( 'presshub_ai_debug_prompts', '0' ) === '1';
+        $option  = 'presshub_ai_debug_prompts';
+        $enabled = PressHub_AI_Settings_Storage::get_debug_prompts();
         ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
         <label for="presshub_ai_debug_prompts">
-            <input type="checkbox" name="presshub_ai_debug_prompts" id="presshub_ai_debug_prompts" value="1" <?php echo $enabled ? 'checked="checked"' : ''; ?> />
-            <?php echo esc_html__( 'Append every SYSTEM and USER prompt to wp-content/uploads/presshub-ai/presshub-ai-debug.log (debugging only — disable in production).', 'presshub-ai-editor' ); ?>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_debug_prompts" value="1" <?php checked( true, $enabled ); ?> />
+            <?php echo esc_html__( 'Append every SYSTEM and USER prompt exchange to wp-content/uploads/presshub-ai/presshub-ai-debug.log as structured JSONL.', 'presshub-ai-editor' ); ?>
         </label>
+        <p class="description">
+            <?php echo esc_html__( 'Captures complete system instructions, user inputs, model configuration, response completions, and trace IDs. Disable in production to conserve storage.', 'presshub-ai-editor' ); ?>
+        </p>
         <?php
     }
 

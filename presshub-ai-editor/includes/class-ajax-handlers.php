@@ -58,6 +58,8 @@ class PressHub_AI_Ajax_Handlers {
         // Diagnostic Logs Endpoints
         add_action( 'wp_ajax_presshub_ai_get_logs', [ $this, 'get_logs' ] );
         add_action( 'wp_ajax_presshub_ai_clear_logs', [ $this, 'clear_logs' ] );
+        add_action( 'wp_ajax_presshub_ai_download_log', [ $this, 'download_log' ] );
+        add_action( 'admin_post_presshub_ai_download_log', [ $this, 'download_log' ] );
     }
 
     /**
@@ -2326,6 +2328,130 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'message' => __( 'Logs cleared successfully.', 'presshub-ai-editor' ),
         ] );
     }
+
+    /**
+     * Endpoint to download diagnostic log files.
+     * Accessible via both wp_ajax_presshub_ai_download_log and admin_post_presshub_ai_download_log.
+     * Supports target: 'app' | 'prompts' | 'tts' | 'all'.
+     */
+    public function download_log(): void {
+        if ( isset( $_REQUEST['nonce'] ) ) {
+            check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        } else {
+            check_admin_referer( 'presshub_ai_download_log' );
+        }
+
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_die( esc_html__( 'Insufficient permissions.', 'presshub-ai-editor' ), 403 );
+        }
+
+        require_once __DIR__ . '/class-logger.php';
+
+        $target   = isset( $_REQUEST['target'] ) ? sanitize_key( wp_unslash( $_REQUEST['target'] ) ) : 'app';
+        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
+        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
+        $date_str = gmdate( 'Y-m-d' );
+
+        if ( 'all' === $target ) {
+            $files_to_zip = [
+                'presshub-debug.log'          => PressHub_AI_Logger::get_log_file_path(),
+                'presshub-ai-debug.jsonl'     => $base_dir . '/presshub-ai-debug.log',
+                'presshub-ai-tts-debug.jsonl' => $base_dir . '/presshub-ai-tts-debug.log',
+            ];
+
+            if ( class_exists( 'ZipArchive' ) ) {
+                $zip_path = tempnam( sys_get_temp_dir(), 'ph_log_zip_' );
+                $zip      = new ZipArchive();
+                if ( true === $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
+                    foreach ( $files_to_zip as $entry_name => $file_path ) {
+                        if ( file_exists( $file_path ) && is_readable( $file_path ) && filesize( $file_path ) > 0 ) {
+                            $zip->addFile( $file_path, $entry_name );
+                        } else {
+                            $zip->addFromString( $entry_name, '' );
+                        }
+                    }
+                    $zip->close();
+
+                    if ( function_exists( 'nocache_headers' ) ) {
+                        nocache_headers();
+                    }
+                    header( 'Content-Description: File Transfer' );
+                    header( 'Content-Type: application/zip' );
+                    header( 'Content-Disposition: attachment; filename="presshub-logs-' . $date_str . '.zip"' );
+                    header( 'Expires: 0' );
+                    header( 'Cache-Control: must-revalidate' );
+                    header( 'Pragma: public' );
+                    header( 'Content-Length: ' . filesize( $zip_path ) );
+                    readfile( $zip_path );
+                    @unlink( $zip_path );
+                    exit;
+                }
+            }
+
+            // Fallback if ZipArchive is absent: concatenate into a combined plain text download
+            $filename = 'presshub-all-logs-' . $date_str . '.log';
+            if ( function_exists( 'nocache_headers' ) ) {
+                nocache_headers();
+            }
+            header( 'Content-Description: File Transfer' );
+            header( 'Content-Type: text/plain; charset=utf-8' );
+            header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+            header( 'Expires: 0' );
+            header( 'Cache-Control: must-revalidate' );
+            header( 'Pragma: public' );
+
+            foreach ( $files_to_zip as $name => $path ) {
+                echo "=================================================================\n";
+                echo "FILE: {$name}\n";
+                echo "=================================================================\n";
+                if ( file_exists( $path ) && is_readable( $path ) ) {
+                    readfile( $path );
+                } else {
+                    echo "(File empty or does not exist)\n";
+                }
+                echo "\n\n";
+            }
+            exit;
+        }
+
+        // Individual target download
+        switch ( $target ) {
+            case 'prompts':
+                $file     = $base_dir . '/presshub-ai-debug.log';
+                $filename = 'presshub-ai-debug-' . $date_str . '.jsonl';
+                $mime     = 'application/x-jsonlines; charset=utf-8';
+                break;
+            case 'tts':
+                $file     = $base_dir . '/presshub-ai-tts-debug.log';
+                $filename = 'presshub-ai-tts-debug-' . $date_str . '.jsonl';
+                $mime     = 'application/x-jsonlines; charset=utf-8';
+                break;
+            case 'app':
+            default:
+                $file     = PressHub_AI_Logger::get_log_file_path();
+                $filename = 'presshub-debug-' . $date_str . '.log';
+                $mime     = 'text/plain; charset=utf-8';
+                break;
+        }
+
+        $content = ( file_exists( $file ) && is_readable( $file ) ) ? (string) file_get_contents( $file ) : '';
+
+        if ( function_exists( 'nocache_headers' ) ) {
+            nocache_headers();
+        }
+        header( 'Content-Description: File Transfer' );
+        header( 'Content-Type: ' . $mime );
+        header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+        header( 'Expires: 0' );
+        header( 'Cache-Control: must-revalidate' );
+        header( 'Pragma: public' );
+        header( 'Content-Length: ' . strlen( $content ) );
+
+        echo $content;
+        exit;
+    }
+
     /**
      * AJAX endpoint to dynamically fetch available models from a provider API.
      */

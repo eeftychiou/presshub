@@ -32,7 +32,7 @@ class SettingsPageTest
         $settings->register_settings();
         $sections    = $GLOBALS['SECTIONS']['presshub-ai'] ?? [];
         $section_ids = array_column( $sections, 'id' );
-        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_briefing', 'presshub_ai_github' ];
+        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_logging', 'presshub_ai_briefing', 'presshub_ai_github' ];
         if ( $section_ids !== $expected ) {
             $failures[] = 'Sections should be registered in order ' . implode( ', ', $expected ) . '; got: ' . implode( ', ', $section_ids );
         }
@@ -89,6 +89,13 @@ class SettingsPageTest
         foreach ( [ 'presshub_ai_rate_limit_enabled', 'presshub_ai_rate_limit_per_hour', 'presshub_ai_rate_limit_window_seconds', 'presshub_ai_research_retention_days' ] as $field ) {
             if ( ! in_array( $field, $rate, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_rate_limits; got: " . implode( ', ', $rate );
+            }
+        }
+
+        $logging = array_column( $fields['presshub_ai_logging'] ?? [], 'id' );
+        foreach ( [ 'presshub_ai_log_level', 'presshub_ai_debug_prompts', 'presshub_ai_log_tts_payloads' ] as $field ) {
+            if ( ! in_array( $field, $logging, true ) ) {
+                $failures[] = "{$field} should be registered in presshub_ai_logging; got: " . implode( ', ', $logging );
             }
         }
 
@@ -255,6 +262,7 @@ class SettingsPageTest
         self::reset_world();
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
         $settings = new PressHub_AI_Settings();
+        $settings->register_settings();
         ob_start();
         $html = '';
         try {
