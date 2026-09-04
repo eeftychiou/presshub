@@ -29,7 +29,7 @@ class ProviderDefaultsTest
         $expected_models = [
             'openai'    => 'gpt-4o',
             'anthropic' => 'claude-3-5-sonnet-20240620',
-            'gemini'    => 'gemini-1.5-pro-latest',
+            'gemini'    => 'gemini-2.5-flash',
         ];
         foreach ( $expected_models as $provider => $model ) {
             $got = PressHub_AI_Provider_Defaults::default_model( $provider );

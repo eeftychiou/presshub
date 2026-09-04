@@ -310,6 +310,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_model"><?php echo __( 'Voice Generation AI Model', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_model_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_audio_split_by_topic"><?php echo __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_audio_split_by_topic_field(); ?>
@@ -1895,11 +1901,11 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_tts_model_field() {
         $option = 'presshub_ai_briefing_tts_model';
-        $value  = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_tts_model() );
+        $value  = PressHub_AI_Settings_Storage::get_briefing_tts_model();
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="gemini-3.1-flash-tts-preview" />
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use speech provider default', 'presshub-ai-editor' ); ?>" />
         <p class="description">
-            <?php echo esc_html__( 'Model ID used for speech synthesis (e.g. gemini-3.1-flash-tts-preview, gemini-2.5-flash-preview-tts, or custom endpoint).', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Model ID used for speech synthesis (e.g. gemini-2.5-flash-preview-tts, gemini-3.1-flash-tts-preview). Leave empty to inherit the default model from the selected Speech AI Provider.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

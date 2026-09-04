@@ -394,6 +394,13 @@ class APIClientModularTest
             $failures[] = "resolve_module_config('podcast_tts') should use provider default_model when briefing_tts_model is empty; got: " . var_export( $pod_tts_res['model'], true );
         }
 
+        // Issue #113: No silent model fallback for TTS in resolve_module_config
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'][0]['default_model'] = '';
+        $tts_empty_res = PressHub_AI_API_Client::resolve_module_config( 'tts' );
+        if ( $tts_empty_res['model'] !== '' ) {
+            $failures[] = "resolve_module_config('tts') should return empty model when no model is configured; got: " . var_export( $tts_empty_res['model'], true );
+        }
+
         // ==================================================================
         // 12. call_gemini() omits systemInstruction for TTS models & prepends prompt
         // ==================================================================

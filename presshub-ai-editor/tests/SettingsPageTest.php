@@ -291,6 +291,9 @@ class SettingsPageTest
         if ( false === strpos( $html, 'name="presshub_ai_briefing_voice_pitch"' ) ) {
             $failures[] = 'render_settings_page() should output presshub_ai_briefing_voice_pitch input.';
         }
+        if ( false === strpos( $html, 'name="presshub_ai_briefing_tts_model"' ) ) {
+            $failures[] = 'render_settings_page() should output presshub_ai_briefing_tts_model input.';
+        }
 
         // --- Case 5: capability gate — no cap means wp_die, no form output ---
         self::reset_world();

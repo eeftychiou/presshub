@@ -741,6 +741,30 @@ class DailyBriefingSettingsTest
             }
         }
 
+        // Issue #113: Assert Voice Generation AI Model is rendered in Section 2
+        if ( false === strpos( $page_html, 'name="presshub_ai_briefing_tts_model"' ) ) {
+            $failures[] = 'render_settings_page must render presshub_ai_briefing_tts_model input in Section 2.';
+        }
+        if ( false === strpos( $page_html, 'Voice Generation AI Model' ) ) {
+            $failures[] = 'render_settings_page must render Voice Generation AI Model label in Section 2.';
+        }
+
+        // Issue #113: briefing TTS model helper & sanitizer
+        self::reset_options();
+        if ( PressHub_AI_Settings_Storage::get_briefing_tts_model() !== '' ) {
+            $failures[] = 'get_briefing_tts_model() should default to empty string.';
+        }
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = 'gemini-2.5-flash-preview-tts';
+        if ( PressHub_AI_Settings_Storage::get_briefing_tts_model() !== 'gemini-2.5-flash-preview-tts' ) {
+            $failures[] = 'get_briefing_tts_model() should return saved option.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_model', '  gemini-2.5-flash-preview-tts  ' ) !== 'gemini-2.5-flash-preview-tts' ) {
+            $failures[] = 'presshub_ai_briefing_tts_model sanitizer should trim input.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_model', '' ) !== '' ) {
+            $failures[] = 'presshub_ai_briefing_tts_model sanitizer should allow empty string.';
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "DailyBriefingSettingsTest: FAIL\n" );
             foreach ( $failures as $f ) {

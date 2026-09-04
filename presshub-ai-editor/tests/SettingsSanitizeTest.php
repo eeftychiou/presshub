@@ -196,8 +196,8 @@ class SettingsSanitizeTest
         if ( self::sanitize( $cbs, 'presshub_ai_model_anthropic', '' ) !== 'claude-3-5-sonnet-20240620' ) {
             $failures[] = "empty anthropic model should fall back to 'claude-3-5-sonnet-20240620'.";
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_model_gemini', '' ) !== 'gemini-1.5-pro-latest' ) {
-            $failures[] = "empty gemini model should fall back to 'gemini-1.5-pro-latest'.";
+        if ( self::sanitize( $cbs, 'presshub_ai_model_gemini', '' ) !== 'gemini-2.5-flash' ) {
+            $failures[] = "empty gemini model should fall back to 'gemini-2.5-flash'.";
         }
 
         // --- Case 15: google cloud key + github token sanitization ---

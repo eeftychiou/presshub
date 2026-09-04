@@ -1266,6 +1266,15 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Helper to retrieve configured briefing TTS model from database.
+     *
+     * @return string Configured TTS model or empty string to use speech provider default.
+     */
+    public static function get_briefing_tts_model(): string {
+        return (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+    }
+
+    /**
      * Helper to retrieve configured briefing TTS timeout from database (clamped 60–900s, default 300s).
      *
      * @return int Configured HTTP timeout in seconds for speech generation.
@@ -1802,7 +1811,7 @@ class PressHub_AI_Settings_Storage {
 
     public static function sanitize_briefing_tts_model( $value ): string {
         $clean = self::sanitize_text( $value );
-        return '' !== $clean ? substr( $clean, 0, 100 ) : self::default_briefing_tts_model();
+        return '' !== $clean ? substr( $clean, 0, 100 ) : '';
     }
 
     public static function sanitize_briefing_tts_timeout( $value ): int {
