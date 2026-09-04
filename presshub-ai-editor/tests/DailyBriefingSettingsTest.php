@@ -683,6 +683,58 @@ class DailyBriefingSettingsTest
             $failures[] = 'render_settings_page should render Section 3: Podcast Dialogue Styles & Prompt Studio.';
         }
 
+        // Issue #108: Assert obsolete host name inputs and dialogue preset are absent
+        if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_host_female"' ) ) {
+            $failures[] = 'render_settings_page must not render obsolete host female input.';
+        }
+        if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_host_male"' ) ) {
+            $failures[] = 'render_settings_page must not render obsolete host male input.';
+        }
+        if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_host_tertiary"' ) ) {
+            $failures[] = 'render_settings_page must not render obsolete host tertiary input.';
+        }
+        if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_podcast_preset"' ) ) {
+            $failures[] = 'render_settings_page must not render obsolete podcast preset dropdown.';
+        }
+        if ( false !== strpos( $page_html, 'presshub-podcast-preview' ) ) {
+            $failures[] = 'render_settings_page must not render obsolete Effective Prompt Preview.';
+        }
+
+        // Issue #108: Assert Presenter 1, 2, and 3 voice dropdowns contain voices from both male and female catalogs
+        preg_match( '/<select[^>]+name="presshub_ai_briefing_voice_female"[^>]*>(.*?)<\/select>/s', $page_html, $v1_match );
+        if ( empty( $v1_match[1] ) || false === strpos( $v1_match[1], 'value="Fenrir"' ) || false === strpos( $v1_match[1], 'value="Kore"' ) ) {
+            $failures[] = 'Presenter 1 voice dropdown must contain both male and female voices.';
+        }
+
+        preg_match( '/<select[^>]+name="presshub_ai_briefing_voice_male"[^>]*>(.*?)<\/select>/s', $page_html, $v2_match );
+        if ( empty( $v2_match[1] ) || false === strpos( $v2_match[1], 'value="Fenrir"' ) || false === strpos( $v2_match[1], 'value="Kore"' ) ) {
+            $failures[] = 'Presenter 2 voice dropdown must contain both male and female voices.';
+        }
+
+        preg_match( '/<select[^>]+name="presshub_ai_briefing_voice_tertiary"[^>]*>(.*?)<\/select>/s', $page_html, $v3_match );
+        if ( empty( $v3_match[1] ) || false === strpos( $v3_match[1], 'value="Fenrir"' ) || false === strpos( $v3_match[1], 'value="Kore"' ) ) {
+            $failures[] = 'Presenter 3 voice dropdown must contain both male and female voices.';
+        }
+
+        // Issue #108: Assert Prompt Studio renders style tabs, subtabs, and prompt textareas
+        if ( false === strpos( $page_html, 'presshub-prompt-style-tabs' ) ) {
+            $failures[] = 'render_settings_page should render Prompt Studio style tabs.';
+        }
+        if ( false === strpos( $page_html, 'presshub-prompt-host-tabs' ) ) {
+            $failures[] = 'render_settings_page should render Prompt Studio presenter subtabs.';
+        }
+        if ( false === strpos( $page_html, 'presshub-prompt-textarea' ) ) {
+            $failures[] = 'render_settings_page should render Prompt Studio prompt textareas.';
+        }
+        foreach ( $styles as $s ) {
+            foreach ( [ 1, 2, 3 ] as $hc_n ) {
+                $p_key = 'presshub_ai_briefing_podcast_prompt_' . $hc_n . '_' . $s;
+                if ( false === strpos( $page_html, 'name="' . $p_key . '"' ) ) {
+                    $failures[] = "render_settings_page should render textarea for {$p_key}.";
+                }
+            }
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "DailyBriefingSettingsTest: FAIL\n" );
             foreach ( $failures as $f ) {

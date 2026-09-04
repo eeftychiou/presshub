@@ -500,6 +500,15 @@ class PressHub_AI_Podcast_Producer {
             }
         }
 
+        if ( '' === trim( (string) $base_prompt ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Dialogue prompt is missing or empty', [
+                    'style'      => $style,
+                    'host_count' => $host_count,
+                ] );
+            }
+            throw new InvalidArgumentException( sprintf( __( 'No dialogue prompt configured for style "%1$s" and %2$d presenter(s). Please configure the prompt in PressHub AI Settings -> Daily Briefing & AI Podcast Hub -> Prompt Studio.', 'presshub-ai-editor' ), $style, $host_count ) );
+        }
 
         $base_prompt = apply_filters( 'presshub_ai_podcast_producer_system_prompt', $base_prompt );
 

@@ -566,7 +566,36 @@ SCRIPT;
 $no_tertiary_turns = $producer->parse_script_turns( $no_tertiary_script, 'Μαρία', 'Νίκος', '' );
 pp_check( 'issue_100: empty tertiary_host → [SPEAKER_3]: ignored; only 1 turn', count( $no_tertiary_turns ) === 1 );
 
+// =========================================================================
+// 12. Issue #108 — Empty prompt validation in build_dialogue_prompt()
+// =========================================================================
 
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 2;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_style'] = 'default_greek_chat';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_prompt_2_default_greek_chat'] = '   ';
+
+$threw_empty_exception = false;
+$exception_message = '';
+try {
+    $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-04' );
+} catch ( InvalidArgumentException $e ) {
+    $threw_empty_exception = true;
+    $exception_message = $e->getMessage();
+}
+
+pp_check( 'issue_108: build_dialogue_prompt throws InvalidArgumentException on empty prompt', $threw_empty_exception );
+pp_check( 'issue_108: exception message mentions Prompt Studio and style', false !== strpos( $exception_message, 'No dialogue prompt configured for style "default_greek_chat" and 2 presenter(s)' ) );
+
+// Verify when seeded or valid prompt is set, it succeeds
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_prompt_2_default_greek_chat'] );
+$valid_prompt_generated = false;
+try {
+    $seeded_result = $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-04' );
+    $valid_prompt_generated = ! empty( $seeded_result['system_prompt'] );
+} catch ( Exception $e ) {
+    $valid_prompt_generated = false;
+}
+pp_check( 'issue_108: build_dialogue_prompt succeeds when prompt is seeded/valid', $valid_prompt_generated );
 
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
@@ -585,4 +614,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PodcastProducerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PodcastProducerTest: OK (90 checks)\n";
+echo "PodcastProducerTest: OK (93 checks)\n";

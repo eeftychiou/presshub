@@ -57,7 +57,13 @@ class PressHub_AI_Settings_Storage {
     // the rewrite semantically correct without any string edits.
     // ------------------------------------------------------------------
 
+    public static function init(): void {
+        self::seed_default_podcast_prompts();
+    }
+
     public static function register_options(): void {
+        self::seed_default_podcast_prompts();
+
         // Render callbacks point at the render module (Concern #2 T5).
         $render = new PressHub_AI_Settings_Render();
 
@@ -1450,8 +1456,8 @@ class PressHub_AI_Settings_Storage {
         return (string) get_option( 'presshub_ai_briefing_audio_outro_sfx', 'silence' );
     }
 
-    public static function get_podcast_prompt_1(): string {
-        return self::resolve_podcast_prompt( 1, 'presshub_ai_briefing_podcast_prompt_1', '' );
+    public static function get_podcast_prompt_1( string $style = '' ): string {
+        return self::resolve_podcast_prompt( 1, 'presshub_ai_briefing_podcast_prompt_1', $style );
     }
 
     /**
@@ -1467,16 +1473,16 @@ class PressHub_AI_Settings_Storage {
         return self::resolve_podcast_prompt( 1, 'presshub_ai_briefing_podcast_prompt_1', $style );
     }
 
-    public static function get_podcast_prompt_2(): string {
-        return self::resolve_podcast_prompt( 2, 'presshub_ai_briefing_podcast_prompt_2', '' );
+    public static function get_podcast_prompt_2( string $style = '' ): string {
+        return self::resolve_podcast_prompt( 2, 'presshub_ai_briefing_podcast_prompt_2', $style );
     }
 
     public static function get_podcast_prompt_2_for_style( string $style ): string {
         return self::resolve_podcast_prompt( 2, 'presshub_ai_briefing_podcast_prompt_2', $style );
     }
 
-    public static function get_podcast_prompt_3(): string {
-        return self::resolve_podcast_prompt( 3, 'presshub_ai_briefing_podcast_prompt_3', '' );
+    public static function get_podcast_prompt_3( string $style = '' ): string {
+        return self::resolve_podcast_prompt( 3, 'presshub_ai_briefing_podcast_prompt_3', $style );
     }
 
     public static function get_podcast_prompt_3_for_style( string $style ): string {
@@ -1484,29 +1490,56 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
-     * Issue #90 — shared resolver for podcast prompt options. Reads
-     * `${prefix}_${style}` first; if empty, falls back to the style-specific
-     * built-in default template via PressHub_AI_Podcast_Producer.
+     * Issue #90 / Issue #108 — shared resolver for podcast prompt options. Reads
+     * `${prefix}_${style}` first; if null (never saved in DB), retrieves default,
+     * seeds it in the database and returns it.
+     * If the stored value is empty or whitespace-only (operator explicitly cleared it),
+     * returns '' without silent fallback.
      *
      * @param int    $host_count Number of presenters (1, 2, or 3).
      * @param string $option_prefix e.g. 'presshub_ai_briefing_podcast_prompt_1'.
      * @param string $style Style key. Empty string = use the active saved style.
-     * @return string The resolved prompt template (never empty).
+     * @return string The resolved prompt template.
      */
     private static function resolve_podcast_prompt( int $host_count, string $option_prefix, string $style ): string {
         $style_key = '' !== $style ? $style : self::get_podcast_style();
 
         $per_style_option = $option_prefix . '_' . $style_key;
-        $val              = (string) get_option( $per_style_option, '' );
-        if ( ! empty( trim( $val ) ) ) {
+        $val              = get_option( $per_style_option, null );
+        if ( null === $val ) {
+            if ( ! class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+                require_once __DIR__ . '/class-podcast-producer.php';
+            }
+            $val = PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count, $style_key );
+            update_option( $per_style_option, $val );
             return $val;
         }
 
-        // Fall back to style-specific built-in default template.
-        if ( class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
-            return PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count, $style_key );
+        if ( '' === trim( (string) $val ) ) {
+            return '';
         }
-        return '';
+
+        return (string) $val;
+    }
+
+    /**
+     * Issue #108 — Seed built-in default prompts for all 9 style x presenter count options
+     * if they have not yet been stored in the database.
+     */
+    public static function seed_default_podcast_prompts(): void {
+        if ( ! class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+            require_once __DIR__ . '/class-podcast-producer.php';
+        }
+        $styles = [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ];
+        foreach ( $styles as $style_key ) {
+            foreach ( [ 1, 2, 3 ] as $host_count ) {
+                $option_name = 'presshub_ai_briefing_podcast_prompt_' . $host_count . '_' . $style_key;
+                if ( null === get_option( $option_name, null ) ) {
+                    $default = PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count, $style_key );
+                    update_option( $option_name, $default );
+                }
+            }
+        }
     }
 
     /**

@@ -300,25 +300,6 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_host_female"><?php echo __( 'Lead Presenter Name', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_host_female_field(); ?>
-                                </td>
-                            </tr>
-                            <?php $cur_host_count = PressHub_AI_Settings_Storage::get_briefing_host_count(); ?>
-                            <tr id="presshub-host-male-row" style="<?php echo ( $cur_host_count >= 2 ) ? '' : 'display: none;'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_host_male"><?php echo __( 'Secondary Co-Host Name', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_host_male_field(); ?>
-                                </td>
-                            </tr>
-                            <tr id="presshub-host-tertiary-row" style="<?php echo ( $cur_host_count >= 3 ) ? '' : 'display: none;'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_host_tertiary"><?php echo __( 'Third Host Name', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_host_tertiary_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_tts_provider"><?php echo __( 'Speech AI Provider (logosAI)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $cur_tts_prov = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' ); ?>
@@ -370,20 +351,21 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_tts_custom_style_field(); ?>
                                 </td>
                             </tr>
+                            <?php $cur_host_count = PressHub_AI_Settings_Storage::get_briefing_host_count(); ?>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo __( 'Lead Host Voice Persona', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo __( 'Presenter 1 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_female_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-voice-male-row" style="<?php echo ( $cur_host_count >= 2 ) ? '' : 'display: none;'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_voice_male"><?php echo __( 'Secondary Host Voice Persona', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_male"><?php echo __( 'Presenter 2 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_male_field(); ?>
                                 </td>
                             </tr>
                             <tr id="presshub-voice-tertiary-row" style="<?php echo ( $cur_host_count >= 3 ) ? '' : 'display: none;'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_voice_tertiary"><?php echo __( 'Third Host Voice Persona', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_tertiary"><?php echo __( 'Presenter 3 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_tertiary_field(); ?>
                                 </td>
@@ -406,12 +388,6 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_podcast_status_field(); ?>
                                 </td>
                             </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_preset"><?php echo __( 'Podcast Dialogue Preset', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_podcast_preset_field(); ?>
-                                </td>
-                            </tr>
                         </tbody>
                     </table>
 
@@ -426,32 +402,10 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_podcast_style_field(); ?>
                                 </td>
                             </tr>
-                            <tr>
-                                <th scope="row"><?php echo esc_html__( 'Default Greek Chat Overrides', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_briefing_podcast_prompts_default_greek_chat_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo esc_html__( 'BBC Standards Overrides', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_briefing_podcast_prompts_bbc_broadcasting_standards_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo esc_html__( 'Conversational Reporting Overrides', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_briefing_podcast_prompts_conversational_news_reporting_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo esc_html__( 'Effective Prompt Preview', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_briefing_podcast_live_preview_field(); ?>
-                                </td>
-                            </tr>
                         </tbody>
                     </table>
+
+                    <?php $this->render_briefing_prompt_studio(); ?>
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="briefing"><?php echo esc_html__( 'Save Daily Briefing Settings', 'presshub-ai-editor' ); ?></button>
@@ -2089,26 +2043,20 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_voice_female';
         $selected = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_voice_female() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
-        // Issue #89 — read the engine-aware catalog (was hardcoded 'gemini'
-        // which produced a stale dropdown for Google Cloud TTS operators).
-        // We guard the engine lookup with class_exists() because some
-        // tests load class-settings-render.php without the audio
-        // synthesizer class — in that case we fall back to the legacy
-        // 'gemini' engine id which still resolves to gemini-2.5 via the
-        // synthesizer's own shim.
         $engine_key = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? PressHub_AI_Audio_Synthesizer::OPTION_ENGINE : 'presshub_ai_briefing_tts_engine';
         $engine    = (string) get_option( $engine_key, 'gemini' );
         $engine_id = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
-        $voices    = $synthesizer ? ( $synthesizer->get_available_voices( $engine_id )['female'] ?? [] ) : [];
+        $voices    = $synthesizer ? $synthesizer->get_available_voices( $engine_id ) : [];
+        $all_voices = array_merge( $voices['male'] ?? [], $voices['female'] ?? [] );
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php foreach ( $voices as $key => $v ) : ?>
+            <?php foreach ( $all_voices as $key => $v ) : ?>
                 <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
                     <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
                 </option>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo __( 'Voice model used for the lead presenter (Μαρία). Default: Kore / Κόρη.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Voice persona for Presenter 1. Default: Kore.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2116,22 +2064,20 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_briefing_voice_male';
         $selected = (string) get_option( $option, PressHub_AI_Settings_Migration::default_briefing_voice_male() );
         $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
-        // Issue #89 — engine-aware (was hardcoded 'gemini'). Guarded for
-        // test environments that load Settings_Render without the
-        // Audio_Synthesizer class.
         $engine_key = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? PressHub_AI_Audio_Synthesizer::OPTION_ENGINE : 'presshub_ai_briefing_tts_engine';
         $engine    = (string) get_option( $engine_key, 'gemini' );
         $engine_id = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
-        $voices    = $synthesizer ? ( $synthesizer->get_available_voices( $engine_id )['male'] ?? [] ) : [];
+        $voices    = $synthesizer ? $synthesizer->get_available_voices( $engine_id ) : [];
+        $all_voices = array_merge( $voices['male'] ?? [], $voices['female'] ?? [] );
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
-            <?php foreach ( $voices as $key => $v ) : ?>
+            <?php foreach ( $all_voices as $key => $v ) : ?>
                 <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
                     <?php echo self::esc_html_safe( $v['label'] ?? $key ); ?>
                 </option>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo __( 'Voice model used for the co-host / commentator (Νίκος). Default: Fenrir / Φένριρ.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Voice persona for Presenter 2. Default: Fenrir.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2471,52 +2417,78 @@ class PressHub_AI_Settings_Render {
     }
 
     /**
-     * Issue #90 — Render the live preview block: shows the resolved template
-     * after style + host_count + per-style overrides have been applied, and
-     * warns the operator if a legacy {hostN_name} placeholder is still present
-     * in any custom override.
+     * Issue #108 — Section 3: Podcast Dialogue Styles & Prompt Studio
+     * Tabbed Prompt Studio with primary Style Tabs, Presenter Subtabs, pre-filled textareas,
+     * template load/clear actions, and empty prompt warning states.
      */
-    public function render_briefing_podcast_live_preview_field() {
-        $style      = PressHub_AI_Settings_Storage::get_podcast_style();
-        $host_count = (int) get_option( 'presshub_ai_briefing_host_count', 2 );
-        if ( $host_count < 1 || $host_count > 3 ) {
-            $host_count = 2;
-        }
-        $resolved = '';
-        if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
-            switch ( $host_count ) {
-                case 1: $resolved = PressHub_AI_Settings_Storage::get_podcast_prompt_1_for_style( $style ); break;
-                case 3: $resolved = PressHub_AI_Settings_Storage::get_podcast_prompt_3_for_style( $style ); break;
-                default: $resolved = PressHub_AI_Settings_Storage::get_podcast_prompt_2_for_style( $style ); break;
-            }
-        }
-        $warning = '';
-        foreach ( [ 1, 2, 3 ] as $hc ) {
-            foreach ( [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ] as $st ) {
-                $opt = 'presshub_ai_briefing_podcast_prompt_' . $hc . '_' . $st;
-                $val = (string) get_option( $opt, '' );
-                if ( '' !== trim( $val ) && preg_match( '/\{host[123]_name\}/', $val ) ) {
-                    $warning .= sprintf( '%s contains the legacy {hostN_name} placeholder which is no longer substituted. ', $opt );
-                }
-            }
-        }
+    public function render_briefing_prompt_studio() {
+        $styles = [
+            'default_greek_chat'             => __( 'Default Greek Chat', 'presshub-ai-editor' ),
+            'bbc_broadcasting_standards'     => __( 'BBC Broadcasting Standards', 'presshub-ai-editor' ),
+            'conversational_news_reporting' => __( 'Conversational News Reporting', 'presshub-ai-editor' ),
+        ];
         ?>
-        <div class="presshub-podcast-preview" style="border:1px solid #ccc;padding:12px;background:#fafafa;max-height:400px;overflow:auto;">
-            <p><strong><?php
-                /* translators: 1: style key, 2: host count */
-                echo esc_html( sprintf( __( 'Active resolution: style=%1$s, host_count=%2$d', 'presshub-ai-editor' ), $style, $host_count ) );
-            ?></strong></p>
-            <?php if ( '' !== $warning ) : ?>
-                <div class="notice notice-warning inline" style="padding:8px 12px;margin:8px 0;">
-                    <p><strong><?php echo esc_html__( 'Legacy placeholder warning:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html( $warning ); ?></p>
-                </div>
-            <?php endif; ?>
-            <pre style="white-space:pre-wrap;font-size:12px;line-height:1.4;margin:0;"><?php echo esc_html( $resolved ); ?></pre>
+        <div class="presshub-prompt-style-tabs nav-tab-wrapper" style="margin-top:15px;margin-bottom:15px;">
+            <a href="#presshub-style-default_greek_chat" class="nav-tab presshub-style-tab nav-tab-active" data-style="default_greek_chat"><?php echo esc_html__( 'Default Greek Chat', 'presshub-ai-editor' ); ?></a>
+            <a href="#presshub-style-bbc_broadcasting_standards" class="nav-tab presshub-style-tab" data-style="bbc_broadcasting_standards"><?php echo esc_html__( 'BBC Broadcasting Standards', 'presshub-ai-editor' ); ?></a>
+            <a href="#presshub-style-conversational_news_reporting" class="nav-tab presshub-style-tab" data-style="conversational_news_reporting"><?php echo esc_html__( 'Conversational News Reporting', 'presshub-ai-editor' ); ?></a>
         </div>
-        <p class="description"><?php
-            echo __( 'Live preview of the resolved podcast dialogue system prompt after applying the active style, host count, and any per-style overrides. Use the controls above to change the style or host count and watch this preview update on Save Settings.', 'presshub-ai-editor' );
-        ?></p>
+
+        <?php foreach ( $styles as $style_key => $style_title ) : ?>
+            <div id="presshub-style-<?php echo esc_attr( $style_key ); ?>" class="presshub-style-pane" style="<?php echo ( 'default_greek_chat' === $style_key ) ? '' : 'display:none;'; ?>">
+                <div class="presshub-prompt-host-tabs" style="display:flex;gap:8px;margin-bottom:12px;">
+                    <button type="button" class="button button-primary presshub-host-tab" data-target="presshub-pane-<?php echo esc_attr( $style_key ); ?>-1"><?php echo esc_html__( '1 Presenter (Solo)', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary presshub-host-tab" data-target="presshub-pane-<?php echo esc_attr( $style_key ); ?>-2"><?php echo esc_html__( '2 Presenters (Duo)', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button button-secondary presshub-host-tab" data-target="presshub-pane-<?php echo esc_attr( $style_key ); ?>-3"><?php echo esc_html__( '3 Presenters (Panel)', 'presshub-ai-editor' ); ?></button>
+                </div>
+
+                <?php
+                foreach ( [ 1, 2, 3 ] as $host_count_n ) :
+                    $option  = 'presshub_ai_briefing_podcast_prompt_' . $host_count_n . '_' . $style_key;
+                    $val     = get_option( $option, null );
+                    $default = class_exists( 'PressHub_AI_Podcast_Producer' ) ? PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count_n, $style_key ) : '';
+                    if ( null === $val ) {
+                        $val = $default;
+                        update_option( $option, $val );
+                    }
+                    $val_str = (string) $val;
+                    ?>
+                    <div id="presshub-pane-<?php echo esc_attr( $style_key ); ?>-<?php echo $host_count_n; ?>" class="presshub-host-pane" style="<?php echo ( 1 === $host_count_n ) ? '' : 'display:none;'; ?>">
+                        <textarea name="<?php echo esc_attr( $option ); ?>" id="<?php echo esc_attr( $option ); ?>" rows="10" class="large-text code presshub-prompt-textarea"><?php echo esc_textarea( $val_str ); ?></textarea>
+
+                        <p style="margin-top:8px;">
+                            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo esc_attr( $option ); ?>" data-default="<?php echo esc_attr( $default ); ?>">
+                                <?php echo esc_html__( 'Load Built-in Template for Editing', 'presshub-ai-editor' ); ?>
+                            </button>
+                            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo esc_attr( $option ); ?>" data-default="">
+                                <?php echo esc_html__( 'Clear Prompt', 'presshub-ai-editor' ); ?>
+                            </button>
+                        </p>
+
+                        <div class="presshub-empty-prompt-warning notice notice-warning inline" style="margin-top:8px;<?php echo empty( trim( $val_str ) ) ? '' : 'display:none;'; ?>">
+                            <p>⚠️ <strong><?php echo esc_html__( 'Warning:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'This prompt is currently empty. Dialogue generation for this style and presenter count will fail with an error unless a prompt is saved.', 'presshub-ai-editor' ); ?></p>
+                        </div>
+
+                        <p class="description" style="margin-top:8px;">
+                            <?php
+                            if ( 1 === $host_count_n ) {
+                                echo esc_html__( 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker label: [SPEAKER_1]:', 'presshub-ai-editor' );
+                            } elseif ( 2 === $host_count_n ) {
+                                echo esc_html__( 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker labels: [SPEAKER_1]:, [SPEAKER_2]:', 'presshub-ai-editor' );
+                            } else {
+                                echo esc_html__( 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker labels: [SPEAKER_1]:, [SPEAKER_2]:, [SPEAKER_3]:', 'presshub-ai-editor' );
+                            }
+                            ?>
+                        </p>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endforeach; ?>
         <?php
+    }
+
+    public function render_briefing_podcast_live_preview_field() {
+        // Obsolete in Issue #108: Effective Prompt Preview removed.
     }
 
 
