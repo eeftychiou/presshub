@@ -9,7 +9,7 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
 - **`presshub-ai-editor/`**: The core WordPress plugin source code.
   - `includes/`: PHP classes (API client, token logger, structured logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings).
   - `assets/`: Frontend/Admin JavaScript and CSS.
-  - `tests/`: Isolated PHP unit test suite (49 test files + `run-all-tests.php`).
+  - `tests/`: Isolated PHP unit test suite (70 test files + `run-all-tests.php`).
 - **`presshub-workflow/`**: TypeScript workflow and MCP server components (Jest test suite).
 - **`dev-env/`**: Fully configured, self-contained local WordPress development and testing environment powered by the official WordPress Core SQLite database engine (zero external database services required).
 
@@ -330,7 +330,7 @@ Validates plugin activation, database tables, logger outputs, options persistenc
 php dev-env/scripts/run-integration-tests.php
 ```
 
-### 2. Plugin Unit Tests (49 test files)
+### 2. Plugin Unit Tests (70 test files)
 Runs all unit tests in process-isolated PHP runners:
 ```bash
 php presshub-ai-editor/tests/run-all-tests.php
@@ -358,7 +358,12 @@ When acting as a PR reviewer, never blindly trust a PR author's claim that a CI 
 
 ## 👁️ Visual Inspection, Browser Tool & Screenshot Verification
 
-As part of the QA pipeline, agents **must** perform a visual inspection of all frontend or admin UI changes in the local testing environment:
+### Scope & Applicability
+- **Mandatory for UI/Frontend Changes**: Visual inspection and browser screenshot verification are **required** for all modifications affecting frontend views, Gutenberg editor components, sidebar panels, modal dialogs, admin settings screens, CSS stylesheets, or client-side JavaScript interactions.
+- **Exempt for Pure Backend/Headless Changes**: Pure backend changes (such as API client adapters, token/audit logger internals, script turn parsers, database migrations, CLI scripts, unit/integration test suites, and documentation) are **exempt** from visual browser inspection. For these changes, 100% clean test suite passes (PHPUnit, integration, Jest) and empirical log evidence per the Logging-First protocol provide full verification.
+
+### Verification Workflow (for UI/Frontend Tasks)
+When UI changes are involved, perform visual inspection in the local testing environment:
 
 1. **Start Local Dev Server**:
    - Ensure the local development server is running (`php dev-env/scripts/server.php`).
@@ -569,7 +574,7 @@ When `replace_file_content` with `AllowMultiple=true` (or any other auto-expandi
 Before committing, you **MUST** run all verification test suites and ensure a 100% clean pass rate:
 
 ```bash
-# 1. Plugin Unit Tests (All 49+ test suites)
+# 1. Plugin Unit Tests (All 70 test suites)
 php presshub-ai-editor/tests/run-all-tests.php
 
 # 2. Live WordPress Integration Tests
@@ -615,7 +620,7 @@ git commit -m "fix(settings): prevent pre-populating active providers on clean i
    - [x] \`php presshub-ai-editor/tests/run-all-tests.php\` passed (100%)
    - [x] \`php dev-env/scripts/run-integration-tests.php\` passed (100%)
    - [x] Verified clean state in local dev environment
-   - [x] Visual inspection and screenshots verified
+   - [x] Visual inspection and screenshots verified (if UI touched)
 
    Closes #1"
    ```
@@ -630,10 +635,14 @@ git commit -m "fix(settings): prevent pre-populating active providers on clean i
 
 ### Step 6: Merge Pull Request into `main` (`gh pr merge`)
 
-1. Once CI checks pass and the PR is approved, merge the PR into `main` using squash or rebase:
+1. Once CI checks pass and the PR is approved, merge the PR into `main` using squash:
    ```bash
-   gh pr merge <pr-number> --squash --delete-branch
+   gh pr merge <pr-number> --squash
    ```
+
+> [!NOTE]
+> **Remote Branch Retention Policy:**
+> Do not pass `--delete-branch`. Remote branches (`feat/*`, `fix/*`, `docs/*`) are intentionally preserved on `origin` to maintain permanent historical audit trails and linkable references for previous issues, PRs, and commit histories.
 
 2. Verify that GitHub automatically closes the corresponding issue via the closing keyword (`Closes #<id>` / `Fixes #<id>`).
 
