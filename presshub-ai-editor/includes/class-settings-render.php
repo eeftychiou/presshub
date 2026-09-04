@@ -2447,7 +2447,7 @@ class PressHub_AI_Settings_Render {
                     $option  = 'presshub_ai_briefing_podcast_prompt_' . $host_count_n . '_' . $style_key;
                     $val     = get_option( $option, null );
                     $default = class_exists( 'PressHub_AI_Podcast_Producer' ) ? PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count_n, $style_key ) : '';
-                    if ( null === $val ) {
+                    if ( null === $val || ( is_string( $val ) && str_starts_with( trim( $val ), 'You are' ) ) ) {
                         $val = $default;
                         update_option( $option, $val );
                     }

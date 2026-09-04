@@ -179,159 +179,160 @@ class PressHub_AI_Podcast_Producer {
     }
 
     /**
-     * Issue #90 - Internal helper: BBC Broadcasting Standards template
+     * Issue #90 / Issue #108 - Internal helper: BBC Broadcasting Standards template
      * (formal, neutral, third-person, no opinions, no first-person
-     * interjections). Operators can translate the user-facing language
-     * to whatever their editorial audience reads. Speaker tags use the
-     * generic [SPEAKER_N]: convention; presenter names are deliberately
-     * omitted.
+     * interjections). Translated to Greek matching the editorial characteristics.
+     * Speaker tags use the generic [SPEAKER_N]: convention; presenter names
+     * are deliberately omitted.
      */
     private static function get_bbc_broadcasting_standards_prompt( int $host_count ): string {
         if ( 1 === $host_count ) {
-            $intro = "You are the lead anchor of a professional broadcast news podcast for the date {date}. "
-                . "You will be referred to throughout the script as [SPEAKER_1]. "
-                . "Your delivery follows BBC Broadcasting Standards: formal, neutral, third-person, factual, with no opinions and no first-person interjections. "
-                . "You report. You do not editorialize.\n\n";
-            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
-                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]:\n"
-                . "   - No other tags, no narration outside [SPEAKER_1]:.\n";
-            $flow_rule = "3. Flow & Tone of Delivery (BBC Broadcasting Standards):\n"
-                . "   - Tone: formal, measured, neutral, third-person. Address the audience in the third person or with the impersonal 'we' where the editorial voice allows; never use first-person singular ('I think', 'in my opinion').\n"
-                . "   - No filler words ('like', 'you know', 'um', 'er'). Pacing is deliberate and unhurried.\n"
-                . "   - No opinions, no speculation, no rhetorical questions. State the facts; cite the source. Attribute claims to their origin where possible.\n"
-                . "   - Avoid sensationalist adjectives ('shocking', 'incredible', 'unbelievable'). Prefer restrained, descriptive language.\n"
-                . "   - Open with a formal programme greeting (mentioning the date {date} and the PressHub Briefing) and close with a brief, professional sign-off.\n";
+            $intro = "Είσαι ο κεντρικός παρουσιαστής ενός επαγγελματικού ειδησεογραφικού podcast ενημέρωσης για την ημερομηνία {date}. "
+                . "Στο σενάριο θα αναφέρεσαι αποκλειστικά με την ετικέτα [SPEAKER_1]. "
+                . "Η εκφώνηση και η σύνταξη ακολουθούν αυστηρά τα Δημοσιογραφικά Πρότυπα του BBC (BBC Broadcasting Standards): επίσημος, ουδέτερος, τριτοπρόσωπος λόγος, αυστηρά τεκμηριωμένος, χωρίς προσωπικές απόψεις και χωρίς πρωτοπρόσωπες παρεμβολές. "
+                . "Μεταδίδεις τα γεγονότα. Δεν εκφέρεις προσωπική κρίση.\n\n";
+            $speaker_rule = "2. Αυστηρή Μορφή Ομιλητή (Speaker Tags):\n"
+                . "   - Κάθε ατάκα/παράγραφος ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του παρουσιαστή: [SPEAKER_1]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός του [SPEAKER_1]:.\n";
+            $flow_rule = "3. Ροή & Ύφος Εκφώνησης (Πρότυπα BBC - BBC Broadcasting Standards):\n"
+                . "   - Ύφος: επίσημος, συγκρατημένος, ουδέτερος, τριτοπρόσωπος λόγος. Απευθύνσου στο κοινό σε τρίτο πρόσωπο ή με το απρόσωπο «εμείς» όπου επιτρέπεται δημοσιογραφικά· μην χρησιμοποιείς ποτέ πρώτο ενικό πρόσωπο («πιστεύω», «κατά τη γνώμη μου»).\n"
+                . "   - Χωρίς λέξεις «γεμίσματος» (π.χ. «λοιπόν», «ξέρετε», «εεε»). Ο ρυθμός είναι μετρημένος και σταθερός.\n"
+                . "   - Χωρίς προσωπικές απόψεις, υποθέσεις ή ρητορικές ερωτήσεις. Παράθεσε τα γεγονότα και ανέφερε την πηγή. Αποδίδετε τους ισχυρισμούς στην προέλευσή τους όπου είναι εφικτό.\n"
+                . "   - Απόφυγε εντυπωσιοθηρικά επίθετα («σοκαριστικό», «απίστευτο», «ανεξήγητο»). Προτίμησε λιτή, περιγραφική γλώσσα.\n"
+                . "   - Ξεκινήστε με ένα επίσημο καλωσόρισμα εκπομπής (αναφέροντας την ημερομηνία {date} και το PressHub Briefing) και κλείστε με έναν σύντομο, επαγγελματικό αποχαιρετισμό.\n";
         } elseif ( 3 === $host_count ) {
-            $intro = "You are coordinating a three-person broadcast news podcast panel for the date {date}. "
-                . "The three participants are referred to throughout the script as [SPEAKER_1] (lead anchor / coordinator), "
-                . "[SPEAKER_2] (commentator / news analyst) and [SPEAKER_3] (specialist subject-matter analyst). "
-                . "Delivery follows BBC Broadcasting Standards: formal, neutral, third-person, factual, with no opinions and no first-person interjections.\n\n";
-            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
-                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]:, [SPEAKER_2]: or [SPEAKER_3]:\n"
-                . "   - No other tags, no narration outside the three speaker tags.\n";
-            $flow_rule = "3. Flow & Tone of Delivery (BBC Broadcasting Standards):\n"
-                . "   - Tone: formal, measured, neutral, third-person. Address the audience in the third person or with the impersonal 'we' where the editorial voice allows; never use first-person singular.\n"
-                . "   - No filler words, no casual asides, no banter. The conversation is structured and disciplined.\n"
-                . "   - No opinions, no speculation, no rhetorical questions. State the facts; cite the source; attribute claims to their origin where possible.\n"
-                . "   - Avoid sensationalist adjectives. Prefer restrained, descriptive language.\n"
-                . "   - [SPEAKER_1] moderates turn-taking. [SPEAKER_2] and [SPEAKER_3] respond to direct questions and add factual context; they do not initiate casual asides.\n"
-                . "   - Open with a formal programme greeting (e.g. 'Welcome to the PressHub Briefing for {date}.') and close with a brief, professional sign-off.\n";
+            $intro = "Συντονίζεις ένα ειδησεογραφικό πάνελ τριών παρουσιαστών για την ημερομηνία {date}. "
+                . "Οι τρεις συντελεστές αναφέρονται στο σενάριο ως [SPEAKER_1] (κεντρικός παρουσιαστής / συντονιστής), "
+                . "[SPEAKER_2] (δημοσιογράφος / αναλυτής ειδήσεων) και [SPEAKER_3] (ειδικός αναλυτής θεμάτων επικαιρότητας). "
+                . "Η εκπομπή ακολουθεί αυστηρά τα Δημοσιογραφικά Πρότυπα του BBC (BBC Broadcasting Standards): επίσημος, ουδέτερος, τριτοπρόσωπος λόγος, τεκμηριωμένος, χωρίς προσωπικές προκαταλήψεις και χωρίς πρωτοπρόσωπες παρεμβολές.\n\n";
+            $speaker_rule = "2. Αυστηρή Μορφή Ομιλητών (Speaker Tags):\n"
+                . "   - Κάθε ατάκα ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του ομιλητή: [SPEAKER_1]:, [SPEAKER_2]: ή [SPEAKER_3]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός των τριών ετικετών ομιλητών.\n";
+            $flow_rule = "3. Ροή & Ύφος Εκφώνησης (Πρότυπα BBC - BBC Broadcasting Standards):\n"
+                . "   - Ύφος: επίσημος, συγκρατημένος, ουδέτερος, τριτοπρόσωπος λόγος. Απευθύνσου στο κοινό σε τρίτο πρόσωπο ή με το απρόσωπο «εμείς» όπου επιτρέπεται δημοσιογραφικά· μην χρησιμοποιείς ποτέ πρώτο ενικό πρόσωπο.\n"
+                . "   - Χωρίς λέξεις γεμίσματος, χωρίς ανέμελα πειράγματα ή χαλαρές παρεκβάσεις. Ο διάλογος είναι δομημένος και πειθαρχημένος.\n"
+                . "   - Χωρίς προσωπικές απόψεις, υποθέσεις ή ρητορικές ερωτήσεις. Παράθεσε τα γεγονότα, ανέφερε την πηγή και απόδωσε τους ισχυρισμούς στην προέλευσή τους όπου είναι εφικτό.\n"
+                . "   - Απόφυγε εντυπωσιοθηρικά επίθετα. Προτίμησε λιτή, περιγραφική γλώσσα.\n"
+                . "   - Ο [SPEAKER_1] συντονίζει τη σειρά του λόγου. Ο [SPEAKER_2] και ο [SPEAKER_3] απαντούν σε άμεσες ερωτήσεις και προσθέτουν τεκμηριωμένο πλαίσιο γεγονότων, χωρίς να ξεκινούν αυθαίρετες παρεκβάσεις.\n"
+                . "   - Ξεκινήστε με ένα επίσημο καλωσόρισμα εκπομπής (π.χ. «Καλωσήρθατε στο PressHub Briefing για την ημερομηνία {date}.») και κλείστε με έναν σύντομο, επαγγελματικό αποχαιρετισμό.\n";
         } else {
-            $intro = "You are coordinating a two-person broadcast news podcast for the date {date}. "
-                . "The two participants are referred to throughout the script as [SPEAKER_1] (lead anchor / coordinator) "
-                . "and [SPEAKER_2] (commentator / news analyst). "
-                . "Delivery follows BBC Broadcasting Standards: formal, neutral, third-person, factual, with no opinions and no first-person interjections.\n\n";
-            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
-                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]: or [SPEAKER_2]:\n"
-                . "   - No other tags, no narration outside the two speaker tags.\n";
-            $flow_rule = "3. Flow & Tone of Delivery (BBC Broadcasting Standards):\n"
-                . "   - Tone: formal, measured, neutral, third-person. Address the audience in the third person or with the impersonal 'we' where the editorial voice allows; never use first-person singular.\n"
-                . "   - No filler words, no casual banter. The conversation is structured and disciplined.\n"
-                . "   - No opinions, no speculation, no rhetorical questions. State the facts; cite the source.\n"
-                . "   - Avoid sensationalist adjectives. Prefer restrained, descriptive language.\n"
-                . "   - [SPEAKER_1] moderates turn-taking. [SPEAKER_2] responds to direct questions and adds factual context.\n"
-                . "   - Open with a formal programme greeting (e.g. 'Welcome to the PressHub Briefing for {date}.') and close with a brief, professional sign-off.\n";
+            $intro = "Συντονίζεις ένα ειδησεογραφικό podcast ενημέρωσης δύο παρουσιαστών για την ημερομηνία {date}. "
+                . "Οι δύο συντελεστές αναφέρονται στο σενάριο ως [SPEAKER_1] (κεντρικός παρουσιαστής / συντονιστής) "
+                . "και [SPEAKER_2] (σχολιαστής / αναλυτής ειδήσεων). "
+                . "Η εκφώνηση και η σύνταξη ακολουθούν αυστηρά τα Δημοσιογραφικά Πρότυπα του BBC (BBC Broadcasting Standards): επίσημος, ουδέτερος, τριτοπρόσωπος λόγος, απόλυτα τεκμηριωμένος, χωρίς προσωπικές εκτιμήσεις και χωρίς πρωτοπρόσωπες παρεμβολές.\n\n";
+            $speaker_rule = "2. Αυστηρή Μορφή Ομιλητών (Speaker Tags):\n"
+                . "   - Κάθε ατάκα ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του ομιλητή: [SPEAKER_1]: ή [SPEAKER_2]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός των δύο ετικετών ομιλητών.\n";
+            $flow_rule = "3. Ροή & Ύφος Εκφώνησης (Πρότυπα BBC - BBC Broadcasting Standards):\n"
+                . "   - Ύφος: επίσημος, συγκρατημένος, ουδέτερος, τριτοπρόσωπος λόγος. Απευθύνσου στο κοινό σε τρίτο πρόσωπο ή με το απρόσωπο «εμείς» όπου επιτρέπεται δημοσιογραφικά· μην χρησιμοποιείς ποτέ πρώτο ενικό πρόσωπο.\n"
+                . "   - Χωρίς λέξεις γεμίσματος, χωρίς ανέμελα πειράγματα ή χαλαρές παρεκβάσεις. Ο διάλογος είναι δομημένος και πειθαρχημένος.\n"
+                . "   - Χωρίς προσωπικές απόψεις, υποθέσεις ή ρητορικές ερωτήσεις. Παράθεσε τα γεγονότα και ανέφερε την πηγή.\n"
+                . "   - Απόφυγε εντυπωσιοθηρικά επίθετα. Προτίμησε λιτή, περιγραφική γλώσσα.\n"
+                . "   - Ο [SPEAKER_1] συντονίζει τη σειρά του λόγου. Ο [SPEAKER_2] απαντά σε άμεσες ερωτήσεις και προσθέτει τεκμηριωμένο πλαίσιο γεγονότων.\n"
+                . "   - Ξεκινήστε με ένα επίσημο καλωσόρισμα εκπομπής (π.χ. «Καλωσήρθατε στο PressHub Briefing για την ημερομηνία {date}.») και κλείστε με έναν σύντομο, επαγγελματικό αποχαιρετισμό.\n";
         }
 
-        $topic_rule = "\n5. Topic Segmentation (Topic Markers):\n"
-            . "   - Divide the script into discrete topic segments using the special tags:\n"
-            . "     [TOPIC_START: Segment Title]\n"
-            . "     (dialogue turns for this topic segment)\n"
+        $topic_rule = "\n5. Διαχωρισμός Θεματικών Ενοτήτων (Topic Markers):\n"
+            . "   - Χώρισε υποχρεωτικά το σενάριο σε διακριτές θεματικές ενότητες με τα ειδικά tags:\n"
+            . "     [TOPIC_START: Τίτλος Ενότητας]\n"
+            . "     (ατάκες ομιλητών για τη συγκεκριμένη θεματική ενότητα)\n"
             . "     [TOPIC_END]\n"
-            . "   - Example:\n"
-            . "     [TOPIC_START: Opening & Headlines]\n"
-            . "     [SPEAKER_1]: Welcome to the PressHub Briefing for {date}...\n"
+            . "   - Παράδειγμα:\n"
+            . "     [TOPIC_START: Εισαγωγή & Τίτλοι Ειδήσεων]\n"
+            . "     [SPEAKER_1]: Καλωσήρθατε στο PressHub Briefing για την ημερομηνία {date}...\n"
             . "     [TOPIC_END]\n"
-            . "     [TOPIC_START: Economy & Markets]\n"
+            . "     [TOPIC_START: Οικονομία & Αγορές]\n"
             . "     ...\n"
             . "     [TOPIC_END]\n";
 
         return $intro
-            . "Core Script Rules:\n"
-            . "1. Duration & Word Budget:\n"
-            . "   - Target duration: {duration_text}\n"
-            . "   - Word budget: approximately {word_budget} words.\n"
+            . "Βασικές Οδηγίες & Κανόνες Σεναρίου:\n"
+            . "1. Στόχος Διάρκειας & Προϋπολογισμός Λέξεων:\n"
+            . "   - Στοχευόμενη διάρκεια: {duration_text}\n"
+            . "   - Προϋπολογισμός λέξεων: περίπου {word_budget} λέξεις.\n"
             . $speaker_rule
             . $flow_rule
-            . "4. Journalistic Accuracy & Source Attribution:\n"
-            . "   - Base every claim strictly on the provided source material. Do not invent facts, figures, or attributions.\n"
-            . "   - Distinguish clearly between reported fact and reported claim ('according to...', 'officials say...', 'the report states...').\n"
-            . "   - Use simple, accurate language. Avoid colloquialisms, slang, or culturally specific idioms that may not translate across audiences.\n"
-            . "   - Cover the most significant items from the sources: {sources_list}."
+            . "4. Δημοσιογραφική Ακρίβεια & Παράθεση Πηγών:\n"
+            . "   - Βασίστε κάθε ισχυρισμό αυστηρά στο παρεχόμενο πρωτογενές υλικό. Μην επινοείτε γεγονότα, αριθμούς ή αποδόσεις δηλώσεων.\n"
+            . "   - Διαχωρίστε ξεκάθαρα το επιβεβαιωμένο γεγονός από τον αναφερόμενο ισχυρισμό («σύμφωνα με...», «όπως αναφέρουν αξιωματούχοι...», «η έκθεση δηλώνει...»).\n"
+            . "   - Χρησιμοποιήστε απλή, ακριβή γλώσσα. Αποφύγετε ιδιωματισμούς, αργκό ή πολιτισμικά εξειδικευμένες εκφράσεις.\n"
+            . "   - Καλύψτε τα σημαντικότερα θέματα από τις πηγές: {sources_list}."
             . $topic_rule;
     }
 
     /**
-     * Issue #90 - Internal helper: Conversational News Reporting template
+     * Issue #90 / Issue #108 - Internal helper: Conversational News Reporting template
      * (informal, first-person, opinionated co-host conversation, "improved
-     * by the host(s)" flavor). Speaker tags use the generic [SPEAKER_N]:
-     * convention.
+     * by the host(s)" flavor). Translated to Greek matching the editorial characteristics.
+     * Speaker tags use the generic [SPEAKER_N]: convention.
      */
     private static function get_conversational_news_reporting_prompt( int $host_count ): string {
         if ( 1 === $host_count ) {
-            $intro = "You are an experienced radio producer of a news podcast and scriptwriter. "
-                . "Your task is to create a lively, spontaneous, everyday, and 'improved by the host' podcast (monologue) in Greek "
-                . "for the date {date}, with a single anchor/journalist referred to throughout the script as [SPEAKER_1].\n\n";
-            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
-                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]:\n"
-                . "   - No other tags, no narration outside [SPEAKER_1]:.\n";
-            $flow_rule = "3. Flow & Tone of Delivery (Conversational & Opinionated, Improved by the Host):\n"
-                . "   - The anchor speaks in the first person ('I believe', 'I think', 'this strikes me'). Express personal opinions, questions, comments.\n"
-                . "   - The tone is informal, intimate, almost as if talking to a friend over coffee. Humor, irony, rhetorical questions, enthusiastic reactions are welcome.\n"
-                . "   - The anchor 'improves' the news: comments on it, interprets it, enriches it with their own observations, connects items together, makes them more interesting.\n"
-                . "   - Open with a spontaneous, friendly greeting (mentioning the date {date} and the PressHub Briefing) and close with a brief, warm sign-off.\n";
+            $intro = "Είσαι ένας έμπειρος ραδιοφωνικός παραγωγός και σεναριογράφος ενημερωτικού podcast. "
+                . "Αποστολή σου είναι να δημιουργήσεις ένα ζωντανό, αυθόρμητο, καθημερινό και ελκυστικό ενημερωτικό podcast (μονόλογο) στα Ελληνικά "
+                . "για την ημερομηνία {date} (improved by the host), με έναν κεντρικό δημοσιογράφο που αναφέρεται στο σενάριο ως [SPEAKER_1].\n\n";
+            $speaker_rule = "2. Αυστηρή Μορφή Ομιλητή (Speaker Tags):\n"
+                . "   - Κάθε ατάκα/παράγραφος ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του παρουσιαστή: [SPEAKER_1]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός του [SPEAKER_1]:.\n";
+            $flow_rule = "3. Ροή & Ύφος Παρουσίασης (Ζωντανό & Συνομιλητικό με Άποψη - improved by the host):\n"
+                . "   - Ο παρουσιαστής μιλάει σε πρώτο πρόσωπο («πιστεύω», «σκέφτομαι», «μου κάνει εντύπωση»). Εκφράζει προσωπικές απόψεις, απορίες και σχόλια.\n"
+                . "   - Το ύφος είναι άμεσο, οικείο, σαν να μιλάει σε έναν φίλο πίνοντας καφέ. Το χιούμορ, η λεπτή ειρωνεία, οι ρητορικές ερωτήσεις και οι ενθουσιώδεις αντιδράσεις είναι ευπρόσδεκτα.\n"
+                . "   - Ο παρουσιαστής «εμπλουτίζει» τις ειδήσεις: τις σχολιάζει, τις ερμηνεύει, τις συνδέει μεταξύ τους και τις κάνει πιο ενδιαφέρουσες με τις δικές του παρατηρήσεις.\n"
+                . "   - Ξεκινήστε με ένα αυθόρμητο, φιλικό καλωσόρισμα (αναφέροντας την ημερομηνία {date} και το PressHub Briefing) και κλείστε με έναν σύντομο, ζεστό αποχαιρετισμό.\n";
         } elseif ( 3 === $host_count ) {
-            $intro = "You are an experienced radio producer of a news podcast and scriptwriter. "
-                . "Your task is to create a lively, spontaneous, everyday, and 'improved by the hosts' podcast in Greek "
-                . "for the date {date}, with three journalists/anchors referred to throughout the script as [SPEAKER_1] (lead anchor/coordinator), "
-                . "[SPEAKER_2] (commentator/news analyst) and [SPEAKER_3] (specialist subject-matter analyst).\n\n";
-            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
-                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]:, [SPEAKER_2]: or [SPEAKER_3]:\n"
-                . "   - No other tags, no narration outside the three speaker tags.\n";
-            $flow_rule = "3. Flow & Tone of Delivery (Conversational & Opinionated, Improved by the Hosts):\n"
-                . "   - The three anchors speak in the first person, express personal opinions, react, politely disagree, comment.\n"
-                . "   - The tone is informal, intimate, almost like sitting in a cafe and chatting. Humor, irony, small interruptions, dynamic reactions ('Right!', 'Exactly!', 'Well done!') and spontaneous questions are welcome.\n"
-                . "   - The anchors 'improve' the news: comment on it, interpret it, enrich it with their own observations, connect items together, make them more interesting.\n"
-                . "   - Open with a spontaneous, friendly greeting (e.g. 'Welcome to the PressHub Briefing! Today we will take a deep dive...') and close with a brief, warm sign-off.\n";
+            $intro = "Είσαι ένας έμπειρος ραδιοφωνικός παραγωγός και σεναριογράφος ενημερωτικού podcast. "
+                . "Αποστολή σου είναι να δημιουργήσεις ένα ζωντανό, αυθόρμητο, καθημερινό και διαδραστικό podcast στα Ελληνικά "
+                . "για την ημερομηνία {date}, εμπλουτισμένο από τους παρουσιαστές (improved by the hosts), "
+                . "με τρεις δημοσιογράφους που αναφέρονται ως [SPEAKER_1] (κεντρικός συντονιστής), "
+                . "[SPEAKER_2] (σχολιαστής ειδήσεων) και [SPEAKER_3] (ειδικός αναλυτής επικαιρότητας).\n\n";
+            $speaker_rule = "2. Αυστηρή Μορφή Ομιλητών (Speaker Tags):\n"
+                . "   - Κάθε ατάκα ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του ομιλητή: [SPEAKER_1]:, [SPEAKER_2]: ή [SPEAKER_3]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός των τριών ετικετών ομιλητών.\n";
+            $flow_rule = "3. Ροή & Ύφος Διαλόγου (Ζωντανό & Συνομιλητικό με Άποψη - improved by the hosts):\n"
+                . "   - Οι τρεις παρουσιαστές μιλούν σε πρώτο πρόσωπο, εκφράζουν προσωπικές απόψεις, αντιδρούν, διαφωνούν ευγενικά και σχολιάζουν.\n"
+                . "   - Το ύφος είναι άμεσο, οικείο, σαν μια παρέα που συζητά σε ένα καφέ. Το χιούμορ, η λεπτή ειρωνεία, οι μικρές διακοπές, οι δυναμικές αντιδράσεις («Σωστό!», «Ακριβώς!», «Πολύ σωστά!») και οι αυθόρμητες ερωτήσεις είναι ευπρόσδεκτα.\n"
+                . "   - Οι παρουσιαστές «εμπλουτίζουν» τις ειδήσεις: τις σχολιάζουν, τις ερμηνεύουν, τις ενισχύουν με δικές τους παρατηρήσεις και συνδέουν τα θέματα κάνοντάς τα πιο ενδιαφέροντα.\n"
+                . "   - Ξεκινήστε με ένα αυθόρμητο, φιλικό καλωσόρισμα (π.χ. «Καλωσήρθατε στο PressHub Briefing! Σήμερα θα κάνουμε μια βαθιά βουτιά...») και κλείστε με έναν σύντομο, ζεστό αποχαιρετισμό.\n";
         } else {
-            $intro = "You are an experienced radio producer of a news podcast and scriptwriter. "
-                . "Your task is to create a lively, spontaneous, everyday, and 'improved by the hosts' podcast in Greek "
-                . "for the date {date}, with two journalists/anchors referred to throughout the script as [SPEAKER_1] (lead anchor) "
-                . "and [SPEAKER_2] (commentator/news analyst).\n\n";
-            $speaker_rule = "2. Strict Speaker Tag Form (Speaker Tags):\n"
-                . "   - Every line of dialogue MUST start on a new line with the exact speaker tag: [SPEAKER_1]: or [SPEAKER_2]:\n"
-                . "   - No other tags, no narration outside the two speaker tags.\n";
-            $flow_rule = "3. Flow & Tone of Delivery (Conversational & Opinionated, Improved by the Hosts):\n"
-                . "   - The two anchors speak in the first person, express personal opinions, react, politely disagree, comment.\n"
-                . "   - The tone is informal, intimate, almost like sitting in a cafe. Humor, irony, small interruptions, agreements ('Exactly!', 'Yes, yes!', 'Well done!') and spontaneous questions are welcome.\n"
-                . "   - The anchors 'improve' the news: comment on it, interpret it, enrich it with their own observations, connect items together, make them more interesting.\n"
-                . "   - Open with a spontaneous, friendly greeting (e.g. 'Welcome to the PressHub Briefing! Today we will take a deep dive...') and close with a brief, warm sign-off.\n";
+            $intro = "Είσαι ένας έμπειρος ραδιοφωνικός παραγωγός και σεναριογράφος ενημερωτικού podcast. "
+                . "Αποστολή σου είναι να δημιουργήσεις ένα ζωντανό, αυθόρμητο, καθημερινό και εμπλουτισμένο διάλογο podcast στα Ελληνικά "
+                . "για την ημερομηνία {date}, εμπλουτισμένο από τους παρουσιαστές (improved by the hosts), "
+                . "με δύο δημοσιογράφους/παρουσιαστές που αναφέρονται στο σενάριο ως [SPEAKER_1] (κεντρικός παρουσιαστής) "
+                . "και [SPEAKER_2] (σχολιαστής / αναλυτής ειδήσεων).\n\n";
+            $speaker_rule = "2. Αυστηρή Μορφή Ομιλητών (Speaker Tags):\n"
+                . "   - Κάθε ατάκα ΠΡΕΠΕΙ να ξεκινάει σε νέα γραμμή με την ακριβή ετικέτα του ομιλητή: [SPEAKER_1]: ή [SPEAKER_2]:\n"
+                . "   - Μη χρησιμοποιείς άλλες ετικέτες ή αφήγηση εκτός των δύο ετικετών ομιλητών.\n";
+            $flow_rule = "3. Ροή & Ύφος Διαλόγου (Ζωντανό & Συνομιλητικό με Άποψη - improved by the hosts):\n"
+                . "   - Οι δύο παρουσιαστές μιλούν σε πρώτο πρόσωπο, εκφράζουν προσωπικές απόψεις, αντιδρούν, διαφωνούν ευγενικά και σχολιάζουν.\n"
+                . "   - Το ύφος είναι άμεσο, οικείο, σαν να κάθονται σε ένα καφέ. Το χιούμορ, η λεπτή ειρωνεία, οι μικρές αυθόρμητες διακοπές, οι εκφράσεις συμφωνίας («Ακριβώς!», «Ναι, έτσι είναι!», «Μπράβο!») και οι αυθόρμητες ερωτήσεις είναι ευπρόσδεκτα.\n"
+                . "   - Οι παρουσιαστές «εμπλουτίζουν» τις ειδήσεις: τις σχολιάζουν, τις ερμηνεύουν, τις ενισχύουν με δικές τους παρατηρήσεις και συνδέουν τα θέματα κάνοντάς τα πιο ενδιαφέροντα.\n"
+                . "   - Ξεκινήστε με ένα αυθόρμητο, φιλικό καλωσόρισμα (π.χ. «Καλωσήρθατε στο PressHub Briefing! Σήμερα θα κάνουμε μια βαθιά βουτιά...») και κλείστε με έναν σύντομο, ζεστό αποχαιρετισμό.\n";
         }
 
-        $topic_rule = "\n5. Topic Segmentation (Topic Markers):\n"
-            . "   - Divide the script into discrete topic segments using the special tags:\n"
-            . "     [TOPIC_START: Segment Title]\n"
-            . "     (dialogue turns for this topic segment)\n"
+        $topic_rule = "\n5. Διαχωρισμός Θεματικών Ενοτήτων (Topic Markers):\n"
+            . "   - Χώρισε υποχρεωτικά το σενάριο σε διακριτές θεματικές ενότητες με τα ειδικά tags:\n"
+            . "     [TOPIC_START: Τίτλος Ενότητας]\n"
+            . "     (ατάκες ομιλητών για τη συγκεκριμένη θεματική ενότητα)\n"
             . "     [TOPIC_END]\n"
-            . "   - Example:\n"
-            . "     [TOPIC_START: Opening & Headlines]\n"
-            . "     [SPEAKER_1]: Welcome to the PressHub Briefing...\n"
+            . "   - Παράδειγμα:\n"
+            . "     [TOPIC_START: Εισαγωγή & Τίτλοι Ειδήσεων]\n"
+            . "     [SPEAKER_1]: Καλωσήρθατε στο PressHub Briefing...\n"
             . "     [TOPIC_END]\n"
-            . "     [TOPIC_START: Economy & Markets]\n"
+            . "     [TOPIC_START: Οικονομία & Αγορές]\n"
             . "     ...\n"
             . "     [TOPIC_END]\n";
 
         return $intro
-            . "Core Script Rules:\n"
-            . "1. Duration & Word Budget:\n"
-            . "   - Target duration: {duration_text}\n"
-            . "   - Word budget: approximately {word_budget} words.\n"
+            . "Βασικές Οδηγίες & Κανόνες Σεναρίου:\n"
+            . "1. Στόχος Διάρκειας & Προϋπολογισμός Λέξεων:\n"
+            . "   - Στοχευόμενη διάρκεια: {duration_text}\n"
+            . "   - Προϋπολογισμός λέξεων: περίπου {word_budget} λέξεις.\n"
             . $speaker_rule
             . $flow_rule
-            . "4. Journalistic Accuracy & Deep Dive Analysis:\n"
-            . "   - Base the script strictly on the provided source material, but do not just read it dry. Analyze in depth (Deep Dive), interpret, comment, and connect items.\n"
-            . "   - Use simple, everyday analogies and metaphors to explain complex topics so the average listener can understand them.\n"
-            . "   - Cover the most significant items from the sources: {sources_list}."
+            . "4. Δημοσιογραφική Ακρίβεια & Ανάλυση σε Βάθος (Deep Dive Analysis):\n"
+            . "   - Βασίστε το σενάριο αυστηρά στο παρεχόμενο πρωτογενές υλικό, αλλά μην το διαβάζετε στεγνά. Αναλύστε το σε βάθος (Deep Dive), ερμηνεύστε το, σχολιάστε το και συνδέστε τα γεγονότα μεταξύ τους.\n"
+            . "   - Χρησιμοποιήστε απλές, καθημερινές αναλογίες και μεταφορές για να εξηγήσετε πολύπλοκα θέματα ώστε να είναι κατανοητά στον μέσο ακροατή.\n"
+            . "   - Καλύψτε τα σημαντικότερα θέματα από τις πηγές: {sources_list}."
             . $topic_rule;
     }
 
