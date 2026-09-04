@@ -55,8 +55,11 @@ $gemini_voices = $synthesizer->get_available_voices( 'gemini' );
 as_check( 'voices: returns array with female and male sections', is_array( $gemini_voices ) && isset( $gemini_voices['female'], $gemini_voices['male'] ) );
 as_check( 'voices: female voices contains Aoede', isset( $gemini_voices['female']['Aoede'] ) );
 as_check( 'voices: female voices contains Kore', isset( $gemini_voices['female']['Kore'] ) );
+as_check( 'voices: female voices contains Achernar', isset( $gemini_voices['female']['Achernar'] ) );
 as_check( 'voices: male voices contains Fenrir', isset( $gemini_voices['male']['Fenrir'] ) );
 as_check( 'voices: male voices contains Puck', isset( $gemini_voices['male']['Puck'] ) );
+as_check( 'voices: male voices contains Achird', isset( $gemini_voices['male']['Achird'] ) );
+as_check( 'voices: total Gemini voices is 30', ( count( $gemini_voices['female'] ) + count( $gemini_voices['male'] ) ) === 30 );
 
 $sample_voice = $gemini_voices['male']['Fenrir'];
 as_check( 'voices: metadata contains name Fenrir', ( $sample_voice['name'] ?? '' ) === 'Fenrir' );
@@ -389,6 +392,8 @@ $captured_models = [];
 $turn_res = $synthesizer->synthesize_turn( '[Μαρία]: Γεια σας!', 'Kore', 1.0, 0.0, null, 'formal' );
 as_check( 'tts_module: synthesize_turn succeeds with null api_client', ! is_wp_error( $turn_res ) && is_string( $turn_res ) );
 as_check( 'tts_module: synthesize_turn with null api_client targets gemini-2.5-flash-preview-tts', ! empty( $captured_models ) && 'gemini-2.5-flash-preview-tts' === end( $captured_models ) );
+$last_token_log = end( $GLOBALS['wpdb']->tables['wp_presshub_ai_token_logs'] );
+as_check( 'tts_module: audio turn token logging uses action podcast_audio', is_array( $last_token_log ) && ( $last_token_log['action_trigger'] ?? '' ) === 'podcast_audio' );
 
 // Test 8b: synthesize_podcast with null api_client resolves tts model (gemini-2.5-flash-preview-tts)
 $captured_models = [];
@@ -410,6 +415,20 @@ as_check( 'tts_module: synthesize_turn returns missing_tts_model error when no T
 
 // Restore provider default_model for subsequent tests
 $GLOBALS['OPTIONS_STORE'][ PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDERS ][0]['default_model'] = 'gemini-2.5-flash-preview-tts';
+
+// Test 8e: Verify set_module maps functional modules to intended action triggers
+$client_tts = new PressHub_AI_API_Client( 'tts' );
+as_check( 'tts_module: tts module sets current_action to podcast_audio', $client_tts->get_action() === 'podcast_audio' );
+$client_podcast_tts = new PressHub_AI_API_Client( 'podcast_tts' );
+as_check( 'tts_module: podcast_tts module sets current_action to podcast_audio', $client_podcast_tts->get_action() === 'podcast_audio' );
+$client_briefing_podcast = new PressHub_AI_API_Client( 'briefing_podcast' );
+as_check( 'tts_module: briefing_podcast module sets current_action to podcast_script', $client_briefing_podcast->get_action() === 'podcast_script' );
+$client_briefing_text = new PressHub_AI_API_Client( 'briefing_text' );
+as_check( 'tts_module: briefing_text module sets current_action to briefing_curation', $client_briefing_text->get_action() === 'briefing_curation' );
+$client_coauthor = new PressHub_AI_API_Client( 'coauthor' );
+as_check( 'tts_module: coauthor module sets current_action to coauthor_draft', $client_coauthor->get_action() === 'coauthor_draft' );
+$client_copilot = new PressHub_AI_API_Client( 'copilot' );
+as_check( 'tts_module: copilot module sets current_action to copilot_chat', $client_copilot->get_action() === 'copilot_chat' );
 
 
 // =========================================================================

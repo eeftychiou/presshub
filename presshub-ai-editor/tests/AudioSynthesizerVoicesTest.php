@@ -118,12 +118,27 @@ class AudioSynthesizerVoicesTest {
             if ( ! in_array( strtolower( (string) ( $kore['gender'] ?? '' ) ), [ 'female', 'f' ], true ) ) {
                 $failures[] = 'gemini-2.5 Kore entry must have gender=female (downstream render relies on this).';
             }
+            $total_gemini25 = count( $gemini25['female'] ) + count( $gemini25['male'] );
+            if ( 30 !== $total_gemini25 ) {
+                $failures[] = "gemini-2.5 must bundle 30 voices (got $total_gemini25).";
+            }
+            if ( count( $gemini25['female'] ) !== 14 || count( $gemini25['male'] ) !== 16 ) {
+                $failures[] = "gemini-2.5 voice distribution expected 14 female, 16 male (got " . count( $gemini25['female'] ) . " female, " . count( $gemini25['male'] ) . " male).";
+            }
         }
 
         // (a) gemini-3.1 must also be a valid engine key.
         $gemini31 = $synthesizer->get_available_voices( 'gemini-3.1' );
         if ( ! isset( $gemini31['female']['Kore'] ) || ! isset( $gemini31['male']['Fenrir'] ) ) {
             $failures[] = 'gemini-3.1 must bundle Kore + Fenrir (the canonical Gemini voice names per Google docs).';
+        } else {
+            $total_gemini31 = count( $gemini31['female'] ) + count( $gemini31['male'] );
+            if ( 30 !== $total_gemini31 ) {
+                $failures[] = "gemini-3.1 must bundle 30 voices (got $total_gemini31).";
+            }
+            if ( count( $gemini31['female'] ) !== 14 || count( $gemini31['male'] ) !== 16 ) {
+                $failures[] = "gemini-3.1 voice distribution expected 14 female, 16 male (got " . count( $gemini31['female'] ) . " female, " . count( $gemini31['male'] ) . " male).";
+            }
         }
 
         // (a) google_cloud is in-scope but ships empty voice list for now.
@@ -283,6 +298,32 @@ class AudioSynthesizerVoicesTest {
             if ( ! method_exists( 'PressHub_AI_Settings_Storage', $helper ) ) {
                 $failures[] = "PressHub_AI_Settings_Storage::$helper() must exist (AGENTS.md §Settings-First).";
             }
+        }
+
+        // ==================================================================
+        // 8. legacy_gemini25_fallback is purged completely
+        // ==================================================================
+        if ( method_exists( $synth, 'legacy_gemini25_fallback' ) ) {
+            $failures[] = 'PressHub_AI_Audio_Synthesizer::legacy_gemini25_fallback() must be deleted completely (Zero-Silent-Fallback).';
+        }
+
+        // ==================================================================
+        // 9. voice_catalog_allow_list contains all 30 Gemini voices
+        // ==================================================================
+        $allow_list = PressHub_AI_Settings_Storage::voice_catalog_allow_list();
+        $expected_30 = [
+            'Kore', 'Aoede', 'Leda', 'Callirrhoe', 'Autonoe', 'Achernar', 'Despina', 'Erinome', 'Gacrux',
+            'Laomedeia', 'Pulcherrima', 'Sulafat', 'Vindemiatrix', 'Zephyr',
+            'Fenrir', 'Puck', 'Charon', 'Orus', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Enceladus',
+            'Iapetus', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Umbriel', 'Zubenelgenubi',
+        ];
+        foreach ( $expected_30 as $expected_voice ) {
+            if ( ! in_array( $expected_voice, $allow_list, true ) ) {
+                $failures[] = "voice_catalog_allow_list() must contain Gemini voice: {$expected_voice}.";
+            }
+        }
+        if ( count( $allow_list ) < 30 ) {
+            $failures[] = 'voice_catalog_allow_list() must contain at least 30 voices (got: ' . count( $allow_list ) . ').';
         }
 
         self::finish( $failures );

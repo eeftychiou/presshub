@@ -391,7 +391,7 @@ class PressHub_AI_API_Client {
             return;
         }
 
-        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'copilot', 'tts' ], true ) ) {
+        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'copilot', 'tts', 'podcast_tts' ], true ) ) {
             $this->set_module( $module_or_provider );
             return;
         }
@@ -556,6 +556,18 @@ class PressHub_AI_API_Client {
         $this->set_provider_config( $config );
         $this->provider_source = $config['provider_source'] ?? '';
         $this->model_source    = $config['model_source'] ?? '';
+
+        if ( 'tts' === $module || 'podcast_tts' === $module ) {
+            $this->current_action = 'podcast_audio';
+        } elseif ( 'briefing_podcast' === $module ) {
+            $this->current_action = 'podcast_script';
+        } elseif ( 'briefing_text' === $module ) {
+            $this->current_action = 'briefing_curation';
+        } elseif ( 'coauthor' === $module ) {
+            $this->current_action = 'coauthor_draft';
+        } elseif ( 'copilot' === $module ) {
+            $this->current_action = 'copilot_chat';
+        }
 
         // Issue #43 + Issue #44 defence-in-depth: the same API client
         // instance is reused across intents in handlers like
@@ -1652,6 +1664,9 @@ class PressHub_AI_API_Client {
             }
         }
 
+        $action     = $this->get_action();
+        $log_action = ( ! empty( $action ) && 'coauthor_draft' !== $action ) ? $action : 'podcast_audio';
+
         if ( empty( $audio_base64 ) ) {
             $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
             $err_msg = $last_error ?: __( 'No audio payload received from Gemini Speech model.', 'presshub-ai-editor' );
@@ -1659,7 +1674,7 @@ class PressHub_AI_API_Client {
                 PressHub_AI_Logger::error( sprintf( '[LogosAI Speech] Synthesis failed for all models: %s', $err_msg ) );
             }
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_tts_request( $this->get_action() ?: 'briefing_podcast', 'gemini', $configured_model, mb_strlen( $clean_text ), $duration_ms, 'error', $err_msg );
+                PressHub_AI_Token_Logger::log_tts_request( $log_action, 'gemini', $configured_model, mb_strlen( $clean_text ), $duration_ms, 'error', $err_msg );
             }
             return new WP_Error( 'gemini_audio_error', $err_msg );
         }
@@ -1674,7 +1689,7 @@ class PressHub_AI_API_Client {
             PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Success with model "%s" in %d ms (raw audio: %d bytes)', $used_model, $duration_ms, strlen( $raw_audio ) ) );
         }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-            PressHub_AI_Token_Logger::log_tts_request( $this->get_action() ?: 'briefing_podcast', 'gemini', $used_model ?: $configured_model, mb_strlen( $clean_text ), $duration_ms, 'success', null );
+            PressHub_AI_Token_Logger::log_tts_request( $log_action, 'gemini', $used_model ?: $configured_model, mb_strlen( $clean_text ), $duration_ms, 'success', null );
         }
 
         // If it is PCM data, extract sample rate or default to 24000

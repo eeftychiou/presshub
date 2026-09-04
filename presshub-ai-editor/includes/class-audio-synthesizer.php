@@ -161,14 +161,9 @@ class PressHub_AI_Audio_Synthesizer {
         $manifest = $this->load_voice_catalog_manifest();
         $engine_slice = $manifest['engines'][ $engine ] ?? null;
 
-        // Last-resort fallback: the bundled manifest must always include
-        // gemini-2.5 (the canonical voice set). If the JSON file is
-        // missing or malformed we still need to return SOMETHING so the
-        // settings UI does not crash — emit the historical hardcoded
-        // Gemini 2.5 catalog as the absolute fallback.
-        if ( null === $engine_slice ) {
-            if ( 'gemini-2.5' === $engine ) {
-                return $this->legacy_gemini25_fallback();
+        if ( null === $engine_slice || empty( $manifest['engines'] ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( sprintf( 'TTS voice catalog missing manifest or engine slice for engine: %s', $engine ) );
             }
             return [ 'female' => [], 'male' => [] ];
         }
@@ -414,33 +409,6 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
-     * Absolute last-resort fallback for get_available_voices() when the
-     * bundled manifest is missing or corrupted. Mirrors the historical
-     * hardcoded catalog so existing operators who upgrade from a very
-     * old plugin still see voices in the dropdown.
-     *
-     * @return array{ female: array<string, array>, male: array<string, array> }
-     */
-    private function legacy_gemini25_fallback(): array {
-        return [
-            'female' => [
-                'Kore'       => [ 'name' => 'Kore',       'label' => __( 'Kore (Warm, Crystal Clear & Articulate - Default)', 'presshub-ai-editor' ), 'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Aoede'      => [ 'name' => 'Aoede',      'label' => __( 'Aoede (Expressive & Melodic)', 'presshub-ai-editor' ),                   'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Leda'       => [ 'name' => 'Leda',       'label' => __( 'Leda (Warm & Professional)', 'presshub-ai-editor' ),                      'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Callirrhoe' => [ 'name' => 'Callirrhoe', 'label' => __( 'Callirrhoe (Dynamic & Engaging)', 'presshub-ai-editor' ),          'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Autonoe'    => [ 'name' => 'Autonoe',    'label' => __( 'Autonoe (Conversational)', 'presshub-ai-editor' ),                    'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-            ],
-            'male' => [
-                'Fenrir'     => [ 'name' => 'Fenrir',     'label' => __( 'Fenrir (Bold, Strong & Authoritative - Default)', 'presshub-ai-editor' ), 'gender' => 'MALE', 'type' => 'Gemini-Neural' ],
-                'Puck'       => [ 'name' => 'Puck',       'label' => __( 'Puck (Lively, Youthful & Expressive)', 'presshub-ai-editor' ),            'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
-                'Charon'     => [ 'name' => 'Charon',     'label' => __( 'Charon (Deep Baritone & Solemn Gravitas)', 'presshub-ai-editor' ),       'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
-                'Zephyr'     => [ 'name' => 'Zephyr',     'label' => __( 'Zephyr (Calm, Gentle & Melodious)', 'presshub-ai-editor' ),            'gender' => 'NEUTRAL', 'type' => 'Gemini-Neural' ],
-                'Orus'       => [ 'name' => 'Orus',       'label' => __( 'Orus (Confident & Articulate)', 'presshub-ai-editor' ),                  'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
-            ],
-        ];
-    }
-
-    /**
      * Get the configured voice model for a given speaker identifier.
      *
      * @param string $speaker Speaker identifier ('female', 'male', 'host1', 'host2', or speaker name).
@@ -459,10 +427,10 @@ class PressHub_AI_Audio_Synthesizer {
         $p2_voice = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_presenter_2() : (string) get_option( self::OPTION_VOICE_MALE, $default_p2 );
         $p3_voice = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_presenter_3() : (string) get_option( 'presshub_ai_briefing_voice_tertiary', $default_p3 );
 
-        if ( empty( $p1_voice ) || false !== strpos( $p1_voice, 'Neural2' ) ) {
+        if ( empty( $p1_voice ) ) {
             $p1_voice = $default_p1;
         }
-        if ( empty( $p2_voice ) || false !== strpos( $p2_voice, 'Neural2' ) || 'el-GR-Wavenet-B' === $p2_voice || 'el-GR-Standard-B' === $p2_voice ) {
+        if ( empty( $p2_voice ) ) {
             $p2_voice = $default_p2;
         }
         if ( empty( $p3_voice ) ) {
@@ -678,6 +646,9 @@ class PressHub_AI_Audio_Synthesizer {
     public function synthesize_turn( string $text, string $voice_model = '', float $speed = 1.0, float $pitch = 0.0, ?PressHub_AI_API_Client $api_client = null, string $style = 'formal' ) {
         if ( null === $api_client ) {
             $api_client = new PressHub_AI_API_Client( 'tts' );
+        }
+        if ( method_exists( $api_client, 'set_action' ) ) {
+            $api_client->set_action( 'podcast_audio' );
         }
 
         if ( empty( $voice_model ) ) {
@@ -1017,6 +988,9 @@ class PressHub_AI_Audio_Synthesizer {
 
         if ( null === $api_client ) {
             $api_client = new PressHub_AI_API_Client( 'tts' );
+        }
+        if ( method_exists( $api_client, 'set_action' ) ) {
+            $api_client->set_action( 'podcast_audio' );
         }
 
         // 1. Resolve script

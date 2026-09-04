@@ -1414,17 +1414,12 @@ class PressHub_AI_Settings_Storage {
      * Build the canonical allow-list of voice identifiers from the bundled
      * voice-catalog manifest. Returns a flat array of `name` strings.
      *
-     * Issue #89 — the sanitizers used to hardcode their allow-list as
-     * a PHP array literal. That was brittle (any new voice required a
-     * code change) and could drift from the bundled manifest. The
-     * single source of truth is now the JSON manifest; this helper
-     * reads it once and flattens it. If the manifest is unreadable the
-     * helper falls back to the historical hardcoded Gemini 2.5 catalog
-     * so the sanitizers never reject a previously-valid value.
+     * The manifest is the sole source of truth. If the manifest cannot be read,
+     * an error is logged and an empty array is returned.
      *
      * @return array<int, string> Flat list of permitted voice identifiers.
      */
-    private static function voice_catalog_allow_list(): array {
+    public static function voice_catalog_allow_list(): array {
         static $cached = null;
         if ( null !== $cached ) {
             return $cached;
@@ -1450,18 +1445,10 @@ class PressHub_AI_Settings_Storage {
                 }
             }
         }
-        // Last-resort fallback mirrors the historical hardcoded list so
-        // operators with pre-#89 stored values keep resolving correctly.
-        $cached = [
-            'Fenrir', 'Puck', 'Charon', 'Zephyr', 'Orus',
-            'Aoede', 'Kore', 'Leda', 'Callirrhoe', 'Autonoe',
-            'el-GR-Wavenet-A', 'el-GR-Wavenet-B', 'el-GR-Wavenet-C',
-            'el-GR-Standard-A', 'el-GR-Standard-B',
-            'el-GR-Chirp3-HD-Aoede', 'el-GR-Chirp3-HD-Achernar',
-            'el-GR-Chirp3-HD-Achird', 'el-GR-Chirp3-HD-Algenib',
-            'el-GR-Chirp3-HD-Algieba', 'el-GR-Chirp3-HD-Alnilam',
-            'el-GR-Neural2-A', 'el-GR-Neural2-B',
-        ];
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( 'TTS voice catalog manifest is missing or unreadable at: ' . $path );
+        }
+        $cached = [];
         return $cached;
     }
 
