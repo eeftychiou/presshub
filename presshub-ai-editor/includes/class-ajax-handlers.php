@@ -1605,6 +1605,15 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $saved_count = 0;
             $saved_keys  = [];
 
+            $boolean_options = [
+                'presshub_ai_fetch_urls',
+                'presshub_ai_debug_prompts',
+                'presshub_ai_rate_limit_enabled',
+                'presshub_ai_briefing_schedule_enabled',
+                'presshub_ai_briefing_audio_split_by_topic',
+                'presshub_ai_log_tts_payloads',
+            ];
+
             foreach ( $options_map as $option => $sanitizer ) {
                 try {
                     // Handle removal flags
@@ -1642,11 +1651,14 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                         if ( class_exists( 'PressHub_AI_Logger' ) ) {
                             PressHub_AI_Logger::debug( sprintf( 'Saved option %s in section %s', $option, $tab ) );
                         }
-                    } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
+                    } elseif ( in_array( $option, $boolean_options, true ) ) {
                         // Unchecked checkbox belonging to this section defaults to 0
                         update_option( $option, 0 );
                         $saved_count++;
                         $saved_keys[] = $option;
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::debug( sprintf( 'Saved option %s in section %s', $option, $tab ) );
+                        }
                     }
                 } catch ( Throwable $opt_err ) {
                     if ( class_exists( 'PressHub_AI_Logger' ) ) {
