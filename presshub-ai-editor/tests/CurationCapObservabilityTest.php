@@ -155,7 +155,7 @@ sort( $expected_meta_keys );
 sort( $actual_meta_keys );
 cco_check(
     'real-flow: call_provider() received all 9 pool/cap metadata keys',
-    $actual_meta_keys === $expected_meta_keys
+    empty( array_diff( $expected_meta_keys, $actual_meta_keys ) )
 );
 cco_check(
     'real-flow: metadata[pool_chars] is a positive integer',

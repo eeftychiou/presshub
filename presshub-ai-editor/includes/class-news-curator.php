@@ -875,17 +875,38 @@ class PressHub_AI_News_Curator {
             'articles_count'         => (int) $used_articles_count,
             'articles_count_original'=> (int) $this->last_original_articles_count(),
             'articles_truncated'     => (bool) $this->was_context_truncated(),
+            'model_source'           => method_exists( $api_client, 'get_model_source' ) ? $api_client->get_model_source() : '',
+            'provider_source'        => method_exists( $api_client, 'get_provider_source' ) ? $api_client->get_provider_source() : '',
         ];
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            $cur_provider_id = method_exists( $api_client, 'get_provider_id' ) ? $api_client->get_provider_id() : ( method_exists( $api_client, 'get_provider' ) ? $api_client->get_provider() : '' );
+            $cur_model       = method_exists( $api_client, 'get_model' ) ? $api_client->get_model() : '';
+            $cur_model_src   = method_exists( $api_client, 'get_model_source' ) ? $api_client->get_model_source() : '';
+            PressHub_AI_Logger::info(
+                sprintf(
+                    'Starting news curation for %s: pool=%d articles, provider=%s, model=%s (source: %s)',
+                    $date,
+                    count( $articles ),
+                    $cur_provider_id,
+                    $cur_model,
+                    $cur_model_src
+                )
+            );
+        }
 
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $curation_metadata );
 
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+            $req_meta = method_exists( $api_client, 'get_request_meta' )
+                ? $api_client->get_request_meta()
+                : PressHub_AI_API_Client::current_request_meta();
             presshub_ai_log_prompts(
                 'curation',
                 $prompts['system_prompt'],
                 $prompts['user_prompt'],
                 is_wp_error( $response ) ? 'ERROR: ' . $response->get_error_message() : $response,
-                PressHub_AI_API_Client::current_request_meta()
+                $req_meta
             );
         }
 
