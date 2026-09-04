@@ -320,6 +320,64 @@ If a PR introduces a new operational knob without the full six-step registration
 
 ---
 
+## 🧹 Clean Slate Architecture (No Legacy Baggage)
+
+> **The plugin is under active development. Do NOT write backward-compatibility layers, multi-tiered legacy fallbacks, or defensive code to support deprecated options or older schema formats.**
+
+1. **Provider Store is the Sole Source of Truth**:
+   - Providers and their default models are managed solely in `PressHub_AI_Provider_Store` (`wp_presshub_ai_providers`).
+   - Do NOT maintain or check deprecated global options like `presshub_ai_provider`, `presshub_ai_api_key`, `presshub_ai_model_{type}`, or `presshub_ai_model` in business logic.
+2. **Direct Module Configuration**:
+   - Each module reads its provider from `presshub_ai_{module}_provider` and optional override from `presshub_ai_{module}_model`.
+   - If a module has no override, it directly takes `$provider_record['default_model']` from the chosen provider.
+   - Do NOT build multi-step fallback cascades through obsolete options.
+3. **Purge Rather than Preserve**:
+   - When refactoring, actively delete obsolete fields, unused options, and deprecated helper functions rather than keeping them "for backward compatibility".
+   - Clean, direct code is prioritized over preserving obsolete state.
+
+---
+
+## 🛡️ Zero-Silent-Fallback Principle (Anti-Pattern Guard)
+
+> **No business logic, API client, prompt resolver, or pipeline stage may silently fall back to a hardcoded model, prompt, or operational parameter when configuration is missing, empty, or failing.**
+
+1. **Fail Loudly & Explicitly**:
+   - If a required configuration (such as a prompt template, voice persona, model identifier, or API credentials) is missing or blank in the database, execution **must halt immediately** by returning an explicit `WP_Error` (e.g. `missing_tts_model`) or throwing a descriptive exception (e.g. `InvalidArgumentException`).
+   - It **must log an `ERROR`** to `PressHub_AI_Logger` stating exactly which option or parameter was missing.
+   - It **must NEVER silently substitute** a hidden in-code default string or fallback model that masks the omission from the operator.
+2. **Zero In-Code Fallback Strings**:
+   - Default prompts and templates must be seeded into the database/UI options (`seed_default_*`), where the operator can inspect, modify, and restore them, rather than living as invisible runtime code fallbacks.
+   - Never use in-code default string fallbacks (`$prompt ?: "Default in code..."`) that execute invisible instructions.
+3. **No Silent Multi-Model Retries**:
+   - API client methods must **never** execute silent multi-model fallback retry loops that mask provider errors or run unconfigured models. Surface the exact error from the configured provider/model immediately.
+4. **End-to-End Resolution Provenance**:
+   - Every API invocation must track and log `provider_source` and `model_source` across structured logs (`[API Client Resolution]`), pre-dispatch summaries, prompt debug headers, and token log metadata (`wp_presshub_ai_token_logs.metadata`).
+
+#### Anti-Pattern vs. Required Pattern
+
+```php
+// 🚫 Forbidden: Silent in-code fallback hiding missing option
+function resolve_prompt() {
+    $prompt = get_option( 'presshub_ai_some_prompt', '' );
+    if ( empty( $prompt ) ) {
+        return "You are an expert journalist..."; // SILENT CODE FALLBACK
+    }
+    return $prompt;
+}
+
+// ✅ Required: Explicit error and loud failure
+function resolve_prompt() {
+    $prompt = PressHub_AI_Settings_Storage::get_some_prompt();
+    if ( '' === trim( $prompt ) ) {
+        PressHub_AI_Logger::error( 'Missing required prompt: presshub_ai_some_prompt is empty' );
+        throw new InvalidArgumentException( __( 'No prompt template configured. Please set the prompt in Settings.', 'presshub-ai-editor' ) );
+    }
+    return $prompt;
+}
+```
+
+---
+
 ## 🧪 Verification & Testing Protocol
 
 Before marking any task, bugfix, or feature as complete, you **MUST** run all verification test suites:
