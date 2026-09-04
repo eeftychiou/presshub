@@ -458,6 +458,115 @@ pp_check( 'issue_71: 3 host prompt does NOT contain literal host name', false ==
 pp_check( 'issue_71: system prompt instructs topic markers', false !== strpos( $panel_prompt['system_prompt'], 'TOPIC_START' ) );
 
 
+// =========================================================================
+// 11. Issue #100 — [SPEAKER_N]: canonical tag parsing (system prompt contract)
+// =========================================================================
+//
+// The system prompt contract (Issue #90) explicitly instructs the LLM to emit
+// [SPEAKER_1]: / [SPEAKER_2]: / [SPEAKER_3]: (with [HOST_N]: as a tolerated
+// alias) and forbids any other speaker tag. Issue #100 documents the parser
+// regression where Gemini 3.5 Flash Lite produced [SPEAKER_N]: output and the
+// parser rejected it, returning 0 turns and Stage-3 with "Failed to parse
+// dialogue turns from generated podcast script."
+//
+// These cases pin the contract: [SPEAKER_N]: is the canonical, first-class
+// input; legacy [Μαρία]: / [Νίκος]: / [Κώστας]: fallbacks remain functional.
+
+// Test 11a: Two-host [SPEAKER_N]: script (the format captured in
+// presshub-debug.log WARNING @ 2026-09-04 04:32:09 UTC).
+$speaker_two_host_script = <<<'SCRIPT'
+[TOPIC_START: Εισαγωγή & Τίτλοι Ειδήσεων]
+
+[SPEAKER_1]: Λοιπόν, καλημέρα σας! Είναι Παρασκευή, 4 Σεπτεμβρίου 2026.
+
+[SPEAKER_1]: Σήμερα θα δούμε τις κυριότερες εξελίξεις.
+
+[SPEAKER_2]: Καλημέρα και από εμένα!
+
+[TOPIC_END]
+
+[TOPIC_START: Κύπρος]
+
+[SPEAKER_1]: Ας ξεκινήσουμε με την Κύπρο.
+
+[TOPIC_END]
+
+[TOPIC_START: Διεθνή]
+
+[SPEAKER_2]: Στη διεθνή επικαιρότητα.
+
+[SPEAKER_1]: Πράγματι.
+
+[TOPIC_END]
+SCRIPT;
+
+$speaker_turns = $producer->parse_script_turns( $speaker_two_host_script, 'Μαρία', 'Νίκος', 'Κώστας' );
+pp_check( 'issue_100: parses 6 turns from canonical [SPEAKER_N]: script', count( $speaker_turns ) === 6 );
+pp_check( 'issue_100: [SPEAKER_1]: turn 0 maps to female (Μαρία)', ( $speaker_turns[0]['speaker'] ?? '' ) === 'female' && ( $speaker_turns[0]['speaker_name'] ?? '' ) === 'Μαρία' );
+pp_check( 'issue_100: [SPEAKER_2]: turn 2 maps to male (Νίκος)', ( $speaker_turns[2]['speaker'] ?? '' ) === 'male' && ( $speaker_turns[2]['speaker_name'] ?? '' ) === 'Νίκος' );
+pp_check( 'issue_100: [SPEAKER_1]: turn 0 text begins with Λοιπόν', 0 === strpos( $speaker_turns[0]['text'] ?? '', 'Λοιπόν' ) );
+
+// Test 11b: Three-host [SPEAKER_N]: script (roundtable).
+$speaker_three_host_script = <<<'SCRIPT'
+[SPEAKER_1]: Καλωσήρθατε στην εκπομπή.
+[SPEAKER_2]: Καλημέρα σε όλους.
+[SPEAKER_3]: Καλημέρα, σήμερα έχουμε ενδιαφέρουσα ανάλυση.
+SCRIPT;
+$speaker_three_turns = $producer->parse_script_turns( $speaker_three_host_script, 'Μαρία', 'Νίκος', 'Κώστας' );
+pp_check( 'issue_100: 3-host [SPEAKER_N]: script returns 3 turns', count( $speaker_three_turns ) === 3 );
+pp_check( 'issue_100: [SPEAKER_3]: maps to tertiary Κώστας', ( $speaker_three_turns[2]['speaker'] ?? '' ) === 'tertiary' && ( $speaker_three_turns[2]['speaker_name'] ?? '' ) === 'Κώστας' );
+
+// Test 11c: [HOST_N]: alias (also permitted by the prompt contract).
+$host_alias_script = <<<'SCRIPT'
+[HOST_1]: Lead opens the show.
+[HOST_2]: Analyst replies.
+[HOST_3]: Specialist comments.
+SCRIPT;
+$host_turns = $producer->parse_script_turns( $host_alias_script, 'Alice', 'Bob', 'Carol' );
+pp_check( 'issue_100: [HOST_N]: alias returns 3 turns', count( $host_turns ) === 3 );
+pp_check( 'issue_100: [HOST_1]: maps to female (Alice)', ( $host_turns[0]['speaker'] ?? '' ) === 'female' && ( $host_turns[0]['speaker_name'] ?? '' ) === 'Alice' );
+pp_check( 'issue_100: [HOST_2]: maps to male (Bob)', ( $host_turns[1]['speaker'] ?? '' ) === 'male' && ( $host_turns[1]['speaker_name'] ?? '' ) === 'Bob' );
+pp_check( 'issue_100: [HOST_3]: maps to tertiary (Carol)', ( $host_turns[2]['speaker'] ?? '' ) === 'tertiary' && ( $host_turns[2]['speaker_name'] ?? '' ) === 'Carol' );
+
+// Test 11d: Markdown-bolded [SPEAKER_N]: (the LLM sometimes wraps tags in **...**).
+$bold_speaker_script = <<<'SCRIPT'
+**[SPEAKER_1]:** Lead opens.
+**[SPEAKER_2]**: Analyst replies.
+SCRIPT;
+$bold_speaker_turns = $producer->parse_script_turns( $bold_speaker_script, 'Μαρία', 'Νίκος' );
+pp_check( 'issue_100: bolded **[SPEAKER_N]**: tags parse correctly', count( $bold_speaker_turns ) === 2 );
+pp_check( 'issue_100: bolded [SPEAKER_1]: maps to female Μαρία', ( $bold_speaker_turns[0]['speaker'] ?? '' ) === 'female' );
+
+// Test 11e: Out-of-range [SPEAKER_4]: (no classifier match, must not crash).
+$oor_speaker_script = <<<'SCRIPT'
+[SPEAKER_1]: Valid opener.
+[SPEAKER_4]: Out-of-range (no classifier bucket for N=4).
+[SPEAKER_2]: Valid reply.
+SCRIPT;
+$oor_speaker_turns = $producer->parse_script_turns( $oor_speaker_script, 'Μαρία', 'Νίκος', 'Κώστας' );
+pp_check( 'issue_100: [SPEAKER_4]: out-of-range; only 2 valid turns', count( $oor_speaker_turns ) === 2 );
+
+// Test 11f: Mixed canonical + legacy in the same script (degenerate but must not crash).
+$mixed_script = <<<'SCRIPT'
+[SPEAKER_1]: Canonical opener.
+[Μαρία]: Legacy follow-up.
+[SPEAKER_2]: Canonical reply.
+[Νίκος]: Legacy reply.
+SCRIPT;
+$mixed_turns = $producer->parse_script_turns( $mixed_script, 'Μαρία', 'Νίκος' );
+pp_check( 'issue_100: mixed canonical+legacy returns 4 turns', count( $mixed_turns ) === 4 );
+pp_check( 'issue_100: mixed: canonical [SPEAKER_1]: turn 0 is female', ( $mixed_turns[0]['speaker'] ?? '' ) === 'female' );
+pp_check( 'issue_100: mixed: legacy [Μαρία]: turn 1 is also female', ( $mixed_turns[1]['speaker'] ?? '' ) === 'female' );
+
+// Test 11g: [SPEAKER_3]: must be ignored when tertiary_host is empty.
+$no_tertiary_script = <<<'SCRIPT'
+[SPEAKER_1]: Opener.
+[SPEAKER_3]: Tertiary line.
+SCRIPT;
+$no_tertiary_turns = $producer->parse_script_turns( $no_tertiary_script, 'Μαρία', 'Νίκος', '' );
+pp_check( 'issue_100: empty tertiary_host → [SPEAKER_3]: ignored; only 1 turn', count( $no_tertiary_turns ) === 1 );
+
+
 
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
@@ -476,4 +585,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PodcastProducerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PodcastProducerTest: OK (75 checks)\n";
+echo "PodcastProducerTest: OK (90 checks)\n";
