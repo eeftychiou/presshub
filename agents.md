@@ -46,37 +46,150 @@ php dev-env/scripts/setup.php
 
 ---
 
-## 🪵 Debugging & Log Access
+## 🔬 Logging-First Investigation Protocol
 
-The environment is configured with `WP_DEBUG = true`, `WP_DEBUG_LOG = true`, `SAVEQUERIES = true`, and structured PressHub logging enabled.
+> **Logs before code.** Reading the source to guess a root cause without first consulting the
+> four logging layers is a violation of this protocol. The empirical record always wins over
+> the developer's intuition.
 
-### Live Log Streaming & Filtering Tool
-Use `dev-env/scripts/tail-logs.php` to monitor both WordPress core errors and PressHub AI plugin logs:
+Every agent — whether triaging a bug, writing a test, implementing a feature, or reviewing a
+PR — **must** run the following phase-appropriate commands. The output of these commands
+becomes the evidence attached to issues, the assertions inside tests, and the proof in PR
+descriptions.
+
+### Phase 1 — Before reproducing
+
+Confirm the environment is in a clean, observable state and the right level of detail will
+be captured:
 
 ```bash
-# View recent 50 lines from all sources
-php dev-env/scripts/tail-logs.php
-
-# Live stream logs in real time (follow)
-php dev-env/scripts/tail-logs.php --follow
-
-# Filter by log level (DEBUG, INFO, WARNING, ERROR)
-php dev-env/scripts/tail-logs.php --level=ERROR
-
-# Filter by source
-php dev-env/scripts/tail-logs.php --source=presshub   # PressHub plugin logs only
-php dev-env/scripts/tail-logs.php --source=wp         # WordPress core debug.log only
-
-# Filter by search keyword
-php dev-env/scripts/tail-logs.php --search="rate limit"
-
-# Clear log files
+# Clear stale noise from prior runs
 php dev-env/scripts/tail-logs.php --clear
+
+# Enable prompt-level detail for any LLM-touching bug (disable again after reproduction)
+dev-env\bin\wp option update presshub_ai_debug_prompts 1
+
+# Ensure the log level captures everything you'll need (default is DEBUG when WP_DEBUG is on)
+dev-env\bin\wp eval "echo get_option('presshub_ai_log_level');"
 ```
 
-### Raw Log File Paths
-- **WordPress Core Debug Log**: `dev-env/wordpress/wp-content/debug.log`
-- **PressHub Structured Log**: `dev-env/wordpress/wp-content/uploads/presshub-ai/presshub-debug.log`
+### Phase 2 — While reproducing
+
+Run the live log streamer in a separate terminal so you can correlate the operator's actions
+with the plugin's response **in time order**:
+
+```bash
+# Stream all PressHub logs in real time
+php dev-env/scripts/tail-logs.php --follow
+
+# Or narrow to a suspected subsystem during a focused reproduction
+php dev-env/scripts/tail-logs.php --follow --source=presshub --level=WARNING
+```
+
+Then trigger the bug. Don't kill the streamer yet — let it run for at least 10 seconds after
+the failure to capture any deferred writes (cron, shutdown handlers, `register_shutdown`).
+
+### Phase 3 — Diagnosing
+
+Read the logs in this order, **stopping at the first layer that contains the answer**:
+
+1. **Layer 1 (structured log)** — `php dev-env/scripts/tail-logs.php --level=ERROR`
+   * If the error originates inside PressHub, it is here with full context.
+2. **Layer 2 (token log)** — `php dev-env/scripts/view-token-logs.php --status=error`
+   * If the bug is "the LLM call returned the wrong thing / failed", the request/response
+     metadata and the truncated error message live here.
+3. **Layer 3 (audit log)** — `php dev-env/scripts/query-db.php "SELECT created_at, event_type, entity_type, details FROM wp_presshub_ai_audit_log ORDER BY id DESC LIMIT 30"`
+   * If the bug is "I changed a setting and nothing changed", the audit log shows whether the
+     change was actually persisted and what the masked payload looked like.
+4. **Layer 4 (WP debug.log)** — `php dev-env/scripts/tail-logs.php --source=wp`
+   * If Layers 1-3 are silent and you still see a 500/blank screen, the cause is outside
+     PressHub (PHP fatal, cURL, memory, plugin conflict). The traceback is here.
+5. **Direct SQL** — `php dev-env/scripts/query-db.php "SELECT … FROM wp_options / wp_posts / wp_postmeta WHERE …"`
+   * Use this to confirm a hypothesis about persisted state, not as a first stop.
+
+> **Never read source code to guess** what the plugin is doing **while logs exist that can tell
+> you directly**. Code reading is for *fixing* once you know what to fix, not for *finding*
+> what to fix.
+
+### Phase 4 — While implementing the fix
+
+When adding new instrumentation during development (a temporary `PressHub_AI_Logger::debug()`
+call to confirm a code path), follow these rules so the diagnostic value survives review:
+
+* **Log at the appropriate level** — `DEBUG` for verbose path traces, `INFO` for notable
+  state transitions, `WARNING` for recoverable anomalies, `ERROR` only for hard failures.
+* **Always pass structured context** — `PressHub_AI_Logger::debug( 'curator picked articles', [
+  'date' => $date, 'pool_size' => count($pool), 'selected' => $selected_ids ] )` rather than
+  string-interpolating values into the message.
+* **Never log secrets** — even when debugging an API-key issue, log the masked key
+  (`PressHub_AI_Provider_Store::mask_key( $api_key )`) and the response code, never the raw key.
+* **Remove the diagnostic log line** once the fix is verified, unless it documents a non-obvious
+  code path that future maintainers will need (in which case leave it at `DEBUG` level so it
+  stays out of `WARNING`/`ERROR` filtered views).
+* **Verify with `tail-logs.php --search="<unique-token>"`** that your log line actually fires
+  in the path you intended and only in that path. A log that fires on every request is worse
+  than no log at all.
+
+### Phase 5 — Verifying the fix
+
+Before claiming a bug is fixed, prove it from the logs:
+
+```bash
+# Confirm the original symptom is no longer present
+php dev-env/scripts/tail-logs.php --search="<error-keyword-from-original-bug>" --level=ERROR
+# expected: no output
+
+# Confirm the new code path executes as designed
+php dev-env/scripts/tail-logs.php --search="<new-debug-token>" --level=DEBUG
+# expected: the new log line appears under the triggering conditions and not otherwise
+
+# Confirm no collateral damage to other stages
+php dev-env/scripts/view-token-logs.php --status=error --limit=50
+# expected: no new errors unrelated to the change
+```
+
+### Phase 6 — Submitting the PR
+
+Attach log excerpts to the PR body inside a fenced block:
+
+```markdown
+### 🪵 Log Evidence
+
+**Before fix** (Layer 1, ERROR):
+```
+[2026-09-04 06:30:00 UTC] [ERROR] [HARVEST_SOURCE] https://example.com/feed | [GET] Code: 503 | Latency: 12000ms | Status: FAIL (...)
+```
+
+**After fix** (Layer 1, INFO):
+```
+[2026-09-04 06:35:00 UTC] [INFO] [HARVEST_SOURCE] https://example.com/feed | [GET] Code: 200 | Latency: 450ms | Status: OK (...)
+```
+```
+
+A PR without log evidence for a non-trivial bug is grounds for review rejection.
+
+---
+
+## 🪵 Logging Cheat-Sheet
+
+When you don't know which tool to reach for, scan this table:
+
+| Symptom | First tool to reach for |
+|---|---|
+| White screen / 500 / fatal error / blank page | `php dev-env/scripts/tail-logs.php --source=wp --level=ERROR` |
+| PressHub feature "did nothing" with no UI feedback | `php dev-env/scripts/tail-logs.php --source=presshub --level=WARNING` |
+| LLM returned wrong / truncated / hallucinated output | `php dev-env/scripts/view-token-logs.php --status=success --limit=10` (then `--detail=<id>` to read the JSON metadata) |
+| LLM API call failed | `php dev-env/scripts/view-token-logs.php --status=error` |
+| "I saved a setting but it didn't take effect" | `php dev-env/scripts/query-db.php "SELECT * FROM wp_presshub_ai_audit_log WHERE event_type='settings_saved' ORDER BY id DESC LIMIT 5"` |
+| "I added/edited a provider but it doesn't show up" | `php dev-env/scripts/query-db.php "SELECT * FROM wp_presshub_ai_audit_log WHERE entity_type='provider' ORDER BY id DESC LIMIT 10"` |
+| Source returned 0 articles / parser failed silently | `php dev-env/scripts/tail-logs.php --source=presshub --level=WARNING --search="HARVEST_ARTICLE"` |
+| Pipeline stage status box looks stale / wrong | `php dev-env/scripts/view-token-logs.php --action=<stage> --limit=10` + `php dev-env/scripts/query-db.php "SELECT * FROM wp_options WHERE option_name LIKE 'presshub_ai_briefing_%'"` |
+| Need to see the full prompt the LLM received | `dev-env\bin\wp option update presshub_ai_debug_prompts 1` then reproduce, then `php dev-env/scripts/tail-logs.php --search="prompt" --level=DEBUG` |
+| Need a live view while reproducing interactively | `php dev-env/scripts/tail-logs.php --follow` (in a 2nd terminal) |
+| Just want a fresh slate | `php dev-env/scripts/tail-logs.php --clear` then `php dev-env/scripts/query-db.php "DELETE FROM wp_presshub_ai_token_logs"` (last is destructive — only with intent) |
+
+> When none of the above match, **default to `tail-logs.php --follow`** during reproduction and
+> read what actually appears — it almost always tells you the layer you should pivot to.
 
 ---
 
@@ -269,14 +382,22 @@ As part of the QA pipeline, agents **must** perform a visual inspection of all f
 All bugs, regressions, edge cases, and feature tasks identified during development or debugging **must** follow this rigorous investigation and GitHub issue tracking lifecycle.
 
 ### 1. Pre-Issue Investigation Protocol
-Before creating any GitHub issue, thoroughly examine the problem in the local development environment:
+
+Before creating any GitHub issue, thoroughly examine the problem in the local development environment.
+The full procedure is described in **🔬 Logging-First Investigation Protocol** above; this
+section summarizes the minimum that every issue body must demonstrate.
+
 1. **Reproduce & Isolate**: Run the relevant test suite, trigger the AJAX/REST endpoint, or reproduce the issue in WordPress admin (`http://127.0.0.1:8888`).
-2. **Collect Evidence**:
-   - Inspect WordPress & plugin debug logs: `php dev-env/scripts/tail-logs.php --level=ERROR`
-   - Inspect database token & activity records: `php dev-env/scripts/view-token-logs.php --status=error` or `--detail=<id>`
-   - Query relevant tables/options: `php dev-env/scripts/query-db.php "SELECT ..."`
-3. **Identify Root Cause**: Pinpoint the exact file, class, function, or SQL query responsible.
-4. **Line-number drift between issue body and current source**: Issue bodies cite line numbers that matched the file at the time the issue was filed. After any commit touches that file, the line numbers shift. Always re-locate the exact code in the **current** file via `grep_search` or `view_file` before editing — issue bodies are authoritative on intent, not on line numbers. When opening a PR, explicitly state in the description when the cited line numbers have shifted.
+2. **Collect Evidence** (one excerpt per active logging layer — not just the one that proves your theory):
+   - **Layer 1 (PressHub structured log)**: `php dev-env/scripts/tail-logs.php --level=ERROR --search="<symptom-keyword>"`
+   - **Layer 2 (LLM token log)**: `php dev-env/scripts/view-token-logs.php --status=error` (then `--detail=<id>` for the relevant row)
+   - **Layer 3 (settings audit log)** — only if the issue involves persisted settings or providers:
+     `php dev-env/scripts/query-db.php "SELECT created_at, event_type, entity_type, details FROM wp_presshub_ai_audit_log ORDER BY id DESC LIMIT 20"`
+   - **Layer 4 (WP debug.log)**: `php dev-env/scripts/tail-logs.php --source=wp --search="<symptom-keyword>"`
+   - **Direct SQL** for state verification: `php dev-env/scripts/query-db.php "SELECT …"`
+3. **Identify Root Cause**: Pinpoint the exact file, class, function, or SQL query responsible. **Quote a log line from the reproduction** as the empirical anchor in the `🔬 Root Cause Analysis` section — never open an issue with a purely speculative root cause.
+4. **Attach log excerpts** to the `🔍 Reproduction & Evidence` section of the issue body inside fenced blocks, tagged with which layer they came from.
+5. **Line-number drift between issue body and current source**: Issue bodies cite line numbers that matched the file at the time the issue was filed. After any commit touches that file, the line numbers shift. Always re-locate the exact code in the **current** file via `grep_search` or `view_file` before editing — issue bodies are authoritative on intent, not on line numbers. When opening a PR, explicitly state in the description when the cited line numbers have shifted.
 
 ### 2. Issue Categorization & Severity Taxonomy
 
@@ -426,11 +547,13 @@ digraph SDLC {
    - Edit PHP/JS/CSS files in `presshub-ai-editor/` or TypeScript in `presshub-workflow/`.
    - Ensure clean coding standards, proper docstrings, and escaping (`esc_html`, `esc_attr`, `sanitize_text_field`).
 
-3. **Verify Locally against Dev Environment**:
-   - Check real-time logs: `php dev-env/scripts/tail-logs.php --level=ERROR`
-   - Check database records: `php dev-env/scripts/view-token-logs.php` or `php dev-env/scripts/query-db.php "..."`
+3. **Verify Locally against Dev Environment** (mandatory; see also **🔬 Logging-First Investigation Protocol**):
+   - **Before triggering the action**, start `php dev-env/scripts/tail-logs.php --follow` in a separate terminal so the log lines from your reproduction are captured in time order.
+   - **After triggering the action**, verify in the same terminal that the expected log lines appeared at the expected levels, and that no unrelated WARNING/ERROR was emitted by collateral code paths.
+   - Cross-check via `php dev-env/scripts/view-token-logs.php --status=error` and `php dev-env/scripts/query-db.php "SELECT … FROM wp_presshub_ai_audit_log …"` when the change touches LLM calls or persisted settings.
    - Test UI in WordPress Admin: `http://127.0.0.1:8888/wp-admin/`
    - Capture screenshots for any modified UI views.
+   - **Save the relevant log excerpts** to paste into the PR description under a "🪵 Log Evidence" section.
 
 #### Scope expansion beyond an issue's literal list
 When `replace_file_content` with `AllowMultiple=true` (or any other auto-expanding tool) matches more sites than the issue body explicitly enumerated:
