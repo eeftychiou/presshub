@@ -20,79 +20,99 @@
 declare(strict_types=1);
 
 $dev_env_dir = dirname(__DIR__);
-$wp_log_file = $dev_env_dir . '/wordpress/wp-content/debug.log';
-$ph_log_file = $dev_env_dir . '/wordpress/wp-content/uploads/presshub-ai/presshub-debug.log';
+$wp_log_file      = $dev_env_dir . '/wordpress/wp-content/debug.log';
+$app_log_file     = $dev_env_dir . '/wordpress/wp-content/uploads/presshub-ai/presshub-debug.log';
+$prompts_log_file = $dev_env_dir . '/wordpress/wp-content/uploads/presshub-ai/presshub-ai-debug.log';
+$tts_log_file     = $dev_env_dir . '/wordpress/wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log';
 
-$options = getopt( 'f', [ 'lines::', 'source::', 'level::', 'search::', 'follow', 'clear', 'help' ] );
+$options = getopt( 'f', [ 'lines::', 'source::', 'level::', 'search::', 'trace::', 'follow', 'clear', 'help' ] );
 
 if ( isset( $options['help'] ) ) {
     echo "PressHub Dev Log Monitor\n";
     echo "------------------------\n";
     echo "Options:\n";
     echo "  --lines=N        Number of recent lines to display (default: 50)\n";
-    echo "  --source=all|wp|presshub  Filter by log source (default: all)\n";
+    echo "  --source=NAME    Filter by log source: all|wp|app|presshub|prompts|tts (default: all)\n";
     echo "  --level=NAME     Filter by log level (DEBUG, INFO, WARNING, ERROR)\n";
     echo "  --search=TEXT    Filter lines matching text\n";
+    echo "  --trace=ID       Filter lines matching Trace ID\n";
     echo "  --follow, -f     Stream logs continuously\n";
     echo "  --clear          Clear log files\n";
     exit( 0 );
 }
 
 if ( isset( $options['clear'] ) ) {
-    if ( file_exists( $wp_log_file ) ) {
-        file_put_contents( $wp_log_file, '' );
-        echo "Cleared {$wp_log_file}\n";
+    $files_to_clear = [
+        'WordPress Debug' => $wp_log_file,
+        'PressHub App'    => $app_log_file,
+        'PressHub Prompts'=> $prompts_log_file,
+        'PressHub TTS'    => $tts_log_file,
+    ];
+    foreach ( $files_to_clear as $label => $file_path ) {
+        if ( file_exists( $file_path ) ) {
+            file_put_contents( $file_path, '' );
+            echo "Cleared {$label} log: {$file_path}\n";
+        }
     }
-    if ( file_exists( $ph_log_file ) ) {
-        file_put_contents( $ph_log_file, '' );
-        echo "Cleared {$ph_log_file}\n";
-    }
+    echo "All specified logs cleared successfully.\n";
     exit( 0 );
 }
 
-$lines_count = isset( $options['lines'] ) ? (int) $options['lines'] : 50;
-$source      = isset( $options['source'] ) ? strtolower( (string) $options['source'] ) : 'all';
-$level_filter= isset( $options['level'] ) ? strtoupper( (string) $options['level'] ) : null;
-$search      = isset( $options['search'] ) ? (string) $options['search'] : null;
-$is_follow   = isset( $options['follow'] ) || isset( $options['f'] );
+$lines_count  = isset( $options['lines'] ) ? (int) $options['lines'] : 50;
+$source       = isset( $options['source'] ) ? strtolower( (string) $options['source'] ) : 'all';
+$level_filter = isset( $options['level'] ) ? strtoupper( (string) $options['level'] ) : null;
+$search       = isset( $options['search'] ) ? (string) $options['search'] : null;
+$trace_filter = isset( $options['trace'] ) ? (string) $options['trace'] : null;
+$is_follow    = isset( $options['follow'] ) || isset( $options['f'] );
 
 echo "=================================================================\n";
 echo "PressHub AI Development Log Monitor\n";
 echo "=================================================================\n";
-echo "WP Debug Log:    " . ( file_exists( $wp_log_file ) ? $wp_log_file . " (" . filesize( $wp_log_file ) . " bytes)" : "No log file yet" ) . "\n";
-echo "PressHub Log:    " . ( file_exists( $ph_log_file ) ? $ph_log_file . " (" . filesize( $ph_log_file ) . " bytes)" : "No log file yet" ) . "\n";
-echo "Source Filter:   {$source}\n";
+echo "WP Debug Log:        " . ( file_exists( $wp_log_file ) ? $wp_log_file . " (" . filesize( $wp_log_file ) . " bytes)" : "No log file yet" ) . "\n";
+echo "PressHub App Log:    " . ( file_exists( $app_log_file ) ? $app_log_file . " (" . filesize( $app_log_file ) . " bytes)" : "No log file yet" ) . "\n";
+echo "PressHub Prompts Log:" . ( file_exists( $prompts_log_file ) ? $prompts_log_file . " (" . filesize( $prompts_log_file ) . " bytes)" : "No log file yet" ) . "\n";
+echo "PressHub TTS Log:    " . ( file_exists( $tts_log_file ) ? $tts_log_file . " (" . filesize( $tts_log_file ) . " bytes)" : "No log file yet" ) . "\n";
+echo "Source Filter:       {$source}\n";
 if ( $level_filter ) {
-    echo "Level Filter:    {$level_filter}\n";
+    echo "Level Filter:        {$level_filter}\n";
 }
 if ( $search ) {
-    echo "Search Filter:   {$search}\n";
+    echo "Search Filter:       {$search}\n";
+}
+if ( $trace_filter ) {
+    echo "Trace Filter:        {$trace_filter}\n";
 }
 echo "=================================================================\n\n";
 
-$read_entries = function() use ( $wp_log_file, $ph_log_file, $source, $level_filter, $search ): array {
+$read_entries = function() use (
+    $wp_log_file,
+    $app_log_file,
+    $prompts_log_file,
+    $tts_log_file,
+    $source,
+    $level_filter,
+    $search,
+    $trace_filter
+): array {
     $entries = [];
 
-    if ( in_array( $source, [ 'all', 'wp' ], true ) && file_exists( $wp_log_file ) ) {
-        $lines = file( $wp_log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
-        if ( is_array( $lines ) ) {
-            foreach ( $lines as $line ) {
-                $entries[] = [
-                    'source' => 'WP',
-                    'raw'    => $line,
-                ];
-            }
-        }
-    }
+    $sources_config = [
+        'wp'      => [ 'file' => $wp_log_file, 'tag' => 'WP-CORE', 'match' => [ 'all', 'wp' ] ],
+        'app'     => [ 'file' => $app_log_file, 'tag' => 'PH-APP', 'match' => [ 'all', 'app', 'presshub' ] ],
+        'prompts' => [ 'file' => $prompts_log_file, 'tag' => 'PH-PROMPT', 'match' => [ 'all', 'prompts' ] ],
+        'tts'     => [ 'file' => $tts_log_file, 'tag' => 'PH-TTS', 'match' => [ 'all', 'tts' ] ],
+    ];
 
-    if ( in_array( $source, [ 'all', 'presshub' ], true ) && file_exists( $ph_log_file ) ) {
-        $lines = file( $ph_log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
-        if ( is_array( $lines ) ) {
-            foreach ( $lines as $line ) {
-                $entries[] = [
-                    'source' => 'PressHub',
-                    'raw'    => $line,
-                ];
+    foreach ( $sources_config as $cfg ) {
+        if ( in_array( $source, $cfg['match'], true ) && file_exists( $cfg['file'] ) ) {
+            $lines = file( $cfg['file'], FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
+            if ( is_array( $lines ) ) {
+                foreach ( $lines as $line ) {
+                    $entries[] = [
+                        'source' => $cfg['tag'],
+                        'raw'    => $line,
+                    ];
+                }
             }
         }
     }
@@ -106,6 +126,10 @@ $read_entries = function() use ( $wp_log_file, $ph_log_file, $source, $level_fil
         }
 
         if ( $search && false === stripos( $text, $search ) ) {
+            continue;
+        }
+
+        if ( $trace_filter && false === stripos( $text, $trace_filter ) ) {
             continue;
         }
 
@@ -132,60 +156,52 @@ if ( ! $is_follow ) {
 
 echo "\n--- Live streaming logs (Press Ctrl+C to exit) ---\n";
 
-$wp_pos = file_exists( $wp_log_file ) ? filesize( $wp_log_file ) : 0;
-$ph_pos = file_exists( $ph_log_file ) ? filesize( $ph_log_file ) : 0;
+$targets = [];
+if ( in_array( $source, [ 'all', 'wp' ], true ) ) {
+    $targets[] = [ 'tag' => 'WP-CORE', 'file' => $wp_log_file, 'pos' => file_exists( $wp_log_file ) ? filesize( $wp_log_file ) : 0 ];
+}
+if ( in_array( $source, [ 'all', 'app', 'presshub' ], true ) ) {
+    $targets[] = [ 'tag' => 'PH-APP', 'file' => $app_log_file, 'pos' => file_exists( $app_log_file ) ? filesize( $app_log_file ) : 0 ];
+}
+if ( in_array( $source, [ 'all', 'prompts' ], true ) ) {
+    $targets[] = [ 'tag' => 'PH-PROMPT', 'file' => $prompts_log_file, 'pos' => file_exists( $prompts_log_file ) ? filesize( $prompts_log_file ) : 0 ];
+}
+if ( in_array( $source, [ 'all', 'tts' ], true ) ) {
+    $targets[] = [ 'tag' => 'PH-TTS', 'file' => $tts_log_file, 'pos' => file_exists( $tts_log_file ) ? filesize( $tts_log_file ) : 0 ];
+}
 
 while ( true ) {
     clearstatcache();
 
-    // Check WP log
-    if ( file_exists( $wp_log_file ) ) {
-        $cur_size = filesize( $wp_log_file );
-        if ( $cur_size > $wp_pos ) {
-            $fp = fopen( $wp_log_file, 'r' );
-            fseek( $fp, $wp_pos );
-            while ( false !== ( $line = fgets( $fp ) ) ) {
-                $trimmed = trim( $line );
-                if ( '' !== $trimmed ) {
-                    if ( ( ! $level_filter || stripos( $trimmed, $level_filter ) !== false ) &&
-                         ( ! $search || stripos( $trimmed, $search ) !== false ) ) {
-                        format_log_line( 'WP', $trimmed );
+    foreach ( $targets as &$tgt ) {
+        $f = $tgt['file'];
+        if ( file_exists( $f ) ) {
+            $cur_size = filesize( $f );
+            if ( $cur_size > $tgt['pos'] ) {
+                $fp = fopen( $f, 'r' );
+                fseek( $fp, $tgt['pos'] );
+                while ( false !== ( $line = fgets( $fp ) ) ) {
+                    $trimmed = trim( $line );
+                    if ( '' !== $trimmed ) {
+                        if ( ( ! $level_filter || stripos( $trimmed, $level_filter ) !== false ) &&
+                             ( ! $search || stripos( $trimmed, $search ) !== false ) &&
+                             ( ! $trace_filter || stripos( $trimmed, $trace_filter ) !== false ) ) {
+                            format_log_line( $tgt['tag'], $trimmed );
+                        }
                     }
                 }
+                $tgt['pos'] = ftell( $fp );
+                fclose( $fp );
+            } elseif ( $cur_size < $tgt['pos'] ) {
+                $tgt['pos'] = 0;
             }
-            $wp_pos = ftell( $fp );
-            fclose( $fp );
-        } elseif ( $cur_size < $wp_pos ) {
-            $wp_pos = 0;
         }
     }
-
-    // Check PressHub log
-    if ( file_exists( $ph_log_file ) ) {
-        $cur_size = filesize( $ph_log_file );
-        if ( $cur_size > $ph_pos ) {
-            $fp = fopen( $ph_log_file, 'r' );
-            fseek( $fp, $ph_pos );
-            while ( false !== ( $line = fgets( $fp ) ) ) {
-                $trimmed = trim( $line );
-                if ( '' !== $trimmed ) {
-                    if ( ( ! $level_filter || stripos( $trimmed, $level_filter ) !== false ) &&
-                         ( ! $search || stripos( $trimmed, $search ) !== false ) ) {
-                        format_log_line( 'PressHub', $trimmed );
-                    }
-                }
-            }
-            $ph_pos = ftell( $fp );
-            fclose( $fp );
-        } elseif ( $cur_size < $ph_pos ) {
-            $ph_pos = 0;
-        }
-    }
+    unset( $tgt );
 
     usleep( 300000 );
 }
 
-function format_log_line( string $source, string $line ): void {
-    $prefix = $source === 'PressHub' ? '[PH-AI]' : '[WP-CORE]';
-    echo "{$prefix} {$line}\n";
+function format_log_line( string $tag, string $line ): void {
+    echo "[{$tag}] {$line}\n";
 }

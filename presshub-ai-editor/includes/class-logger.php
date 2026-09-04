@@ -107,6 +107,14 @@ class PressHub_AI_Logger {
             return;
         }
 
+        $trace_id = class_exists( 'PressHub_AI_Trace' ) ? PressHub_AI_Trace::get_current_trace_id() : null;
+        if ( ! empty( $trace_id ) ) {
+            $message = sprintf( '[%s] %s', $trace_id, $message );
+            if ( ! empty( $context ) && ! isset( $context['trace_id'] ) ) {
+                $context['trace_id'] = $trace_id;
+            }
+        }
+
         $time      = gmdate( 'Y-m-d H:i:s' );
         $ctx_str   = ! empty( $context ) ? ' ' . wp_json_encode( $context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) : '';
         $formatted = sprintf( "[%s UTC] [%s] %s%s\n", $time, $level, $message, $ctx_str );

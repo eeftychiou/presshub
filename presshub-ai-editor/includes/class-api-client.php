@@ -43,25 +43,38 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
         if ( ! $debug_enabled ) {
             return;
         }
-        $uploads  = wp_upload_dir();
-        $log_file = trailingslashit( $uploads['basedir'] ) . 'presshub-ai-debug.log';
+        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
+        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
+        if ( ! is_dir( $base_dir ) && function_exists( 'wp_mkdir_p' ) ) {
+            wp_mkdir_p( $base_dir );
+        }
+        $log_file = $base_dir . '/presshub-ai-debug.log';
         $stamp    = gmdate( 'Y-m-d H:i:s' );
-        $entry    = "[$stamp] [$endpoint]";
-        if ( '' !== $meta ) {
-            $entry .= ' CONFIG: ' . $meta;
+        $trace_id = class_exists( 'PressHub_AI_Trace' ) ? PressHub_AI_Trace::get_or_create_trace_id() : '';
+
+        // Auto-rotate if > 8MB
+        if ( file_exists( $log_file ) && filesize( $log_file ) > 8 * 1024 * 1024 ) {
+            $rotated = $log_file . '.' . gmdate( 'Ymd_His' ) . '.old';
+            @rename( $log_file, $rotated );
         }
-        $entry .= " SYSTEM prompt:\n" . $sys_prompt
-            . "\n\n[$stamp] [$endpoint] USER prompt:\n" . $user_prompt;
-        if ( null !== $response ) {
-            $entry .= "\n\n[$stamp] [$endpoint] RESPONSE (" . strlen( (string) $response ) . " chars):\n" . $response;
+
+        $entry = [
+            'trace_id'       => $trace_id,
+            'timestamp'      => $stamp,
+            'endpoint'       => (string) $endpoint,
+            'config'         => (string) $meta,
+            'system_prompt'  => (string) $sys_prompt,
+            'user_prompt'    => (string) $user_prompt,
+            'response'       => null !== $response ? (string) $response : null,
+            'response_chars' => null !== $response ? strlen( (string) $response ) : 0,
+        ];
+
+        $json = wp_json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+        if ( false !== $json ) {
+            @file_put_contents( $log_file, $json . "\n", FILE_APPEND | LOCK_EX );
         }
-        $entry .= "\n\n---\n";
-        // message_type 3 appends to a file directly (no WP filesystem API
-        // needed); @-silenced so a read-only uploads dir can't break the
-        // draft request.
-        // phpcs:ignore WordPress.PHP.NoSilencedErrors
-        @error_log( $entry, 3, $log_file );
-        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt, $response, $meta );
+
+        do_action( 'presshub_ai_prompt_log', $endpoint, $sys_prompt, $user_prompt, $response, $meta, $trace_id );
     }
 }
 
@@ -1311,7 +1324,9 @@ class PressHub_AI_API_Client {
      * @return array{phase:string, timestamp:string, data:array}
      */
     public static function build_tts_payload_log_entry( string $phase, array $data ): array {
+        $trace_id = class_exists( 'PressHub_AI_Trace' ) ? PressHub_AI_Trace::get_or_create_trace_id() : '';
         return [
+            'trace_id'  => $trace_id,
             'phase'     => $phase,
             'timestamp' => gmdate( 'Y-m-d H:i:s' ),
             'data'      => $data,
@@ -1330,6 +1345,10 @@ class PressHub_AI_API_Client {
      * @param array $entry Entry as produced by {@see self::build_tts_payload_log_entry()}.
      */
     public static function write_tts_payload_log( array $entry ): void {
+        if ( empty( $entry['trace_id'] ) && class_exists( 'PressHub_AI_Trace' ) ) {
+            $entry['trace_id'] = PressHub_AI_Trace::get_or_create_trace_id();
+        }
+
         $json = wp_json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
         if ( false === $json || '' === $json ) {
             return;

@@ -118,48 +118,59 @@ if ( $failures > 0 ) {
     exit( 1 );
 }
 
-// --- Case 4: settings option → file written to uploads (1.2.5) ------------
+// --- Case 4: settings option → JSONL file written to uploads/presshub-ai (1.2.5 + 2.3.2) ------------
 $log_dir = sys_get_temp_dir() . '/presshub-pdl-' . getmypid();
-@mkdir( $log_dir, 0777, true );
+@mkdir( $log_dir . '/presshub-ai', 0777, true );
 $GLOBALS['UPLOAD_DIR'] = $log_dir;
-$log_file = trailingslashit( $log_dir ) . 'presshub-ai-debug.log';
+$log_file = trailingslashit( $log_dir ) . 'presshub-ai/presshub-ai-debug.log';
 @unlink( $log_file );
 
 $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] = '1';
 presshub_ai_log_prompts( 'chat', 'SYS-OPT', 'USER-OPT' );
 pdl_check( 'option: log file created', file_exists( $log_file ) );
 if ( file_exists( $log_file ) ) {
-    $content = file_get_contents( $log_file );
-    pdl_check( 'option: system prompt in file', false !== strpos( $content, 'SYS-OPT' ) );
-    pdl_check( 'option: user prompt in file', false !== strpos( $content, 'USER-OPT' ) );
-    pdl_check( 'option: endpoint tag in file', false !== strpos( $content, '[chat]' ) );
-    pdl_check( 'option: SYSTEM header present', false !== strpos( $content, 'SYSTEM prompt:' ) );
-    pdl_check( 'option: no RESPONSE section without response arg', false === strpos( $content, 'RESPONSE (' ) );
+    $lines = file( $log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
+    pdl_check( 'option: exactly 1 line written', count( $lines ) === 1 );
+    $decoded = json_decode( $lines[0] ?? '', true );
+    pdl_check( 'option: line is valid JSON', is_array( $decoded ) );
+    pdl_check( 'option: trace_id present in line', ! empty( $decoded['trace_id'] ) );
+    pdl_check( 'option: timestamp present in line', ! empty( $decoded['timestamp'] ) );
+    pdl_check( 'option: system prompt in json', ( $decoded['system_prompt'] ?? '' ) === 'SYS-OPT' );
+    pdl_check( 'option: user prompt in json', ( $decoded['user_prompt'] ?? '' ) === 'USER-OPT' );
+    pdl_check( 'option: endpoint tag in json', ( $decoded['endpoint'] ?? '' ) === 'chat' );
+    pdl_check( 'option: no response when null', null === ( $decoded['response'] ?? null ) );
+    pdl_check( 'option: response_chars is 0 when null', 0 === ( $decoded['response_chars'] ?? -1 ) );
 }
 
-// Response logging: passing the 4th arg appends a RESPONSE section with
-// the exact text and a char count.
+// Response logging: passing the 4th arg appends a RESPONSE with chars count.
 presshub_ai_log_prompts( 'draft', 'SYS-R', 'USER-R', 'FULL RESPONSE TEXT' );
 if ( file_exists( $log_file ) ) {
-    $content = file_get_contents( $log_file );
-    pdl_check( 'response: RESPONSE header present', false !== strpos( $content, 'RESPONSE (' ) );
-    pdl_check( 'response: char count present', false !== strpos( $content, 'RESPONSE (18 chars)' ) );
-    pdl_check( 'response: response body in file', false !== strpos( $content, 'FULL RESPONSE TEXT' ) );
+    $lines = file( $log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
+    pdl_check( 'response: 2 lines written', count( $lines ) === 2 );
+    $decoded2 = json_decode( $lines[1] ?? '', true );
+    pdl_check( 'response: line 2 valid JSON', is_array( $decoded2 ) );
+    pdl_check( 'response: trace_id present', ! empty( $decoded2['trace_id'] ) );
+    pdl_check( 'response: response body in JSON', ( $decoded2['response'] ?? '' ) === 'FULL RESPONSE TEXT' );
+    pdl_check( 'response: char count is 18', 18 === ( $decoded2['response_chars'] ?? 0 ) );
 }
 
-// Meta/config line (1.2.7): a 5th arg appears as a CONFIG prefix.
+// Meta/config line: a 5th arg appears as config field in JSON.
 presshub_ai_log_prompts( 'draft', 'SYS-M', 'USER-M', 'RESP-M', 'provider=openai model=gpt-4o max_tokens=3000' );
 if ( file_exists( $log_file ) ) {
-    $content = file_get_contents( $log_file );
-    pdl_check( 'meta: CONFIG line present', false !== strpos( $content, 'CONFIG: provider=openai model=gpt-4o max_tokens=3000' ) );
-    pdl_check( 'meta: entry tagged draft', false !== strpos( $content, '[draft] CONFIG: provider=openai' ) );
+    $lines = file( $log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
+    pdl_check( 'meta: 3 lines written', count( $lines ) === 3 );
+    $decoded3 = json_decode( $lines[2] ?? '', true );
+    pdl_check( 'meta: line 3 valid JSON', is_array( $decoded3 ) );
+    pdl_check( 'meta: config field present', ( $decoded3['config'] ?? '' ) === 'provider=openai model=gpt-4o max_tokens=3000' );
+    pdl_check( 'meta: endpoint is draft', ( $decoded3['endpoint'] ?? '' ) === 'draft' );
 }
 
 // Errors are logged too.
 presshub_ai_log_prompts( 'draft', 'SYS-E', 'USER-E', 'ERROR: boom' );
 if ( file_exists( $log_file ) ) {
-    $content = file_get_contents( $log_file );
-    pdl_check( 'response: error string logged', false !== strpos( $content, 'ERROR: boom' ) );
+    $lines = file( $log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
+    $decoded4 = json_decode( $lines[3] ?? '', true );
+    pdl_check( 'response: error string logged in json response', ( $decoded4['response'] ?? '' ) === 'ERROR: boom' );
 }
 
 // Option off → no new entry appended (filter from Case 2 removed first).
@@ -172,6 +183,7 @@ if ( file_exists( $log_file ) ) {
 }
 
 @unlink( $log_file );
+@rmdir( $log_dir . '/presshub-ai' );
 @rmdir( $log_dir );
 unset( $GLOBALS['UPLOAD_DIR'], $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] );
 

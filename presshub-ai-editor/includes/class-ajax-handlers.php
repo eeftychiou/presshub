@@ -2116,7 +2116,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
     }
 
     /**
-     * AJAX endpoint to retrieve diagnostic log entries.
+     * AJAX endpoint to retrieve diagnostic log entries across targets.
+     * Supports target: 'app' | 'prompts' | 'tts'.
+     * Supports lines (default 50), trace_id filter, and search filter.
      */
     public function get_logs(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
@@ -2126,20 +2128,159 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         require_once __DIR__ . '/class-logger.php';
-        $logs = PressHub_AI_Logger::get_recent_logs( 200 );
+
+        $target   = isset( $_POST['target'] ) ? sanitize_key( wp_unslash( $_POST['target'] ) ) : 'app';
+        if ( ! in_array( $target, [ 'app', 'prompts', 'tts' ], true ) ) {
+            $target = 'app';
+        }
+
+        $lines    = isset( $_POST['lines'] ) ? max( 1, min( 500, (int) $_POST['lines'] ) ) : 50;
+        $search   = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
+        $trace_id = isset( $_POST['trace_id'] ) ? sanitize_text_field( wp_unslash( $_POST['trace_id'] ) ) : '';
+
+        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
+        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
+
+        if ( 'prompts' === $target ) {
+            $file = $base_dir . '/presshub-ai-debug.log';
+            $size = file_exists( $file ) ? filesize( $file ) : 0;
+            $raw_lines = ( file_exists( $file ) && is_readable( $file ) )
+                ? file( $file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES )
+                : [];
+            if ( false === $raw_lines ) {
+                $raw_lines = [];
+            }
+
+            $entries = [];
+            foreach ( $raw_lines as $l ) {
+                $trimmed = trim( $l );
+                if ( '' === $trimmed ) {
+                    continue;
+                }
+
+                if ( '' !== $trace_id && false === stripos( $trimmed, $trace_id ) ) {
+                    continue;
+                }
+
+                if ( '' !== $search && false === stripos( $trimmed, $search ) ) {
+                    continue;
+                }
+
+                $decoded = json_decode( $trimmed, true );
+                if ( is_array( $decoded ) ) {
+                    $entries[] = $decoded;
+                } else {
+                    $entries[] = [ 'raw' => $trimmed ];
+                }
+            }
+
+            $slice = array_slice( $entries, -$lines );
+            $plain = implode( "\n", array_map( function ( $e ) {
+                return isset( $e['raw'] ) ? $e['raw'] : wp_json_encode( $e, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+            }, $slice ) );
+
+            wp_send_json_success( [
+                'target'     => 'prompts',
+                'entries'    => $slice,
+                'logs'       => $plain,
+                'file'       => $file,
+                'size_bytes' => $size,
+                'total'      => count( $entries ),
+            ] );
+            return;
+        }
+
+        if ( 'tts' === $target ) {
+            $file = $base_dir . '/presshub-ai-tts-debug.log';
+            $size = file_exists( $file ) ? filesize( $file ) : 0;
+            $raw_lines = ( file_exists( $file ) && is_readable( $file ) )
+                ? file( $file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES )
+                : [];
+            if ( false === $raw_lines ) {
+                $raw_lines = [];
+            }
+
+            $entries = [];
+            foreach ( $raw_lines as $l ) {
+                $trimmed = trim( $l );
+                if ( '' === $trimmed ) {
+                    continue;
+                }
+
+                if ( '' !== $trace_id && false === stripos( $trimmed, $trace_id ) ) {
+                    continue;
+                }
+
+                if ( '' !== $search && false === stripos( $trimmed, $search ) ) {
+                    continue;
+                }
+
+                $json_str = $trimmed;
+                $brace_pos = strpos( $trimmed, '{' );
+                if ( false !== $brace_pos ) {
+                    $json_str = substr( $trimmed, $brace_pos );
+                }
+                $decoded = json_decode( $json_str, true );
+                if ( is_array( $decoded ) ) {
+                    $entries[] = $decoded;
+                } else {
+                    $entries[] = [ 'raw' => $trimmed ];
+                }
+            }
+
+            $slice = array_slice( $entries, -$lines );
+            $plain = implode( "\n", array_map( function ( $e ) {
+                return isset( $e['raw'] ) ? $e['raw'] : wp_json_encode( $e, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+            }, $slice ) );
+
+            wp_send_json_success( [
+                'target'     => 'tts',
+                'entries'    => $slice,
+                'logs'       => $plain,
+                'file'       => $file,
+                'size_bytes' => $size,
+                'total'      => count( $entries ),
+            ] );
+            return;
+        }
+
+        // Default: 'app'
         $file = PressHub_AI_Logger::get_log_file_path();
         $size = file_exists( $file ) ? filesize( $file ) : 0;
+        $raw_lines = ( file_exists( $file ) && is_readable( $file ) )
+            ? file( $file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES )
+            : [];
+        if ( false === $raw_lines ) {
+            $raw_lines = [];
+        }
+
+        $filtered = [];
+        foreach ( $raw_lines as $l ) {
+            if ( '' !== $trace_id && false === stripos( $l, $trace_id ) ) {
+                continue;
+            }
+            if ( '' !== $search && false === stripos( $l, $search ) ) {
+                continue;
+            }
+            $filtered[] = $l;
+        }
+
+        $slice = array_slice( $filtered, -$lines );
 
         wp_send_json_success( [
-            'logs'       => $logs,
+            'target'     => 'app',
+            'logs'       => implode( "\n", $slice ),
+            'entries'    => $slice,
             'file'       => $file,
             'size_bytes' => $size,
             'level'      => PressHub_AI_Logger::get_configured_level(),
+            'total'      => count( $filtered ),
         ] );
     }
 
     /**
-     * AJAX endpoint to clear the diagnostic log file.
+     * AJAX endpoint to clear diagnostic log files.
+     * Supports target: 'app' | 'prompts' | 'tts' | 'all'.
      */
     public function clear_logs(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
@@ -2149,11 +2290,40 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         require_once __DIR__ . '/class-logger.php';
-        PressHub_AI_Logger::clear_log();
-        PressHub_AI_Logger::info( 'Diagnostic log file cleared by user ' . get_current_user_id() );
+
+        $target   = isset( $_POST['target'] ) ? sanitize_key( wp_unslash( $_POST['target'] ) ) : 'app';
+        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
+        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
+
+        $cleared = [];
+
+        if ( in_array( $target, [ 'app', 'all' ], true ) ) {
+            PressHub_AI_Logger::clear_log();
+            $cleared[] = 'app';
+        }
+
+        if ( in_array( $target, [ 'prompts', 'all' ], true ) ) {
+            $f = $base_dir . '/presshub-ai-debug.log';
+            if ( file_exists( $f ) ) {
+                @file_put_contents( $f, '' );
+            }
+            $cleared[] = 'prompts';
+        }
+
+        if ( in_array( $target, [ 'tts', 'all' ], true ) ) {
+            $f = $base_dir . '/presshub-ai-tts-debug.log';
+            if ( file_exists( $f ) ) {
+                @file_put_contents( $f, '' );
+            }
+            $cleared[] = 'tts';
+        }
+
+        PressHub_AI_Logger::info( sprintf( 'Diagnostic logs (%s) cleared by user %d', implode( ', ', $cleared ), get_current_user_id() ) );
 
         wp_send_json_success( [
-            'message' => __( 'Log file cleared successfully.', 'presshub-ai-editor' ),
+            'target'  => $target,
+            'cleared' => $cleared,
+            'message' => __( 'Logs cleared successfully.', 'presshub-ai-editor' ),
         ] );
     }
     /**

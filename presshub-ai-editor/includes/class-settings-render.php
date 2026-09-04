@@ -517,15 +517,56 @@ class PressHub_AI_Settings_Render {
                     <div id="presshub-ai-test-result" style="margin-top: 15px; font-weight: bold;"></div>
 
                     <hr style="margin: 25px 0;">
-                    <h2><?php echo __( 'Internal Diagnostic Log Viewer', 'presshub-ai-editor' ); ?></h2>
-                    <p><?php echo __( 'View recent internal diagnostic logs for debugging scraping, API calls, prompt hydration, and background jobs.', 'presshub-ai-editor' ); ?></p>
-                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
-                        <button type="button" id="presshub-ai-refresh-logs" class="button button-secondary"><?php echo __( 'Refresh Logs', 'presshub-ai-editor' ); ?></button>
-                        <button type="button" id="presshub-ai-clear-logs" class="button button-secondary"><?php echo __( 'Clear Logs', 'presshub-ai-editor' ); ?></button>
-                        <span id="presshub-ai-log-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
-                        <span id="presshub-ai-log-status" style="margin-left: 10px; color: #666;"></span>
+                    <h2><?php echo esc_html__( 'Diagnostic Inspector', 'presshub-ai-editor' ); ?></h2>
+                    <p><?php echo esc_html__( 'Inspect internal application logs, raw LLM prompt/response JSON lines, and TTS audio synthesis payloads with trace correlation.', 'presshub-ai-editor' ); ?></p>
+                    
+                    <div class="presshub-inspector-toolbar" style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; background: #f6f7f7; padding: 10px; border-radius: 4px; border: 1px solid #dcdcde;">
+                        <div>
+                            <label for="presshub-ai-log-target" style="font-weight: 600; margin-right: 4px;"><?php esc_html_e( 'Target:', 'presshub-ai-editor' ); ?></label>
+                            <select id="presshub-ai-log-target" class="presshub-no-dirty">
+                                <option value="app"><?php esc_html_e( 'Application Log (presshub-debug.log)', 'presshub-ai-editor' ); ?></option>
+                                <option value="prompts"><?php esc_html_e( 'LLM Prompts & Responses (presshub-ai-debug.log)', 'presshub-ai-editor' ); ?></option>
+                                <option value="tts"><?php esc_html_e( 'TTS Audio Payloads (presshub-ai-tts-debug.log)', 'presshub-ai-editor' ); ?></option>
+                            </select>
+                        </div>
+
+                        <div style="flex-grow: 1; min-width: 200px;">
+                            <input type="text" id="presshub-ai-log-search" class="presshub-no-dirty regular-text" style="width: 100%;" placeholder="<?php esc_attr_e( 'Filter by search term or Trace ID (e.g. tr_...)...', 'presshub-ai-editor' ); ?>" />
+                        </div>
+
+                        <div>
+                            <select id="presshub-ai-log-lines" class="presshub-no-dirty" style="width: 90px;">
+                                <option value="25"><?php esc_html_e( '25 lines', 'presshub-ai-editor' ); ?></option>
+                                <option value="50" selected="selected"><?php esc_html_e( '50 lines', 'presshub-ai-editor' ); ?></option>
+                                <option value="100"><?php esc_html_e( '100 lines', 'presshub-ai-editor' ); ?></option>
+                                <option value="200"><?php esc_html_e( '200 lines', 'presshub-ai-editor' ); ?></option>
+                            </select>
+                        </div>
+
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <button type="button" id="presshub-ai-refresh-logs" class="button button-secondary">
+                                <span class="dashicons dashicons-update" style="vertical-align: text-top; font-size: 16px; width: 16px; height: 16px;"></span>
+                                <?php esc_html_e( 'Refresh', 'presshub-ai-editor' ); ?>
+                            </button>
+                            <button type="button" id="presshub-ai-clear-logs" class="button button-secondary" style="color: #b32d2e;">
+                                <?php esc_html_e( 'Clear Log', 'presshub-ai-editor' ); ?>
+                            </button>
+                            <select id="presshub-ai-clear-target" class="presshub-no-dirty" style="font-size: 12px; height: 30px;">
+                                <option value="active"><?php esc_html_e( 'Active Target', 'presshub-ai-editor' ); ?></option>
+                                <option value="all"><?php esc_html_e( 'All 3 Logs', 'presshub-ai-editor' ); ?></option>
+                            </select>
+                            <span id="presshub-ai-log-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
+                        </div>
                     </div>
-                    <textarea id="presshub-ai-log-viewer" rows="14" class="large-text code" readonly="readonly" style="font-size: 12px; background: #1e1e1e; color: #d4d4d4; font-family: monospace;" placeholder="<?php echo esc_attr__( 'Click "Refresh Logs" to load diagnostic entries...', 'presshub-ai-editor' ); ?>"></textarea>
+
+                    <div id="presshub-ai-log-meta-bar" style="margin-bottom: 8px; font-size: 12px; color: #50575e; display: flex; justify-content: space-between; align-items: center;">
+                        <span id="presshub-ai-log-status"><?php esc_html_e( 'Click "Refresh" to load diagnostic entries...', 'presshub-ai-editor' ); ?></span>
+                        <span id="presshub-ai-log-file-info" style="font-family: monospace;"></span>
+                    </div>
+
+                    <textarea id="presshub-ai-log-viewer" rows="14" class="large-text code presshub-no-dirty" readonly="readonly" style="font-size: 12px; background: #1e1e1e; color: #d4d4d4; font-family: monospace;" placeholder="<?php echo esc_attr__( 'Click "Refresh" to load diagnostic entries...', 'presshub-ai-editor' ); ?>"></textarea>
+                    
+                    <div id="presshub-ai-log-cards" class="presshub-log-cards-container presshub-no-dirty" style="display: none; max-height: 520px; overflow-y: auto; border: 1px solid #c3c4c7; background: #f0f0f1; padding: 10px; border-radius: 4px;"></div>
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="advanced"><?php echo esc_html__( 'Save Advanced Settings', 'presshub-ai-editor' ); ?></button>
@@ -1233,7 +1274,7 @@ class PressHub_AI_Settings_Render {
 
     /**
      * 1.2.5: prompt inspection toggle. Writes the exact SYSTEM and USER
-     * prompts to wp-content/uploads/presshub-ai-debug.log (findable via
+     * prompts to wp-content/uploads/presshub-ai/presshub-ai-debug.log (findable via
      * the host file manager — no wp-config or PHP error log hunting).
      */
     public function render_debug_prompts_field() {
@@ -1241,7 +1282,7 @@ class PressHub_AI_Settings_Render {
         ?>
         <label for="presshub_ai_debug_prompts">
             <input type="checkbox" name="presshub_ai_debug_prompts" id="presshub_ai_debug_prompts" value="1" <?php echo $enabled ? 'checked="checked"' : ''; ?> />
-            <?php echo esc_html__( 'Append every SYSTEM and USER prompt to wp-content/uploads/presshub-ai-debug.log (debugging only — disable in production).', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Append every SYSTEM and USER prompt to wp-content/uploads/presshub-ai/presshub-ai-debug.log (debugging only — disable in production).', 'presshub-ai-editor' ); ?>
         </label>
         <?php
     }
@@ -1924,7 +1965,7 @@ class PressHub_AI_Settings_Render {
     /**
      * Issue #80 — Settings-First: granular TTS payload debug toggle.
      * When enabled, every Gemini TTS API call appends a JSON entry to
-     * wp-content/uploads/presshub-ai-tts-debug.log via the
+     * wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
      * `presshub_ai_tts_payload_log` action, so operators can diagnose
      * voice drift and unexpected voice allocation without code changes.
      * Default off so production log size is preserved.
@@ -1936,7 +1977,7 @@ class PressHub_AI_Settings_Render {
         <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
         <label>
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
-            <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to wp-content/uploads/presshub-ai-tts-debug.log.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
             <?php echo esc_html__( 'Use only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' ); ?>

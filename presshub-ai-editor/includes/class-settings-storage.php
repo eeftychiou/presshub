@@ -81,7 +81,7 @@ class PressHub_AI_Settings_Storage {
         ] );
 
         // Prompt inspection toggle (1.2.5): appends the exact SYSTEM/USER
-        // prompts to wp-content/uploads/presshub-ai-debug.log.
+        // prompts to wp-content/uploads/presshub-ai/presshub-ai-debug.log.
         register_setting( 'presshub_ai_options', 'presshub_ai_debug_prompts', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_fetch_urls' ],
             'type'              => 'boolean',
@@ -199,7 +199,7 @@ class PressHub_AI_Settings_Storage {
         ] );
         // Issue #80 — Settings-First: TTS payload debug log toggle. When enabled
         // every Gemini TTS API call appends detailed request/response JSON
-        // entries to wp-content/uploads/presshub-ai-tts-debug.log via the
+        // entries to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
         // `presshub_ai_tts_payload_log` action, so operators can diagnose
         // voice drift or unexpected voice allocation without touching code.
         register_setting( 'presshub_ai_options', 'presshub_ai_log_tts_payloads', [
@@ -1602,7 +1602,7 @@ class PressHub_AI_Settings_Storage {
      * toggle. Issue #80 — Settings-First: when enabled, every Gemini TTS API
      * call appends a detailed JSON entry (endpoint URL, masked headers,
      * speaker-voice mapping, prompt text, full request body, response
-     * metadata) to wp-content/uploads/presshub-ai-tts-debug.log via the
+     * metadata) to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
      * `presshub_ai_tts_payload_log` action. Defaults to false so production
      * log size is preserved.
      *
@@ -1610,6 +1610,15 @@ class PressHub_AI_Settings_Storage {
      */
     public static function get_log_tts_payloads(): bool {
         return '1' === (string) get_option( 'presshub_ai_log_tts_payloads', '0' );
+    }
+
+    /**
+     * Helper to retrieve the operator-configurable "Log AI prompts" toggle.
+     *
+     * @return bool True when debug prompt logging is enabled.
+     */
+    public static function get_debug_prompts(): bool {
+        return '1' === (string) get_option( 'presshub_ai_debug_prompts', '0' );
     }
 
     /**

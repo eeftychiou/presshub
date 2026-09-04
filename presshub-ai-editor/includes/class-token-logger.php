@@ -106,6 +106,13 @@ class PressHub_AI_Token_Logger {
             $user_id = (int) get_current_user_id();
         }
 
+        if ( empty( $metadata['trace_id'] ) && class_exists( 'PressHub_AI_Trace' ) ) {
+            $trace_id = PressHub_AI_Trace::get_current_trace_id();
+            if ( ! empty( $trace_id ) ) {
+                $metadata['trace_id'] = $trace_id;
+            }
+        }
+
         $total_tokens = max( 0, $prompt_tokens + $completion_tokens );
 
         return self::insert_row( [
@@ -122,6 +129,35 @@ class PressHub_AI_Token_Logger {
             'error_message'     => $error ? sanitize_textarea_field( $error ) : null,
             'metadata'          => ! empty( $metadata ) ? wp_json_encode( $metadata ) : null,
         ] );
+    }
+
+    /**
+     * Alias for log_llm_request().
+     */
+    public static function log_request(
+        string $action,
+        string $provider,
+        string $model,
+        int $prompt_tokens,
+        int $completion_tokens,
+        int $duration_ms,
+        string $status = 'success',
+        ?string $error = null,
+        array $metadata = [],
+        int $user_id = 0
+    ): ?int {
+        return self::log_llm_request(
+            $action,
+            $provider,
+            $model,
+            $prompt_tokens,
+            $completion_tokens,
+            $duration_ms,
+            $status,
+            $error,
+            $metadata,
+            $user_id
+        );
     }
 
     /**
@@ -190,6 +226,13 @@ class PressHub_AI_Token_Logger {
     ): ?int {
         if ( 0 === $user_id && function_exists( 'get_current_user_id' ) ) {
             $user_id = (int) get_current_user_id();
+        }
+
+        if ( empty( $metadata['trace_id'] ) && class_exists( 'PressHub_AI_Trace' ) ) {
+            $trace_id = PressHub_AI_Trace::get_current_trace_id();
+            if ( ! empty( $trace_id ) ) {
+                $metadata['trace_id'] = $trace_id;
+            }
         }
 
         return self::insert_row( [
