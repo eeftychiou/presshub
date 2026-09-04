@@ -340,6 +340,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_log_tts_payloads"><?php echo __( 'Log TTS Payload Details', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_log_tts_payloads_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo __( 'Speaking Delivery Style (logosAI)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_style_field(); ?>
@@ -374,6 +380,12 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_briefing_voice_speed"><?php echo __( 'Speaking Rate / Speed', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_speed_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_voice_pitch"><?php echo __( 'Voice Pitch Tuning', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_voice_pitch_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1915,6 +1927,7 @@ class PressHub_AI_Settings_Render {
         $option = 'presshub_ai_log_tts_payloads';
         $value  = PressHub_AI_Settings_Storage::get_log_tts_payloads();
         ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
         <label>
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
             <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to wp-content/uploads/presshub-ai-tts-debug.log.', 'presshub-ai-editor' ); ?>

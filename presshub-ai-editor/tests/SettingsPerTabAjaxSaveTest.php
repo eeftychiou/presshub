@@ -234,6 +234,8 @@ class SettingsPerTabAjaxSaveTest
             'presshub_ai_briefing_host_male'            => 'Κώστας',
             'presshub_ai_briefing_podcast_tts_provider' => 'gemini-speech',
             'presshub_ai_briefing_voice_speed'          => '1.15',
+            'presshub_ai_briefing_voice_pitch'          => '1.5',
+            'presshub_ai_log_tts_payloads'              => '1',
         ];
 
         $_POST = [
@@ -257,6 +259,12 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( (float) get_option( 'presshub_ai_briefing_voice_speed' ) !== 1.15 ) {
             $failures[] = 'presshub_ai_briefing_voice_speed not saved correctly; got: ' . var_export( get_option( 'presshub_ai_briefing_voice_speed' ), true );
+        }
+        if ( (float) get_option( 'presshub_ai_briefing_voice_pitch' ) !== 1.5 ) {
+            $failures[] = 'presshub_ai_briefing_voice_pitch not saved correctly; got: ' . var_export( get_option( 'presshub_ai_briefing_voice_pitch' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_log_tts_payloads' ) !== 1 ) {
+            $failures[] = 'presshub_ai_log_tts_payloads not saved correctly; got: ' . var_export( get_option( 'presshub_ai_log_tts_payloads' ), true );
         }
 
         // -------------------------------------------------------------
