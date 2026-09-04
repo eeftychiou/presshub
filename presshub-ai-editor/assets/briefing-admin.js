@@ -649,10 +649,17 @@
             box.find('.presshub-status-row').slice(1).remove();
             // Voice chips row
             var voiceRow = $('<div class="presshub-status-row"></div>');
+            var hostCount = parseInt(audio.host_count, 10) || 2;
             var voices = [];
-            if (audio.female_voice) voices.push('🎙 ' + audio.female_voice + ' (Female)');
-            if (audio.male_voice)   voices.push('🎙 ' + audio.male_voice + ' (Male)');
-            if (audio.tertiary_voice) voices.push('🎙 ' + audio.tertiary_voice + ' (Tertiary)');
+            if (hostCount >= 1 && audio.female_voice) {
+                voices.push('🎙 ' + audio.female_voice + ' (Presenter 1)');
+            }
+            if (hostCount >= 2 && audio.male_voice) {
+                voices.push('🎙 ' + audio.male_voice + ' (Presenter 2)');
+            }
+            if (hostCount >= 3 && audio.tertiary_voice) {
+                voices.push('🎙 ' + audio.tertiary_voice + ' (Presenter 3)');
+            }
             if (voices.length) {
                 voiceRow.css('margin-top', '4px');
                 for (var i = 0; i < voices.length; i++) {

@@ -1326,6 +1326,7 @@ class PressHub_AI_Briefing_Admin {
                         $au_sample_rate = (int) ( $au['sample_rate'] ?? 0 );
                         $au_format      = strtoupper( (string) ( $au['format'] ?? '' ) );
                         $au_engine      = (string) ( $au['engine'] ?? '' );
+                        $au_host_count  = (int) ( $au['host_count'] ?? ( $status['audio_meta']['host_count'] ?? 2 ) );
                         $au_fem         = (string) ( $au['female_voice'] ?? '' );
                         $au_mal         = (string) ( $au['male_voice'] ?? '' );
                         $au_ter         = (string) ( $au['tertiary_voice'] ?? '' );
@@ -1356,14 +1357,14 @@ class PressHub_AI_Briefing_Admin {
                             ? sprintf( 'Topic-Stitched (%d topics)', $au_topics )
                             : 'Single-Pass';
                         $voice_chips = [];
-                        if ( '' !== $au_fem ) {
-                            $voice_chips[] = sprintf( '%s (Female)', $au_fem );
+                        if ( $au_host_count >= 1 && '' !== $au_fem ) {
+                            $voice_chips[] = sprintf( '%s (Presenter 1)', $au_fem );
                         }
-                        if ( '' !== $au_mal ) {
-                            $voice_chips[] = sprintf( '%s (Male)', $au_mal );
+                        if ( $au_host_count >= 2 && '' !== $au_mal ) {
+                            $voice_chips[] = sprintf( '%s (Presenter 2)', $au_mal );
                         }
-                        if ( '' !== $au_ter ) {
-                            $voice_chips[] = sprintf( '%s (Tertiary)', $au_ter );
+                        if ( $au_host_count >= 3 && '' !== $au_ter ) {
+                            $voice_chips[] = sprintf( '%s (Presenter 3)', $au_ter );
                         }
                         ?>
                         <div class="presshub-stage-status-box" id="stage-audio-status-box" data-stage="audio">

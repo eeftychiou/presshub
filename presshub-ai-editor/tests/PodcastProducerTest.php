@@ -566,6 +566,23 @@ SCRIPT;
 $no_tertiary_turns = $producer->parse_script_turns( $no_tertiary_script, 'Μαρία', 'Νίκος', '' );
 pp_check( 'issue_100: empty tertiary_host → [SPEAKER_3]: ignored; only 1 turn', count( $no_tertiary_turns ) === 1 );
 
+// Test 11h: [PRESENTER_N]: alias and default host names (Presenter 1, 2, 3)
+$presenter_alias_script = <<<'SCRIPT'
+[PRESENTER_1]: Lead presenter begins.
+[PRESENTER_2]: Second presenter continues.
+[PRESENTER_3]: Third presenter concludes.
+SCRIPT;
+$presenter_turns = $producer->parse_script_turns( $presenter_alias_script );
+pp_check( 'presenter_tags: [PRESENTER_N]: alias returns 3 turns with default host names', count( $presenter_turns ) === 3 );
+pp_check( 'presenter_tags: turn 0 is female Presenter 1', ( $presenter_turns[0]['speaker'] ?? '' ) === 'female' && ( $presenter_turns[0]['speaker_name'] ?? '' ) === 'Presenter 1' );
+pp_check( 'presenter_tags: turn 1 is male Presenter 2', ( $presenter_turns[1]['speaker'] ?? '' ) === 'male' && ( $presenter_turns[1]['speaker_name'] ?? '' ) === 'Presenter 2' );
+pp_check( 'presenter_tags: turn 2 is tertiary Presenter 3', ( $presenter_turns[2]['speaker'] ?? '' ) === 'tertiary' && ( $presenter_turns[2]['speaker_name'] ?? '' ) === 'Presenter 3' );
+
+// Test 11i: Legacy Greek names with default Presenter host names
+$greek_with_defaults = "[Μαρία]: Καλημέρα σας!\n[Νίκος]: Καλημέρα σε όλους!";
+$greek_def_turns = $producer->parse_script_turns( $greek_with_defaults );
+pp_check( 'presenter_tags: Greek tags match with default Presenter names', count( $greek_def_turns ) === 2 && ( $greek_def_turns[0]['speaker'] ?? '' ) === 'female' && ( $greek_def_turns[1]['speaker'] ?? '' ) === 'male' );
+
 // =========================================================================
 // 12. Issue #108 — Empty prompt validation in build_dialogue_prompt()
 // =========================================================================

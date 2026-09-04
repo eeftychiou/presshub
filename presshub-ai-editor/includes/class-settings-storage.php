@@ -1301,14 +1301,14 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
-     * Helper to retrieve configured tertiary host name (default 'Κώστας').
+     * Helper to retrieve configured tertiary host name (default 'Presenter 3').
      *
      * @return string Third host name.
      */
     public static function get_briefing_host_tertiary(): string {
-        $host = (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Κώστας' );
+        $host = (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Presenter 3' );
         $host = trim( $host );
-        return ! empty( $host ) ? $host : 'Κώστας';
+        return ! empty( $host ) ? $host : 'Presenter 3';
     }
 
     /**
@@ -1381,6 +1381,33 @@ class PressHub_AI_Settings_Storage {
         $voice = (string) get_option( 'presshub_ai_briefing_voice_tertiary', $default );
         $allowed = self::voice_catalog_allow_list();
         return in_array( $voice, $allowed, true ) ? $voice : $default;
+    }
+
+    /**
+     * Helper to retrieve configured Presenter 1 voice persona (alias for get_voice_female).
+     *
+     * @return string Presenter 1 voice identifier.
+     */
+    public static function get_voice_presenter_1(): string {
+        return self::get_voice_female();
+    }
+
+    /**
+     * Helper to retrieve configured Presenter 2 voice persona (alias for get_voice_male).
+     *
+     * @return string Presenter 2 voice identifier.
+     */
+    public static function get_voice_presenter_2(): string {
+        return self::get_voice_male();
+    }
+
+    /**
+     * Helper to retrieve configured Presenter 3 voice persona (alias for get_voice_tertiary).
+     *
+     * @return string Presenter 3 voice identifier.
+     */
+    public static function get_voice_presenter_3(): string {
+        return self::get_voice_tertiary();
     }
 
     /**
