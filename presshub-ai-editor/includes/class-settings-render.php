@@ -1756,6 +1756,7 @@ class PressHub_AI_Settings_Render {
         $value  = PressHub_AI_Settings_Storage::get_briefing_schedule_enabled();
         ?>
         <label>
+            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
             <?php echo __( 'Enable automated morning news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
         </label>
@@ -2003,6 +2004,7 @@ class PressHub_AI_Settings_Render {
         $checked = PressHub_AI_Settings_Storage::get_briefing_audio_split_by_topic();
         ?>
         <label>
+            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
             <?php echo esc_html__( 'Generate audio separately for each topic and stitch seamlessly (Recommended)', 'presshub-ai-editor' ); ?>
         </label>

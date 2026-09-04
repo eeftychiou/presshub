@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Test suite for Issue #15: Per-Tab AJAX Save for PressHub AI Settings.
  *
@@ -180,6 +180,47 @@ class SettingsPerTabAjaxSaveTest
         }
 
         // -------------------------------------------------------------
+        // Case 5b: Daily Briefing Checkbox / Toggle Handling & Isolation (Issue #107)
+        // -------------------------------------------------------------
+        self::reset_env();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_schedule_enabled'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_audio_split_by_topic'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_log_tts_payloads'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_copilot_model'] = 'gpt-4o-briefing-isolation';
+
+        // Save briefing tab without briefing checkboxes (all unchecked)
+        $briefing_payload = [
+            'presshub_ai_briefing_text_provider' => 'gemini',
+        ];
+        $_POST = [
+            'tab'         => 'briefing',
+            'nonce'       => 'valid_nonce',
+            'payload_b64' => base64_encode( json_encode( $briefing_payload ) ),
+        ];
+
+        try {
+            $handlers->save_settings_section();
+        } catch ( Throwable $e ) {}
+
+        if ( (int) get_option( 'presshub_ai_briefing_schedule_enabled' ) !== 0 ) {
+            $failures[] = 'Unchecked checkbox presshub_ai_briefing_schedule_enabled in briefing tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_briefing_schedule_enabled' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_briefing_audio_split_by_topic' ) !== 0 ) {
+            $failures[] = 'Unchecked checkbox presshub_ai_briefing_audio_split_by_topic in briefing tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_briefing_audio_split_by_topic' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_log_tts_payloads' ) !== 0 ) {
+            $failures[] = 'Unchecked checkbox presshub_ai_log_tts_payloads in briefing tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_log_tts_payloads' ), true );
+        }
+        // Assert section isolation: ensure other section options remain untouched
+        if ( (int) get_option( 'presshub_ai_rate_limit_enabled' ) !== 1 ) {
+            $failures[] = 'Isolation failed: presshub_ai_rate_limit_enabled was altered during briefing tab save.';
+        }
+        if ( get_option( 'presshub_ai_copilot_model' ) !== 'gpt-4o-briefing-isolation' ) {
+            $failures[] = 'Isolation failed: presshub_ai_copilot_model was altered during briefing tab save.';
+        }
+
+        // -------------------------------------------------------------
         // Case 6: Daily Briefing Hub Section Save & JSON Payload support
         // -------------------------------------------------------------
         self::reset_env();
@@ -311,6 +352,14 @@ class SettingsPerTabAjaxSaveTest
         // Verify fallback submit wrap is also present for non-JS
         if ( false === strpos( $html, 'presshub-settings-submit-wrap' ) ) {
             $failures[] = 'Rendered settings page missing fallback presshub-settings-submit-wrap.';
+        }
+
+        // Verify hidden input fallbacks for briefing checkboxes (Issue #107)
+        if ( false === strpos( $html, 'name="presshub_ai_briefing_schedule_enabled" value="0"' ) ) {
+            $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_briefing_schedule_enabled.';
+        }
+        if ( false === strpos( $html, 'name="presshub_ai_briefing_audio_split_by_topic" value="0"' ) ) {
+            $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_briefing_audio_split_by_topic.';
         }
 
         // -------------------------------------------------------------
