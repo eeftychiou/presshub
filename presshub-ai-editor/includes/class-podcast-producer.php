@@ -4,8 +4,9 @@
  *
  * Coordinates prompt composition with placeholder hydration ({date}, {articles_context},
  * {sources_list}, {duration_text}, {word_budget}, {host1_name}, {host2_name}), duration-based
- * word budget tuning, preset resolution, AI generation, strict dual-speaker dialogue parsing
- * ([Μαρία]: / [Νίκος]:), and daily briefing script persistence.
+ * word budget tuning, preset resolution, AI generation, strict dialogue parsing for the
+ * generic [SPEAKER_N]: tags the system prompt contract requires (with legacy Greek-name
+ * [Μαρία]: / [Νίκος]: / [Κώστας]: fallbacks), and daily briefing script persistence.
  *
  * @package PressHub_AI_Editor
  * @since 1.3.0
@@ -579,9 +580,14 @@ class PressHub_AI_Podcast_Producer {
     }
 
     /**
-     * Parse raw Greek podcast script into structured speaker turns.
+     * Parse raw podcast script into structured speaker turns.
      *
-     * Handles formats such as:
+     * The system-prompt contract requires the LLM to emit lines in the generic
+     * `[SPEAKER_N]:` form (Issue #90 — `[SPEAKER_1]:`, `[SPEAKER_2]:`, `[SPEAKER_3]:`,
+     * also `[HOST_N]:`). Those tags are the canonical, first-class input.
+     *
+     * Legacy Greek-name formats remain supported for back-compat with operators
+     * who customized earlier prompts:
      *   - [Μαρία]: Καλημέρα...
      *   - **[Μαρία]:** Καλημέρα...
      *   - **[Νίκος]**: Καλημέρα...
@@ -629,11 +635,35 @@ class PressHub_AI_Podcast_Producer {
                 // Clean speaker tag of markdown symbols or brackets
                 $clean_speaker = trim( preg_replace( '/[^\p{L}\p{N}\s]+/u', '', $raw_speaker_tag ) );
 
-                // Determine speaker identity
+                // First-class canonical format: the system prompt (Issue #90) explicitly
+                // tells the LLM to emit [SPEAKER_1]: / [SPEAKER_2]: / [SPEAKER_3]: (also
+                // [HOST_N]: as a tolerated alias) and forbids any other tag. We extract the
+                // numeric index once and bucket by N, falling through to the legacy
+                // Greek-name / English-alias clauses only if no [SPEAKER_N]/[HOST_N] match.
+                $speaker_idx = null;
+                if ( preg_match( '/^(?:speaker|host)[_\s]?([123])$/iu', $clean_speaker, $idx_match ) ) {
+                    $speaker_idx = (int) $idx_match[1];
+                }
+
+                // Determine speaker identity.
                 $matched_type = null;
                 $matched_name = null;
 
-                if ( false !== mb_stripos( $clean_speaker, $female_host ) || false !== stripos( $clean_speaker, 'maria' ) || false !== mb_stripos( $clean_speaker, 'μαρία' ) || false !== stripos( $clean_speaker, 'female' ) || false !== stripos( $clean_speaker, 'host1' ) || false !== stripos( $clean_speaker, 'host 1' ) ) {
+                if ( 1 === $speaker_idx ) {
+                    // [SPEAKER_1]: or [HOST_1]: -> female lead.
+                    $matched_type = 'female';
+                    $matched_name = $female_host;
+                } elseif ( 2 === $speaker_idx ) {
+                    // [SPEAKER_2]: or [HOST_2]: -> male secondary.
+                    $matched_type = 'male';
+                    $matched_name = $male_host;
+                } elseif ( 3 === $speaker_idx && ! empty( $tertiary_host ) ) {
+                    // [SPEAKER_3]: or [HOST_3]: -> tertiary roundtable analyst.
+                    $matched_type = 'tertiary';
+                    $matched_name = $tertiary_host;
+                } elseif ( false !== mb_stripos( $clean_speaker, $female_host ) || false !== stripos( $clean_speaker, 'maria' ) || false !== stripos( $clean_speaker, 'μαρία' ) || false !== stripos( $clean_speaker, 'female' ) || false !== stripos( $clean_speaker, 'host1' ) || false !== stripos( $clean_speaker, 'host 1' ) ) {
+                    // Legacy fallback: Greek-name / English-alias recognition for back-compat
+                    // with operators who customized earlier prompts before Issue #90.
                     $matched_type = 'female';
                     $matched_name = $female_host;
                 } elseif ( ! empty( $tertiary_host ) && ( false !== mb_stripos( $clean_speaker, $tertiary_host ) || false !== stripos( $clean_speaker, 'host3' ) || false !== stripos( $clean_speaker, 'host 3' ) || false !== stripos( $clean_speaker, 'tertiary' ) || false !== mb_stripos( $clean_speaker, 'κώστας' ) ) ) {
