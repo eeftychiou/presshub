@@ -412,22 +412,42 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_podcast_preset_field(); ?>
                                 </td>
                             </tr>
-                            <tr id="presshub-prompt-1-row">
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_prompt_1"><?php echo __( 'Podcast System Prompt (1 Host)', 'presshub-ai-editor' ); ?></label></th>
+                        </tbody>
+                    </table>
+
+                    <hr style="margin: 25px 0;">
+                    <h3><?php echo esc_html__( '3. Podcast Dialogue Styles & Prompt Studio', 'presshub-ai-editor' ); ?></h3>
+                    <p class="description"><?php echo esc_html__( 'Select the dialogue style template that powers the podcast scriptwriter and fine-tune prompt templates for each style and presenter count (e.g. enforcing acronym pronunciation guidelines or editorial pacing).', 'presshub-ai-editor' ); ?></p>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_style"><?php echo esc_html__( 'Active Dialogue Style', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $this->render_briefing_podcast_prompt_1_field(); ?>
+                                    <?php $this->render_briefing_podcast_style_field(); ?>
                                 </td>
                             </tr>
-                            <tr id="presshub-prompt-2-row">
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_prompt_2"><?php echo __( 'Podcast System Prompt (2 Hosts)', 'presshub-ai-editor' ); ?></label></th>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'Default Greek Chat Overrides', 'presshub-ai-editor' ); ?></th>
                                 <td>
-                                    <?php $this->render_briefing_podcast_prompt_2_field(); ?>
+                                    <?php $this->render_briefing_podcast_prompts_default_greek_chat_field(); ?>
                                 </td>
                             </tr>
-                            <tr id="presshub-prompt-3-row">
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_prompt_3"><?php echo __( 'Podcast System Prompt (3 Hosts)', 'presshub-ai-editor' ); ?></label></th>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'BBC Standards Overrides', 'presshub-ai-editor' ); ?></th>
                                 <td>
-                                    <?php $this->render_briefing_podcast_prompt_3_field(); ?>
+                                    <?php $this->render_briefing_podcast_prompts_bbc_broadcasting_standards_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'Conversational Reporting Overrides', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_prompts_conversational_news_reporting_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'Effective Prompt Preview', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_live_preview_field(); ?>
                                 </td>
                             </tr>
                         </tbody>

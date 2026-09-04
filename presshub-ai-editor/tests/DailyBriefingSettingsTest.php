@@ -643,6 +643,46 @@ class DailyBriefingSettingsTest
             $failures[] = 'render_curation_max_chars_per_article_field should render value="2500".';
         }
 
+        // --- Case 15c: Issue #108 — Podcast Dialogue Styles & Prompt Studio (Options map & Render) ---
+        self::reset_world();
+        $briefing_map = PressHub_AI_Settings_Storage::get_section_options_map( 'briefing' );
+        if ( ! isset( $briefing_map['presshub_ai_briefing_podcast_style'] ) || ! is_callable( $briefing_map['presshub_ai_briefing_podcast_style'] ) ) {
+            $failures[] = 'presshub_ai_briefing_podcast_style must be present and callable in briefing section options map.';
+        }
+
+        $styles = [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ];
+        foreach ( $styles as $style ) {
+            foreach ( [ 1, 2, 3 ] as $host_count_n ) {
+                $prompt_key = 'presshub_ai_briefing_podcast_prompt_' . $host_count_n . '_' . $style;
+                if ( ! isset( $briefing_map[ $prompt_key ] ) || ! is_callable( $briefing_map[ $prompt_key ] ) ) {
+                    $failures[] = "{$prompt_key} must be present and callable in briefing section options map.";
+                }
+            }
+        }
+
+        // Render page test: verify Section 3 renders podcast style selector and obsolete prompt-1-row is removed
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $renderer = new PressHub_AI_Settings_Render();
+        ob_start();
+        $renderer->render_settings_page();
+        $page_html = ob_get_clean();
+
+        if ( false === strpos( $page_html, 'name="presshub_ai_briefing_podcast_style"' ) ) {
+            $failures[] = 'render_settings_page should render briefing podcast style selector.';
+        }
+        if ( false !== strpos( $page_html, 'id="presshub-prompt-1-row"' ) ) {
+            $failures[] = 'render_settings_page must not render obsolete id="presshub-prompt-1-row".';
+        }
+        if ( false !== strpos( $page_html, 'id="presshub-prompt-2-row"' ) ) {
+            $failures[] = 'render_settings_page must not render obsolete id="presshub-prompt-2-row".';
+        }
+        if ( false !== strpos( $page_html, 'id="presshub-prompt-3-row"' ) ) {
+            $failures[] = 'render_settings_page must not render obsolete id="presshub-prompt-3-row".';
+        }
+        if ( false === strpos( $page_html, '3. Podcast Dialogue Styles' ) ) {
+            $failures[] = 'render_settings_page should render Section 3: Podcast Dialogue Styles & Prompt Studio.';
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "DailyBriefingSettingsTest: FAIL\n" );
             foreach ( $failures as $f ) {

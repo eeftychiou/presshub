@@ -2965,17 +2965,11 @@ jQuery(document).ready(function($) {
         var count = parseInt($('#presshub_ai_briefing_host_count').val(), 10) || 2;
         if (count === 1) {
             $('#presshub-host-male-row, #presshub-voice-male-row, #presshub-host-tertiary-row, #presshub-voice-tertiary-row').hide();
-            $('#presshub-prompt-1-row').show();
-            $('#presshub-prompt-2-row, #presshub-prompt-3-row').hide();
         } else if (count === 2) {
             $('#presshub-host-male-row, #presshub-voice-male-row').show();
             $('#presshub-host-tertiary-row, #presshub-voice-tertiary-row').hide();
-            $('#presshub-prompt-2-row').show();
-            $('#presshub-prompt-1-row, #presshub-prompt-3-row').hide();
         } else {
             $('#presshub-host-male-row, #presshub-voice-male-row, #presshub-host-tertiary-row, #presshub-voice-tertiary-row').show();
-            $('#presshub-prompt-3-row').show();
-            $('#presshub-prompt-1-row, #presshub-prompt-2-row').hide();
         }
     }
     $(document).on('change', '#presshub_ai_briefing_host_count', updateBriefingHostRows);
