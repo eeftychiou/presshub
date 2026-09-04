@@ -9,7 +9,7 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
 - **`presshub-ai-editor/`**: The core WordPress plugin source code.
   - `includes/`: PHP classes (API client, token logger, structured logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings).
   - `assets/`: Frontend/Admin JavaScript and CSS.
-  - `tests/`: Isolated PHP unit test suite (70 test files + `run-all-tests.php`).
+  - `tests/`: Isolated PHP unit test suite (72 test files + `run-all-tests.php`).
 - **`presshub-workflow/`**: TypeScript workflow and MCP server components (Jest test suite).
 - **`dev-env/`**: Fully configured, self-contained local WordPress development and testing environment powered by the official WordPress Core SQLite database engine (zero external database services required).
 
@@ -388,7 +388,7 @@ Validates plugin activation, database tables, logger outputs, options persistenc
 php dev-env/scripts/run-integration-tests.php
 ```
 
-### 2. Plugin Unit Tests (70 test files)
+### 2. Plugin Unit Tests (72 test files)
 Runs all unit tests in process-isolated PHP runners:
 ```bash
 php presshub-ai-editor/tests/run-all-tests.php
@@ -632,7 +632,7 @@ When `replace_file_content` with `AllowMultiple=true` (or any other auto-expandi
 Before committing, you **MUST** run all verification test suites and ensure a 100% clean pass rate:
 
 ```bash
-# 1. Plugin Unit Tests (All 70 test suites)
+# 1. Plugin Unit Tests (All 72 test suites)
 php presshub-ai-editor/tests/run-all-tests.php
 
 # 2. Live WordPress Integration Tests
@@ -717,6 +717,25 @@ git commit -m "fix(settings): prevent pre-populating active providers on clean i
 2. Run the live integration test suite against the updated `main` branch to guarantee environment stability:
    ```bash
    php dev-env/scripts/run-integration-tests.php
+   ```
+
+---
+
+### Step 8: Version Bump & Release Tagging (`git tag`)
+
+**Always bump the version and push a new release tag immediately after merging a PR to `main`:**
+
+1. Bump the version in `presshub-ai-editor/presshub-ai-editor.php` (both the header `Version:` and `PRESSHUB_AI_VERSION` constant).
+2. Commit with conventional message:
+   ```bash
+   git add presshub-ai-editor/presshub-ai-editor.php
+   git commit -m "chore(release): bump version to <version>"
+   ```
+3. Tag the release and push both the commit and tag to `origin`:
+   ```bash
+   git tag v<version>
+   git push origin main
+   git push origin v<version>
    ```
 
 ---
