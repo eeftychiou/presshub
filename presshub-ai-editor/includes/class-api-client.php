@@ -198,27 +198,24 @@ class PressHub_AI_API_Client {
             if ( '' === $model && ! empty( $provider_record['default_model'] ) && ( 'gemini' !== $type || false !== strpos( (string) $provider_record['default_model'], 'tts' ) ) ) {
                 $model = $provider_record['default_model'];
             }
-            if ( '' === $model ) {
-                $model = 'gemini-3.1-flash-tts-preview';
-            }
         } else {
             $model = (string) get_option( "presshub_ai_{$module}_model", '' );
-        }
 
-        if ( '' === $model ) {
-            $model = (string) get_option( 'presshub_ai_model_' . $provider_id, '' );
-            if ( '' === $model && $provider_id !== $type ) {
-                $model = (string) get_option( 'presshub_ai_model_' . $type, '' );
+            if ( '' === $model ) {
+                $model = (string) get_option( 'presshub_ai_model_' . $provider_id, '' );
+                if ( '' === $model && $provider_id !== $type ) {
+                    $model = (string) get_option( 'presshub_ai_model_' . $type, '' );
+                }
             }
-        }
-        if ( '' === $model && ! empty( $provider_record['default_model'] ) ) {
-            $model = $provider_record['default_model'];
-        }
-        if ( '' === $model ) {
-            $model = (string) get_option( 'presshub_ai_model', '' );
-        }
-        if ( '' === $model ) {
-            $model = PressHub_AI_Provider_Defaults::default_model( $type );
+            if ( '' === $model && ! empty( $provider_record['default_model'] ) ) {
+                $model = $provider_record['default_model'];
+            }
+            if ( '' === $model ) {
+                $model = (string) get_option( 'presshub_ai_model', '' );
+            }
+            if ( '' === $model ) {
+                $model = PressHub_AI_Provider_Defaults::default_model( $type );
+            }
         }
         $model = preg_replace( '#^models/#', '', $model );
 
@@ -1321,14 +1318,14 @@ class PressHub_AI_API_Client {
             $configured_model = $provider_record['default_model'];
         }
         if ( empty( $configured_model ) || 'journey' === $configured_model ) {
-            $configured_model = 'gemini-3.1-flash-tts-preview';
+            $err_msg = __( 'No Speech AI model configured. Please specify a TTS model in Daily Briefing Settings or configure a default model on your Gemini provider.', 'presshub-ai-editor' );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( '[LogosAI Speech] ' . $err_msg );
+            }
+            return new WP_Error( 'missing_tts_model', $err_msg );
         }
 
-        $tts_models = array_values( array_unique( array_filter( [
-            $configured_model,
-            'gemini-3.1-flash-tts-preview',
-            'gemini-2.5-flash-preview-tts',
-        ] ) ) );
+        $tts_models = [ $configured_model ];
 
         $audio_base64  = null;
         $mime_type     = 'audio/pcm;rate=24000';

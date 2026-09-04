@@ -14,7 +14,7 @@ class PressHub_AI_Provider_Defaults {
     const DEFAULT_MODELS = [
         'openai'           => 'gpt-4o',
         'anthropic'        => 'claude-3-5-sonnet-20240620',
-        'gemini'           => 'gemini-1.5-pro-latest',
+        'gemini'           => 'gemini-2.5-flash',
         'groq'             => 'llama-3.3-70b-versatile',
         'mistral'          => 'mistral-large-latest',
         'deepseek'         => 'deepseek-chat',

@@ -350,7 +350,7 @@ $GLOBALS['OPTIONS_STORE'][ PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDE
         'type'          => 'gemini',
         'name'          => 'Google Gemini',
         'api_key'       => 'test-gemini-key',
-        'default_model' => 'gemini-3.7-flash',
+        'default_model' => 'gemini-2.5-flash-preview-tts',
         'enabled'       => true,
     ],
 ];
@@ -384,23 +384,32 @@ $GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$captured_models 
     return null;
 };
 
-// Test 8a: synthesize_turn with null api_client resolves tts model (gemini-3.1-flash-tts-preview)
+// Test 8a: synthesize_turn with null api_client resolves tts model (gemini-2.5-flash-preview-tts)
 $captured_models = [];
 $turn_res = $synthesizer->synthesize_turn( '[Μαρία]: Γεια σας!', 'Kore', 1.0, 0.0, null, 'formal' );
 as_check( 'tts_module: synthesize_turn succeeds with null api_client', ! is_wp_error( $turn_res ) && is_string( $turn_res ) );
-as_check( 'tts_module: synthesize_turn with null api_client targets gemini-3.1-flash-tts-preview', ! empty( $captured_models ) && 'gemini-3.1-flash-tts-preview' === end( $captured_models ) );
+as_check( 'tts_module: synthesize_turn with null api_client targets gemini-2.5-flash-preview-tts', ! empty( $captured_models ) && 'gemini-2.5-flash-preview-tts' === end( $captured_models ) );
 
-// Test 8b: synthesize_podcast with null api_client resolves tts model (gemini-3.1-flash-tts-preview)
+// Test 8b: synthesize_podcast with null api_client resolves tts model (gemini-2.5-flash-preview-tts)
 $captured_models = [];
 $podcast_res = $synthesizer->synthesize_podcast( '2026-08-26', "[Μαρία]: Γεια σας!\n[Νίκος]: Καλημέρα!", null );
 as_check( 'tts_module: synthesize_podcast succeeds with null api_client', is_array( $podcast_res ) && ( $podcast_res['success'] ?? false ) );
-as_check( 'tts_module: synthesize_podcast with null api_client targets gemini-3.1-flash-tts-preview', ! empty( $captured_models ) && 'gemini-3.1-flash-tts-preview' === end( $captured_models ) );
+as_check( 'tts_module: synthesize_podcast with null api_client targets gemini-2.5-flash-preview-tts', ! empty( $captured_models ) && 'gemini-2.5-flash-preview-tts' === end( $captured_models ) );
 
 // Test 8c: Custom presshub_ai_briefing_tts_model option is respected by default client
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = 'gemini-2.5-flash-preview-tts';
 $captured_models = [];
 $turn_res_custom = $synthesizer->synthesize_turn( '[Μαρία]: Δοκιμή προσαρμοσμένου μοντέλου', 'Kore', 1.0, 0.0, null, 'formal' );
 as_check( 'tts_module: custom briefing_tts_model option is used over general provider model', ! empty( $captured_models ) && 'gemini-2.5-flash-preview-tts' === end( $captured_models ) );
+
+// Test 8d: when provider default_model is empty and presshub_ai_briefing_tts_model is empty, synthesize_turn() returns a WP_Error with code missing_tts_model
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = '';
+$GLOBALS['OPTIONS_STORE'][ PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDERS ][0]['default_model'] = '';
+$turn_res_missing = $synthesizer->synthesize_turn( '[Μαρία]: Χωρίς μοντέλο', 'Kore', 1.0, 0.0, null, 'formal' );
+as_check( 'tts_module: synthesize_turn returns missing_tts_model error when no TTS model configured', is_wp_error( $turn_res_missing ) && 'missing_tts_model' === $turn_res_missing->get_error_code() );
+
+// Restore provider default_model for subsequent tests
+$GLOBALS['OPTIONS_STORE'][ PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDERS ][0]['default_model'] = 'gemini-2.5-flash-preview-tts';
 
 
 // =========================================================================

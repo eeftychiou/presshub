@@ -424,18 +424,18 @@ class PressHub_AI_Audio_Synthesizer {
     private function legacy_gemini25_fallback(): array {
         return [
             'female' => [
-                'Kore'       => [ 'name' => 'Kore',       'label' => __( 'Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)', 'presshub-ai-editor' ), 'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Aoede'      => [ 'name' => 'Aoede',      'label' => __( 'Aoede / Αοιδή (Expressive & Melodic)', 'presshub-ai-editor' ),                   'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Leda'       => [ 'name' => 'Leda',       'label' => __( 'Leda / Λήδα (Warm & Professional)', 'presshub-ai-editor' ),                      'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Callirrhoe' => [ 'name' => 'Callirrhoe', 'label' => __( 'Callirrhoe / Καλλιρρόη (Dynamic & Engaging)', 'presshub-ai-editor' ),          'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
-                'Autonoe'    => [ 'name' => 'Autonoe',    'label' => __( 'Autonoe / Αυτονόη (Conversational)', 'presshub-ai-editor' ),                    'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Kore'       => [ 'name' => 'Kore',       'label' => __( 'Kore (Warm, Crystal Clear & Articulate - Default)', 'presshub-ai-editor' ), 'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Aoede'      => [ 'name' => 'Aoede',      'label' => __( 'Aoede (Expressive & Melodic)', 'presshub-ai-editor' ),                   'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Leda'       => [ 'name' => 'Leda',       'label' => __( 'Leda (Warm & Professional)', 'presshub-ai-editor' ),                      'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Callirrhoe' => [ 'name' => 'Callirrhoe', 'label' => __( 'Callirrhoe (Dynamic & Engaging)', 'presshub-ai-editor' ),          'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
+                'Autonoe'    => [ 'name' => 'Autonoe',    'label' => __( 'Autonoe (Conversational)', 'presshub-ai-editor' ),                    'gender' => 'FEMALE', 'type' => 'Gemini-Neural' ],
             ],
             'male' => [
-                'Fenrir'     => [ 'name' => 'Fenrir',     'label' => __( 'Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)', 'presshub-ai-editor' ), 'gender' => 'MALE', 'type' => 'Gemini-Neural' ],
-                'Puck'       => [ 'name' => 'Puck',       'label' => __( 'Puck / Πουκ (Lively, Youthful & Expressive)', 'presshub-ai-editor' ),            'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
-                'Charon'     => [ 'name' => 'Charon',     'label' => __( 'Charon / Χάρων (Deep Baritone & Solemn Gravitas)', 'presshub-ai-editor' ),       'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
-                'Zephyr'     => [ 'name' => 'Zephyr',     'label' => __( 'Zephyr / Ζέφυρος (Calm, Gentle & Melodious)', 'presshub-ai-editor' ),            'gender' => 'NEUTRAL', 'type' => 'Gemini-Neural' ],
-                'Orus'       => [ 'name' => 'Orus',       'label' => __( 'Orus / Ώρος (Confident & Articulate)', 'presshub-ai-editor' ),                  'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
+                'Fenrir'     => [ 'name' => 'Fenrir',     'label' => __( 'Fenrir (Bold, Strong & Authoritative - Default)', 'presshub-ai-editor' ), 'gender' => 'MALE', 'type' => 'Gemini-Neural' ],
+                'Puck'       => [ 'name' => 'Puck',       'label' => __( 'Puck (Lively, Youthful & Expressive)', 'presshub-ai-editor' ),            'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
+                'Charon'     => [ 'name' => 'Charon',     'label' => __( 'Charon (Deep Baritone & Solemn Gravitas)', 'presshub-ai-editor' ),       'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
+                'Zephyr'     => [ 'name' => 'Zephyr',     'label' => __( 'Zephyr (Calm, Gentle & Melodious)', 'presshub-ai-editor' ),            'gender' => 'NEUTRAL', 'type' => 'Gemini-Neural' ],
+                'Orus'       => [ 'name' => 'Orus',       'label' => __( 'Orus (Confident & Articulate)', 'presshub-ai-editor' ),                  'gender' => 'MALE',    'type' => 'Gemini-Neural' ],
             ],
         ];
     }

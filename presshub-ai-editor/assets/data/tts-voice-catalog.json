@@ -6,32 +6,32 @@
       "label": "Gemini 2.5 Flash TTS",
       "engine_family": "gemini",
       "voices": [
-        { "name": "Kore",       "label": "Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)", "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Aoede",      "label": "Aoede / Αοιδή (Expressive & Melodic)",                   "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Leda",       "label": "Leda / Λήδα (Warm & Professional)",                      "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Callirrhoe", "label": "Callirrhoe / Καλλιρρόη (Dynamic & Engaging)",          "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Autonoe",    "label": "Autonoe / Αυτονόη (Conversational)",                    "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Fenrir",     "label": "Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)", "gender": "male", "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Puck",       "label": "Puck / Πουκ (Lively, Youthful & Expressive)",            "gender": "male",    "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Charon",     "label": "Charon / Χάρων (Deep Baritone & Solemn Gravitas)",       "gender": "male",    "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Zephyr",     "label": "Zephyr / Ζέφυρος (Calm, Gentle & Melodious)",            "gender": "neutral", "language": "el-GR", "engine_version": "2.5" },
-        { "name": "Orus",       "label": "Orus / Ώρος (Confident & Articulate)",                  "gender": "male",    "language": "el-GR", "engine_version": "2.5" }
+        { "name": "Kore",       "label": "Kore (Warm, Crystal Clear & Articulate - Default)", "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Aoede",      "label": "Aoede (Expressive & Melodic)",                   "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Leda",       "label": "Leda (Warm & Professional)",                      "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Callirrhoe", "label": "Callirrhoe (Dynamic & Engaging)",          "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Autonoe",    "label": "Autonoe (Conversational)",                    "gender": "female",  "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Fenrir",     "label": "Fenrir (Bold, Strong & Authoritative - Default)", "gender": "male", "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Puck",       "label": "Puck (Lively, Youthful & Expressive)",            "gender": "male",    "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Charon",     "label": "Charon (Deep Baritone & Solemn Gravitas)",       "gender": "male",    "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Zephyr",     "label": "Zephyr (Calm, Gentle & Melodious)",            "gender": "neutral", "language": "el-GR", "engine_version": "2.5" },
+        { "name": "Orus",       "label": "Orus (Confident & Articulate)",                  "gender": "male",    "language": "el-GR", "engine_version": "2.5" }
       ]
     },
     "gemini-3.1": {
       "label": "Gemini 3.1 Flash TTS Preview",
       "engine_family": "gemini",
       "voices": [
-        { "name": "Kore",       "label": "Kore / Κόρη (Warm, Crystal Clear & Articulate - Default)", "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Aoede",      "label": "Aoede / Αοιδή (Expressive & Melodic)",                   "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Leda",       "label": "Leda / Λήδα (Warm & Professional)",                      "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Callirrhoe", "label": "Callirrhoe / Καλλιρρόη (Dynamic & Engaging)",          "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Autonoe",    "label": "Autonoe / Αυτονόη (Conversational)",                    "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Fenrir",     "label": "Fenrir / Φένριρ (Bold, Strong & Authoritative - Default)", "gender": "male", "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Puck",       "label": "Puck / Πουκ (Lively, Youthful & Expressive)",            "gender": "male",    "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Charon",     "label": "Charon / Χάρων (Deep Baritone & Solemn Gravitas)",       "gender": "male",    "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Zephyr",     "label": "Zephyr / Ζέφυρος (Calm, Gentle & Melodious)",            "gender": "neutral", "language": "el-GR", "engine_version": "3.1" },
-        { "name": "Orus",       "label": "Orus / Ώρος (Confident & Articulate)",                  "gender": "male",    "language": "el-GR", "engine_version": "3.1" }
+        { "name": "Kore",       "label": "Kore (Warm, Crystal Clear & Articulate - Default)", "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Aoede",      "label": "Aoede (Expressive & Melodic)",                   "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Leda",       "label": "Leda (Warm & Professional)",                      "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Callirrhoe", "label": "Callirrhoe (Dynamic & Engaging)",          "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Autonoe",    "label": "Autonoe (Conversational)",                    "gender": "female",  "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Fenrir",     "label": "Fenrir (Bold, Strong & Authoritative - Default)", "gender": "male", "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Puck",       "label": "Puck (Lively, Youthful & Expressive)",            "gender": "male",    "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Charon",     "label": "Charon (Deep Baritone & Solemn Gravitas)",       "gender": "male",    "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Zephyr",     "label": "Zephyr (Calm, Gentle & Melodious)",            "gender": "neutral", "language": "el-GR", "engine_version": "3.1" },
+        { "name": "Orus",       "label": "Orus (Confident & Articulate)",                  "gender": "male",    "language": "el-GR", "engine_version": "3.1" }
       ]
     },
     "google_cloud": {
