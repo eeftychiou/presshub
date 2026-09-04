@@ -558,6 +558,98 @@ class APIClientModularTest
         }
 
         // ==================================================================
+        // 18. Model resolution precedence & resolution source tracking
+        // ==================================================================
+        self::reset_world();
+        PressHub_AI_Provider_Store::save_provider( [
+            'id'            => 'gemini-custom',
+            'type'          => 'gemini',
+            'name'          => 'Custom Gemini Provider',
+            'base_url'      => 'https://generativelanguage.googleapis.com/v1beta',
+            'api_key'       => 'gem-key-cust-999',
+            'default_model' => 'gemini-2.5-pro',
+            'enabled'       => true,
+        ] );
+
+        // Legacy option for type 'gemini' is set, but Provider Store record has default_model 'gemini-2.5-pro'
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini']               = 'gemini-1.5-flash';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_provider']     = 'gemini-custom';
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_model'] );
+
+        $resolved = PressHub_AI_API_Client::resolve_module_config( 'briefing_text' );
+
+        // 18a: default_model from store must take precedence over legacy presshub_ai_model_{type}
+        if ( ( $resolved['model'] ?? '' ) !== 'gemini-2.5-pro' ) {
+            $failures[] = "Provider record default_model must take precedence over legacy presshub_ai_model_{type}; got: " . var_export( $resolved['model'] ?? null, true );
+        }
+        if ( ( $resolved['provider_source'] ?? '' ) !== 'module_option:presshub_ai_briefing_text_provider' ) {
+            $failures[] = "provider_source mismatch; got: " . var_export( $resolved['provider_source'] ?? null, true );
+        }
+        if ( ( $resolved['model_source'] ?? '' ) !== 'provider_store_default:gemini-custom' ) {
+            $failures[] = "model_source mismatch; got: " . var_export( $resolved['model_source'] ?? null, true );
+        }
+
+        // 18b: Instance getters (get_provider, get_provider_id, get_model, get_provider_source, get_model_source, get_request_meta)
+        $client_res = new PressHub_AI_API_Client( 'briefing_text' );
+        if ( $client_res->get_provider() !== 'gemini' ) {
+            $failures[] = "get_provider() mismatch; got: " . var_export( $client_res->get_provider(), true );
+        }
+        if ( $client_res->get_provider_id() !== 'gemini-custom' ) {
+            $failures[] = "get_provider_id() mismatch; got: " . var_export( $client_res->get_provider_id(), true );
+        }
+        if ( $client_res->get_model() !== 'gemini-2.5-pro' ) {
+            $failures[] = "get_model() mismatch; got: " . var_export( $client_res->get_model(), true );
+        }
+        if ( $client_res->get_provider_source() !== 'module_option:presshub_ai_briefing_text_provider' ) {
+            $failures[] = "get_provider_source() mismatch; got: " . var_export( $client_res->get_provider_source(), true );
+        }
+        if ( $client_res->get_model_source() !== 'provider_store_default:gemini-custom' ) {
+            $failures[] = "get_model_source() mismatch; got: " . var_export( $client_res->get_model_source(), true );
+        }
+
+        $meta = $client_res->get_request_meta();
+        if ( false === strpos( $meta, 'provider=gemini' ) || false === strpos( $meta, 'provider_id=gemini-custom' ) || false === strpos( $meta, 'model=gemini-2.5-pro' ) || false === strpos( $meta, '[source: provider_store_default:gemini-custom]' ) ) {
+            $failures[] = "get_request_meta() format mismatch; got: " . var_export( $meta, true );
+        }
+
+        // 18c: Module override takes precedence over store default_model
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_model'] = 'gemini-2.5-flash';
+        $client_res->set_module( 'briefing_text' );
+        if ( $client_res->get_model() !== 'gemini-2.5-flash' ) {
+            $failures[] = "Module model override failed to take precedence; got: " . var_export( $client_res->get_model(), true );
+        }
+        if ( $client_res->get_model_source() !== 'module_override:presshub_ai_briefing_text_model' ) {
+            $failures[] = "Module override model_source mismatch; got: " . var_export( $client_res->get_model_source(), true );
+        }
+        if ( false === strpos( $client_res->get_request_meta(), '[source: module_override:presshub_ai_briefing_text_model]' ) ) {
+            $failures[] = "get_request_meta() missing module_override source tag; got: " . var_export( $client_res->get_request_meta(), true );
+        }
+
+        // 18d: Specific provider ID override takes precedence over store default_model
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_model'] );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini-custom'] = 'gemini-custom-override-model';
+        $client_res->set_module( 'briefing_text' );
+        if ( $client_res->get_model() !== 'gemini-custom-override-model' ) {
+            $failures[] = "Specific provider ID override failed; got: " . var_export( $client_res->get_model(), true );
+        }
+        if ( $client_res->get_model_source() !== 'provider_id_override:presshub_ai_model_gemini-custom' ) {
+            $failures[] = "Specific provider ID override model_source mismatch; got: " . var_export( $client_res->get_model_source(), true );
+        }
+
+        // 18e: Legacy fallback client source tracking
+        self::reset_world();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']     = 'openai';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']      = 'sk-legacy-test';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai'] = 'gpt-4o-mini';
+        $legacy_client_2 = new PressHub_AI_API_Client();
+        if ( $legacy_client_2->get_provider_source() !== 'legacy_fallback:presshub_ai_provider' ) {
+            $failures[] = "Legacy client provider_source mismatch; got: " . var_export( $legacy_client_2->get_provider_source(), true );
+        }
+        if ( $legacy_client_2->get_model_source() !== 'legacy_type_option:presshub_ai_model_openai' ) {
+            $failures[] = "Legacy client model_source mismatch; got: " . var_export( $legacy_client_2->get_model_source(), true );
+        }
+
+        // ==================================================================
         // Output Results
         // ==================================================================
         if ( $failures ) {

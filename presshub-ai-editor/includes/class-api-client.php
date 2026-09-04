@@ -81,6 +81,8 @@ class PressHub_AI_API_Client {
     private $module = null;
     private $provider_config = null;
     private $current_action = 'coauthor_draft';
+    private $provider_source = '';
+    private $model_source = '';
 
     /**
      * Request-config line for the debug log: mirrors the constructor's
@@ -117,17 +119,28 @@ class PressHub_AI_API_Client {
         $module = sanitize_key( $module );
 
         // 1. Get module-configured provider ID or engine
-        $provider_id = '';
+        $provider_id     = '';
+        $provider_source = '';
         if ( 'tts' === $module || 'podcast_tts' === $module ) {
             $provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
-            if ( '' === $provider_id ) {
+            if ( '' !== $provider_id ) {
+                $provider_source = 'module_option:presshub_ai_briefing_podcast_tts_provider';
+            } else {
                 $provider_id = (string) get_option( 'presshub_ai_briefing_tts_engine', '' );
-            }
-            if ( '' === $provider_id ) {
-                $provider_id = (string) get_option( 'presshub_ai_briefing_tts_provider', '' );
+                if ( '' !== $provider_id ) {
+                    $provider_source = 'module_option:presshub_ai_briefing_tts_engine';
+                } else {
+                    $provider_id = (string) get_option( 'presshub_ai_briefing_tts_provider', '' );
+                    if ( '' !== $provider_id ) {
+                        $provider_source = 'module_option:presshub_ai_briefing_tts_provider';
+                    }
+                }
             }
         } else {
             $provider_id = (string) get_option( "presshub_ai_{$module}_provider", '' );
+            if ( '' !== $provider_id ) {
+                $provider_source = "module_option:presshub_ai_{$module}_provider";
+            }
         }
         $provider_id = trim( $provider_id );
 
@@ -144,7 +157,12 @@ class PressHub_AI_API_Client {
                     }
                 }
             }
+            if ( null === $provider_record ) {
+                $provider_source = '';
+            }
         }
+
+        $from_store = true;
 
         // 3. Fallback to first enabled provider if none configured or not found
         if ( null === $provider_record ) {
@@ -161,15 +179,18 @@ class PressHub_AI_API_Client {
                 if ( null === $provider_record ) {
                     $provider_record = $enabled_providers[0];
                 }
+                $provider_source = 'store_fallback:first_enabled_provider';
             }
         }
 
         // 4. Fallback to legacy global provider options
         if ( null === $provider_record ) {
-            $legacy_type = (string) get_option( 'presshub_ai_provider', 'openai' );
+            $from_store      = false;
+            $legacy_type     = (string) get_option( 'presshub_ai_provider', 'openai' );
             $provider_record = PressHub_AI_Provider_Store::get_default_provider_record( $legacy_type );
             $provider_record['id'] = $legacy_type;
             $provider_record['api_key'] = (string) get_option( 'presshub_ai_api_key', '' );
+            $provider_source = 'legacy_fallback:presshub_ai_provider';
         }
 
         $type        = $provider_record['type'] ?? 'openai';
@@ -191,33 +212,76 @@ class PressHub_AI_API_Client {
         }
 
         // 5. Model resolution:
-        // Module option -> Per-provider option -> Provider record default -> Legacy global -> Provider Defaults
-        $model = '';
+        // Module override -> Specific provider ID override -> Provider record default model -> Legacy per-type option -> Legacy global option -> Provider defaults class
+        $model        = '';
+        $model_source = '';
         if ( 'tts' === $module || 'podcast_tts' === $module ) {
-            $model = (string) get_option( 'presshub_ai_briefing_tts_model', '' );
-            if ( '' === $model && ! empty( $provider_record['default_model'] ) && ( 'gemini' !== $type || false !== strpos( (string) $provider_record['default_model'], 'tts' ) ) ) {
-                $model = $provider_record['default_model'];
+            $opt_tts_model = (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+            if ( '' !== $opt_tts_model ) {
+                $model        = $opt_tts_model;
+                $model_source = 'module_override:presshub_ai_briefing_tts_model';
+            } elseif ( $from_store && ! empty( $provider_record['default_model'] ) && ( 'gemini' !== $type || false !== strpos( (string) $provider_record['default_model'], 'tts' ) ) ) {
+                $model        = $provider_record['default_model'];
+                $model_source = "provider_store_default:{$provider_id}";
             }
+            // Issue #113: No silent model fallback for TTS in resolve_module_config
         } else {
-            $model = (string) get_option( "presshub_ai_{$module}_model", '' );
+            $opt_module_model = (string) get_option( "presshub_ai_{$module}_model", '' );
+            if ( '' !== $opt_module_model ) {
+                $model        = $opt_module_model;
+                $model_source = "module_override:presshub_ai_{$module}_model";
+            }
 
-            if ( '' === $model ) {
-                $model = (string) get_option( 'presshub_ai_model_' . $provider_id, '' );
-                if ( '' === $model && $provider_id !== $type ) {
-                    $model = (string) get_option( 'presshub_ai_model_' . $type, '' );
+            if ( '' === $model && $provider_id !== $type ) {
+                $opt_prov_model = (string) get_option( 'presshub_ai_model_' . $provider_id, '' );
+                if ( '' !== $opt_prov_model ) {
+                    $model        = $opt_prov_model;
+                    $model_source = "provider_id_override:presshub_ai_model_{$provider_id}";
                 }
             }
-            if ( '' === $model && ! empty( $provider_record['default_model'] ) ) {
-                $model = $provider_record['default_model'];
+
+            if ( '' === $model && $from_store && ! empty( $provider_record['default_model'] ) ) {
+                $model        = $provider_record['default_model'];
+                $model_source = "provider_store_default:{$provider_id}";
             }
+
             if ( '' === $model ) {
-                $model = (string) get_option( 'presshub_ai_model', '' );
+                $opt_type_model = (string) get_option( 'presshub_ai_model_' . $type, '' );
+                if ( '' !== $opt_type_model ) {
+                    $model        = $opt_type_model;
+                    $model_source = "legacy_type_option:presshub_ai_model_{$type}";
+                }
             }
+
             if ( '' === $model ) {
-                $model = PressHub_AI_Provider_Defaults::default_model( $type );
+                $opt_global_model = (string) get_option( 'presshub_ai_model', '' );
+                if ( '' !== $opt_global_model ) {
+                    $model        = $opt_global_model;
+                    $model_source = 'legacy_global_option:presshub_ai_model';
+                }
+            }
+
+            if ( '' === $model ) {
+                $model        = PressHub_AI_Provider_Defaults::default_model( $type );
+                $model_source = 'class_defaults:PressHub_AI_Provider_Defaults';
             }
         }
         $model = preg_replace( '#^models/#', '', $model );
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info(
+                sprintf(
+                    '[API Client Resolution] Module: "%s" | Provider: "%s" (%s, ID: %s, source: %s) | Model: "%s" (source: %s)',
+                    $module,
+                    $name,
+                    $type,
+                    $provider_id,
+                    $provider_source,
+                    $model,
+                    $model_source
+                )
+            );
+        }
 
         // 6. Temperature resolution
         $opt_temp = ( 'tts' === $module )
@@ -310,6 +374,8 @@ class PressHub_AI_API_Client {
             'headers'          => $headers,
             'enabled'          => $provider_record['enabled'] ?? true,
             'is_system'        => $provider_record['is_system'] ?? false,
+            'provider_source'  => $provider_source,
+            'model_source'     => $model_source,
         ];
     }
 
@@ -334,6 +400,12 @@ class PressHub_AI_API_Client {
         if ( is_string( $module_or_provider ) && '' !== trim( $module_or_provider ) ) {
             $store_prov = PressHub_AI_Provider_Store::get( trim( $module_or_provider ) );
             if ( $store_prov ) {
+                if ( empty( $store_prov['provider_source'] ) ) {
+                    $store_prov['provider_source'] = 'store_id:' . trim( $module_or_provider );
+                }
+                if ( empty( $store_prov['model_source'] ) ) {
+                    $store_prov['model_source'] = 'provider_store_default:' . trim( $module_or_provider );
+                }
                 $this->set_provider_config( $store_prov );
                 return;
             }
@@ -354,7 +426,14 @@ class PressHub_AI_API_Client {
             if ( ! $has_legacy_provider && ! $has_legacy_api_key ) {
                 $enabled = PressHub_AI_Provider_Store::get_all( true );
                 if ( ! empty( $enabled ) && is_array( $enabled ) ) {
-                    $this->set_provider_config( $enabled[0] );
+                    $first_prov = $enabled[0];
+                    if ( empty( $first_prov['provider_source'] ) ) {
+                        $first_prov['provider_source'] = 'store_fallback:first_enabled_provider';
+                    }
+                    if ( empty( $first_prov['model_source'] ) ) {
+                        $first_prov['model_source'] = 'provider_store_default:' . ( $first_prov['id'] ?? $first_prov['type'] );
+                    }
+                    $this->set_provider_config( $first_prov );
 
                     // Issue #43 defence-in-depth: `set_provider_config()`
                     // only sets $this->google_cloud_api_key when the
@@ -394,6 +473,16 @@ class PressHub_AI_API_Client {
         $this->provider = ( is_string( $module_or_provider ) && ! empty( $module_or_provider ) )
             ? $module_or_provider
             : get_option( 'presshub_ai_provider', 'openai' );
+
+        $this->provider_source = 'legacy_fallback:presshub_ai_provider';
+        $opt_prov_model        = (string) get_option( 'presshub_ai_model_' . $this->provider, '' );
+        if ( '' !== $opt_prov_model ) {
+            $this->model_source = 'legacy_type_option:presshub_ai_model_' . $this->provider;
+        } elseif ( '' !== (string) get_option( 'presshub_ai_model', '' ) ) {
+            $this->model_source = 'legacy_global_option:presshub_ai_model';
+        } else {
+            $this->model_source = 'class_defaults:PressHub_AI_Provider_Defaults';
+        }
 
         $this->api_key = get_option( 'presshub_ai_api_key' );
         $this->google_cloud_api_key = get_option( 'presshub_ai_google_cloud_api_key' );
@@ -465,6 +554,8 @@ class PressHub_AI_API_Client {
         $this->module = $module;
         $config = self::resolve_module_config( $module );
         $this->set_provider_config( $config );
+        $this->provider_source = $config['provider_source'] ?? '';
+        $this->model_source    = $config['model_source'] ?? '';
 
         // Issue #43 + Issue #44 defence-in-depth: the same API client
         // instance is reused across intents in handlers like
@@ -534,6 +625,8 @@ class PressHub_AI_API_Client {
         $this->provider        = $config['type'] ?? ( $config['provider'] ?? 'openai' );
         $this->provider_id     = $config['id'] ?? ( $config['provider'] ?? $this->provider );
         $this->api_key         = $config['api_key'] ?? '';
+        $this->provider_source = $config['provider_source'] ?? ( $this->provider_source ?: 'custom_config' );
+        $this->model_source    = $config['model_source'] ?? ( $this->model_source ?: 'custom_config' );
 
         // If API key is empty or masked, attempt to lookup saved record.
         if ( ( empty( $this->api_key ) || false !== strpos( $this->api_key, '•' ) ) && ! empty( $config['id'] ) ) {
@@ -573,6 +666,76 @@ class PressHub_AI_API_Client {
             $this->google_cloud_api_key = $this->api_key;
         }
         return $this;
+    }
+
+    /**
+     * Get the resolved provider slug or type.
+     *
+     * @return string
+     */
+    public function get_provider(): string {
+        return (string) ( $this->provider ?? '' );
+    }
+
+    /**
+     * Get the resolved provider ID.
+     *
+     * @return string
+     */
+    public function get_provider_id(): string {
+        return (string) ( $this->provider_id ?? $this->provider ?? '' );
+    }
+
+    /**
+     * Get the resolved model name.
+     *
+     * @return string
+     */
+    public function get_model(): string {
+        return (string) ( $this->model ?? '' );
+    }
+
+    /**
+     * Get the source identifier for how the provider was resolved.
+     *
+     * @return string
+     */
+    public function get_provider_source(): string {
+        return (string) $this->provider_source;
+    }
+
+    /**
+     * Get the source identifier for how the model was resolved.
+     *
+     * @return string
+     */
+    public function get_model_source(): string {
+        return (string) $this->model_source;
+    }
+
+    /**
+     * Diagnostic request-metadata string reflecting this client's resolved
+     * configuration and resolution source.
+     *
+     * @return string e.g. "provider=gemini provider_id=gemini-main model=gemini-3.1-flash-lite [source: provider_store_default:gemini-main] max_tokens=16384"
+     */
+    public function get_request_meta(): string {
+        $provider    = (string) ( $this->provider ?? 'openai' );
+        $provider_id = (string) ( $this->provider_id ?? $provider );
+        $model       = (string) ( $this->model ?? 'default' );
+        $max_tokens  = (int) ( $this->max_tokens ?? PressHub_AI_Provider_Defaults::default_max_tokens() );
+        $model_src   = (string) $this->model_source;
+
+        $source_part = '' !== $model_src ? " [source: {$model_src}]" : '';
+
+        return sprintf(
+            'provider=%s provider_id=%s model=%s%s max_tokens=%d',
+            $provider,
+            $provider_id,
+            $model,
+            $source_part,
+            $max_tokens
+        );
     }
 
     /**

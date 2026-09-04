@@ -1057,15 +1057,46 @@ class PressHub_AI_Podcast_Producer {
             $api_client->set_action( 'podcast_script' );
         }
 
-        $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [] );
+        $style = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_podcast_style()
+            : (string) get_option( 'presshub_ai_podcast_style', 'default_greek_chat' );
+
+        $model_source    = method_exists( $api_client, 'get_model_source' ) ? $api_client->get_model_source() : '';
+        $provider_source = method_exists( $api_client, 'get_provider_source' ) ? $api_client->get_provider_source() : '';
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            $pod_provider_id = method_exists( $api_client, 'get_provider_id' ) ? $api_client->get_provider_id() : ( method_exists( $api_client, 'get_provider' ) ? $api_client->get_provider() : '' );
+            $pod_model       = method_exists( $api_client, 'get_model' ) ? $api_client->get_model() : '';
+            PressHub_AI_Logger::info(
+                sprintf(
+                    'Starting podcast script generation for %s: provider=%s, model=%s, style=%s (source: %s)',
+                    $date,
+                    $pod_provider_id,
+                    $pod_model,
+                    $style,
+                    $model_source
+                )
+            );
+        }
+
+        $turn_metadata = [
+            'style'           => $style,
+            'model_source'    => $model_source,
+            'provider_source' => $provider_source,
+        ];
+
+        $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $turn_metadata );
 
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+            $req_meta = method_exists( $api_client, 'get_request_meta' )
+                ? $api_client->get_request_meta()
+                : PressHub_AI_API_Client::current_request_meta();
             presshub_ai_log_prompts(
-                'podcast',
+                'podcast_script',
                 $prompts['system_prompt'],
                 $prompts['user_prompt'],
                 is_wp_error( $response ) ? 'ERROR: ' . $response->get_error_message() : $response,
-                PressHub_AI_API_Client::current_request_meta()
+                $req_meta
             );
         }
 
@@ -1099,6 +1130,12 @@ class PressHub_AI_Podcast_Producer {
                 __( 'Failed to parse dialogue turns from generated podcast script.', 'presshub-ai-editor' )
             );
         }
+
+        foreach ( $turns as &$turn ) {
+            $turn['model_source']    = $model_source;
+            $turn['provider_source'] = $provider_source;
+        }
+        unset( $turn );
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info( sprintf( 'Generated podcast script for %s: %d turns parsed', $date, count( $turns ) ) );
