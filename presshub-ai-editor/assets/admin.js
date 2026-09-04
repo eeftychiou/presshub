@@ -2963,23 +2963,62 @@ jQuery(document).ready(function($) {
 
     function updateBriefingHostRows() {
         var count = parseInt($('#presshub_ai_briefing_host_count').val(), 10) || 2;
-        if (count === 1) {
-            $('#presshub-host-male-row, #presshub-voice-male-row, #presshub-host-tertiary-row, #presshub-voice-tertiary-row').hide();
-            $('#presshub-prompt-1-row').show();
-            $('#presshub-prompt-2-row, #presshub-prompt-3-row').hide();
-        } else if (count === 2) {
-            $('#presshub-host-male-row, #presshub-voice-male-row').show();
-            $('#presshub-host-tertiary-row, #presshub-voice-tertiary-row').hide();
-            $('#presshub-prompt-2-row').show();
-            $('#presshub-prompt-1-row, #presshub-prompt-3-row').hide();
+        if (count >= 2) {
+            $('#presshub-voice-male-row').show();
         } else {
-            $('#presshub-host-male-row, #presshub-voice-male-row, #presshub-host-tertiary-row, #presshub-voice-tertiary-row').show();
-            $('#presshub-prompt-3-row').show();
-            $('#presshub-prompt-1-row, #presshub-prompt-2-row').hide();
+            $('#presshub-voice-male-row').hide();
+        }
+        if (count >= 3) {
+            $('#presshub-voice-tertiary-row').show();
+        } else {
+            $('#presshub-voice-tertiary-row').hide();
         }
     }
     $(document).on('change', '#presshub_ai_briefing_host_count', updateBriefingHostRows);
     updateBriefingHostRows();
+
+    // ------------------------------------------------------------------
+    // Prompt Studio Interactive Tab Switching & Warning Engine (Issue #108)
+    // ------------------------------------------------------------------
+    $(document).on('click', '.presshub-style-tab', function(e) {
+        e.preventDefault();
+        var $tab = $(this);
+        var styleKey = $tab.data('style');
+        
+        $('.presshub-style-tab').removeClass('nav-tab-active');
+        $tab.addClass('nav-tab-active');
+        
+        $('.presshub-style-pane').hide();
+        $('#presshub-style-' + styleKey).show();
+    });
+
+    $(document).on('click', '.presshub-host-tab', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var targetId = $btn.data('target');
+        var $stylePane = $btn.closest('.presshub-style-pane');
+
+        $stylePane.find('.presshub-host-tab').removeClass('button-primary').addClass('button-secondary');
+        $btn.removeClass('button-secondary').addClass('button-primary');
+
+        $stylePane.find('.presshub-host-pane').hide();
+        $('#' + targetId).show();
+    });
+
+    function checkEmptyPromptWarning($textarea) {
+        var val = $textarea.val() || '';
+        var $pane = $textarea.closest('.presshub-host-pane');
+        var $warning = $pane.find('.presshub-empty-prompt-warning');
+        if ($.trim(val) === '') {
+            $warning.show();
+        } else {
+            $warning.hide();
+        }
+    }
+
+    $(document).on('input change', '.presshub-prompt-textarea', function() {
+        checkEmptyPromptWarning($(this));
+    });
 
     // SFX Preview Player
     var currentAudio = null;

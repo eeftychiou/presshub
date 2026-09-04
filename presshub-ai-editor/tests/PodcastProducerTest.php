@@ -566,7 +566,77 @@ SCRIPT;
 $no_tertiary_turns = $producer->parse_script_turns( $no_tertiary_script, 'Μαρία', 'Νίκος', '' );
 pp_check( 'issue_100: empty tertiary_host → [SPEAKER_3]: ignored; only 1 turn', count( $no_tertiary_turns ) === 1 );
 
+// =========================================================================
+// 12. Issue #108 — Empty prompt validation in build_dialogue_prompt()
+// =========================================================================
 
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count'] = 2;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_style'] = 'default_greek_chat';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_prompt_2_default_greek_chat'] = '   ';
+
+$threw_empty_exception = false;
+$exception_message = '';
+try {
+    $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-04' );
+} catch ( InvalidArgumentException $e ) {
+    $threw_empty_exception = true;
+    $exception_message = $e->getMessage();
+}
+
+pp_check( 'issue_108: build_dialogue_prompt throws InvalidArgumentException on empty prompt', $threw_empty_exception );
+pp_check( 'issue_108: exception message mentions Prompt Studio and style', false !== strpos( $exception_message, 'No dialogue prompt configured for style "default_greek_chat" and 2 presenter(s)' ) );
+
+// Verify when seeded or valid prompt is set, it succeeds
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_prompt_2_default_greek_chat'] );
+$valid_prompt_generated = false;
+try {
+    $seeded_result = $producer->build_dialogue_prompt( [], '', '5_min', '2026-09-04' );
+    $valid_prompt_generated = ! empty( $seeded_result['system_prompt'] );
+} catch ( Exception $e ) {
+    $valid_prompt_generated = false;
+}
+pp_check( 'issue_108: build_dialogue_prompt succeeds when prompt is seeded/valid', $valid_prompt_generated );
+
+// =========================================================================
+// 13. Greek Default Dialogue Prompts for All Podcast Styles & Seeding Upgrade
+// =========================================================================
+
+$all_styles = [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ];
+foreach ( $all_styles as $style_k ) {
+    foreach ( [ 1, 2, 3 ] as $hc ) {
+        $prompt = PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $hc, $style_k );
+        pp_check( "greek_prompts: {$style_k} {$hc}-host does not start with You are", ! str_starts_with( trim( $prompt ), 'You are' ) );
+        pp_check( "greek_prompts: {$style_k} {$hc}-host contains date placeholder", false !== strpos( $prompt, '{date}' ) );
+        pp_check( "greek_prompts: {$style_k} {$hc}-host contains word budget placeholder", false !== strpos( $prompt, '{word_budget}' ) );
+        pp_check( "greek_prompts: {$style_k} {$hc}-host contains sources placeholder", false !== strpos( $prompt, '{sources_list}' ) );
+        pp_check( "greek_prompts: {$style_k} {$hc}-host contains topic markers", false !== strpos( $prompt, 'TOPIC_START' ) && false !== strpos( $prompt, 'TOPIC_END' ) );
+        pp_check( "greek_prompts: {$style_k} {$hc}-host contains [SPEAKER_1]:", false !== strpos( $prompt, '[SPEAKER_1]:' ) );
+        if ( $hc >= 2 ) {
+            pp_check( "greek_prompts: {$style_k} {$hc}-host contains [SPEAKER_2]:", false !== strpos( $prompt, '[SPEAKER_2]:' ) );
+        }
+        if ( 3 === $hc ) {
+            pp_check( "greek_prompts: {$style_k} {$hc}-host contains [SPEAKER_3]:", false !== strpos( $prompt, '[SPEAKER_3]:' ) );
+        }
+        if ( 'bbc_broadcasting_standards' === $style_k ) {
+            pp_check( "greek_prompts: BBC {$hc}-host retains 'BBC Broadcasting Standards'", false !== strpos( $prompt, 'BBC Broadcasting Standards' ) );
+        }
+        if ( 'conversational_news_reporting' === $style_k ) {
+            pp_check( "greek_prompts: Conversational {$hc}-host retains 'improved by the host'", false !== stripos( $prompt, 'improved by the host' ) );
+        }
+    }
+}
+
+// Test seeding upgrade: legacy 'You are' prompt upgraded to Greek default
+$legacy_option = 'presshub_ai_briefing_podcast_prompt_1_bbc_broadcasting_standards';
+$GLOBALS['OPTIONS_STORE'][ $legacy_option ] = 'You are the lead anchor of a professional broadcast news podcast...';
+PressHub_AI_Settings_Storage::seed_default_podcast_prompts();
+pp_check( 'seeding_upgrade: legacy You are prompt upgraded to Greek', ! str_starts_with( trim( $GLOBALS['OPTIONS_STORE'][ $legacy_option ] ), 'You are' ) && false !== strpos( $GLOBALS['OPTIONS_STORE'][ $legacy_option ], 'BBC Broadcasting Standards' ) );
+
+// Test seeding preserves custom operator prompt that does not start with 'You are'
+$custom_option = 'presshub_ai_briefing_podcast_prompt_2_conversational_news_reporting';
+$GLOBALS['OPTIONS_STORE'][ $custom_option ] = 'Προσαρμοσμένο σενάριο από τον χειριστή με δικό του ύφος (improved by the host).';
+PressHub_AI_Settings_Storage::seed_default_podcast_prompts();
+pp_check( 'seeding_upgrade: custom non-legacy prompt is preserved', $GLOBALS['OPTIONS_STORE'][ $custom_option ] === 'Προσαρμοσμένο σενάριο από τον χειριστή με δικό του ύφος (improved by the host).' );
 
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
@@ -585,4 +655,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PodcastProducerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PodcastProducerTest: OK (90 checks)\n";
+echo "PodcastProducerTest: OK\n";

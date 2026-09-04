@@ -260,6 +260,32 @@ class SettingsPerTabAjaxSaveTest
         }
 
         // -------------------------------------------------------------
+        // Case 6c: Issue #108 — Podcast Dialogue Style & Prompt Studio AJAX Save
+        // -------------------------------------------------------------
+        self::reset_env();
+        $podcast_studio_payload = [
+            'presshub_ai_briefing_podcast_style'                             => 'bbc_broadcasting_standards',
+            'presshub_ai_briefing_podcast_prompt_2_bbc_broadcasting_standards' => 'Custom BBC 2-host prompt: Do not use acronyms.',
+        ];
+
+        $_POST = [
+            'tab'         => 'briefing',
+            'nonce'       => 'valid_nonce',
+            'payload_b64' => base64_encode( json_encode( $podcast_studio_payload ) ),
+        ];
+
+        try {
+            $handlers->save_settings_section();
+        } catch ( Throwable $e ) {}
+
+        if ( get_option( 'presshub_ai_briefing_podcast_style' ) !== 'bbc_broadcasting_standards' ) {
+            $failures[] = 'presshub_ai_briefing_podcast_style not saved correctly via briefing tab AJAX save; got: ' . var_export( get_option( 'presshub_ai_briefing_podcast_style' ), true );
+        }
+        if ( get_option( 'presshub_ai_briefing_podcast_prompt_2_bbc_broadcasting_standards' ) !== 'Custom BBC 2-host prompt: Do not use acronyms.' ) {
+            $failures[] = 'presshub_ai_briefing_podcast_prompt_2_bbc_broadcasting_standards not saved correctly via briefing tab AJAX save; got: ' . var_export( get_option( 'presshub_ai_briefing_podcast_prompt_2_bbc_broadcasting_standards' ), true );
+        }
+
+        // -------------------------------------------------------------
         // Case 7: Copilot Section Save
         // -------------------------------------------------------------
         self::reset_env();
