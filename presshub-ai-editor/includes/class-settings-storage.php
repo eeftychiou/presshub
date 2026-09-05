@@ -1514,6 +1514,23 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Get the configured briefing text story curation prompt.
+     * If empty or not set, loads the built-in default from PressHub_AI_Prompt_Loader.
+     *
+     * @return string Active curation system prompt template.
+     */
+    public static function get_curation_prompt(): string {
+        $saved = (string) get_option( 'presshub_ai_briefing_text_prompt', '' );
+        if ( '' !== trim( $saved ) ) {
+            return $saved;
+        }
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
+        }
+        return PressHub_AI_Prompt_Loader::get_curation_prompt();
+    }
+
+    /**
      * Issue #90 / Issue #108 — shared resolver for podcast prompt options. Reads
      * `${prefix}_${style}` first; if null (never saved in DB), retrieves default,
      * seeds it in the database and returns it.
@@ -1531,10 +1548,10 @@ class PressHub_AI_Settings_Storage {
         $per_style_option = $option_prefix . '_' . $style_key;
         $val              = get_option( $per_style_option, null );
         if ( null === $val || ( is_string( $val ) && str_starts_with( trim( $val ), 'You are' ) ) ) {
-            if ( ! class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
-                require_once __DIR__ . '/class-podcast-producer.php';
+            if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+                require_once __DIR__ . '/class-prompt-loader.php';
             }
-            $val = PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count, $style_key );
+            $val = PressHub_AI_Prompt_Loader::get_podcast_prompt( $host_count, $style_key );
             update_option( $per_style_option, $val );
             return $val;
         }
@@ -1551,8 +1568,8 @@ class PressHub_AI_Settings_Storage {
      * if they have not yet been stored in the database, or upgrade legacy English templates.
      */
     public static function seed_default_podcast_prompts( bool $force = false ): void {
-        if ( ! class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
-            require_once __DIR__ . '/class-podcast-producer.php';
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
         }
         $styles = [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ];
         foreach ( $styles as $style_key ) {
@@ -1560,7 +1577,7 @@ class PressHub_AI_Settings_Storage {
                 $option_name = 'presshub_ai_briefing_podcast_prompt_' . $host_count . '_' . $style_key;
                 $current     = get_option( $option_name, null );
                 if ( null === $current || ( is_string( $current ) && str_starts_with( trim( $current ), 'You are' ) ) || $force ) {
-                    $default = PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count, $style_key );
+                    $default = PressHub_AI_Prompt_Loader::get_podcast_prompt( $host_count, $style_key );
                     update_option( $option_name, $default );
                 }
             }

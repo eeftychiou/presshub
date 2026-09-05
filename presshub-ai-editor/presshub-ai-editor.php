@@ -71,6 +71,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-preset-resolver.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-admin-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-author-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-context-estimator.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-prompt-loader.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-harvester.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
