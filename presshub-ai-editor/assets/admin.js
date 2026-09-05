@@ -1189,7 +1189,7 @@ jQuery(document).ready(function($) {
             $('#provider-model-manual-wrap').hide();
 
             $('#provider-form-temperature').val(providerData.temperature !== undefined ? providerData.temperature : 0.7);
-            $('#provider-form-max-tokens').val(providerData.max_tokens !== undefined ? providerData.max_tokens : 16384);
+            $('#provider-form-max-tokens').val(providerData.max_tokens !== undefined ? providerData.max_tokens : 20000);
             $('#provider-form-timeout').val(providerData.timeout !== undefined ? providerData.timeout : 300);
             var headers = providerData.headers ? (typeof providerData.headers === 'object' ? JSON.stringify(providerData.headers) : providerData.headers) : '';
             $('#provider-form-headers').val(headers);
@@ -1210,7 +1210,7 @@ jQuery(document).ready(function($) {
             $('#provider-form-id').val('');
             $('#provider-form-enabled').prop('checked', true);
             $('#provider-form-temperature').val('0.7');
-            $('#provider-form-max-tokens').val('16384');
+            $('#provider-form-max-tokens').val('20000');
             $('#provider-form-timeout').val('300');
             $('#provider-form-api-key').attr('placeholder', __('Enter API Key', 'presshub-ai-editor'));
 
@@ -1305,7 +1305,7 @@ jQuery(document).ready(function($) {
         $('#provider-model-manual-wrap').hide();
 
         $('#provider-form-temperature').val(tmpl.temperature !== undefined ? tmpl.temperature : 0.7);
-        $('#provider-form-max-tokens').val(tmpl.max_tokens !== undefined ? tmpl.max_tokens : 16384);
+        $('#provider-form-max-tokens').val(tmpl.max_tokens !== undefined ? tmpl.max_tokens : 20000);
         $('#provider-form-timeout').val(tmpl.timeout !== undefined ? tmpl.timeout : 300);
     });
 
@@ -1460,7 +1460,7 @@ jQuery(document).ready(function($) {
             default_model: defaultModel,
             available_models: availableModels,
             temperature: parseFloat($('#provider-form-temperature').val()) || 0.7,
-            max_tokens: parseInt($('#provider-form-max-tokens').val(), 10) || 16384,
+            max_tokens: parseInt($('#provider-form-max-tokens').val(), 10) || 20000,
             timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
             headers: $('#provider-form-headers').val().trim(),
             enabled: $('#provider-form-enabled').is(':checked') ? 1 : 0

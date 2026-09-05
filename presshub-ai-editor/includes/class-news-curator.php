@@ -444,13 +444,27 @@ class PressHub_AI_News_Curator {
         $count   = count( $articles );
         $context = $this->format_articles_context( $articles );
 
-        $user_prompt = sprintf(
-            "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
-            $date,
-            $count,
-            $sources,
-            $context
-        );
+        // Deduplication guard: if the system prompt already contains the formatted
+        // articles (e.g. from an operator custom template that used {articles_context}),
+        // do not duplicate the article text in the user prompt.
+        $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
+
+        if ( $has_context_in_system ) {
+            $user_prompt = sprintf(
+                "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
+                $date,
+                $count,
+                $sources
+            );
+        } else {
+            $user_prompt = sprintf(
+                "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                $date,
+                $count,
+                $sources,
+                $context
+            );
+        }
 
         return [
             'system_prompt' => $system_prompt,

@@ -141,10 +141,20 @@ $usr_prompt = $hydrated_prompts['user_prompt'];
 nc_check( 'hydration: {date} placeholder replaced', false !== strpos( $sys_prompt, '2026-08-26' ) && false === strpos( $sys_prompt, '{date}' ) );
 nc_check( 'hydration: {articles_count} replaced with 3', false !== strpos( $sys_prompt, '3 άρθρα' ) && false === strpos( $sys_prompt, '{articles_count}' ) );
 nc_check( 'hydration: {sources_list} deduplicated (Kathimerini, AMNA)', false !== strpos( $sys_prompt, 'Kathimerini, AMNA' ) && false === strpos( $sys_prompt, '{sources_list}' ) );
-nc_check( 'hydration: {articles_context} replaced with structured articles', false !== strpos( $sys_prompt, 'Νέα μέτρα για τη στέγαση' ) && false === strpos( $sys_prompt, '{articles_context}' ) );
+nc_check( 'deduplication: default system_prompt does not duplicate article text', false === strpos( $sys_prompt, 'Νέα μέτρα για τη στέγαση' ) );
 nc_check( 'hydration: user_prompt contains date', false !== strpos( $usr_prompt, '2026-08-26' ) );
 nc_check( 'hydration: user_prompt contains article count', false !== strpos( $usr_prompt, '3' ) );
 nc_check( 'hydration: user_prompt contains article context', false !== strpos( $usr_prompt, 'Ρεκόρ αφίξεων στον τουρισμό' ) );
+
+// Test 2b: Explicit {articles_context} in template hydrates correctly and dedupes from user_prompt
+$custom_template = "Prompt with {articles_context}";
+$hydrated_custom = $curator->hydrate_prompt( $custom_template, $test_date, $sample_articles_3 );
+nc_check( 'hydration: {articles_context} replaced when present in template', false !== strpos( $hydrated_custom, 'Νέα μέτρα για τη στέγαση' ) && false === strpos( $hydrated_custom, '{articles_context}' ) );
+
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_prompt'] = "Custom: {articles_context}";
+$custom_build = $curator->build_prompt( $sample_articles_3, '__none__', $test_date );
+nc_check( 'deduplication: custom template with {articles_context} omits articles from user_prompt', false !== strpos( $custom_build['system_prompt'], 'Νέα μέτρα για τη στέγαση' ) && false === strpos( $custom_build['user_prompt'], 'Νέα μέτρα για τη στέγαση' ) );
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_prompt'] );
 
 
 // =========================================================================
@@ -155,8 +165,11 @@ nc_check( 'hydration: user_prompt contains article context', false !== strpos( $
 $empty_prompts = $curator->build_prompt( [], '__none__', '2026-08-26' );
 nc_check( 'empty_articles: system_prompt does not have raw placeholders', false === strpos( $empty_prompts['system_prompt'], '{date}' ) && false === strpos( $empty_prompts['system_prompt'], '{articles_count}' ) );
 nc_check( 'empty_articles: count is 0', false !== strpos( $empty_prompts['system_prompt'], '0 άρθρα' ) );
-nc_check( 'empty_articles: context fallback present', false !== strpos( $empty_prompts['system_prompt'], 'Δεν υπάρχουν διαθέσιμα άρθρα.' ) );
+nc_check( 'empty_articles: context fallback present in user_prompt', false !== strpos( $empty_prompts['user_prompt'], 'Δεν υπάρχουν διαθέσιμα άρθρα.' ) );
 nc_check( 'empty_articles: sources fallback present', false !== strpos( $empty_prompts['system_prompt'], 'Καμία πηγή' ) );
+
+$empty_hydrated = $curator->hydrate_prompt( '{articles_context}', '2026-08-26', [] );
+nc_check( 'empty_articles: hydrate_prompt context fallback present', 'Δεν υπάρχουν διαθέσιμα άρθρα.' === $empty_hydrated );
 
 // Test 3b: Articles with missing fields
 $sparse_articles = [
@@ -168,9 +181,9 @@ $sparse_articles = [
     ],
 ];
 $sparse_prompts = $curator->build_prompt( $sparse_articles, '__none__', '2026-08-26' );
-nc_check( 'sparse_articles: title fallback applied', false !== strpos( $sparse_prompts['system_prompt'], 'Χωρίς τίτλο' ) );
-nc_check( 'sparse_articles: source fallback applied', false !== strpos( $sparse_prompts['system_prompt'], 'Άγνωστη πηγή' ) );
-nc_check( 'sparse_articles: content rendered safely', false !== strpos( $sparse_prompts['system_prompt'], 'Μόνο περιεχόμενο' ) );
+nc_check( 'sparse_articles: title fallback applied in user_prompt', false !== strpos( $sparse_prompts['user_prompt'], 'Χωρίς τίτλο' ) );
+nc_check( 'sparse_articles: source fallback applied in user_prompt', false !== strpos( $sparse_prompts['user_prompt'], 'Άγνωστη πηγή' ) );
+nc_check( 'sparse_articles: content rendered safely in user_prompt', false !== strpos( $sparse_prompts['user_prompt'], 'Μόνο περιεχόμενο' ) );
 
 
 // =========================================================================

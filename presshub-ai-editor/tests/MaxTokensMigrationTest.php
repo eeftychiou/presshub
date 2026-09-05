@@ -45,8 +45,8 @@ mtm_check( 'migration flag set', ( $GLOBALS['OPTIONS_STORE']['presshub_ai_migrat
 
 // The cleared providers now resolve to the new default.
 $api = new PressHub_AI_API_Client();
-mtm_check( 'default after migration is 16384', 16384 === PressHub_AI_Provider_Defaults::default_max_tokens() );
-mtm_check( 'meta reflects 16384 default', false !== strpos( PressHub_AI_API_Client::current_request_meta(), 'max_tokens=16384' ) );
+mtm_check( 'default after migration is 20000', 20000 === PressHub_AI_Provider_Defaults::default_max_tokens() );
+mtm_check( 'meta reflects 20000 default', false !== strpos( PressHub_AI_API_Client::current_request_meta(), 'max_tokens=20000' ) );
 
 // --- Case 2: idempotent — second run changes nothing ------------------------
 $before = $GLOBALS['OPTIONS_STORE'];

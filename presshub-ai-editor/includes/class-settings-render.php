@@ -737,7 +737,7 @@ class PressHub_AI_Settings_Render {
                         <?php endif; ?>
                         <div class="presshub-meta-row">
                             <span class="presshub-meta-label"><?php echo __( 'Tuning:', 'presshub-ai-editor' ); ?></span>
-                            <span class="presshub-meta-val"><?php echo sprintf( 'Temp: %s | Max: %s | %ss', esc_html( (string) $temp ), esc_html( function_exists( 'number_format_i18n' ) ? number_format_i18n( $max_tokens ) : number_format( $max_tokens ) ), esc_html( (string) $timeout ) ); ?></span>
+                            <span class="presshub-meta-val"><?php echo sprintf( 'Temp: %s | Max Output: %s | %ss', esc_html( (string) $temp ), esc_html( function_exists( 'number_format_i18n' ) ? number_format_i18n( $max_tokens ) : number_format( $max_tokens ) ), esc_html( (string) $timeout ) ); ?></span>
                         </div>
                         <div class="presshub-meta-row">
                             <span class="presshub-meta-label"><?php echo __( 'Credentials:', 'presshub-ai-editor' ); ?></span>
@@ -862,8 +862,9 @@ class PressHub_AI_Settings_Render {
                                 <input type="number" id="provider-form-temperature" name="temperature" class="widefat" step="0.05" min="0" max="2" value="0.7" style="margin-top: 4px;" />
                             </div>
                             <div class="presshub-form-group" style="flex: 1;">
-                                <label for="provider-form-max-tokens"><strong><?php echo __( 'Max Tokens:', 'presshub-ai-editor' ); ?></strong></label>
-                                <input type="number" id="provider-form-max-tokens" name="max_tokens" class="widefat" step="100" min="1" max="32768" value="10000" style="margin-top: 4px;" />
+                                <label for="provider-form-max-tokens"><strong><?php echo __( 'Max Output Tokens:', 'presshub-ai-editor' ); ?></strong></label>
+                                <input type="number" id="provider-form-max-tokens" name="max_tokens" class="widefat" step="100" min="1" max="65536" value="20000" style="margin-top: 4px;" />
+                                <p class="description" style="margin-top: 4px; font-size: 11px;"><?php echo __( 'Maximum tokens generated in model responses (completion tokens). Does not limit input prompt tokens.', 'presshub-ai-editor' ); ?></p>
                             </div>
                             <div class="presshub-form-group" style="flex: 1;">
                                 <label for="provider-form-timeout"><strong><?php echo __( 'Timeout (seconds):', 'presshub-ai-editor' ); ?></strong></label>
@@ -1349,8 +1350,8 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_max_tokens_' . $provider;
         $value    = (int) get_option( $option, PressHub_AI_Settings_Migration::default_max_tokens() );
         ?>
-        <input type="number" min="1" max="32768" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Maximum tokens per response (1-32768). Default 10000.', 'presshub-ai-editor' ); ?></p>
+        <input type="number" min="1" max="65536" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Maximum output tokens per response (1-65536). Default 20000.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2361,7 +2362,7 @@ class PressHub_AI_Settings_Render {
                 <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
             </button>
         </p>
-        <p class="description"><?php echo __( 'Custom system prompt for Greek text story curation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_count}, {articles_context}.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Custom system prompt for Greek text story curation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_count}. (Optional: {articles_context} if you prefer articles placed inside the system prompt rather than the user prompt).', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
