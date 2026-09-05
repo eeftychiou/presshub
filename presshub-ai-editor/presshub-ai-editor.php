@@ -42,6 +42,42 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
 
+/**
+ * Purge legacy flat provider tuning options (max_tokens, temperature, timeout)
+ * from wp_options so they no longer shadow Provider Store records.
+ * Also migrate any uncustomized 16384 provider records in Provider Store to 20000.
+ */
+if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
+    function presshub_ai_migrate_purge_legacy_provider_tuning() {
+        if ( '1' === get_option( 'presshub_ai_migrated_provider_store_precedence', '0' ) ) {
+            return;
+        }
+
+        foreach ( array( 'openai', 'anthropic', 'gemini' ) as $provider ) {
+            delete_option( 'presshub_ai_max_tokens_' . $provider );
+            delete_option( 'presshub_ai_temperature_' . $provider );
+            delete_option( 'presshub_ai_timeout_' . $provider );
+        }
+
+        if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            $providers = PressHub_AI_Provider_Store::get_all( false );
+            $mutated   = false;
+            foreach ( $providers as $i => $prov ) {
+                if ( isset( $prov['max_tokens'] ) && 16384 === (int) $prov['max_tokens'] ) {
+                    $providers[ $i ]['max_tokens'] = 20000;
+                    $mutated = true;
+                }
+            }
+            if ( $mutated ) {
+                update_option( PressHub_AI_Provider_Store::OPTION_CONFIGURED_PROVIDERS, $providers, false );
+            }
+        }
+
+        update_option( 'presshub_ai_migrated_provider_store_precedence', '1', false );
+    }
+}
+add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
+
 define( 'PRESSHUB_AI_VERSION', '2.3.4' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );

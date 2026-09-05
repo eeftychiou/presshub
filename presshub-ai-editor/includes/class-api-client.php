@@ -104,9 +104,30 @@ class PressHub_AI_API_Client {
      * provider default).
      */
     public static function current_request_meta(): string {
-        $provider   = (string) get_option( 'presshub_ai_provider', 'openai' );
-        $model      = (string) get_option( 'presshub_ai_model_' . $provider, '' );
-        $max_tokens = (int) get_option( 'presshub_ai_max_tokens_' . $provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
+        $provider   = '';
+        $model      = '';
+        $max_tokens = 0;
+
+        if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            $enabled = PressHub_AI_Provider_Store::get_all( true );
+            if ( ! empty( $enabled ) && is_array( $enabled ) ) {
+                $prov       = $enabled[0];
+                $provider   = (string) ( $prov['type'] ?? 'openai' );
+                $model      = (string) ( $prov['default_model'] ?? '' );
+                $max_tokens = (int) ( $prov['max_tokens'] ?? PressHub_AI_Provider_Defaults::default_max_tokens() );
+            }
+        }
+
+        if ( '' === $provider ) {
+            $provider = (string) get_option( 'presshub_ai_provider', 'openai' );
+        }
+        if ( '' === $model ) {
+            $model = (string) get_option( 'presshub_ai_model_' . $provider, 'default' );
+        }
+        if ( $max_tokens <= 0 ) {
+            $max_tokens = (int) get_option( 'presshub_ai_max_tokens_' . $provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
+        }
+
         return 'provider=' . $provider
             . ' model=' . ( '' !== $model ? $model : 'default' )
             . ' max_tokens=' . $max_tokens;
@@ -296,17 +317,10 @@ class PressHub_AI_API_Client {
             );
         }
 
-        // 6. Temperature resolution
+        // 6. Temperature resolution: Module override -> Provider Store record -> Default
         $opt_temp = ( 'tts' === $module )
             ? get_option( 'presshub_ai_briefing_tts_temperature', null )
             : get_option( "presshub_ai_{$module}_temperature", null );
-
-        if ( null === $opt_temp || '' === $opt_temp ) {
-            $opt_temp = get_option( 'presshub_ai_temperature_' . $provider_id, null );
-            if ( ( null === $opt_temp || '' === $opt_temp ) && $provider_id !== $type ) {
-                $opt_temp = get_option( 'presshub_ai_temperature_' . $type, null );
-            }
-        }
 
         if ( null !== $opt_temp && '' !== $opt_temp ) {
             $temperature = max( 0.0, min( 2.0, (float) $opt_temp ) );
@@ -316,17 +330,10 @@ class PressHub_AI_API_Client {
             $temperature = PressHub_AI_Provider_Defaults::default_temperature();
         }
 
-        // 7. Max Tokens resolution
+        // 7. Max Tokens resolution: Module override -> Provider Store record -> Default
         $opt_tokens = ( 'tts' === $module )
             ? get_option( 'presshub_ai_briefing_tts_max_tokens', null )
             : get_option( "presshub_ai_{$module}_max_tokens", null );
-
-        if ( null === $opt_tokens || '' === $opt_tokens ) {
-            $opt_tokens = get_option( 'presshub_ai_max_tokens_' . $provider_id, null );
-            if ( ( null === $opt_tokens || '' === $opt_tokens ) && $provider_id !== $type ) {
-                $opt_tokens = get_option( 'presshub_ai_max_tokens_' . $type, null );
-            }
-        }
 
         if ( null !== $opt_tokens && '' !== $opt_tokens ) {
             $max_tokens = max( 1, (int) $opt_tokens );
@@ -336,17 +343,10 @@ class PressHub_AI_API_Client {
             $max_tokens = PressHub_AI_Provider_Defaults::default_max_tokens();
         }
 
-        // 8. Timeout resolution
+        // 8. Timeout resolution: Module override -> Provider Store record -> Default
         $opt_timeout = ( 'tts' === $module )
             ? get_option( 'presshub_ai_briefing_tts_timeout', null )
             : get_option( "presshub_ai_{$module}_timeout", null );
-
-        if ( null === $opt_timeout || '' === $opt_timeout ) {
-            $opt_timeout = get_option( 'presshub_ai_timeout_' . $provider_id, null );
-            if ( ( null === $opt_timeout || '' === $opt_timeout ) && $provider_id !== $type ) {
-                $opt_timeout = get_option( 'presshub_ai_timeout_' . $type, null );
-            }
-        }
 
         if ( null !== $opt_timeout && '' !== $opt_timeout ) {
             $timeout = max( 1, (int) $opt_timeout );
@@ -523,6 +523,18 @@ class PressHub_AI_API_Client {
             $this->headers  = $configured['headers'] ?? [];
             if ( ! empty( $configured['api_key'] ) ) {
                 $this->api_key = $configured['api_key'];
+            }
+            if ( isset( $configured['temperature'] ) ) {
+                $this->temperature = (float) $configured['temperature'];
+            }
+            if ( isset( $configured['max_tokens'] ) ) {
+                $this->max_tokens = (int) $configured['max_tokens'];
+            }
+            if ( isset( $configured['timeout'] ) ) {
+                $this->timeout = (int) $configured['timeout'];
+            }
+            if ( ! empty( $configured['default_model'] ) ) {
+                $this->model = $configured['default_model'];
             }
         }
     }
@@ -861,6 +873,15 @@ class PressHub_AI_API_Client {
         $this->current_action = 'custom_test';
         if ( ! empty( $provider ) ) {
             $prov_record = PressHub_AI_Provider_Store::get( $provider );
+            if ( null === $prov_record ) {
+                $all_provs = PressHub_AI_Provider_Store::get_all( false );
+                foreach ( $all_provs as $p ) {
+                    if ( ( $p['type'] ?? '' ) === $provider || ( $p['id'] ?? '' ) === $provider ) {
+                        $prov_record = $p;
+                        break;
+                    }
+                }
+            }
             if ( $prov_record ) {
                 $this->set_provider_config( $prov_record );
             } else {
