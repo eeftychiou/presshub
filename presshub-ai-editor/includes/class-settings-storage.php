@@ -1550,7 +1550,7 @@ class PressHub_AI_Settings_Storage {
      * Issue #108 — Seed built-in default prompts for all 9 style x presenter count options
      * if they have not yet been stored in the database, or upgrade legacy English templates.
      */
-    public static function seed_default_podcast_prompts(): void {
+    public static function seed_default_podcast_prompts( bool $force = false ): void {
         if ( ! class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
             require_once __DIR__ . '/class-podcast-producer.php';
         }
@@ -1559,7 +1559,7 @@ class PressHub_AI_Settings_Storage {
             foreach ( [ 1, 2, 3 ] as $host_count ) {
                 $option_name = 'presshub_ai_briefing_podcast_prompt_' . $host_count . '_' . $style_key;
                 $current     = get_option( $option_name, null );
-                if ( null === $current || ( is_string( $current ) && str_starts_with( trim( $current ), 'You are' ) ) ) {
+                if ( null === $current || ( is_string( $current ) && str_starts_with( trim( $current ), 'You are' ) ) || $force ) {
                     $default = PressHub_AI_Podcast_Producer::get_default_dialogue_prompt( $host_count, $style_key );
                     update_option( $option_name, $default );
                 }
