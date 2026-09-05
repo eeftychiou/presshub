@@ -47,8 +47,8 @@ class ProviderDefaultsTest
         if ( PressHub_AI_Provider_Defaults::default_temperature() !== 0.7 ) {
             $failures[] = 'default_temperature() should be 0.7; got: ' . var_export( PressHub_AI_Provider_Defaults::default_temperature(), true );
         }
-        if ( PressHub_AI_Provider_Defaults::default_max_tokens() !== 16384 ) {
-            $failures[] = 'default_max_tokens() should be 16384; got: ' . var_export( PressHub_AI_Provider_Defaults::default_max_tokens(), true );
+        if ( PressHub_AI_Provider_Defaults::default_max_tokens() !== 20000 ) {
+            $failures[] = 'default_max_tokens() should be 20000; got: ' . var_export( PressHub_AI_Provider_Defaults::default_max_tokens(), true );
         }
 
         // --- Case 3: timeout per provider (default 300s) ---

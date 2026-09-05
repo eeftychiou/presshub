@@ -47,7 +47,7 @@ foreach ( $styles as $style ) {
 
 // 3. Verify curation prompt loads
 $curation_prompt = PressHub_AI_Prompt_Loader::get_curation_prompt();
-plt_check( 'load curation prompt', ! empty( $curation_prompt ) && false !== strpos( $curation_prompt, '{articles_context}' ) );
+plt_check( 'load curation prompt', ! empty( $curation_prompt ) && false !== strpos( $curation_prompt, 'Οδηγίες Σύνταξης:' ) && false !== strpos( $curation_prompt, '{sources_list}' ) );
 
 // 4. Verify Zero-Silent-Fallback on missing template
 $caught_missing = false;
