@@ -127,6 +127,41 @@ class APIClientModularTest
         }
 
         // ==================================================================
+        // 2b. Provider Store tuning precedence: $provider_record['max_tokens']
+        // beats legacy flat options in wp_options.
+        // ==================================================================
+        PressHub_AI_Provider_Store::save_provider( [
+            'id'            => 'tuning-precedence-prov',
+            'type'          => 'gemini',
+            'name'          => 'Tuning Precedence Gemini',
+            'max_tokens'    => 28000,
+            'temperature'   => 0.35,
+            'timeout'       => 150,
+            'enabled'       => true,
+        ] );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_text_provider'] = 'tuning-precedence-prov';
+        // Simulate stale legacy options from an upgraded install
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_gemini']      = '10000';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_gemini']     = '0.9';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_timeout_gemini']         = '45';
+
+        $precedence_cfg = PressHub_AI_API_Client::resolve_module_config( 'briefing_text' );
+        if ( $precedence_cfg['max_tokens'] !== 28000 ) {
+            $failures[] = "Provider Store max_tokens (28000) not honored; got: " . var_export( $precedence_cfg['max_tokens'], true );
+        }
+        if ( $precedence_cfg['temperature'] !== 0.35 ) {
+            $failures[] = "Provider Store temperature (0.35) not honored; got: " . var_export( $precedence_cfg['temperature'], true );
+        }
+        if ( $precedence_cfg['timeout'] !== 150 ) {
+            $failures[] = "Provider Store timeout (150) not honored; got: " . var_export( $precedence_cfg['timeout'], true );
+        }
+
+        // Clean up legacy options
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_gemini'] );
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_gemini'] );
+        unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_timeout_gemini'] );
+
+        // ==================================================================
         // 3. Fallback when module options are empty: first enabled provider in store
         // ==================================================================
         self::reset_world();

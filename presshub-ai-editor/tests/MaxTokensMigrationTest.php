@@ -53,16 +53,45 @@ $before = $GLOBALS['OPTIONS_STORE'];
 presshub_ai_migrate_max_tokens_defaults();
 mtm_check( 'second run is a no-op', $before === $GLOBALS['OPTIONS_STORE'] );
 
-// --- Case 3: migration flag already set → untouched stale values ------------
+// --- Case 4: purge legacy tuning options & migrate 16384 store records ------
 $GLOBALS['OPTIONS_STORE'] = [
-    'presshub_ai_migrated_max_tokens' => '1',
-    'presshub_ai_max_tokens_openai'   => '2000',
+    'presshub_ai_max_tokens_openai'       => '10000',
+    'presshub_ai_max_tokens_anthropic'    => '4000',
+    'presshub_ai_max_tokens_gemini'       => '16384',
+    'presshub_ai_temperature_openai'      => '0.7',
+    'presshub_ai_timeout_gemini'          => '120',
+    'presshub_ai_configured_providers'    => [
+        [
+            'id'         => 'prov-1',
+            'type'       => 'gemini',
+            'max_tokens' => 16384, // uncustomized old default
+        ],
+        [
+            'id'         => 'prov-2',
+            'type'       => 'openai',
+            'max_tokens' => 32000, // customized value
+        ],
+    ],
 ];
-presshub_ai_migrate_max_tokens_defaults();
-mtm_check( 'flag-set run leaves values alone', isset( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_openai'] ) );
+
+presshub_ai_migrate_purge_legacy_provider_tuning();
+
+mtm_check( 'legacy max_tokens_openai purged', ! isset( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_openai'] ) );
+mtm_check( 'legacy max_tokens_anthropic purged', ! isset( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_anthropic'] ) );
+mtm_check( 'legacy max_tokens_gemini purged', ! isset( $GLOBALS['OPTIONS_STORE']['presshub_ai_max_tokens_gemini'] ) );
+mtm_check( 'legacy temperature_openai purged', ! isset( $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_openai'] ) );
+mtm_check( 'legacy timeout_gemini purged', ! isset( $GLOBALS['OPTIONS_STORE']['presshub_ai_timeout_gemini'] ) );
+mtm_check( 'uncustomized 16384 migrated to 20000', 20000 === ( $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'][0]['max_tokens'] ?? 0 ) );
+mtm_check( 'customized 32000 left unchanged', 32000 === ( $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'][1]['max_tokens'] ?? 0 ) );
+mtm_check( 'purge migration flag set', ( $GLOBALS['OPTIONS_STORE']['presshub_ai_migrated_provider_store_precedence'] ?? '' ) === '1' );
+
+// Case 4b: Idempotent
+$before_purge = $GLOBALS['OPTIONS_STORE'];
+presshub_ai_migrate_purge_legacy_provider_tuning();
+mtm_check( 'purge migration is idempotent', $before_purge === $GLOBALS['OPTIONS_STORE'] );
 
 if ( $failures > 0 ) {
     fwrite( STDERR, "MaxTokensMigrationTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "MaxTokensMigrationTest: OK (8 checks)\n";
+echo "MaxTokensMigrationTest: OK (17 checks)\n";
