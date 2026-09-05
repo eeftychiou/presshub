@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.3.2
+ * Version: 2.3.3
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -42,7 +42,7 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
 
-define( 'PRESSHUB_AI_VERSION', '2.3.2' );
+define( 'PRESSHUB_AI_VERSION', '2.3.3' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -71,6 +71,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-preset-resolver.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-admin-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-author-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-context-estimator.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-prompt-loader.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-harvester.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';

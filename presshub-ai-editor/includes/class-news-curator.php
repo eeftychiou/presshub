@@ -19,6 +19,7 @@ require_once __DIR__ . '/class-preset-store.php';
 require_once __DIR__ . '/class-preset-resolver.php';
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-api-client.php';
+require_once __DIR__ . '/class-prompt-loader.php';
 require_once __DIR__ . '/class-settings-storage.php';
 
 class PressHub_AI_News_Curator {
@@ -99,25 +100,10 @@ class PressHub_AI_News_Curator {
      * @return string Base system prompt with placeholders.
      */
     public function get_default_curation_prompt(): string {
-        // Issue #65 — Bug A (long-term fix): instruct the LLM to emit ONLY
-        // the editorial headline in the opening `<h1>`, not the full masthead
-        // (e.g. "Πρωινή Ενημέρωση – <date>: …"). The masthead is assembled in
-        // create_wordpress_post() from the operator-configurable
-        // presshub_ai_briefing_text_title_prefix and date-format Settings,
-        // and a duplicate-prefix guard prevents the same prefix from being
-        // applied twice. This means the <h1> in the LLM output now matches
-        // the curator's extracted headline exactly, and the post body
-        // starts cleanly at the first <h2> section.
-        return "Είσαι ένας έμπειρος αρχισυντάκτης και δημοσιογράφος ειδήσεων. "
-            . "Αποστολή σου είναι να συνθέσεις μία ολοκληρωμένη, αντικειμενική και ευανάγνωστη Πρωινή Ενημέρωση (Daily News Briefing) "
-            . "στα Ελληνικά για την ημερομηνία {date}, αξιοποιώντας {articles_count} άρθρα από τις παρακάτω πηγές: {sources_list}.\n\n"
-            . "Οδηγίες Σύνταξης:\n"
-            . "1. Ξεκίνα με έναν σαφή και ελκυστικό κύριο τίτλο σε μορφή Markdown (# Τίτλος) που συνοψίζει το κορυφαίο γεγονός της ημέρας — ΜΟΝΟ τον τίτλο, χωρίς πρόθεμα «Πρωινή Ενημέρωση» ή ημερομηνία. Το πρόθεμα και η ημερομηνία θα προστεθούν αυτόματα από το σύστημα στον τίτλο του άρθρου.\n"
-            . "2. Χώρισε την ενημέρωση σε ευδιάκριτες θεματικές ενότητες με μεσότιτλους (## Πολιτική & Οικονομία, ## Διεθνή, ## Κοινωνία & Επικαιρότητα).\n"
-            . "3. Για κάθε είδηση, ανάδειξε τα βασικά γεγονότα με σαφήνεια και ροή, αναφέροντας την πηγή όπου κρίνεται απαραίτητο, διατηρώντας δημοσιογραφική ουδετερότητα.\n"
-            . "4. Μην επινοείς γεγονότα ή λεπτομέρειες που δεν αναφέρονται στο παρεχόμενο υλικό.\n"
-            . "5. Χρησιμοποίησε καθαρή μορφοποίηση Markdown (επικεφαλίδες, παραγράφους, λίστες με bullets όπου βοηθά στην ανάγνωση).\n\n"
-            . "Άρθρα & Πηγές:\n{articles_context}";
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
+        }
+        return PressHub_AI_Prompt_Loader::get_curation_prompt();
     }
 
     /**
@@ -432,7 +418,9 @@ class PressHub_AI_News_Curator {
         }
 
         // 1. Base curation prompt & filter
-        $base_prompt = $this->get_default_curation_prompt();
+        $base_prompt = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_curation_prompt()
+            : $this->get_default_curation_prompt();
         $base_prompt = apply_filters( 'presshub_ai_curator_system_prompt', $base_prompt );
 
         // 2. Hydrate placeholders

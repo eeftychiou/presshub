@@ -628,6 +628,8 @@ foreach ( $all_styles as $style_k ) {
         pp_check( "greek_prompts: {$style_k} {$hc}-host contains sources placeholder", false !== strpos( $prompt, '{sources_list}' ) );
         pp_check( "greek_prompts: {$style_k} {$hc}-host contains topic markers", false !== strpos( $prompt, 'TOPIC_START' ) && false !== strpos( $prompt, 'TOPIC_END' ) );
         pp_check( "greek_prompts: {$style_k} {$hc}-host contains [SPEAKER_1]:", false !== strpos( $prompt, '[SPEAKER_1]:' ) );
+        pp_check( "greek_prompts: {$style_k} {$hc}-host forbids presenter names", false !== strpos( $prompt, 'Απαγόρευση Ονομάτων' ) );
+        pp_check( "greek_prompts: {$style_k} {$hc}-host requires spoken date formatting for TTS", false !== strpos( $prompt, 'Μορφοποίηση Ημερομηνιών για TTS' ) );
         if ( $hc >= 2 ) {
             pp_check( "greek_prompts: {$style_k} {$hc}-host contains [SPEAKER_2]:", false !== strpos( $prompt, '[SPEAKER_2]:' ) );
         }
@@ -643,6 +645,11 @@ foreach ( $all_styles as $style_k ) {
     }
 }
 
+// Issue #118: Verify user_prompt reinforces nameless presenter instruction and TTS date conversion
+$dialogue_prompt_check = $producer->build_dialogue_prompt( $sample_articles, '__none__', '5_min', '2026-08-26', 'curated_briefing', [], 'Sample Briefing Content' );
+pp_check( 'issue_118: user_prompt enforces nameless presenter instruction', false !== strpos( $dialogue_prompt_check['user_prompt'], 'must never refer to each other or themselves by name' ) || false !== strpos( $dialogue_prompt_check['user_prompt'], 'must not refer to themselves by name' ) );
+pp_check( 'issue_118: user_prompt enforces TTS date formatting', false !== strpos( $dialogue_prompt_check['user_prompt'], 'natural spoken words' ) && false !== strpos( $dialogue_prompt_check['user_prompt'], '03/05/2026' ) );
+
 // Test seeding upgrade: legacy 'You are' prompt upgraded to Greek default
 $legacy_option = 'presshub_ai_briefing_podcast_prompt_1_bbc_broadcasting_standards';
 $GLOBALS['OPTIONS_STORE'][ $legacy_option ] = 'You are the lead anchor of a professional broadcast news podcast...';
@@ -654,6 +661,12 @@ $custom_option = 'presshub_ai_briefing_podcast_prompt_2_conversational_news_repo
 $GLOBALS['OPTIONS_STORE'][ $custom_option ] = 'Προσαρμοσμένο σενάριο από τον χειριστή με δικό του ύφος (improved by the host).';
 PressHub_AI_Settings_Storage::seed_default_podcast_prompts();
 pp_check( 'seeding_upgrade: custom non-legacy prompt is preserved', $GLOBALS['OPTIONS_STORE'][ $custom_option ] === 'Προσαρμοσμένο σενάριο από τον χειριστή με δικό του ύφος (improved by the host).' );
+
+// Test seeding force flag updates options when force=true
+$force_test_option = 'presshub_ai_briefing_podcast_prompt_1_default_greek_chat';
+$GLOBALS['OPTIONS_STORE'][ $force_test_option ] = 'Old stored prompt without date rules';
+PressHub_AI_Settings_Storage::seed_default_podcast_prompts( true );
+pp_check( 'seeding_force: force=true updates option to new default', false !== strpos( $GLOBALS['OPTIONS_STORE'][ $force_test_option ], 'Μορφοποίηση Ημερομηνιών για TTS' ) );
 
 // Cleanup test uploads dir
 if ( is_dir( $test_upload_dir ) ) {
