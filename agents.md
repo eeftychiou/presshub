@@ -334,6 +334,14 @@ If a PR introduces a new operational knob without the full six-step registration
 3. **Purge Rather than Preserve**:
    - When refactoring, actively delete obsolete fields, unused options, and deprecated helper functions rather than keeping them "for backward compatibility".
    - Clean, direct code is prioritized over preserving obsolete state.
+4. **Provider Tuning Resolution Precedence**:
+   - Provider tuning parameters (`max_tokens`, `temperature`, `timeout`, `default_model`) must resolve strictly in this order:
+     1. Per-module explicit override option (`presshub_ai_{module}_{knob}`)
+     2. Configured provider record from `PressHub_AI_Provider_Store` (`$provider_record['max_tokens']`)
+     3. Class defaults (`PressHub_AI_Provider_Defaults::default_max_tokens()`)
+   - **Never** check obsolete flat options (`presshub_ai_{knob}_{provider}`) in business logic or resolution paths.
+5. **Active Purge Migrations**:
+   - When migrating away from deprecated options, write an idempotent DB migration (`presshub_ai_migrate_*`) that explicitly deletes the obsolete rows from `wp_options` so they cannot linger and shadow active records.
 
 ---
 
@@ -375,6 +383,45 @@ function resolve_prompt() {
     return $prompt;
 }
 ```
+
+---
+
+## 📁 Prompt Defaults as External Assets Principle
+
+> **Default prompt templates and lengthy instructions are editorial assets, NOT application code. They must never be hardcoded as long inline string literals in PHP class files.**
+
+1. **Dedicated Asset Files**:
+   - All default system and user prompts must reside in dedicated text files under `presshub-ai-editor/assets/prompts/` (e.g. `assets/prompts/default_greek_briefing.txt`, `assets/prompts/podcast_style_two_hosts_greek.txt`).
+2. **Centralized Prompt Loader**:
+   - All PHP code requiring default prompt templates must load them via `PressHub_AI_Prompt_Loader::load( $filename )`.
+3. **Database Seeding from Assets**:
+   - Default prompts must be seeded into the database/UI options from these asset files. If an option is missing or reset by the operator, it re-seeds from the external asset file.
+4. **Zero Inline Fallback Prompts**:
+   - Never use in-line PHP string literals as fallback templates in prompt resolvers or client dispatch logic.
+
+---
+
+## 🎙️ Audio Script & TTS Formatting Invariants
+
+> **Prompts designed for script generation and Text-to-Speech (TTS) must enforce strict spoken-language rules to prevent robotic output and pronunciation failures.**
+
+1. **Nameless Speaker Dialogue**:
+   - In podcast and multi-speaker script prompts, speakers must **never** refer to each other or themselves by name (e.g., "Welcome back, John", "Thanks, Sarah"). The dialogue must flow naturally based on ideas and topics without repetitive conversational boilerplate.
+2. **Spoken Date Formatting**:
+   - Dates in generated scripts must always be written in natural spoken language (e.g., `"3rd of May 2026"` or `"3 Μαΐου 2026"`), never as raw numerical digits or slashed formats (e.g., `"03/05/2026"` or `"2026-05-03"`), which cause TTS engines to spell out numbers or pronounce slashes.
+3. **No Unrendered Topic Markers**:
+   - Topic and sound effect delimiters (e.g. `[TOPIC_START]`, `[TOPIC_END]`, `[SFX: ...]`) must be isolated and stripped before audio synthesis so TTS models never speak markup tags aloud.
+
+---
+
+## 🚫 Prompt Context Deduplication Guard
+
+> **Payload context (such as harvested articles, transcript snippets, or reference documents) must NEVER be injected multiple times across system and user prompts.**
+
+1. **Single-Context Enforcement**:
+   - If a system prompt or user prompt template already contains a placeholder token for payload data (e.g. `{articles_context}`), the prompt builder must not re-append or duplicate that data in the complementary prompt.
+2. **Distinguish Input Context vs. Output Limit**:
+   - `max_tokens` (or `maxOutputTokens`) strictly bounds the LLM's **output completion length**. It never constrains prompt input tokens. Prompt input size must be controlled explicitly via operational caps (e.g. `presshub_ai_curation_max_articles` and `presshub_ai_curation_max_chars_per_article`).
 
 ---
 
