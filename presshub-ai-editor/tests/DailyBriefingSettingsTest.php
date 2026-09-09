@@ -413,6 +413,27 @@ class DailyBriefingSettingsTest
             $failures[] = 'Updating harvest time must clear and reschedule presshub_daily_news_harvest.';
         }
 
+        // --- Case 12b: First-time option add (add_option hook) triggers scheduling ---
+        self::reset_world();
+        $GLOBALS['TIME_NOW'] = strtotime( '2026-08-26 04:00:00' );
+        $GLOBALS['CLEARED_HOOKS'] = [];
+        $GLOBALS['RECURRING_EVENTS'] = [];
+
+        if ( ! function_exists( 'presshub_ai_on_briefing_option_added' ) ) {
+            $failures[] = 'presshub_ai_on_briefing_option_added function must exist.';
+        } else {
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_schedule_enabled'] = 1;
+            presshub_ai_on_briefing_option_added( 'presshub_ai_briefing_schedule_enabled', 1 );
+
+            $added_recurring = array_column( $GLOBALS['RECURRING_EVENTS'] ?? [], 'hook' );
+            if ( ! in_array( 'presshub_daily_news_harvest', $added_recurring, true ) ) {
+                $failures[] = 'presshub_ai_on_briefing_option_added must schedule presshub_daily_news_harvest on first-time option add.';
+            }
+            if ( ! in_array( 'presshub_daily_news_generate', $added_recurring, true ) ) {
+                $failures[] = 'presshub_ai_on_briefing_option_added must schedule presshub_daily_news_generate on first-time option add.';
+            }
+        }
+
         // --- Case 13: Cron Execution Hooks Registration ---
         if ( ! function_exists( 'presshub_ai_execute_harvest_cron' ) ) {
             $failures[] = 'presshub_ai_execute_harvest_cron function must exist.';
@@ -797,10 +818,14 @@ class DailyBriefingSettingsTest
         $GLOBALS['CLEARED_HOOKS']            = [];
         $GLOBALS['NEXT_SCHEDULED']           = [];
         $GLOBALS['ACTIONS']                  = [
-            'update_option_presshub_ai_briefing_harvest_time'    => [ 'presshub_ai_schedule_briefing_crons' ],
-            'update_option_presshub_ai_briefing_generation_time' => [ 'presshub_ai_schedule_briefing_crons' ],
-            'presshub_daily_news_harvest'                        => [ 'presshub_ai_execute_harvest_cron' ],
-            'presshub_daily_news_generate'                       => [ 'presshub_ai_execute_generation_cron' ],
+            'update_option_presshub_ai_briefing_schedule_enabled' => [ 'presshub_ai_on_briefing_time_updated' ],
+            'update_option_presshub_ai_briefing_harvest_time'     => [ 'presshub_ai_schedule_briefing_crons' ],
+            'update_option_presshub_ai_briefing_generation_time'  => [ 'presshub_ai_schedule_briefing_crons' ],
+            'add_option_presshub_ai_briefing_schedule_enabled'    => [ 'presshub_ai_on_briefing_option_added' ],
+            'add_option_presshub_ai_briefing_harvest_time'         => [ 'presshub_ai_on_briefing_option_added' ],
+            'add_option_presshub_ai_briefing_generation_time'      => [ 'presshub_ai_on_briefing_option_added' ],
+            'presshub_daily_news_harvest'                         => [ 'presshub_ai_execute_harvest_cron' ],
+            'presshub_daily_news_generate'                        => [ 'presshub_ai_execute_generation_cron' ],
         ];
     }
 

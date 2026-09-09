@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.3.5
+ * Version: 2.3.6
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -78,7 +78,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.3.5' );
+define( 'PRESSHUB_AI_VERSION', '2.3.6' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -394,7 +394,22 @@ add_action( 'presshub_daily_news_generate', 'presshub_ai_execute_generation_cron
 add_action( 'update_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
+add_action( 'add_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_option_added', 10, 2 );
+add_action( 'add_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_option_added', 10, 2 );
+add_action( 'add_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_option_added', 10, 2 );
 register_activation_hook( __FILE__, 'presshub_ai_schedule_briefing_crons' );
+
+/**
+ * Handle addition of briefing time/schedule options (first-time save in wp_options).
+ *
+ * @param string|null $option Option name.
+ * @param mixed       $value  Option value.
+ */
+function presshub_ai_on_briefing_option_added( $option = null, $value = null ) {
+    wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
+    wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
+    presshub_ai_schedule_briefing_crons();
+}
 
 /**
  * Handle updates to briefing time options: only reschedule when value changed.
@@ -484,11 +499,29 @@ function presshub_ai_schedule_briefing_crons() {
  * @return array Harvest payload.
  */
 function presshub_ai_execute_harvest_cron() {
+    if ( function_exists( 'set_time_limit' ) ) {
+        @set_time_limit( 0 );
+    }
+    if ( function_exists( 'ignore_user_abort' ) ) {
+        @ignore_user_abort( true );
+    }
+
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( 'PressHub Daily News Harvest Cron started.' );
+    }
+
     $harvester = new PressHub_AI_News_Harvester();
     $sources   = class_exists( 'PressHub_AI_Settings_Storage' )
         ? PressHub_AI_Settings_Storage::get_briefing_sources()
         : ( class_exists( 'PressHub_AI_Settings' ) ? PressHub_AI_Settings::default_briefing_sources() : [] );
-    return $harvester->harvest_all( $sources );
+    $result    = $harvester->harvest_all( $sources );
+
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        $count = is_array( $result['articles'] ?? null ) ? count( $result['articles'] ) : 0;
+        PressHub_AI_Logger::info( sprintf( 'PressHub Daily News Harvest Cron completed: %d articles harvested.', $count ) );
+    }
+
+    return $result;
 }
 
 /**
@@ -497,7 +530,19 @@ function presshub_ai_execute_harvest_cron() {
  * @return array Generated results payload.
  */
 function presshub_ai_execute_generation_cron() {
-    $date = gmdate( 'Y-m-d' );
+    if ( function_exists( 'set_time_limit' ) ) {
+        @set_time_limit( 0 );
+    }
+    if ( function_exists( 'ignore_user_abort' ) ) {
+        @ignore_user_abort( true );
+    }
+
+    $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
+
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( sprintf( 'PressHub Daily News Generation Cron started for date: %s', $date ) );
+    }
+
     $results = [
         'curation'  => null,
         'podcast'   => null,
@@ -509,16 +554,47 @@ function presshub_ai_execute_generation_cron() {
     $preset_text = (string) get_option( 'presshub_ai_briefing_text_preset', '' );
     $results['curation'] = $curator->generate_story( $date, null, $preset_text );
 
+    if ( is_wp_error( $results['curation'] ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( 'Daily News Briefing generation cron error in text story curation: ' . $results['curation']->get_error_message() );
+        }
+    } else {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            $post_id = is_array( $results['curation'] ) ? (int) ( $results['curation']['post_id'] ?? 0 ) : 0;
+            PressHub_AI_Logger::info( sprintf( 'Daily News Briefing text story curated successfully (post ID: %d)', $post_id ) );
+        }
+    }
+
     // 2. Podcast dialogue script generation
     $producer = new PressHub_AI_Podcast_Producer();
     $preset_podcast = (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
     $duration = (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
     $results['podcast'] = $producer->generate_dialogue_script( $date, null, $preset_podcast, $duration );
 
+    if ( is_wp_error( $results['podcast'] ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( 'Daily News Briefing generation cron error in podcast dialogue: ' . $results['podcast']->get_error_message() );
+        }
+    } else {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Daily News Briefing podcast dialogue generated successfully.' );
+        }
+    }
+
     // 3. Audio podcast synthesis
     if ( ! is_wp_error( $results['podcast'] ) ) {
         $synthesizer = new PressHub_AI_Audio_Synthesizer();
         $results['synthesis'] = $synthesizer->synthesize_podcast( $date );
+
+        if ( is_wp_error( $results['synthesis'] ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Daily News Briefing generation cron error in audio synthesis: ' . $results['synthesis']->get_error_message() );
+            }
+        } else {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Daily News Briefing audio podcast synthesized successfully.' );
+            }
+        }
     }
 
     return $results;

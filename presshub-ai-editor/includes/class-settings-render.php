@@ -1801,12 +1801,42 @@ class PressHub_AI_Settings_Render {
     public function render_briefing_schedule_enabled_field() {
         $option = 'presshub_ai_briefing_schedule_enabled';
         $value  = PressHub_AI_Settings_Storage::get_briefing_schedule_enabled();
+
+        $next_harvest  = function_exists( 'wp_next_scheduled' ) ? wp_next_scheduled( 'presshub_daily_news_harvest' ) : false;
+        $next_generate = function_exists( 'wp_next_scheduled' ) ? wp_next_scheduled( 'presshub_daily_news_generate' ) : false;
+        $cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
         ?>
         <label>
             <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
             <?php echo __( 'Enable automated morning news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
         </label>
+        <div style="margin-top: 8px; font-size: 13px; color: #555;">
+            <?php if ( $value ) : ?>
+                <div style="margin-bottom: 4px;">
+                    <strong><?php echo __( 'Status:', 'presshub-ai-editor' ); ?></strong>
+                    <?php if ( $next_harvest ) : ?>
+                        <span style="color: #46b450; font-weight: 600;">&#10003; <?php echo __( 'Harvest:', 'presshub-ai-editor' ); ?></span>
+                        <code><?php echo esc_html( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d H:i:s T', $next_harvest ) : date( 'Y-m-d H:i:s', $next_harvest ) ); ?></code>
+                    <?php else : ?>
+                        <span style="color: #dc3232; font-weight: 600;">&#10007; <?php echo __( 'Harvest not in cron queue.', 'presshub-ai-editor' ); ?></span>
+                    <?php endif; ?>
+                    &nbsp;|&nbsp;
+                    <?php if ( $next_generate ) : ?>
+                        <span style="color: #46b450; font-weight: 600;">&#10003; <?php echo __( 'Generation:', 'presshub-ai-editor' ); ?></span>
+                        <code><?php echo esc_html( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d H:i:s T', $next_generate ) : date( 'Y-m-d H:i:s', $next_generate ) ); ?></code>
+                    <?php else : ?>
+                        <span style="color: #dc3232; font-weight: 600;">&#10007; <?php echo __( 'Generation not in cron queue.', 'presshub-ai-editor' ); ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php if ( $cron_disabled ) : ?>
+                    <div style="margin-top: 6px; padding: 6px 10px; background: #fff8e5; border-left: 4px solid #ffb900; color: #613e00;">
+                        <strong><?php echo __( 'Notice:', 'presshub-ai-editor' ); ?></strong>
+                        <?php echo __( 'DISABLE_WP_CRON is enabled on your site. Automated jobs will only run if a system cron (e.g. crontab) executes wp-cron.php or WP-CLI.', 'presshub-ai-editor' ); ?>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
         <?php
     }
 
