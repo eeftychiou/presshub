@@ -242,28 +242,35 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $this->enforce_rate_limit();
-        // Issue #44: pass the explicit module name so the API client
-        // resolves the coauthor provider/model/keys deterministically.
-        // generate_scorecard() itself sets current_action = 'coauthor_scorecard'.
-        $api = new PressHub_AI_API_Client( 'coauthor' );
-        $scorecard = $api->generate_scorecard( $content );
 
-        if ( is_wp_error( $scorecard ) ) {
-            wp_send_json_error( $scorecard->get_error_message() );
+        require_once __DIR__ . '/class-qa-reviewer.php';
+        $eval_result = PressHub_AI_QA_Reviewer::evaluate_content( $content, 'post' );
+
+        if ( ! empty( $eval_result['error'] ) ) {
+            $error_msg = ! empty( $eval_result['feedback'] ) ? $eval_result['feedback'] : __( 'AI QA review evaluation failed.', 'presshub-ai-editor' );
+            wp_send_json_error( $error_msg );
         }
+
+        $scorecard = [
+            'score'    => $eval_result['score'],
+            'feedback' => $eval_result['feedback'],
+        ];
 
         $status_after = null;
         if ( $post_id ) {
             update_post_meta( $post_id, '_presshub_ai_scorecard', $scorecard );
+            update_post_meta( $post_id, '_presshub_ai_scorecard_hash', md5( trim( $content ) ) );
 
             $post = get_post( $post_id );
             if ( $post ) {
                 $status_after = $post->post_status;
 
+                $min_score = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_qa_min_score() : 80;
+
                 // High-1 guard: run_review() must never demote an
                 // already-published post. Only non-published posts are
                 // transitioned to 'pending' for editorial review.
-                if ( isset( $scorecard['score'] ) && intval( $scorecard['score'] ) >= 80
+                if ( isset( $scorecard['score'] ) && intval( $scorecard['score'] ) >= $min_score
                     && 'publish' !== $post->post_status ) {
                     wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
                     $status_after = 'pending';
@@ -1452,6 +1459,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_qa_min_score'                => [ 'PressHub_AI_Settings_Storage', 'sanitize_qa_min_score' ],
                 'presshub_ai_qa_notify_editor'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
                 'presshub_ai_qa_editor_email'             => [ 'PressHub_AI_Settings_Storage', 'sanitize_qa_editor_email' ],
+                'presshub_ai_qa_article_prompt'           => [ 'PressHub_AI_Settings_Storage', 'sanitize_qa_prompt' ],
+                'presshub_ai_qa_briefing_prompt'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_qa_prompt' ],
                 'presshub_ai_copilot_provider'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_provider_id' ],
                 'presshub_ai_copilot_model'               => [ 'PressHub_AI_Settings_Storage', 'sanitize_model_string' ],
                 'presshub_ai_copilot_temperature'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_temperature' ],

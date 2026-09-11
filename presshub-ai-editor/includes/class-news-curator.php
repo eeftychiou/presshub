@@ -654,7 +654,7 @@ class PressHub_AI_News_Curator {
         $qa_include_briefings = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_qa_include_briefings();
 
         if ( $qa_enabled && $qa_include_briefings && class_exists( 'PressHub_AI_QA_Reviewer' ) ) {
-            $qa_result = PressHub_AI_QA_Reviewer::evaluate_content( $story_content );
+            $qa_result = PressHub_AI_QA_Reviewer::evaluate_content( $story_content, 'briefing' );
             if ( ! empty( $qa_result ) && ! ( $qa_result['passed'] ?? false ) ) {
                 if ( 'publish' === $post_status ) {
                     $post_status = 'pending';

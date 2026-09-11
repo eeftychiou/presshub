@@ -20,9 +20,10 @@ class PressHub_AI_QA_Reviewer {
      * Evaluate raw content using the AI Scorecard.
      *
      * @param string $content Article text content.
+     * @param string $context Evaluation context: 'post' (default) or 'briefing'.
      * @return array [ 'passed' => bool, 'score' => int, 'feedback' => string, 'error' => string|null ]
      */
-    public static function evaluate_content( string $content ): array {
+    public static function evaluate_content( string $content, string $context = 'post' ): array {
         if ( '' === trim( $content ) ) {
             return [
                 'passed'   => false,
@@ -33,14 +34,18 @@ class PressHub_AI_QA_Reviewer {
         }
 
         $min_score = PressHub_AI_Settings_Storage::get_qa_min_score();
-        $api = new PressHub_AI_API_Client( 'coauthor' );
-        $scorecard = $api->generate_scorecard( $content );
+        $template  = ( 'briefing' === $context )
+            ? PressHub_AI_Settings_Storage::get_qa_briefing_prompt()
+            : PressHub_AI_Settings_Storage::get_qa_article_prompt();
+
+        $api       = new PressHub_AI_API_Client( 'coauthor' );
+        $scorecard = $api->generate_scorecard( $content, $template );
 
         if ( is_wp_error( $scorecard ) ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error(
                     'AI QA review failed to generate scorecard',
-                    [ 'error' => $scorecard->get_error_message() ]
+                    [ 'error' => $scorecard->get_error_message(), 'context' => $context ]
                 );
             }
             return [
@@ -57,8 +62,9 @@ class PressHub_AI_QA_Reviewer {
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info(
-                sprintf( 'AI QA evaluation completed: score %d/100 (threshold: %d) -> %s', $score, $min_score, $passed ? 'PASS' : 'FAIL' ),
+                sprintf( 'AI QA evaluation completed (%s): score %d/100 (threshold: %d) -> %s', $context, $score, $min_score, $passed ? 'PASS' : 'FAIL' ),
                 [
+                    'context'   => $context,
                     'score'     => $score,
                     'threshold' => $min_score,
                     'passed'    => $passed,
@@ -79,10 +85,11 @@ class PressHub_AI_QA_Reviewer {
      * Evaluate a WP_Post object. Uses content hashing to avoid redundant API calls
      * if the post content has not changed since the last review.
      *
-     * @param WP_Post|object $post WordPress post object.
+     * @param WP_Post|object $post    WordPress post object.
+     * @param string         $context Evaluation context: 'post' (default) or 'briefing'.
      * @return array Evaluation result with 'passed', 'score', 'feedback'.
      */
-    public static function evaluate_post( $post ): array {
+    public static function evaluate_post( $post, string $context = 'post' ): array {
         if ( ! is_object( $post ) || empty( $post->ID ) ) {
             return [
                 'passed'   => false,
@@ -113,7 +120,7 @@ class PressHub_AI_QA_Reviewer {
             ];
         }
 
-        $result = self::evaluate_content( $content );
+        $result = self::evaluate_content( $content, $context );
 
         // Persist scorecard and content hash
         update_post_meta( $post_id, self::META_SCORECARD, [

@@ -976,7 +976,7 @@ class PressHub_AI_API_Client {
         return $result;
     }
 
-    public function generate_scorecard( $content ) {
+    public function generate_scorecard( $content, string $prompt_template = '' ) {
         $this->current_action = 'coauthor_scorecard';
         if ( empty( $this->api_key ) ) {
             // Issue #44: log the missing-key state before returning.
@@ -984,9 +984,34 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
+        }
+
         $sys_prompt = PressHub_AI_Prompt_Loader::get_scorecard_system_prompt();
         $sys_prompt = apply_filters( 'presshub_ai_scorecard_system_prompt', $sys_prompt );
-        $user_prompt = "Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).\n\nImportant: Do not dispute or penalize recent real-world events, breaking news, or reported deaths based on your static pre-training knowledge or cutoff date. Assess the draft strictly on editorial quality, clarity, structure, and journalistic writing standards.\n\nDraft:\n" . $content;
+
+        if ( '' === trim( $prompt_template ) ) {
+            if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+                $prompt_template = PressHub_AI_Settings_Storage::get_qa_article_prompt();
+            } else {
+                $prompt_template = PressHub_AI_Prompt_Loader::get_article_qa_prompt();
+            }
+        }
+
+        if ( '' === trim( $prompt_template ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Missing required scorecard prompt template' );
+            }
+            return new WP_Error( 'missing_scorecard_prompt', __( 'Scorecard prompt template is missing or unreadable.', 'presshub-ai-editor' ) );
+        }
+
+        if ( false !== strpos( $prompt_template, '{content}' ) ) {
+            $user_prompt = str_replace( '{content}', (string) $content, $prompt_template );
+        } else {
+            $user_prompt = rtrim( $prompt_template ) . "\n\nDraft:\n" . (string) $content;
+        }
+        $user_prompt = apply_filters( 'presshub_ai_scorecard_user_prompt', $user_prompt, $content );
 
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [] );
         presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, self::current_request_meta() );

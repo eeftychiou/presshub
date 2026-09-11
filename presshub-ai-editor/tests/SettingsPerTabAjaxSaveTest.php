@@ -168,6 +168,7 @@ class SettingsPerTabAjaxSaveTest
             'presshub_ai_qa_min_score'         => '85',
             'presshub_ai_qa_notify_editor'     => '1',
             'presshub_ai_qa_editor_email'      => 'chief-editor@presshub.gr',
+            'presshub_ai_qa_article_prompt'    => 'Custom article QA prompt template test with {content}',
         ];
 
         try {
@@ -188,6 +189,9 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( get_option( 'presshub_ai_qa_editor_email' ) !== 'chief-editor@presshub.gr' ) {
             $failures[] = 'presshub_ai_qa_editor_email not saved correctly in DB; got: ' . var_export( get_option( 'presshub_ai_qa_editor_email' ), true );
+        }
+        if ( get_option( 'presshub_ai_qa_article_prompt' ) !== 'Custom article QA prompt template test with {content}' ) {
+            $failures[] = 'presshub_ai_qa_article_prompt not saved correctly in DB; got: ' . var_export( get_option( 'presshub_ai_qa_article_prompt' ), true );
         }
 
         // Test QA clamping (min 50, max 100)
@@ -325,6 +329,7 @@ class SettingsPerTabAjaxSaveTest
             'presshub_ai_briefing_podcast_tts_provider' => 'gemini-speech',
             'presshub_ai_briefing_voice_speed'          => '1.15',
             'presshub_ai_briefing_voice_pitch'          => '1.5',
+            'presshub_ai_qa_briefing_prompt'            => 'Custom Daily Briefing QA prompt template test with {content}',
         ];
 
         $_POST = [
@@ -351,6 +356,9 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( (float) get_option( 'presshub_ai_briefing_voice_pitch' ) !== 1.5 ) {
             $failures[] = 'presshub_ai_briefing_voice_pitch not saved correctly; got: ' . var_export( get_option( 'presshub_ai_briefing_voice_pitch' ), true );
+        }
+        if ( get_option( 'presshub_ai_qa_briefing_prompt' ) !== 'Custom Daily Briefing QA prompt template test with {content}' ) {
+            $failures[] = 'presshub_ai_qa_briefing_prompt not saved correctly; got: ' . var_export( get_option( 'presshub_ai_qa_briefing_prompt' ), true );
         }
 
         // -------------------------------------------------------------

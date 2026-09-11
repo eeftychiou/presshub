@@ -1,6 +1,8 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-settings-storage.php';
+
 class PressHub_AI_Metaboxes {
     public function __construct() {
         add_action( 'add_meta_boxes', [ $this, 'add_coauthor_metabox' ] );
@@ -15,8 +17,9 @@ class PressHub_AI_Metaboxes {
         wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
 
         wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
-            'ajax_url' => admin_url( 'admin-ajax.php' ),
-            'nonce'    => wp_create_nonce( 'presshub_ai_nonce' )
+            'ajax_url'     => admin_url( 'admin-ajax.php' ),
+            'nonce'        => wp_create_nonce( 'presshub_ai_nonce' ),
+            'qa_min_score' => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_qa_min_score() : 80,
         ] );
     }
 
@@ -64,9 +67,10 @@ class PressHub_AI_Metaboxes {
                 <?php if ( is_array( $scorecard ) && isset( $scorecard['score'] ) && is_numeric( $scorecard['score'] ) ) : ?>
                     <?php
                     // ME-4 / F-23: color-coded tone classes mirror the
-                    // admin.js renderer (red < 50, yellow 50-79, green >= 80).
-                    $score = (int) $scorecard['score'];
-                    $tone  = $score < 50 ? 'presshub-score-low' : ( $score < 80 ? 'presshub-score-mid' : 'presshub-score-high' );
+                    // admin.js renderer (red < 50, yellow 50-min_score, green >= min_score).
+                    $score     = (int) $scorecard['score'];
+                    $min_score = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_qa_min_score() : 80;
+                    $tone      = $score < 50 ? 'presshub-score-low' : ( $score < $min_score ? 'presshub-score-mid' : 'presshub-score-high' );
                     ?>
                     <div class="scorecard-box <?php echo esc_attr( $tone ); ?>">
                         <span class="presshub-score-badge" aria-hidden="true"><?php echo esc_html( $score . '/100' ); ?></span>

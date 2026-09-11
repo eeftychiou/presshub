@@ -185,6 +185,12 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_qa_editor_email_field(); ?>
                                 </td>
                             </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_qa_article_prompt"><?php echo __( 'Article QA Review Prompt Template', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_qa_article_prompt_field(); ?>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
 
@@ -277,6 +283,12 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><?php echo __( 'AI QA Review Gate', 'presshub-ai-editor' ); ?></th>
                                 <td>
                                     <?php $this->render_qa_include_briefings_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_qa_briefing_prompt"><?php echo __( 'Daily Briefing QA Review Prompt Template', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_qa_briefing_prompt_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -2717,6 +2729,58 @@ class PressHub_AI_Settings_Render {
         <input type="email" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_editor_email" value="<?php echo self::esc_attr_safe( $value ); ?>" placeholder="<?php echo self::esc_attr_safe( get_option( 'admin_email' ) ); ?>" class="regular-text" />
         <p class="description">
             <?php echo esc_html__( 'Recipient email address for QA failure alerts. Leave blank to default to site admin email (', 'presshub-ai-editor' ); ?><code><?php echo self::esc_html_safe( get_option( 'admin_email' ) ); ?></code><?php echo esc_html__( ').', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render the Article QA Review prompt template textarea.
+     */
+    public function render_qa_article_prompt_field() {
+        $option  = 'presshub_ai_qa_article_prompt';
+        $value   = (string) get_option( $option, '' );
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
+        }
+        $default = PressHub_AI_Prompt_Loader::get_article_qa_prompt();
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="8" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use the built-in default Article QA review prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <p>
+            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="">
+                <?php echo __( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
+            </button>
+            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
+                <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
+            </button>
+        </p>
+        <p class="description">
+            <?php echo __( 'User prompt template sent to the QA model when evaluating author articles. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render the Daily Briefing QA Review prompt template textarea.
+     */
+    public function render_qa_briefing_prompt_field() {
+        $option  = 'presshub_ai_qa_briefing_prompt';
+        $value   = (string) get_option( $option, '' );
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
+        }
+        $default = PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="8" class="large-text code" placeholder="<?php echo esc_attr( __( 'Leave empty to use the built-in default Daily Briefing QA review prompt...', 'presshub-ai-editor' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <p>
+            <button type="button" class="button button-secondary presshub-reset-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="">
+                <?php echo __( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
+            </button>
+            <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="<?php echo self::esc_attr_safe( $option ); ?>" data-default="<?php echo self::esc_attr_safe( $default ); ?>">
+                <?php echo __( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
+            </button>
+        </p>
+        <p class="description">
+            <?php echo __( 'User prompt template sent to the QA model when evaluating automated Daily Briefing roundups. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

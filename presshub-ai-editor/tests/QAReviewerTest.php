@@ -193,6 +193,52 @@ class QAReviewerTest {
         }
 
         // -------------------------------------------------------------
+        // Case 5: Prompt template selection by context and custom prompt overrides
+        // -------------------------------------------------------------
+        self::reset_env();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']  = 'mock-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
+
+        $last_payload = null;
+        $GLOBALS['CAPTURE_FILTER'] = function( $existing, $req ) use ( &$last_payload ) {
+            $last_payload = json_decode( $req[1]['body'] ?? '{}', true );
+            return [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [
+                    'choices' => [ [ 'message' => [ 'content' => '{"score":88,"feedback":"Solid."}' ] ] ],
+                ] ),
+            ];
+        };
+
+        // Context: 'post' (default) uses Article QA prompt
+        $res_post = PressHub_AI_QA_Reviewer::evaluate_content( 'Article content here.', 'post' );
+        if ( ! $res_post['passed'] || $res_post['score'] !== 88 ) {
+            $failures[] = 'evaluate_content with post context failed.';
+        }
+        $user_msg_post = $last_payload['messages'][1]['content'] ?? '';
+        if ( false === strpos( $user_msg_post, 'Review this news article draft' ) ) {
+            $failures[] = 'post context should use article QA prompt template; got: ' . $user_msg_post;
+        }
+
+        // Context: 'briefing' uses Daily Briefing QA prompt
+        $res_briefing = PressHub_AI_QA_Reviewer::evaluate_content( 'Briefing content here.', 'briefing' );
+        if ( ! $res_briefing['passed'] || $res_briefing['score'] !== 88 ) {
+            $failures[] = 'evaluate_content with briefing context failed.';
+        }
+        $user_msg_briefing = $last_payload['messages'][1]['content'] ?? '';
+        if ( false === strpos( $user_msg_briefing, 'Review this daily news briefing draft' ) ) {
+            $failures[] = 'briefing context should use briefing QA prompt template; got: ' . $user_msg_briefing;
+        }
+
+        // Custom prompt override test
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_article_prompt'] = 'CUSTOM ARTICLE PROMPT TEMPLATE: {content}';
+        PressHub_AI_QA_Reviewer::evaluate_content( 'Custom article text.', 'post' );
+        $user_msg_custom = $last_payload['messages'][1]['content'] ?? '';
+        if ( false === strpos( $user_msg_custom, 'CUSTOM ARTICLE PROMPT TEMPLATE: Custom article text.' ) ) {
+            $failures[] = 'custom article prompt override failed to apply; got: ' . $user_msg_custom;
+        }
+
+        // -------------------------------------------------------------
         // Report results
         // -------------------------------------------------------------
         if ( ! empty( $failures ) ) {

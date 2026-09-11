@@ -96,6 +96,27 @@ foreach ( $styles as $style ) {
     }
 }
 
+// 8. Verify Article and Daily Briefing QA prompts
+$article_qa = PressHub_AI_Prompt_Loader::get_article_qa_prompt();
+plt_check( 'load article qa prompt', ! empty( $article_qa ) && false !== strpos( $article_qa, '{content}' ) && false !== strpos( $article_qa, 'cutoff date' ) );
+
+$briefing_qa = PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
+plt_check( 'load briefing qa prompt', ! empty( $briefing_qa ) && false !== strpos( $briefing_qa, '{content}' ) && false !== strpos( $briefing_qa, 'cutoff date' ) );
+
+// 9. Verify Settings Storage get_qa_article_prompt & get_qa_briefing_prompt fallback and override
+$GLOBALS['OPTIONS_STORE'] = [];
+plt_check( 'settings_storage get_qa_article_prompt returns default when empty', PressHub_AI_Settings_Storage::get_qa_article_prompt() === $article_qa );
+plt_check( 'settings_storage get_qa_briefing_prompt returns default when empty', PressHub_AI_Settings_Storage::get_qa_briefing_prompt() === $briefing_qa );
+
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_article_prompt'] = 'CUSTOM_ARTICLE_QA_PROMPT';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_briefing_prompt'] = 'CUSTOM_BRIEFING_QA_PROMPT';
+plt_check( 'settings_storage get_qa_article_prompt returns custom override', 'CUSTOM_ARTICLE_QA_PROMPT' === PressHub_AI_Settings_Storage::get_qa_article_prompt() );
+plt_check( 'settings_storage get_qa_briefing_prompt returns custom override', 'CUSTOM_BRIEFING_QA_PROMPT' === PressHub_AI_Settings_Storage::get_qa_briefing_prompt() );
+
+// 10. Verify ajax_save_settings contains QA prompt options in options_map
+plt_check( 'ajax_save_settings contains presshub_ai_qa_article_prompt', false !== strpos( $source, "'presshub_ai_qa_article_prompt'" ) );
+plt_check( 'ajax_save_settings contains presshub_ai_qa_briefing_prompt', false !== strpos( $source, "'presshub_ai_qa_briefing_prompt'" ) );
+
 if ( $failures > 0 ) {
     echo "PromptLoaderTest: {$failures} failure(s)\n";
     exit( 1 );

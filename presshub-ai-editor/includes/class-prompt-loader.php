@@ -138,4 +138,22 @@ class PressHub_AI_Prompt_Loader {
     public static function get_scorecard_system_prompt(): string {
         return self::load( 'scorecard/default_scorecard_system.txt' );
     }
+
+    /**
+     * Get the built-in default user prompt template for Article QA review.
+     *
+     * @return string Loaded article QA prompt template.
+     */
+    public static function get_article_qa_prompt(): string {
+        return self::load( 'scorecard/article_qa_user_prompt.txt' );
+    }
+
+    /**
+     * Get the built-in default user prompt template for Daily Briefing QA review.
+     *
+     * @return string Loaded briefing QA prompt template.
+     */
+    public static function get_briefing_qa_prompt(): string {
+        return self::load( 'scorecard/briefing_qa_user_prompt.txt' );
+    }
 }

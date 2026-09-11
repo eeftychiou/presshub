@@ -401,6 +401,14 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_qa_editor_email' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_qa_article_prompt', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_prompt' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_qa_briefing_prompt', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_prompt' ],
+            'type'              => 'string',
+        ] );
 
         register_setting( 'presshub_ai_options', 'presshub_ai_copilot_provider', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_provider_id' ],
@@ -587,6 +595,8 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_qa_min_score', __( 'Minimum Passing Score', 'presshub-ai-editor' ), [ $render, 'render_qa_min_score_field' ], 'presshub-ai', 'presshub_ai_general' );
         add_settings_field( 'presshub_ai_qa_notify_editor', __( 'Notify Editor on Failures', 'presshub-ai-editor' ), [ $render, 'render_qa_notify_editor_field' ], 'presshub-ai', 'presshub_ai_general' );
         add_settings_field( 'presshub_ai_qa_editor_email', __( 'Editor Notification Email', 'presshub-ai-editor' ), [ $render, 'render_qa_editor_email_field' ], 'presshub-ai', 'presshub_ai_general' );
+        add_settings_field( 'presshub_ai_qa_article_prompt', __( 'Article QA Review Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_qa_article_prompt_field' ], 'presshub-ai', 'presshub_ai_general' );
+        add_settings_field( 'presshub_ai_qa_briefing_prompt', __( 'Daily Briefing QA Review Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_qa_briefing_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
     }
 
 
@@ -650,6 +660,18 @@ class PressHub_AI_Settings_Storage {
             return is_email( $sanitized ) ? (string) $sanitized : '';
         }
         return filter_var( $sanitized, FILTER_VALIDATE_EMAIL ) ? (string) $sanitized : '';
+    }
+
+    /**
+     * QA review prompt template sanitizer.
+     * Trims, unslashes, and clamps prompt text to 10,000 characters.
+     */
+    public static function sanitize_qa_prompt( $value ): string {
+        $value = wp_unslash( $value );
+        if ( ! is_string( $value ) ) {
+            return '';
+        }
+        return substr( trim( $value ), 0, 10000 );
     }
 
     public static function sanitize_api_key( $value ) {
@@ -1595,6 +1617,40 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * User prompt template for Article QA review.
+     * Falls back to the external asset default if the option is empty.
+     *
+     * @return string
+     */
+    public static function get_qa_article_prompt(): string {
+        $custom = (string) get_option( 'presshub_ai_qa_article_prompt', '' );
+        if ( '' !== trim( $custom ) ) {
+            return $custom;
+        }
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
+        }
+        return PressHub_AI_Prompt_Loader::get_article_qa_prompt();
+    }
+
+    /**
+     * User prompt template for Daily Briefing QA review.
+     * Falls back to the external asset default if the option is empty.
+     *
+     * @return string
+     */
+    public static function get_qa_briefing_prompt(): string {
+        $custom = (string) get_option( 'presshub_ai_qa_briefing_prompt', '' );
+        if ( '' !== trim( $custom ) ) {
+            return $custom;
+        }
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
+        }
+        return PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
+    }
+
+    /**
      * Helper to get the selected sound effect to inject between topics (default 'silence').
      *
      * @return string SFX identifier.
@@ -2263,6 +2319,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_qa_min_score'         => [ __CLASS__, 'sanitize_qa_min_score' ],
             'presshub_ai_qa_notify_editor'     => [ __CLASS__, 'sanitize_checkbox' ],
             'presshub_ai_qa_editor_email'      => [ __CLASS__, 'sanitize_qa_editor_email' ],
+            'presshub_ai_qa_article_prompt'    => [ __CLASS__, 'sanitize_qa_prompt' ],
         ];
 
         $briefing_map = [
@@ -2274,6 +2331,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_generation_time'      => [ __CLASS__, 'sanitize_generation_time' ],
             'presshub_ai_harvest_time_budget'           => [ __CLASS__, 'sanitize_harvest_time_budget' ],
             'presshub_ai_qa_include_briefings'          => [ __CLASS__, 'sanitize_checkbox' ],
+            'presshub_ai_qa_briefing_prompt'            => [ __CLASS__, 'sanitize_qa_prompt' ],
             // Issue #61 — Settings-First: curation LLM context cap knobs.
             'presshub_ai_curation_max_articles'          => [ __CLASS__, 'sanitize_curation_max_articles' ],
             'presshub_ai_curation_max_chars_per_article' => [ __CLASS__, 'sanitize_curation_max_chars_per_article' ],

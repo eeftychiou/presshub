@@ -49,7 +49,7 @@ class SettingsPageTest
         if ( ! in_array( 'presshub_ai_provider', $general, true ) ) {
             $failures[] = 'presshub_ai_provider should be registered in presshub_ai_general; got: ' . implode( ', ', $general );
         }
-        foreach ( [ 'presshub_ai_qa_enabled', 'presshub_ai_qa_min_score', 'presshub_ai_qa_notify_editor', 'presshub_ai_qa_editor_email' ] as $field ) {
+        foreach ( [ 'presshub_ai_qa_enabled', 'presshub_ai_qa_min_score', 'presshub_ai_qa_notify_editor', 'presshub_ai_qa_editor_email', 'presshub_ai_qa_article_prompt' ] as $field ) {
             if ( ! in_array( $field, $general, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_general; got: " . implode( ', ', $general );
             }
@@ -131,6 +131,7 @@ class SettingsPageTest
             'presshub_ai_briefing_podcast_prompt_2',
             'presshub_ai_briefing_podcast_prompt_3',
             'presshub_ai_qa_include_briefings',
+            'presshub_ai_qa_briefing_prompt',
         ] as $field ) {
             if ( ! in_array( $field, $briefing, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_briefing; got: " . implode( ', ', $briefing );
@@ -252,6 +253,8 @@ class SettingsPageTest
             'presshub_ai_qa_min_score',
             'presshub_ai_qa_notify_editor',
             'presshub_ai_qa_editor_email',
+            'presshub_ai_qa_article_prompt',
+            'presshub_ai_qa_briefing_prompt',
         ];
 
         $missing = array_diff( $expected_options, $registered );
@@ -319,6 +322,8 @@ class SettingsPageTest
             'presshub_ai_qa_min_score',
             'presshub_ai_qa_notify_editor',
             'presshub_ai_qa_editor_email',
+            'presshub_ai_qa_article_prompt',
+            'presshub_ai_qa_briefing_prompt',
         ] as $qa_field ) {
             if ( false === strpos( $html, 'name="' . $qa_field . '"' ) ) {
                 $failures[] = "render_settings_page() should output {$qa_field} input.";

@@ -415,10 +415,11 @@ jQuery(document).ready(function($) {
         if (isNaN(s)) {
             return '';
         }
+        var minScore = (window.presshubAI && parseInt(window.presshubAI.qa_min_score, 10)) || 80;
         if (s < 50) {
             return 'presshub-score-low';
         }
-        if (s < 80) {
+        if (s < minScore) {
             return 'presshub-score-mid';
         }
         return 'presshub-score-high';

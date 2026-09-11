@@ -34,6 +34,10 @@ class RunReviewStatusGuardTest
         if ( ! is_array( $meta ) || ( $meta['score'] ?? null ) !== 95 ) {
             $failures[] = 'scorecard meta should still be stored for the published post; got: ' . var_export( $meta, true );
         }
+        $hash = $GLOBALS['POST_META_STORE'][42]['_presshub_ai_scorecard_hash'] ?? null;
+        if ( $hash !== md5( 'draft copy' ) ) {
+            $failures[] = 'scorecard hash should be stored for post 42; got: ' . var_export( $hash, true );
+        }
         if ( ( $GLOBALS['POST_STATUSES'][42] ?? null ) !== 'publish' ) {
             $failures[] = 'published post status must remain publish; got: ' . var_export( $GLOBALS['POST_STATUSES'][42] ?? null, true );
         }
@@ -97,6 +101,17 @@ class RunReviewStatusGuardTest
         $last = $GLOBALS['JSON_RESPONSES'][0]['data'] ?? null;
         if ( ! is_array( $last ) || ! array_key_exists( 'status_after', $last ) || $last['status_after'] !== null ) {
             $failures[] = 'status_after should be null when no post_id is sent; got: ' . var_export( $last, true );
+        }
+
+        // --- Case 6: dynamic threshold (qa_min_score = 90) -> score 85 does not transition draft to pending ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_min_score'] = 90;
+        $GLOBALS['POSTS_STORE'][45]  = [ 'ID' => 45, 'post_status' => 'draft', 'post_type' => 'post' ];
+        $GLOBALS['POST_STATUSES'][45] = 'draft';
+        $_POST = [ 'content' => 'draft copy', 'post_id' => 45, 'nonce' => 'valid' ];
+        self::drive_review( '{"score":85,"feedback":"good but under 90"}' );
+        if ( ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 ) !== 0 ) {
+            $failures[] = 'run_review must respect dynamic min score (90); score 85 should not transition to pending';
         }
 
         if ( $failures ) {

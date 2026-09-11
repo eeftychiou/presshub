@@ -122,10 +122,28 @@ class MetaboxesRenderTest
         if ( ! $localized || ( $localized['data']['nonce'] ?? '' ) !== 'test-nonce' ) {
             $failures[] = 'enqueue_assets should localize presshubAI with the nonce; got: ' . json_encode( $localized );
         }
+        if ( ! isset( $localized['data']['qa_min_score'] ) || $localized['data']['qa_min_score'] !== 80 ) {
+            $failures[] = 'enqueue_assets should localize presshubAI with qa_min_score=80; got: ' . json_encode( $localized );
+        }
         self::reset();
         $meta->enqueue_assets( 'dashboard.php' );
         if ( ! empty( $GLOBALS['ENQUEUED_SCRIPTS'] ) ) {
             $failures[] = 'enqueue_assets must not fire outside post edit screens.';
+        }
+
+        // --- Case 8: tone calculation respects dynamic qa_min_score ---
+        self::reset();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_min_score'] = 85;
+        $GLOBALS['POST_META_STORE'][42]['_presshub_ai_scorecard'] = [ 'score' => 82, 'feedback' => 'Good but below 85.' ];
+        $html = self::render( 42 );
+        if ( false === strpos( $html, 'presshub-score-mid' ) ) {
+            $failures[] = 'Score 82 with qa_min_score=85 should render presshub-score-mid; got: ' . $html;
+        }
+
+        $GLOBALS['POST_META_STORE'][42]['_presshub_ai_scorecard'] = [ 'score' => 85, 'feedback' => 'Passed.' ];
+        $html = self::render( 42 );
+        if ( false === strpos( $html, 'presshub-score-high' ) ) {
+            $failures[] = 'Score 85 with qa_min_score=85 should render presshub-score-high; got: ' . $html;
         }
 
         if ( $failures ) {

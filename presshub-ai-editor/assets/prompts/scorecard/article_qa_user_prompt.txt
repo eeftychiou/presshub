@@ -1,0 +1,6 @@
+Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).
+
+Important: Do not dispute or penalize recent real-world events, breaking news, or reported deaths based on your static pre-training knowledge or cutoff date. Assess the draft strictly on editorial quality, clarity, structure, factual attribution, narrative balance, grammar, and journalistic writing standards.
+
+Draft:
+{content}
