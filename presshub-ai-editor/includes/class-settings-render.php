@@ -151,6 +151,43 @@ class PressHub_AI_Settings_Render {
                         </tbody>
                     </table>
 
+                    <h3 style="margin-top: 30px;"><?php echo __( 'Automated AI Editorial QA & Pre-Publication Gate', 'presshub-ai-editor' ); ?></h3>
+                    <p><?php echo __( 'Configure the automated quality-assurance review gate. When enabled, articles submitted for publication are automatically evaluated against editorial standards and blocked if they do not meet the minimum score.', 'presshub-ai-editor' ); ?></p>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><?php echo __( 'Enable QA Review System', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_qa_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo __( 'Include Daily Briefings', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_qa_include_briefings_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_qa_min_score"><?php echo __( 'Minimum Passing Score', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_qa_min_score_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo __( 'Notify Editor on Failures', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_qa_notify_editor_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_qa_editor_email"><?php echo __( 'Editor Notification Email', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_qa_editor_email_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="coauthor"><?php echo esc_html__( 'Save AI Co-Author Settings', 'presshub-ai-editor' ); ?></button>
                         <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
@@ -234,6 +271,12 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_briefing_text_status"><?php echo __( 'Text Post Status', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_status_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo __( 'AI QA Review Gate', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_qa_include_briefings_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -2594,6 +2637,90 @@ class PressHub_AI_Settings_Render {
     public function render_briefing_podcast_live_preview_field() {
         // Obsolete in Issue #108: Effective Prompt Preview removed.
     }
+
+    /**
+     * Render the QA Enabled checkbox.
+     */
+    public function render_qa_enabled_field() {
+        $option  = 'presshub_ai_qa_enabled';
+        $enabled = PressHub_AI_Settings_Storage::get_qa_enabled();
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_enabled">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <?php echo esc_html__( 'Enable automated pre-publication AI editorial QA review gate.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description">
+            <?php echo esc_html__( 'When enabled, articles submitted for publication by authors or automated pipelines are scored before publishing. If the article fails to meet the minimum score, publication is blocked and reverted to Pending Review.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render the Include Daily Briefings in QA review checkbox.
+     */
+    public function render_qa_include_briefings_field() {
+        $option  = 'presshub_ai_qa_include_briefings';
+        $enabled = PressHub_AI_Settings_Storage::get_qa_include_briefings();
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_include_briefings">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_include_briefings" value="1" <?php checked( true, $enabled ); ?> />
+            <?php echo esc_html__( 'Subject automated Daily Briefing posts to AI QA evaluation before publishing.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description">
+            <?php echo esc_html__( 'Default: Enabled. When enabled, even if the briefing post status is set to "Publish immediately", it will only publish if it passes the QA review standard; otherwise it is held in Pending Review for editor inspection.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render the QA Minimum Passing Score input.
+     */
+    public function render_qa_min_score_field() {
+        $option = 'presshub_ai_qa_min_score';
+        $value  = PressHub_AI_Settings_Storage::get_qa_min_score();
+        ?>
+        <input type="number" min="50" max="100" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_min_score" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <span class="description"><?php echo esc_html__( '/ 100', 'presshub-ai-editor' ); ?></span>
+        <p class="description">
+            <?php echo esc_html__( 'Minimum score (50-100) required for publication. Articles scoring below this threshold are held in Pending Review. Default: 80.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render the QA Notify Editor checkbox.
+     */
+    public function render_qa_notify_editor_field() {
+        $option  = 'presshub_ai_qa_notify_editor';
+        $enabled = PressHub_AI_Settings_Storage::get_qa_notify_editor();
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_notify_editor">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_notify_editor" value="1" <?php checked( true, $enabled ); ?> />
+            <?php echo esc_html__( 'Email the Editor when an article fails QA evaluation and is blocked.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description">
+            <?php echo esc_html__( 'Sends an email with the score, AI critique feedback, author name, and direct post-edit link.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render the QA Editor Notification Email input.
+     */
+    public function render_qa_editor_email_field() {
+        $option = 'presshub_ai_qa_editor_email';
+        $value  = (string) get_option( $option, '' );
+        ?>
+        <input type="email" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_editor_email" value="<?php echo self::esc_attr_safe( $value ); ?>" placeholder="<?php echo self::esc_attr_safe( get_option( 'admin_email' ) ); ?>" class="regular-text" />
+        <p class="description">
+            <?php echo esc_html__( 'Recipient email address for QA failure alerts. Leave blank to default to site admin email (', 'presshub-ai-editor' ); ?><code><?php echo self::esc_html_safe( get_option( 'admin_email' ) ); ?></code><?php echo esc_html__( ').', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
 
 
     // ------------------------------------------------------------------

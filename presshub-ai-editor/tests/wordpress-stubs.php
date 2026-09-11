@@ -55,6 +55,18 @@ if ( ! function_exists( 'selected' ) ) {
     }
 }
 
+if ( ! function_exists( 'is_email' ) ) {
+    function is_email( $email ) {
+        return filter_var( $email, FILTER_VALIDATE_EMAIL ) ? $email : false;
+    }
+}
+
+if ( ! function_exists( 'sanitize_email' ) ) {
+    function sanitize_email( $email ) {
+        return filter_var( $email, FILTER_SANITIZE_EMAIL );
+    }
+}
+
 if ( ! function_exists( 'get_post_meta' ) ) {
     function get_post_meta( $post_id, $key, $single = false ) {
         $store = $GLOBALS['POST_META_STORE'] ?? [];
@@ -65,6 +77,29 @@ if ( ! function_exists( 'get_post_meta' ) ) {
 if ( ! function_exists( 'update_post_meta' ) ) {
     function update_post_meta( $post_id, $key, $value ) {
         $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] = $value;
+        return true;
+    }
+}
+
+
+if ( ! function_exists( 'get_userdata' ) ) {
+    function get_userdata( $user_id ) {
+        return $GLOBALS['MOCK_USERS'][ (int) $user_id ] ?? null;
+    }
+}
+
+if ( ! function_exists( 'admin_url' ) ) {
+    function admin_url( $path = '' ) {
+        return 'https://example.com/wp-admin/' . ltrim( $path, '/' );
+    }
+}
+
+if ( ! function_exists( 'wp_mail' ) ) {
+    function wp_mail( $to, $subject, $message, $headers = '', $attachments = [] ) {
+        if ( isset( $GLOBALS['MOCK_WP_MAIL_CB'] ) && is_callable( $GLOBALS['MOCK_WP_MAIL_CB'] ) ) {
+            return call_user_func( $GLOBALS['MOCK_WP_MAIL_CB'], $to, $subject, $message, $headers, $attachments );
+        }
+        $GLOBALS['SENT_EMAILS'][] = compact( 'to', 'subject', 'message', 'headers', 'attachments' );
         return true;
     }
 }

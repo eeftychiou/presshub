@@ -49,6 +49,11 @@ class SettingsPageTest
         if ( ! in_array( 'presshub_ai_provider', $general, true ) ) {
             $failures[] = 'presshub_ai_provider should be registered in presshub_ai_general; got: ' . implode( ', ', $general );
         }
+        foreach ( [ 'presshub_ai_qa_enabled', 'presshub_ai_qa_min_score', 'presshub_ai_qa_notify_editor', 'presshub_ai_qa_editor_email' ] as $field ) {
+            if ( ! in_array( $field, $general, true ) ) {
+                $failures[] = "{$field} should be registered in presshub_ai_general; got: " . implode( ', ', $general );
+            }
+        }
 
         $providers = array_column( $fields['presshub_ai_providers'] ?? [], 'id' );
         foreach ( [
@@ -125,6 +130,7 @@ class SettingsPageTest
             'presshub_ai_briefing_podcast_prompt_1',
             'presshub_ai_briefing_podcast_prompt_2',
             'presshub_ai_briefing_podcast_prompt_3',
+            'presshub_ai_qa_include_briefings',
         ] as $field ) {
             if ( ! in_array( $field, $briefing, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_briefing; got: " . implode( ', ', $briefing );
@@ -241,6 +247,11 @@ class SettingsPageTest
             'presshub_ai_briefing_podcast_temperature',
             'presshub_ai_briefing_podcast_max_tokens',
             'presshub_ai_briefing_podcast_timeout',
+            'presshub_ai_qa_enabled',
+            'presshub_ai_qa_include_briefings',
+            'presshub_ai_qa_min_score',
+            'presshub_ai_qa_notify_editor',
+            'presshub_ai_qa_editor_email',
         ];
 
         $missing = array_diff( $expected_options, $registered );
@@ -301,6 +312,17 @@ class SettingsPageTest
         }
         if ( false === strpos( $html, 'name="presshub_ai_briefing_tts_model"' ) ) {
             $failures[] = 'render_settings_page() should output presshub_ai_briefing_tts_model input.';
+        }
+        foreach ( [
+            'presshub_ai_qa_enabled',
+            'presshub_ai_qa_include_briefings',
+            'presshub_ai_qa_min_score',
+            'presshub_ai_qa_notify_editor',
+            'presshub_ai_qa_editor_email',
+        ] as $qa_field ) {
+            if ( false === strpos( $html, 'name="' . $qa_field . '"' ) ) {
+                $failures[] = "render_settings_page() should output {$qa_field} input.";
+            }
         }
 
         // --- Case 5: capability gate — no cap means wp_die, no form output ---

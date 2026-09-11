@@ -1447,6 +1447,11 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_coauthor_temperature'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_temperature' ],
                 'presshub_ai_coauthor_max_tokens'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_max_tokens' ],
                 'presshub_ai_coauthor_timeout'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_timeout' ],
+                'presshub_ai_qa_enabled'                  => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
+                'presshub_ai_qa_include_briefings'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
+                'presshub_ai_qa_min_score'                => [ 'PressHub_AI_Settings_Storage', 'sanitize_qa_min_score' ],
+                'presshub_ai_qa_notify_editor'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
+                'presshub_ai_qa_editor_email'             => [ 'PressHub_AI_Settings_Storage', 'sanitize_qa_editor_email' ],
                 'presshub_ai_copilot_provider'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_provider_id' ],
                 'presshub_ai_copilot_model'               => [ 'PressHub_AI_Settings_Storage', 'sanitize_model_string' ],
                 'presshub_ai_copilot_temperature'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_temperature' ],
@@ -1627,6 +1632,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_schedule_enabled',
                 'presshub_ai_briefing_audio_split_by_topic',
                 'presshub_ai_log_tts_payloads',
+                'presshub_ai_qa_enabled',
+                'presshub_ai_qa_include_briefings',
+                'presshub_ai_qa_notify_editor',
             ];
 
             foreach ( $options_map as $option => $sanitizer ) {

@@ -156,6 +156,93 @@ class SettingsPerTabAjaxSaveTest
         }
 
         // -------------------------------------------------------------
+        // Case 4b: Automated AI Editorial QA Review Settings Save & Persistence
+        // -------------------------------------------------------------
+        self::reset_env();
+        $_POST = [
+            'tab'                              => 'coauthor',
+            'nonce'                            => 'valid_nonce',
+            'presshub_ai_coauthor_provider'    => 'anthropic',
+            'presshub_ai_qa_enabled'           => '1',
+            'presshub_ai_qa_include_briefings' => '1',
+            'presshub_ai_qa_min_score'         => '85',
+            'presshub_ai_qa_notify_editor'     => '1',
+            'presshub_ai_qa_editor_email'      => 'chief-editor@presshub.gr',
+        ];
+
+        try {
+            $handlers->save_settings_section();
+        } catch ( Throwable $e ) {}
+
+        if ( (int) get_option( 'presshub_ai_qa_enabled' ) !== 1 ) {
+            $failures[] = 'presshub_ai_qa_enabled not saved correctly in DB; got: ' . var_export( get_option( 'presshub_ai_qa_enabled' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_qa_include_briefings' ) !== 1 ) {
+            $failures[] = 'presshub_ai_qa_include_briefings not saved correctly in DB; got: ' . var_export( get_option( 'presshub_ai_qa_include_briefings' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_qa_min_score' ) !== 85 ) {
+            $failures[] = 'presshub_ai_qa_min_score not saved correctly in DB; got: ' . var_export( get_option( 'presshub_ai_qa_min_score' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_qa_notify_editor' ) !== 1 ) {
+            $failures[] = 'presshub_ai_qa_notify_editor not saved correctly in DB; got: ' . var_export( get_option( 'presshub_ai_qa_notify_editor' ), true );
+        }
+        if ( get_option( 'presshub_ai_qa_editor_email' ) !== 'chief-editor@presshub.gr' ) {
+            $failures[] = 'presshub_ai_qa_editor_email not saved correctly in DB; got: ' . var_export( get_option( 'presshub_ai_qa_editor_email' ), true );
+        }
+
+        // Test QA clamping (min 50, max 100)
+        self::reset_env();
+        $_POST = [
+            'tab'                      => 'coauthor',
+            'nonce'                    => 'valid_nonce',
+            'presshub_ai_qa_min_score' => '150',
+        ];
+        try {
+            $handlers->save_settings_section();
+        } catch ( Throwable $e ) {}
+        if ( (int) get_option( 'presshub_ai_qa_min_score' ) !== 100 ) {
+            $failures[] = 'presshub_ai_qa_min_score should clamp 150 to 100; got: ' . var_export( get_option( 'presshub_ai_qa_min_score' ), true );
+        }
+
+        self::reset_env();
+        $_POST = [
+            'tab'                      => 'coauthor',
+            'nonce'                    => 'valid_nonce',
+            'presshub_ai_qa_min_score' => '20',
+        ];
+        try {
+            $handlers->save_settings_section();
+        } catch ( Throwable $e ) {}
+        if ( (int) get_option( 'presshub_ai_qa_min_score' ) !== 50 ) {
+            $failures[] = 'presshub_ai_qa_min_score should clamp 20 to 50; got: ' . var_export( get_option( 'presshub_ai_qa_min_score' ), true );
+        }
+
+        // Test Unchecking QA Checkboxes saves 0 in DB
+        self::reset_env();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_enabled']           = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_include_briefings'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_notify_editor']     = 1;
+
+        $_POST = [
+            'tab'                           => 'coauthor',
+            'nonce'                         => 'valid_nonce',
+            'presshub_ai_coauthor_provider' => 'openai',
+        ];
+        try {
+            $handlers->save_settings_section();
+        } catch ( Throwable $e ) {}
+
+        if ( (int) get_option( 'presshub_ai_qa_enabled' ) !== 0 ) {
+            $failures[] = 'Unchecked presshub_ai_qa_enabled was not saved as 0 in DB; got: ' . var_export( get_option( 'presshub_ai_qa_enabled' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_qa_include_briefings' ) !== 0 ) {
+            $failures[] = 'Unchecked presshub_ai_qa_include_briefings was not saved as 0 in DB; got: ' . var_export( get_option( 'presshub_ai_qa_include_briefings' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_qa_notify_editor' ) !== 0 ) {
+            $failures[] = 'Unchecked presshub_ai_qa_notify_editor was not saved as 0 in DB; got: ' . var_export( get_option( 'presshub_ai_qa_notify_editor' ), true );
+        }
+
+        // -------------------------------------------------------------
         // Case 5: Checkbox Handling inside active section without resetting other tabs
         // -------------------------------------------------------------
         self::reset_env();
@@ -440,6 +527,17 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( false === strpos( $html, 'name="presshub_ai_log_tts_payloads" value="0"' ) ) {
             $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_log_tts_payloads.';
+        }
+
+        // Verify hidden input fallbacks for QA checkboxes
+        if ( false === strpos( $html, 'name="presshub_ai_qa_enabled" value="0"' ) ) {
+            $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_qa_enabled.';
+        }
+        if ( false === strpos( $html, 'name="presshub_ai_qa_include_briefings" value="0"' ) ) {
+            $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_qa_include_briefings.';
+        }
+        if ( false === strpos( $html, 'name="presshub_ai_qa_notify_editor" value="0"' ) ) {
+            $failures[] = 'Rendered settings page missing hidden input fallback for presshub_ai_qa_notify_editor.';
         }
 
         // -------------------------------------------------------------

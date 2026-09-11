@@ -380,6 +380,28 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
         ] );
 
+        // Automated AI Editorial QA Review System (v2.3.9)
+        register_setting( 'presshub_ai_options', 'presshub_ai_qa_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_checkbox' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_qa_include_briefings', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_checkbox' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_qa_min_score', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_min_score' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_qa_notify_editor', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_checkbox' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_qa_editor_email', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_editor_email' ],
+            'type'              => 'string',
+        ] );
+
         register_setting( 'presshub_ai_options', 'presshub_ai_copilot_provider', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_provider_id' ],
             'type'              => 'string',
@@ -558,6 +580,13 @@ class PressHub_AI_Settings_Storage {
         // Issue #90 — Live preview block: shows the resolved template after
         // style + host_count + per-style overrides have been applied.
         add_settings_field( 'presshub_ai_briefing_podcast_live_preview', __( 'Podcast Dialogue Live Preview', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_live_preview_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+
+        // Automated AI Editorial QA Review System fields
+        add_settings_field( 'presshub_ai_qa_enabled', __( 'Enable AI QA Review System', 'presshub-ai-editor' ), [ $render, 'render_qa_enabled_field' ], 'presshub-ai', 'presshub_ai_general' );
+        add_settings_field( 'presshub_ai_qa_include_briefings', __( 'Include Daily Briefings in AI QA Review', 'presshub-ai-editor' ), [ $render, 'render_qa_include_briefings_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_qa_min_score', __( 'Minimum Passing Score', 'presshub-ai-editor' ), [ $render, 'render_qa_min_score_field' ], 'presshub-ai', 'presshub_ai_general' );
+        add_settings_field( 'presshub_ai_qa_notify_editor', __( 'Notify Editor on Failures', 'presshub-ai-editor' ), [ $render, 'render_qa_notify_editor_field' ], 'presshub-ai', 'presshub_ai_general' );
+        add_settings_field( 'presshub_ai_qa_editor_email', __( 'Editor Notification Email', 'presshub-ai-editor' ), [ $render, 'render_qa_editor_email_field' ], 'presshub-ai', 'presshub_ai_general' );
     }
 
 
@@ -581,6 +610,46 @@ class PressHub_AI_Settings_Storage {
      */
     public static function sanitize_fetch_urls( $value ) {
         return '1' === $value || 1 === $value || 'on' === $value ? '1' : '0';
+    }
+
+    /**
+     * Generic checkbox sanitizer returning 1 or 0.
+     */
+    public static function sanitize_checkbox( $value ): int {
+        return ( '1' === (string) $value || 1 === $value || 'on' === (string) $value || true === $value ) ? 1 : 0;
+    }
+
+    /**
+     * QA minimum score sanitizer, clamped between 50 and 100. Default: 80.
+     */
+    public static function sanitize_qa_min_score( $value ): int {
+        $val = (int) wp_unslash( $value );
+        if ( $val < 50 ) {
+            return 50;
+        }
+        if ( $val > 100 ) {
+            return 100;
+        }
+        return $val;
+    }
+
+    /**
+     * QA editor notification email sanitizer.
+     */
+    public static function sanitize_qa_editor_email( $value ): string {
+        $value = trim( (string) wp_unslash( $value ) );
+        if ( '' === $value ) {
+            return '';
+        }
+        if ( function_exists( 'sanitize_email' ) ) {
+            $sanitized = sanitize_email( $value );
+        } else {
+            $sanitized = filter_var( $value, FILTER_SANITIZE_EMAIL );
+        }
+        if ( function_exists( 'is_email' ) ) {
+            return is_email( $sanitized ) ? (string) $sanitized : '';
+        }
+        return filter_var( $sanitized, FILTER_VALIDATE_EMAIL ) ? (string) $sanitized : '';
     }
 
     public static function sanitize_api_key( $value ) {
@@ -1464,6 +1533,68 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Is the automated AI Editorial QA review system enabled?
+     * Default is true (1).
+     *
+     * @return bool
+     */
+    public static function get_qa_enabled(): bool {
+        $val = get_option( 'presshub_ai_qa_enabled', 1 );
+        return ( 1 === (int) $val || '1' === (string) $val || true === $val || 'on' === (string) $val );
+    }
+
+    /**
+     * Should Daily Briefing Hub posts be included in the AI QA review?
+     * Default is true (1).
+     *
+     * @return bool
+     */
+    public static function get_qa_include_briefings(): bool {
+        $val = get_option( 'presshub_ai_qa_include_briefings', 1 );
+        return ( 1 === (int) $val || '1' === (string) $val || true === $val || 'on' === (string) $val );
+    }
+
+    /**
+     * Minimum passing score threshold for the AI QA review.
+     * Default is 80 (bounded between 50 and 100).
+     *
+     * @return int
+     */
+    public static function get_qa_min_score(): int {
+        $val = (int) get_option( 'presshub_ai_qa_min_score', 80 );
+        if ( $val < 50 ) {
+            return 50;
+        }
+        if ( $val > 100 ) {
+            return 100;
+        }
+        return $val;
+    }
+
+    /**
+     * Should editor be notified via email on failing reviews?
+     * Default is true (1).
+     *
+     * @return bool
+     */
+    public static function get_qa_notify_editor(): bool {
+        $val = get_option( 'presshub_ai_qa_notify_editor', 1 );
+        return ( 1 === (int) $val || '1' === (string) $val || true === $val || 'on' === (string) $val );
+    }
+
+    /**
+     * Configured email address for QA failure notifications.
+     * If empty, caller falls back to site admin_email.
+     *
+     * @return string
+     */
+    public static function get_qa_editor_email(): string {
+        $email = (string) get_option( 'presshub_ai_qa_editor_email', '' );
+        $email = sanitize_email( trim( $email ) );
+        return is_email( $email ) ? $email : '';
+    }
+
+    /**
      * Helper to get the selected sound effect to inject between topics (default 'silence').
      *
      * @return string SFX identifier.
@@ -2127,6 +2258,11 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_coauthor_max_tokens'  => [ __CLASS__, 'sanitize_max_tokens' ],
             'presshub_ai_coauthor_timeout'     => [ __CLASS__, 'sanitize_timeout' ],
             'presshub_ai_fetch_urls'           => [ __CLASS__, 'sanitize_fetch_urls' ],
+            'presshub_ai_qa_enabled'           => [ __CLASS__, 'sanitize_checkbox' ],
+            'presshub_ai_qa_include_briefings' => [ __CLASS__, 'sanitize_checkbox' ],
+            'presshub_ai_qa_min_score'         => [ __CLASS__, 'sanitize_qa_min_score' ],
+            'presshub_ai_qa_notify_editor'     => [ __CLASS__, 'sanitize_checkbox' ],
+            'presshub_ai_qa_editor_email'      => [ __CLASS__, 'sanitize_qa_editor_email' ],
         ];
 
         $briefing_map = [
@@ -2137,6 +2273,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_harvest_time'         => [ __CLASS__, 'sanitize_harvest_time' ],
             'presshub_ai_briefing_generation_time'      => [ __CLASS__, 'sanitize_generation_time' ],
             'presshub_ai_harvest_time_budget'           => [ __CLASS__, 'sanitize_harvest_time_budget' ],
+            'presshub_ai_qa_include_briefings'          => [ __CLASS__, 'sanitize_checkbox' ],
             // Issue #61 — Settings-First: curation LLM context cap knobs.
             'presshub_ai_curation_max_articles'          => [ __CLASS__, 'sanitize_curation_max_articles' ],
             'presshub_ai_curation_max_chars_per_article' => [ __CLASS__, 'sanitize_curation_max_chars_per_article' ],

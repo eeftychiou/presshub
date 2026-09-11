@@ -1,6 +1,9 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-settings-storage.php';
+require_once __DIR__ . '/class-qa-reviewer.php';
+
 class PressHub_AI_Workflow {
     /**
      * Re-entrancy guard for enforce_editorial_workflow().
@@ -48,20 +51,57 @@ class PressHub_AI_Workflow {
             return;
         }
 
-        // If an author tries to publish directly, block it if it hasn't been reviewed
+        // If an author tries to publish directly, block it if it hasn't passed QA review
         if ( 'publish' === $new_status && 'publish' !== $old_status ) {
-            $scorecard = get_post_meta( $post->ID, '_presshub_ai_scorecard', true );
-
             // Allow editors/admins to bypass, but not authors
             if ( ! current_user_can( 'edit_others_posts' ) ) {
-                if ( empty( $scorecard ) || ! isset( $scorecard['score'] ) || intval( $scorecard['score'] ) < 80 ) {
+                if ( ! PressHub_AI_Settings_Storage::get_qa_enabled() ) {
+                    return;
+                }
+
+                $min_score = PressHub_AI_Settings_Storage::get_qa_min_score();
+                $scorecard = get_post_meta( $post->ID, '_presshub_ai_scorecard', true );
+
+                $content_hash = md5( trim( (string) ( $post->post_content ?? '' ) ) );
+                $cached_hash  = (string) get_post_meta( $post->ID, '_presshub_ai_scorecard_hash', true );
+
+                $needs_eval = true;
+                if ( is_array( $scorecard ) && isset( $scorecard['score'] ) ) {
+                    if ( '' !== $cached_hash && $cached_hash === $content_hash ) {
+                        $needs_eval = false;
+                    } elseif ( '' === $cached_hash ) {
+                        // Seeded or legacy meta without cached hash
+                        $needs_eval = false;
+                    }
+                }
+
+                $eval_result = null;
+                if ( $needs_eval && class_exists( 'PressHub_AI_QA_Reviewer' ) ) {
+                    $eval_result = PressHub_AI_QA_Reviewer::evaluate_post( $post );
+                    $passed      = (bool) ( $eval_result['passed'] ?? false );
+                } else {
+                    $score       = isset( $scorecard['score'] ) ? (int) $scorecard['score'] : 0;
+                    $passed      = ( $score >= $min_score );
+                    $eval_result = [
+                        'passed'   => $passed,
+                        'score'    => $score,
+                        'feedback' => (string) ( $scorecard['feedback'] ?? '' ),
+                        'error'    => null,
+                    ];
+                }
+
+                if ( ! $passed ) {
                     self::$enforcing = true;
                     try {
                         // Revert to pending
                         wp_update_post( [
-                            'ID' => $post->ID,
-                            'post_status' => 'pending'
+                            'ID'          => $post->ID,
+                            'post_status' => 'pending',
                         ] );
+
+                        if ( class_exists( 'PressHub_AI_QA_Reviewer' ) ) {
+                            PressHub_AI_QA_Reviewer::notify_editor_failure( $post->ID, $eval_result, 'post' );
+                        }
                     } finally {
                         self::$enforcing = false;
                     }
