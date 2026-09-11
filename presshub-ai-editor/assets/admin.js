@@ -922,10 +922,31 @@ jQuery(document).ready(function($) {
             'general': 'coauthor',
             'media': 'advanced',
             'rate_limits': 'advanced',
-            'diagnostics': 'advanced'
+            'diagnostics': 'advanced',
+            'qa': 'coauthor',
+            'scorecard': 'coauthor',
+            'scorecards': 'coauthor',
+            'editorial-qa': 'coauthor',
+            'editorial_qa': 'coauthor',
+            'coauthor-qa': 'coauthor',
+            'coauthor-drafting': 'coauthor'
         };
 
+        function switchCoauthorSubtab(subtabKey) {
+            var $subtabs = $('.presshub-coauthor-subtabs');
+            if (!$subtabs.length) {
+                return;
+            }
+            $subtabs.find('.presshub-coauthor-subtab').removeClass('nav-tab-active').attr('aria-selected', 'false');
+            var $activeSubtab = $subtabs.find('.presshub-coauthor-subtab[data-subtab="' + subtabKey + '"]');
+            $activeSubtab.addClass('nav-tab-active').attr('aria-selected', 'true');
+
+            $('.presshub-coauthor-subpane').hide();
+            $('#presshub-subpane-coauthor-' + subtabKey).show();
+        }
+
         function switchTab(tabKey) {
+            var rawKey = tabKey;
             if (tabAliases[tabKey]) {
                 tabKey = tabAliases[tabKey];
             }
@@ -954,6 +975,12 @@ jQuery(document).ready(function($) {
                 loadDiagnosticLogs();
             }
 
+            if (rawKey === 'qa' || rawKey === 'scorecard' || rawKey === 'scorecards' || rawKey === 'editorial-qa' || rawKey === 'editorial_qa' || rawKey === 'coauthor-qa') {
+                switchCoauthorSubtab('qa');
+            } else if (rawKey === 'coauthor-drafting') {
+                switchCoauthorSubtab('drafting');
+            }
+
             // Scroll active tab into view in horizontal scrolling container
             if ($activeTab.length && typeof $activeTab[0].scrollIntoView === 'function') {
                 try {
@@ -966,9 +993,9 @@ jQuery(document).ready(function($) {
             updateStickySaveBar(tabKey);
             updateStickySaveBarDirtyState();
 
-            if (window.location.hash !== '#' + tabKey) {
+            if (window.location.hash !== '#' + rawKey && window.location.hash !== '#' + tabKey) {
                 if (window.history && window.history.replaceState) {
-                    window.history.replaceState(null, null, '#' + tabKey);
+                    window.history.replaceState(null, null, '#' + rawKey);
                 }
             }
         }
@@ -1004,6 +1031,66 @@ jQuery(document).ready(function($) {
             switchTab(tabKey);
         });
 
+        $(document).on('click', '.presshub-coauthor-subtab', function(e) {
+            e.preventDefault();
+            var subtabKey = $(this).data('subtab');
+            if (subtabKey) {
+                switchCoauthorSubtab(subtabKey);
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, null, '#coauthor-' + subtabKey);
+                }
+            }
+        });
+
+        $(document).on('click', '.presshub-qa-tab', function(e) {
+            e.preventDefault();
+            var targetPaneId = $(this).data('qa-target');
+            if (!targetPaneId) {
+                return;
+            }
+            $('.presshub-qa-tab').removeClass('nav-tab-active').attr('aria-selected', 'false');
+            $(this).addClass('nav-tab-active').attr('aria-selected', 'true');
+
+            $('.presshub-qa-pane').hide();
+            $('#' + targetPaneId).show();
+        });
+
+        $(document).on('click', '.presshub-switch-to-qa-studio', function(e) {
+            e.preventDefault();
+            var targetTab = $(this).data('target-tab') || 'coauthor';
+            var subtab = $(this).data('subtab') || 'qa';
+            var promptTarget = $(this).data('prompt-target') || 'briefing';
+
+            switchTab(targetTab);
+            switchCoauthorSubtab(subtab);
+
+            if (promptTarget === 'briefing') {
+                $('.presshub-qa-tab[data-qa-target="presshub-qa-pane-briefing"]').trigger('click');
+            } else {
+                $('.presshub-qa-tab[data-qa-target="presshub-qa-pane-article"]').trigger('click');
+            }
+
+            var $targetPane = (promptTarget === 'briefing') ? $('#presshub-qa-pane-briefing') : $('#presshub-qa-pane-article');
+            if ($targetPane.length && typeof $targetPane[0].scrollIntoView === 'function') {
+                try {
+                    $targetPane[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } catch (err) {}
+            }
+        });
+
+        $(document).on('input change', '.presshub-qa-prompt-textarea', function() {
+            var $textarea = $(this);
+            var $pane = $textarea.closest('.presshub-qa-pane');
+            var $warning = $pane.find('.presshub-empty-prompt-warning');
+            if ($warning.length) {
+                if ($.trim($textarea.val()) === '') {
+                    $warning.slideDown(150);
+                } else {
+                    $warning.slideUp(150);
+                }
+            }
+        });
+
         $(document).on('change', '#presshub-mobile-tab-select', function(e) {
             var tabKey = $(this).val();
             if (tabKey) {
@@ -1016,7 +1103,7 @@ jQuery(document).ready(function($) {
             if (hash) {
                 var targetTab = tabAliases[hash] || hash;
                 if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length) {
-                    switchTab(targetTab);
+                    switchTab(hash);
                 }
             }
         });
@@ -1025,7 +1112,7 @@ jQuery(document).ready(function($) {
         if (initialHash) {
             var targetTab = tabAliases[initialHash] || initialHash;
             if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length) {
-                switchTab(targetTab);
+                switchTab(initialHash);
             }
         } else {
             // Ensure default active tab is in sync

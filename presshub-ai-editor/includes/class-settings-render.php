@@ -98,101 +98,112 @@ class PressHub_AI_Settings_Render {
                     <h2><?php echo __( 'AI Co-Author & Editorial Review', 'presshub-ai-editor' ); ?></h2>
                     <p><?php echo __( 'Configure the AI engine, default model, and drafting behavior for draft generation and article reviews.', 'presshub-ai-editor' ); ?></p>
                     
-                    <table class="form-table" role="presentation">
-                        <tbody>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_coauthor_provider"><?php echo __( 'Active Co-Author Provider', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_coauthor_prov = (string) get_option( 'presshub_ai_coauthor_provider', get_option( 'presshub_ai_provider', 'openai' ) ); ?>
-                                    <select name="presshub_ai_coauthor_provider" id="presshub_ai_coauthor_provider" class="regular-text">
-                                        <?php echo self::get_active_providers_options( $cur_coauthor_prov ); ?>
-                                    </select>
-                                    <p class="description"><?php echo __( 'Select which AI provider powers drafting and scorecard evaluation in the editor metabox.', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_coauthor_model"><?php echo __( 'Custom Model Override', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_coauthor_model = (string) get_option( 'presshub_ai_coauthor_model', '' ); ?>
-                                    <input type="text" name="presshub_ai_coauthor_model" id="presshub_ai_coauthor_model" value="<?php echo self::esc_attr_safe( $cur_coauthor_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default model', 'presshub-ai-editor' ); ?>" />
-                                    <p class="description"><?php echo __( 'Optional specific model identifier for Co-Author (e.g. gpt-4o, claude-3-5-sonnet-20241022).', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_coauthor_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_coauthor_tokens = (int) get_option( 'presshub_ai_coauthor_max_tokens', PressHub_AI_Provider_Defaults::default_max_tokens() ); ?>
-                                    <input type="number" min="1" max="65536" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_tokens ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (1 - 65,536). Default: 16,384.', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_coauthor_temperature"><?php echo __( 'Sampling Temperature', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_coauthor_temp = get_option( 'presshub_ai_coauthor_temperature', '0.7' ); ?>
-                                    <input type="number" min="0" max="2" step="0.05" name="presshub_ai_coauthor_temperature" id="presshub_ai_coauthor_temperature" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_temp ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'Creativity tuning for story drafting (0.0 to 2.0). Scorecards use deterministic 0.0.', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_coauthor_timeout"><?php echo __( 'Request Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_coauthor_timeout = (int) get_option( 'presshub_ai_coauthor_timeout', 300 ); ?>
-                                    <input type="number" min="5" max="300" name="presshub_ai_coauthor_timeout" id="presshub_ai_coauthor_timeout" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_timeout ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'HTTP timeout for draft generation requests. Default 300s.', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo __( 'Source Processing', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_fetch_urls_field(); ?>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <!-- Subtabs for Co-Author & QA Review -->
+                    <div class="presshub-subtab-wrapper nav-tab-wrapper presshub-coauthor-subtabs" style="margin-top: 15px; margin-bottom: 20px;">
+                        <a href="#coauthor-drafting" class="nav-tab presshub-coauthor-subtab nav-tab-active" data-subtab="drafting" role="tab" aria-selected="true"><?php echo esc_html__( 'Co-Author Story Drafting', 'presshub-ai-editor' ); ?></a>
+                        <a href="#coauthor-qa" class="nav-tab presshub-coauthor-subtab" data-subtab="qa" role="tab" aria-selected="false"><?php echo esc_html__( 'Editorial QA & Pre-Publication Gate', 'presshub-ai-editor' ); ?></a>
+                    </div>
 
-                    <h3 style="margin-top: 30px;"><?php echo __( 'Automated AI Editorial QA & Pre-Publication Gate', 'presshub-ai-editor' ); ?></h3>
-                    <p><?php echo __( 'Configure the automated quality-assurance review gate. When enabled, articles submitted for publication are automatically evaluated against editorial standards and blocked if they do not meet the minimum score.', 'presshub-ai-editor' ); ?></p>
-                    <table class="form-table" role="presentation">
-                        <tbody>
-                            <tr>
-                                <th scope="row"><?php echo __( 'Enable QA Review System', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_qa_enabled_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo __( 'Include Daily Briefings', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_qa_include_briefings_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_qa_min_score"><?php echo __( 'Minimum Passing Score', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_qa_min_score_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo __( 'Notify Editor on Failures', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_qa_notify_editor_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_qa_editor_email"><?php echo __( 'Editor Notification Email', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_qa_editor_email_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_qa_article_prompt"><?php echo __( 'Article QA Review Prompt Template', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_qa_article_prompt_field(); ?>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <!-- SUBPANE 1: Drafting Settings -->
+                    <div id="presshub-subpane-coauthor-drafting" class="presshub-coauthor-subpane">
+                        <table class="form-table" role="presentation">
+                            <tbody>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_coauthor_provider"><?php echo __( 'Active Co-Author Provider', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $cur_coauthor_prov = (string) get_option( 'presshub_ai_coauthor_provider', get_option( 'presshub_ai_provider', 'openai' ) ); ?>
+                                        <select name="presshub_ai_coauthor_provider" id="presshub_ai_coauthor_provider" class="regular-text">
+                                            <?php echo self::get_active_providers_options( $cur_coauthor_prov ); ?>
+                                        </select>
+                                        <p class="description"><?php echo __( 'Select which AI provider powers drafting and scorecard evaluation in the editor metabox.', 'presshub-ai-editor' ); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_coauthor_model"><?php echo __( 'Custom Model Override', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $cur_coauthor_model = (string) get_option( 'presshub_ai_coauthor_model', '' ); ?>
+                                        <input type="text" name="presshub_ai_coauthor_model" id="presshub_ai_coauthor_model" value="<?php echo self::esc_attr_safe( $cur_coauthor_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default model', 'presshub-ai-editor' ); ?>" />
+                                        <p class="description"><?php echo __( 'Optional specific model identifier for Co-Author (e.g. gpt-4o, claude-3-5-sonnet-20241022).', 'presshub-ai-editor' ); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_coauthor_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $cur_coauthor_tokens = (int) get_option( 'presshub_ai_coauthor_max_tokens', PressHub_AI_Provider_Defaults::default_max_tokens() ); ?>
+                                        <input type="number" min="1" max="65536" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_tokens ); ?>" class="small-text" />
+                                        <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (1 - 65,536). Default: 16,384.', 'presshub-ai-editor' ); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_coauthor_temperature"><?php echo __( 'Sampling Temperature', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $cur_coauthor_temp = get_option( 'presshub_ai_coauthor_temperature', '0.7' ); ?>
+                                        <input type="number" min="0" max="2" step="0.05" name="presshub_ai_coauthor_temperature" id="presshub_ai_coauthor_temperature" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_temp ); ?>" class="small-text" />
+                                        <p class="description"><?php echo __( 'Creativity tuning for story drafting (0.0 to 2.0). Scorecards use deterministic 0.0.', 'presshub-ai-editor' ); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_coauthor_timeout"><?php echo __( 'Request Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $cur_coauthor_timeout = (int) get_option( 'presshub_ai_coauthor_timeout', 300 ); ?>
+                                        <input type="number" min="5" max="300" name="presshub_ai_coauthor_timeout" id="presshub_ai_coauthor_timeout" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_timeout ); ?>" class="small-text" />
+                                        <p class="description"><?php echo __( 'HTTP timeout for draft generation requests. Default 300s.', 'presshub-ai-editor' ); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo __( 'Source Processing', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_fetch_urls_field(); ?>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- SUBPANE 2: QA & Scorecards -->
+                    <div id="presshub-subpane-coauthor-qa" class="presshub-coauthor-subpane" style="display: none;">
+                        <h3><?php echo __( 'Automated AI Editorial QA & Pre-Publication Gate', 'presshub-ai-editor' ); ?></h3>
+                        <p><?php echo __( 'Configure the automated quality-assurance review gate. When enabled, articles submitted for publication are automatically evaluated against editorial standards and blocked if they do not meet the minimum score.', 'presshub-ai-editor' ); ?></p>
+                        <table class="form-table" role="presentation">
+                            <tbody>
+                                <tr>
+                                    <th scope="row"><?php echo __( 'Enable QA Review System', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_enabled_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo __( 'Include Daily Briefings', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_include_briefings_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_min_score"><?php echo __( 'Minimum Passing Score', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_min_score_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo __( 'Notify Editor on Failures', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_notify_editor_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_editor_email"><?php echo __( 'Editor Notification Email', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_editor_email_field(); ?>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <hr style="margin: 25px 0;">
+                        <h3><?php echo esc_html__( 'Editorial QA Review Prompt Studio', 'presshub-ai-editor' ); ?></h3>
+                        <p><?php echo esc_html__( 'Customize the prompt templates used by the QA Review model. Switch between tabs below to inspect and customize prompts for author articles or automated Daily Briefing roundups.', 'presshub-ai-editor' ); ?></p>
+                        <?php $this->render_qa_prompt_studio(); ?>
+                    </div>
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="coauthor"><?php echo esc_html__( 'Save AI Co-Author Settings', 'presshub-ai-editor' ); ?></button>
@@ -282,13 +293,7 @@ class PressHub_AI_Settings_Render {
                             <tr>
                                 <th scope="row"><?php echo __( 'AI QA Review Gate', 'presshub-ai-editor' ); ?></th>
                                 <td>
-                                    <?php $this->render_qa_include_briefings_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_qa_briefing_prompt"><?php echo __( 'Daily Briefing QA Review Prompt Template', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_qa_briefing_prompt_field(); ?>
+                                    <?php $this->render_briefing_qa_gate_notice(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1262,7 +1267,9 @@ class PressHub_AI_Settings_Render {
                 return;
             }
         }
-        add_help_tab( $args );
+        if ( function_exists( 'add_help_tab' ) ) {
+            add_help_tab( $args );
+        }
     }
 
     // ------------------------------------------------------------------
@@ -2781,6 +2788,100 @@ class PressHub_AI_Settings_Render {
         </p>
         <p class="description">
             <?php echo __( 'User prompt template sent to the QA model when evaluating automated Daily Briefing roundups. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render the Tabbed Editorial QA Prompt Studio.
+     * Provides primary tabs for Article QA Review Prompt and Daily Briefing QA Review Prompt,
+     * pre-filled textareas, template load/clear actions, and empty prompt warning states.
+     */
+    public function render_qa_prompt_studio() {
+        if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            require_once __DIR__ . '/class-prompt-loader.php';
+        }
+
+        $default_article_prompt  = PressHub_AI_Prompt_Loader::get_article_qa_prompt();
+        $default_briefing_prompt = PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
+
+        $article_val  = (string) get_option( 'presshub_ai_qa_article_prompt', '' );
+        $briefing_val = (string) get_option( 'presshub_ai_qa_briefing_prompt', '' );
+        ?>
+        <div class="presshub-qa-prompt-tabs nav-tab-wrapper" style="margin-top:15px;margin-bottom:15px;">
+            <a href="#presshub-qa-pane-article" class="nav-tab presshub-qa-tab nav-tab-active" data-qa-target="presshub-qa-pane-article"><?php echo esc_html__( 'Article QA Review Prompt', 'presshub-ai-editor' ); ?></a>
+            <a href="#presshub-qa-pane-briefing" class="nav-tab presshub-qa-tab" data-qa-target="presshub-qa-pane-briefing"><?php echo esc_html__( 'Daily Briefing QA Review Prompt', 'presshub-ai-editor' ); ?></a>
+        </div>
+
+        <!-- PANE 1: Article QA Prompt -->
+        <div id="presshub-qa-pane-article" class="presshub-qa-pane">
+            <textarea name="presshub_ai_qa_article_prompt" id="presshub_ai_qa_article_prompt" rows="9" class="large-text code presshub-qa-prompt-textarea" placeholder="<?php echo esc_attr__( 'Leave empty to use the built-in default Article QA review prompt...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $article_val ); ?></textarea>
+
+            <p style="margin-top:8px;">
+                <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="presshub_ai_qa_article_prompt" data-default="<?php echo self::esc_attr_safe( $default_article_prompt ); ?>">
+                    <?php echo esc_html__( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
+                </button>
+                <button type="button" class="button button-secondary presshub-reset-prompt" data-target="presshub_ai_qa_article_prompt" data-default="">
+                    <?php echo esc_html__( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
+                </button>
+            </p>
+
+            <div class="presshub-empty-prompt-warning notice notice-warning inline" style="margin-top:8px;<?php echo empty( trim( $article_val ) ) ? 'display:block;' : 'display:none;'; ?>">
+                <p>⚠️ <strong><?php echo esc_html__( 'Note:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'When left empty, PressHub AI automatically uses the built-in default prompt asset from assets/prompts/scorecard/article_qa_user_prompt.txt.', 'presshub-ai-editor' ); ?></p>
+            </div>
+
+            <p class="description" style="margin-top:8px;">
+                <?php echo __( 'User prompt template sent to the QA model when evaluating author articles. Evaluates factual clarity, grammar, structure, attribution, and balance. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ); ?>
+            </p>
+        </div>
+
+        <!-- PANE 2: Daily Briefing QA Prompt -->
+        <div id="presshub-qa-pane-briefing" class="presshub-qa-pane" style="display:none;">
+            <textarea name="presshub_ai_qa_briefing_prompt" id="presshub_ai_qa_briefing_prompt" rows="9" class="large-text code presshub-qa-prompt-textarea" placeholder="<?php echo esc_attr__( 'Leave empty to use the built-in default Daily Briefing QA review prompt...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $briefing_val ); ?></textarea>
+
+            <p style="margin-top:8px;">
+                <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="presshub_ai_qa_briefing_prompt" data-default="<?php echo self::esc_attr_safe( $default_briefing_prompt ); ?>">
+                    <?php echo esc_html__( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
+                </button>
+                <button type="button" class="button button-secondary presshub-reset-prompt" data-target="presshub_ai_qa_briefing_prompt" data-default="">
+                    <?php echo esc_html__( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
+                </button>
+            </p>
+
+            <div class="presshub-empty-prompt-warning notice notice-warning inline" style="margin-top:8px;<?php echo empty( trim( $briefing_val ) ) ? 'display:block;' : 'display:none;'; ?>">
+                <p>⚠️ <strong><?php echo esc_html__( 'Note:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'When left empty, PressHub AI automatically uses the built-in default prompt asset from assets/prompts/scorecard/briefing_qa_user_prompt.txt.', 'presshub-ai-editor' ); ?></p>
+            </div>
+
+            <p class="description" style="margin-top:8px;">
+                <?php echo __( 'User prompt template sent to the QA model when evaluating automated Daily Briefing roundups. Evaluates multi-source synthesis, briefing flow, readability, and brevity. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ); ?>
+            </p>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render the Daily Briefing QA Review gate notice & direct link in Tab 3.
+     */
+    public function render_briefing_qa_gate_notice() {
+        $qa_enabled   = PressHub_AI_Settings_Storage::get_qa_enabled();
+        $qa_briefings = PressHub_AI_Settings_Storage::get_qa_include_briefings();
+        $min_score    = PressHub_AI_Settings_Storage::get_qa_min_score();
+        ?>
+        <p class="description" style="margin-bottom: 8px;">
+            <?php
+            if ( $qa_enabled && $qa_briefings ) {
+                echo '<span class="dashicons dashicons-yes-alt" style="color:#46b450;vertical-align:middle;"></span> <strong>' . esc_html__( 'Active', 'presshub-ai-editor' ) . '</strong> &mdash; ' . sprintf( esc_html__( 'Automated Daily Briefing posts are evaluated by the QA Reviewer and require a minimum score of %d/100 to publish.', 'presshub-ai-editor' ), (int) $min_score );
+            } elseif ( $qa_enabled ) {
+                echo '<span class="dashicons dashicons-info" style="color:#dba617;vertical-align:middle;"></span> <strong>' . esc_html__( 'Exempt from QA Gate', 'presshub-ai-editor' ) . '</strong> &mdash; ' . esc_html__( 'QA Gate is enabled for author posts, but Daily Briefings are currently set to bypass the gate.', 'presshub-ai-editor' );
+            } else {
+                echo '<span class="dashicons dashicons-marker" style="color:#72777c;vertical-align:middle;"></span> <strong>' . esc_html__( 'Disabled Globally', 'presshub-ai-editor' ) . '</strong> &mdash; ' . esc_html__( 'The AI Editorial QA Review System is currently disabled.', 'presshub-ai-editor' );
+            }
+            ?>
+        </p>
+        <p>
+            <a href="#coauthor-qa" class="button button-secondary presshub-switch-to-qa-studio" data-target-tab="coauthor" data-subtab="qa" data-prompt-target="briefing">
+                <?php echo esc_html__( 'Configure QA Review Gate & Edit Briefing Prompt Template →', 'presshub-ai-editor' ); ?>
+            </a>
         </p>
         <?php
     }

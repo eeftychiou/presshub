@@ -2320,6 +2320,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_qa_notify_editor'     => [ __CLASS__, 'sanitize_checkbox' ],
             'presshub_ai_qa_editor_email'      => [ __CLASS__, 'sanitize_qa_editor_email' ],
             'presshub_ai_qa_article_prompt'    => [ __CLASS__, 'sanitize_qa_prompt' ],
+            'presshub_ai_qa_briefing_prompt'   => [ __CLASS__, 'sanitize_qa_prompt' ],
         ];
 
         $briefing_map = [
@@ -2441,9 +2442,24 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_anthropic_version'           => [ __CLASS__, 'sanitize_anthropic_version' ],
         ];
 
+        $qa_map = [
+            'presshub_ai_qa_enabled'           => [ __CLASS__, 'sanitize_checkbox' ],
+            'presshub_ai_qa_include_briefings' => [ __CLASS__, 'sanitize_checkbox' ],
+            'presshub_ai_qa_min_score'         => [ __CLASS__, 'sanitize_qa_min_score' ],
+            'presshub_ai_qa_notify_editor'     => [ __CLASS__, 'sanitize_checkbox' ],
+            'presshub_ai_qa_editor_email'      => [ __CLASS__, 'sanitize_qa_editor_email' ],
+            'presshub_ai_qa_article_prompt'    => [ __CLASS__, 'sanitize_qa_prompt' ],
+            'presshub_ai_qa_briefing_prompt'   => [ __CLASS__, 'sanitize_qa_prompt' ],
+        ];
+
         switch ( $section ) {
             case 'coauthor':
                 return $coauthor_map;
+            case 'qa':
+            case 'scorecard':
+            case 'scorecards':
+            case 'editorial_qa':
+                return $qa_map;
             case 'briefing':
                 return $briefing_map;
             case 'copilot':
@@ -2462,6 +2478,7 @@ class PressHub_AI_Settings_Storage {
                     $general_map,
                     $providers_map,
                     $coauthor_map,
+                    $qa_map,
                     $briefing_map,
                     $copilot_map,
                     $advanced_map

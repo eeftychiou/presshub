@@ -1324,3 +1324,93 @@ body.presshub-modal-open {
     background: #fdfdfd;
     border-top: 1px solid #dcdcde;
 }
+
+/* ==========================================================================
+   Editorial QA Prompt Studio & Subtabs Styling
+   ========================================================================== */
+.presshub-subtab-wrapper {
+    margin-top: 15px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #c3c4c7;
+    background: transparent;
+    padding-bottom: 0;
+}
+.presshub-subtab-wrapper .nav-tab {
+    font-size: 13px;
+    padding: 6px 14px;
+    background: #f0f0f1;
+    border-color: #c3c4c7;
+    color: #50575e;
+    transition: all 0.15s ease-in-out;
+}
+.presshub-subtab-wrapper .nav-tab:hover {
+    background: #fff;
+    color: #1d2327;
+}
+.presshub-subtab-wrapper .nav-tab-active {
+    background: #fff;
+    border-bottom-color: #fff;
+    color: #1d2327;
+    font-weight: 600;
+}
+.presshub-coauthor-subpane {
+    animation: presshubFadeIn 0.15s ease-in-out;
+}
+
+.presshub-qa-prompt-tabs {
+    margin-top: 15px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #c3c4c7;
+    display: flex;
+    gap: 4px;
+}
+.presshub-qa-tab {
+    font-size: 13px;
+    padding: 5px 12px;
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    color: #50575e;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+}
+.presshub-qa-tab:hover {
+    background: #fff;
+    color: #1d2327;
+}
+.presshub-qa-tab.nav-tab-active {
+    background: #fff;
+    border-bottom-color: #fff;
+    color: #1d2327;
+    font-weight: 600;
+    position: relative;
+    margin-bottom: -1px;
+}
+.presshub-qa-pane {
+    animation: presshubFadeIn 0.15s ease-in-out;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    padding: 16px;
+    border-radius: 0 4px 4px 4px;
+}
+.presshub-qa-prompt-textarea {
+    font-family: Consolas, Monaco, "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    background: #fafafa;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    width: 100%;
+}
+.presshub-qa-prompt-textarea:focus {
+    background: #fff;
+}
+.presshub-switch-to-qa-studio {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+}
+
