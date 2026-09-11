@@ -32,6 +32,7 @@ $prompts_dir = PressHub_AI_Prompt_Loader::get_prompts_dir();
 plt_check( 'prompts_dir exists', is_dir( $prompts_dir ) );
 plt_check( 'prompts_dir podcast exists', is_dir( $prompts_dir . '/podcast' ) );
 plt_check( 'prompts_dir curation exists', is_dir( $prompts_dir . '/curation' ) );
+plt_check( 'prompts_dir scorecard exists', is_dir( $prompts_dir . '/scorecard' ) );
 
 // 2. Verify all 9 podcast templates load and contain required rules
 $styles = [ 'default_greek_chat', 'bbc_broadcasting_standards', 'conversational_news_reporting' ];
@@ -48,6 +49,10 @@ foreach ( $styles as $style ) {
 // 3. Verify curation prompt loads
 $curation_prompt = PressHub_AI_Prompt_Loader::get_curation_prompt();
 plt_check( 'load curation prompt', ! empty( $curation_prompt ) && false !== strpos( $curation_prompt, 'Οδηγίες Σύνταξης:' ) && false !== strpos( $curation_prompt, '{sources_list}' ) );
+
+// 3b. Verify scorecard prompt loads and contains temporal/factual directive
+$scorecard_prompt = PressHub_AI_Prompt_Loader::get_scorecard_system_prompt();
+plt_check( 'load scorecard prompt', ! empty( $scorecard_prompt ) && false !== strpos( $scorecard_prompt, 'CRITICAL FACTUAL AND TEMPORAL DIRECTIVE' ) && false !== strpos( $scorecard_prompt, 'knowledge cutoff' ) );
 
 // 4. Verify Zero-Silent-Fallback on missing template
 $caught_missing = false;

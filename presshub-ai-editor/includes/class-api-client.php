@@ -10,6 +10,7 @@ require_once __DIR__ . '/class-url-fetcher.php';
 require_once __DIR__ . '/class-markdown.php';
 require_once __DIR__ . '/class-logger.php';
 require_once __DIR__ . '/class-token-logger.php';
+require_once __DIR__ . '/class-prompt-loader.php';
 
 /**
  * Optional prompt inspection: when the presshub_ai_debug_prompts option
@@ -983,9 +984,9 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
         }
 
-        $sys_prompt = __( 'You are an exacting news editor.', 'presshub-ai-editor' );
+        $sys_prompt = PressHub_AI_Prompt_Loader::get_scorecard_system_prompt();
         $sys_prompt = apply_filters( 'presshub_ai_scorecard_system_prompt', $sys_prompt );
-        $user_prompt = "Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).\n\nDraft:\n" . $content;
+        $user_prompt = "Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).\n\nImportant: Do not dispute or penalize recent real-world events, breaking news, or reported deaths based on your static pre-training knowledge or cutoff date. Assess the draft strictly on editorial quality, clarity, structure, and journalistic writing standards.\n\nDraft:\n" . $content;
 
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [] );
         presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, self::current_request_meta() );

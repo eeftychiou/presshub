@@ -129,4 +129,13 @@ class PressHub_AI_Prompt_Loader {
     public static function get_curation_prompt(): string {
         return self::load( 'curation/default_greek_briefing.txt' );
     }
+
+    /**
+     * Get the built-in default scorecard evaluation system prompt.
+     *
+     * @return string Loaded scorecard system prompt template.
+     */
+    public static function get_scorecard_system_prompt(): string {
+        return self::load( 'scorecard/default_scorecard_system.txt' );
+    }
 }

@@ -25,7 +25,6 @@ require_once __DIR__ . '/../includes/class-api-client.php';
 class InstructionCompositionTest
 {
     private const BUILTIN_DRAFT    = 'You are a professional AI journalist.';
-    private const BUILTIN_SCORECARD = 'You are an exacting news editor.';
     private const BUILTIN_CLASSIFY = "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else.";
     private const BUILTIN_AUDIO    = "You are a professional news radio narrator. Convert the user's prompt or media notes into a short 4-5 sentence radio report script. Output ONLY the speech script and nothing else.";
 
@@ -168,7 +167,7 @@ class InstructionCompositionTest
         $api = new PressHub_AI_API_Client();
         $api->generate_scorecard( 'some draft content here' );
         $sys = self::last_openai_system();
-        if ( $sys !== self::BUILTIN_SCORECARD ) {
+        if ( $sys !== PressHub_AI_Prompt_Loader::get_scorecard_system_prompt() ) {
             $failures[] = "Case 7: scorecard prompt must be untouched by presets. Got: " . var_export( $sys, true );
         }
 
