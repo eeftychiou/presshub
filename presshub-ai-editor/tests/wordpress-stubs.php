@@ -1236,4 +1236,10 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
 
 if ( ! isset( $GLOBALS['wpdb'] ) || ! is_object( $GLOBALS['wpdb'] ) ) {
     $GLOBALS['wpdb'] = new PressHub_Test_WPDB();
+}
+
+if ( ! function_exists( 'wp_doing_cron' ) ) {
+    function wp_doing_cron() {
+        return ( defined( 'DOING_CRON' ) && DOING_CRON ) || ! empty( $GLOBALS['WP_DOING_CRON'] );
+    }
 }

@@ -29,6 +29,19 @@ class PressHub_AI_Workflow {
             return;
         }
 
+        // Automated Daily Briefing Hub posts (text briefing stories & audio podcasts)
+        // are governed by their own settings (presshub_ai_briefing_text_status /
+        // presshub_ai_briefing_podcast_status), not by the co-pilot author scorecard gate.
+        if ( ! empty( get_post_meta( $post->ID, '_presshub_briefing_type', true ) ) ) {
+            return;
+        }
+
+        // Cron and headless flows run without a logged-in user (user 0) where
+        // current_user_can() is unreliable. Never block scheduled/cron publishing.
+        if ( ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
+            return;
+        }
+
         // Bail out if we are already enforcing to prevent infinite recursion
         // when wp_update_post() fires transition_post_status again below.
         if ( self::$enforcing ) {

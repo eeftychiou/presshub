@@ -98,6 +98,36 @@ class WorkflowRecursionTest
             $failures[] = "CPT transitions must bypass the editorial gate (0 wp_update_post calls), got " . ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 ) . ".";
         }
 
+        // Automated Daily Briefing Hub posts (text briefing stories)
+        // must bypass the editorial gate even without a scorecard.
+        self::reset_world();
+        self::grant_author_caps();
+        $GLOBALS['POST_META_STORE'][42]['_presshub_briefing_type'] = 'text';
+        $count = self::simulate_unreviewed_publish();
+        if ( $count !== 0 ) {
+            $failures[] = "Briefing text post must bypass the editorial gate (0 wp_update_post calls), got {$count}.";
+        }
+
+        // Automated Daily Briefing Hub posts (podcast posts)
+        // must bypass the editorial gate even without a scorecard.
+        self::reset_world();
+        self::grant_author_caps();
+        $GLOBALS['POST_META_STORE'][42]['_presshub_briefing_type'] = 'podcast';
+        $count = self::simulate_unreviewed_publish();
+        if ( $count !== 0 ) {
+            $failures[] = "Briefing podcast post must bypass the editorial gate (0 wp_update_post calls), got {$count}.";
+        }
+
+        // Cron executions (wp_doing_cron() === true) must bypass the gate.
+        self::reset_world();
+        self::grant_author_caps();
+        $GLOBALS['WP_DOING_CRON'] = true;
+        $count = self::simulate_unreviewed_publish();
+        if ( $count !== 0 ) {
+            $failures[] = "Cron execution must bypass the editorial gate (0 wp_update_post calls), got {$count}.";
+        }
+        $GLOBALS['WP_DOING_CRON'] = false;
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {
@@ -119,6 +149,7 @@ class WorkflowRecursionTest
         $GLOBALS['HOOK_INVOCATION_LOG'] = [];
         $GLOBALS['DO_ACTION_LOG'] = [];
         $GLOBALS['TRANSITION_HANDLERS'] = [];
+        $GLOBALS['WP_DOING_CRON'] = false;
     }
 
     private static function grant_author_caps(): void {
