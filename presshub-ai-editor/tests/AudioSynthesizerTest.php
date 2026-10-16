@@ -253,7 +253,8 @@ as_check( 'create_post: configured category applied (42)', isset( $inserted['pos
 as_check( 'create_post: configured status applied (publish)', ( $inserted['post_status'] ?? '' ) === 'publish' );
 as_check( 'create_post: content contains WordPress Audio Block', false !== strpos( $inserted['post_content'], '<!-- wp:audio {"id":88} -->' ) );
 as_check( 'create_post: content contains audio src URL', false !== strpos( $inserted['post_content'], 'http://example.test/wp-content/uploads/podcast-2026-08-26.mp3' ) );
-as_check( 'create_post: content contains formatted dialogue transcript', false !== strpos( $inserted['post_content'], '<strong>Μαρία:</strong>' ) && false !== strpos( $inserted['post_content'], 'Καλημέρα σε όλους!' ) );
+as_check( 'create_post: script saved in meta _presshub_podcast_script', get_post_meta( $post_id, '_presshub_podcast_script', true ) === $test_transcript );
+as_check( 'create_post: content by default does not contain transcript', false === strpos( $inserted['post_content'], '<strong>Μαρία:</strong>' ) );
 as_check( 'create_post: meta _presshub_briefing_date saved', get_post_meta( $post_id, '_presshub_briefing_date', true ) === '2026-08-26' );
 as_check( 'create_post: meta _presshub_briefing_type is podcast', get_post_meta( $post_id, '_presshub_briefing_type', true ) === 'podcast' );
 as_check( 'create_post: meta _presshub_audio_attachment_id is 88', (int) get_post_meta( $post_id, '_presshub_audio_attachment_id', true ) === 88 );
@@ -717,8 +718,21 @@ as_check( 'issue_91: post_content free of [TOPIC_START',  false === strpos( $iss
 as_check( 'issue_91: post_content free of [TOPIC_END]',    false === strpos( $issue91_content, '[TOPIC_END]' ) );
 as_check( 'issue_91: post_content free of <!-- TOPIC_',    false === strpos( $issue91_content, '<!-- TOPIC_' ) );
 as_check( 'issue_91: post_content free of === TOPIC:',     false === strpos( $issue91_content, '=== TOPIC:' ) );
-as_check( 'issue_91: post_content free of ### TOPIC:',     false === strpos( $issue91_content, '### TOPIC:' ) );
-as_check( 'issue_91: post_content preserves dialogue',      false !== strpos( $issue91_content, 'Καλημέρα σας' ) && false !== strpos( $issue91_content, 'Ευχαριστούμε' ) );
+$issue91_meta_script = get_post_meta( (int) $issue91_post_id, '_presshub_podcast_script', true );
+as_check( 'issue_91: post meta preserves dialogue', false !== strpos( $issue91_meta_script, 'Καλημέρα σας' ) && false !== strpos( $issue91_meta_script, 'Ευχαριστούμε' ) );
+
+// Test with include_text enabled
+update_option( 'presshub_ai_briefing_podcast_include_text', 1 );
+$issue91_text_post_id = $synthesizer->create_podcast_post(
+    'http://example.test/audio-issue91-text.mp3',
+    99998,
+    $issue91_script,
+    '2026-09-02',
+    'Test Podcast Post With Text'
+);
+$issue91_text_content = get_post( (int) $issue91_text_post_id )->post_content ?? '';
+as_check( 'issue_91: post_content preserves dialogue when include_text enabled', false !== strpos( $issue91_text_content, 'Καλημέρα σας' ) && false !== strpos( $issue91_text_content, 'Ευχαριστούμε' ) );
+delete_option( 'presshub_ai_briefing_podcast_include_text' );
 
 
 // =========================================================================

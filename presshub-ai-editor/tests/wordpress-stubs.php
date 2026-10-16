@@ -163,6 +163,7 @@ if ( ! function_exists( 'wp_update_post' ) ) {
         $new_status = $postarr['post_status'] ?? 'publish';
         $old_status = $GLOBALS['POST_STATUSES'][ $post_id ] ?? 'draft';
         $GLOBALS['POST_STATUSES'][ $post_id ] = $new_status;
+        $GLOBALS['POSTS_STORE'][ $post_id ] = array_merge( $GLOBALS['POSTS_STORE'][ $post_id ] ?? [], $postarr );
         $GLOBALS['WP_UPDATE_POST_CALLS']++;
         $GLOBALS['HOOK_INVOCATION_LOG'][] = [
             'post_id' => $post_id,
@@ -755,6 +756,31 @@ if ( ! function_exists( 'admin_url' ) ) {
     }
 }
 
+if ( ! function_exists( 'add_query_arg' ) ) {
+    function add_query_arg( ...$args ) {
+        if ( is_array( $args[0] ) ) {
+            $qs  = $args[0];
+            $url = $args[1] ?? '';
+        } elseif ( count( $args ) >= 3 ) {
+            $qs  = [ $args[0] => $args[1] ];
+            $url = $args[2];
+        } elseif ( count( $args ) === 2 ) {
+            $qs  = [ $args[0] => $args[1] ];
+            $url = '';
+        } else {
+            return '';
+        }
+        $parts    = explode( '?', $url, 2 );
+        $base     = $parts[0];
+        $existing = [];
+        if ( isset( $parts[1] ) ) {
+            parse_str( $parts[1], $existing );
+        }
+        $combined = array_merge( $existing, $qs );
+        return $base . ( ! empty( $combined ) ? '?' . http_build_query( $combined ) : '' );
+    }
+}
+
 if ( ! function_exists( 'wp_unslash' ) ) {
     function wp_unslash( $value ) {
         return is_string( $value ) ? stripslashes( $value ) : $value;
@@ -961,6 +987,12 @@ if ( ! function_exists( 'wp_localize_script' ) ) {
 if ( ! function_exists( 'wp_create_nonce' ) ) {
     function wp_create_nonce( $action = -1 ) {
         return 'test-nonce';
+    }
+}
+
+if ( ! function_exists( 'wp_verify_nonce' ) ) {
+    function wp_verify_nonce( $nonce, $action = -1 ) {
+        return ! empty( $nonce );
     }
 }
 
@@ -1276,5 +1308,102 @@ if ( ! isset( $GLOBALS['wpdb'] ) || ! is_object( $GLOBALS['wpdb'] ) ) {
 if ( ! function_exists( 'wp_doing_cron' ) ) {
     function wp_doing_cron() {
         return ( defined( 'DOING_CRON' ) && DOING_CRON ) || ! empty( $GLOBALS['WP_DOING_CRON'] );
+    }
+}
+
+if ( ! isset( $GLOBALS['POST_THUMBNAILS'] ) ) {
+    $GLOBALS['POST_THUMBNAILS'] = [];
+}
+
+if ( ! function_exists( 'set_post_thumbnail' ) ) {
+    function set_post_thumbnail( $post, $thumbnail_id ) {
+        $post_id = is_object( $post ) ? $post->ID : (int) $post;
+        $GLOBALS['POST_THUMBNAILS'][ $post_id ] = (int) $thumbnail_id;
+        update_post_meta( $post_id, '_thumbnail_id', (int) $thumbnail_id );
+        return true;
+    }
+}
+
+if ( ! function_exists( 'has_post_thumbnail' ) ) {
+    function has_post_thumbnail( $post = null ) {
+        if ( empty( $post ) ) {
+            $post = function_exists( 'get_queried_object' ) ? get_queried_object() : null;
+        }
+        $post_id = is_object( $post ) ? $post->ID : (int) $post;
+        return ! empty( $GLOBALS['POST_THUMBNAILS'][ $post_id ] ) || ! empty( get_post_meta( $post_id, '_thumbnail_id', true ) );
+    }
+}
+
+if ( ! function_exists( 'get_post_thumbnail_id' ) ) {
+    function get_post_thumbnail_id( $post = null ) {
+        if ( empty( $post ) ) {
+            $post = function_exists( 'get_queried_object' ) ? get_queried_object() : null;
+        }
+        $post_id = is_object( $post ) ? $post->ID : (int) $post;
+        return $GLOBALS['POST_THUMBNAILS'][ $post_id ] ?? ( (int) get_post_meta( $post_id, '_thumbnail_id', true ) ?: 0 );
+    }
+}
+
+if ( ! function_exists( 'wp_get_attachment_image_src' ) ) {
+    function wp_get_attachment_image_src( $attachment_id, $size = 'thumbnail', $icon = false ) {
+        if ( empty( $attachment_id ) ) {
+            return false;
+        }
+        return [ "https://example.com/wp-content/uploads/image-{$attachment_id}.jpg", 1200, 630, false ];
+    }
+}
+
+if ( ! function_exists( 'get_queried_object' ) ) {
+    function get_queried_object() {
+        return $GLOBALS['QUERIED_OBJECT'] ?? null;
+    }
+}
+
+if ( ! function_exists( 'is_singular' ) ) {
+    function is_singular( $post_types = '' ) {
+        return ! empty( $GLOBALS['IS_SINGULAR'] );
+    }
+}
+
+if ( ! function_exists( 'is_single' ) ) {
+    function is_single( $post = '' ) {
+        return ! empty( $GLOBALS['IS_SINGLE'] );
+    }
+}
+
+if ( ! function_exists( 'strip_shortcodes' ) ) {
+    function strip_shortcodes( $content ) {
+        return preg_replace( '/\[[^\]]+\]/', '', (string) $content );
+    }
+}
+
+if ( ! function_exists( 'wp_trim_words' ) ) {
+    function wp_trim_words( $text, $num_words = 55, $more = null ) {
+        if ( null === $more ) {
+            $more = '&hellip;';
+        }
+        $words = preg_split( '/[\n\r\t ]+/', trim( (string) $text ), $num_words + 1, PREG_SPLIT_NO_EMPTY );
+        if ( count( $words ) > $num_words ) {
+            array_pop( $words );
+            $text = implode( ' ', $words );
+            $text = $text . $more;
+        } else {
+            $text = implode( ' ', $words );
+        }
+        return $text;
+    }
+}
+
+if ( ! function_exists( 'wp_nonce_field' ) ) {
+    function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $echo = true ) {
+        $nonce = wp_create_nonce( $action );
+        $html = '<input type="hidden" id="' . esc_attr( $name ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $nonce ) . '" />';
+        if ( $referer ) {
+            $html .= '<input type="hidden" name="_wp_http_referer" value="/" />';
+        }
+        if ( $echo ) {
+            echo $html;
+        }
+        return $html;
     }
 }

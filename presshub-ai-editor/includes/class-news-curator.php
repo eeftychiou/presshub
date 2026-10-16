@@ -306,10 +306,29 @@ class PressHub_AI_News_Curator {
      * @param string $date Briefing date (YYYY-MM-DD).
      * @return string|null Briefing content or null if not found.
      */
-    public function get_briefing_content( string $date ): ?string {
+    public function get_briefing_content( string $date, string $edition = 'morning' ): ?string {
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
+
+        $edition_meta = 'noon' === $edition
+            ? [
+                'key'     => '_presshub_briefing_edition',
+                'value'   => 'noon',
+                'compare' => '=',
+            ]
+            : [
+                'relation' => 'OR',
+                [
+                    'key'     => '_presshub_briefing_edition',
+                    'value'   => 'morning',
+                    'compare' => '=',
+                ],
+                [
+                    'key'     => '_presshub_briefing_edition',
+                    'compare' => 'NOT EXISTS',
+                ],
+            ];
 
         // 1. Query WordPress briefing posts by meta
         if ( function_exists( 'get_posts' ) ) {
@@ -328,6 +347,7 @@ class PressHub_AI_News_Curator {
                         'value'   => 'text',
                         'compare' => '=',
                     ],
+                    $edition_meta,
                 ],
             ] );
 
@@ -344,10 +364,13 @@ class PressHub_AI_News_Curator {
         if ( ! empty( $GLOBALS['POST_META_STORE'] ) && is_array( $GLOBALS['POST_META_STORE'] ) ) {
             foreach ( $GLOBALS['POST_META_STORE'] as $post_id => $meta ) {
                 if ( ( $meta['_presshub_briefing_date'] ?? '' ) === $date && ( $meta['_presshub_briefing_type'] ?? '' ) === 'text' ) {
-                    if ( function_exists( 'get_post' ) ) {
-                        $p = get_post( $post_id );
-                        if ( $p && ! empty( $p->post_content ) ) {
-                            return (string) $p->post_content;
+                    $item_edition = $meta['_presshub_briefing_edition'] ?? 'morning';
+                    if ( $item_edition === $edition || ( 'morning' === $edition && empty( $meta['_presshub_briefing_edition'] ) ) ) {
+                        if ( function_exists( 'get_post' ) ) {
+                            $p = get_post( $post_id );
+                            if ( $p && ! empty( $p->post_content ) ) {
+                                return (string) $p->post_content;
+                            }
                         }
                     }
                 }
@@ -357,7 +380,9 @@ class PressHub_AI_News_Curator {
         // 2. Check snapshot storage directory for saved text briefing files
         $harvester = new PressHub_AI_News_Harvester();
         $dir       = $harvester->get_snapshot_dir( $date );
-        $candidates = [ 'briefing-text.md', 'briefing-text.txt', 'briefing.md', 'briefing.txt' ];
+        $candidates = 'noon' === $edition
+            ? [ 'briefing-text-noon.md', 'briefing-text-noon.txt', 'briefing-noon.md', 'briefing-noon.txt' ]
+            : [ 'briefing-text.md', 'briefing-text.txt', 'briefing.md', 'briefing.txt' ];
 
         foreach ( $candidates as $file ) {
             $path = trailingslashit( $dir ) . $file;
@@ -379,9 +404,10 @@ class PressHub_AI_News_Curator {
      * @param string $preset_id            Optional preset slug override.
      * @param string $date                 Target briefing date (YYYY-MM-DD).
      * @param array  $selected_article_ids Optional list of selected article IDs to filter by.
+     * @param string $edition              Briefing edition ('morning' or 'noon').
      * @return array Associative array with 'system_prompt' and 'user_prompt'.
      */
-    public function build_prompt( array $articles, string $preset_id = '', string $date = '', array $selected_article_ids = [] ): array {
+    public function build_prompt( array $articles, string $preset_id = '', string $date = '', array $selected_article_ids = [], string $edition = 'morning' ): array {
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
@@ -450,21 +476,56 @@ class PressHub_AI_News_Curator {
         // do not duplicate the article text in the user prompt.
         $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
 
-        if ( $has_context_in_system ) {
-            $user_prompt = sprintf(
-                "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
-                $date,
-                $count,
-                $sources
-            );
+        $morning_briefing_block = '';
+        if ( 'noon' === $edition ) {
+            $morning_content = $this->get_briefing_content( $date, 'morning' );
+            if ( ! empty( $morning_content ) ) {
+                $morning_briefing_block = sprintf(
+                    "\n\n--- ΠΡΩΙΝΗ ΕΝΗΜΕΡΩΣΗ (%s) ---\n%s\n---------------------------------\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Λάβε υπόψη την πρωινή ενημέρωση και συνέταξε μια νέα επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις από το πρωί.\n",
+                    $date,
+                    trim( $morning_content )
+                );
+            } else {
+                $morning_briefing_block = "\n\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Συνέταξε μια επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις της ημέρας.\n";
+            }
+        }
+
+        if ( 'noon' === $edition ) {
+            if ( $has_context_in_system ) {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
+                    $date,
+                    $count,
+                    $sources,
+                    $morning_briefing_block
+                );
+            } else {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    $date,
+                    $count,
+                    $sources,
+                    $morning_briefing_block,
+                    $context
+                );
+            }
         } else {
-            $user_prompt = sprintf(
-                "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
-                $date,
-                $count,
-                $sources,
-                $context
-            );
+            if ( $has_context_in_system ) {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
+                    $date,
+                    $count,
+                    $sources
+                );
+            } else {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    $date,
+                    $count,
+                    $sources,
+                    $context
+                );
+            }
         }
 
         return [
@@ -543,12 +604,15 @@ class PressHub_AI_News_Curator {
      *
      * @param string $headline       Headline extracted from the curator output.
      * @param string $formatted_date Locale-formatted date string (e.g. "26/08/2026").
+     * @param string $edition        Briefing edition ('morning' or 'noon').
      * @return string Composed post title (no surrounding whitespace).
      */
-    private function compose_text_story_title( string $headline, string $formatted_date ): string {
+    private function compose_text_story_title( string $headline, string $formatted_date, string $edition = 'morning' ): string {
         $headline = trim( $headline );
 
-        $prefix = PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
+        $prefix = 'noon' === $edition
+            ? PressHub_AI_Settings_Storage::get_briefing_noon_text_title_prefix()
+            : PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
         $prefix = trim( (string) $prefix );
 
         $date_format = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
@@ -611,9 +675,10 @@ class PressHub_AI_News_Curator {
      * @param string $story_content HTML or Markdown content of the story.
      * @param string $date          Briefing date (YYYY-MM-DD).
      * @param string $headline      Optional headline override.
+     * @param string $edition       Briefing edition ('morning' or 'noon').
      * @return int|WP_Error Post ID on success or WP_Error on failure.
      */
-    public function create_wordpress_post( string $story_content, string $date, string $headline = '' ) {
+    public function create_wordpress_post( string $story_content, string $date, string $headline = '', string $edition = 'morning' ) {
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
@@ -636,7 +701,7 @@ class PressHub_AI_News_Curator {
         // Issue #65 — compose title via the Settings-First helper, which
         // applies the prefix-collision guard and reads the prefix/date
         // format from operator-configurable Settings (not hard-coded).
-        $post_title = $this->compose_text_story_title( $headline, $formatted_date );
+        $post_title = $this->compose_text_story_title( $headline, $formatted_date, $edition );
 
         // Read category setting
         $category_id = (int) get_option( self::OPTION_CATEGORY, 0 );
@@ -688,8 +753,9 @@ class PressHub_AI_News_Curator {
             'post_status'  => $post_status,
             'post_type'    => 'post',
             'meta_input'   => [
-                '_presshub_briefing_date' => $date,
-                '_presshub_briefing_type' => 'text',
+                '_presshub_briefing_date'    => $date,
+                '_presshub_briefing_type'    => 'text',
+                '_presshub_briefing_edition' => $edition,
             ],
         ];
 
@@ -720,6 +786,7 @@ class PressHub_AI_News_Curator {
         // Persist meta explicitly in addition to meta_input
         update_post_meta( $post_id, '_presshub_briefing_date', $date );
         update_post_meta( $post_id, '_presshub_briefing_type', 'text' );
+        update_post_meta( $post_id, '_presshub_briefing_edition', $edition );
 
         if ( ! empty( $qa_result ) ) {
             update_post_meta( $post_id, '_presshub_ai_scorecard', [
@@ -736,10 +803,27 @@ class PressHub_AI_News_Curator {
         // Issue #65 — stash the prefix/date-format state used to compose
         // this title so downstream observers (token log, integration
         // tests) can confirm whether the prefix was applied as configured.
-        $applied_prefix = PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
+        $applied_prefix = 'noon' === $edition
+            ? PressHub_AI_Settings_Storage::get_briefing_noon_text_title_prefix()
+            : PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
         $applied_date_format = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
         update_post_meta( $post_id, '_presshub_text_title_prefix_applied', (string) $applied_prefix );
         update_post_meta( $post_id, '_presshub_text_title_date_format_applied', (string) $applied_date_format );
+
+        // Assign featured image from configured pool if available
+        $thumb_id = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id();
+        if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
+            set_post_thumbnail( $post_id, $thumb_id );
+        }
+
+        // Set clean post excerpt for search snippets, RSS, and social meta tags
+        $clean_summary = wp_trim_words( wp_strip_all_tags( $html_content ), 35 );
+        if ( ! empty( $clean_summary ) ) {
+            wp_update_post( [
+                'ID'           => $post_id,
+                'post_excerpt' => $clean_summary,
+            ] );
+        }
 
         // Issue #79 — surface the source-context the LLM was actually fed so
         // the Briefing Hub stage card can show "All Harvested Articles (N)"
@@ -842,16 +926,17 @@ class PressHub_AI_News_Curator {
      * @param PressHub_AI_API_Client|null $api_client           Optional API client instance.
      * @param string                       $preset_id            Optional preset slug.
      * @param array                        $selected_article_ids Optional list of selected article IDs to filter by.
+     * @param string                       $edition              Briefing edition ('morning' or 'noon').
      * @return array|WP_Error Result payload array or WP_Error on failure.
      */
-    public function generate_briefing( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', array $selected_article_ids = [] ) {
+    public function generate_briefing( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', array $selected_article_ids = [], string $edition = 'morning' ) {
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         // 1. Load snapshot from harvester
         $harvester = new PressHub_AI_News_Harvester();
-        $snapshot  = $harvester->load_snapshot( $date );
+        $snapshot  = $harvester->load_snapshot( $date, $edition );
 
         if ( empty( $snapshot ) || empty( $snapshot['articles'] ) || ! is_array( $snapshot['articles'] ) ) {
             return new WP_Error(
@@ -863,7 +948,7 @@ class PressHub_AI_News_Curator {
         $articles = $snapshot['articles'];
 
         // 2. Build prompts (with selected_article_ids filter)
-        $prompts = $this->build_prompt( $articles, $preset_id, $date, $selected_article_ids );
+        $prompts = $this->build_prompt( $articles, $preset_id, $date, $selected_article_ids, $edition );
 
         // 3. Call AI provider
         if ( null === $api_client ) {
@@ -916,6 +1001,7 @@ class PressHub_AI_News_Curator {
         // briefing_curation row that call_provider() logs on success, so
         // the structured token log is the single source of truth.
         $curation_metadata = [
+            'edition'                => $edition,
             'pool_chars'             => (int) $pool_chars,
             'pool_tokens_estimate'   => (int) $pool_tokens_estimate,
             'capped_chars'           => (int) $this->last_capped_chars(),
@@ -935,8 +1021,9 @@ class PressHub_AI_News_Curator {
             $cur_model_src   = method_exists( $api_client, 'get_model_source' ) ? $api_client->get_model_source() : '';
             PressHub_AI_Logger::info(
                 sprintf(
-                    'Starting news curation for %s: pool=%d articles, provider=%s, model=%s (source: %s)',
+                    'Starting news curation for %s (edition: %s): pool=%d articles, provider=%s, model=%s (source: %s)',
                     $date,
+                    $edition,
                     count( $articles ),
                     $cur_provider_id,
                     $cur_model,
@@ -971,7 +1058,7 @@ class PressHub_AI_News_Curator {
             PressHub_AI_Logger::info( sprintf( 'Text curation AI generated successfully for %s (%d chars)', $date, strlen( $response ) ) );
         }
 
-        // Save raw response to snapshot directory as briefing-text.md
+        // Save raw response to snapshot directory as briefing-text.md or briefing-text-noon.md
         $dir = $harvester->get_snapshot_dir( $date );
         if ( ! is_dir( $dir ) ) {
             if ( function_exists( 'wp_mkdir_p' ) ) {
@@ -980,7 +1067,8 @@ class PressHub_AI_News_Curator {
                 @mkdir( $dir, 0755, true );
             }
         }
-        @file_put_contents( trailingslashit( $dir ) . 'briefing-text.md', $response );
+        $file_name = 'noon' === $edition ? 'briefing-text-noon.md' : 'briefing-text.md';
+        @file_put_contents( trailingslashit( $dir ) . $file_name, $response );
 
         // 4. Convert Markdown to HTML
         $html_content = PressHub_AI_Markdown::to_html( $response );
@@ -1000,7 +1088,7 @@ class PressHub_AI_News_Curator {
         }
         self::set_source_context( $source_type, (int) $used_articles_count, (string) $preset_id );
 
-        $post_id  = $this->create_wordpress_post( $html_content, $date, $headline );
+        $post_id  = $this->create_wordpress_post( $html_content, $date, $headline, $edition );
 
         if ( is_wp_error( $post_id ) ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -1020,6 +1108,7 @@ class PressHub_AI_News_Curator {
         return [
             'post_id'                  => $post_id,
             'date'                     => $date,
+            'edition'                  => $edition,
             'headline'                 => $headline,
             'html_content'             => $html_content,
             'raw_response'             => $response,
@@ -1043,9 +1132,10 @@ class PressHub_AI_News_Curator {
      * @param PressHub_AI_API_Client|null $api_client           Optional API client instance.
      * @param string                       $preset_id            Optional preset slug.
      * @param array                        $selected_article_ids Optional list of selected article IDs to filter by.
+     * @param string                       $edition              Briefing edition ('morning' or 'noon').
      * @return array|WP_Error Result payload array or WP_Error on failure.
      */
-    public function generate_story( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', array $selected_article_ids = [] ) {
-        return $this->generate_briefing( $date, $api_client, $preset_id, $selected_article_ids );
+    public function generate_story( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', array $selected_article_ids = [], string $edition = 'morning' ) {
+        return $this->generate_briefing( $date, $api_client, $preset_id, $selected_article_ids, $edition );
     }
 }

@@ -261,6 +261,24 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_schedule_enabled"><?php echo __( 'Enable Noon Briefing Schedule', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_schedule_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_harvest_time"><?php echo __( 'Noon Harvest Time', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_harvest_time_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_generation_time"><?php echo __( 'Noon Generation Time', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_generation_time_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_harvest_time_budget"><?php echo __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_harvest_time_budget_field(); ?>
@@ -306,6 +324,12 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_briefing_text_title_date_format"><?php echo __( 'Text Story Title Date Format', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_text_title_date_format_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_text_title_prefix"><?php echo __( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_text_title_prefix_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -455,6 +479,24 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_status"><?php echo __( 'Podcast Post Status', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_status_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_podcast_title_prefix"><?php echo __( 'Noon Podcast Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_podcast_title_prefix_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_featured_image_ids"><?php echo __( 'Featured Image Pool (Attachment IDs)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_featured_image_ids_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_include_text"><?php echo __( 'Include Transcript in Podcast Post', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_include_text_field(); ?>
                                 </td>
                             </tr>
                         </tbody>
@@ -1920,6 +1962,66 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    public function render_briefing_noon_schedule_enabled_field() {
+        $option = 'presshub_ai_briefing_noon_schedule_enabled';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_noon_schedule_enabled();
+
+        $next_harvest  = function_exists( 'wp_next_scheduled' ) ? wp_next_scheduled( 'presshub_noon_news_harvest' ) : false;
+        $next_generate = function_exists( 'wp_next_scheduled' ) ? wp_next_scheduled( 'presshub_noon_news_generate' ) : false;
+        $cron_disabled = defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON;
+        ?>
+        <label>
+            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( 1, $value ); ?> />
+            <?php echo __( 'Enable automated noon news harvesting and podcast generation crons.', 'presshub-ai-editor' ); ?>
+        </label>
+        <div style="margin-top: 8px; font-size: 13px; color: #555;">
+            <?php if ( $value ) : ?>
+                <div style="margin-bottom: 4px;">
+                    <strong><?php echo __( 'Status:', 'presshub-ai-editor' ); ?></strong>
+                    <?php if ( $next_harvest ) : ?>
+                        <span style="color: #46b450; font-weight: 600;">&#10003; <?php echo __( 'Harvest:', 'presshub-ai-editor' ); ?></span>
+                        <code><?php echo esc_html( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d H:i:s T', $next_harvest ) : date( 'Y-m-d H:i:s', $next_harvest ) ); ?></code>
+                    <?php else : ?>
+                        <span style="color: #dc3232; font-weight: 600;">&#10007; <?php echo __( 'Harvest not in cron queue.', 'presshub-ai-editor' ); ?></span>
+                    <?php endif; ?>
+                    &nbsp;|&nbsp;
+                    <?php if ( $next_generate ) : ?>
+                        <span style="color: #46b450; font-weight: 600;">&#10003; <?php echo __( 'Generation:', 'presshub-ai-editor' ); ?></span>
+                        <code><?php echo esc_html( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d H:i:s T', $next_generate ) : date( 'Y-m-d H:i:s', $next_generate ) ); ?></code>
+                    <?php else : ?>
+                        <span style="color: #dc3232; font-weight: 600;">&#10007; <?php echo __( 'Generation not in cron queue.', 'presshub-ai-editor' ); ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php if ( $cron_disabled ) : ?>
+                    <div style="margin-top: 6px; padding: 6px 10px; background: #fff8e5; border-left: 4px solid #ffb900; color: #613e00;">
+                        <strong><?php echo __( 'Notice:', 'presshub-ai-editor' ); ?></strong>
+                        <?php echo __( 'DISABLE_WP_CRON is enabled on your site. Automated jobs will only run if a system cron (e.g. crontab) executes wp-cron.php or WP-CLI.', 'presshub-ai-editor' ); ?>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    public function render_briefing_noon_harvest_time_field() {
+        $option = 'presshub_ai_briefing_noon_harvest_time';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_noon_harvest_time();
+        ?>
+        <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo __( 'Time when noon Greek news sources are scraped and noon snapshot saved. Default 12:30.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_noon_generation_time_field() {
+        $option = 'presshub_ai_briefing_noon_generation_time';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_noon_generation_time();
+        ?>
+        <input type="time" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo __( 'Time when noon text story curation and podcast synthesis are triggered. Default 13:00.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
     public function render_harvest_time_budget_field() {
         $option = 'presshub_ai_harvest_time_budget';
         $value  = (int) get_option( $option, 60 );
@@ -2422,6 +2524,44 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" maxlength="30" placeholder="<?php echo esc_attr__( 'e.g. d/m/Y', 'presshub-ai-editor' ); ?>" />
         <p class="description"><?php echo __( 'date() format appended after the title prefix and headline (e.g. "d/m/Y" → 26/08/2026). Leave blank to omit the date. Default: "d/m/Y". Tokens are validated by PHP\'s date() function before being saved.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_noon_text_title_prefix_field() {
+        $option = 'presshub_ai_briefing_noon_text_title_prefix';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_noon_text_title_prefix();
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Μεσημβρινή Ενημέρωση:', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Noon Text Story post title (e.g. "Μεσημβρινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Μεσημβρινή Ενημέρωση:".', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_noon_podcast_title_prefix_field() {
+        $option = 'presshub_ai_briefing_noon_podcast_title_prefix';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_noon_podcast_title_prefix();
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Μεσημβρινό Podcast Ενημέρωσης - ', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Noon Podcast post title (e.g. "Μεσημβρινό Podcast Ενημέρωσης - "). Default: "Μεσημβρινό Podcast Ενημέρωσης - ".', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_featured_image_ids_field() {
+        $option = 'presshub_ai_briefing_featured_image_ids';
+        $value  = get_option( $option, '' );
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" placeholder="<?php echo esc_attr__( 'e.g. 102, 105, 110', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo __( 'Comma-separated Media Library attachment IDs. PressHub AI will randomly cycle through this pool to assign featured images (post thumbnails) to daily briefs and audio podcasts (including noon updates).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_include_text_field() {
+        $option  = 'presshub_ai_briefing_podcast_include_text';
+        $checked = PressHub_AI_Settings_Storage::get_briefing_podcast_include_text();
+        ?>
+        <label>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
+            <?php echo __( 'Include full dialogue text in podcast post content (Default: Disabled, audio player only with dialogue managed via the Podcast Editor metabox).', 'presshub-ai-editor' ); ?>
+        </label>
         <?php
     }
 

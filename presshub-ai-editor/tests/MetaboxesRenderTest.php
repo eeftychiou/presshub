@@ -69,6 +69,35 @@ class MetaboxesRenderTest
             $failures[] = 'A valid scorecard should render score + feedback; got: ' . $html;
         }
 
+        // --- Case 1b: 4-key scorecard renders libel risk badge and legal concerns ---
+        self::reset();
+        $GLOBALS['POST_META_STORE'][42]['_presshub_ai_scorecard'] = [
+            'score'          => 78,
+            'feedback'       => 'Needs editorial balance.',
+            'libel_risk'     => 'Medium',
+            'legal_concerns' => 'Check allegation against official.',
+        ];
+        $html_4key = self::render( 42 );
+        if ( false === strpos( $html_4key, 'presshub-libel-badge' ) || false === strpos( $html_4key, 'presshub-libel-medium' ) || false === strpos( $html_4key, 'Libel Risk: Medium' ) ) {
+            $failures[] = 'Scorecard with libel_risk should render libel badge; got: ' . $html_4key;
+        }
+        if ( false === strpos( $html_4key, 'presshub-legal-concerns' ) || false === strpos( $html_4key, 'Check allegation against official.' ) ) {
+            $failures[] = 'Scorecard with legal_concerns should render legal concerns section; got: ' . $html_4key;
+        }
+
+        // --- Case 1c: "None identified" legal concerns should not render legal concerns block ---
+        self::reset();
+        $GLOBALS['POST_META_STORE'][42]['_presshub_ai_scorecard'] = [
+            'score'          => 90,
+            'feedback'       => 'Great piece.',
+            'libel_risk'     => 'Low',
+            'legal_concerns' => 'None identified',
+        ];
+        $html_none = self::render( 42 );
+        if ( false !== strpos( $html_none, 'presshub-legal-concerns' ) ) {
+            $failures[] = '"None identified" legal concerns must not render legal concerns block; got: ' . $html_none;
+        }
+
         // --- Case 2: legacy string meta renders nothing (no warnings) ---
         self::reset();
         $GLOBALS['POST_META_STORE'][42]['_presshub_ai_scorecard'] = 'legacy-string-meta';

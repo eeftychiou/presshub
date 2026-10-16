@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.4.2
+ * Version: 2.5.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -78,7 +78,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.4.2' );
+define( 'PRESSHUB_AI_VERSION', '2.5.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -116,6 +116,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 /**
  * Auto-update hardening: force the canonical plugin folder name during
@@ -172,6 +173,8 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_ai_do_research' );
     wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
     wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
+    wp_clear_scheduled_hook( 'presshub_noon_news_harvest' );
+    wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_token_logs' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_audit_logs' );
 }
@@ -220,6 +223,7 @@ function presshub_ai_init() {
     new PressHub_AI_Ajax_Handlers();
     new PressHub_AI_Workflow();
     new PressHub_AI_Briefing_Admin();
+    new PressHub_AI_Social_Meta();
     PressHub_AI_Research_Cleanup::register();
 
     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
@@ -392,12 +396,20 @@ function presshub_ai_execute_research_job( $research_id ) {
 
 add_action( 'presshub_daily_news_harvest', 'presshub_ai_execute_harvest_cron' );
 add_action( 'presshub_daily_news_generate', 'presshub_ai_execute_generation_cron' );
+add_action( 'presshub_noon_news_harvest', 'presshub_ai_execute_noon_harvest_cron' );
+add_action( 'presshub_noon_news_generate', 'presshub_ai_execute_noon_generation_cron' );
 add_action( 'update_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
+add_action( 'update_option_presshub_ai_briefing_noon_schedule_enabled', 'presshub_ai_on_briefing_time_updated', 10, 3 );
+add_action( 'update_option_presshub_ai_briefing_noon_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
+add_action( 'update_option_presshub_ai_briefing_noon_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'add_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_option_added', 10, 2 );
 add_action( 'add_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_option_added', 10, 2 );
 add_action( 'add_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_option_added', 10, 2 );
+add_action( 'add_option_presshub_ai_briefing_noon_schedule_enabled', 'presshub_ai_on_briefing_option_added', 10, 2 );
+add_action( 'add_option_presshub_ai_briefing_noon_harvest_time', 'presshub_ai_on_briefing_option_added', 10, 2 );
+add_action( 'add_option_presshub_ai_briefing_noon_generation_time', 'presshub_ai_on_briefing_option_added', 10, 2 );
 register_activation_hook( __FILE__, 'presshub_ai_schedule_briefing_crons' );
 
 /**
@@ -409,6 +421,8 @@ register_activation_hook( __FILE__, 'presshub_ai_schedule_briefing_crons' );
 function presshub_ai_on_briefing_option_added( $option = null, $value = null ) {
     wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
     wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
+    wp_clear_scheduled_hook( 'presshub_noon_news_harvest' );
+    wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
     presshub_ai_schedule_briefing_crons();
 }
 
@@ -425,6 +439,8 @@ function presshub_ai_on_briefing_time_updated( $old_value = null, $value = null,
     }
     wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
     wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
+    wp_clear_scheduled_hook( 'presshub_noon_news_harvest' );
+    wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
     presshub_ai_schedule_briefing_crons();
 }
 
@@ -473,20 +489,42 @@ function presshub_ai_schedule_briefing_crons() {
     try {
         wp_clear_scheduled_hook( 'presshub_daily_news_harvest' );
         wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
+        wp_clear_scheduled_hook( 'presshub_noon_news_harvest' );
+        wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
 
-        $is_enabled = (int) get_option( 'presshub_ai_briefing_schedule_enabled', 1 );
-        if ( ! $is_enabled ) {
-            return;
+        $is_morning_enabled = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_briefing_schedule_enabled()
+            : (int) get_option( 'presshub_ai_briefing_schedule_enabled', 1 );
+
+        if ( $is_morning_enabled ) {
+            $harvest_time    = (string) get_option( 'presshub_ai_briefing_harvest_time', '06:30' );
+            $generation_time = (string) get_option( 'presshub_ai_briefing_generation_time', '07:15' );
+
+            $harvest_timestamp    = presshub_ai_get_cron_timestamp( $harvest_time );
+            $generation_timestamp = presshub_ai_get_cron_timestamp( $generation_time );
+
+            wp_schedule_event( $harvest_timestamp, 'daily', 'presshub_daily_news_harvest' );
+            wp_schedule_event( $generation_timestamp, 'daily', 'presshub_daily_news_generate' );
         }
 
-        $harvest_time    = (string) get_option( 'presshub_ai_briefing_harvest_time', '06:30' );
-        $generation_time = (string) get_option( 'presshub_ai_briefing_generation_time', '07:15' );
+        $is_noon_enabled = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_briefing_noon_schedule_enabled()
+            : (int) get_option( 'presshub_ai_briefing_noon_schedule_enabled', 1 );
 
-        $harvest_timestamp    = presshub_ai_get_cron_timestamp( $harvest_time );
-        $generation_timestamp = presshub_ai_get_cron_timestamp( $generation_time );
+        if ( $is_noon_enabled ) {
+            $noon_harvest_time    = class_exists( 'PressHub_AI_Settings_Storage' )
+                ? PressHub_AI_Settings_Storage::get_briefing_noon_harvest_time()
+                : (string) get_option( 'presshub_ai_briefing_noon_harvest_time', '12:30' );
+            $noon_generation_time = class_exists( 'PressHub_AI_Settings_Storage' )
+                ? PressHub_AI_Settings_Storage::get_briefing_noon_generation_time()
+                : (string) get_option( 'presshub_ai_briefing_noon_generation_time', '13:00' );
 
-        wp_schedule_event( $harvest_timestamp, 'daily', 'presshub_daily_news_harvest' );
-        wp_schedule_event( $generation_timestamp, 'daily', 'presshub_daily_news_generate' );
+            $noon_harvest_timestamp    = presshub_ai_get_cron_timestamp( $noon_harvest_time );
+            $noon_generation_timestamp = presshub_ai_get_cron_timestamp( $noon_generation_time );
+
+            wp_schedule_event( $noon_harvest_timestamp, 'daily', 'presshub_noon_news_harvest' );
+            wp_schedule_event( $noon_generation_timestamp, 'daily', 'presshub_noon_news_generate' );
+        }
     } catch ( Throwable $t ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::warning( 'Cron scheduling error: ' . $t->getMessage() );
@@ -594,6 +632,115 @@ function presshub_ai_execute_generation_cron() {
         } else {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::info( 'Daily News Briefing audio podcast synthesized successfully.' );
+            }
+        }
+    }
+
+    return $results;
+}
+
+/**
+ * Execute the automated Greek noon news harvest cron.
+ *
+ * @return array Harvest payload.
+ */
+function presshub_ai_execute_noon_harvest_cron() {
+    if ( function_exists( 'set_time_limit' ) ) {
+        @set_time_limit( 0 );
+    }
+    if ( function_exists( 'ignore_user_abort' ) ) {
+        @ignore_user_abort( true );
+    }
+
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( 'PressHub Noon News Harvest Cron started.' );
+    }
+
+    $harvester = new PressHub_AI_News_Harvester();
+    $sources   = class_exists( 'PressHub_AI_Settings_Storage' )
+        ? PressHub_AI_Settings_Storage::get_briefing_sources()
+        : ( class_exists( 'PressHub_AI_Settings' ) ? PressHub_AI_Settings::default_briefing_sources() : [] );
+    $date      = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
+    $budget    = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_harvest_time_budget() : 60;
+    $result    = $harvester->harvest_all( $sources, $date, $budget, 'noon' );
+
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        $count = is_array( $result['articles'] ?? null ) ? count( $result['articles'] ) : 0;
+        PressHub_AI_Logger::info( sprintf( 'PressHub Noon News Harvest Cron completed: %d articles harvested.', $count ) );
+    }
+
+    return $result;
+}
+
+/**
+ * Execute the automated noon news briefing generation cron (Text Story + Podcast Dialogue + Audio Synthesis).
+ *
+ * @return array Generated results payload.
+ */
+function presshub_ai_execute_noon_generation_cron() {
+    if ( function_exists( 'set_time_limit' ) ) {
+        @set_time_limit( 0 );
+    }
+    if ( function_exists( 'ignore_user_abort' ) ) {
+        @ignore_user_abort( true );
+    }
+
+    $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
+
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( sprintf( 'PressHub Noon News Generation Cron started for date: %s', $date ) );
+    }
+
+    $results = [
+        'curation'  => null,
+        'podcast'   => null,
+        'synthesis' => null,
+    ];
+
+    // 1. Text story curation
+    $curator = new PressHub_AI_News_Curator();
+    $preset_text = (string) get_option( 'presshub_ai_briefing_text_preset', '' );
+    $results['curation'] = $curator->generate_story( $date, null, $preset_text, [], 'noon' );
+
+    if ( is_wp_error( $results['curation'] ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( 'Noon News Briefing generation cron error in text story curation: ' . $results['curation']->get_error_message() );
+        }
+    } else {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            $post_id = is_array( $results['curation'] ) ? (int) ( $results['curation']['post_id'] ?? 0 ) : 0;
+            PressHub_AI_Logger::info( sprintf( 'Noon News Briefing text story curated successfully (post ID: %d)', $post_id ) );
+        }
+    }
+
+    // 2. Podcast dialogue script generation
+    $producer = new PressHub_AI_Podcast_Producer();
+    $preset_podcast = (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
+    $duration = (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
+    $results['podcast'] = $producer->generate_dialogue_script( $date, null, $preset_podcast, $duration, 'curated_briefing', [], 'noon' );
+
+    if ( is_wp_error( $results['podcast'] ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( 'Noon News Briefing generation cron error in podcast dialogue: ' . $results['podcast']->get_error_message() );
+        }
+    } else {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Noon News Briefing podcast dialogue generated successfully.' );
+        }
+    }
+
+    // 3. Audio podcast synthesis
+    if ( ! is_wp_error( $results['podcast'] ) ) {
+        $synthesizer = new PressHub_AI_Audio_Synthesizer();
+        $results['synthesis'] = $synthesizer->synthesize_podcast( $date, null, 'noon' );
+
+        if ( is_wp_error( $results['synthesis'] ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Noon News Briefing generation cron error in audio synthesis: ' . $results['synthesis']->get_error_message() );
+            }
+        } else {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Noon News Briefing audio podcast synthesized successfully.' );
             }
         }
     }

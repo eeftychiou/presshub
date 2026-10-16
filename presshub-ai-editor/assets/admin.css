@@ -74,6 +74,48 @@
     background: #d63638;
     color: #fff;
 }
+.presshub-libel-badge {
+    display: inline-block;
+    border-radius: 3px;
+    padding: 2px 8px;
+    margin-left: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.4;
+    vertical-align: middle;
+}
+.presshub-libel-badge.presshub-libel-low {
+    background: #e7f5ea;
+    color: #007017;
+    border: 1px solid #68de7c;
+}
+.presshub-libel-badge.presshub-libel-medium {
+    background: #fef8ee;
+    color: #996800;
+    border: 1px solid #dba617;
+}
+.presshub-libel-badge.presshub-libel-high {
+    background: #fcf0f1;
+    color: #b32d2e;
+    border: 1px solid #d63638;
+}
+.presshub-legal-concerns {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: #fff;
+    border-left: 3px solid #d63638;
+    border-radius: 2px;
+    font-size: 13px;
+}
+.presshub-legal-concerns strong {
+    color: #b32d2e;
+    display: block;
+    margin-bottom: 4px;
+}
+.presshub-legal-concerns p {
+    margin: 0;
+    color: #1d2327;
+}
 
 /* ------------------------------------------------------------------
  * Modal visibility & backdrop standards (LF-1 / F-02 + F-27).

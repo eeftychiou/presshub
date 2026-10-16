@@ -31,6 +31,7 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_briefing_generate_podcast', [ $this, 'briefing_run_script' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_save_script', [ $this, 'briefing_save_script' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_generate_audio', [ $this, 'briefing_generate_audio' ] );
+        add_action( 'wp_ajax_presshub_ai_regenerate_podcast_audio', [ $this, 'regenerate_podcast_audio' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
         // AJAX Settings Save
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
@@ -252,8 +253,10 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $scorecard = [
-            'score'    => $eval_result['score'],
-            'feedback' => $eval_result['feedback'],
+            'score'          => $eval_result['score'],
+            'feedback'       => $eval_result['feedback'],
+            'libel_risk'     => $eval_result['libel_risk'] ?? 'Low',
+            'legal_concerns' => $eval_result['legal_concerns'] ?? 'None identified',
         ];
 
         $status_after = null;
@@ -306,6 +309,17 @@ class PressHub_AI_Ajax_Handlers {
             $article_content = substr( $article_content, 0, 200000 );
         }
         $article_title = isset( $_POST['article_title'] ) ? sanitize_text_field( wp_unslash( $_POST['article_title'] ) ) : '';
+
+        // Hydrate from existing post in database if post_id is provided and content is not sent
+        if ( '' === trim( $article_content ) && $post_id > 0 ) {
+            $existing_post = get_post( $post_id );
+            if ( $existing_post ) {
+                $article_content = (string) $existing_post->post_content;
+                if ( '' === trim( $article_title ) ) {
+                    $article_title = (string) $existing_post->post_title;
+                }
+            }
+        }
 
         // Gate paid media generation (Imagen / Cloud TTS) to admins only.
         // Authors can still use chat + research. This prevents a low-priv
@@ -870,9 +884,11 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
+        $edition = isset( $_POST['edition'] ) && 'noon' === sanitize_key( wp_unslash( $_POST['edition'] ) ) ? 'noon' : 'morning';
+
         require_once __DIR__ . '/class-briefing-admin.php';
         $admin  = new PressHub_AI_Briefing_Admin();
-        $status = $admin->get_briefing_status( $date );
+        $status = $admin->get_briefing_status( $date, $edition );
 
         wp_send_json_success( $status );
     }
@@ -902,6 +918,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
+        $edition   = isset( $_POST['edition'] ) && 'noon' === sanitize_key( wp_unslash( $_POST['edition'] ) ) ? 'noon' : 'morning';
         $source_id = isset( $_POST['source_id'] ) ? sanitize_text_field( wp_unslash( $_POST['source_id'] ) ) : '';
 
         try {
@@ -924,9 +941,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 if ( empty( $target_source ) ) {
                     $target_source = $source_id;
                 }
-                $result = $harvester->harvest_source( $target_source, $date, $budget );
+                $result = $harvester->harvest_source( $target_source, $date, $budget, $edition );
             } else {
-                $result = $harvester->harvest_all( $sources, $date, $budget );
+                $result = $harvester->harvest_all( $sources, $date, $budget, $edition );
             }
 
             wp_send_json_success( $result );
@@ -973,6 +990,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
+        $edition   = isset( $_POST['edition'] ) && 'noon' === sanitize_key( wp_unslash( $_POST['edition'] ) ) ? 'noon' : 'morning';
         $preset_id = isset( $_POST['preset_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preset_id'] ) ) : (string) get_option( 'presshub_ai_briefing_text_preset', '' );
 
         $selected_articles = [];
@@ -1011,7 +1029,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         try {
             require_once __DIR__ . '/class-news-curator.php';
             $curator = new PressHub_AI_News_Curator();
-            $result  = $curator->generate_briefing( $date, null, $preset_id, $selected_articles );
+            $result  = $curator->generate_briefing( $date, null, $preset_id, $selected_articles, $edition );
 
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );
@@ -1062,6 +1080,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
+        $edition   = isset( $_POST['edition'] ) && 'noon' === sanitize_key( wp_unslash( $_POST['edition'] ) ) ? 'noon' : 'morning';
         $preset_id = isset( $_POST['preset_id'] ) ? sanitize_text_field( wp_unslash( $_POST['preset_id'] ) ) : (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
         $duration  = isset( $_POST['duration'] ) ? sanitize_text_field( wp_unslash( $_POST['duration'] ) ) : (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
 
@@ -1106,7 +1125,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         try {
             require_once __DIR__ . '/class-podcast-producer.php';
             $producer = new PressHub_AI_Podcast_Producer();
-            $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration, $context_mode, $selected_articles );
+            $result   = $producer->generate_dialogue_script( $date, null, $preset_id, $duration, $context_mode, $selected_articles, $edition );
 
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );
@@ -1159,6 +1178,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
+        $edition = isset( $_POST['edition'] ) && 'noon' === sanitize_key( wp_unslash( $_POST['edition'] ) ) ? 'noon' : 'morning';
+
         $script = '';
         if ( isset( $_POST['script_b64'] ) && is_string( $_POST['script_b64'] ) ) {
             $raw_script = base64_decode( sanitize_text_field( wp_unslash( $_POST['script_b64'] ) ) );
@@ -1175,7 +1196,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-podcast-producer.php';
         $producer = new PressHub_AI_Podcast_Producer();
-        $saved    = $producer->save_script( $date, $script );
+        $saved    = $producer->save_script( $date, $script, '', 0, '', $edition );
 
         if ( ! $saved ) {
             wp_send_json_error( __( 'Failed to save podcast script to disk.', 'presshub-ai-editor' ) );
@@ -1186,6 +1207,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         wp_send_json_success( [
             'saved'       => true,
             'date'        => $date,
+            'edition'     => $edition,
             'turns_count' => count( $turns ),
         ] );
     }
@@ -1204,6 +1226,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
+
+        $edition = isset( $_POST['edition'] ) && 'noon' === sanitize_key( wp_unslash( $_POST['edition'] ) ) ? 'noon' : 'morning';
 
         $script = '';
         if ( isset( $_POST['script_b64'] ) && is_string( $_POST['script_b64'] ) ) {
@@ -1228,7 +1252,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         try {
             require_once __DIR__ . '/class-audio-synthesizer.php';
             $synthesizer = new PressHub_AI_Audio_Synthesizer();
-            $result      = $synthesizer->synthesize_podcast( $date, $script );
+            $result      = $synthesizer->synthesize_podcast( $date, $script, $edition );
 
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );
@@ -1256,6 +1280,66 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
     }
 
     /**
+     * AJAX: presshub_ai_regenerate_podcast_audio — regenerates podcast audio from corrected dialogue script.
+     */
+    public function regenerate_podcast_audio() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied. Editors and above only.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
+        $script  = isset( $_POST['script'] ) ? wp_unslash( $_POST['script'] ) : '';
+
+        if ( empty( $post_id ) ) {
+            wp_send_json_error( [ 'message' => __( 'Missing post ID.', 'presshub-ai-editor' ) ], 400 );
+        }
+
+        if ( empty( trim( $script ) ) ) {
+            wp_send_json_error( [ 'message' => __( 'Dialogue script cannot be empty.', 'presshub-ai-editor' ) ], 400 );
+        }
+
+        require_once __DIR__ . '/class-settings-storage.php';
+        $budget = PressHub_AI_Settings_Storage::get_curation_audio_time_budget();
+
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( (int) $budget + 60 );
+        }
+        if ( function_exists( 'wp_raise_memory_limit' ) ) {
+            wp_raise_memory_limit( 'admin' );
+        }
+
+        try {
+            require_once __DIR__ . '/class-audio-synthesizer.php';
+            $synthesizer = new PressHub_AI_Audio_Synthesizer();
+            $result      = $synthesizer->regenerate_podcast_for_post( $post_id, $script );
+
+            if ( is_wp_error( $result ) ) {
+                wp_send_json_error( [ 'message' => $result->get_error_message() ], 500 );
+            }
+
+            wp_send_json_success( [
+                'message'       => __( 'Podcast audio successfully regenerated and post updated!', 'presshub-ai-editor' ),
+                'post_id'       => $post_id,
+                'audio_url'     => $result['audio_url'] ?? '',
+                'attachment_id' => $result['attachment_id'] ?? 0,
+            ] );
+        } catch ( \Throwable $e ) {
+            if ( $e instanceof \RuntimeException && 0 === strpos( $e->getMessage(), 'wp_send_json' ) ) {
+                throw $e;
+            }
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Unhandled exception during podcast audio regeneration: ' . $e->getMessage(), [
+                    'exception' => $e->getMessage(),
+                    'post_id'   => $post_id,
+                ] );
+            }
+            wp_send_json_error( [ 'message' => sprintf( __( 'Audio regeneration failed: %s', 'presshub-ai-editor' ), $e->getMessage() ) ], 500 );
+        }
+    }
+
+    /**
      * AJAX: presshub_ai_briefing_upload — merges uploaded documents or pasted notes into daily pool.
      */
     public function briefing_upload() {
@@ -1270,6 +1354,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
+        $edition = isset( $_POST['edition'] ) && 'noon' === sanitize_key( wp_unslash( $_POST['edition'] ) ) ? 'noon' : 'morning';
         $source  = isset( $_POST['source'] ) ? sanitize_text_field( wp_unslash( $_POST['source'] ) ) : __( 'Manual Upload', 'presshub-ai-editor' );
         $title   = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
         $content = isset( $_POST['content'] ) ? sanitize_textarea_field( wp_unslash( $_POST['content'] ) ) : '';
@@ -1336,7 +1421,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-news-harvester.php';
         $harvester = new PressHub_AI_News_Harvester();
-        $result    = $harvester->handle_manual_upload( $articles_to_merge, $date );
+        $result    = $harvester->handle_manual_upload( $articles_to_merge, $date, $edition );
         wp_send_json_success( $result );
     }
 
@@ -1417,26 +1502,32 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_tts_model'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_model' ],
                 'presshub_ai_briefing_tts_style'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_style' ],
                 'presshub_ai_briefing_tts_custom_style'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_custom_style' ],
-                'presshub_ai_briefing_harvest_time'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_harvest_time' ],
-                'presshub_ai_briefing_generation_time'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_generation_time' ],
-                'presshub_ai_harvest_time_budget'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_harvest_time_budget' ],
-                'presshub_ai_briefing_text_preset'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_preset_slug' ],
-                'presshub_ai_briefing_podcast_preset'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_preset_slug' ],
-                'presshub_ai_briefing_target_duration'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_duration' ],
-                'presshub_ai_briefing_host_female'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_host_female' ],
-                'presshub_ai_briefing_host_male'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_host_male' ],
-                'presshub_ai_briefing_voice_female'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_voice_female' ],
-                'presshub_ai_briefing_voice_male'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_voice_male' ],
-                'presshub_ai_briefing_voice_speed'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_voice_speed' ],
-                'presshub_ai_briefing_voice_pitch'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_voice_pitch' ],
-                'presshub_ai_briefing_text_category'      => [ 'PressHub_AI_Settings_Storage', 'sanitize_category_id' ],
-                'presshub_ai_briefing_podcast_category'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_category_id' ],
-                'presshub_ai_briefing_text_status'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_status' ],
+                'presshub_ai_briefing_schedule_enabled'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
+                'presshub_ai_briefing_noon_schedule_enabled'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
+                'presshub_ai_briefing_harvest_time'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_harvest_time' ],
+                'presshub_ai_briefing_generation_time'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_generation_time' ],
+                'presshub_ai_briefing_noon_harvest_time'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_noon_harvest_time' ],
+                'presshub_ai_briefing_noon_generation_time'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_noon_generation_time' ],
+                'presshub_ai_harvest_time_budget'              => [ 'PressHub_AI_Settings_Storage', 'sanitize_harvest_time_budget' ],
+                'presshub_ai_briefing_text_preset'             => [ 'PressHub_AI_Settings_Storage', 'sanitize_preset_slug' ],
+                'presshub_ai_briefing_podcast_preset'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_preset_slug' ],
+                'presshub_ai_briefing_target_duration'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_duration' ],
+                'presshub_ai_briefing_host_female'             => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_host_female' ],
+                'presshub_ai_briefing_host_male'               => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_host_male' ],
+                'presshub_ai_briefing_voice_female'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_voice_female' ],
+                'presshub_ai_briefing_voice_male'              => [ 'PressHub_AI_Settings_Storage', 'sanitize_voice_male' ],
+                'presshub_ai_briefing_voice_speed'             => [ 'PressHub_AI_Settings_Storage', 'sanitize_voice_speed' ],
+                'presshub_ai_briefing_voice_pitch'             => [ 'PressHub_AI_Settings_Storage', 'sanitize_voice_pitch' ],
+                'presshub_ai_briefing_text_category'           => [ 'PressHub_AI_Settings_Storage', 'sanitize_category_id' ],
+                'presshub_ai_briefing_podcast_category'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_category_id' ],
+                'presshub_ai_briefing_text_status'             => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_status' ],
                 // Issue #65 — Settings-First: title prefix and date format
                 // for the generated Text Story post.
-                'presshub_ai_briefing_text_title_prefix'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_text_title_prefix' ],
-                'presshub_ai_briefing_text_title_date_format'  => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_text_title_date_format' ],
-                'presshub_ai_briefing_podcast_status'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_status' ],
+                'presshub_ai_briefing_text_title_prefix'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_text_title_prefix' ],
+                'presshub_ai_briefing_noon_text_title_prefix'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_noon_text_title_prefix' ],
+                'presshub_ai_briefing_text_title_date_format'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_text_title_date_format' ],
+                'presshub_ai_briefing_podcast_status'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_status' ],
+                'presshub_ai_briefing_noon_podcast_title_prefix'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_noon_podcast_title_prefix' ],
                 'presshub_ai_briefing_text_prompt'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_prompt' ],
                 'presshub_ai_briefing_podcast_prompt'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_prompt' ],
                 'presshub_ai_briefing_podcast_prompt_1'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_prompt' ],
@@ -1524,7 +1615,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                                 PressHub_AI_Logger::info( 'Saved briefing sources: ' . var_export( $clean, true ) );
                             }
                         }
-                    } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled' ], true ) ) {
+                    } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled', 'presshub_ai_briefing_schedule_enabled', 'presshub_ai_briefing_noon_schedule_enabled' ], true ) ) {
                         update_option( $option, 0 );
                         $saved_count++;
                         $processed[] = $option . '=0';
@@ -1642,6 +1733,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_debug_prompts',
                 'presshub_ai_rate_limit_enabled',
                 'presshub_ai_briefing_schedule_enabled',
+                'presshub_ai_briefing_noon_schedule_enabled',
                 'presshub_ai_briefing_audio_split_by_topic',
                 'presshub_ai_log_tts_payloads',
                 'presshub_ai_qa_enabled',

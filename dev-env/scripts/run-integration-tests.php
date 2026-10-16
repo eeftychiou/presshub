@@ -1089,37 +1089,48 @@ run_test( 'Issue #91: podcast post body strips [TOPIC_START] / [TOPIC_END] marke
 [TOPIC_END]
 SCRIPT;
 
-    $synth = new PressHub_AI_Audio_Synthesizer();
-    $post_id = $synth->create_podcast_post(
-        'http://example.test/audio.mp3',
-        99999,
-        $issue91_script,
-        '2026-09-02',
-        'Test Podcast'
-    );
+    update_option( 'presshub_ai_briefing_podcast_include_text', 1 );
+    try {
+        $synth = new PressHub_AI_Audio_Synthesizer();
+        $post_id = $synth->create_podcast_post(
+            'http://example.test/audio.mp3',
+            99999,
+            $issue91_script,
+            '2026-09-02',
+            'Test Podcast'
+        );
 
-    if ( ! is_numeric( $post_id ) ) {
-        return 'create_podcast_post() did not return a numeric post id; got: ' . var_export( $post_id, true );
-    }
+        if ( ! is_numeric( $post_id ) ) {
+            return 'create_podcast_post() did not return a numeric post id; got: ' . var_export( $post_id, true );
+        }
 
-    $post = get_post( (int) $post_id );
-    $content = is_object( $post ) ? ( $post->post_content ?? '' ) : '';
+        $post = get_post( (int) $post_id );
+        $content = is_object( $post ) ? ( $post->post_content ?? '' ) : '';
 
-    foreach ( [ '[TOPIC_START', '[TOPIC_END]', '<!-- TOPIC_', '=== TOPIC:', '### TOPIC:' ] as $needle ) {
-        if ( false !== stripos( $content, $needle ) ) {
-            return "post_content still contains '$needle' after strip_topic_markers()";
+        foreach ( [ '[TOPIC_START', '[TOPIC_END]', '<!-- TOPIC_', '=== TOPIC:', '### TOPIC:' ] as $needle ) {
+            if ( false !== stripos( $content, $needle ) ) {
+                return "post_content still contains '$needle' after strip_topic_markers()";
+            }
+        }
+
+        // Speaker dialogue must survive the stripping.
+        foreach ( [ 'Καλημέρα σας', 'Συμφωνώ απόλυτα', 'Ευχαριστούμε' ] as $expected ) {
+            if ( false === stripos( $content, $expected ) ) {
+                return "post_content missing speaker dialogue '$expected'";
+            }
+        }
+
+        // Script meta must also be stored
+        $meta_script = (string) get_post_meta( (int) $post_id, '_presshub_podcast_script', true );
+        if ( false === stripos( $meta_script, 'Καλημέρα σας' ) ) {
+            return '_presshub_podcast_script post meta missing dialogue';
+        }
+    } finally {
+        delete_option( 'presshub_ai_briefing_podcast_include_text' );
+        if ( isset( $post_id ) && is_numeric( $post_id ) ) {
+            wp_delete_post( (int) $post_id, true );
         }
     }
-
-    // Speaker dialogue must survive the stripping.
-    foreach ( [ 'Καλημέρα σας', 'Συμφωνώ απόλυτα', 'Ευχαριστούμε' ] as $expected ) {
-        if ( false === stripos( $content, $expected ) ) {
-            return "post_content missing speaker dialogue '$expected'";
-        }
-    }
-
-    // Cleanup test post so the integration runner stays idempotent.
-    wp_delete_post( (int) $post_id, true );
 
     return true;
 } );
@@ -1183,6 +1194,220 @@ run_test( 'Issue #90: podcast dialogue style selector resolves correct template 
     delete_option( 'presshub_ai_briefing_podcast_prompt_2_bbc_broadcasting_standards' );
     update_option( 'presshub_ai_briefing_podcast_style', 'default_greek_chat' );
     update_option( 'presshub_ai_briefing_host_count', 2 );
+
+    return true;
+} );
+
+// Test: Noon Briefing Update Pipeline & Persistence
+run_test( 'Noon Briefing: storage settings, edition persistence, and prompt injection', function() {
+    // 1. Settings storage verification
+    if ( ! class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+        return 'PressHub_AI_Settings_Storage class missing';
+    }
+    update_option( 'presshub_ai_briefing_noon_harvest_time', '12:15' );
+    update_option( 'presshub_ai_briefing_noon_generation_time', '12:45' );
+    if ( PressHub_AI_Settings_Storage::get_briefing_noon_harvest_time() !== '12:15' ) {
+        return 'get_briefing_noon_harvest_time() mismatch';
+    }
+    if ( PressHub_AI_Settings_Storage::get_briefing_noon_generation_time() !== '12:45' ) {
+        return 'get_briefing_noon_generation_time() mismatch';
+    }
+
+    // 2. Harvester edition-aware snapshot
+    $harvester = new PressHub_AI_News_Harvester();
+    $articles = [
+        [
+            'title'   => 'Μεσημβρινή είδηση για την οικονομία',
+            'url'     => 'https://example.com/noon-news',
+            'content' => 'Σημαντικές εξελίξεις σημειώθηκαν το μεσημέρι...',
+            'source'  => 'Test Source',
+        ]
+    ];
+    $today = current_time( 'Y-m-d' );
+    $save_res = $harvester->save_snapshot( $today, [ 'articles' => $articles ], 'noon' );
+    if ( ! $save_res ) {
+        return 'save_snapshot() failed for noon edition';
+    }
+    $loaded = $harvester->load_snapshot( $today, 'noon' );
+    if ( empty( $loaded['articles'] ) || ( $loaded['articles'][0]['title'] ?? '' ) !== 'Μεσημβρινή είδηση για την οικονομία' ) {
+        return 'load_snapshot() failed to retrieve noon snapshot';
+    }
+
+    // 3. Curator prompt injection of morning briefing
+    $curator = new PressHub_AI_News_Curator();
+    // Create dummy morning briefing
+    $morning_post_id = wp_insert_post( [
+        'post_title'   => 'Πρωινή Ενημέρωση: 16/10/2026',
+        'post_content' => '<p>Πρωινή σύνοψη: Συζητήσεις στη Βουλή.</p>',
+        'post_status'  => 'publish',
+        'post_type'    => 'post',
+        'meta_input'   => [
+            '_presshub_briefing_date'    => $today,
+            '_presshub_briefing_type'    => 'text',
+            '_presshub_briefing_edition' => 'morning',
+        ],
+    ] );
+
+    try {
+        $noon_prompt = $curator->build_prompt( $loaded['articles'], '', $today, [], 'noon' );
+        if ( false === stripos( $noon_prompt['user_prompt'], 'Πρωινή σύνοψη: Συζητήσεις στη Βουλή' ) ) {
+            return 'build_prompt() for noon edition failed to inject morning briefing content';
+        }
+        if ( false === stripos( $noon_prompt['user_prompt'], 'Οδηγία για τη Μεσημβρινή Ενημέρωση' ) ) {
+            return 'build_prompt() for noon edition missing noon guidance instruction';
+        }
+    } finally {
+        wp_delete_post( (int) $morning_post_id, true );
+    }
+
+    return true;
+} );
+
+// Test: Image Pool & Podcast Audio-Only Body + Script Regeneration
+run_test( 'Image Pool & Podcast: audio-only post_content, script meta, and regeneration', function() {
+    $synth = new PressHub_AI_Audio_Synthesizer();
+
+    // 1. Featured image pool configuration
+    update_option( 'presshub_ai_briefing_featured_image_ids', '101, 102, 103' );
+    $pool = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids();
+    if ( $pool !== [ 101, 102, 103 ] ) {
+        return 'get_briefing_featured_image_ids() mismatch; got: ' . json_encode( $pool );
+    }
+    $rand_id = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id();
+    if ( ! in_array( $rand_id, [ 101, 102, 103 ], true ) ) {
+        return 'get_random_briefing_featured_image_id() returned unexpected ID: ' . $rand_id;
+    }
+
+    // 2. Podcast post creation (default: NO text in post_content)
+    delete_option( 'presshub_ai_briefing_podcast_include_text' );
+    $script = "[SPEAKER_1]: Γεια σας.\n[SPEAKER_2]: Καλημέρα σας.";
+    $today  = current_time( 'Y-m-d' );
+    $post_id = $synth->create_podcast_post(
+        'http://example.com/audio1.mp3',
+        777,
+        $script,
+        $today,
+        'Live Test Podcast'
+    );
+
+    if ( ! is_numeric( $post_id ) ) {
+        return 'create_podcast_post() failed; got: ' . var_export( $post_id, true );
+    }
+
+    try {
+        $post = get_post( (int) $post_id );
+        if ( false !== stripos( $post->post_content, 'Γεια σας' ) ) {
+            return 'podcast post_content contains dialogue text when include_text is disabled';
+        }
+        if ( false === stripos( $post->post_content, 'wp-block-audio' ) ) {
+            return 'podcast post_content missing wp-block-audio player';
+        }
+
+        // Script must be in meta
+        $meta_script = (string) get_post_meta( (int) $post_id, '_presshub_podcast_script', true );
+        if ( $meta_script !== $script ) {
+            return '_presshub_podcast_script meta mismatch';
+        }
+
+        // 3. Post update via update_podcast_post()
+        $updated_script = "[SPEAKER_1]: Επικαιροποιημένος διάλογος.";
+        $up_res = $synth->update_podcast_post(
+            (int) $post_id,
+            'http://example.com/audio2.mp3',
+            888,
+            $updated_script,
+            $today,
+            'Updated Podcast Title',
+            'morning'
+        );
+        if ( is_wp_error( $up_res ) ) {
+            return 'update_podcast_post() returned error: ' . $up_res->get_error_message();
+        }
+
+        $post_reloaded = get_post( (int) $post_id );
+        if ( false === stripos( $post_reloaded->post_content, 'audio2.mp3' ) ) {
+            return 'updated post_content missing new audio URL';
+        }
+        $saved_updated = (string) get_post_meta( (int) $post_id, '_presshub_podcast_script', true );
+        if ( $saved_updated !== $updated_script ) {
+            return 'updated _presshub_podcast_script meta mismatch';
+        }
+    } finally {
+        wp_delete_post( (int) $post_id, true );
+        delete_option( 'presshub_ai_briefing_featured_image_ids' );
+    }
+
+    return true;
+} );
+
+// Test: OpenGraph and Twitter Card Social Meta Tags
+run_test( 'Social Meta Tags: opengraph and twitter tags generation & title optimizer', function() {
+    global $wp_query;
+    if ( ! class_exists( 'PressHub_AI_Social_Meta' ) ) {
+        return 'PressHub_AI_Social_Meta class missing';
+    }
+
+    $social = new PressHub_AI_Social_Meta();
+
+    // Create a briefing post
+    $post_id = wp_insert_post( [
+        'post_title'   => 'Πρωινό Podcast Ενημέρωσης – 16/10/2026 – Πολύ Μεγάλος Τίτλος Για Δοκιμή',
+        'post_content' => '<p>Περιεχόμενο του briefing για δοκιμή των social tags.</p>',
+        'post_excerpt' => 'Σύντομη περιγραφή του επεισοδίου.',
+        'post_status'  => 'publish',
+        'post_type'    => 'post',
+        'meta_input'   => [
+            '_presshub_briefing_type' => 'podcast',
+            '_presshub_briefing_date' => current_time( 'Y-m-d' ),
+            '_presshub_podcast_script' => '[SPEAKER_1]: Καλημέρα σας από το PressHub.',
+        ],
+    ] );
+
+    try {
+        // Test title length optimization
+        $parts = [
+            'title' => 'Πρωινό Podcast Ενημέρωσης – 16/10/2026 – Αναλυτική Κάλυψη Ειδήσεων',
+            'site'  => 'PressHub.Cy - Ηλεκτρονική Εφημερίδα',
+        ];
+        $optimized_parts = $social->optimize_document_title_parts( $parts, get_post( (int) $post_id ) );
+        $full_title = implode( ' - ', array_filter( $optimized_parts ) );
+        if ( mb_strlen( $full_title, 'UTF-8' ) > 60 ) {
+            return 'optimize_document_title_parts() generated title exceeding 60 characters: ' . $full_title . ' (' . mb_strlen( $full_title, 'UTF-8' ) . ' chars)';
+        }
+
+        // Test wp_head output tags by setting up queried object
+        $saved_query = $wp_query;
+        $wp_query = new WP_Query();
+        $wp_query->is_single = true;
+        $wp_query->is_singular = true;
+        $wp_query->queried_object = get_post( (int) $post_id );
+        $wp_query->queried_object_id = (int) $post_id;
+
+        ob_start();
+        $social->render_social_meta_tags();
+        $html = ob_get_clean();
+
+        $wp_query = $saved_query;
+
+        $required_tags = [
+            '<meta property="og:title"',
+            '<meta property="og:description"',
+            '<meta property="og:type" content="article"',
+            '<meta property="og:site_name"',
+            '<meta name="description"',
+            '<meta name="twitter:card" content="summary_large_image"',
+            '<meta name="twitter:title"',
+            '<meta name="twitter:description"',
+        ];
+
+        foreach ( $required_tags as $tag ) {
+            if ( false === stripos( $html, $tag ) ) {
+                return "render_social_meta_tags() missing expected tag: {$tag}\nGot: " . substr( $html, 0, 300 );
+            }
+        }
+    } finally {
+        wp_delete_post( (int) $post_id, true );
+    }
 
     return true;
 } );

@@ -459,15 +459,32 @@ jQuery(document).ready(function($) {
         return 'presshub-score-high';
     }
 
-    function renderScorecard(score, feedback, $btn) {
+    function renderScorecard(score, feedback, $btn, libelRisk, legalConcerns) {
         var scoreText = __('Score: %s/100', 'presshub-ai-editor')
             .replace('%s', presshubEsc(score));
         var tone = scorecardTone(score);
+        var libelHtml = '';
+        if (libelRisk) {
+            var libelClass = 'presshub-libel-' + String(libelRisk).toLowerCase();
+            var libelLabel = __('Libel Risk: %s', 'presshub-ai-editor')
+                .replace('%s', presshubEsc(libelRisk));
+            libelHtml = ' <span class="presshub-libel-badge ' + presshubEsc(libelClass) + '">' +
+                libelLabel + '</span>';
+        }
+        var legalHtml = '';
+        if (legalConcerns && legalConcerns !== 'None identified') {
+            legalHtml = '<div class="presshub-legal-concerns">' +
+                '<strong>' + __('Legal Concerns:', 'presshub-ai-editor') + '</strong>' +
+                '<p>' + presshubEsc(legalConcerns) + '</p>' +
+                '</div>';
+        }
         var html = '<div class="scorecard-box ' + tone + '">' +
             '<span class="presshub-score-badge" aria-hidden="true">' +
             presshubEsc(score) + '/100</span>' +
             '<strong>' + scoreText + '</strong>' +
+            libelHtml +
             '<p>' + presshubEsc(feedback) + '</p>' +
+            legalHtml +
             '</div>';
         $('#presshub-ai-scorecard-results').html(html);
         // A fresh scorecard means there is something to review again.
@@ -625,7 +642,13 @@ jQuery(document).ready(function($) {
             $('#presshub-ai-review-spinner .screen-reader-text').text('');
             $btn.prop('disabled', false);
             if (response && response.success) {
-                renderScorecard(response.data.score, response.data.feedback, $btn);
+                renderScorecard(
+                    response.data.score,
+                    response.data.feedback,
+                    $btn,
+                    response.data.libel_risk,
+                    response.data.legal_concerns
+                );
 
                 // ME-8 / F-29: tell the journalist what happened to the
                 // post status, derived from the server response.
@@ -660,6 +683,68 @@ jQuery(document).ready(function($) {
                 'error',
                 $btn
             );
+        });
+    });
+
+    // ------------------------------------------------------------------
+    // Podcast Dialogue Script Regeneration
+    // ------------------------------------------------------------------
+
+    $(document).on('click', '#presshub-regenerate-podcast-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        if ($btn.prop('disabled')) {
+            return;
+        }
+        var postId = $btn.data('post-id');
+        var script = $('#presshub_podcast_script').val();
+        var $spinner = $('#presshub-regenerate-podcast-spinner');
+        var $status = $('#presshub-regenerate-podcast-status');
+
+        if (!script || !script.trim()) {
+            $status.css('color', '#dc3232').text(__('Dialogue script cannot be empty.', 'presshub-ai-editor'));
+            return;
+        }
+
+        $btn.prop('disabled', true);
+        $spinner.addClass('is-active');
+        $status.css('color', '#555').text(__('Regenerating audio... this may take a moment.', 'presshub-ai-editor'));
+
+        $.ajax({
+            url: (typeof presshubAI !== 'undefined' ? presshubAI.ajax_url : ajaxurl),
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'presshub_ai_regenerate_podcast_audio',
+                nonce: (typeof presshubAI !== 'undefined' ? presshubAI.nonce : ''),
+                post_id: postId,
+                script: script
+            }
+        }).done(function(response) {
+            if (response && response.success) {
+                $status.css('color', '#46b450').text(response.data.message || __('Audio regenerated successfully!', 'presshub-ai-editor'));
+                if (response.data.audio_url) {
+                    var $player = $('#presshub-podcast-audio-player');
+                    if ($player.length) {
+                        $player.attr('src', response.data.audio_url);
+                        if ($player[0] && $player[0].load) {
+                            $player[0].load();
+                        }
+                    }
+                }
+            } else {
+                var msg = (response && response.data && response.data.message) ? response.data.message : __('Failed to regenerate audio.', 'presshub-ai-editor');
+                $status.css('color', '#dc3232').text(msg);
+            }
+        }).fail(function(xhr) {
+            var msg = __('Failed to regenerate audio. Server error.', 'presshub-ai-editor');
+            if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                msg = xhr.responseJSON.data.message;
+            }
+            $status.css('color', '#dc3232').text(msg);
+        }).always(function() {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
         });
     });
 

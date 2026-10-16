@@ -116,6 +116,26 @@ class PressHub_AI_Settings_Migration {
         return '07:15';
     }
 
+    public static function default_briefing_noon_schedule_enabled(): int {
+        return 1;
+    }
+
+    public static function default_briefing_noon_harvest_time(): string {
+        return '12:00';
+    }
+
+    public static function default_briefing_noon_generation_time(): string {
+        return '12:45';
+    }
+
+    public static function default_briefing_noon_text_title_prefix(): string {
+        return 'Μεσημβρινή Ενημέρωση:';
+    }
+
+    public static function default_briefing_noon_podcast_title_prefix(): string {
+        return 'Μεσημβρινό Podcast Ενημέρωσης - ';
+    }
+
     public static function default_briefing_target_duration(): string {
         return '5_min';
     }

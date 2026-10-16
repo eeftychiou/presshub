@@ -46,13 +46,19 @@ class RunReviewStatusGuardTest
         if ( ( $last['status_after'] ?? 'missing' ) !== 'publish' ) {
             $failures[] = 'status_after should be "publish" for a published post; got: ' . var_export( $last['status_after'] ?? null, true );
         }
+        if ( ( $meta['libel_risk'] ?? '' ) !== 'Low' || ( $meta['legal_concerns'] ?? '' ) !== 'None identified' ) {
+            $failures[] = 'scorecard meta should contain default libel_risk and legal_concerns; got: ' . var_export( $meta, true );
+        }
+        if ( ( $last['libel_risk'] ?? '' ) !== 'Low' || ( $last['legal_concerns'] ?? '' ) !== 'None identified' ) {
+            $failures[] = 'run_review response should contain libel_risk and legal_concerns; got: ' . var_export( $last, true );
+        }
 
         // --- Case 2: draft post + score >= 80 -> wp_update_post('pending') ---
         self::reset();
         $GLOBALS['POSTS_STORE'][43]  = [ 'ID' => 43, 'post_status' => 'draft', 'post_type' => 'post' ];
         $GLOBALS['POST_STATUSES'][43] = 'draft';
         $_POST = [ 'content' => 'draft copy', 'post_id' => 43, 'nonce' => 'valid' ];
-        self::drive_review( '{"score":90,"feedback":"good"}' );
+        self::drive_review( '{"score":90,"feedback":"good","libel_risk":"Medium","legal_concerns":"Attribution needed for claims."}' );
         if ( ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 ) !== 1 ) {
             $failures[] = 'run_review should transition a draft to pending; calls=' . ( $GLOBALS['WP_UPDATE_POST_CALLS'] ?? 0 );
         }
@@ -66,6 +72,13 @@ class RunReviewStatusGuardTest
         $last = $GLOBALS['JSON_RESPONSES'][0]['data'] ?? null;
         if ( ( $last['status_after'] ?? 'missing' ) !== 'pending' ) {
             $failures[] = 'status_after should be "pending" after a draft -> pending transition; got: ' . var_export( $last['status_after'] ?? null, true );
+        }
+        $meta2 = $GLOBALS['POST_META_STORE'][43]['_presshub_ai_scorecard'] ?? null;
+        if ( ( $meta2['libel_risk'] ?? '' ) !== 'Medium' || ( $meta2['legal_concerns'] ?? '' ) !== 'Attribution needed for claims.' ) {
+            $failures[] = 'scorecard meta should contain 4-key payload; got: ' . var_export( $meta2, true );
+        }
+        if ( ( $last['libel_risk'] ?? '' ) !== 'Medium' || ( $last['legal_concerns'] ?? '' ) !== 'Attribution needed for claims.' ) {
+            $failures[] = 'run_review JSON response should contain 4-key payload; got: ' . var_export( $last, true );
         }
 
         // --- Case 3: published post + score < 80 -> no wp_update_post ---

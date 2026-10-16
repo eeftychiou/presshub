@@ -98,7 +98,7 @@ foreach ( $styles as $style ) {
 
 // 8. Verify Article and Daily Briefing QA prompts
 $article_qa = PressHub_AI_Prompt_Loader::get_article_qa_prompt();
-plt_check( 'load article qa prompt', ! empty( $article_qa ) && false !== strpos( $article_qa, '{content}' ) && false !== strpos( $article_qa, 'cutoff date' ) );
+plt_check( 'load article qa prompt', ! empty( $article_qa ) && false !== strpos( $article_qa, '{content}' ) && false !== stripos( $article_qa, 'cutoff' ) );
 
 $briefing_qa = PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
 plt_check( 'load briefing qa prompt', ! empty( $briefing_qa ) && false !== strpos( $briefing_qa, '{content}' ) && false !== strpos( $briefing_qa, 'cutoff date' ) );

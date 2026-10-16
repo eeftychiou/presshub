@@ -2,10 +2,10 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.4.2-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
-[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-76%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
+[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-80%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Jest Workflow Tests](https://img.shields.io/badge/Jest%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-workflow/tests/)
 [![CI](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml/badge.svg)](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-GPL--2.0--or--later-orange.svg)](presshub-ai-editor/presshub-ai-editor.php)
@@ -33,11 +33,12 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 │  Daily Briefing  │     │ Podcast Producer │     │  In-Editor AI    │
 │     Pipeline     │     │   & TTS Studio   │     │     Co-Pilot     │
 ├──────────────────┤     ├──────────────────┤     ├──────────────────┤
-│ • RSS & Web Scrape│    │ • Multi-Host Dialogue│ │ • Draft Assistant│
-│ • LLM Curation   │     │ • Nameless Hosts │     │ • 0-100 Scorecard│
-│ • Token Budgets  │     │ • Spoken Dates   │     │ • Chat Intents   │
-│ • Multilingual   │     │ • 30-Voice TTS   │     │ • Imagen Sideload│
-│ • Stage Triggers │     │ • Audio Stitching│     │ • Deep Research  │
+│ • Morning & Noon │     │ • Multi-Host Dialogue│ │ • Draft Assistant│
+│ • RSS & Web Scrape│    │ • Nameless Hosts │     │ • 0-100 Scorecard│
+│ • Context Ingest │     │ • Spoken Dates   │     │ • Chat Intents   │
+│ • Image Cycling  │     │ • Audio-Only Post│     │ • Imagen Sideload│
+│ • Social Meta    │     │ • Script Editor  │     │ • Block Revision │
+│ • Stage Triggers │     │ • Audio Re-Gen   │     │ • Revision Logs  │
 └────────┬─────────┘     └────────┬─────────┘     └────────┬─────────┘
          │                        │                        │
          └────────────────────────┼────────────────────────┘
@@ -51,27 +52,26 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1. 📰 Automated Daily Briefing Pipeline
-- **Autonomous News Harvester (`PressHub_AI_News_Harvester`)**: Concurrently scrapes and processes articles from configured RSS feeds and direct web URLs. Features domain politeness delays, per-domain concurrency limits, total execution time budgets, lead-article extraction, and HTML sanitization.
+### 1. 📰 Automated Daily Briefing Pipeline (Morning Edition & Noon News Update)
+- **Autonomous News Harvester (`PressHub_AI_News_Harvester`)**: Concurrently scrapes and processes articles from configured RSS feeds and direct web URLs. Features domain politeness delays, per-domain concurrency limits, total execution time budgets, lead-article extraction, and HTML sanitization. Manages edition-partitioned raw snapshots (`raw-articles.json` vs `raw-articles-noon.json`).
 - **Intelligent News Curator (`PressHub_AI_News_Curator`)**: Evaluates harvested candidate stories using LLM analysis. Employs semantic article deduplication to prevent repetitive coverage, enforces strict token context limits, and produces comprehensive bilingual (Greek and English) daily briefings.
-- **Interactive Briefing Admin (`PressHub_AI_Briefing_Admin`)**: A dedicated WordPress administrative control center providing visibility into each pipeline stage (*Harvest → Curate → Audio/Podcast → Publish*), stage event timelines, manual triggers, single-stage regeneration, and full timezone-aware scheduling. Access is strictly role-gated to Editors and above (`edit_others_posts`, filterable via `presshub_ai_briefing_cap`).
+  - **Noon News Update**: Re-scrapes sources at noon, automatically ingests the morning briefing post as reference context, and generates an updated noon briefing focusing on developments since morning.
+- **Featured Image Pool & Random Cycling**: Configure a pool of Media Library attachment IDs (`presshub_ai_briefing_featured_image_ids`) that are automatically cycled at random and assigned as post thumbnails to daily text briefings and podcasts (including noon updates).
+- **Social Sharing & OpenGraph Optimization (`PressHub_AI_Social_Meta`)**: Emits rich, opengraph.xyz-compliant metadata (`og:title`, `og:description`, `og:image`, `og:site_name`, `og:type=article`, `twitter:card=summary_large_image`, `twitter:title`, `twitter:description`, `twitter:image`, and standard `<meta name="description">`). Includes an automated title length optimizer guaranteeing document titles remain ≤ 60 characters for optimal search snippet display.
+- **Interactive Briefing Admin (`PressHub_AI_Briefing_Admin`)**: A dedicated WordPress administrative control center providing visibility into each pipeline stage (*Harvest → Curate → Audio/Podcast → Publish*), stage event timelines, manual triggers, single-stage regeneration, and full timezone-aware scheduling. Includes interactive tabs to toggle between **Morning Edition** and **Noon Update**. Access is strictly role-gated to Editors and above (`edit_others_posts`, filterable via `presshub_ai_briefing_cap`).
 
-### 2. 🎙️ Podcast Producer & TTS Audio Studio
+### 2. 🎙️ Podcast Producer, Script Editor & Audio Regeneration
 - **Multi-Host Script Engine (`PressHub_AI_Podcast_Producer`)**: Automatically transforms curated news briefings into dynamic, conversational podcast scripts between multiple hosts:
-  - **Nameless Speaker Invariant**: Presenters never awkwardly refer to each other or themselves by name (eliminating robotic "Thanks, John" conversational tropes); dialogue progresses naturally through ideas.
-  - **Spoken Date Formatting**: All dates are converted to natural spoken-language phrasing (e.g. *"3rd of May 2026"* or *"3 Μαΐου 2026"*) rather than raw numerical digits or slashed formats that confuse TTS models.
-  - **Presenter Persona Alignment**: Distinct host roles (anchor, analyst, commentator) maintain consistent editorial voices and perspectives.
-- **Broadcast Audio Synthesizer (`PressHub_AI_Audio_Synthesizer`)**: Synthesizes broadcast-quality audio via Google Cloud Text-to-Speech:
-  - Supports modern speech engines including **Journey**, **Chirp**, **Neural2**, **Studio**, **Standard**, and **Wavenet**.
-  - **30-Voice Catalog** across multilingual accents with granular speaking rate and pitch adjustment.
-  - **Audio Delimiter Handling & Stitching**: Sound effect tags (`[SFX: ...]`) and topic transition markers are isolated and processed, automatically stitching synthesized host segments into unified broadcast audio files.
+  - **Nameless Speaker Invariant**: Presenters never awkwardly refer to each other or themselves by name; dialogue progresses naturally through ideas.
+  - **Spoken Date Formatting**: All dates are converted to natural spoken-language phrasing (e.g. *"3rd of May 2026"* or *"3 Μαΐου 2026"*).
+- **Clean Audio Post Content**: By default, podcast post content displays exclusively the audio player block (`wp:audio`), omitting raw dialogue text for a polished user experience (configurable via `presshub_ai_briefing_podcast_include_text`).
+- **Podcast Dialogue Editor Metabox & One-Click Audio Regeneration**: Editors can review and refine spoken scripts in the **"Podcast Audio & Dialogue Editor"** metabox on podcast edit screens, and click **"Regenerate Audio from Script"** to re-synthesize and stitch the episode in real time.
+- **Broadcast Audio Synthesizer (`PressHub_AI_Audio_Synthesizer`)**: Synthesizes broadcast-quality audio via Gemini Flash Preview or Google Cloud Text-to-Speech (30-voice catalog, Journey/Chirp/Neural2/Studio models, speed and pitch adjustment, and automated silence/SFX stitching).
 
 ### 3. ✍️ In-Editor Editorial Co-Pilot
 - **AI Draft Generation**: Accelerates content creation by synthesizing comprehensive drafts from raw source URLs, interview transcripts, or bullet notes.
-- **0–100 Editorial Scorecard Gate**: Evaluates drafts against an editorial rubric (readiness score, depth, factual grounding, tone). High-scoring drafts (score ≥ 80) can automatically transition to `pending review`, while published posts are safeguarded against accidental demotion.
-- **Sidebar Chat Intent Router**: Automatically classifies author prompts into specialized handlers: `chat` (editorial conversation), `research` (deep web synthesis), `image` (visual prompt generation), or `report` (audio script generation).
-- **Google Imagen Generation & Media Sideloading**: Creates editorial imagery via Google Imagen on Vertex AI, automatically sideloading assets into the WordPress Media Library and setting them as featured images.
-- **Scheduled Deep-Research Jobs**: Runs long-horizon research queries asynchronously in the background as `presshub_research` custom posts, protected by concurrency locking and automated retention sweeps.
+- **4-Key Editorial Scorecard & Legal Exposure Assessment**: Evaluates drafts using a structured 4-key rubric: overall publication readiness score (0–100), legal exposure rating badge (`Low`, `Medium`, or `High`), 2–3 sentence editorial feedback, and targeted legal concern alerts highlighting potential defamation or unverified claims.
+- **Block-Level Gutenberg Editing**: Modifies individual Gutenberg block attributes (`attributes.content` / `attributes.text`) without resetting document state, supporting existing article revisions.
 
 ### 4. 🎛️ Instruction Presets & Prompt Studio
 - **Multi-Tier Presets**: Admin-curated global defaults, author-specific profiles, author defaults, and per-request metabox dropdown selection. Presets append specialized instructions to base system prompts without overwriting foundational editorial safety constraints.

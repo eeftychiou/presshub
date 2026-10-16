@@ -32,6 +32,7 @@
         // avoided as a final fallback because it always returns UTC
         // and leaks yesterday's date for operators east of UTC.
         var currentDate = $('#presshub-briefing-hub-wrap').data('date') || config.date || '';
+        var currentEdition = $('#presshub-briefing-hub-wrap').data('edition') || 'morning';
 
         // -------------------------------------------------------------------------
         // Notice Display System
@@ -721,7 +722,8 @@
                 data: {
                     action: 'presshub_ai_briefing_get_status',
                     nonce: nonce,
-                    date: targetDate
+                    date: targetDate,
+                    edition: currentEdition
                 },
                 success: function(response) {
                     if (response.success && response.data) {
@@ -905,7 +907,8 @@
                 data: {
                     action: 'presshub_ai_briefing_run_harvest',
                     nonce: nonce,
-                    date: currentDate
+                    date: currentDate,
+                    edition: currentEdition
                 },
                 success: function(response) {
                     setButtonLoading($btn, false);
@@ -955,6 +958,7 @@
                     action: 'presshub_ai_briefing_run_curation',
                     nonce: nonce,
                     date: currentDate,
+                    edition: currentEdition,
                     selected_articles: selectedArticles
                 },
                 success: function(response) {
@@ -991,6 +995,7 @@
                     action: 'presshub_ai_briefing_run_script',
                     nonce: nonce,
                     date: currentDate,
+                    edition: currentEdition,
                     context_mode: contextMode,
                     selected_articles: selectedArticles
                 },
@@ -1039,7 +1044,8 @@
             var ajaxData = {
                 action: 'presshub_ai_briefing_save_script',
                 nonce: nonce,
-                date: currentDate
+                date: currentDate,
+                edition: currentEdition
             };
             if (scriptB64) {
                 ajaxData.script_b64 = scriptB64;
@@ -1088,7 +1094,8 @@
             var ajaxData = {
                 action: 'presshub_ai_briefing_generate_audio',
                 nonce: nonce,
-                date: currentDate
+                date: currentDate,
+                edition: currentEdition
             };
             if (scriptB64) {
                 ajaxData.script_b64 = scriptB64;
@@ -1128,6 +1135,7 @@
             formData.append('action', 'presshub_ai_briefing_upload');
             formData.append('nonce', nonce);
             formData.append('date', currentDate);
+            formData.append('edition', currentEdition);
 
             var source = $('#upload-source-outlet').val();
             var title = $('#upload-article-title').val();
@@ -1183,7 +1191,7 @@
             $.ajax({
                 url: ajaxUrl,
                 type: 'POST',
-                data: { action: 'presshub_ai_briefing_run_harvest', nonce: nonce, date: currentDate },
+                data: { action: 'presshub_ai_briefing_run_harvest', nonce: nonce, date: currentDate, edition: currentEdition },
                 success: function(res1) {
                     if (!res1.success) {
                         setButtonLoading($btn, false);
@@ -1205,6 +1213,7 @@
                             action: 'presshub_ai_briefing_run_curation',
                             nonce: nonce,
                             date: currentDate,
+                            edition: currentEdition,
                             selected_articles: selectedArticles
                         },
                         success: function(res2) {
@@ -1224,6 +1233,7 @@
                                     action: 'presshub_ai_briefing_run_script',
                                     nonce: nonce,
                                     date: currentDate,
+                                    edition: currentEdition,
                                     context_mode: contextMode,
                                     selected_articles: selectedArticles
                                 },
@@ -1242,7 +1252,7 @@
                                     $.ajax({
                                         url: ajaxUrl,
                                         type: 'POST',
-                                        data: { action: 'presshub_ai_briefing_generate_audio', nonce: nonce, date: currentDate, script: res3.data.raw_script || '' },
+                                        data: { action: 'presshub_ai_briefing_generate_audio', nonce: nonce, date: currentDate, edition: currentEdition, script: res3.data.raw_script || '' },
                                         success: function(res4) {
                                             setButtonLoading($btn, false);
                                             if (!res4.success) {

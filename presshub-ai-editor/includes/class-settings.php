@@ -186,6 +186,26 @@ class PressHub_AI_Settings {
         return PressHub_AI_Settings_Migration::default_briefing_generation_time();
     }
 
+    public static function default_briefing_noon_schedule_enabled(): int {
+        return PressHub_AI_Settings_Migration::default_briefing_noon_schedule_enabled();
+    }
+
+    public static function default_briefing_noon_harvest_time(): string {
+        return PressHub_AI_Settings_Migration::default_briefing_noon_harvest_time();
+    }
+
+    public static function default_briefing_noon_generation_time(): string {
+        return PressHub_AI_Settings_Migration::default_briefing_noon_generation_time();
+    }
+
+    public static function default_briefing_noon_text_title_prefix(): string {
+        return PressHub_AI_Settings_Migration::default_briefing_noon_text_title_prefix();
+    }
+
+    public static function default_briefing_noon_podcast_title_prefix(): string {
+        return PressHub_AI_Settings_Migration::default_briefing_noon_podcast_title_prefix();
+    }
+
     public static function default_briefing_target_duration(): string {
         return PressHub_AI_Settings_Migration::default_briefing_target_duration();
     }

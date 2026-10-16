@@ -183,9 +183,12 @@ class PressHub_AI_Podcast_Producer {
      * @param string      $context_mode         Context mode ('curated_briefing' or 'harvested_articles').
      * @param array       $selected_article_ids Optional list of selected article IDs to filter by.
      * @param string|null $briefing_text        Optional explicit briefing text to use in 'curated_briefing' mode.
+     * @param string      $edition              Briefing edition ('morning' or 'noon').
      * @return array Associative array with 'system_prompt' and 'user_prompt'.
      */
-    public function build_dialogue_prompt( array $articles, string $preset_id = '', string $duration = '', string $date = '', string $context_mode = 'curated_briefing', array $selected_article_ids = [], ?string $briefing_text = null ): array {
+    public function build_dialogue_prompt( array $articles, string $preset_id = '', string $duration = '', string $date = '', string $context_mode = 'curated_briefing', array $selected_article_ids = [], ?string $briefing_text = null, string $edition = 'morning' ): array {
+        $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
+
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
@@ -301,17 +304,30 @@ class PressHub_AI_Podcast_Producer {
         if ( 'curated_briefing' === $context_mode ) {
             if ( null === $briefing_text ) {
                 $curator = new PressHub_AI_News_Curator();
-                $briefing_text = $curator->get_briefing_content( $date );
+                $briefing_text = $curator->get_briefing_content( $date, $edition );
             }
 
             if ( ! empty( $briefing_text ) && '' !== trim( $briefing_text ) ) {
+                $edition_label = ( 'noon' === $edition )
+                    ? __( 'Μεσημβρινής Ενημέρωσης (Curated Noon Briefing)', 'presshub-ai-editor' )
+                    : __( 'Πρωινής Ενημέρωσης (Curated Morning Briefing)', 'presshub-ai-editor' );
+                $podcast_task_label = ( 'noon' === $edition )
+                    ? __( 'μεσημβρινού podcast', 'presshub-ai-editor' )
+                    : __( 'podcast', 'presshub-ai-editor' );
+                $briefing_ref_label = ( 'noon' === $edition )
+                    ? __( 'μεσημβρινή ενημέρωση', 'presshub-ai-editor' )
+                    : __( 'πρωινή ενημέρωση', 'presshub-ai-editor' );
+
                 $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\n\nΠαρακάτω ακολουθεί το συνταχθέν κείμενο της Πρωινής Ενημέρωσης (Curated Morning Briefing):\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο podcast στα Ελληνικά με %s βασισμένο στην παραπάνω πρωινή ενημέρωση.",
+                    "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\n\nΠαρακάτω ακολουθεί το συνταχθέν κείμενο της %s:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο %s στα Ελληνικά με %s βασισμένο στην παραπάνω %s.",
                     $date,
                     $specs['description'],
                     $specs['target_words'],
+                    $edition_label,
                     trim( $briefing_text ),
-                    $presenter_mention
+                    $podcast_task_label,
+                    $presenter_mention,
+                    $briefing_ref_label
                 );
 
                 return [
@@ -324,14 +340,18 @@ class PressHub_AI_Podcast_Producer {
         // Default / Fallback: 'harvested_articles' mode
         $sources = $this->get_sources_list( $articles );
         $context = $this->format_articles_context( $articles );
+        $podcast_task_label = ( 'noon' === $edition )
+            ? __( 'μεσημβρινού podcast', 'presshub-ai-editor' )
+            : __( 'podcast', 'presshub-ai-editor' );
 
         $user_prompt = sprintf(
-            "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο podcast στα Ελληνικά με %s.",
+            "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο %s στα Ελληνικά με %s.",
             $date,
             $specs['description'],
             $specs['target_words'],
             $sources,
             $context,
+            $podcast_task_label,
             $presenter_mention
         );
 
@@ -637,9 +657,17 @@ class PressHub_AI_Podcast_Producer {
      * @param string $context_mode     Optional — 'curated_briefing' or 'harvested_articles' (Issue #79).
      * @param int    $source_post_id   Optional source WP post ID (curated mode).
      * @param string $attempted_at     Optional ISO 8601 attempted timestamp.
+     * @param string $edition          Briefing edition ('morning' or 'noon').
      * @return bool True on success, false on failure.
      */
-    public function save_script( string $date, string $script, string $context_mode = '', int $source_post_id = 0, string $attempted_at = '' ): bool {
+    public function save_script( string $date, string $script, string $context_mode = '', int $source_post_id = 0, string $attempted_at = '', string $edition = 'morning' ): bool {
+        // Smart parameter shift: if caller called save_script($date, $script, $edition)
+        if ( in_array( $context_mode, [ 'morning', 'noon' ], true ) && 'morning' === $edition && 0 === $source_post_id && '' === $attempted_at ) {
+            $edition = $context_mode;
+            $context_mode = '';
+        }
+        $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
+
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
@@ -655,8 +683,9 @@ class PressHub_AI_Podcast_Producer {
             }
         }
 
-        $path = trailingslashit( $dir ) . 'podcast-script.txt';
-        $saved = ( false !== @file_put_contents( $path, $script ) );
+        $filename = ( 'noon' === $edition ) ? 'podcast-script-noon.txt' : 'podcast-script.txt';
+        $path     = trailingslashit( $dir ) . $filename;
+        $saved    = ( false !== @file_put_contents( $path, $script ) );
 
         // Issue #79 — persist execution lifecycle metadata for the Briefing
         // Hub stage card. Kept in a sibling JSON file (no WP post) so the
@@ -665,7 +694,8 @@ class PressHub_AI_Podcast_Producer {
         // additive and forward-compatible: missing/old files simply yield
         // null/empty values in the aggregator.
         $normalized_context = in_array( $context_mode, [ 'curated_briefing', 'harvested_articles' ], true ) ? $context_mode : '';
-        $meta_path          = trailingslashit( $dir ) . 'podcast-script.meta.json';
+        $meta_filename      = ( 'noon' === $edition ) ? 'podcast-script-noon.meta.json' : 'podcast-script.meta.json';
+        $meta_path          = trailingslashit( $dir ) . $meta_filename;
         $sidecar_exists     = file_exists( $meta_path );
         // Persistence rule: write the sidecar only when (a) the caller
         // explicitly supplied a recognized context_mode (or non-zero source
@@ -679,6 +709,7 @@ class PressHub_AI_Podcast_Producer {
                 'source_post_id' => max( 0, $source_post_id ),
                 'attempted_at'   => (string) $attempted_at,
                 'completed_at'   => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
+                'edition'        => $edition,
             ];
             @file_put_contents( $meta_path, wp_json_encode( $meta, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) );
         }
@@ -692,10 +723,12 @@ class PressHub_AI_Podcast_Producer {
      * by save_script(). Returns an empty array when no metadata file
      * exists (legacy runs).
      *
-     * @param string $date Briefing date (YYYY-MM-DD).
-     * @return array{context_mode:string,source_post_id:int,attempted_at:string,completed_at:string}
+     * @param string $date    Briefing date (YYYY-MM-DD).
+     * @param string $edition Briefing edition ('morning' or 'noon').
+     * @return array{context_mode:string,source_post_id:int,attempted_at:string,completed_at:string,edition:string}
      */
-    public function get_script_meta( string $date ): array {
+    public function get_script_meta( string $date, string $edition = 'morning' ): array {
+        $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
@@ -705,10 +738,12 @@ class PressHub_AI_Podcast_Producer {
             'source_post_id' => 0,
             'attempted_at'   => '',
             'completed_at'   => '',
+            'edition'        => $edition,
         ];
 
-        $harvester = new PressHub_AI_News_Harvester();
-        $path      = trailingslashit( $harvester->get_snapshot_dir( $date ) ) . 'podcast-script.meta.json';
+        $harvester     = new PressHub_AI_News_Harvester();
+        $meta_filename = ( 'noon' === $edition ) ? 'podcast-script-noon.meta.json' : 'podcast-script.meta.json';
+        $path          = trailingslashit( $harvester->get_snapshot_dir( $date ) ) . $meta_filename;
 
         if ( ! file_exists( $path ) ) {
             return $defaults;
@@ -733,22 +768,26 @@ class PressHub_AI_Podcast_Producer {
             'source_post_id' => isset( $decoded['source_post_id'] ) ? (int) $decoded['source_post_id'] : 0,
             'attempted_at'   => isset( $decoded['attempted_at'] ) ? (string) $decoded['attempted_at'] : '',
             'completed_at'   => isset( $decoded['completed_at'] ) ? (string) $decoded['completed_at'] : '',
+            'edition'        => isset( $decoded['edition'] ) ? (string) $decoded['edition'] : $edition,
         ];
     }
 
     /**
      * Load podcast dialogue script from briefing storage directory.
      *
-     * @param string $date Briefing date (YYYY-MM-DD).
+     * @param string $date    Briefing date (YYYY-MM-DD).
+     * @param string $edition Briefing edition ('morning' or 'noon').
      * @return string|null Script content or null if not found.
      */
-    public function get_script( string $date ): ?string {
+    public function get_script( string $date, string $edition = 'morning' ): ?string {
+        $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         $harvester = new PressHub_AI_News_Harvester();
-        $path      = trailingslashit( $harvester->get_snapshot_dir( $date ) ) . 'podcast-script.txt';
+        $filename  = ( 'noon' === $edition ) ? 'podcast-script-noon.txt' : 'podcast-script.txt';
+        $path      = trailingslashit( $harvester->get_snapshot_dir( $date ) ) . $filename;
 
         if ( ! file_exists( $path ) ) {
             return null;
@@ -771,35 +810,37 @@ class PressHub_AI_Podcast_Producer {
      * @param string                       $duration             Optional duration option override ('3_min', '5_min', '10_min').
      * @param string                       $context_mode         Context mode ('curated_briefing' or 'harvested_articles').
      * @param array                        $selected_article_ids Optional list of selected article IDs to filter by.
+     * @param string                       $edition              Briefing edition ('morning' or 'noon').
      * @return array|WP_Error Result payload array or WP_Error on failure.
      */
-    public function generate_dialogue_script( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', string $duration = '', string $context_mode = 'curated_briefing', array $selected_article_ids = [] ) {
+    public function generate_dialogue_script( string $date = '', ?PressHub_AI_API_Client $api_client = null, string $preset_id = '', string $duration = '', string $context_mode = 'curated_briefing', array $selected_article_ids = [], string $edition = 'morning' ) {
+        $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
         // 1. Load snapshot from harvester
         $harvester = new PressHub_AI_News_Harvester();
-        $snapshot  = $harvester->load_snapshot( $date );
+        $snapshot  = $harvester->load_snapshot( $date, $edition );
         $articles  = ( ! empty( $snapshot ) && ! empty( $snapshot['articles'] ) && is_array( $snapshot['articles'] ) ) ? $snapshot['articles'] : [];
 
         if ( empty( $articles ) ) {
             $briefing_content = null;
             if ( 'curated_briefing' === $context_mode ) {
                 $curator = new PressHub_AI_News_Curator();
-                $briefing_content = $curator->get_briefing_content( $date );
+                $briefing_content = $curator->get_briefing_content( $date, $edition );
             }
 
             if ( empty( $briefing_content ) ) {
                 return new WP_Error(
                     'no_articles',
-                    sprintf( __( 'No harvested articles found for date: %s', 'presshub-ai-editor' ), $date )
+                    sprintf( __( 'No harvested articles found for date: %s (%s edition)', 'presshub-ai-editor' ), $date, $edition )
                 );
             }
         }
 
-        // 2. Build prompts (context mode, preset, duration, date, article filtering)
-        $prompts = $this->build_dialogue_prompt( $articles, $preset_id, $duration, $date, $context_mode, $selected_article_ids );
+        // 2. Build prompts (context mode, preset, duration, date, article filtering, edition)
+        $prompts = $this->build_dialogue_prompt( $articles, $preset_id, $duration, $date, $context_mode, $selected_article_ids, null, $edition );
 
         // 3. Call AI provider
         if ( null === $api_client ) {
@@ -821,8 +862,9 @@ class PressHub_AI_Podcast_Producer {
             $pod_model       = method_exists( $api_client, 'get_model' ) ? $api_client->get_model() : '';
             PressHub_AI_Logger::info(
                 sprintf(
-                    'Starting podcast script generation for %s: provider=%s, model=%s, style=%s (source: %s)',
+                    'Starting podcast script generation for %s (edition: %s): provider=%s, model=%s, style=%s (source: %s)',
                     $date,
+                    $edition,
                     $pod_provider_id,
                     $pod_model,
                     $style,
@@ -835,6 +877,7 @@ class PressHub_AI_Podcast_Producer {
             'style'           => $style,
             'model_source'    => $model_source,
             'provider_source' => $provider_source,
+            'edition'         => $edition,
         ];
 
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $turn_metadata );
@@ -896,7 +939,7 @@ class PressHub_AI_Podcast_Producer {
         unset( $turn );
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( sprintf( 'Generated podcast script for %s: %d turns parsed', $date, count( $turns ) ) );
+            PressHub_AI_Logger::info( sprintf( 'Generated podcast script for %s (edition: %s): %d turns parsed', $date, $edition, count( $turns ) ) );
         }
 
         // Issue #79 — record the timestamp when script generation was *attempted*
@@ -914,26 +957,37 @@ class PressHub_AI_Podcast_Producer {
         // a small get_posts() lookup mirroring its find_briefing_post() logic.
         $briefing_source_post_id = 0;
         if ( 'curated_briefing' === $context_mode && function_exists( 'get_posts' ) ) {
+            $meta_query = [
+                [ 'key' => '_presshub_briefing_date', 'value' => $date ],
+                [ 'key' => '_presshub_briefing_type', 'value' => 'text' ],
+            ];
+            if ( 'noon' === $edition ) {
+                $meta_query[] = [ 'key' => '_presshub_briefing_edition', 'value' => 'noon' ];
+            } else {
+                $meta_query[] = [
+                    'relation' => 'OR',
+                    [ 'key' => '_presshub_briefing_edition', 'value' => 'morning' ],
+                    [ 'key' => '_presshub_briefing_edition', 'compare' => 'NOT EXISTS' ],
+                ];
+            }
             $briefing_posts = get_posts( [
                 'post_type'      => 'post',
                 'post_status'    => 'any',
                 'posts_per_page' => 1,
-                'meta_query'     => [
-                    [ 'key' => '_presshub_briefing_date', 'value' => $date ],
-                    [ 'key' => '_presshub_briefing_type', 'value' => 'text' ],
-                ],
+                'meta_query'     => $meta_query,
             ] );
             if ( ! empty( $briefing_posts ) ) {
                 $briefing_source_post_id = (int) $briefing_posts[0]->ID;
             }
         }
-        $this->save_script( $date, $response, $context_mode, $briefing_source_post_id, $script_attempted_at );
+        $this->save_script( $date, $response, $context_mode, $briefing_source_post_id, $script_attempted_at, $edition );
 
         // 6. Calculate word count
         $word_count = (int) PressHub_AI_Context_Estimator::utf8_word_count( $response );
 
         return [
             'date'         => $date,
+            'edition'      => $edition,
             'raw_script'   => $response,
             'turns'        => $turns,
             'turns_count'  => count( $turns ),

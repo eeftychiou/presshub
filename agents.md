@@ -9,7 +9,7 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
 - **`presshub-ai-editor/`**: The core WordPress plugin source code.
   - `includes/`: PHP classes (API client, token logger, structured logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings).
   - `assets/`: Frontend/Admin JavaScript and CSS.
-  - `tests/`: Isolated PHP unit test suite (73 test files + `run-all-tests.php`).
+  - `tests/`: Isolated PHP unit test suite (80 test files + `run-all-tests.php`).
 - **`presshub-workflow/`**: TypeScript workflow and MCP server components (Jest test suite).
 - **`dev-env/`**: Fully configured, self-contained local WordPress development and testing environment powered by the official WordPress Core SQLite database engine (zero external database services required).
 
@@ -425,6 +425,38 @@ function resolve_prompt() {
 
 ---
 
+## ⚖️ Editorial QA Review & 4-Key Scorecard Protocol
+
+The automated AI Editorial Review system (`PressHub_AI_QA_Reviewer`) evaluates draft posts before publication against a standardized 4-key JSON schema:
+
+1. **`score`**: Integer (0–100) indicating overall publication readiness (evaluated against the configurable threshold `presshub_ai_qa_min_score`, default: 80).
+2. **`libel_risk`**: Legal exposure rating (`"Low"`, `"Medium"`, or `"High"`). Unrecognized or missing ratings default strictly to `"Low"`.
+3. **`feedback`**: Concise 2–3 sentence critique summarizing editorial quality, narrative structure, and attribution balance.
+4. **`legal_concerns`**: Targeted 1–2 sentence assessment highlighting potential defamation, unsubstantiated allegations, or missing right-of-reply (defaulting to `"None identified"` when low risk).
+
+### Invariants:
+- **Hashing & Cache**: Results are keyed by MD5 of post content (`_presshub_ai_scorecard_hash`) and persisted in `_presshub_ai_scorecard` post meta. Identical content is never re-evaluated against the LLM.
+- **Fail-Loudly Notifications**: If score is below threshold and notifications are enabled, `notify_editor_failure()` dispatches an email incorporating libel risk and legal concerns.
+- **Metabox & UI**: Rendered in the post editor metabox with color-coded libel risk badges (`.presshub-libel-low`, `.presshub-libel-medium`, `.presshub-libel-high`) and dedicated legal concerns alert boxes.
+
+---
+
+## ⚖️ Editorial QA Review & 4-Key Scorecard Protocol
+
+The automated AI Editorial Review system (`PressHub_AI_QA_Reviewer`) evaluates draft posts before publication against a standardized 4-key JSON schema:
+
+1. **`score`**: Integer (0–100) indicating overall publication readiness (evaluated against the configurable threshold `presshub_ai_qa_min_score`, default: 80).
+2. **`libel_risk`**: Legal exposure rating (`"Low"`, `"Medium"`, or `"High"`). Unrecognized or missing ratings default strictly to `"Low"`.
+3. **`feedback`**: Concise 2–3 sentence critique summarizing editorial quality, narrative structure, and attribution balance.
+4. **`legal_concerns`**: Targeted 1–2 sentence assessment highlighting potential defamation, unsubstantiated allegations, or missing right-of-reply (defaulting to `"None identified"` when low risk).
+
+### Invariants:
+- **Hashing & Cache**: Results are keyed by MD5 of post content (`_presshub_ai_scorecard_hash`) and persisted in `_presshub_ai_scorecard` post meta. Identical content is never re-evaluated against the LLM.
+- **Fail-Loudly Notifications**: If score is below threshold and notifications are enabled, `notify_editor_failure()` dispatches an email incorporating libel risk and legal concerns.
+- **Metabox & UI**: Rendered in the post editor metabox with color-coded libel risk badges (`.presshub-libel-low`, `.presshub-libel-medium`, `.presshub-libel-high`) and dedicated legal concerns alert boxes.
+
+---
+
 ## 🧪 Verification & Testing Protocol
 
 Before marking any task, bugfix, or feature as complete, you **MUST** run all verification test suites:
@@ -722,7 +754,7 @@ When `replace_file_content` with `AllowMultiple=true` (or any other auto-expandi
 Before committing, you **MUST** run all verification test suites and ensure a 100% clean pass rate:
 
 ```bash
-# 1. Plugin Unit Tests (All 73 test suites)
+# 1. Plugin Unit Tests (All 80 test suites)
 php presshub-ai-editor/tests/run-all-tests.php
 
 # 2. Live WordPress Integration Tests

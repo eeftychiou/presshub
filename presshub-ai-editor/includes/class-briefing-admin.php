@@ -538,11 +538,14 @@ class PressHub_AI_Briefing_Admin {
     /**
      * Locate WordPress briefing post by date and type.
      *
-     * @param string $date Date string YYYY-MM-DD.
-     * @param string $type Briefing type ('text' or 'podcast').
+     * @param string $date    Date string YYYY-MM-DD.
+     * @param string $type    Briefing type ('text' or 'podcast').
+     * @param string $edition Briefing edition ('morning' or 'noon').
      * @return object|null Post object or null.
      */
-    public function find_briefing_post( string $date, string $type = 'text' ) {
+    public function find_briefing_post( string $date, string $type = 'text', string $edition = 'morning' ) {
+        $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
+
         // Fast-path lookup for test environment stubs
         if ( ! empty( $GLOBALS['POST_META_STORE'] ) && is_array( $GLOBALS['POST_META_STORE'] ) ) {
             foreach ( $GLOBALS['POST_META_STORE'] as $post_id => $metas ) {
@@ -551,34 +554,70 @@ class PressHub_AI_Briefing_Admin {
                     && $metas['_presshub_briefing_date'] === $date
                     && $metas['_presshub_briefing_type'] === $type
                 ) {
-                    $post = get_post( $post_id );
-                    if ( $post ) {
-                        return $post;
+                    $post_edition = $metas['_presshub_briefing_edition'] ?? 'morning';
+                    if ( 'noon' === $edition ) {
+                        if ( 'noon' === $post_edition ) {
+                            $post = get_post( $post_id );
+                            if ( $post ) {
+                                return $post;
+                            }
+                        }
+                    } else {
+                        if ( 'noon' !== $post_edition ) {
+                            $post = get_post( $post_id );
+                            if ( $post ) {
+                                return $post;
+                            }
+                        }
                     }
                 }
             }
+        }
+
+        $meta_query = [
+            [ 'key' => '_presshub_briefing_date', 'value' => $date ],
+            [ 'key' => '_presshub_briefing_type', 'value' => $type ],
+        ];
+
+        if ( 'noon' === $edition ) {
+            $meta_query[] = [
+                'key'   => '_presshub_briefing_edition',
+                'value' => 'noon',
+            ];
+        } else {
+            $meta_query[] = [
+                'relation' => 'OR',
+                [
+                    'key'   => '_presshub_briefing_edition',
+                    'value' => 'morning',
+                ],
+                [
+                    'key'     => '_presshub_briefing_edition',
+                    'compare' => 'NOT EXISTS',
+                ],
+            ];
         }
 
         $posts = get_posts( [
             'post_type'      => 'post',
             'post_status'    => 'any',
             'posts_per_page' => 1,
-            'meta_query'     => [
-                [ 'key' => '_presshub_briefing_date', 'value' => $date ],
-                [ 'key' => '_presshub_briefing_type', 'value' => $type ],
-            ],
+            'meta_query'     => $meta_query,
         ] );
 
         return ! empty( $posts ) ? (object) $posts[0] : null;
     }
 
     /**
-     * Get complete pipeline status for a specific date.
+     * Get complete pipeline status for a specific date and edition.
      *
-     * @param string $date Date string YYYY-MM-DD (defaults to current date).
+     * @param string $date    Date string YYYY-MM-DD (defaults to current date).
+     * @param string $edition Briefing edition ('morning' or 'noon').
      * @return array Structured status dictionary.
      */
-    public function get_briefing_status( string $date = '' ): array {
+    public function get_briefing_status( string $date = '', string $edition = 'morning' ): array {
+        $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
+
         if ( empty( $date ) ) {
             // Issue #83 — anchor "today" in the WP-local timezone used by
             // the token-log writer (class-token-logger.php writes
@@ -593,7 +632,7 @@ class PressHub_AI_Briefing_Admin {
         $producer  = new PressHub_AI_Podcast_Producer();
 
         // 1. Harvest Stage
-        $snapshot = $harvester->load_snapshot( $date );
+        $snapshot = $harvester->load_snapshot( $date, $edition );
         $articles = $snapshot['articles'] ?? [];
         $blocked_sources = $snapshot['blocked_sources'] ?? [];
         $source_health = $snapshot['source_health'] ?? ( $snapshot['diagnostics'] ?? [] );
@@ -601,7 +640,7 @@ class PressHub_AI_Briefing_Admin {
         $is_harvested = ! empty( $snapshot ) && is_array( $snapshot );
 
         // 2. Text Story Stage
-        $text_post = $this->find_briefing_post( $date, 'text' );
+        $text_post = $this->find_briefing_post( $date, 'text', $edition );
         $text_created = ( null !== $text_post && ! empty( $text_post->ID ) );
         $text_post_id = $text_created ? (int) $text_post->ID : null;
         $text_post_title = $text_created ? (string) ( $text_post->post_title ?? '' ) : '';
@@ -610,7 +649,7 @@ class PressHub_AI_Briefing_Admin {
         $text_permalink = $text_created ? get_permalink( $text_post_id ) : '';
 
         // 3. Podcast Dialogue Script Stage
-        $script_text = $producer->get_script( $date ) ?? '';
+        $script_text = $producer->get_script( $date, $edition ) ?? '';
         $script_created = ( '' !== trim( $script_text ) );
         $turns = $script_created ? $producer->parse_script_turns( $script_text ) : [];
         $word_count = $script_created
@@ -618,7 +657,7 @@ class PressHub_AI_Briefing_Admin {
             : 0;
 
         // 4. Audio Podcast Stage
-        $podcast_post = $this->find_briefing_post( $date, 'podcast' );
+        $podcast_post = $this->find_briefing_post( $date, 'podcast', $edition );
         $audio_created = ( null !== $podcast_post && ! empty( $podcast_post->ID ) );
         $podcast_post_id = $audio_created ? (int) $podcast_post->ID : null;
         $podcast_post_title = $audio_created ? (string) ( $podcast_post->post_title ?? '' ) : '';
@@ -659,8 +698,8 @@ class PressHub_AI_Briefing_Admin {
                 : [ 'type' => '', 'count' => 0, 'preset' => '' ] )
             : [ 'type' => '', 'count' => 0, 'preset' => '' ];
         $script_meta = class_exists( 'PressHub_AI_Podcast_Producer' )
-            ? ( new PressHub_AI_Podcast_Producer() )->get_script_meta( $date )
-            : [ 'context_mode' => '', 'source_post_id' => 0, 'attempted_at' => '', 'completed_at' => '' ];
+            ? ( new PressHub_AI_Podcast_Producer() )->get_script_meta( $date, $edition )
+            : [ 'context_mode' => '', 'source_post_id' => 0, 'attempted_at' => '', 'completed_at' => '', 'edition' => $edition ];
         $audio_meta  = ( $audio_created && class_exists( 'PressHub_AI_Audio_Synthesizer' ) )
             ? PressHub_AI_Audio_Synthesizer::get_audio_meta( (int) $podcast_post_id )
             : [
@@ -716,8 +755,13 @@ class PressHub_AI_Briefing_Admin {
         $active_source_labels  = array_slice( $active_source_labels, 0, 5 );
         $blocked_source_labels = array_slice( $blocked_source_labels, 0, 5 );
 
+        $current_text_prefix = ( 'noon' === $edition )
+            ? ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_noon_text_title_prefix() : 'Μεσημβρινή Ενημέρωση:' )
+            : PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
+
         return [
             'date'                => $date,
+            'edition'             => $edition,
             'formatted_date'      => $formatted_date,
             'harvested'           => $is_harvested,
             'harvested_at'        => $harvested_at,
@@ -740,7 +784,7 @@ class PressHub_AI_Briefing_Admin {
             // the current Settings value, which may have since changed).
             'text_title_prefix_applied'      => $latest_post_meta_prefix,
             'text_title_date_format_applied' => $latest_post_meta_date_format,
-            'text_title_prefix_current'      => PressHub_AI_Settings_Storage::get_briefing_text_title_prefix(),
+            'text_title_prefix_current'      => $current_text_prefix,
             'text_title_date_format_current' => PressHub_AI_Settings_Storage::get_briefing_text_title_date_format(),
             'script_created'      => $script_created,
             'script_text'         => $script_text,
@@ -783,9 +827,10 @@ class PressHub_AI_Briefing_Admin {
     /**
      * Render the Daily Briefing Hub admin page.
      *
-     * @param string $date Target date string (YYYY-MM-DD).
+     * @param string $date    Target date string (YYYY-MM-DD).
+     * @param string $edition Briefing edition ('morning' or 'noon').
      */
-    public function render_hub_page( string $date = '' ) {
+    public function render_hub_page( string $date = '', string $edition = '' ) {
         if ( ! current_user_can( self::capability() ) ) {
             wp_die( __( 'You do not have permission to access the Daily Briefing Hub.', 'presshub-ai-editor' ) );
         }
@@ -798,7 +843,12 @@ class PressHub_AI_Briefing_Admin {
             $date = ( '' !== $raw_date ) ? $raw_date : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) );
         }
 
-        $status = $this->get_briefing_status( $date );
+        if ( empty( $edition ) ) {
+            $raw_edition = isset( $_GET['edition'] ) ? sanitize_key( wp_unslash( $_GET['edition'] ) ) : 'morning';
+            $edition     = ( 'noon' === $raw_edition ) ? 'noon' : 'morning';
+        }
+
+        $status = $this->get_briefing_status( $date, $edition );
         $settings_url = admin_url( 'options-general.php?page=presshub-ai' );
         // Issue #61 — deep link into the Daily Briefing tab where the
         // curation cap knobs (Maximum Articles Sent to Curation LLM /
@@ -879,7 +929,7 @@ class PressHub_AI_Briefing_Admin {
             );
         }
         ?>
-        <div class="wrap presshub-briefing-hub-wrap" id="presshub-briefing-hub-wrap" data-date="<?php echo esc_attr( $date ); ?>">
+        <div class="wrap presshub-briefing-hub-wrap" id="presshub-briefing-hub-wrap" data-date="<?php echo esc_attr( $date ); ?>" data-edition="<?php echo esc_attr( $edition ); ?>">
             <header class="presshub-hub-header">
                 <div class="presshub-hub-title-group">
                     <h1 class="wp-heading-inline">
@@ -887,6 +937,9 @@ class PressHub_AI_Briefing_Admin {
                     </h1>
                     <span class="presshub-date-badge">
                         📅 <?php echo esc_html( $status['formatted_date'] ); ?> (<code><?php echo esc_html( $date ); ?></code>)
+                    </span>
+                    <span class="presshub-edition-badge" style="display:inline-block; margin-left:8px; font-weight:600; padding:2px 8px; border-radius:4px; background:<?php echo 'noon' === $edition ? '#fff3cd; color:#856404;' : '#e8f4fd; color:#0c5460;'; ?>">
+                        <?php echo 'noon' === $edition ? '☀️ ' . esc_html__( 'Noon Update', 'presshub-ai-editor' ) : '🌅 ' . esc_html__( 'Morning Edition', 'presshub-ai-editor' ); ?>
                     </span>
                 </div>
                 <div class="presshub-hub-header-actions">
@@ -900,6 +953,23 @@ class PressHub_AI_Briefing_Admin {
                     </a>
                 </div>
             </header>
+
+            <?php
+            $morning_tab_url = function_exists( 'add_query_arg' )
+                ? add_query_arg( [ 'page' => 'presshub-ai-briefing-hub', 'briefing_date' => $date, 'edition' => 'morning' ], admin_url( 'admin.php' ) )
+                : admin_url( 'admin.php?page=presshub-ai-briefing-hub&briefing_date=' . rawurlencode( $date ) . '&edition=morning' );
+            $noon_tab_url = function_exists( 'add_query_arg' )
+                ? add_query_arg( [ 'page' => 'presshub-ai-briefing-hub', 'briefing_date' => $date, 'edition' => 'noon' ], admin_url( 'admin.php' ) )
+                : admin_url( 'admin.php?page=presshub-ai-briefing-hub&briefing_date=' . rawurlencode( $date ) . '&edition=noon' );
+            ?>
+            <nav class="nav-tab-wrapper presshub-edition-tabs" style="margin-top: 15px; margin-bottom: 20px;">
+                <a href="<?php echo esc_url( $morning_tab_url ); ?>" class="nav-tab <?php echo 'morning' === $edition ? 'nav-tab-active' : ''; ?>">
+                    🌅 <?php echo esc_html__( 'Morning Edition (Πρωινή Ενημέρωση)', 'presshub-ai-editor' ); ?>
+                </a>
+                <a href="<?php echo esc_url( $noon_tab_url ); ?>" class="nav-tab <?php echo 'noon' === $edition ? 'nav-tab-active' : ''; ?>">
+                    ☀️ <?php echo esc_html__( 'Noon Update (Μεσημβρινή Ενημέρωση)', 'presshub-ai-editor' ); ?>
+                </a>
+            </nav>
 
             <div id="presshub-briefing-notices" class="presshub-notices-container" aria-live="polite"></div>
 

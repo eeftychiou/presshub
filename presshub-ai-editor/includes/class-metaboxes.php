@@ -6,6 +6,8 @@ require_once __DIR__ . '/class-settings-storage.php';
 class PressHub_AI_Metaboxes {
     public function __construct() {
         add_action( 'add_meta_boxes', [ $this, 'add_coauthor_metabox' ] );
+        add_action( 'add_meta_boxes', [ $this, 'add_podcast_metabox' ], 10, 2 );
+        add_action( 'save_post', [ $this, 'save_podcast_metabox_data' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
     }
 
@@ -71,6 +73,8 @@ class PressHub_AI_Metaboxes {
                     $score     = (int) $scorecard['score'];
                     $min_score = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_qa_min_score() : 80;
                     $tone      = $score < 50 ? 'presshub-score-low' : ( $score < $min_score ? 'presshub-score-mid' : 'presshub-score-high' );
+                    $libel_risk = isset( $scorecard['libel_risk'] ) && is_string( $scorecard['libel_risk'] ) && '' !== trim( $scorecard['libel_risk'] ) ? trim( $scorecard['libel_risk'] ) : '';
+                    $legal_concerns = isset( $scorecard['legal_concerns'] ) && is_string( $scorecard['legal_concerns'] ) ? trim( $scorecard['legal_concerns'] ) : '';
                     ?>
                     <div class="scorecard-box <?php echo esc_attr( $tone ); ?>">
                         <span class="presshub-score-badge" aria-hidden="true"><?php echo esc_html( $score . '/100' ); ?></span>
@@ -78,8 +82,23 @@ class PressHub_AI_Metaboxes {
                             /* translators: %s: numeric score 0-100. */
                             echo esc_html( sprintf( __( 'Score: %s/100', 'presshub-ai-editor' ), $score ) );
                         ?></strong>
+                        <?php if ( '' !== $libel_risk ) : ?>
+                            <?php $libel_class = 'presshub-libel-' . strtolower( $libel_risk ); ?>
+                            <span class="presshub-libel-badge <?php echo esc_attr( $libel_class ); ?>">
+                                <?php
+                                /* translators: %s: libel risk rating (Low, Medium, High). */
+                                echo esc_html( sprintf( __( 'Libel Risk: %s', 'presshub-ai-editor' ), $libel_risk ) );
+                                ?>
+                            </span>
+                        <?php endif; ?>
                         <?php if ( isset( $scorecard['feedback'] ) && is_string( $scorecard['feedback'] ) ) : ?>
                             <p><?php echo esc_html( $scorecard['feedback'] ); ?></p>
+                        <?php endif; ?>
+                        <?php if ( '' !== $legal_concerns && 'None identified' !== $legal_concerns ) : ?>
+                            <div class="presshub-legal-concerns">
+                                <strong><?php echo esc_html__( 'Legal Concerns:', 'presshub-ai-editor' ); ?></strong>
+                                <p><?php echo esc_html( $legal_concerns ); ?></p>
+                            </div>
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
@@ -185,5 +204,97 @@ class PressHub_AI_Metaboxes {
         </select>
         <p class="description"><?php echo esc_html__( 'Pick a preset to influence the system prompt. The per-article instructions above still take precedence in the user prompt.', 'presshub-ai-editor' ); ?></p>
         <?php
+    }
+
+    /**
+     * Add podcast script and audio editor metabox for podcast briefing posts.
+     *
+     * @param string   $post_type Current post type.
+     * @param \WP_Post $post      Current post object.
+     */
+    public function add_podcast_metabox( $post_type, $post ) {
+        if ( 'post' !== $post_type || ! is_object( $post ) ) {
+            return;
+        }
+        $type = get_post_meta( $post->ID, '_presshub_briefing_type', true );
+        if ( 'podcast' !== $type ) {
+            return;
+        }
+
+        add_meta_box(
+            'presshub_ai_podcast_editor',
+            __( 'PressHub Podcast Audio & Script Editor', 'presshub-ai-editor' ),
+            [ $this, 'render_podcast_metabox' ],
+            'post',
+            'normal',
+            'high'
+        );
+    }
+
+    /**
+     * Render the podcast dialogue script editor metabox.
+     *
+     * @param \WP_Post $post Current post object.
+     */
+    public function render_podcast_metabox( $post ) {
+        $audio_url = (string) get_post_meta( $post->ID, '_presshub_audio_url', true );
+        $script    = (string) get_post_meta( $post->ID, '_presshub_podcast_script', true );
+        $date      = (string) get_post_meta( $post->ID, '_presshub_briefing_date', true );
+        $edition   = (string) get_post_meta( $post->ID, '_presshub_briefing_edition', true );
+
+        // If meta script is missing, try loading from saved snapshot
+        if ( empty( $script ) && class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+            $producer = new PressHub_AI_Podcast_Producer();
+            $script = (string) $producer->get_script( $date, $edition ?: 'morning' );
+        }
+
+        wp_nonce_field( 'presshub_podcast_save_script', 'presshub_podcast_save_nonce' );
+        ?>
+        <div class="presshub-podcast-editor-container" style="padding: 10px 0;">
+            <?php if ( ! empty( $audio_url ) ) : ?>
+                <div style="margin-bottom: 15px;">
+                    <label style="display:block; font-weight: 600; margin-bottom: 5px;"><?php echo esc_html__( 'Current Podcast Audio Preview:', 'presshub-ai-editor' ); ?></label>
+                    <audio id="presshub-podcast-audio-player" controls src="<?php echo esc_url( $audio_url ); ?>" style="width: 100%; max-width: 600px;"></audio>
+                </div>
+            <?php endif; ?>
+
+            <label for="presshub_podcast_script" style="display:block; font-weight: 600; margin-bottom: 5px;">
+                <?php echo esc_html__( 'Podcast Dialogue Script:', 'presshub-ai-editor' ); ?>
+            </label>
+            <p class="description" style="margin-bottom: 10px;">
+                <?php echo esc_html__( 'You can edit the dialogue script below. Once edited, click "Regenerate Audio from Script" to re-synthesize the voice audio and update this post.', 'presshub-ai-editor' ); ?>
+            </p>
+            <textarea id="presshub_podcast_script" name="presshub_podcast_script" rows="14" style="width: 100%; font-family: monospace; font-size: 13px; line-height: 1.5; padding: 10px;"><?php echo esc_textarea( $script ); ?></textarea>
+
+            <div style="margin-top: 15px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <button type="button" id="presshub-regenerate-podcast-btn" class="button button-primary" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
+                    <?php echo esc_html__( 'Regenerate Audio from Script', 'presshub-ai-editor' ); ?>
+                </button>
+                <span id="presshub-regenerate-podcast-spinner" class="spinner" role="status" style="float:none; margin:0;"><span class="screen-reader-text"></span></span>
+                <span id="presshub-regenerate-podcast-status" style="font-weight: 600;"></span>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Save dialogue script changes when saving a podcast post.
+     *
+     * @param int $post_id Post ID.
+     */
+    public function save_podcast_metabox_data( $post_id ) {
+        if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+            return;
+        }
+        if ( ! isset( $_POST['presshub_podcast_save_nonce'] ) || ! wp_verify_nonce( $_POST['presshub_podcast_save_nonce'], 'presshub_podcast_save_script' ) ) {
+            return;
+        }
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            return;
+        }
+        if ( isset( $_POST['presshub_podcast_script'] ) ) {
+            $script = wp_unslash( $_POST['presshub_podcast_script'] );
+            update_post_meta( $post_id, '_presshub_podcast_script', $script );
+        }
     }
 }

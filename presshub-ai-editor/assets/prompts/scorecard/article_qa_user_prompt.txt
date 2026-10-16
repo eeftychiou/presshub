@@ -1,6 +1,13 @@
-Review this news article draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).
+Review this news article draft. Provide a JSON response with exactly four keys:
+- "score": An integer from 0 to 100 representing overall publication readiness.
+- "libel_risk": A string rating the legal exposure ("Low", "Medium", or "High").
+- "feedback": A 2-3 sentence critique summarizing editorial quality, structure, and balance.
+- "legal_concerns": A concise 1-2 sentence assessment highlighting any potentially libelous, unverified, or defamatory claims (or explicitly state "None identified" if the draft presents low risk).
 
-Important: Do not dispute or penalize recent real-world events, breaking news, or reported deaths based on your static pre-training knowledge or cutoff date. Assess the draft strictly on editorial quality, clarity, structure, factual attribution, narrative balance, grammar, and journalistic writing standards.
+Evaluation Criteria:
+1. Editorial Quality: Assess clarity, structure, factual attribution, narrative balance, grammar, and standard journalistic style.
+2. Defamation & Libel Check: Flag unverified assertions of criminal wrongdoing, unsubstantiated attacks on character or professional reputation, lack of attribution for controversial allegations, or missing opportunities for a right of reply.
+3. Knowledge Cutoff & Recency: Do not dispute or penalize recent real-world events, breaking news, or reported deaths based on static pre-training knowledge. Assess the draft strictly on internal editorial soundness and attribution standards.
 
 Draft:
 {content}

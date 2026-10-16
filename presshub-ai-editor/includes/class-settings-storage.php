@@ -222,6 +222,18 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_generation_time' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_noon_schedule_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_schedule_enabled' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_noon_harvest_time', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_harvest_time' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_noon_generation_time', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_generation_time' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_harvest_time_budget', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_harvest_time_budget' ],
             'type'              => 'integer',
@@ -336,6 +348,22 @@ class PressHub_AI_Settings_Storage {
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_title_date_format', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_text_title_date_format' ],
             'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_noon_text_title_prefix', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_text_title_prefix' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_noon_podcast_title_prefix', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_podcast_title_prefix' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_ids', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_include_text', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_include_text' ],
+            'type'              => 'integer',
         ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_status', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_status' ],
@@ -536,6 +564,9 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_schedule_enabled', __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ), [ $render, 'render_briefing_schedule_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_harvest_time', __( 'Morning Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_generation_time', __( 'Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_noon_schedule_enabled', __( 'Enable Noon Briefing Schedule', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_schedule_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_noon_harvest_time', __( 'Noon Harvest Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_harvest_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_noon_generation_time', __( 'Noon Briefing Generation Time (HH:MM)', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_generation_time_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_harvest_time_budget', __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ), [ $render, 'render_harvest_time_budget_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         // Issue #61 — Settings-First: curation LLM context cap knobs. These
         // rows live in the Daily Briefing section next to the harvest budget
@@ -571,6 +602,10 @@ class PressHub_AI_Settings_Storage {
         // without touching code.
         add_settings_field( 'presshub_ai_briefing_text_title_prefix', __( 'Text Story Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_title_date_format', __( 'Text Story Title Date Format', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_date_format_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_noon_text_title_prefix', __( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_text_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_noon_podcast_title_prefix', __( 'Noon Podcast Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_podcast_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_featured_image_ids', __( 'Featured Image Pool (Attachment IDs)', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_include_text', __( 'Include Text in Podcast Post', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_include_text_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_status', __( 'Podcast Post Status', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_prompt', __( 'Text Story System Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_prompt_1', __( 'Podcast Dialogue System Prompt (1 Host)', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_prompt_1_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1288,6 +1323,18 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_time_format( $value, self::default_briefing_generation_time() );
     }
 
+    public static function sanitize_briefing_noon_schedule_enabled( $value ): int {
+        return self::sanitize_boolean( $value );
+    }
+
+    public static function sanitize_briefing_noon_harvest_time( $value ) {
+        return self::sanitize_time_format( $value, self::default_briefing_noon_harvest_time() );
+    }
+
+    public static function sanitize_briefing_noon_generation_time( $value ) {
+        return self::sanitize_time_format( $value, self::default_briefing_noon_generation_time() );
+    }
+
     public static function sanitize_harvest_time_budget( $value ): int {
         $value = wp_unslash( $value );
         if ( ! is_numeric( $value ) ) {
@@ -1953,6 +2000,56 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_briefing_text_title_date_format( $value );
     }
 
+    public static function default_briefing_noon_text_title_prefix(): string {
+        return 'Μεσημβρινή Ενημέρωση:';
+    }
+
+    public static function sanitize_briefing_noon_text_title_prefix( $value ): string {
+        if ( ! is_string( $value ) ) {
+            return self::default_briefing_noon_text_title_prefix();
+        }
+        $clean = sanitize_text_field( wp_unslash( $value ) );
+        if ( '' === trim( $clean ) ) {
+            return self::default_briefing_noon_text_title_prefix();
+        }
+        return mb_substr( trim( $clean ), 0, 60, 'UTF-8' );
+    }
+
+    public static function get_briefing_noon_text_title_prefix(): string {
+        $value = get_option( 'presshub_ai_briefing_noon_text_title_prefix', null );
+        if ( null === $value ) {
+            return self::default_briefing_noon_text_title_prefix();
+        }
+        return self::sanitize_briefing_noon_text_title_prefix( $value );
+    }
+
+    public static function default_briefing_noon_podcast_title_prefix(): string {
+        return 'Μεσημβρινό Podcast Ενημέρωσης - ';
+    }
+
+    public static function sanitize_briefing_noon_podcast_title_prefix( $value ): string {
+        if ( ! is_string( $value ) ) {
+            return self::default_briefing_noon_podcast_title_prefix();
+        }
+        $clean = sanitize_text_field( wp_unslash( $value ) );
+        if ( '' === trim( $clean ) ) {
+            return self::default_briefing_noon_podcast_title_prefix();
+        }
+        $raw = wp_unslash( $value );
+        if ( substr( $raw, -1 ) === ' ' && substr( $clean, -1 ) !== ' ' ) {
+            $clean .= ' ';
+        }
+        return mb_substr( $clean, 0, 60, 'UTF-8' );
+    }
+
+    public static function get_briefing_noon_podcast_title_prefix(): string {
+        $value = get_option( 'presshub_ai_briefing_noon_podcast_title_prefix', null );
+        if ( null === $value ) {
+            return self::default_briefing_noon_podcast_title_prefix();
+        }
+        return self::sanitize_briefing_noon_podcast_title_prefix( $value );
+    }
+
     private static function sanitize_time_format( $value, $default = '06:30' ): string {
         $value = trim( (string) wp_unslash( $value ) );
         if ( preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', $value, $matches ) ) {
@@ -2265,6 +2362,93 @@ class PressHub_AI_Settings_Storage {
         return '07:15';
     }
 
+    public static function get_briefing_harvest_time(): string {
+        $value = get_option( 'presshub_ai_briefing_harvest_time', self::default_briefing_harvest_time() );
+        return self::sanitize_harvest_time( $value );
+    }
+
+    public static function get_briefing_generation_time(): string {
+        $value = get_option( 'presshub_ai_briefing_generation_time', self::default_briefing_generation_time() );
+        return self::sanitize_generation_time( $value );
+    }
+
+    public static function default_briefing_noon_schedule_enabled(): int {
+        return 1;
+    }
+
+    public static function get_briefing_noon_schedule_enabled(): int {
+        return (int) get_option( 'presshub_ai_briefing_noon_schedule_enabled', 1 );
+    }
+
+    public static function is_briefing_noon_schedule_enabled(): bool {
+        return (bool) self::get_briefing_noon_schedule_enabled();
+    }
+
+    public static function default_briefing_noon_harvest_time(): string {
+        return '12:00';
+    }
+
+    public static function get_briefing_noon_harvest_time(): string {
+        $value = get_option( 'presshub_ai_briefing_noon_harvest_time', self::default_briefing_noon_harvest_time() );
+        return self::sanitize_briefing_noon_harvest_time( $value );
+    }
+
+    public static function default_briefing_noon_generation_time(): string {
+        return '12:45';
+    }
+
+    public static function get_briefing_noon_generation_time(): string {
+        $value = get_option( 'presshub_ai_briefing_noon_generation_time', self::default_briefing_noon_generation_time() );
+        return self::sanitize_briefing_noon_generation_time( $value );
+    }
+
+    public static function sanitize_briefing_featured_image_ids( $value ): string {
+        if ( is_array( $value ) ) {
+            $ids = array_map( 'intval', $value );
+        } else {
+            $parts = explode( ',', (string) $value );
+            $ids = array_map( 'intval', array_map( 'trim', $parts ) );
+        }
+        $valid = array_filter( $ids, function( $id ) {
+            return $id > 0;
+        } );
+        $unique = array_values( array_unique( $valid ) );
+        return implode( ',', $unique );
+    }
+
+    public static function get_briefing_featured_image_ids(): array {
+        $val = (string) get_option( 'presshub_ai_briefing_featured_image_ids', '' );
+        if ( '' === trim( $val ) ) {
+            return [];
+        }
+        $parts = explode( ',', $val );
+        $ids = [];
+        foreach ( $parts as $p ) {
+            $id = (int) trim( $p );
+            if ( $id > 0 ) {
+                $ids[] = $id;
+            }
+        }
+        return array_values( array_unique( $ids ) );
+    }
+
+    public static function get_random_briefing_featured_image_id(): int {
+        $pool = self::get_briefing_featured_image_ids();
+        if ( empty( $pool ) ) {
+            return 0;
+        }
+        $idx = array_rand( $pool );
+        return (int) $pool[ $idx ];
+    }
+
+    public static function sanitize_briefing_podcast_include_text( $value ): int {
+        return ( ! empty( $value ) && '0' !== $value && false !== $value ) ? 1 : 0;
+    }
+
+    public static function get_briefing_podcast_include_text(): bool {
+        return (bool) get_option( 'presshub_ai_briefing_podcast_include_text', 0 );
+    }
+
     public static function default_briefing_target_duration(): string {
         return '5_min';
     }
@@ -2327,22 +2511,29 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_text_provider'        => [ __CLASS__, 'sanitize_provider_id' ],
             'presshub_ai_briefing_text_model'           => [ __CLASS__, 'sanitize_model_string' ],
             'presshub_ai_briefing_sources'              => [ __CLASS__, 'sanitize_briefing_sources' ],
-            'presshub_ai_briefing_schedule_enabled'     => [ __CLASS__, 'sanitize_boolean' ],
-            'presshub_ai_briefing_harvest_time'         => [ __CLASS__, 'sanitize_harvest_time' ],
-            'presshub_ai_briefing_generation_time'      => [ __CLASS__, 'sanitize_generation_time' ],
-            'presshub_ai_harvest_time_budget'           => [ __CLASS__, 'sanitize_harvest_time_budget' ],
-            'presshub_ai_qa_include_briefings'          => [ __CLASS__, 'sanitize_checkbox' ],
-            'presshub_ai_qa_briefing_prompt'            => [ __CLASS__, 'sanitize_qa_prompt' ],
+            'presshub_ai_briefing_schedule_enabled'        => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_briefing_harvest_time'            => [ __CLASS__, 'sanitize_harvest_time' ],
+            'presshub_ai_briefing_generation_time'         => [ __CLASS__, 'sanitize_generation_time' ],
+            'presshub_ai_briefing_noon_schedule_enabled'   => [ __CLASS__, 'sanitize_briefing_noon_schedule_enabled' ],
+            'presshub_ai_briefing_noon_harvest_time'       => [ __CLASS__, 'sanitize_briefing_noon_harvest_time' ],
+            'presshub_ai_briefing_noon_generation_time'    => [ __CLASS__, 'sanitize_briefing_noon_generation_time' ],
+            'presshub_ai_harvest_time_budget'              => [ __CLASS__, 'sanitize_harvest_time_budget' ],
+            'presshub_ai_qa_include_briefings'             => [ __CLASS__, 'sanitize_checkbox' ],
+            'presshub_ai_qa_briefing_prompt'               => [ __CLASS__, 'sanitize_qa_prompt' ],
             // Issue #61 — Settings-First: curation LLM context cap knobs.
-            'presshub_ai_curation_max_articles'          => [ __CLASS__, 'sanitize_curation_max_articles' ],
-            'presshub_ai_curation_max_chars_per_article' => [ __CLASS__, 'sanitize_curation_max_chars_per_article' ],
-            'presshub_ai_briefing_text_category'        => [ __CLASS__, 'sanitize_category_id' ],
-            'presshub_ai_briefing_text_status'          => [ __CLASS__, 'sanitize_briefing_status' ],
+            'presshub_ai_curation_max_articles'             => [ __CLASS__, 'sanitize_curation_max_articles' ],
+            'presshub_ai_curation_max_chars_per_article'    => [ __CLASS__, 'sanitize_curation_max_chars_per_article' ],
+            'presshub_ai_briefing_text_category'           => [ __CLASS__, 'sanitize_category_id' ],
+            'presshub_ai_briefing_text_status'             => [ __CLASS__, 'sanitize_briefing_status' ],
             // Issue #65 — Settings-First: title prefix and date format
             // for the generated Text Story post.
-            'presshub_ai_briefing_text_title_prefix'       => [ __CLASS__, 'sanitize_briefing_text_title_prefix' ],
-            'presshub_ai_briefing_text_title_date_format'  => [ __CLASS__, 'sanitize_briefing_text_title_date_format' ],
-            'presshub_ai_briefing_text_preset'          => [ __CLASS__, 'sanitize_preset_slug' ],
+            'presshub_ai_briefing_text_title_prefix'          => [ __CLASS__, 'sanitize_briefing_text_title_prefix' ],
+            'presshub_ai_briefing_text_title_date_format'     => [ __CLASS__, 'sanitize_briefing_text_title_date_format' ],
+            'presshub_ai_briefing_noon_text_title_prefix'     => [ __CLASS__, 'sanitize_briefing_noon_text_title_prefix' ],
+            'presshub_ai_briefing_noon_podcast_title_prefix'  => [ __CLASS__, 'sanitize_briefing_noon_podcast_title_prefix' ],
+            'presshub_ai_briefing_featured_image_ids'          => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
+            'presshub_ai_briefing_podcast_include_text'        => [ __CLASS__, 'sanitize_briefing_podcast_include_text' ],
+            'presshub_ai_briefing_text_preset'             => [ __CLASS__, 'sanitize_preset_slug' ],
             'presshub_ai_briefing_text_prompt'          => [ __CLASS__, 'sanitize_briefing_prompt' ],
             'presshub_ai_briefing_text_temperature'     => [ __CLASS__, 'sanitize_temperature' ],
             'presshub_ai_briefing_text_max_tokens'      => [ __CLASS__, 'sanitize_max_tokens' ],

@@ -21,15 +21,17 @@ class PressHub_AI_QA_Reviewer {
      *
      * @param string $content Article text content.
      * @param string $context Evaluation context: 'post' (default) or 'briefing'.
-     * @return array [ 'passed' => bool, 'score' => int, 'feedback' => string, 'error' => string|null ]
+     * @return array [ 'passed' => bool, 'score' => int, 'feedback' => string, 'libel_risk' => string, 'legal_concerns' => string, 'error' => string|null ]
      */
     public static function evaluate_content( string $content, string $context = 'post' ): array {
         if ( '' === trim( $content ) ) {
             return [
-                'passed'   => false,
-                'score'    => 0,
-                'feedback' => __( 'Empty article content cannot be evaluated.', 'presshub-ai-editor' ),
-                'error'    => 'empty_content',
+                'passed'         => false,
+                'score'          => 0,
+                'feedback'       => __( 'Empty article content cannot be evaluated.', 'presshub-ai-editor' ),
+                'libel_risk'     => 'Low',
+                'legal_concerns' => 'None identified',
+                'error'          => 'empty_content',
             ];
         }
 
@@ -49,35 +51,48 @@ class PressHub_AI_QA_Reviewer {
                 );
             }
             return [
-                'passed'   => false,
-                'score'    => 0,
-                'feedback' => $scorecard->get_error_message(),
-                'error'    => $scorecard->get_error_code(),
+                'passed'         => false,
+                'score'          => 0,
+                'feedback'       => $scorecard->get_error_message(),
+                'libel_risk'     => 'Low',
+                'legal_concerns' => 'None identified',
+                'error'          => $scorecard->get_error_code(),
             ];
         }
 
-        $score    = isset( $scorecard['score'] ) ? (int) $scorecard['score'] : 0;
-        $feedback = isset( $scorecard['feedback'] ) ? (string) $scorecard['feedback'] : '';
-        $passed   = ( $score >= $min_score );
+        $score          = isset( $scorecard['score'] ) ? (int) $scorecard['score'] : 0;
+        $feedback       = isset( $scorecard['feedback'] ) ? (string) $scorecard['feedback'] : '';
+        $raw_libel      = isset( $scorecard['libel_risk'] ) ? trim( (string) $scorecard['libel_risk'] ) : 'Low';
+        $libel_risk     = in_array( ucfirst( strtolower( $raw_libel ) ), [ 'Low', 'Medium', 'High' ], true )
+            ? ucfirst( strtolower( $raw_libel ) )
+            : 'Low';
+        $legal_concerns = ( isset( $scorecard['legal_concerns'] ) && '' !== trim( (string) $scorecard['legal_concerns'] ) )
+            ? trim( (string) $scorecard['legal_concerns'] )
+            : 'None identified';
+        $passed         = ( $score >= $min_score );
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info(
                 sprintf( 'AI QA evaluation completed (%s): score %d/100 (threshold: %d) -> %s', $context, $score, $min_score, $passed ? 'PASS' : 'FAIL' ),
                 [
-                    'context'   => $context,
-                    'score'     => $score,
-                    'threshold' => $min_score,
-                    'passed'    => $passed,
-                    'feedback'  => $feedback,
+                    'context'        => $context,
+                    'score'          => $score,
+                    'threshold'      => $min_score,
+                    'passed'         => $passed,
+                    'feedback'       => $feedback,
+                    'libel_risk'     => $libel_risk,
+                    'legal_concerns' => $legal_concerns,
                 ]
             );
         }
 
         return [
-            'passed'   => $passed,
-            'score'    => $score,
-            'feedback' => $feedback,
-            'error'    => null,
+            'passed'         => $passed,
+            'score'          => $score,
+            'feedback'       => $feedback,
+            'libel_risk'     => $libel_risk,
+            'legal_concerns' => $legal_concerns,
+            'error'          => null,
         ];
     }
 
@@ -87,15 +102,17 @@ class PressHub_AI_QA_Reviewer {
      *
      * @param WP_Post|object $post    WordPress post object.
      * @param string         $context Evaluation context: 'post' (default) or 'briefing'.
-     * @return array Evaluation result with 'passed', 'score', 'feedback'.
+     * @return array Evaluation result with 'passed', 'score', 'feedback', 'libel_risk', 'legal_concerns'.
      */
     public static function evaluate_post( $post, string $context = 'post' ): array {
         if ( ! is_object( $post ) || empty( $post->ID ) ) {
             return [
-                'passed'   => false,
-                'score'    => 0,
-                'feedback' => __( 'Invalid post object.', 'presshub-ai-editor' ),
-                'error'    => 'invalid_post',
+                'passed'         => false,
+                'score'          => 0,
+                'feedback'       => __( 'Invalid post object.', 'presshub-ai-editor' ),
+                'libel_risk'     => 'Low',
+                'legal_concerns' => 'None identified',
+                'error'          => 'invalid_post',
             ];
         }
 
@@ -109,14 +126,23 @@ class PressHub_AI_QA_Reviewer {
 
         // If content hasn't changed and we have a valid scorecard, reuse it
         if ( $cached_hash === $content_hash && is_array( $existing_scorecard ) && isset( $existing_scorecard['score'] ) ) {
-            $score    = (int) $existing_scorecard['score'];
-            $feedback = (string) ( $existing_scorecard['feedback'] ?? '' );
+            $score          = (int) $existing_scorecard['score'];
+            $feedback       = (string) ( $existing_scorecard['feedback'] ?? '' );
+            $raw_libel      = isset( $existing_scorecard['libel_risk'] ) ? trim( (string) $existing_scorecard['libel_risk'] ) : 'Low';
+            $libel_risk     = in_array( ucfirst( strtolower( $raw_libel ) ), [ 'Low', 'Medium', 'High' ], true )
+                ? ucfirst( strtolower( $raw_libel ) )
+                : 'Low';
+            $legal_concerns = ( isset( $existing_scorecard['legal_concerns'] ) && '' !== trim( (string) $existing_scorecard['legal_concerns'] ) )
+                ? trim( (string) $existing_scorecard['legal_concerns'] )
+                : 'None identified';
             return [
-                'passed'   => ( $score >= $min_score ),
-                'score'    => $score,
-                'feedback' => $feedback,
-                'error'    => null,
-                'cached'   => true,
+                'passed'         => ( $score >= $min_score ),
+                'score'          => $score,
+                'feedback'       => $feedback,
+                'libel_risk'     => $libel_risk,
+                'legal_concerns' => $legal_concerns,
+                'error'          => null,
+                'cached'         => true,
             ];
         }
 
@@ -124,8 +150,10 @@ class PressHub_AI_QA_Reviewer {
 
         // Persist scorecard and content hash
         update_post_meta( $post_id, self::META_SCORECARD, [
-            'score'    => $result['score'],
-            'feedback' => $result['feedback'],
+            'score'          => $result['score'],
+            'feedback'       => $result['feedback'],
+            'libel_risk'     => $result['libel_risk'],
+            'legal_concerns' => $result['legal_concerns'],
         ] );
         update_post_meta( $post_id, self::META_CONTENT_HASH, $content_hash );
 
@@ -175,12 +203,24 @@ class PressHub_AI_QA_Reviewer {
             }
         }
 
-        $score       = isset( $scorecard['score'] ) ? (int) $scorecard['score'] : 0;
-        $min_score   = PressHub_AI_Settings_Storage::get_qa_min_score();
-        $feedback    = isset( $scorecard['feedback'] ) ? (string) $scorecard['feedback'] : __( 'No critique provided.', 'presshub-ai-editor' );
-        $edit_url    = admin_url( sprintf( 'post.php?post=%d&action=edit', $post_id ) );
-        $post_title  = ! empty( $post->post_title ) ? $post->post_title : sprintf( __( '(Post #%d)', 'presshub-ai-editor' ), $post_id );
-        $site_name   = function_exists( 'wp_specialchars_decode' ) ? wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) : get_option( 'blogname' );
+        $score          = isset( $scorecard['score'] ) ? (int) $scorecard['score'] : 0;
+        $min_score      = PressHub_AI_Settings_Storage::get_qa_min_score();
+        $feedback       = isset( $scorecard['feedback'] ) ? (string) $scorecard['feedback'] : __( 'No critique provided.', 'presshub-ai-editor' );
+        $libel_risk     = isset( $scorecard['libel_risk'] ) ? trim( (string) $scorecard['libel_risk'] ) : '';
+        $legal_concerns = isset( $scorecard['legal_concerns'] ) ? trim( (string) $scorecard['legal_concerns'] ) : '';
+        $edit_url       = admin_url( sprintf( 'post.php?post=%d&action=edit', $post_id ) );
+        $post_title     = ! empty( $post->post_title ) ? $post->post_title : sprintf( __( '(Post #%d)', 'presshub-ai-editor' ), $post_id );
+        $site_name      = function_exists( 'wp_specialchars_decode' ) ? wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) : get_option( 'blogname' );
+
+        $libel_section = '';
+        if ( '' !== $libel_risk && 'None identified' !== $libel_risk ) {
+            $libel_section = sprintf( "Libel Risk: %s\n", $libel_risk );
+        }
+
+        $legal_section = '';
+        if ( '' !== $legal_concerns && 'None identified' !== $legal_concerns ) {
+            $legal_section = sprintf( "\nLegal Concerns:\n%s\n", $legal_concerns );
+        }
 
         if ( 'briefing' === $context ) {
             $subject = sprintf( '[%s] Daily Briefing QA Review Failed (Score: %d/%d)', $site_name, $score, $min_score );
@@ -196,9 +236,11 @@ class PressHub_AI_QA_Reviewer {
             "Article: %s\n" .
             "Author: %s\n" .
             "Score: %d / 100 (Minimum required: %d)\n" .
+            "%s" .
             "Status: Pending Review\n" .
             "--------------------------------------------------\n\n" .
-            "AI Editorial Critique:\n%s\n\n" .
+            "AI Editorial Critique:\n%s\n" .
+            "%s\n" .
             "Review and edit the post here:\n%s\n\n" .
             "--\nPressHub AI Editorial Co-Pilot",
             $intro,
@@ -206,7 +248,9 @@ class PressHub_AI_QA_Reviewer {
             $author_name,
             $score,
             $min_score,
+            $libel_section,
             $feedback,
+            $legal_section,
             $edit_url
         );
 

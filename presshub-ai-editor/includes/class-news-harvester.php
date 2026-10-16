@@ -1030,9 +1030,10 @@ class PressHub_AI_News_Harvester {
      * @param array|string   $source      Source config array, URL string, or source ID.
      * @param string         $date        Target date in YYYY-MM-DD format (defaults to current date).
      * @param int|float|null $time_budget Optional time budget in seconds.
+     * @param string         $edition     Briefing edition ('morning' or 'noon').
      * @return array Harvest payload snapshot with diagnostics and articles.
      */
-    public function harvest_source( $source, string $date = '', $time_budget = null ): array {
+    public function harvest_source( $source, string $date = '', $time_budget = null, string $edition = 'morning' ): array {
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
@@ -1106,9 +1107,10 @@ class PressHub_AI_News_Harvester {
             : $this->get_max_links_per_source();
 
         // Load existing snapshot to preserve existing articles
-        $existing = $this->load_snapshot( $date );
+        $existing = $this->load_snapshot( $date, $edition );
         $payload  = ( is_array( $existing ) && ! empty( $existing ) ) ? $existing : [
             'date'               => $date,
+            'edition'            => $edition,
             'harvested_at'       => gmdate( 'c' ),
             'sources'            => [],
             'configured_sources' => [],
@@ -1119,6 +1121,7 @@ class PressHub_AI_News_Harvester {
             'budget_exceeded'    => false,
             'harvested_count'    => 0,
         ];
+        $payload['edition'] = $edition;
 
         if ( ! in_array( $source_url, $payload['sources'] ?? [], true ) ) {
             $payload['sources'][] = $source_url;
@@ -1322,7 +1325,7 @@ class PressHub_AI_News_Harvester {
             );
         }
 
-        $this->save_snapshot( $date, $payload );
+        $this->save_snapshot( $date, $payload, $edition );
 
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
             PressHub_AI_Token_Logger::log_scrape_request(
@@ -1335,6 +1338,7 @@ class PressHub_AI_News_Harvester {
                 [
                     'source_url'      => $source_url,
                     'date'            => $date,
+                    'edition'         => $edition,
                     'budget_exceeded' => $budget_exceeded,
                     'time_budget_sec' => $time_budget,
                 ]
@@ -1359,9 +1363,10 @@ class PressHub_AI_News_Harvester {
      * @param string[]|array $sources     List of news website URLs or structured source configs.
      * @param string         $date        Target date in YYYY-MM-DD format (defaults to current date).
      * @param int|float|null $time_budget Optional time budget in seconds.
+     * @param string         $edition     Briefing edition ('morning' or 'noon').
      * @return array Harvest payload with diagnostics and articles.
      */
-    public function harvest_all( $sources, string $date = '', $time_budget = null ): array {
+    public function harvest_all( $sources, string $date = '', $time_budget = null, string $edition = 'morning' ): array {
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
@@ -1437,6 +1442,7 @@ class PressHub_AI_News_Harvester {
 
         $payload = [
             'date'               => $date,
+            'edition'            => $edition,
             'harvested_at'       => gmdate( 'c' ),
             'sources'            => $source_urls,
             'configured_sources' => $structured_sources,
@@ -1449,7 +1455,7 @@ class PressHub_AI_News_Harvester {
         ];
 
         // Preserve any existing manual uploads in snapshot
-        $existing_snapshot = $this->load_snapshot( $date );
+        $existing_snapshot = $this->load_snapshot( $date, $edition );
         if ( is_array( $existing_snapshot ) && ! empty( $existing_snapshot['articles'] ) ) {
             foreach ( $existing_snapshot['articles'] as $art ) {
                 if ( ! empty( $art['is_manual'] ) ) {
@@ -1653,7 +1659,7 @@ class PressHub_AI_News_Harvester {
             );
         }
 
-        $this->save_snapshot( $date, $payload );
+        $this->save_snapshot( $date, $payload, $edition );
 
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
             PressHub_AI_Token_Logger::log_scrape_request(
@@ -1666,6 +1672,7 @@ class PressHub_AI_News_Harvester {
                 [
                     'blocked_sources' => count( $payload['blocked_sources'] ),
                     'date'            => $date,
+                    'edition'         => $edition,
                     'budget_exceeded' => $budget_exceeded,
                     'time_budget_sec' => $time_budget,
                 ]
@@ -1744,17 +1751,19 @@ class PressHub_AI_News_Harvester {
      *
      * @param array  $uploaded_articles Array of upload items with 'title', 'content', 'source', 'url'.
      * @param string $date              Target date in YYYY-MM-DD format.
+     * @param string $edition           Briefing edition ('morning' or 'noon').
      * @return array Updated payload array.
      */
-    public function handle_manual_upload( array $uploaded_articles, string $date = '' ): array {
+    public function handle_manual_upload( array $uploaded_articles, string $date = '', string $edition = 'morning' ): array {
         if ( empty( $date ) ) {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
-        $payload = $this->load_snapshot( $date );
+        $payload = $this->load_snapshot( $date, $edition );
         if ( ! is_array( $payload ) || empty( $payload ) ) {
             $payload = [
                 'date'            => $date,
+                'edition'         => $edition,
                 'harvested_at'    => gmdate( 'c' ),
                 'sources'         => [],
                 'blocked_sources' => [],
@@ -1763,6 +1772,7 @@ class PressHub_AI_News_Harvester {
                 'articles'        => [],
             ];
         }
+        $payload['edition'] = $edition;
 
         $existing_articles = $payload['articles'] ?? [];
         $existing_keys     = [];
@@ -1810,7 +1820,7 @@ class PressHub_AI_News_Harvester {
             ];
         }
 
-        $this->save_snapshot( $date, $payload );
+        $this->save_snapshot( $date, $payload, $edition );
         return $payload;
     }
 
@@ -1832,31 +1842,38 @@ class PressHub_AI_News_Harvester {
     /**
      * Get full file path for the raw-articles.json snapshot.
      *
-     * @param string $date Date string YYYY-MM-DD.
+     * @param string $date    Date string YYYY-MM-DD.
+     * @param string $edition Briefing edition ('morning' or 'noon').
      * @return string Full file path.
      */
-    public function get_snapshot_path( string $date ): string {
-        return trailingslashit( $this->get_snapshot_dir( $date ) ) . 'raw-articles.json';
+    public function get_snapshot_path( string $date, string $edition = 'morning' ): string {
+        $filename = 'noon' === $edition ? 'raw-articles-noon.json' : 'raw-articles.json';
+        return trailingslashit( $this->get_snapshot_dir( $date ) ) . $filename;
     }
 
     /**
      * Save daily snapshot payload to disk as JSON and in transients.
      *
-     * @param string $date Date string YYYY-MM-DD.
-     * @param array  $data Snapshot data.
+     * @param string $date    Date string YYYY-MM-DD.
+     * @param array  $data    Snapshot data.
+     * @param string $edition Briefing edition ('morning' or 'noon').
      * @return bool True on success, false on failure.
      */
-    public function save_snapshot( string $date, array $data ): bool {
+    public function save_snapshot( string $date, array $data, string $edition = 'morning' ): bool {
         $clean_date = preg_replace( '/[^0-9\-]/', '', $date );
         if ( empty( $clean_date ) ) {
             $clean_date = gmdate( 'Y-m-d' );
         }
 
+        $transient_key = 'noon' === $edition
+            ? 'presshub_ai_harvest_snapshot_noon_' . $clean_date
+            : 'presshub_ai_harvest_snapshot_' . $clean_date;
+
         if ( function_exists( 'set_transient' ) ) {
-            set_transient( 'presshub_ai_harvest_snapshot_' . $clean_date, $data, DAY_IN_SECONDS );
+            set_transient( $transient_key, $data, DAY_IN_SECONDS );
         }
 
-        $path = $this->get_snapshot_path( $date );
+        $path = $this->get_snapshot_path( $date, $edition );
         $dir  = dirname( $path );
 
         if ( ! is_dir( $dir ) ) {
@@ -1878,16 +1895,17 @@ class PressHub_AI_News_Harvester {
     /**
      * Load daily snapshot payload from disk or transient cache.
      *
-     * @param string $date Date string YYYY-MM-DD.
+     * @param string $date    Date string YYYY-MM-DD.
+     * @param string $edition Briefing edition ('morning' or 'noon').
      * @return array|null Decoded payload array or null if not found.
      */
-    public function load_snapshot( string $date ): ?array {
+    public function load_snapshot( string $date, string $edition = 'morning' ): ?array {
         $clean_date = preg_replace( '/[^0-9\-]/', '', $date );
         if ( empty( $clean_date ) ) {
             $clean_date = gmdate( 'Y-m-d' );
         }
 
-        $path = $this->get_snapshot_path( $date );
+        $path = $this->get_snapshot_path( $date, $edition );
         if ( file_exists( $path ) ) {
             $content = @file_get_contents( $path );
             if ( false !== $content && '' !== trim( $content ) ) {
@@ -1898,8 +1916,12 @@ class PressHub_AI_News_Harvester {
             }
         }
 
+        $transient_key = 'noon' === $edition
+            ? 'presshub_ai_harvest_snapshot_noon_' . $clean_date
+            : 'presshub_ai_harvest_snapshot_' . $clean_date;
+
         if ( function_exists( 'get_transient' ) ) {
-            $cached = get_transient( 'presshub_ai_harvest_snapshot_' . $clean_date );
+            $cached = get_transient( $transient_key );
             if ( is_array( $cached ) && ! empty( $cached ) ) {
                 return $cached;
             }

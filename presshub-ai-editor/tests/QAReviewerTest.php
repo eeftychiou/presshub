@@ -95,8 +95,10 @@ class QAReviewerTest {
         // Seed an existing scorecard with score 85 and corresponding hash
         $content_hash = md5( trim( $post->post_content ) );
         update_post_meta( $post_id, PressHub_AI_QA_Reviewer::META_SCORECARD, [
-            'score'    => 85,
-            'feedback' => 'Well-written and concise report.',
+            'score'          => 85,
+            'feedback'       => 'Well-written and concise report.',
+            'libel_risk'     => 'Low',
+            'legal_concerns' => 'None identified',
         ] );
         update_post_meta( $post_id, PressHub_AI_QA_Reviewer::META_CONTENT_HASH, $content_hash );
 
@@ -107,15 +109,29 @@ class QAReviewerTest {
         if ( ! $eval['passed'] || $eval['score'] !== 85 ) {
             $failures[] = 'evaluate_post should report passed=true for score 85 (threshold 80).';
         }
+        if ( ( $eval['libel_risk'] ?? '' ) !== 'Low' ) {
+            $failures[] = 'evaluate_post should return cached libel_risk (Low); got: ' . ( $eval['libel_risk'] ?? 'null' );
+        }
+        if ( ( $eval['legal_concerns'] ?? '' ) !== 'None identified' ) {
+            $failures[] = 'evaluate_post should return cached legal_concerns (None identified); got: ' . ( $eval['legal_concerns'] ?? 'null' );
+        }
 
-        // Now test threshold failure with cached score 75
+        // Now test threshold failure with cached score 75 and libel risk
         update_post_meta( $post_id, PressHub_AI_QA_Reviewer::META_SCORECARD, [
-            'score'    => 75,
-            'feedback' => 'Needs better sourcing.',
+            'score'          => 75,
+            'feedback'       => 'Needs better sourcing.',
+            'libel_risk'     => 'Medium',
+            'legal_concerns' => 'Unverified claims regarding company executives.',
         ] );
         $eval_fail = PressHub_AI_QA_Reviewer::evaluate_post( $post );
         if ( $eval_fail['passed'] !== false || $eval_fail['score'] !== 75 ) {
             $failures[] = 'evaluate_post should report passed=false for score 75 (threshold 80).';
+        }
+        if ( ( $eval_fail['libel_risk'] ?? '' ) !== 'Medium' ) {
+            $failures[] = 'evaluate_post should return cached libel_risk (Medium); got: ' . ( $eval_fail['libel_risk'] ?? 'null' );
+        }
+        if ( ( $eval_fail['legal_concerns'] ?? '' ) !== 'Unverified claims regarding company executives.' ) {
+            $failures[] = 'evaluate_post should return cached legal_concerns; got: ' . ( $eval_fail['legal_concerns'] ?? 'null' );
         }
 
         // -------------------------------------------------------------
@@ -136,8 +152,10 @@ class QAReviewerTest {
         $GLOBALS['POSTS_STORE'][ $post_id ] = $post_obj;
 
         $scorecard = [
-            'score'    => 65,
-            'feedback' => 'Lacks structure and attribution.',
+            'score'          => 65,
+            'feedback'       => 'Lacks structure and attribution.',
+            'libel_risk'     => 'High',
+            'legal_concerns' => 'Contains unverified accusations of fraud.',
         ];
 
         // First notification should be dispatched
@@ -158,6 +176,12 @@ class QAReviewerTest {
             }
             if ( false === strpos( $email['message'], 'Lacks structure and attribution.' ) ) {
                 $failures[] = 'Notification body should contain AI feedback; got: ' . $email['message'];
+            }
+            if ( false === strpos( $email['message'], 'Libel Risk: High' ) ) {
+                $failures[] = 'Notification body should contain Libel Risk: High; got: ' . $email['message'];
+            }
+            if ( false === strpos( $email['message'], 'Contains unverified accusations of fraud.' ) ) {
+                $failures[] = 'Notification body should contain Legal Concerns text; got: ' . $email['message'];
             }
         }
 
@@ -205,7 +229,7 @@ class QAReviewerTest {
             return [
                 'response' => [ 'code' => 200 ],
                 'body'     => json_encode( [
-                    'choices' => [ [ 'message' => [ 'content' => '{"score":88,"feedback":"Solid."}' ] ] ],
+                    'choices' => [ [ 'message' => [ 'content' => '{"score":88,"libel_risk":"Low","feedback":"Solid.","legal_concerns":"None identified"}' ] ] ],
                 ] ),
             ];
         };
@@ -214,6 +238,12 @@ class QAReviewerTest {
         $res_post = PressHub_AI_QA_Reviewer::evaluate_content( 'Article content here.', 'post' );
         if ( ! $res_post['passed'] || $res_post['score'] !== 88 ) {
             $failures[] = 'evaluate_content with post context failed.';
+        }
+        if ( ( $res_post['libel_risk'] ?? '' ) !== 'Low' ) {
+            $failures[] = 'evaluate_content should return libel_risk (Low); got: ' . ( $res_post['libel_risk'] ?? 'null' );
+        }
+        if ( ( $res_post['legal_concerns'] ?? '' ) !== 'None identified' ) {
+            $failures[] = 'evaluate_content should return legal_concerns (None identified); got: ' . ( $res_post['legal_concerns'] ?? 'null' );
         }
         $user_msg_post = $last_payload['messages'][1]['content'] ?? '';
         if ( false === strpos( $user_msg_post, 'Review this news article draft' ) ) {
@@ -236,6 +266,72 @@ class QAReviewerTest {
         $user_msg_custom = $last_payload['messages'][1]['content'] ?? '';
         if ( false === strpos( $user_msg_custom, 'CUSTOM ARTICLE PROMPT TEMPLATE: Custom article text.' ) ) {
             $failures[] = 'custom article prompt override failed to apply; got: ' . $user_msg_custom;
+        }
+
+        // -------------------------------------------------------------
+        // Case 6: 4-Key Scoring Persistence and Libel Risk Clamping
+        // -------------------------------------------------------------
+        self::reset_env();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']  = 'mock-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
+
+        $GLOBALS['CAPTURE_FILTER'] = function( $existing, $req ) {
+            return [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [
+                    'choices' => [ [ 'message' => [ 'content' => '{"score":92,"libel_risk":"medium","feedback":"Well-researched story.","legal_concerns":"Verify the source document for quote on line 4."}' ] ] ],
+                ] ),
+            ];
+        };
+
+        $post_id_fresh = 404;
+        $post_fresh = (object) [
+            'ID'           => $post_id_fresh,
+            'post_title'   => 'Investigation Report',
+            'post_content' => 'A detailed investigation into public procurement contracts.',
+            'post_author'  => 1,
+        ];
+        $GLOBALS['POSTS_STORE'][ $post_id_fresh ] = [
+            'ID'           => $post_id_fresh,
+            'post_title'   => 'Investigation Report',
+            'post_content' => 'A detailed investigation into public procurement contracts.',
+            'post_author'  => 1,
+        ];
+
+        $fresh_res = PressHub_AI_QA_Reviewer::evaluate_post( $post_fresh );
+        if ( ! $fresh_res['passed'] || $fresh_res['score'] !== 92 ) {
+            $failures[] = 'Fresh evaluate_post failed to return passed/score=92.';
+        }
+        if ( ( $fresh_res['libel_risk'] ?? '' ) !== 'Medium' ) {
+            $failures[] = 'Fresh evaluate_post should normalize "medium" to "Medium"; got: ' . ( $fresh_res['libel_risk'] ?? 'null' );
+        }
+        if ( ( $fresh_res['legal_concerns'] ?? '' ) !== 'Verify the source document for quote on line 4.' ) {
+            $failures[] = 'Fresh evaluate_post should return legal_concerns; got: ' . ( $fresh_res['legal_concerns'] ?? 'null' );
+        }
+
+        $saved_meta = $GLOBALS['POST_META_STORE'][ $post_id_fresh ][ PressHub_AI_QA_Reviewer::META_SCORECARD ] ?? [];
+        if ( ( $saved_meta['libel_risk'] ?? '' ) !== 'Medium' ) {
+            $failures[] = 'Post meta _presshub_ai_scorecard should store libel_risk=Medium; got: ' . var_export( $saved_meta, true );
+        }
+        if ( ( $saved_meta['legal_concerns'] ?? '' ) !== 'Verify the source document for quote on line 4.' ) {
+            $failures[] = 'Post meta _presshub_ai_scorecard should store legal_concerns; got: ' . var_export( $saved_meta, true );
+        }
+
+        // Test unrecognized libel_risk clamps to Low
+        $GLOBALS['CAPTURE_FILTER'] = function( $existing, $req ) {
+            return [
+                'response' => [ 'code' => 200 ],
+                'body'     => json_encode( [
+                    'choices' => [ [ 'message' => [ 'content' => '{"score":85,"libel_risk":"CriticalHazard","feedback":"Check.","legal_concerns":""}' ] ] ],
+                ] ),
+            ];
+        };
+        $clamp_res = PressHub_AI_QA_Reviewer::evaluate_content( 'Sample content for clamp test.' );
+        if ( ( $clamp_res['libel_risk'] ?? '' ) !== 'Low' ) {
+            $failures[] = 'Unrecognized libel_risk should clamp to "Low"; got: ' . ( $clamp_res['libel_risk'] ?? 'null' );
+        }
+        if ( ( $clamp_res['legal_concerns'] ?? '' ) !== 'None identified' ) {
+            $failures[] = 'Empty legal_concerns should default to "None identified"; got: ' . ( $clamp_res['legal_concerns'] ?? 'null' );
         }
 
         // -------------------------------------------------------------
