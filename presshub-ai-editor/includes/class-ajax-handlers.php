@@ -846,10 +846,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
     // ------------------------------------------------------------------
 
     /**
-     * Capability required for Daily Briefing Hub actions.
+     * Capability required for Daily Briefing Hub actions (Editors and above).
      */
     private function briefing_capability(): string {
-        return (string) apply_filters( 'presshub_ai_briefing_cap', 'edit_posts' );
+        if ( class_exists( 'PressHub_AI_Briefing_Admin' ) && method_exists( 'PressHub_AI_Briefing_Admin', 'capability' ) ) {
+            return PressHub_AI_Briefing_Admin::capability();
+        }
+        return (string) apply_filters( 'presshub_ai_briefing_cap', 'edit_others_posts' );
     }
 
     /**

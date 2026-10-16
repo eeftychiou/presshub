@@ -76,23 +76,41 @@
 }
 
 /* ------------------------------------------------------------------
- * Draft preview/diff modal (LF-1 / F-02 + F-27).
+ * Modal visibility & backdrop standards (LF-1 / F-02 + F-27).
+ * Every modal is hidden by default and only shown when .is-open is added
+ * or when explicitly opened.
+ * The HTML [hidden] attribute ALWAYS forces display: none !important.
  * ------------------------------------------------------------------ */
+[hidden],
+.presshub-modal-backdrop[hidden],
+.presshub-modal[hidden],
+#presshub-draft-modal[hidden],
+#presshub-draft-diff-modal[hidden] {
+    display: none !important;
+}
+
 .presshub-modal-backdrop {
     position: fixed;
     top: 0;
+    left: 0;
     right: 0;
     bottom: 0;
-    left: 0;
     background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
     z-index: 100000;
     display: none;
     align-items: center;
     justify-content: center;
 }
+
 .presshub-modal-backdrop.is-open {
     display: flex;
 }
+
+.presshub-modal-backdrop:not(.is-open) {
+    display: none;
+}
+
 .presshub-modal {
     background: #fff;
     max-width: 720px;
@@ -100,8 +118,17 @@
     max-height: 85vh;
     display: flex;
     flex-direction: column;
-    border-radius: 4px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    animation: presshubModalSlide 0.2s ease-out;
+}
+
+#presshub-draft-modal .presshub-modal,
+#presshub-draft-diff-modal .presshub-modal,
+.presshub-draft-diff-modal .presshub-modal {
+    max-width: 720px;
+    width: 92%;
+    max-height: 85vh;
 }
 .presshub-modal h2 {
     margin: 0;
@@ -857,38 +884,10 @@ body.auto-fold .presshub-sticky-save-bar {
 /* ==========================================================================
    Provider Modal Dialog
    ========================================================================== */
-.presshub-modal-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
-    z-index: 100000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(2px);
-}
-
-.presshub-modal {
-    background: #ffffff;
-    border-radius: 8px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+#presshub-provider-modal .presshub-modal,
+.presshub-provider-modal-content {
     width: 620px;
     max-width: 90vw;
-    display: flex;
-    flex-direction: column;
-    animation: presshubModalSlide 0.2s ease-out;
-}
-
-@keyframes presshubModalSlide {
-    from { opacity: 0; transform: translateY(15px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-body.presshub-modal-open {
-    overflow: hidden;
 }
 
 /* ==========================================================================

@@ -352,9 +352,9 @@ for ( $i = 1; $i <= 100; $i++ ) {
     'articles'        => $render_articles,
 ] );
 
-// Need edit_posts capability to render the page (render_hub_page
+// Need edit_others_posts capability (editors and above) to render the page (render_hub_page
 // wp_die()s without it, matching the real WordPress behaviour).
-$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'edit_others_posts' ];
 $briefing_admin = new PressHub_AI_Briefing_Admin();
 ob_start();
 $briefing_admin->render_hub_page( $render_test_date );

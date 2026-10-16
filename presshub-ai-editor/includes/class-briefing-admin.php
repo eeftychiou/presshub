@@ -247,10 +247,12 @@ class PressHub_AI_Briefing_Admin {
     /**
      * Capability required to access Daily Briefing Hub.
      *
+     * Available only to editors and above (`edit_others_posts`), not simple authors (`edit_posts`).
+     *
      * @return string Required capability.
      */
-    public function capability(): string {
-        return (string) apply_filters( 'presshub_ai_briefing_cap', 'edit_posts' );
+    public static function capability(): string {
+        return (string) apply_filters( 'presshub_ai_briefing_cap', 'edit_others_posts' );
     }
 
     /**
@@ -272,12 +274,12 @@ class PressHub_AI_Briefing_Admin {
      * deliberately left untouched. Editors reach it via the existing
      * `curation_settings_url` deep-link exposed in the JS payload.
      *
-     * Capability gating is preserved verbatim: the hub uses
+     * Capability gating: the hub uses
      * {@see self::capability()} (filterable `presshub_ai_briefing_cap`,
-     * default `edit_posts`).
+     * default `edit_others_posts` for editors and above).
      */
     public function add_admin_menu() {
-        $cap      = $this->capability();
+        $cap      = self::capability();
         $icon     = 'dashicons-microphone';
         $position = 26; // After Comments (25), before Appearance (60).
 
@@ -311,6 +313,10 @@ class PressHub_AI_Briefing_Admin {
      */
     public function enqueue_assets( $hook ) {
         if ( false === strpos( (string) $hook, 'presshub-ai-briefing-hub' ) ) {
+            return;
+        }
+
+        if ( ! current_user_can( self::capability() ) ) {
             return;
         }
 
@@ -780,7 +786,7 @@ class PressHub_AI_Briefing_Admin {
      * @param string $date Target date string (YYYY-MM-DD).
      */
     public function render_hub_page( string $date = '' ) {
-        if ( ! current_user_can( $this->capability() ) ) {
+        if ( ! current_user_can( self::capability() ) ) {
             wp_die( __( 'You do not have permission to access the Daily Briefing Hub.', 'presshub-ai-editor' ) );
         }
 

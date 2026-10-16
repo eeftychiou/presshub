@@ -64,8 +64,8 @@ class DailyBriefingAdminTest
             if ( false === strpos( $briefing_top['menu_title'], 'Daily Briefing Hub' ) ) {
                 $failures[] = 'Top-level menu title should contain "Daily Briefing Hub"; got: ' . $briefing_top['menu_title'];
             }
-            if ( $briefing_top['capability'] !== 'edit_posts' ) {
-                $failures[] = 'Top-level capability should default to edit_posts; got: ' . $briefing_top['capability'];
+            if ( $briefing_top['capability'] !== 'edit_others_posts' ) {
+                $failures[] = 'Top-level capability should default to edit_others_posts; got: ' . $briefing_top['capability'];
             }
             if ( empty( $briefing_top['icon_url'] ) ) {
                 $failures[] = 'Top-level icon_url must be set (dashicons-* expected); got: ' . ( $briefing_top['icon_url'] ?? '' );
@@ -137,11 +137,20 @@ class DailyBriefingAdminTest
             $failures[] = 'Assets must not be enqueued on non-briefing pages (e.g. edit.php).';
         }
 
+        // Must not enqueue for simple authors (edit_posts only, lacking edit_others_posts)
+        self::reset_world();
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $admin = new PressHub_AI_Briefing_Admin();
+        $admin->enqueue_assets( 'toplevel_page_presshub-ai-briefing-hub' );
+        if ( ! empty( $GLOBALS['ENQUEUED_SCRIPTS'] ) || ! empty( $GLOBALS['ENQUEUED_STYLES'] ) ) {
+            $failures[] = 'Assets must not be enqueued for simple authors without edit_others_posts capability.';
+        }
+
         // =========================================================================
         // Case 3: Daily Briefing Hub Page Rendering
         // =========================================================================
         self::reset_world();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $test_date = '2026-08-26';
         $admin = new PressHub_AI_Briefing_Admin();
 
@@ -229,7 +238,7 @@ class DailyBriefingAdminTest
             }
         }
 
-        // Permission denied check
+        // Permission denied check (empty caps)
         self::reset_world();
         $GLOBALS['CURRENT_USER_CAPS'] = [];
         $admin = new PressHub_AI_Briefing_Admin();
@@ -240,7 +249,21 @@ class DailyBriefingAdminTest
             $thrown = true;
         }
         if ( ! $thrown ) {
-            $failures[] = 'render_hub_page() must reject users without edit_posts capability.';
+            $failures[] = 'render_hub_page() must reject users without edit_others_posts capability.';
+        }
+
+        // Permission denied check (simple author: edit_posts only, lacks edit_others_posts)
+        self::reset_world();
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $admin = new PressHub_AI_Briefing_Admin();
+        $thrown = false;
+        try {
+            $admin->render_hub_page( $test_date );
+        } catch ( Throwable $e ) {
+            $thrown = true;
+        }
+        if ( ! $thrown ) {
+            $failures[] = 'render_hub_page() must reject simple authors (edit_posts only) lacking edit_others_posts capability.';
         }
 
         // =========================================================================
@@ -254,7 +277,7 @@ class DailyBriefingAdminTest
         //   (a) a server-side fallback that computes totals from $status['articles']
         //   (b) a JS boot call to updateSelectedCountBadge().
         self::reset_world();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
 
         $agg_test_date    = '2026-08-27';
         $agg_known_content = 'Ελληνική είδηση με πολλές λέπτομέρειες για να μετρηθεί σωστά το μήκος του κειμένου και να ελεγχθεί ο υπολογισμός λέξεων.';
@@ -435,7 +458,7 @@ class DailyBriefingAdminTest
         foreach ( $endpoints as $endpoint ) {
             self::reset_world();
             $GLOBALS['NONCE_VALID'] = false;
-            $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+            $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
             $thrown = false;
             try {
                 $ajax_handlers->{$endpoint}();
@@ -447,7 +470,7 @@ class DailyBriefingAdminTest
             }
         }
 
-        // Capability failure test for each endpoint
+        // Capability failure test for each endpoint: no capabilities
         foreach ( $endpoints as $endpoint ) {
             self::reset_world();
             $GLOBALS['NONCE_VALID'] = true;
@@ -462,7 +485,26 @@ class DailyBriefingAdminTest
                 }
             }
             if ( ! $thrown ) {
-                $failures[] = "AJAX endpoint {$endpoint} must reject requests without edit_posts capability.";
+                $failures[] = "AJAX endpoint {$endpoint} must reject requests without edit_others_posts capability.";
+            }
+        }
+
+        // Capability failure test for each endpoint: simple author (edit_posts only, lacking edit_others_posts)
+        foreach ( $endpoints as $endpoint ) {
+            self::reset_world();
+            $GLOBALS['NONCE_VALID'] = true;
+            $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ]; // simple author
+            $thrown = false;
+            try {
+                $ajax_handlers->{$endpoint}();
+            } catch ( Throwable $e ) {
+                $thrown = true;
+                if ( false === strpos( $e->getMessage(), 'Permission denied' ) ) {
+                    $failures[] = "AJAX endpoint {$endpoint} simple author failure should emit 'Permission denied'; got: " . $e->getMessage();
+                }
+            }
+            if ( ! $thrown ) {
+                $failures[] = "AJAX endpoint {$endpoint} must reject simple authors lacking edit_others_posts capability.";
             }
         }
 
@@ -471,7 +513,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date'] = $test_date;
 
         $response = self::execute_ajax( [ $ajax_handlers, 'briefing_get_status' ] );
@@ -484,7 +526,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date'] = $test_date;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_sources'] = 'https://www.tovima.gr';
 
@@ -511,7 +553,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date']   = $test_date;
         $_POST['script'] = "[Μαρία]: Νέο επεξεργασμένο κείμενο!\n[Νίκος]: Συμφωνώ απόλυτα!";
 
@@ -540,7 +582,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date']    = $test_date;
         $_POST['source']  = 'Kathimerini';
         $_POST['title']   = 'Χειροκίνητη Ανάλυση';
@@ -561,7 +603,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date'] = $test_date;
 
         // Ensure snapshot exists
@@ -592,7 +634,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date'] = $test_date;
 
         $GLOBALS['CAPTURE_FILTER'] = function( $result, $args ) {
@@ -616,7 +658,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key'] = 'test-gemini-key';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = 'gemini-2.5-flash-preview-tts';
         $_POST['date']   = $test_date;
@@ -654,7 +696,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date'] = $test_date;
         $_POST['selected_articles'] = [ 0, 2 ];
 
@@ -689,7 +731,7 @@ class DailyBriefingAdminTest
         // Test comma-separated string format
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date'] = $test_date;
         $_POST['selected_articles'] = '1';
 
@@ -723,7 +765,7 @@ class DailyBriefingAdminTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
         $_POST['date']              = $test_date;
         $_POST['context_mode']       = 'harvested_articles';
         $_POST['selected_articles'] = [ 0 ];
@@ -918,7 +960,7 @@ class DailyBriefingAdminTest
         $_GET                                = [];
         $_FILES                              = [];
         $GLOBALS['OPTIONS_STORE']            = [];
-        $GLOBALS['CURRENT_USER_CAPS']        = [ 'edit_posts', 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS']        = [ 'edit_posts', 'edit_others_posts', 'manage_options' ];
         $GLOBALS['CURRENT_USER_ID']          = 1;
         $GLOBALS['NONCE_VALID']              = true;
         $GLOBALS['SUBMENU_PAGES']            = [];

@@ -2,10 +2,10 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.3.5-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.4.2-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
-[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-73%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
+[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-76%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Jest Workflow Tests](https://img.shields.io/badge/Jest%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-workflow/tests/)
 [![CI](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml/badge.svg)](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-GPL--2.0--or--later-orange.svg)](presshub-ai-editor/presshub-ai-editor.php)
@@ -54,7 +54,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 ### 1. 📰 Automated Daily Briefing Pipeline
 - **Autonomous News Harvester (`PressHub_AI_News_Harvester`)**: Concurrently scrapes and processes articles from configured RSS feeds and direct web URLs. Features domain politeness delays, per-domain concurrency limits, total execution time budgets, lead-article extraction, and HTML sanitization.
 - **Intelligent News Curator (`PressHub_AI_News_Curator`)**: Evaluates harvested candidate stories using LLM analysis. Employs semantic article deduplication to prevent repetitive coverage, enforces strict token context limits, and produces comprehensive bilingual (Greek and English) daily briefings.
-- **Interactive Briefing Admin (`PressHub_AI_Briefing_Admin`)**: A dedicated WordPress administrative control center providing visibility into each pipeline stage (*Harvest → Curate → Audio/Podcast → Publish*), stage event timelines, manual triggers, single-stage regeneration, and full timezone-aware scheduling.
+- **Interactive Briefing Admin (`PressHub_AI_Briefing_Admin`)**: A dedicated WordPress administrative control center providing visibility into each pipeline stage (*Harvest → Curate → Audio/Podcast → Publish*), stage event timelines, manual triggers, single-stage regeneration, and full timezone-aware scheduling. Access is strictly role-gated to Editors and above (`edit_others_posts`, filterable via `presshub_ai_briefing_cap`).
 
 ### 2. 🎙️ Podcast Producer & TTS Audio Studio
 - **Multi-Host Script Engine (`PressHub_AI_Podcast_Producer`)**: Automatically transforms curated news briefings into dynamic, conversational podcast scripts between multiple hosts:

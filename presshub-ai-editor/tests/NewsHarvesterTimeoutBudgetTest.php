@@ -184,7 +184,7 @@ class NewsHarvesterTimeoutBudgetTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID']       = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'edit_others_posts' ];
         $_POST['date']                = '2026-08-24';
         $_POST['source_id']           = 'https://www.working-source.gr';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_sources'] = json_encode( [
@@ -229,7 +229,7 @@ class NewsHarvesterTimeoutBudgetTest
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID']       = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'edit_others_posts' ];
         $_POST['date']                = '2026-08-25';
 
         // Mock GET_RESPONSE_FILTER throwing an unexpected RuntimeException
@@ -277,7 +277,7 @@ class NewsHarvesterTimeoutBudgetTest
         $_FILES                              = [];
         $GLOBALS['OPTIONS_STORE']            = [];
         $GLOBALS['TRANSIENTS_STORE']         = [];
-        $GLOBALS['CURRENT_USER_CAPS']        = [ 'edit_posts', 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS']        = [ 'edit_posts', 'edit_others_posts', 'manage_options' ];
         $GLOBALS['CURRENT_USER_ID']          = 1;
         $GLOBALS['NONCE_VALID']              = true;
         $GLOBALS['SUBMENU_PAGES']            = [];

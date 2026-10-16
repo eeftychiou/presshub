@@ -235,16 +235,39 @@ jQuery(document).ready(function($) {
         return html;
     }
 
+    function openModal($modal) {
+        if (!$modal || !$modal.length) {
+            return;
+        }
+        $modal.removeAttr('hidden')
+            .prop('hidden', false)
+            .css('display', 'flex')
+            .addClass('is-open');
+        $('body').addClass('presshub-modal-open');
+    }
+
+    function closeModal($modal) {
+        if (!$modal || !$modal.length) {
+            return;
+        }
+        $modal.removeClass('is-open')
+            .attr('hidden', 'hidden')
+            .prop('hidden', true)
+            .css('display', 'none')
+            .hide();
+        $('body').removeClass('presshub-modal-open');
+    }
+
     function ensureDraftModal() {
-        var $modal = $('#presshub-draft-modal');
+        var $modal = $('#presshub-draft-modal, #presshub-draft-diff-modal');
         if ($modal.length) {
-            return $modal;
+            return $modal.first();
         }
 
         $modal = $(
-            '<div class="presshub-modal-backdrop" id="presshub-draft-modal" ' +
+            '<div class="presshub-modal-backdrop presshub-draft-diff-modal" id="presshub-draft-modal" ' +
             'role="dialog" aria-modal="true" aria-labelledby="presshub-draft-modal-title" ' +
-            'aria-describedby="presshub-draft-modal-desc" tabindex="-1">' +
+            'aria-describedby="presshub-draft-modal-desc" tabindex="-1" hidden style="display:none;">' +
             '<div class="presshub-modal">' +
             '<h2 id="presshub-draft-modal-title">' +
             presshubEsc(__('Preview AI draft', 'presshub-ai-editor')) +
@@ -274,13 +297,16 @@ jQuery(document).ready(function($) {
                 closeDraftModal(false);
             }
         });
-        $modal.find('#presshub-draft-accept').on('click', function() {
+        $modal.find('#presshub-draft-accept').on('click', function(e) {
+            e.preventDefault();
             acceptDraft();
         });
-        $modal.find('#presshub-draft-reject').on('click', function() {
+        $modal.find('#presshub-draft-reject').on('click', function(e) {
+            e.preventDefault();
             closeDraftModal(true);
         });
-        $modal.find('.presshub-modal-cancel').on('click', function() {
+        $modal.find('.presshub-modal-cancel').on('click', function(e) {
+            e.preventDefault();
             closeDraftModal(false);
         });
         // Focus trap: Tab/Shift+Tab cycle inside the dialog.
@@ -333,24 +359,19 @@ jQuery(document).ready(function($) {
             }
         }
 
-        $modal.addClass('is-open');
-        $('body').addClass('presshub-modal-open');
+        openModal($modal);
         presshubModalOpen = true;
         // Move focus into the dialog (first focusable = Insert draft).
         $modal.find('#presshub-draft-accept').trigger('focus');
     }
 
     function closeDraftModal(discarded) {
-        if (!presshubModalOpen) {
-            return;
-        }
-        var $modal = $('#presshub-draft-modal');
+        var $modal = $('#presshub-draft-modal, #presshub-draft-diff-modal');
         var $returnFocus = presshubModalReturnFocus;
         presshubModalOpen = false;
         presshubPendingDraft = null;
         presshubModalReturnFocus = null;
-        $modal.removeClass('is-open');
-        $('body').removeClass('presshub-modal-open');
+        closeModal($modal);
         if ($returnFocus && $returnFocus.length) {
             $returnFocus.trigger('focus');
         }
@@ -375,17 +396,14 @@ jQuery(document).ready(function($) {
 
     function acceptDraft() {
         if (!presshubPendingDraft) {
+            closeDraftModal(false);
             return;
         }
         var draftHtml = presshubPendingDraft.html;
         var $generate = presshubModalReturnFocus || $('#presshub-ai-generate-draft');
         insertDraft(draftHtml);
-        presshubModalOpen = false;
-        presshubPendingDraft = null;
-        presshubModalReturnFocus = null;
-        $('#presshub-draft-modal').removeClass('is-open');
-        $('body').removeClass('presshub-modal-open');
-        if ($generate.length) {
+        closeDraftModal(false);
+        if ($generate && $generate.length) {
             $generate.trigger('focus');
         }
         showNotice(
@@ -398,10 +416,26 @@ jQuery(document).ready(function($) {
 
     // Esc closes the modal without inserting (LF-1 keyboard support).
     $(document).on('keydown', function(e) {
-        if (presshubModalOpen && e.key === 'Escape') {
-            e.preventDefault();
-            closeDraftModal(false);
+        if (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) {
+            var $draftModal = $('#presshub-draft-modal, #presshub-draft-diff-modal');
+            if (presshubModalOpen || ($draftModal.length && $draftModal.is(':visible'))) {
+                e.preventDefault();
+                closeDraftModal(false);
+            }
         }
+    });
+
+    $(document).on('click', '#presshub-draft-modal #presshub-draft-accept, #presshub-draft-diff-modal #presshub-draft-accept', function(e) {
+        e.preventDefault();
+        acceptDraft();
+    });
+    $(document).on('click', '#presshub-draft-modal #presshub-draft-reject, #presshub-draft-diff-modal #presshub-draft-reject', function(e) {
+        e.preventDefault();
+        closeDraftModal(true);
+    });
+    $(document).on('click', '#presshub-draft-modal .presshub-modal-cancel, #presshub-draft-diff-modal .presshub-modal-cancel, #presshub-draft-modal .presshub-modal-close, #presshub-draft-diff-modal .presshub-modal-close', function(e) {
+        e.preventDefault();
+        closeDraftModal(false);
     });
 
     // ------------------------------------------------------------------
@@ -1318,14 +1352,12 @@ jQuery(document).ready(function($) {
 
     function closeProviderModal() {
         var $modal = $('#presshub-provider-modal');
-        $modal.hide().removeClass('is-open');
-        $('body').removeClass('presshub-modal-open');
+        closeModal($modal);
     }
 
     function closeLogDetailsModal() {
         var $modal = $('#presshub-log-details-modal');
-        $modal.hide().removeClass('is-open');
-        $('body').removeClass('presshub-modal-open');
+        closeModal($modal);
     }
 
     // Modal Trigger Buttons
@@ -1334,11 +1366,11 @@ jQuery(document).ready(function($) {
         openProviderModal(null);
     });
 
-    $(document).on('click', '.presshub-modal-close, .presshub-modal-cancel', function(e) {
+    $(document).on('click', '#presshub-provider-modal .presshub-modal-close, #presshub-provider-modal .presshub-modal-cancel, #presshub-log-details-modal .presshub-modal-close, #presshub-log-details-modal .presshub-modal-cancel', function(e) {
         e.preventDefault();
         if ($(this).closest('#presshub-provider-modal').length) {
             tryCloseProviderModal(false);
-        } else {
+        } else if ($(this).closest('#presshub-log-details-modal').length) {
             closeLogDetailsModal();
         }
     });

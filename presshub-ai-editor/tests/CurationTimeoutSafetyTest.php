@@ -290,7 +290,7 @@ class CurationTimeoutSafetyTest {
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID']       = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'edit_others_posts' ];
         $_POST['date']                = '2026-08-30';
         $_POST['preset_id']           = '';
 
@@ -335,7 +335,7 @@ class CurationTimeoutSafetyTest {
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID']       = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'edit_others_posts' ];
         $_POST['date']                = '2026-08-30';
         $_POST['preset_id']           = '';
         $_POST['duration']            = '5_min';
@@ -384,7 +384,7 @@ class CurationTimeoutSafetyTest {
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID']       = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'edit_others_posts' ];
         $_POST['date']                = '2026-08-30';
         // parse_script_turns() needs a properly-tagged speaker line to reach
         // the get_option() call further down in synthesize_podcast().
@@ -422,7 +422,7 @@ class CurationTimeoutSafetyTest {
         // =========================================================================
         self::reset_world();
         $GLOBALS['NONCE_VALID']       = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'edit_others_posts' ];
 
         // Track whether set_time_limit and wp_raise_memory_limit were called.
         // In the test harness these functions are not defined, so the function_exists()
@@ -506,7 +506,7 @@ class CurationTimeoutSafetyTest {
         $_FILES                              = [];
         $GLOBALS['OPTIONS_STORE']            = [];
         $GLOBALS['TRANSIENTS_STORE']         = [];
-        $GLOBALS['CURRENT_USER_CAPS']        = [ 'edit_posts', 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS']        = [ 'edit_posts', 'edit_others_posts', 'manage_options' ];
         $GLOBALS['CURRENT_USER_ID']          = 1;
         $GLOBALS['NONCE_VALID']              = true;
         $GLOBALS['SUBMENU_PAGES']            = [];

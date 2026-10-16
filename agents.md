@@ -487,6 +487,49 @@ When UI changes are involved, perform visual inspection in the local testing env
 
 ---
 
+## 🪟 Modal Dialog Lifecycle & Visibility Standards
+
+> **All modal dialogs in the plugin must adhere to strict visibility scoping, HTML [hidden] priority, and lifecycle state management.**
+
+1. **Default Hidden State**:
+   - Every modal backdrop (`.presshub-modal-backdrop`) must have `display: none;` as its default author style.
+   - `display: flex;` is **strictly gated** behind `.presshub-modal-backdrop.is-open`.
+   - Never write an un-scoped `.presshub-modal-backdrop { display: flex; }` rule that could override `display: none` in the cascade.
+2. **HTML `[hidden]` Absolute Priority**:
+   - Because CSS author rules for class selectors (`display: flex`) override browser user-agent `[hidden]` styles, stylesheets must declare:
+     ```css
+     [hidden],
+     .presshub-modal-backdrop[hidden],
+     .presshub-modal[hidden] {
+         display: none !important;
+     }
+     ```
+3. **Symmetric Open / Close Lifecycle**:
+   - When closing any modal, the handler must symmetrically:
+     - Remove `.is-open` from the modal backdrop.
+     - Add the `hidden` attribute via `.attr('hidden', 'hidden')` and set `.prop('hidden', true)`.
+     - Explicitly set `display: none` / call `.hide()`.
+     - Remove `presshub-modal-open` from `body`.
+   - Action buttons (e.g. "Insert draft", "Discard draft", "Cancel", Escape) must invoke this full closure logic so dialogs never remain visible after action completion.
+4. **Scoped Modal Event Listeners**:
+   - Never attach global event handlers for general modal classes (e.g. `$(document).on('click', '.presshub-modal-close, .presshub-modal-cancel')`) with fallback `else` branches that close unrelated modals.
+   - All cancel and close listeners must be explicitly scoped to their parent modal IDs.
+
+---
+
+## 🛡️ Daily Briefing Hub Role & Capability Gating
+
+> **The Daily Briefing Hub orchestrates pipeline operations across news harvesting, editorial curation, podcast script generation, and audio synthesis. It must remain accessible only to Editors and Administrators (`edit_others_posts`), never simple authors (`edit_posts`).**
+
+1. **Required Capability (`edit_others_posts`)**:
+   - The admin menu registration (`PressHub_AI_Briefing_Admin::add_admin_menu()`) must enforce `edit_others_posts` (via `PressHub_AI_Briefing_Admin::capability()`, filterable via `presshub_ai_briefing_cap`).
+   - The page renderer (`render_hub_page()`) and asset enqueuer (`enqueue_assets()`) must guard execution with `current_user_can( self::capability() )` and call `wp_die()` / return immediately if the user lacks the capability.
+2. **AJAX Capability Gating**:
+   - All Daily Briefing Hub AJAX endpoints (`presshub_ai_briefing_*`) in `PressHub_AI_Ajax_Handlers` must verify `$this->briefing_capability()`, which defaults to `edit_others_posts` (delegating to `PressHub_AI_Briefing_Admin::capability()`).
+   - Simple authors holding only `edit_posts` must receive `wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) )`.
+
+---
+
 ## 📋 GitHub Issue Tracking Protocol & Best Practices
 
 All bugs, regressions, edge cases, and feature tasks identified during development or debugging **must** follow this rigorous investigation and GitHub issue tracking lifecycle.
