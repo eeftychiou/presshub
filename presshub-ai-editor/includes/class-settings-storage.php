@@ -1781,17 +1781,13 @@ class PressHub_AI_Settings_Storage {
 
         $per_style_option = $option_prefix . '_' . $style_key;
         $val              = get_option( $per_style_option, null );
-        if ( null === $val || ( is_string( $val ) && str_starts_with( trim( $val ), 'You are' ) ) ) {
+        if ( null === $val || '' === trim( (string) $val ) || ( is_string( $val ) && str_starts_with( trim( $val ), 'You are' ) ) ) {
             if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
                 require_once __DIR__ . '/class-prompt-loader.php';
             }
             $val = PressHub_AI_Prompt_Loader::get_podcast_prompt( $host_count, $style_key );
             update_option( $per_style_option, $val );
             return $val;
-        }
-
-        if ( '' === trim( (string) $val ) ) {
-            return '';
         }
 
         return (string) $val;
