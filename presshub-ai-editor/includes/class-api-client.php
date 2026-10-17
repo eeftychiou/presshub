@@ -336,10 +336,10 @@ class PressHub_AI_API_Client {
             ? get_option( 'presshub_ai_briefing_tts_max_tokens', null )
             : get_option( "presshub_ai_{$module}_max_tokens", null );
 
-        if ( null !== $opt_tokens && '' !== $opt_tokens ) {
-            $max_tokens = max( 1, (int) $opt_tokens );
-        } elseif ( isset( $provider_record['max_tokens'] ) ) {
-            $max_tokens = (int) $provider_record['max_tokens'];
+        if ( null !== $opt_tokens && '' !== $opt_tokens && (int) $opt_tokens >= 64 ) {
+            $max_tokens = min( 65536, (int) $opt_tokens );
+        } elseif ( isset( $provider_record['max_tokens'] ) && (int) $provider_record['max_tokens'] >= 64 ) {
+            $max_tokens = min( 65536, (int) $provider_record['max_tokens'] );
         } else {
             $max_tokens = PressHub_AI_Provider_Defaults::default_max_tokens();
         }
@@ -349,9 +349,9 @@ class PressHub_AI_API_Client {
             ? get_option( 'presshub_ai_briefing_tts_timeout', null )
             : get_option( "presshub_ai_{$module}_timeout", null );
 
-        if ( null !== $opt_timeout && '' !== $opt_timeout ) {
-            $timeout = max( 1, (int) $opt_timeout );
-        } elseif ( isset( $provider_record['timeout'] ) ) {
+        if ( null !== $opt_timeout && '' !== $opt_timeout && (int) $opt_timeout >= 10 ) {
+            $timeout = max( 10, min( 600, (int) $opt_timeout ) );
+        } elseif ( isset( $provider_record['timeout'] ) && (int) $provider_record['timeout'] >= 10 ) {
             $timeout = (int) $provider_record['timeout'];
         } else {
             $timeout = PressHub_AI_Provider_Defaults::default_timeout( $type );
@@ -1460,8 +1460,12 @@ class PressHub_AI_API_Client {
      *                                     ]
      * @return string|WP_Error Binary audio data or WP_Error on failure.
      */
-    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal', $speaker_configs = null ) {
-        // 1. Resolve Provider and API Key from Provider Store or dedicated option
+    /**
+     * Resolve the active Google Gemini API key for TTS operations.
+     *
+     * @return string API key or empty string.
+     */
+    public function resolve_gemini_api_key(): string {
         $tts_provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
         $provider_record = null;
 
@@ -1486,6 +1490,9 @@ class PressHub_AI_API_Client {
         } elseif ( ! empty( $provider_record['api_key'] ) ) {
             $tts_api_key = $provider_record['api_key'];
         }
+        if ( empty( $tts_api_key ) && class_exists( 'PressHub_AI_Settings_Storage' ) && method_exists( 'PressHub_AI_Settings_Storage', 'get_briefing_tts_api_key' ) ) {
+            $tts_api_key = (string) PressHub_AI_Settings_Storage::get_briefing_tts_api_key();
+        }
         if ( empty( $tts_api_key ) ) {
             $tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
         }
@@ -1495,6 +1502,455 @@ class PressHub_AI_API_Client {
         if ( empty( $tts_api_key ) ) {
             $tts_api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
         }
+        return $tts_api_key;
+    }
+
+    /**
+     * Compose sustained turn-level style directive string for Gemini 3.8 TTS speech_metadata.style.
+     * Incorporates delivery emotion, pacing/speed, and pitch tuning as specified in Google's official TTS documentation.
+     *
+     * @param string $style_description Base delivery style description.
+     * @param float  $speed             Speaking rate multiplier (e.g. 1.15).
+     * @param float  $pitch             Pitch tuning in semitones (e.g. +1.0).
+     * @return string Composed style directive for speech_metadata.style.
+     */
+    public static function compose_tts_style_string( string $style_description, float $speed = 1.0, float $pitch = 0.0 ): string {
+        $components = [ rtrim( trim( $style_description ), '.' ) ];
+
+        // Pacing / Speed guidance per official Google TTS prompt guide
+        if ( abs( $speed - 1.0 ) >= 0.02 ) {
+            $pace_desc = 'normal pace';
+            if ( $speed <= 0.88 ) {
+                $pace_desc = 'very slow and deliberate pace';
+            } elseif ( $speed <= 0.96 ) {
+                $pace_desc = 'measured, unhurried pace';
+            } elseif ( $speed >= 1.18 ) {
+                $pace_desc = 'rapid, brisk broadcast pace';
+            } elseif ( $speed >= 1.05 ) {
+                $pace_desc = 'brisk and lively pace';
+            }
+            $components[] = sprintf( 'Speaking rate: %.2fx %s', $speed, $pace_desc );
+        }
+
+        // Pitch guidance per official Google TTS prompt guide
+        if ( abs( $pitch ) >= 0.2 ) {
+            $pitch_desc = $pitch > 0 ? 'higher pitch' : 'lower, deeper pitch';
+            if ( $pitch >= 2.0 ) {
+                $pitch_desc = 'noticeably higher bright pitch';
+            } elseif ( $pitch <= -2.0 ) {
+                $pitch_desc = 'deep resonant baritone low pitch';
+            }
+            $components[] = sprintf( 'Voice pitch: %+0.1f semitones %s', $pitch, $pitch_desc );
+        }
+
+        return implode( '. ', $components ) . '.';
+    }
+
+    /**
+     * Build the complete request body array for Gemini TTS API calls.
+     *
+     * Supports configurable payload modes:
+     * - 'structured' (default): Official Gemini 3.8 TTS REST specification. Clean dialogue transcript
+     *   in parts, emotional/delivery style + speed + pitch in turn-level speech_metadata.style,
+     *   speaker mapping in speechConfig.multiSpeakerVoiceConfig. Completely eliminates prompt narration.
+     *   Does not use top-level systemInstruction (not part of the official 3.8 TTS REST schema).
+     * - 'hybrid_instruction': sends turn speech_metadata.style AND includes top-level systemInstruction block.
+     * - 'legacy': legacy fallback prepending style prompt directly into the prompt text string.
+     *
+     * @param string $text                      Script text to synthesize.
+     * @param string $voice_name                Single speaker voice name (default 'Kore').
+     * @param bool   $is_multi_speaker          Whether multi-speaker configuration is active.
+     * @param array  $multi_speakers            Array of multi-speaker configurations.
+     * @param string $style                     Delivery style key or custom prompt instruction.
+     * @param float  $speed                     Speaking rate (default 1.0).
+     * @param float  $pitch                     Voice pitch tuning in semitones (default 0.0).
+     * @param string $payload_mode              Payload structure mode ('structured', 'hybrid_instruction', 'legacy').
+     * @param string $custom_system_instruction Optional custom system instruction template.
+     * @return array Complete request body array.
+     */
+    public static function build_gemini_tts_request_body(
+        string $text,
+        string $voice_name = 'Kore',
+        bool $is_multi_speaker = false,
+        array $multi_speakers = [],
+        string $style = 'formal',
+        float $speed = 1.0,
+        float $pitch = 0.0,
+        string $payload_mode = 'structured',
+        string $custom_system_instruction = ''
+    ): array {
+        $style_instructions = [
+            'natural'     => 'Say naturally and clearly in Greek with warm human cadence:',
+            'formal'      => 'Say in a professional, authoritative, articulate Greek news broadcast tone:',
+            'cheerful'    => 'Say cheerfully, enthusiastically, and with a bright uplifting smile in Greek:',
+            'storyteller' => 'Say like an engaging, captivating storyteller with theatrical pacing and expressive pauses in Greek:',
+            'calm'        => 'Say in a peaceful, gentle, soothing, and relaxing tone in Greek:',
+            'dramatic'    => 'Say with intense dramatic emotion, resonant weight, and vivid inflection in Greek:',
+            'poetic'      => 'Say with deep lyrical emotion, soft melodic rhythm, and poetic sensitivity in Greek:',
+            'epic'        => 'Say in a grand, legendary, classical ancient oratorical style in Greek:',
+            'whisper'     => 'Say in a soft, intimate, gentle quiet whisper in Greek:',
+            'energetic'   => 'Say with high energy, vibrant excitement, and dynamic rhythm in Greek:',
+        ];
+        $style_descriptions = [
+            'natural'     => 'Natural and clear human broadcast cadence in Greek',
+            'formal'      => 'Professional, authoritative, articulate Greek news broadcast tone',
+            'cheerful'    => 'Cheerful, enthusiastic, and bright delivery in Greek',
+            'storyteller' => 'Engaging narrative storytelling with theatrical pacing in Greek',
+            'calm'        => 'Peaceful, soothing, and gentle tone in Greek',
+            'dramatic'    => 'Intense dramatic resonance and inflection in Greek',
+            'poetic'      => 'Lyrical emotion and melodic rhythm in Greek',
+            'epic'        => 'Grand, legendary classical oratorical delivery in Greek',
+            'whisper'     => 'Soft, intimate, quiet whisper in Greek',
+            'energetic'   => 'High energy, vibrant excitement, and dynamic rhythm in Greek',
+        ];
+
+        $instruction       = $style_instructions[ $style ] ?? ( ! empty( $style ) && strlen( $style ) > 15 ? $style : $style_instructions['formal'] );
+        $style_description = $style_descriptions[ $style ] ?? ( ! empty( $style ) ? $style : $style_descriptions['formal'] );
+        $composed_style    = self::compose_tts_style_string( $style_description, $speed, $pitch );
+        $clean_text        = trim( $text );
+
+        $speech_config = $is_multi_speaker
+            ? [
+                'multiSpeakerVoiceConfig' => [
+                    'speakerVoiceConfigs' => $multi_speakers,
+                ],
+            ]
+            : [
+                'voiceConfig' => [
+                    'prebuiltVoiceConfig' => [
+                        'voiceName' => $voice_name,
+                    ],
+                ],
+            ];
+
+        // Legacy mode: prepend instruction directly to transcript text
+        if ( 'legacy' === $payload_mode ) {
+            $prompt_text = $is_multi_speaker ? ( $instruction . "\n\n" . $clean_text ) : ( $instruction . "\n\"" . $clean_text . "\"" );
+            return [
+                'contents' => [
+                    [
+                        'role'  => 'user',
+                        'parts' => [
+                            [ 'text' => $prompt_text ],
+                        ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'responseModalities' => [ 'AUDIO' ],
+                    'speechConfig'       => $speech_config,
+                ],
+            ];
+        }
+
+        // Modern modes ('structured', 'hybrid_instruction', 'speech_metadata', 'system_instruction')
+        $parts = [];
+        if ( $is_multi_speaker ) {
+            $pattern = '/(?:^|\n+)\[?(Presenter\s+\d+|Speaker\s+\d+|Ομιλητής\s+\d+|Παρουσιαστής\s+\d+|[^\n:]+)\]?:\s*(.+?)(?=(?:\n+\[?(?:Presenter\s+\d+|Speaker\s+\d+|Ομιλητής\s+\d+|Παρουσιαστής\s+\d+|[^\n:]+)\]?:)|$)/us';
+            if ( preg_match_all( $pattern, $clean_text, $matches, PREG_SET_ORDER ) ) {
+                foreach ( $matches as $m ) {
+                    $speaker_tag = trim( $m[1] );
+                    $turn_text   = trim( $m[2] );
+                    if ( '' !== $turn_text ) {
+                        $matched_speaker = $speaker_tag;
+                        if ( preg_match( '/(\d+)/', $speaker_tag, $num_match ) ) {
+                            $spk_idx = (int) $num_match[1] - 1;
+                            if ( isset( $multi_speakers[ $spk_idx ]['speaker'] ) ) {
+                                $matched_speaker = $multi_speakers[ $spk_idx ]['speaker'];
+                            } else {
+                                $matched_speaker = 'Presenter ' . $num_match[1];
+                            }
+                        }
+
+                        $part = [ 'text' => $turn_text ];
+                        if ( 'system_instruction' !== $payload_mode ) {
+                            $part['speech_metadata'] = [
+                                'speaker' => $matched_speaker,
+                                'style'   => $composed_style,
+                            ];
+                        }
+                        $parts[] = $part;
+                    }
+                }
+            }
+        }
+
+        if ( empty( $parts ) ) {
+            $monologue_clean = preg_replace( '/^\[?(?:Presenter\s+\d+|Speaker\s+\d+)\]?:\s*/u', '', $clean_text );
+            $part = [ 'text' => $monologue_clean ];
+            if ( 'system_instruction' !== $payload_mode ) {
+                $part['speech_metadata'] = [
+                    'style' => $composed_style,
+                ];
+            }
+            $parts[] = $part;
+        }
+
+        $gen_body = [
+            'contents' => [
+                [
+                    'role'  => 'user',
+                    'parts' => $parts,
+                ],
+            ],
+            'generationConfig' => [
+                'responseModalities' => [ 'AUDIO' ],
+                'speechConfig'       => $speech_config,
+            ],
+        ];
+
+        // Top-level systemInstruction is only included if explicitly requested via hybrid_instruction or system_instruction
+        if ( in_array( $payload_mode, [ 'hybrid_instruction', 'system_instruction' ], true ) ) {
+            $sys_template = ! empty( $custom_system_instruction )
+                ? $custom_system_instruction
+                : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction() : '' );
+            if ( empty( $sys_template ) ) {
+                $sys_template = "You are an expert news broadcaster and podcast host delivering a professional news update in Greek.\nDelivery tone: {style_instruction}\nSpeaking rate multiplier: {speed}\nPitch adjustment: {pitch}\nPresenter Personas:\n- Speaker 1 (Presenter 1) persona: {speaker1}\n- Speaker 2 (Presenter 2) persona: {speaker2}\n\nStrict broadcast rules:\n- Speak strictly the verbatim transcript text.\n- Never read aloud instructions, prompt metadata, speaker aliases (such as \"Presenter 1:\" or \"Presenter 2:\"), brackets, or stage directions.\n- Transition naturally and seamlessly between dialogue turns with broadcast cadence.";
+            }
+
+            $p1_v = $voice_name;
+            $p2_v = '';
+            if ( ! empty( $multi_speakers[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ) ) {
+                $p1_v = $multi_speakers[0]['voiceConfig']['prebuiltVoiceConfig']['voiceName'];
+            }
+            if ( ! empty( $multi_speakers[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ) ) {
+                $p2_v = $multi_speakers[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'];
+            }
+
+            $speed_str   = number_format( $speed > 0 ? $speed : 1.0, 2 );
+            $pitch_str   = ( $pitch >= 0 ? '+' : '' ) . number_format( $pitch, 1 );
+            $p2_display  = ! empty( $p2_v ) ? $p2_v : 'None (Solo Broadcaster)';
+
+            $system_instruction_text = str_replace(
+                [ '{style_instruction}', '{speed}', '{pitch}', '{presenter_1_voice}', '{presenter_2_voice}', '{speaker1}', '{speaker2}' ],
+                [ $style_description, $speed_str, $pitch_str, $p1_v, $p2_display, $p1_v, $p2_display ],
+                $sys_template
+            );
+
+            if ( '' !== trim( $system_instruction_text ) ) {
+                $gen_body['systemInstruction'] = [
+                    'parts' => [
+                        [ 'text' => $system_instruction_text ],
+                    ],
+                ];
+            }
+        }
+
+        return $gen_body;
+    }
+
+    /**
+     * Test speech synthesis and return audio data URI alongside complete JSON request payload breakdown.
+     *
+     * @param array $args Options for test synthesis (text, engine, model, style, presenter_1_voice, presenter_2_voice, speed, pitch, payload_mode, system_instruction, preview_only).
+     * @return array|WP_Error Array with audio_data_url, request_payload, request_json, duration_ms, audio_bytes, etc., or WP_Error.
+     */
+    public function test_synthesize_speech( array $args = [] ): array|WP_Error {
+        $text             = ! empty( $args['text'] ) ? (string) $args['text'] : "[Presenter 1]: Καλημέρα σας από το PressHub AI. Αυτή είναι μια ζωντανή δοκιμή παραγωγής φωνής.\n\n[Presenter 2]: Επιβεβαιώνουμε τη φυσική ροή του διαλόγου, το ρυθμό εκφώνησης και τον επαγγελματικό τόνο.";
+        $engine           = ! empty( $args['engine'] ) ? (string) $args['engine'] : 'gemini';
+        $style            = ! empty( $args['style'] ) ? (string) $args['style'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_style() : 'formal' );
+        $custom_style     = $args['custom_style'] ?? ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_custom_style() : '' );
+        $p1_voice         = ! empty( $args['speaker1'] ) ? (string) $args['speaker1'] : ( ! empty( $args['presenter_1_voice'] ) ? (string) $args['presenter_1_voice'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_female() : 'Charon' ) );
+        $p2_voice         = ! empty( $args['speaker2'] ) ? (string) $args['speaker2'] : ( ! empty( $args['presenter_2_voice'] ) ? (string) $args['presenter_2_voice'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_male() : 'Kore' ) );
+        $speed            = isset( $args['speed'] ) ? (float) $args['speed'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_speed() : 1.0 );
+        $pitch            = isset( $args['pitch'] ) ? (float) $args['pitch'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_pitch() : 0.0 );
+        $payload_mode     = ! empty( $args['payload_mode'] ) ? (string) $args['payload_mode'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured' );
+        $sys_instruction  = $args['system_instruction'] ?? ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction() : '' );
+        $is_multi_speaker = isset( $args['two_hosts'] )
+            ? ( ! empty( $args['two_hosts'] ) && '0' !== $args['two_hosts'] && 'false' !== $args['two_hosts'] )
+            : ( ( $args['host_count'] ?? 2 ) >= 2 );
+
+        $multi_speakers   = [];
+        if ( $is_multi_speaker ) {
+            $multi_speakers = [
+                [
+                    'speaker'     => 'Presenter 1',
+                    'voiceConfig' => [
+                        'prebuiltVoiceConfig' => [ 'voiceName' => $p1_voice ],
+                    ],
+                ],
+                [
+                    'speaker'     => 'Presenter 2',
+                    'voiceConfig' => [
+                        'prebuiltVoiceConfig' => [ 'voiceName' => $p2_voice ],
+                    ],
+                ],
+            ];
+        }
+
+        $used_style = ( 'custom' === $style && ! empty( $custom_style ) ) ? $custom_style : $style;
+        $gen_body = self::build_gemini_tts_request_body(
+            $text,
+            $p1_voice,
+            $is_multi_speaker,
+            $multi_speakers,
+            $used_style,
+            $speed,
+            $pitch,
+            $payload_mode,
+            $sys_instruction
+        );
+
+        $configured_model = ! empty( $args['model'] ) ? (string) $args['model'] : '';
+        if ( empty( $configured_model ) ) {
+            $configured_model = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+        }
+        if ( empty( $configured_model ) ) {
+            $configured_model = 'gemini-3.8-flash-lite-tts';
+        }
+
+        $tts_api_key = $this->resolve_gemini_api_key();
+        $gen_url     = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $configured_model ) . ':generateContent?key=' . urlencode( $tts_api_key );
+        $masked_url  = self::mask_api_key_in_url( $gen_url );
+        $masked_key  = class_exists( 'PressHub_AI_Provider_Store' ) ? PressHub_AI_Provider_Store::mask_key( $tts_api_key ) : '***masked***';
+
+        $headers = [
+            'Content-Type'   => 'application/json',
+            'x-goog-api-key' => $tts_api_key,
+            'User-Agent'     => 'aistudio-build',
+        ];
+        $headers_masked = [
+            'Content-Type'   => 'application/json',
+            'x-goog-api-key' => $masked_key,
+            'User-Agent'     => 'aistudio-build',
+        ];
+
+        $request_json = wp_json_encode( $gen_body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
+        // If preview-only requested (no actual API dispatch)
+        if ( ! empty( $args['preview_only'] ) ) {
+            return [
+                'preview_only'    => true,
+                'endpoint_masked' => $masked_url,
+                'headers_masked'  => $headers_masked,
+                'request_payload' => $gen_body,
+                'request_json'    => $request_json,
+                'model'           => $configured_model,
+            ];
+        }
+
+        if ( empty( $tts_api_key ) ) {
+            return new WP_Error(
+                'no_gemini_key',
+                __( 'Google AI Studio Gemini API key is missing. Please configure your Gemini Provider or Speech API Key.', 'presshub-ai-editor' ),
+                [
+                    'endpoint_masked' => $masked_url,
+                    'headers_masked'  => $headers_masked,
+                    'request_payload' => $gen_body,
+                    'request_json'    => $request_json,
+                ]
+            );
+        }
+
+        // Execute live request
+        $start_time = microtime( true );
+        $response   = wp_remote_post( $gen_url, [
+            'headers' => $headers,
+            'body'    => wp_json_encode( $gen_body ),
+            'timeout' => 90,
+        ] );
+        $duration_ms = max( 1, (int) round( ( microtime( true ) - $start_time ) * 1000 ) );
+
+        if ( is_wp_error( $response ) ) {
+            return new WP_Error(
+                'tts_test_failed',
+                sprintf( __( 'Gemini TTS request failed: %s', 'presshub-ai-editor' ), $response->get_error_message() ),
+                [
+                    'endpoint_masked' => $masked_url,
+                    'headers_masked'  => $headers_masked,
+                    'request_payload' => $gen_body,
+                    'request_json'    => $request_json,
+                    'duration_ms'     => $duration_ms,
+                ]
+            );
+        }
+
+        $code     = wp_remote_retrieve_response_code( $response );
+        $body_raw = wp_remote_retrieve_body( $response );
+        $res_json = json_decode( $body_raw, true );
+
+        if ( 200 !== $code ) {
+            $err_detail = $res_json['error']['message'] ?? ( 'HTTP ' . $code . ': ' . substr( $body_raw, 0, 500 ) );
+            return new WP_Error(
+                'tts_api_error',
+                sprintf( __( 'Gemini API Error (%d): %s', 'presshub-ai-editor' ), $code, $err_detail ),
+                [
+                    'endpoint_masked' => $masked_url,
+                    'headers_masked'  => $headers_masked,
+                    'request_payload' => $gen_body,
+                    'request_json'    => $request_json,
+                    'duration_ms'     => $duration_ms,
+                    'http_code'       => $code,
+                    'raw_response'    => $res_json,
+                ]
+            );
+        }
+
+        // Extract audio base64
+        $audio_base64 = null;
+        $mime_type    = 'audio/pcm;rate=24000';
+        if ( isset( $res_json['candidates'][0]['content']['parts'] ) ) {
+            foreach ( $res_json['candidates'][0]['content']['parts'] as $part ) {
+                if ( ! empty( $part['inlineData']['data'] ) ) {
+                    $audio_base64 = $part['inlineData']['data'];
+                    $mime_type    = $part['inlineData']['mimeType'] ?? $mime_type;
+                    break;
+                } elseif ( ! empty( $part['inline_data']['data'] ) ) {
+                    $audio_base64 = $part['inline_data']['data'];
+                    $mime_type    = $part['inline_data']['mime_type'] ?? $mime_type;
+                    break;
+                }
+            }
+        }
+
+        if ( empty( $audio_base64 ) ) {
+            return new WP_Error(
+                'no_audio_in_response',
+                __( 'API returned 200 OK but no audio data was present in candidate parts.', 'presshub-ai-editor' ),
+                [
+                    'endpoint_masked' => $masked_url,
+                    'headers_masked'  => $headers_masked,
+                    'request_payload' => $gen_body,
+                    'request_json'    => $request_json,
+                    'duration_ms'     => $duration_ms,
+                    'raw_response'    => $res_json,
+                ]
+            );
+        }
+
+        $raw_pcm = base64_decode( $audio_base64 );
+        $sample_rate = 24000;
+        if ( preg_match( '/rate=(\d+)/i', $mime_type, $rm ) ) {
+            $sample_rate = (int) $rm[1];
+        }
+        $wav_binary = ( substr( $raw_pcm, 0, 4 ) === 'RIFF' ) ? $raw_pcm : self::pcm_to_wav( $raw_pcm, $sample_rate );
+        $data_url   = 'data:audio/wav;base64,' . base64_encode( $wav_binary );
+
+        return [
+            'success'         => true,
+            'audio_data_url'  => $data_url,
+            'audio_bytes'     => strlen( $wav_binary ),
+            'raw_bytes'       => strlen( $raw_pcm ),
+            'sample_rate'     => $sample_rate,
+            'duration_ms'     => $duration_ms,
+            'model'           => $configured_model,
+            'endpoint_masked' => $masked_url,
+            'headers_masked'  => $headers_masked,
+            'request_payload' => $gen_body,
+            'json_payload'    => $gen_body,
+            'request_json'    => $request_json,
+        ];
+    }
+
+    public function synthesize_speech_via_gemini(
+        string $text,
+        string $voice_name = 'Kore',
+        bool $as_wav = true,
+        string $style = 'formal',
+        $speaker_configs = null,
+        float $speed = 1.0,
+        float $pitch = 0.0
+    ) {
+        $tts_api_key = $this->resolve_gemini_api_key();
 
         if ( empty( $tts_api_key ) ) {
             $err_msg = __( 'Google AI Studio Gemini API key is missing. Please configure your Gemini Provider in the AI Providers tab or enter a Speech API Key in Briefing Settings.', 'presshub-ai-editor' );
@@ -1508,23 +1964,7 @@ class PressHub_AI_API_Client {
             $voice_name = 'Kore';
         }
 
-        // 2. Build logosAI prompt instruction
-        $style_instructions = [
-            'natural'     => 'Say naturally and clearly in Greek with warm human cadence:',
-            'formal'      => 'Say in a professional, authoritative, articulate Greek news broadcast tone:',
-            'cheerful'    => 'Say cheerfully, enthusiastically, and with a bright uplifting smile in Greek:',
-            'storyteller' => 'Say like an engaging, captivating storyteller with theatrical pacing and expressive pauses in Greek:',
-            'calm'        => 'Say in a peaceful, gentle, soothing, and relaxing tone in Greek:',
-            'dramatic'    => 'Say with intense dramatic emotion, resonant weight, and vivid inflection in Greek:',
-            'poetic'      => 'Say with deep lyrical emotion, soft melodic rhythm, and poetic sensitivity in Greek:',
-            'epic'        => 'Say in a grand, legendary, classical ancient oratorical style in Greek:',
-            'whisper'     => 'Say in a soft, intimate, gentle quiet whisper in Greek:',
-            'energetic'   => 'Say with high energy, vibrant excitement, and dynamic rhythm in Greek:',
-        ];
-
-        $instruction = $style_instructions[ $style ] ?? ( ! empty( $style ) && strlen( $style ) > 15 ? $style : $style_instructions['formal'] );
-        $clean_text  = trim( $text );
-
+        $clean_text       = trim( $text );
         $is_multi_speaker = false;
         $multi_speakers   = [];
         if ( ! empty( $speaker_configs ) && is_array( $speaker_configs ) && count( $speaker_configs ) >= 2 ) {
@@ -1545,13 +1985,34 @@ class PressHub_AI_API_Client {
             }
         }
 
-        if ( $is_multi_speaker ) {
-            $prompt_text = $instruction . "\n\n" . $clean_text;
-        } else {
-            $prompt_text = $instruction . "\n\"" . $clean_text . "\"";
+        // Resolve operational tuning
+        $speed = ( $speed > 0 ) ? $speed : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_speed() : 1.0 );
+        $pitch = ( 0.0 !== $pitch || ! class_exists( 'PressHub_AI_Settings_Storage' ) ) ? $pitch : PressHub_AI_Settings_Storage::get_voice_pitch();
+        $payload_mode    = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured';
+        $sys_instruction = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction() : '';
+
+        // Build request body
+        $gen_body = self::build_gemini_tts_request_body(
+            $clean_text,
+            $voice_name,
+            $is_multi_speaker,
+            $multi_speakers,
+            $style,
+            $speed,
+            $pitch,
+            $payload_mode,
+            $sys_instruction
+        );
+
+        // Resolve Model cascade
+        $provider_record = null;
+        if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            $tts_provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
+            if ( ! empty( $tts_provider_id ) ) {
+                $provider_record = PressHub_AI_Provider_Store::get( $tts_provider_id );
+            }
         }
 
-        // 3. Resolve Model cascade
         $configured_model = ! empty( $this->model ) && 'gemini' === $this->provider && ( 'tts' === $this->module || false !== strpos( (string) $this->model, 'tts' ) )
             ? $this->model
             : (string) get_option( 'presshub_ai_briefing_tts_model', '' );
@@ -1579,9 +2040,9 @@ class PressHub_AI_API_Client {
                 $sp_desc = implode( ', ', array_map( function( $s ) {
                     return $s['speaker'] . '=' . ( $s['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' );
                 }, $multi_speakers ) );
-                PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Initiating Multi-Speaker TTS: target_model="%s", speakers="%s", style="%s", chars=%d', $configured_model, $sp_desc, $style, mb_strlen( $clean_text ) ) );
+                PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Initiating Multi-Speaker TTS: target_model="%s", speakers="%s", style="%s", speed=%.2f, pitch=%.1f, mode="%s", chars=%d', $configured_model, $sp_desc, $style, $speed, $pitch, $payload_mode, mb_strlen( $clean_text ) ) );
             } else {
-                PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Initiating TTS: target_model="%s", voice="%s", style="%s", chars=%d', $configured_model, $voice_name, $style, mb_strlen( $clean_text ) ) );
+                PressHub_AI_Logger::info( sprintf( '[LogosAI Speech] Initiating TTS: target_model="%s", voice="%s", style="%s", speed=%.2f, pitch=%.1f, mode="%s", chars=%d', $configured_model, $voice_name, $style, $speed, $pitch, $payload_mode, mb_strlen( $clean_text ) ) );
             }
         }
 
@@ -1595,44 +2056,11 @@ class PressHub_AI_API_Client {
         foreach ( $tts_models as $model ) {
             $gen_url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
 
-            $speech_config = $is_multi_speaker
-                ? [
-                    'multiSpeakerVoiceConfig' => [
-                        'speakerVoiceConfigs' => $multi_speakers,
-                    ],
-                ]
-                : [
-                    'voiceConfig' => [
-                        'prebuiltVoiceConfig' => [
-                            'voiceName' => $voice_name,
-                        ],
-                    ],
-                ];
-
-            $gen_body = [
-                'contents' => [
-                    [
-                        'role'  => 'user',
-                        'parts' => [
-                            [ 'text' => $prompt_text ],
-                        ],
-                    ],
-                ],
-                'generationConfig' => [
-                    'responseModalities' => [ 'AUDIO' ],
-                    'speechConfig'       => $speech_config,
-                ],
-            ];
-
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::debug( sprintf( '[LogosAI Speech] POST %s with model "%s"', 'generateContent', $model ) );
             }
 
-            // Issue #80 — Settings-First: capture full TTS request payload
-            // before dispatch when the operator has enabled the debug toggle.
-            // The log file is wp-content/uploads/presshub-ai-tts-debug.log and
-            // the same payload is mirrored on the presshub_ai_tts_payload_log
-            // action so developer scripts / CLI inspectors can intercept it.
+            // Capture full TTS request payload before dispatch if logging enabled
             $tts_payload_log_enabled = class_exists( 'PressHub_AI_Settings_Storage' )
                 && PressHub_AI_Settings_Storage::get_log_tts_payloads();
             $tts_call_started_at = microtime( true );
@@ -1654,8 +2082,10 @@ class PressHub_AI_API_Client {
                         'speaker_mapping'  => $is_multi_speaker ? $multi_speakers : null,
                         'voice_name'       => $is_multi_speaker ? null : $voice_name,
                         'style'            => $style,
+                        'speed'            => $speed,
+                        'pitch'            => $pitch,
+                        'payload_mode'     => $payload_mode,
                         'is_multi_speaker' => $is_multi_speaker,
-                        'prompt_text'      => $prompt_text,
                         'request_body'     => $gen_body,
                         'chars'            => mb_strlen( $clean_text ),
                     ]
@@ -1764,7 +2194,10 @@ class PressHub_AI_API_Client {
             $sample_rate = (int) $m[1];
         }
 
-        return $as_wav ? self::pcm_to_wav( $raw_audio, $sample_rate ) : $raw_audio;
+        if ( $as_wav ) {
+            return ( substr( $raw_audio, 0, 4 ) === 'RIFF' ) ? $raw_audio : self::pcm_to_wav( $raw_audio, $sample_rate );
+        }
+        return $raw_audio;
     }
 
     /**

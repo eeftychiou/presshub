@@ -287,12 +287,14 @@ $producer->save_script( $test_date_e2e, $script_content );
 class Mock_Audio_API_Client extends PressHub_AI_API_Client {
     public $synthesized_calls = [];
     public function __construct() {}
-    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal', $speaker_configs = null ) {
+    public function synthesize_speech_via_gemini( string $text, string $voice_name = 'Kore', bool $as_wav = true, string $style = 'formal', $speaker_configs = null, float $speed = 1.0, float $pitch = 0.0 ) {
         $this->synthesized_calls[] = [
             'engine'     => 'gemini',
             'text'       => $text,
             'voice_name' => $voice_name,
             'style'      => $style,
+            'speed'      => $speed,
+            'pitch'      => $pitch,
         ];
         $fake_pcm = str_repeat( "\x12\x34", 1200 ); // 100ms at 24kHz
         return $as_wav ? self::pcm_to_wav( $fake_pcm, 24000 ) : $fake_pcm;

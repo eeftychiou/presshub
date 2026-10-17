@@ -3253,6 +3253,240 @@ jQuery(document).ready(function($) {
     });
 
     // ------------------------------------------------------------------
+    // Gemini Speech Settings Dynamic Inactive States & Visual Indicators
+    // ------------------------------------------------------------------
+    function updateTtsPayloadModeVisualStates() {
+        var mode = $('#presshub_ai_briefing_tts_payload_mode').val() || 'structured';
+        var $sysRow = $('#presshub-tts-system-instruction-row');
+        var $speedRow = $('#presshub-voice-speed-row');
+        var $pitchRow = $('#presshub-voice-pitch-row');
+
+        if (mode === 'structured') {
+            // Official Gemini 3.8 TTS REST Standard:
+            // Google controls tone, speed, and pitch directly in speech_metadata.style without system instructions
+            $sysRow.addClass('presshub-setting-inactive');
+            $sysRow.find('textarea, button').prop('disabled', true);
+            $sysRow.find('.presshub-inactive-mode-badge').show();
+
+            // Speed and Pitch are active (mapped to speech_metadata.style)
+            $speedRow.removeClass('presshub-setting-inactive');
+            $speedRow.find('input').prop('disabled', false);
+            $speedRow.find('.presshub-inactive-mode-badge').hide();
+
+            $pitchRow.removeClass('presshub-setting-inactive');
+            $pitchRow.find('input').prop('disabled', false);
+            $pitchRow.find('.presshub-inactive-mode-badge').hide();
+        } else if (mode === 'hybrid_instruction') {
+            // Hybrid: All settings active
+            $sysRow.removeClass('presshub-setting-inactive');
+            $sysRow.find('textarea, button').prop('disabled', false);
+            $sysRow.find('.presshub-inactive-mode-badge').hide();
+
+            $speedRow.removeClass('presshub-setting-inactive');
+            $speedRow.find('input').prop('disabled', false);
+            $speedRow.find('.presshub-inactive-mode-badge').hide();
+
+            $pitchRow.removeClass('presshub-setting-inactive');
+            $pitchRow.find('input').prop('disabled', false);
+            $pitchRow.find('.presshub-inactive-mode-badge').hide();
+        } else if (mode === 'legacy') {
+            // Legacy: System instruction, speed, pitch NOT used
+            $sysRow.addClass('presshub-setting-inactive');
+            $sysRow.find('textarea, button').prop('disabled', true);
+            $sysRow.find('.presshub-inactive-mode-badge').show();
+
+            $speedRow.addClass('presshub-setting-inactive');
+            $speedRow.find('input').prop('disabled', true);
+            $speedRow.find('.presshub-inactive-mode-badge').show();
+
+            $pitchRow.addClass('presshub-setting-inactive');
+            $pitchRow.find('input').prop('disabled', true);
+            $pitchRow.find('.presshub-inactive-mode-badge').show();
+        }
+    }
+
+    $(document).on('change', '#presshub_ai_briefing_tts_payload_mode', function() {
+        updateTtsPayloadModeVisualStates();
+    });
+
+    $(document).ready(function() {
+        updateTtsPayloadModeVisualStates();
+    });
+
+    // ------------------------------------------------------------------
+    // Gemini Speech API JSON Payload Inspector & Live Audio Tester
+    // ------------------------------------------------------------------
+    function getTtsTesterParameters() {
+        var nonce = (typeof presshubAI !== 'undefined' && presshubAI.nonce) ? presshubAI.nonce : ($('#presshub_ai_nonce').val() || '');
+        var hostsVal = $('input[name="presshub_tts_test_hosts"]:checked').val();
+        var twoHosts = (hostsVal === '2' || typeof hostsVal === 'undefined') ? 1 : 0;
+
+        return {
+            nonce: nonce,
+            text: $('#presshub-tts-test-text').val() || '',
+            speaker1: $('#presshub_ai_briefing_voice_female').val() || 'Charon',
+            speaker2: $('#presshub_ai_briefing_voice_male').val() || 'Kore',
+            speed: parseFloat($('#presshub_ai_briefing_voice_speed').val()) || 1.0,
+            pitch: parseFloat($('#presshub_ai_briefing_voice_pitch').val()) || 0.0,
+            style: $('#presshub_ai_briefing_tts_style').val() || 'formal',
+            custom_style: $('#presshub_ai_briefing_tts_custom_style').val() || '',
+            payload_mode: $('#presshub_ai_briefing_tts_payload_mode').val() || 'structured',
+            system_instruction: $('#presshub_ai_briefing_tts_system_instruction').val() || '',
+            two_hosts: twoHosts
+        };
+    }
+
+    var ttsPreviewDebounceTimer = null;
+    function updateTtsPayloadPreview() {
+        var params = getTtsTesterParameters();
+        params.action = 'presshub_ai_preview_tts_payload';
+
+        var ajaxTarget = (typeof presshubAI !== 'undefined' && presshubAI.ajax_url) ? presshubAI.ajax_url : (typeof ajaxurl !== 'undefined' ? ajaxurl : '/wp-admin/admin-ajax.php');
+
+        $.ajax({
+            url: ajaxTarget,
+            type: 'POST',
+            data: params,
+            success: function(res) {
+                if (res && res.success && res.data && res.data.json_formatted) {
+                    $('#presshub-tts-payload-preview').text(res.data.json_formatted);
+                } else if (res && res.data && res.data.message) {
+                    $('#presshub-tts-payload-preview').text('Error: ' + res.data.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                $('#presshub-tts-payload-preview').text('Error fetching JSON preview: ' + (error || status || 'Network error'));
+            }
+        });
+    }
+
+    function scheduleTtsPayloadPreview() {
+        if ($('#presshub-tts-payload-preview').length === 0) {
+            return;
+        }
+        if (ttsPreviewDebounceTimer) {
+            clearTimeout(ttsPreviewDebounceTimer);
+        }
+        ttsPreviewDebounceTimer = setTimeout(updateTtsPayloadPreview, 350);
+    }
+
+    $(document).on('change', '#presshub_ai_briefing_tts_payload_mode, #presshub_ai_briefing_tts_style, #presshub_ai_briefing_voice_female, #presshub_ai_briefing_voice_male, #presshub_ai_briefing_voice_speed, #presshub_ai_briefing_voice_pitch, input[name="presshub_tts_test_hosts"]', scheduleTtsPayloadPreview);
+    $(document).on('input', '#presshub-tts-test-text, #presshub_ai_briefing_tts_custom_style, #presshub_ai_briefing_tts_system_instruction', scheduleTtsPayloadPreview);
+
+    $(document).on('click', '#presshub-preview-tts-payload-btn', function(e) {
+        e.preventDefault();
+        updateTtsPayloadPreview();
+    });
+
+    $(document).on('click', '#presshub-restore-default-tts-instruction', function(e) {
+        e.preventDefault();
+        var defaultTpl = $(this).data('default') || '';
+        $('#presshub_ai_briefing_tts_system_instruction').val(defaultTpl).trigger('change');
+        if (typeof markTabDirty === 'function') {
+            markTabDirty('briefing');
+        }
+        updateTtsPayloadPreview();
+    });
+
+    $(document).on('click', '#presshub-copy-tts-json-btn', function(e) {
+        e.preventDefault();
+        var jsonText = $('#presshub-tts-payload-preview').text();
+        var $btn = $(this);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(jsonText).then(function() {
+                var orig = $btn.text();
+                $btn.text('Copied!');
+                setTimeout(function() { $btn.text(orig); }, 1500);
+            });
+        } else {
+            var $temp = $('<textarea>');
+            $('body').append($temp);
+            $temp.val(jsonText).select();
+            document.execCommand('copy');
+            $temp.remove();
+            var orig = $btn.text();
+            $btn.text('Copied!');
+            setTimeout(function() { $btn.text(orig); }, 1500);
+        }
+    });
+
+    $(document).on('click', '#presshub-test-tts-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var params = getTtsTesterParameters();
+        params.action = 'presshub_ai_test_tts_synthesis';
+
+        $btn.prop('disabled', true).addClass('updating-message');
+        $('#presshub-tts-test-idle').hide();
+        $('#presshub-tts-test-error').hide();
+        $('#presshub-tts-test-result').hide();
+        $('#presshub-tts-test-loading').show();
+
+        var ajaxTarget = (typeof presshubAI !== 'undefined' && presshubAI.ajax_url) ? presshubAI.ajax_url : (typeof ajaxurl !== 'undefined' ? ajaxurl : '/wp-admin/admin-ajax.php');
+
+        $.ajax({
+            url: ajaxTarget,
+            type: 'POST',
+            data: params,
+            success: function(res) {
+                $('#presshub-tts-test-loading').hide();
+                if (res && res.success && res.data) {
+                    var data = res.data;
+                    var audioUrl = data.audio_data_url || data.audio_url || '';
+                    var player = document.getElementById('presshub-tts-test-audio-player');
+                    if (player && audioUrl) {
+                        player.src = audioUrl;
+                        player.load();
+                        player.play().catch(function() {});
+                    }
+
+                    var dur = data.duration_ms ? Math.round(data.duration_ms) + 'ms' : '';
+                    var kb = data.audio_bytes ? Math.round(data.audio_bytes / 1024) + ' KB' : '';
+                    var mode = data.payload_mode ? 'Mode: ' + data.payload_mode : '';
+                    var model = data.model ? 'Model: ' + data.model : '';
+                    var metricsText = [mode, dur, kb, model].filter(Boolean).join(' · ');
+
+                    $('#presshub-tts-test-metrics').text(metricsText);
+
+                    if (audioUrl) {
+                        $('#presshub-tts-download-link').attr('href', audioUrl).show();
+                    } else {
+                        $('#presshub-tts-download-link').hide();
+                    }
+
+                    if (data.json_payload) {
+                        var formatted = JSON.stringify(data.json_payload, null, 2);
+                        $('#presshub-tts-payload-preview').text(formatted);
+                    }
+
+                    $('#presshub-tts-test-result').show();
+                } else {
+                    var errMsg = (res && res.data && res.data.message) ? res.data.message : 'Speech synthesis failed.';
+                    $('#presshub-tts-test-error p').text(errMsg);
+                    $('#presshub-tts-test-error').show();
+                }
+            },
+            error: function(xhr, status, error) {
+                $('#presshub-tts-test-loading').hide();
+                var msg = 'Synthesis request failed: ' + (error || status || 'Server error');
+                if (xhr.responseText) {
+                    try {
+                        var parsed = JSON.parse(xhr.responseText);
+                        if (parsed && parsed.data && parsed.data.message) {
+                            msg = parsed.data.message;
+                        }
+                    } catch (e) {}
+                }
+                $('#presshub-tts-test-error p').text(msg);
+                $('#presshub-tts-test-error').show();
+            },
+            complete: function() {
+                $btn.prop('disabled', false).removeClass('updating-message');
+            }
+        });
+    });
+
+    // ------------------------------------------------------------------
     // Diagnostic Inspector Handlers (Issue #100 / Rationalization).
     // ------------------------------------------------------------------
     function escapeHtml(str) {

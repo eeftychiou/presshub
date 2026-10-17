@@ -5,7 +5,7 @@ Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for 
 [![Version](https://img.shields.io/badge/version-2.5.2-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
-[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-80%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
+[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Jest Workflow Tests](https://img.shields.io/badge/Jest%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-workflow/tests/)
 [![CI](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml/badge.svg)](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-GPL--2.0--or--later-orange.svg)](presshub-ai-editor/presshub-ai-editor.php)
@@ -66,7 +66,15 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - **Spoken Date Formatting**: All dates are converted to natural spoken-language phrasing (e.g. *"3rd of May 2026"* or *"3 Μαΐου 2026"*).
 - **Clean Audio Post Content**: By default, podcast post content displays exclusively the audio player block (`wp:audio`), omitting raw dialogue text for a polished user experience (configurable via `presshub_ai_briefing_podcast_include_text`).
 - **Podcast Dialogue Editor Metabox & One-Click Audio Regeneration**: Editors can review and refine spoken scripts in the **"Podcast Audio & Dialogue Editor"** metabox on podcast edit screens, and click **"Regenerate Audio from Script"** to re-synthesize and stitch the episode in real time.
-- **Broadcast Audio Synthesizer (`PressHub_AI_Audio_Synthesizer`)**: Synthesizes broadcast-quality audio via Gemini Flash Preview or Google Cloud Text-to-Speech (30-voice catalog, Journey/Chirp/Neural2/Studio models, speed and pitch adjustment, and automated silence/SFX stitching).
+- **Broadcast Audio Synthesizer & Gemini 3.8 TTS REST Architecture (`PressHub_AI_Audio_Synthesizer` & `PressHub_AI_API_Client`)**:
+  - **Zero Narrated Instructions**: Passes clean verbatim dialogue turns in `contents[0].parts[].text` without prepended prompt directives, eliminating prompt narration on modern models (`gemini-3.8-flash-tts` / `gemini-3.8-flash-lite-tts`).
+  - **Official Gemini 3.8 TTS REST Standard (`structured` — Recommended)**: Conforms strictly to Google's official Gemini 3.8 TTS REST specification. Turn-level `speech_metadata.style` carries delivery emotion, speaking rate (`0.85x - 1.25x`), and voice pitch tuning (`-5.0 to +5.0 semitones`) without top-level system instructions. Inactive settings (e.g. system instructions) dynamically grey out in the UI with informative badges.
+  - **Hybrid / System Instruction Override Mode (`hybrid_instruction`)**: Passes both turn-level `speech_metadata.style` and top-level `systemInstruction` with resolved speaker persona and rate placeholders.
+  - **Multi-Speaker Persona Mapping**: Maps Presenter 1 and Presenter 2 to distinct voice personas (e.g. Charon, Kore, Fenrir, Aoede) in `speechConfig.multiSpeakerVoiceConfig`.
+  - **RIFF WAV Header Handling**: Detects RIFF headers on incoming audio bytes from Gemini 3.8 to prevent double-wrapping WAV headers.
+- **Gemini Speech API JSON Inspector & Live Voice Testing Studio**:
+  - Live preview container in Daily Briefing settings renders the exact JSON request body sent to Gemini's speech endpoint, updating dynamically as voices, speed, pitch, delivery style, or test scripts change.
+  - Interactive testing studio allows editors to audition 1-host and 2-host audio synthesis with immediate in-browser audio playback, execution metrics (duration ms, byte size), and download capabilities before publishing. Accessible directly from the Daily Briefing Hub Audio Synthesis Stage Card.
 
 ### 3. ✍️ In-Editor Editorial Co-Pilot
 - **AI Draft Generation**: Accelerates content creation by synthesizing comprehensive drafts from raw source URLs, interview transcripts, or bullet notes.
@@ -87,7 +95,7 @@ PressHub AI adheres strictly to enterprise software engineering standards:
 ### ⚙️ Settings-First Principle
 > **No operational limit, threshold, cap, time budget, batch size, retry count, or rate limit that affects user-visible behavior may be hardcoded inside business logic.**
 
-Every parameter is registered in the WordPress Options API with strict sanitization bounds, exposed via `PressHub_AI_Settings_Storage`, and rendered in the admin settings UI.
+Every parameter is registered in the WordPress Options API with strict sanitization bounds, exposed via `PressHub_AI_Settings_Storage`, and rendered in the admin settings UI. Module-level token limits and HTTP timeouts enforce minimum safe thresholds (e.g. `max_tokens ≥ 64`, `timeout ≥ 10s`) ensuring unrendered form submissions or empty inputs never corrupt model execution parameters.
 
 ### 🛡️ Zero-Silent-Fallback Principle
 > **No business logic, API client, prompt resolver, or pipeline stage may silently fall back to a hardcoded model, prompt, or operational parameter when configuration is missing or failing.**

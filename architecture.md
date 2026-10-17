@@ -99,8 +99,23 @@ graph TD
     - `curated_briefing`: Uses text story post content.
     - `harvested_articles`: Uses raw harvested articles pool.
 
-### 4.4 Audio Synthesizer (`PressHub_AI_Audio_Synthesizer`)
-- **Role**: Synthesizes speech audio from dialogue scripts using Google Gemini 2.5/3.1 Flash Preview or Google Cloud TTS.
+### 4.4 Audio Synthesizer (`PressHub_AI_Audio_Synthesizer` & `PressHub_AI_API_Client`)
+- **Role**: Synthesizes speech audio from dialogue scripts using Google Gemini (e.g. `gemini-3.8-flash-tts`, `gemini-3.8-flash-lite-tts`, `gemini-2.5-flash-native-audio`) or Google Cloud TTS.
+- **Gemini 3.8 TTS REST Specification & Clean Slate Architecture**:
+  - **Verbatim Transcript Invariant**: Spoken content in `contents[0].parts[].text` contains strictly verbatim dialogue text. Prompt directives, delivery styles, and actor roles are **never** prepended to transcript strings, eliminating prompt narration.
+  - **Official Gemini 3.8 TTS REST Standard (`structured` — Recommended)**:
+    - Strictly conforms to Google's official Gemini 3.8 TTS REST documentation (`https://ai.google.dev/gemini-api/docs/generate-content/speech-generation#rest`).
+    - Presenter voices are mapped in `speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs` (or `voiceConfig` for single speaker).
+    - Delivery emotions, pacing/speed, and pitch tuning are passed via sustained turn-level `speech_metadata.style` composed via `PressHub_AI_API_Client::compose_tts_style_string()`.
+    - Omits top-level `systemInstruction` (not part of the official Gemini 3.8 TTS REST schema).
+    - In the Settings UI, the Gemini Speech System Instruction setting dynamically greys out with an informative notice badge explaining that Google controls tone, speed, and pitch directly via turn-level `speech_metadata.style`.
+  - **Hybrid / System Instruction Override Mode (`hybrid_instruction`)**:
+    - Passes both turn-level `speech_metadata.style` and a top-level `systemInstruction` block with `{style_instruction}`, `{speed}`, `{pitch}`, `{speaker1}`, and `{speaker2}` placeholders resolved. All settings remain active.
+  - **Legacy Prepended Instruction Mode (`legacy` — Deprecated)**:
+    - Backward-compatibility mode prepending style instructions directly into script text.
+    - System instruction, speaking speed, and voice pitch settings dynamically grey out in the UI.
+  - **RIFF WAV Header Handling**:
+    - Gemini 3.8 TTS returns full WAV files with RIFF headers; audio decoding checks for the RIFF signature before applying PCM-to-WAV wrapping to prevent audio stream corruption.
 - **Voice Catalog**:
   - Uses canonical voice catalog (`assets/data/tts-voice-catalog.json`).
   - Supports 30+ voice personas with speed and pitch controls.
@@ -180,7 +195,31 @@ graph TD
   - Content hash stored in `_presshub_ai_scorecard_hash` avoids redundant LLM dispatches when post text has not changed.
 - **Workflow & UI Presentation**:
   - Editorial review metabox (`class-metaboxes.php`) and Admin JS (`assets/admin.js`) render the Score badge, Libel Risk badge (color-coded: subtle green for Low, orange for Medium, red for High), editorial critique paragraph, and alert box for active legal concerns.
-  - Email notification on failure (`notify_editor_failure()`) incorporates libel risk ratings and flagged legal concerns.
+### 4.12 Gemini Speech API JSON Payload Inspector & Live Audio Tester
+- **Components**: `PressHub_AI_Settings_Render::render_gemini_tts_tester()`, `PressHub_AI_Ajax_Handlers` (`presshub_ai_preview_tts_payload`, `presshub_ai_test_tts_synthesis`), `PressHub_AI_API_Client::test_synthesize_speech()`, `assets/admin.js`.
+- **Live JSON Payload Inspection**:
+  - Automatically reconstructs the exact JSON payload sent to Gemini's speech generation endpoint in real time whenever any audio option (Presenter 1/2 voices, speaking rate, voice pitch, delivery style, payload structure mode, custom system instructions, or test script) is modified.
+  - Formatted inside a responsive, monospace syntax container with one-click clipboard copy (`#presshub-copy-tts-json-btn`).
+- **Interactive Audio Synthesis Testing Studio**:
+  - Allows editors to verify voice pronunciation, pacing, pitch, and multi-speaker turn transitions without running full daily briefing pipelines.
+  - Features quick-switch presets (1 Presenter vs. 2 Presenters) and editable sample scripts in Greek.
+  - Sends AJAX request to `test_synthesize_speech()` which invokes Gemini's endpoint and returns an in-browser playable Base64 audio data URL, generation duration in milliseconds, audio byte size, and model identifier.
+  - Embeds HTML5 `<audio>` player with instant playback and direct audio file download link.
+- **Access & Navigation**:
+  - Located in Daily Briefing settings (`admin.php?page=presshub-ai#briefing`).
+  - Directly accessible from the Daily Briefing Hub (`admin.php?page=presshub-ai-briefing`) via a direct link button in the **Audio Synthesis Stage Card** (`#stage-audio`).
+  - Gated by capability filter `presshub_ai_briefing_cap` (defaults to `edit_others_posts`, Editors and above).
+
+### 4.13 Module Tuning Safeguards & Sub-Threshold Fallbacks
+- **Problem & Vulnerability**:
+  - When saving settings or tabs without all registered fields present, unrendered options received empty strings or `null`. An integer clamp `max( 1, (int) $val )` previously converted empty strings (`(int) "" === 0`) to `1` for `max_tokens` and `5` for `timeout`.
+  - Storing `max_tokens = 1` in `wp_options` caused LLM text and script generations to abort immediately after 1 token with `"reached maximum output tokens limit (1 tokens)"`.
+- **Architectural Safeguards**:
+  - **Resolution Threshold Guard**: `PressHub_AI_API_Client::resolve_options_for_module()` enforces strict minimum thresholds (`max_tokens >= 64`, `timeout >= 10s`). Sub-threshold options in `wp_options` are safely bypassed in favor of the configured provider record (`$provider_record['max_tokens']`, e.g. 60,000 for Gemini) or class defaults (`PressHub_AI_Provider_Defaults::default_max_tokens()`).
+  - **Sanitizer Protection**: `PressHub_AI_Settings_Storage::sanitize_max_tokens()` returns `0` (indicating no module-level override) for `null` or empty string inputs instead of clamping to 1.
+  - **Settings-First Accessors**: Added dedicated storage helpers (`get_briefing_podcast_max_tokens()`, `get_briefing_text_max_tokens()`, `get_coauthor_max_tokens()`, `get_copilot_max_tokens()`) returning `0` when unset or `< 64`.
+  - **Exposed Settings Inputs**: Exposed explicit "Maximum Output Tokens" inputs across all pipeline modules in `PressHub AI → Settings` with safe bounds (`min="64" max="65536"`).
+  - **Auto-Purge Migration**: `presshub_ai_migrate_fix_corrupted_tuning_options()` cleanses corrupted database rows (`max_tokens < 64`, `timeout < 10`) on initialization.
 
 ---
 

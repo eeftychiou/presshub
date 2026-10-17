@@ -129,9 +129,9 @@ class PressHub_AI_Settings_Render {
                                 <tr>
                                     <th scope="row"><label for="presshub_ai_coauthor_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
-                                        <?php $cur_coauthor_tokens = (int) get_option( 'presshub_ai_coauthor_max_tokens', PressHub_AI_Provider_Defaults::default_max_tokens() ); ?>
-                                        <input type="number" min="1" max="65536" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_tokens ); ?>" class="small-text" />
-                                        <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (1 - 65,536). Default: 16,384.', 'presshub-ai-editor' ); ?></p>
+                                        <?php $cur_coauthor_tokens = PressHub_AI_Settings_Storage::get_coauthor_max_tokens(); ?>
+                                        <input type="number" min="64" max="65536" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo $cur_coauthor_tokens > 0 ? self::esc_attr_safe( (string) $cur_coauthor_tokens ) : ''; ?>" class="small-text" placeholder="20000" />
+                                        <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
                                     </td>
                                 </tr>
                                 <tr>
@@ -234,6 +234,14 @@ class PressHub_AI_Settings_Render {
                                 <td>
                                     <?php $cur_text_model = (string) get_option( 'presshub_ai_briefing_text_model', '' ); ?>
                                     <input type="text" name="presshub_ai_briefing_text_model" id="presshub_ai_briefing_text_model" value="<?php echo self::esc_attr_safe( $cur_text_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default', 'presshub-ai-editor' ); ?>" />
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_max_tokens"><?php echo __( 'Curator Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $cur_text_tokens = PressHub_AI_Settings_Storage::get_briefing_text_max_tokens(); ?>
+                                    <input type="number" min="64" max="65536" name="presshub_ai_briefing_text_max_tokens" id="presshub_ai_briefing_text_max_tokens" value="<?php echo $cur_text_tokens > 0 ? self::esc_attr_safe( (string) $cur_text_tokens ) : ''; ?>" class="small-text" placeholder="20000" />
+                                    <p class="description"><?php echo __( 'Maximum output tokens for news story curation (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
                             <tr>
@@ -369,6 +377,14 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_max_tokens"><?php echo __( 'Scriptwriter Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $cur_pod_tokens = PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens(); ?>
+                                    <input type="number" min="64" max="65536" name="presshub_ai_briefing_podcast_max_tokens" id="presshub_ai_briefing_podcast_max_tokens" value="<?php echo $cur_pod_tokens > 0 ? self::esc_attr_safe( (string) $cur_pod_tokens ) : ''; ?>" class="small-text" placeholder="20000" />
+                                    <p class="description"><?php echo __( 'Maximum output tokens for podcast script generation (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_target_duration"><?php echo __( 'Target Podcast Duration', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_target_duration_field(); ?>
@@ -438,8 +454,31 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_tts_custom_style_field(); ?>
                                 </td>
                             </tr>
+                            <?php
+                            $cur_payload_mode = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured';
+                            $sys_inactive     = in_array( $cur_payload_mode, [ 'structured', 'legacy' ], true );
+                            $speed_inactive   = ( 'legacy' === $cur_payload_mode );
+                            $pitch_inactive   = ( 'legacy' === $cur_payload_mode );
+                            ?>
+                            <tr id="presshub-tts-payload-mode-row">
+                                <th scope="row"><label for="presshub_ai_briefing_tts_payload_mode"><?php echo __( 'Gemini Speech Payload Structure', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_payload_mode_field(); ?>
+                                </td>
+                            </tr>
+                            <tr id="presshub-tts-system-instruction-row" class="<?php echo $sys_inactive ? 'presshub-setting-inactive' : ''; ?>">
+                                <th scope="row"><label for="presshub_ai_briefing_tts_system_instruction"><?php echo __( 'Gemini Speech System Instruction', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <div class="presshub-inactive-mode-badge" style="<?php echo $sys_inactive ? '' : 'display: none;'; ?>">
+                                        <span class="dashicons dashicons-info" style="color: #646970; font-size: 16px; width: 16px; height: 16px; vertical-align: text-bottom;"></span>
+                                        <strong><?php echo esc_html__( 'Not used by Official Gemini 3.8 TTS REST Standard:', 'presshub-ai-editor' ); ?></strong>
+                                        <?php echo esc_html__( 'Google\'s official Gemini 3.8 TTS specification controls tone, speed, and pitch directly via turn-level speech_metadata.style without top-level system instructions. To pass a top-level system instruction directive, select "Hybrid / System Instruction Override" above.', 'presshub-ai-editor' ); ?>
+                                    </div>
+                                    <?php $this->render_briefing_tts_system_instruction_field(); ?>
+                                </td>
+                            </tr>
                             <?php $cur_host_count = PressHub_AI_Settings_Storage::get_briefing_host_count(); ?>
-                            <tr>
+                            <tr id="presshub-voice-female-row">
                                 <th scope="row"><label for="presshub_ai_briefing_voice_female"><?php echo __( 'Presenter 1 Voice (TTS)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_voice_female_field(); ?>
@@ -457,15 +496,23 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_voice_tertiary_field(); ?>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr id="presshub-voice-speed-row" class="<?php echo $speed_inactive ? 'presshub-setting-inactive' : ''; ?>">
                                 <th scope="row"><label for="presshub_ai_briefing_voice_speed"><?php echo __( 'Speaking Rate / Speed', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
+                                    <div class="presshub-inactive-mode-badge" style="<?php echo $speed_inactive ? '' : 'display: none;'; ?>">
+                                        <span class="dashicons dashicons-info" style="color: #646970; font-size: 16px; width: 16px; height: 16px; vertical-align: text-bottom;"></span>
+                                        <?php echo esc_html__( 'Not used in Legacy mode (Legacy mode only prepends plain text instructions before the script).', 'presshub-ai-editor' ); ?>
+                                    </div>
                                     <?php $this->render_briefing_voice_speed_field(); ?>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr id="presshub-voice-pitch-row" class="<?php echo $pitch_inactive ? 'presshub-setting-inactive' : ''; ?>">
                                 <th scope="row"><label for="presshub_ai_briefing_voice_pitch"><?php echo __( 'Voice Pitch Tuning', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
+                                    <div class="presshub-inactive-mode-badge" style="<?php echo $pitch_inactive ? '' : 'display: none;'; ?>">
+                                        <span class="dashicons dashicons-info" style="color: #646970; font-size: 16px; width: 16px; height: 16px; vertical-align: text-bottom;"></span>
+                                        <?php echo esc_html__( 'Not used in Legacy mode (Legacy mode only prepends plain text instructions before the script).', 'presshub-ai-editor' ); ?>
+                                    </div>
                                     <?php $this->render_briefing_voice_pitch_field(); ?>
                                 </td>
                             </tr>
@@ -507,6 +554,8 @@ class PressHub_AI_Settings_Render {
                             </tr>
                         </tbody>
                     </table>
+
+                    <?php $this->render_gemini_tts_tester(); ?>
 
                     <hr style="margin: 25px 0;">
                     <h3><?php echo esc_html__( '3. Podcast Dialogue Styles & Prompt Studio', 'presshub-ai-editor' ); ?></h3>
@@ -558,9 +607,9 @@ class PressHub_AI_Settings_Render {
                             <tr>
                                 <th scope="row"><label for="presshub_ai_copilot_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $cur_copilot_tokens = (int) get_option( 'presshub_ai_copilot_max_tokens', PressHub_AI_Provider_Defaults::default_max_tokens() ); ?>
-                                    <input type="number" min="1" max="65536" name="presshub_ai_copilot_max_tokens" id="presshub_ai_copilot_max_tokens" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_tokens ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (1 - 65,536). Default: 16,384.', 'presshub-ai-editor' ); ?></p>
+                                    <?php $cur_copilot_tokens = PressHub_AI_Settings_Storage::get_copilot_max_tokens(); ?>
+                                    <input type="number" min="64" max="65536" name="presshub_ai_copilot_max_tokens" id="presshub_ai_copilot_max_tokens" value="<?php echo $cur_copilot_tokens > 0 ? self::esc_attr_safe( (string) $cur_copilot_tokens ) : ''; ?>" class="small-text" placeholder="20000" />
+                                    <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
                             <tr>
@@ -2435,6 +2484,178 @@ class PressHub_AI_Settings_Render {
         ?>
         <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="3" class="large-text" placeholder="<?php echo esc_attr__( 'e.g. Say in an energetic, radio-broadcaster style with rapid pace and enthusiasm in Greek:', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
         <p class="description"><?php echo __( 'Custom prompt prefix prepended before spoken text when Style is set to "Custom Prompt Instruction".', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_tts_payload_mode_field() {
+        $option   = 'presshub_ai_briefing_tts_payload_mode';
+        $selected = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured';
+        $modes    = [
+            'structured'         => [
+                'label' => __( 'Official Gemini 3.8 TTS REST Standard (speech_metadata.style) — Recommended', 'presshub-ai-editor' ),
+                'desc'  => __( 'Strictly adheres to Google\'s Gemini 3.8 TTS REST specification. Turn-level speech_metadata controls style, speed, and pitch without top-level system instructions. Verbatim dialogue in parts eliminates prompt narration.', 'presshub-ai-editor' ),
+            ],
+            'hybrid_instruction' => [
+                'label' => __( 'Hybrid / System Instruction Override (speech_metadata + systemInstruction)', 'presshub-ai-editor' ),
+                'desc'  => __( 'Sends turn-level speech_metadata AND passes a top-level systemInstruction directive block with {speaker1}, {speaker2}, {speed}, and {pitch} placeholders resolved.', 'presshub-ai-editor' ),
+            ],
+            'legacy'             => [
+                'label' => __( 'Legacy Prepended Instruction (instruction text prepended before script — Deprecated)', 'presshub-ai-editor' ),
+                'desc'  => __( 'Old format: prepends prompt instruction directly into script text. (Note: May be read aloud by Gemini 3.8 TTS models).', 'presshub-ai-editor' ),
+            ],
+        ];
+        if ( ! isset( $modes[ $selected ] ) ) {
+            $selected = 'structured';
+        }
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <?php foreach ( $modes as $key => $mode ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $key ); ?>" <?php echo $selected === $key ? 'selected="selected"' : ''; ?>>
+                    <?php echo self::esc_html_safe( $mode['label'] ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description">
+            <?php echo esc_html__( 'Controls how prompts, delivery instructions, speaker personas, speed, and pitch are formatted when calling the Gemini Speech API.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_briefing_tts_system_instruction_field() {
+        $option  = 'presshub_ai_briefing_tts_system_instruction';
+        $current = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction() : '';
+        $default = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::default_briefing_tts_system_instruction() : '';
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="5" class="large-text code" placeholder="<?php echo esc_attr( $default ); ?>"><?php echo esc_textarea( $current ); ?></textarea>
+        <p class="description">
+            <?php echo esc_html__( 'System instruction template passed to the Gemini model for speech synthesis. Leave empty to use the built-in external default template.', 'presshub-ai-editor' ); ?>
+            <br />
+            <strong><?php echo esc_html__( 'Supported placeholders:', 'presshub-ai-editor' ); ?></strong> <code>{style_instruction}</code>, <code>{speed}</code>, <code>{pitch}</code>, <code>{speaker1}</code>, <code>{speaker2}</code>.
+        </p>
+        <p>
+            <button type="button" class="button button-secondary" id="presshub-restore-default-tts-instruction" data-default="<?php echo esc_attr( $default ); ?>">
+                <?php echo esc_html__( 'Restore Default System Instruction', 'presshub-ai-editor' ); ?>
+            </button>
+        </p>
+        <?php
+    }
+
+    public function render_gemini_tts_tester() {
+        require_once __DIR__ . '/class-api-client.php';
+        $client       = new PressHub_AI_API_Client();
+        $initial_text = "[Presenter 1]: Καλημέρα σας από το PressHub AI. Αυτή είναι μια ζωντανή δοκιμή παραγωγής φωνής.\n\n[Presenter 2]: Επιβεβαιώνουμε τη φυσική ροή του διαλόγου, το ρυθμό εκφώνησης και τον επαγγελματικό τόνο.";
+        $p1_voice     = PressHub_AI_Settings_Storage::get_voice_female();
+        $p2_voice     = PressHub_AI_Settings_Storage::get_voice_male();
+        $multi_speakers = [
+            [
+                'speaker'     => 'Presenter 1',
+                'voiceConfig' => [
+                    'prebuiltVoiceConfig' => [ 'voiceName' => $p1_voice ],
+                ],
+            ],
+            [
+                'speaker'     => 'Presenter 2',
+                'voiceConfig' => [
+                    'prebuiltVoiceConfig' => [ 'voiceName' => $p2_voice ],
+                ],
+            ],
+        ];
+        $initial_payload = $client->build_gemini_tts_request_body(
+            $initial_text,
+            $p1_voice,
+            true,
+            $multi_speakers,
+            PressHub_AI_Settings_Storage::get_briefing_tts_style(),
+            PressHub_AI_Settings_Storage::get_voice_speed(),
+            PressHub_AI_Settings_Storage::get_voice_pitch(),
+            PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode(),
+            PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction()
+        );
+        $initial_json = wp_json_encode( $initial_payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+        ?>
+        <div class="presshub-tts-tester-card" id="presshub-tts-tester-card" style="margin-top: 25px; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #e2e4e7; padding-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <h3 style="margin: 0 0 5px 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                        <span class="dashicons dashicons-format-audio" style="color: #2271b1;"></span>
+                        <?php echo esc_html__( 'Gemini Speech API JSON Payload Inspector & Live Audio Tester', 'presshub-ai-editor' ); ?>
+                    </h3>
+                    <p class="description" style="margin: 0;">
+                        <?php echo esc_html__( 'Inspect the exact JSON request sent to Gemini (gemini-3.8-flash-lite-tts / native audio) and test speech synthesis with the selected voice personas, speed, pitch, and delivery style.', 'presshub-ai-editor' ); ?>
+                    </p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" class="button button-secondary" id="presshub-preview-tts-payload-btn">
+                        <span class="dashicons dashicons-visibility" style="vertical-align: text-top;"></span>
+                        <?php echo esc_html__( 'Update JSON Preview', 'presshub-ai-editor' ); ?>
+                    </button>
+                    <button type="button" class="button button-primary" id="presshub-test-tts-btn">
+                        <span class="dashicons dashicons-controls-play" style="vertical-align: text-top;"></span>
+                        <?php echo esc_html__( 'Test Speech Synthesis', 'presshub-ai-editor' ); ?>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Test Options & Dialogue Editor -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 15px;">
+                <div>
+                    <label for="presshub-tts-test-text" style="font-weight: 600; display: block; margin-bottom: 5px;">
+                        <?php echo esc_html__( 'Test Dialogue Script:', 'presshub-ai-editor' ); ?>
+                    </label>
+                    <textarea id="presshub-tts-test-text" rows="4" class="large-text" style="font-family: monospace; font-size: 13px;" placeholder="<?php echo esc_attr__( 'Enter test script or leave empty for default Greek dialogue...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $initial_text ); ?></textarea>
+                    <div style="display: flex; gap: 15px; margin-top: 8px; align-items: center;">
+                        <label>
+                            <input type="radio" name="presshub_tts_test_hosts" value="2" checked="checked" />
+                            <?php echo esc_html__( '2 Hosts (Presenter 1 & 2)', 'presshub-ai-editor' ); ?>
+                        </label>
+                        <label>
+                            <input type="radio" name="presshub_tts_test_hosts" value="1" />
+                            <?php echo esc_html__( 'Single Host (Presenter 1)', 'presshub-ai-editor' ); ?>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-weight: 600; display: block; margin-bottom: 5px;">
+                        <?php echo esc_html__( 'Live Synthesis Audio Player & Status:', 'presshub-ai-editor' ); ?>
+                    </label>
+                    <div id="presshub-tts-player-wrap" style="background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px; padding: 15px; min-height: 90px; display: flex; flex-direction: column; justify-content: center;">
+                        <div id="presshub-tts-test-idle" style="color: #646970; font-size: 13px; text-align: center;">
+                            <?php echo esc_html__( 'Click "Test Speech Synthesis" above to generate sample audio using the configured Gemini model, voices, speed, pitch, and style.', 'presshub-ai-editor' ); ?>
+                        </div>
+                        <div id="presshub-tts-test-loading" style="display: none; text-align: center;">
+                            <span class="spinner is-active" style="float: none; margin: 0 5px 0 0;"></span>
+                            <span style="font-weight: 500; color: #2271b1;"><?php echo esc_html__( 'Synthesizing speech via Gemini API...', 'presshub-ai-editor' ); ?></span>
+                        </div>
+                        <div id="presshub-tts-test-result" style="display: none;">
+                            <audio id="presshub-tts-test-audio-player" controls style="width: 100%; margin-bottom: 8px;"></audio>
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #50575e;">
+                                <span id="presshub-tts-test-metrics"></span>
+                                <a id="presshub-tts-download-link" href="#" download="gemini-tts-test.wav" class="button button-small" style="display: none;">
+                                    <?php echo esc_html__( 'Download Audio (WAV)', 'presshub-ai-editor' ); ?>
+                                </a>
+                            </div>
+                        </div>
+                        <div id="presshub-tts-test-error" class="notice notice-error inline" style="display: none; margin: 8px 0 0 0;">
+                            <p style="margin: 4px 0; font-size: 12px;"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Full JSON Request Body Inspection -->
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label for="presshub-tts-payload-preview" style="font-weight: 600; font-size: 13px;">
+                        <?php echo esc_html__( 'Complete JSON Message Sent to Gemini Speech Endpoint:', 'presshub-ai-editor' ); ?>
+                    </label>
+                    <button type="button" class="button button-small" id="presshub-copy-tts-json-btn">
+                        <?php echo esc_html__( 'Copy JSON', 'presshub-ai-editor' ); ?>
+                    </button>
+                </div>
+                <pre id="presshub-tts-payload-preview" style="background: #1e1e1e; color: #d4d4d4; padding: 12px 15px; border-radius: 4px; max-height: 380px; overflow-y: auto; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.5; margin: 0; white-space: pre-wrap; word-break: break-all;"><?php echo esc_html( $initial_json ); ?></pre>
+            </div>
+        </div>
         <?php
     }
 

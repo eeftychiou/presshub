@@ -31,6 +31,8 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_briefing_generate_podcast', [ $this, 'briefing_run_script' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_save_script', [ $this, 'briefing_save_script' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_generate_audio', [ $this, 'briefing_generate_audio' ] );
+        add_action( 'wp_ajax_presshub_ai_test_tts_synthesis', [ $this, 'test_tts_synthesis' ] );
+        add_action( 'wp_ajax_presshub_ai_preview_tts_payload', [ $this, 'preview_tts_payload' ] );
         add_action( 'wp_ajax_presshub_ai_regenerate_podcast_audio', [ $this, 'regenerate_podcast_audio' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
         // AJAX Settings Save
@@ -1426,6 +1428,144 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
     }
 
     /**
+     * AJAX: presshub_ai_preview_tts_payload — builds and returns the JSON payload for inspection.
+     */
+    public function preview_tts_payload(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-settings-storage.php';
+        require_once __DIR__ . '/class-api-client.php';
+
+        $text               = isset( $_POST['text'] ) ? wp_unslash( $_POST['text'] ) : '';
+        $speaker1           = isset( $_POST['speaker1'] ) ? sanitize_text_field( wp_unslash( $_POST['speaker1'] ) ) : PressHub_AI_Settings_Storage::get_voice_female();
+        $speaker2           = isset( $_POST['speaker2'] ) ? sanitize_text_field( wp_unslash( $_POST['speaker2'] ) ) : PressHub_AI_Settings_Storage::get_voice_male();
+        $speed              = isset( $_POST['speed'] ) ? floatval( $_POST['speed'] ) : PressHub_AI_Settings_Storage::get_voice_speed();
+        $pitch              = isset( $_POST['pitch'] ) ? floatval( $_POST['pitch'] ) : PressHub_AI_Settings_Storage::get_voice_pitch();
+        $style              = isset( $_POST['style'] ) ? sanitize_key( wp_unslash( $_POST['style'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_style();
+        $custom_style       = isset( $_POST['custom_style'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_style'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_custom_style();
+        $payload_mode       = isset( $_POST['payload_mode'] ) ? sanitize_key( wp_unslash( $_POST['payload_mode'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode();
+        $system_instruction = isset( $_POST['system_instruction'] ) ? wp_unslash( $_POST['system_instruction'] ) : PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction();
+        $two_hosts          = ! empty( $_POST['two_hosts'] ) && '0' !== $_POST['two_hosts'] && 'false' !== $_POST['two_hosts'];
+
+        if ( '' === trim( $text ) ) {
+            if ( $two_hosts ) {
+                $text = "Ομιλητής 1: Καλημέρα σας. Ξεκινάμε με τις σημαντικότερες ειδήσεις της ημέρας.\nΟμιλητής 2: Πράγματι, στο επίκεντρο βρίσκονται οι τελευταίες οικονομικές και πολιτικές εξελίξεις.";
+            } else {
+                $text = "Καλημέρα σας. Μεταδίδουμε τις κυριότερες ειδήσεις της ημέρας σε άμεση και υπεύθυνη ενημέρωση.";
+            }
+        }
+
+        $multi_speakers = [];
+        if ( $two_hosts ) {
+            $multi_speakers = [
+                [
+                    'speaker'     => 'Speaker 1',
+                    'voiceConfig' => [
+                        'prebuiltVoiceConfig' => [ 'voiceName' => $speaker1 ],
+                    ],
+                ],
+                [
+                    'speaker'     => 'Speaker 2',
+                    'voiceConfig' => [
+                        'prebuiltVoiceConfig' => [ 'voiceName' => $speaker2 ],
+                    ],
+                ],
+            ];
+        }
+
+        $used_style = ( 'custom' === $style && ! empty( $custom_style ) ) ? $custom_style : $style;
+
+        $client  = new PressHub_AI_API_Client();
+        $payload = $client->build_gemini_tts_request_body(
+            $text,
+            $speaker1,
+            $two_hosts,
+            $multi_speakers,
+            $used_style,
+            $speed,
+            $pitch,
+            $payload_mode,
+            $system_instruction
+        );
+
+        $json_formatted = wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+
+        wp_send_json_success( [
+            'payload'        => $payload,
+            'json_formatted' => $json_formatted,
+            'meta'           => [
+                'payload_mode' => $payload_mode,
+                'speaker1'     => $speaker1,
+                'speaker2'     => $speaker2,
+                'two_hosts'    => $two_hosts,
+                'speed'        => $speed,
+                'pitch'        => $pitch,
+                'style'        => $style,
+            ],
+        ] );
+    }
+
+    /**
+     * AJAX: presshub_ai_test_tts_synthesis — runs a live synthesis test against the Gemini endpoint.
+     */
+    public function test_tts_synthesis(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
+        }
+
+        require_once __DIR__ . '/class-settings-storage.php';
+        require_once __DIR__ . '/class-api-client.php';
+
+        $text               = isset( $_POST['text'] ) ? wp_unslash( $_POST['text'] ) : '';
+        $speaker1           = isset( $_POST['speaker1'] ) ? sanitize_text_field( wp_unslash( $_POST['speaker1'] ) ) : PressHub_AI_Settings_Storage::get_voice_female();
+        $speaker2           = isset( $_POST['speaker2'] ) ? sanitize_text_field( wp_unslash( $_POST['speaker2'] ) ) : PressHub_AI_Settings_Storage::get_voice_male();
+        $speed              = isset( $_POST['speed'] ) ? floatval( $_POST['speed'] ) : PressHub_AI_Settings_Storage::get_voice_speed();
+        $pitch              = isset( $_POST['pitch'] ) ? floatval( $_POST['pitch'] ) : PressHub_AI_Settings_Storage::get_voice_pitch();
+        $style              = isset( $_POST['style'] ) ? sanitize_key( wp_unslash( $_POST['style'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_style();
+        $custom_style       = isset( $_POST['custom_style'] ) ? sanitize_text_field( wp_unslash( $_POST['custom_style'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_custom_style();
+        $payload_mode       = isset( $_POST['payload_mode'] ) ? sanitize_key( wp_unslash( $_POST['payload_mode'] ) ) : PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode();
+        $system_instruction = isset( $_POST['system_instruction'] ) ? wp_unslash( $_POST['system_instruction'] ) : PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction();
+        $two_hosts          = ! empty( $_POST['two_hosts'] ) && '0' !== $_POST['two_hosts'] && 'false' !== $_POST['two_hosts'];
+
+        if ( '' === trim( $text ) ) {
+            if ( $two_hosts ) {
+                $text = "Ομιλητής 1: Καλημέρα σας. Ξεκινάμε με τις σημαντικότερες ειδήσεις της ημέρας.\nΟμιλητής 2: Πράγματι, στο επίκεντρο βρίσκονται οι τελευταίες οικονομικές και πολιτικές εξελίξεις.";
+            } else {
+                $text = "Καλημέρα σας. Μεταδίδουμε τις κυριότερες ειδήσεις της ημέρας σε άμεση και υπεύθυνη ενημέρωση.";
+            }
+        }
+
+        $client = new PressHub_AI_API_Client();
+        $result = $client->test_synthesize_speech( [
+            'text'               => $text,
+            'speaker1'           => $speaker1,
+            'speaker2'           => $speaker2,
+            'two_hosts'          => $two_hosts,
+            'speed'              => $speed,
+            'pitch'              => $pitch,
+            'style'              => $style,
+            'custom_style'       => $custom_style,
+            'payload_mode'       => $payload_mode,
+            'system_instruction' => $system_instruction,
+        ] );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( [
+                'message' => $result->get_error_message(),
+                'code'    => $result->get_error_code(),
+            ] );
+        }
+
+        wp_send_json_success( $result );
+    }
+
+    /**
      * AJAX handler: save all PressHub AI settings cleanly and securely.
      */
     public function save_settings(): void {
@@ -1502,6 +1642,11 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_tts_model'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_model' ],
                 'presshub_ai_briefing_tts_style'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_style' ],
                 'presshub_ai_briefing_tts_custom_style'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_custom_style' ],
+                'presshub_ai_briefing_tts_payload_mode'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_payload_mode' ],
+                'presshub_ai_briefing_tts_system_instruction' => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_system_instruction' ],
+                'presshub_ai_briefing_featured_image_ids'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_featured_image_ids' ],
+                'presshub_ai_briefing_featured_image_ids_morning'  => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_featured_image_ids' ],
+                'presshub_ai_briefing_featured_image_ids_noon'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_featured_image_ids' ],
                 'presshub_ai_briefing_schedule_enabled'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
                 'presshub_ai_briefing_noon_schedule_enabled'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
                 'presshub_ai_briefing_harvest_time'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_harvest_time' ],

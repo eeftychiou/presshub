@@ -322,6 +322,14 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_custom_style' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_payload_mode', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_payload_mode' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_system_instruction', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_system_instruction' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_category', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_category_id' ],
             'type'              => 'integer',
@@ -600,6 +608,8 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_audio_split_by_topic', __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ), [ $render, 'render_briefing_audio_split_by_topic_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_style', __( 'Speaking Delivery Style', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_custom_style', __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_custom_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_payload_mode', __( 'Gemini Speech Payload Structure', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_payload_mode_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_system_instruction', __( 'Gemini Speech System Instruction', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_system_instruction_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_category', __( 'Text Briefing Category', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_category', __( 'Podcast Category', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_category_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_status', __( 'Text Briefing Post Status', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -790,12 +800,24 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function sanitize_max_tokens( $value ) {
+        if ( null === $value || '' === trim( (string) $value ) ) {
+            return 0;
+        }
         $n = (int) wp_unslash( $value );
+        if ( $n <= 0 ) {
+            return 1;
+        }
         return max( 1, min( 65536, $n ) );
     }
 
     public static function sanitize_timeout( $value ) {
+        if ( null === $value || '' === trim( (string) $value ) ) {
+            return PressHub_AI_Provider_Defaults::DEFAULT_TIMEOUT;
+        }
         $n = (int) wp_unslash( $value );
+        if ( $n <= 0 ) {
+            return 5;
+        }
         return max( 5, min( 300, $n ) );
     }
 
@@ -1905,6 +1927,42 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Settings-First getter for Briefing Podcast Scriptwriter Maximum Output Tokens.
+     * Returns 0 if unset or < 64 (meaning no module override, use provider default).
+     */
+    public static function get_briefing_podcast_max_tokens(): int {
+        $value = (int) get_option( 'presshub_ai_briefing_podcast_max_tokens', 0 );
+        return ( $value >= 64 && $value <= 65536 ) ? $value : 0;
+    }
+
+    /**
+     * Settings-First getter for Briefing Text Story Curator Maximum Output Tokens.
+     * Returns 0 if unset or < 64 (meaning no module override, use provider default).
+     */
+    public static function get_briefing_text_max_tokens(): int {
+        $value = (int) get_option( 'presshub_ai_briefing_text_max_tokens', 0 );
+        return ( $value >= 64 && $value <= 65536 ) ? $value : 0;
+    }
+
+    /**
+     * Settings-First getter for AI Co-Author Maximum Output Tokens.
+     * Returns 0 if unset or < 64 (meaning no module override, use provider default).
+     */
+    public static function get_coauthor_max_tokens(): int {
+        $value = (int) get_option( 'presshub_ai_coauthor_max_tokens', 0 );
+        return ( $value >= 64 && $value <= 65536 ) ? $value : 0;
+    }
+
+    /**
+     * Settings-First getter for AI Copilot Maximum Output Tokens.
+     * Returns 0 if unset or < 64 (meaning no module override, use provider default).
+     */
+    public static function get_copilot_max_tokens(): int {
+        $value = (int) get_option( 'presshub_ai_copilot_max_tokens', 0 );
+        return ( $value >= 64 && $value <= 65536 ) ? $value : 0;
+    }
+
+    /**
      * Issue #65 — Sanitize the operator-configurable title prefix prepended
      * to the generated Text Story post title. Clamps to a 60-character
      * max so a runaway value can't break the post title field; falls back
@@ -2224,6 +2282,21 @@ class PressHub_AI_Settings_Storage {
             return '';
         }
         return substr( trim( $value ), 0, 2000 );
+    }
+
+    public static function sanitize_briefing_tts_payload_mode( $value ): string {
+        $allowed = [ 'structured', 'hybrid_instruction', 'legacy', 'system_instruction', 'speech_metadata' ];
+        $value   = strtolower( trim( (string) wp_unslash( $value ) ) );
+        return in_array( $value, $allowed, true ) ? $value : self::default_briefing_tts_payload_mode();
+    }
+
+    public static function sanitize_briefing_tts_system_instruction( $value ): string {
+        $value = wp_unslash( $value );
+        if ( ! is_string( $value ) ) {
+            return self::default_briefing_tts_system_instruction();
+        }
+        $trimmed = trim( $value );
+        return '' === $trimmed ? self::default_briefing_tts_system_instruction() : substr( $trimmed, 0, 5000 );
     }
 
     public static function sanitize_briefing_status( $value ): string {
@@ -2653,6 +2726,86 @@ class PressHub_AI_Settings_Storage {
         return 'formal';
     }
 
+    public static function default_briefing_tts_payload_mode(): string {
+        return 'structured';
+    }
+
+    public static function default_briefing_tts_system_instruction(): string {
+        if ( class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            try {
+                return PressHub_AI_Prompt_Loader::load( 'tts/default_gemini_tts_system_instruction.txt' );
+            } catch ( \Throwable $e ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( 'Failed to load TTS system instruction prompt asset: ' . $e->getMessage() );
+                }
+            }
+        }
+        return "You are an expert news broadcaster and podcast host delivering a professional news update in Greek.\nDelivery tone: {style_instruction}\nPacing: {speed}x speed.\nPitch adjustment: {pitch} semitones.\nStrict broadcast rules:\n- Speak strictly the verbatim transcript text.\n- Never read aloud instructions, prompt metadata, speaker aliases (such as \"Presenter 1:\" or \"Presenter 2:\"), brackets, or stage directions.\n- Transition naturally and seamlessly between dialogue turns with broadcast cadence.";
+    }
+
+    public static function get_briefing_tts_payload_mode(): string {
+        $value = (string) get_option( 'presshub_ai_briefing_tts_payload_mode', self::default_briefing_tts_payload_mode() );
+        return self::sanitize_briefing_tts_payload_mode( $value );
+    }
+
+    public static function get_briefing_tts_system_instruction(): string {
+        $value = (string) get_option( 'presshub_ai_briefing_tts_system_instruction', '' );
+        return '' !== trim( $value ) ? $value : self::default_briefing_tts_system_instruction();
+    }
+
+    public static function get_briefing_tts_api_key(): string {
+        return (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
+    }
+
+    public static function get_voice_speed(): float {
+        $val = get_option( 'presshub_ai_briefing_voice_speed', 1.0 );
+        return self::sanitize_voice_speed( $val );
+    }
+
+    public static function get_voice_pitch(): float {
+        $val = get_option( 'presshub_ai_briefing_voice_pitch', 0.0 );
+        return self::sanitize_voice_pitch( $val );
+    }
+
+    public static function get_briefing_tts_style(): string {
+        $val = get_option( 'presshub_ai_briefing_tts_style', self::default_briefing_tts_style() );
+        return self::sanitize_briefing_tts_style( $val );
+    }
+
+    public static function get_briefing_tts_custom_style(): string {
+        $val = get_option( 'presshub_ai_briefing_tts_custom_style', '' );
+        return self::sanitize_briefing_tts_custom_style( $val );
+    }
+
+    public static function resolve_briefing_tts_style_instruction( string $style = '', string $custom = '' ): string {
+        if ( '' === $style ) {
+            $style = self::get_briefing_tts_style();
+        }
+        if ( 'custom' === $style ) {
+            if ( '' === $custom ) {
+                $custom = self::get_briefing_tts_custom_style();
+            }
+            if ( '' !== trim( $custom ) ) {
+                return trim( $custom );
+            }
+        }
+
+        $style_map = [
+            'formal'      => 'Say in a professional, authoritative, articulate Greek news broadcast tone:',
+            'natural'     => 'Say naturally and clearly in Greek with warm human cadence:',
+            'cheerful'    => 'Say cheerfully, enthusiastically, and with a bright uplifting smile in Greek:',
+            'storyteller' => 'Say like an engaging, captivating storyteller with theatrical pacing and expressive pauses in Greek:',
+            'calm'        => 'Say in a peaceful, gentle, soothing, and relaxing tone in Greek:',
+            'dramatic'    => 'Say with intense dramatic emotion, resonant weight, and vivid inflection in Greek:',
+            'poetic'      => 'Say with deep lyrical emotion, soft melodic rhythm, and poetic sensitivity in Greek:',
+            'epic'        => 'Say in a grand, legendary, classical ancient oratorical style in Greek:',
+            'whisper'     => 'Say in a soft, intimate, gentle quiet whisper in Greek:',
+            'energetic'   => 'Say with high energy, vibrant excitement, and dynamic rhythm in Greek:',
+        ];
+
+        return $style_map[ $style ] ?? $style_map['formal'];
+    }
+
     /**
      * Get the map of options and their respective sanitization callbacks for a specific settings section/tab.
      *
@@ -2722,6 +2875,8 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_host_tertiary'         => [ __CLASS__, 'sanitize_briefing_host_tertiary' ],
             'presshub_ai_briefing_tts_style'            => [ __CLASS__, 'sanitize_briefing_tts_style' ],
             'presshub_ai_briefing_tts_custom_style'     => [ __CLASS__, 'sanitize_briefing_tts_custom_style' ],
+            'presshub_ai_briefing_tts_payload_mode'     => [ __CLASS__, 'sanitize_briefing_tts_payload_mode' ],
+            'presshub_ai_briefing_tts_system_instruction' => [ __CLASS__, 'sanitize_briefing_tts_system_instruction' ],
             'presshub_ai_briefing_voice_female'         => [ __CLASS__, 'sanitize_voice_female' ],
             'presshub_ai_briefing_voice_male'           => [ __CLASS__, 'sanitize_voice_male' ],
             'presshub_ai_briefing_voice_tertiary'        => [ __CLASS__, 'sanitize_voice_tertiary' ],

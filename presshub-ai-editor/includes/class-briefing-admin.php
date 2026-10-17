@@ -1517,10 +1517,13 @@ class PressHub_AI_Briefing_Admin {
                             <?php endif; ?>
                         </div>
                     </div>
-                    <div class="presshub-card-footer">
+                    <div class="presshub-card-footer" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                         <button type="button" class="button button-primary" id="btn-synthesize-audio">
                             🔊 <?php echo $status['audio_created'] ? esc_html__( 'Re-synthesize Audio', 'presshub-ai-editor' ) : esc_html__( 'Synthesize Audio Podcast', 'presshub-ai-editor' ); ?>
                         </button>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=presshub-ai#briefing' ) ); ?>" class="button button-secondary" title="<?php echo esc_attr__( 'Inspect the complete JSON message sent to Gemini Speech and test delivery settings', 'presshub-ai-editor' ); ?>">
+                            🎙️ <?php echo esc_html__( 'Speech JSON & Voice Tester', 'presshub-ai-editor' ); ?>
+                        </a>
                         <?php if ( $status['audio_created'] && ! empty( $status['podcast_edit_url'] ) ) : ?>
                             <a href="<?php echo esc_url( $status['podcast_edit_url'] ); ?>" class="button button-link" target="_blank">
                                 ↗️ <?php echo esc_html__( 'View Podcast', 'presshub-ai-editor' ); ?>

@@ -659,7 +659,7 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         $start_time = microtime( true );
-        $result     = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style );
+        $result     = $api_client->synthesize_speech_via_gemini( $text, $voice_model, true, $style, null, $speed, $pitch );
         $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         $char_count  = mb_strlen( $text );
 
@@ -1300,7 +1300,9 @@ class PressHub_AI_Audio_Synthesizer {
                             $presenter_1_voice,
                             true,
                             $used_style,
-                            null
+                            null,
+                            $speed,
+                            $pitch
                         );
                     } elseif ( 3 === $host_count ) {
                         // 3 Hosts: Gemini multiSpeakerVoiceConfig strictly requires exactly 2 speakers.
@@ -1338,11 +1340,13 @@ class PressHub_AI_Audio_Synthesizer {
 
                         if ( class_exists( 'PressHub_AI_Logger' ) ) {
                             PressHub_AI_Logger::info( sprintf(
-                                '[LogosAI Synthesizer] Topic %d/%d multi-speaker synthesis with speakers="Presenter 1=%s, Presenter 2=%s"',
+                                '[LogosAI Synthesizer] Topic %d/%d multi-speaker synthesis with speakers="Presenter 1=%s, Presenter 2=%s", speed=%.2f, pitch=%.1f',
                                 $topic_idx + 1,
                                 count( $topics ),
                                 $presenter_1_voice,
-                                $presenter_2_voice
+                                $presenter_2_voice,
+                                $speed,
+                                $pitch
                             ) );
                         }
 
@@ -1351,7 +1355,9 @@ class PressHub_AI_Audio_Synthesizer {
                             $presenter_1_voice,
                             true,
                             $used_style,
-                            $speaker_configs
+                            $speaker_configs,
+                            $speed,
+                            $pitch
                         );
 
                         // Resilient fallback for this topic if single-pass fails
@@ -1476,7 +1482,9 @@ class PressHub_AI_Audio_Synthesizer {
                     $presenter_1_voice,
                     true,
                     $used_style,
-                    null
+                    null,
+                    $speed,
+                    $pitch
                 );
                 $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
                 $char_count  = mb_strlen( $formatted_script );
@@ -1514,12 +1522,14 @@ class PressHub_AI_Audio_Synthesizer {
 
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::info( sprintf(
-                        '[LogosAI Synthesizer] Synthesizing podcast audio for %s (%d turns, speakers="Presenter 1=%s, Presenter 2=%s", style: %s)',
+                        '[LogosAI Synthesizer] Synthesizing podcast audio for %s (%d turns, speakers="Presenter 1=%s, Presenter 2=%s", style: %s, speed=%.2f, pitch=%.1f)',
                         $date,
                         count( $turns ),
                         $presenter_1_voice,
                         $presenter_2_voice,
-                        $used_style
+                        $used_style,
+                        $speed,
+                        $pitch
                     ) );
                 }
 
@@ -1529,7 +1539,9 @@ class PressHub_AI_Audio_Synthesizer {
                     $presenter_1_voice,
                     true,
                     $used_style,
-                    $speaker_configs
+                    $speaker_configs,
+                    $speed,
+                    $pitch
                 );
                 $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
                 $char_count  = mb_strlen( $formatted_script );

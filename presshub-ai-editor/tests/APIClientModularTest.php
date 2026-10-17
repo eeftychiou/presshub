@@ -515,8 +515,9 @@ class APIClientModularTest
         if ( is_wp_error( $test_conn_res ) || false === strpos( (string) $test_conn_res, 'Speech API Connection Successful!' ) ) {
             $failures[] = "test_connection() for TTS provider failed; got: " . var_export( $test_conn_res, true );
         }
-        if ( isset( $captured_test_body['systemInstruction'] ) ) {
-            $failures[] = "test_connection() for TTS provider must NOT include systemInstruction; got: " . json_encode( $captured_test_body );
+        // Official Gemini 3.8 TTS REST standard uses speech_metadata.style on parts
+        if ( ! isset( $captured_test_body['contents'][0]['parts'][0]['speech_metadata']['style'] ) ) {
+            $failures[] = "test_connection() for TTS provider in modern mode should include speech_metadata.style; got: " . json_encode( $captured_test_body );
         }
         $modalities = $captured_test_body['generationConfig']['responseModalities'] ?? [];
         if ( ! in_array( 'AUDIO', $modalities, true ) ) {
@@ -682,6 +683,72 @@ class APIClientModularTest
         }
         if ( $legacy_client_2->get_model_source() !== 'legacy_type_option:presshub_ai_model_openai' ) {
             $failures[] = "Legacy client model_source mismatch; got: " . var_export( $legacy_client_2->get_model_source(), true );
+        }
+
+        // ==================================================================
+        // 19. Guard against sub-threshold or corrupted max_tokens (< 64) and timeout (< 10)
+        // ==================================================================
+        self::reset_world();
+        PressHub_AI_Provider_Store::save_provider( [
+            'id'               => 'gemini-test-prov',
+            'type'             => 'gemini',
+            'name'             => 'Gemini Test',
+            'base_url'         => 'https://generativelanguage.googleapis.com/v1beta',
+            'api_key'          => 'AQ.TestKey',
+            'default_model'    => 'gemini-3.1-flash-lite',
+            'available_models' => [ 'gemini-3.1-flash-lite' ],
+            'timeout'          => 300,
+            'temperature'      => 0.7,
+            'max_tokens'       => 60000,
+            'headers'          => [],
+            'enabled'          => true,
+        ] );
+
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_provider']   = 'gemini-test-prov';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_max_tokens'] = 1; // Corrupted / sub-threshold limit
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_timeout']    = 5; // Corrupted / sub-threshold timeout
+
+        $guarded_client = new PressHub_AI_API_Client( 'briefing_podcast' );
+        $client_cfg = $guarded_client->get_provider_config();
+
+        if ( $client_cfg['max_tokens'] !== 60000 ) {
+            $failures[] = "Corrupted max_tokens (1) should be ignored in favor of provider record (60000); got: " . var_export( $client_cfg['max_tokens'] ?? null, true );
+        }
+        if ( $client_cfg['timeout'] !== 300 ) {
+            $failures[] = "Corrupted timeout (5) should be ignored in favor of provider record (300); got: " . var_export( $client_cfg['timeout'] ?? null, true );
+        }
+
+        // Also test static resolve_module_config()
+        $resolved_guarded = PressHub_AI_API_Client::resolve_module_config( 'briefing_podcast' );
+        if ( $resolved_guarded['max_tokens'] !== 60000 ) {
+            $failures[] = "resolve_module_config with corrupted max_tokens (1) should return 60000; got: " . var_export( $resolved_guarded['max_tokens'] ?? null, true );
+        }
+
+        // Now test valid explicit override (e.g. 8192)
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_max_tokens'] = 8192;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_timeout']    = 180;
+        $valid_client = new PressHub_AI_API_Client( 'briefing_podcast' );
+        $valid_cfg = $valid_client->get_provider_config();
+
+        if ( $valid_cfg['max_tokens'] !== 8192 ) {
+            $failures[] = "Valid max_tokens override (8192) should be respected; got: " . var_export( $valid_cfg['max_tokens'] ?? null, true );
+        }
+        if ( $valid_cfg['timeout'] !== 180 ) {
+            $failures[] = "Valid timeout override (180) should be respected; got: " . var_export( $valid_cfg['timeout'] ?? null, true );
+        }
+
+        // Test Settings_Storage getters and sanitizers
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_max_tokens'] = 1;
+            if ( PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens() !== 0 ) {
+                $failures[] = "Settings_Storage::get_briefing_podcast_max_tokens() should return 0 for corrupted value (1); got: " . var_export( PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens(), true );
+            }
+            if ( PressHub_AI_Settings_Storage::sanitize_max_tokens( '' ) !== 0 ) {
+                $failures[] = "Settings_Storage::sanitize_max_tokens('') should return 0; got: " . var_export( PressHub_AI_Settings_Storage::sanitize_max_tokens( '' ), true );
+            }
+            if ( PressHub_AI_Settings_Storage::sanitize_max_tokens( null ) !== 0 ) {
+                $failures[] = "Settings_Storage::sanitize_max_tokens(null) should return 0; got: " . var_export( PressHub_AI_Settings_Storage::sanitize_max_tokens( null ), true );
+            }
         }
 
         // ==================================================================

@@ -1422,6 +1422,52 @@ run_test( 'Social Meta Tags: opengraph and twitter tags generation & title optim
     return true;
 } );
 
+// Test 34: Tuning Safety: corrupted max_tokens (< 64) and timeout (< 10) fallback safely
+run_test( 'Tuning Safety: corrupted max_tokens and timeout fallback to provider record', function() {
+    $orig_tokens  = get_option( 'presshub_ai_briefing_podcast_max_tokens', null );
+    $orig_timeout = get_option( 'presshub_ai_briefing_podcast_timeout', null );
+
+    try {
+        // Force corrupt values into wp_options
+        update_option( 'presshub_ai_briefing_podcast_max_tokens', 1 );
+        update_option( 'presshub_ai_briefing_podcast_timeout', 5 );
+
+        // 1. Settings_Storage getter clamps corrupted value to 0 (no override)
+        $storage_tokens = PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens();
+        if ( 0 !== $storage_tokens ) {
+            return "Expected get_briefing_podcast_max_tokens() to return 0 for value 1; got {$storage_tokens}";
+        }
+
+        // 2. Sanitizer returns 0 for empty string
+        $clean_empty = PressHub_AI_Settings_Storage::sanitize_max_tokens( '' );
+        if ( 0 !== $clean_empty ) {
+            return "Expected sanitize_max_tokens('') to return 0; got {$clean_empty}";
+        }
+
+        // 3. API Client resolves module config bypassing corrupted 1 token
+        $cfg = PressHub_AI_API_Client::resolve_module_config( 'briefing_podcast' );
+        if ( $cfg['max_tokens'] < 64 ) {
+            return "API Client accepted corrupted max_tokens < 64: got {$cfg['max_tokens']}";
+        }
+        if ( $cfg['timeout'] < 10 ) {
+            return "API Client accepted corrupted timeout < 10: got {$cfg['timeout']}";
+        }
+    } finally {
+        if ( null !== $orig_tokens ) {
+            update_option( 'presshub_ai_briefing_podcast_max_tokens', $orig_tokens );
+        } else {
+            delete_option( 'presshub_ai_briefing_podcast_max_tokens' );
+        }
+        if ( null !== $orig_timeout ) {
+            update_option( 'presshub_ai_briefing_podcast_timeout', $orig_timeout );
+        } else {
+            delete_option( 'presshub_ai_briefing_podcast_timeout' );
+        }
+    }
+
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";

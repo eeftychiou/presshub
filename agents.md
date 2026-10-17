@@ -340,6 +340,7 @@ If a PR introduces a new operational knob without the full six-step registration
      2. Configured provider record from `PressHub_AI_Provider_Store` (`$provider_record['max_tokens']`)
      3. Class defaults (`PressHub_AI_Provider_Defaults::default_max_tokens()`)
    - **Never** check obsolete flat options (`presshub_ai_{knob}_{provider}`) in business logic or resolution paths.
+   - **Module Override Safeguards**: Per-module tuning options must enforce safe minimum thresholds (`max_tokens >= 64`, `timeout >= 10s`). Empty, null, or corrupted sub-threshold options in `wp_options` (e.g. `1` token or `5s`) must never override provider records or class defaults. Empty input submissions must sanitize to `0` (or class defaults) rather than clamping to 1.
 5. **Active Purge Migrations**:
    - When migrating away from deprecated options, write an idempotent DB migration (`presshub_ai_migrate_*`) that explicitly deletes the obsolete rows from `wp_options` so they cannot linger and shadow active records.
 
@@ -441,19 +442,30 @@ The automated AI Editorial Review system (`PressHub_AI_QA_Reviewer`) evaluates d
 
 ---
 
-## ⚖️ Editorial QA Review & 4-Key Scorecard Protocol
+## 🎙️ Gemini Speech & Audio Synthesis Protocol (Gemini 3.8 TTS REST Standard)
 
-The automated AI Editorial Review system (`PressHub_AI_QA_Reviewer`) evaluates draft posts before publication against a standardized 4-key JSON schema:
+> **Gemini audio models (e.g. `gemini-3.8-flash-tts`, `gemini-3.8-flash-lite-tts`) treat `contents[0].parts[].text` strictly as verbatim script to speak aloud. Prompts or tone directives must NEVER be prepended to transcript text.**
 
-1. **`score`**: Integer (0–100) indicating overall publication readiness (evaluated against the configurable threshold `presshub_ai_qa_min_score`, default: 80).
-2. **`libel_risk`**: Legal exposure rating (`"Low"`, `"Medium"`, or `"High"`). Unrecognized or missing ratings default strictly to `"Low"`.
-3. **`feedback`**: Concise 2–3 sentence critique summarizing editorial quality, narrative structure, and attribution balance.
-4. **`legal_concerns`**: Targeted 1–2 sentence assessment highlighting potential defamation, unsubstantiated allegations, or missing right-of-reply (defaulting to `"None identified"` when low risk).
-
-### Invariants:
-- **Hashing & Cache**: Results are keyed by MD5 of post content (`_presshub_ai_scorecard_hash`) and persisted in `_presshub_ai_scorecard` post meta. Identical content is never re-evaluated against the LLM.
-- **Fail-Loudly Notifications**: If score is below threshold and notifications are enabled, `notify_editor_failure()` dispatches an email incorporating libel risk and legal concerns.
-- **Metabox & UI**: Rendered in the post editor metabox with color-coded libel risk badges (`.presshub-libel-low`, `.presshub-libel-medium`, `.presshub-libel-high`) and dedicated legal concerns alert boxes.
+1. **Verbatim Content Invariant**:
+   - Spoken turns in `contents[0].parts[].text` must contain only the exact dialogue text. Directives like `"Say in a professional tone:"` must never be concatenated into transcript strings.
+2. **Official Gemini 3.8 TTS REST Standard (`structured` — Recommended)**:
+   - Strictly conforms to Google's official Gemini 3.8 TTS REST documentation (`https://ai.google.dev/gemini-api/docs/generate-content/speech-generation#rest`).
+   - Turn-level delivery style, speaking rate (speed), and voice pitch tuning are passed strictly through `speech_metadata.style` composed via `PressHub_AI_API_Client::compose_tts_style_string()`.
+   - Top-level `systemInstruction` is omitted as it is not part of the official Gemini 3.8 TTS REST schema.
+   - The settings UI dynamically greys out the Gemini Speech System Instruction row with an explanatory badge.
+3. **Hybrid / System Instruction Override Mode (`hybrid_instruction`)**:
+   - Sends turn-level `speech_metadata.style` AND passes a top-level `systemInstruction` block with `{style_instruction}`, `{speed}`, `{pitch}`, `{speaker1}`, and `{speaker2}` placeholders resolved.
+4. **Legacy Prepended Instruction Mode (`legacy` — Deprecated)**:
+   - Backward-compatibility mode prepending style instructions directly into script text.
+   - System instruction, speaking speed, and voice pitch settings dynamically grey out in the UI.
+5. **Multi-Speaker Voice Mapping & Turn Metadata**:
+   - Presenter 1 (`presshub_ai_briefing_voice_female`) and Presenter 2 (`presshub_ai_briefing_voice_male`) are mapped to canonical voice personas (e.g. Charon, Kore) inside `speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs`.
+   - Each transcript turn is tagged with `speech_metadata.speaker` (`Presenter 1` or `Presenter 2`) and `speech_metadata.style`.
+6. **RIFF WAV Header Handling**:
+   - Gemini 3.8 TTS responses return complete WAV files with RIFF headers; audio decoding checks for the RIFF signature before applying PCM-to-WAV wrapping to prevent audio stream corruption.
+7. **Interactive Testing Studio & Live JSON Inspector**:
+   - The settings page provides a live JSON inspector updating dynamically whenever audio options change.
+   - Editors can test 1-host and 2-host audio synthesis in real time via AJAX endpoints `presshub_ai_preview_tts_payload` and `presshub_ai_test_tts_synthesis` (gated by `edit_others_posts`).
 
 ---
 
