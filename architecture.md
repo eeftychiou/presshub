@@ -118,12 +118,20 @@ graph TD
   - Client-side script maintains `currentEdition` and attaches `edition: currentEdition` to all AJAX pipeline dispatches (`briefing_get_status`, `briefing_run_harvest`, `briefing_run_curation`, `briefing_run_script`, `briefing_save_script`, `briefing_generate_audio`, `briefing_upload`).
   - Full backward compatibility for historical posts that lack `_presshub_briefing_edition` meta (queried as morning).
 
-### 4.6 Featured Image Pool & Random Cycling
-- **Configuration**:
-  - `presshub_ai_briefing_featured_image_ids`: Comma-separated WordPress Media Library attachment IDs configured in Settings (`PressHub AI → Settings → Daily Briefing`).
-  - Helper methods: `PressHub_AI_Settings_Storage::get_briefing_featured_image_ids()` and `get_random_briefing_featured_image_id()`.
-- **Behavior**:
-  - Automatically selects a random image ID from the configured pool upon creation of daily text briefings and podcast audio posts (including noon updates).
+### 4.6 Featured Image Pools & Interactive Media Library Picker
+- **Configuration & Options**:
+  - `presshub_ai_briefing_featured_image_ids_morning`: Comma-separated WordPress Media Library attachment IDs for Morning briefings and podcasts.
+  - `presshub_ai_briefing_featured_image_ids_noon`: Comma-separated WordPress Media Library attachment IDs for Noon updates. If unpopulated, automatically falls back to the Morning pool.
+  - `presshub_ai_briefing_featured_image_ids`: Retained for backward compatibility as legacy fallback if Morning pool is not explicitly configured.
+  - Helper methods: `PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( $edition )`, `get_briefing_featured_image_ids_morning()`, `get_briefing_featured_image_ids_noon()`, `get_used_briefing_thumbnail_ids_for_date( $date, $exclude_post_id )`, and `get_random_briefing_featured_image_id( $edition, $exclude_ids )`.
+- **Interactive UI**:
+  - Replaced plain text input with interactive WordPress Media Library picker modal (`wp.media`) supporting multiple selection.
+  - Visual thumbnail card grid with image previews, `#ID` badge overlay, individual `×` removal buttons, and "Clear All" action.
+  - Integrated into dirty-state form tracking and responsive save bar.
+- **Behavior & Collision Avoidance**:
+  - Automatically selects a random image ID from the edition-appropriate pool upon creation of daily text briefings and podcast audio posts.
+  - **Same-Day Collision Avoidance**: When multiple posts are generated on the same date (Morning Text Briefing, Morning Podcast, Noon Text Briefing, Noon Podcast), the system checks existing posts for that date via `PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )`.
+  - Excludes already-assigned thumbnail IDs from the edition's pool (`array_diff`). If alternatives exist in the pool, a distinct featured image is selected. If the pool is exhausted, it gracefully falls back to the full pool rather than failing.
   - Assigns the image as the post thumbnail (`set_post_thumbnail()`) and sets it as the social card fallback image (`og:image` and `twitter:image`).
 
 ### 4.7 Podcast Post Content & Dialogue Script Editor

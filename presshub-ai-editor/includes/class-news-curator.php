@@ -810,8 +810,9 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_text_title_prefix_applied', (string) $applied_prefix );
         update_post_meta( $post_id, '_presshub_text_title_date_format_applied', (string) $applied_date_format );
 
-        // Assign featured image from configured pool if available
-        $thumb_id = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id();
+        // Assign featured image from configured pool if available (with collision avoidance)
+        $exclude_ids = PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id );
+        $thumb_id    = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids );
         if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
             set_post_thumbnail( $post_id, $thumb_id );
         }

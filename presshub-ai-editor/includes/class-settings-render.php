@@ -488,9 +488,15 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_featured_image_ids"><?php echo __( 'Featured Image Pool (Attachment IDs)', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_briefing_featured_image_ids_morning"><?php echo esc_html__( 'Morning Featured Image Pool', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
-                                    <?php $this->render_briefing_featured_image_ids_field(); ?>
+                                    <?php $this->render_briefing_featured_image_ids_morning_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_featured_image_ids_noon"><?php echo esc_html__( 'Noon Featured Image Pool', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_featured_image_ids_noon_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -2545,13 +2551,94 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
-    public function render_briefing_featured_image_ids_field() {
-        $option = 'presshub_ai_briefing_featured_image_ids';
-        $value  = get_option( $option, '' );
+    /**
+     * Render an interactive media library image pool manager.
+     *
+     * @param string $option        WordPress option name storing comma-separated attachment IDs.
+     * @param string $edition_label Label for the edition (e.g. 'Morning', 'Noon').
+     * @param string $description   Help text describing the pool.
+     */
+    public function render_image_pool_manager( string $option, string $edition_label, string $description ) {
+        $raw_value  = (string) get_option( $option, '' );
+        $is_morning = 'presshub_ai_briefing_featured_image_ids_morning' === $option;
+        $is_noon    = 'presshub_ai_briefing_featured_image_ids_noon' === $option;
+
+        // Support fallback from legacy presshub_ai_briefing_featured_image_ids for morning if empty
+        if ( '' === trim( $raw_value ) && $is_morning ) {
+            $raw_value = (string) get_option( 'presshub_ai_briefing_featured_image_ids', '' );
+        }
+
+        $sanitized_csv = PressHub_AI_Settings_Storage::sanitize_briefing_featured_image_ids( $raw_value );
+        $ids           = '' !== $sanitized_csv ? array_map( 'intval', explode( ',', $sanitized_csv ) ) : [];
+        $has_images    = ! empty( $ids );
         ?>
-        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" placeholder="<?php echo esc_attr__( 'e.g. 102, 105, 110', 'presshub-ai-editor' ); ?>" />
-        <p class="description"><?php echo __( 'Comma-separated Media Library attachment IDs. PressHub AI will randomly cycle through this pool to assign featured images (post thumbnails) to daily briefs and audio podcasts (including noon updates).', 'presshub-ai-editor' ); ?></p>
+        <div class="presshub-image-pool-manager" data-option="<?php echo esc_attr( $option ); ?>">
+            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $sanitized_csv ); ?>" />
+
+            <div class="presshub-image-pool-grid">
+                <?php
+                foreach ( $ids as $id ) :
+                    $thumb_url = function_exists( 'wp_get_attachment_image_url' )
+                        ? wp_get_attachment_image_url( $id, 'thumbnail' )
+                        : false;
+                    if ( ! $thumb_url && function_exists( 'wp_get_attachment_url' ) ) {
+                        $thumb_url = wp_get_attachment_url( $id );
+                    }
+                    if ( ! $thumb_url ) {
+                        $thumb_url = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23eee"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23999" font-size="12">#' . esc_attr( $id ) . '</text></svg>';
+                    }
+                    ?>
+                    <div class="presshub-image-pool-item" data-id="<?php echo esc_attr( $id ); ?>">
+                        <img src="<?php echo esc_url( $thumb_url ); ?>" alt="<?php echo esc_attr( sprintf( __( 'Image #%d', 'presshub-ai-editor' ), $id ) ); ?>" />
+                        <span class="presshub-image-pool-badge">#<?php echo esc_html( $id ); ?></span>
+                        <button type="button" class="presshub-image-pool-remove" title="<?php echo esc_attr__( 'Remove image from pool', 'presshub-ai-editor' ); ?>" aria-label="<?php echo esc_attr__( 'Remove image', 'presshub-ai-editor' ); ?>">&times;</button>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <div class="presshub-image-pool-empty" <?php echo $has_images ? 'style="display:none;"' : ''; ?>>
+                <p class="description"><?php echo esc_html__( 'No images in pool. Click below to select images from the Media Library.', 'presshub-ai-editor' ); ?></p>
+            </div>
+
+            <?php if ( $is_noon ) : ?>
+                <p class="presshub-image-pool-fallback description" <?php echo $has_images ? 'style="display:none;"' : ''; ?>>
+                    <em><?php echo esc_html__( 'Note: If the Noon pool is empty, PressHub AI automatically falls back to the Morning pool.', 'presshub-ai-editor' ); ?></em>
+                </p>
+            <?php endif; ?>
+
+            <div class="presshub-image-pool-actions" style="margin-top: 10px;">
+                <button type="button" class="button button-secondary presshub-select-pool-images-btn">
+                    <span class="dashicons dashicons-images-alt2" style="vertical-align: middle; margin-right: 4px;"></span>
+                    <?php echo esc_html__( 'Select Images from Media Library', 'presshub-ai-editor' ); ?>
+                </button>
+                <button type="button" class="button button-link-delete presshub-clear-pool-images-btn" style="margin-left: 10px; <?php echo ! $has_images ? 'display:none;' : ''; ?>">
+                    <?php echo esc_html__( 'Clear All', 'presshub-ai-editor' ); ?>
+                </button>
+            </div>
+
+            <p class="description" style="margin-top: 6px;"><?php echo esc_html( $description ); ?></p>
+        </div>
         <?php
+    }
+
+    public function render_briefing_featured_image_ids_morning_field() {
+        $this->render_image_pool_manager(
+            'presshub_ai_briefing_featured_image_ids_morning',
+            __( 'Morning', 'presshub-ai-editor' ),
+            __( 'Media Library images for Morning daily briefings and audio podcasts. PressHub AI will randomly cycle through this pool to assign featured images (post thumbnails).', 'presshub-ai-editor' )
+        );
+    }
+
+    public function render_briefing_featured_image_ids_noon_field() {
+        $this->render_image_pool_manager(
+            'presshub_ai_briefing_featured_image_ids_noon',
+            __( 'Noon', 'presshub-ai-editor' ),
+            __( 'Media Library images for Noon updates. If empty, PressHub AI automatically falls back to the Morning pool.', 'presshub-ai-editor' )
+        );
+    }
+
+    public function render_briefing_featured_image_ids_field() {
+        $this->render_briefing_featured_image_ids_morning_field();
     }
 
     public function render_briefing_podcast_include_text_field() {

@@ -357,6 +357,14 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_podcast_title_prefix' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_ids_morning', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_ids_noon', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_ids', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'type'              => 'string',
@@ -604,6 +612,8 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_text_title_date_format', __( 'Text Story Title Date Format', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_date_format_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_noon_text_title_prefix', __( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_text_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_noon_podcast_title_prefix', __( 'Noon Podcast Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_podcast_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_featured_image_ids_morning', __( 'Morning Featured Image Pool', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_morning_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_featured_image_ids_noon', __( 'Noon Featured Image Pool', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_noon_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_featured_image_ids', __( 'Featured Image Pool (Attachment IDs)', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_include_text', __( 'Include Text in Podcast Post', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_include_text_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_status', __( 'Podcast Post Status', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_status_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1781,7 +1791,7 @@ class PressHub_AI_Settings_Storage {
 
         $per_style_option = $option_prefix . '_' . $style_key;
         $val              = get_option( $per_style_option, null );
-        if ( null === $val || '' === trim( (string) $val ) || ( is_string( $val ) && str_starts_with( trim( $val ), 'You are' ) ) ) {
+        if ( null === $val || ( is_string( $val ) && str_starts_with( trim( $val ), 'You are' ) ) ) {
             if ( ! class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
                 require_once __DIR__ . '/class-prompt-loader.php';
             }
@@ -2412,15 +2422,21 @@ class PressHub_AI_Settings_Storage {
         return implode( ',', $unique );
     }
 
-    public static function get_briefing_featured_image_ids(): array {
-        $val = (string) get_option( 'presshub_ai_briefing_featured_image_ids', '' );
-        if ( '' === trim( $val ) ) {
-            return [];
+    /**
+     * Helper to parse string or array of IDs into array of unique positive integers.
+     *
+     * @param mixed $val Value to parse.
+     * @return int[]
+     */
+    private static function parse_ids_to_array( $val ): array {
+        if ( is_array( $val ) ) {
+            $parts = $val;
+        } else {
+            $parts = explode( ',', (string) $val );
         }
-        $parts = explode( ',', $val );
         $ids = [];
         foreach ( $parts as $p ) {
-            $id = (int) trim( $p );
+            $id = (int) trim( (string) $p );
             if ( $id > 0 ) {
                 $ids[] = $id;
             }
@@ -2428,11 +2444,171 @@ class PressHub_AI_Settings_Storage {
         return array_values( array_unique( $ids ) );
     }
 
-    public static function get_random_briefing_featured_image_id(): int {
-        $pool = self::get_briefing_featured_image_ids();
+    public static function get_briefing_featured_image_ids_morning(): array {
+        $val = (string) get_option( 'presshub_ai_briefing_featured_image_ids_morning', '' );
+        $ids = self::parse_ids_to_array( $val );
+        if ( ! empty( $ids ) ) {
+            return $ids;
+        }
+        $legacy = (string) get_option( 'presshub_ai_briefing_featured_image_ids', '' );
+        return self::parse_ids_to_array( $legacy );
+    }
+
+    public static function get_briefing_featured_image_ids_noon(): array {
+        $val = (string) get_option( 'presshub_ai_briefing_featured_image_ids_noon', '' );
+        return self::parse_ids_to_array( $val );
+    }
+
+    public static function get_briefing_featured_image_ids( string $edition = '' ): array {
+        if ( 'noon' === $edition ) {
+            $noon_ids = self::get_briefing_featured_image_ids_noon();
+            if ( ! empty( $noon_ids ) ) {
+                return $noon_ids;
+            }
+            return self::get_briefing_featured_image_ids_morning();
+        }
+
+        return self::get_briefing_featured_image_ids_morning();
+    }
+
+    /**
+     * Retrieve array of featured image (thumbnail) IDs already assigned to briefing or podcast
+     * posts for the specified date, optionally excluding a specific post ID (e.g. the post currently being saved).
+     *
+     * Used for same-day featured image collision avoidance across morning/noon text briefings and podcasts.
+     *
+     * @param string $date            Briefing date (YYYY-MM-DD).
+     * @param int    $exclude_post_id Optional post ID to exclude from consideration. Default 0.
+     * @return int[] Unique array of thumbnail attachment IDs already in use on that date.
+     */
+    public static function get_used_briefing_thumbnail_ids_for_date( string $date, int $exclude_post_id = 0 ): array {
+        $used_ids        = [];
+        $exclude_post_id = (int) $exclude_post_id;
+
+        // 1. Check unit test stubs / globals ($GLOBALS['WP_TEST_POSTS'] and $GLOBALS['POST_META_STORE'])
+        if ( ! empty( $GLOBALS['WP_TEST_POSTS'] ) && is_array( $GLOBALS['WP_TEST_POSTS'] ) ) {
+            foreach ( $GLOBALS['WP_TEST_POSTS'] as $key => $post_item ) {
+                $pid     = 0;
+                $p_date  = '';
+                $p_thumb = 0;
+
+                if ( is_object( $post_item ) ) {
+                    $pid     = (int) ( $post_item->ID ?? $key );
+                    $p_date  = (string) ( $post_item->_presshub_briefing_date ?? ( $post_item->meta['_presshub_briefing_date'] ?? '' ) );
+                    $p_thumb = (int) ( $post_item->_thumbnail_id ?? ( $post_item->thumbnail_id ?? 0 ) );
+                } elseif ( is_array( $post_item ) ) {
+                    $pid     = (int) ( $post_item['ID'] ?? $key );
+                    $p_date  = (string) ( $post_item['_presshub_briefing_date'] ?? ( $post_item['meta']['_presshub_briefing_date'] ?? '' ) );
+                    $p_thumb = (int) ( $post_item['_thumbnail_id'] ?? ( $post_item['meta']['_thumbnail_id'] ?? ( $post_item['thumbnail_id'] ?? 0 ) ) );
+                } else {
+                    $pid = (int) $post_item;
+                }
+
+                if ( $pid <= 0 || ( $exclude_post_id > 0 && $pid === $exclude_post_id ) ) {
+                    continue;
+                }
+
+                if ( empty( $p_date ) && function_exists( 'get_post_meta' ) ) {
+                    $p_date = (string) get_post_meta( $pid, '_presshub_briefing_date', true );
+                }
+
+                if ( $p_date === $date ) {
+                    if ( 0 === $p_thumb && function_exists( 'get_post_thumbnail_id' ) ) {
+                        $p_thumb = (int) get_post_thumbnail_id( $pid );
+                    }
+                    if ( 0 === $p_thumb && ! empty( $GLOBALS['POST_THUMBNAILS'][ $pid ] ) ) {
+                        $p_thumb = (int) $GLOBALS['POST_THUMBNAILS'][ $pid ];
+                    }
+                    if ( 0 === $p_thumb && function_exists( 'get_post_meta' ) ) {
+                        $p_thumb = (int) get_post_meta( $pid, '_thumbnail_id', true );
+                    }
+                    if ( $p_thumb > 0 ) {
+                        $used_ids[] = $p_thumb;
+                    }
+                }
+            }
+        }
+
+        if ( ! empty( $GLOBALS['POST_META_STORE'] ) && is_array( $GLOBALS['POST_META_STORE'] ) ) {
+            foreach ( $GLOBALS['POST_META_STORE'] as $pid => $metas ) {
+                $pid = (int) $pid;
+                if ( $pid <= 0 || ( $exclude_post_id > 0 && $pid === $exclude_post_id ) ) {
+                    continue;
+                }
+                if ( isset( $metas['_presshub_briefing_date'] ) && (string) $metas['_presshub_briefing_date'] === $date ) {
+                    $thumb_id = 0;
+                    if ( function_exists( 'get_post_thumbnail_id' ) ) {
+                        $thumb_id = (int) get_post_thumbnail_id( $pid );
+                    }
+                    if ( 0 === $thumb_id && ! empty( $GLOBALS['POST_THUMBNAILS'][ $pid ] ) ) {
+                        $thumb_id = (int) $GLOBALS['POST_THUMBNAILS'][ $pid ];
+                    }
+                    if ( 0 === $thumb_id && ! empty( $metas['_thumbnail_id'] ) ) {
+                        $thumb_id = (int) $metas['_thumbnail_id'];
+                    }
+                    if ( $thumb_id > 0 ) {
+                        $used_ids[] = $thumb_id;
+                    }
+                }
+            }
+        }
+
+        // 2. Query live WordPress posts via get_posts
+        if ( function_exists( 'get_posts' ) ) {
+            $found_posts = get_posts( [
+                'post_type'      => 'post',
+                'post_status'    => [ 'publish', 'draft', 'future', 'pending', 'private' ],
+                'posts_per_page' => 50,
+                'meta_query'     => [
+                    [
+                        'key'     => '_presshub_briefing_date',
+                        'value'   => $date,
+                        'compare' => '=',
+                    ],
+                ],
+            ] );
+
+            if ( ! empty( $found_posts ) && is_array( $found_posts ) ) {
+                foreach ( $found_posts as $p ) {
+                    $pid = is_object( $p ) ? (int) $p->ID : (int) $p;
+                    if ( $pid <= 0 || ( $exclude_post_id > 0 && $pid === $exclude_post_id ) ) {
+                        continue;
+                    }
+                    $thumb_id = 0;
+                    if ( function_exists( 'get_post_thumbnail_id' ) ) {
+                        $thumb_id = (int) get_post_thumbnail_id( $pid );
+                    }
+                    if ( 0 === $thumb_id && ! empty( $GLOBALS['POST_THUMBNAILS'][ $pid ] ) ) {
+                        $thumb_id = (int) $GLOBALS['POST_THUMBNAILS'][ $pid ];
+                    }
+                    if ( 0 === $thumb_id && function_exists( 'get_post_meta' ) ) {
+                        $thumb_id = (int) get_post_meta( $pid, '_thumbnail_id', true );
+                    }
+                    if ( $thumb_id > 0 ) {
+                        $used_ids[] = $thumb_id;
+                    }
+                }
+            }
+        }
+
+        return array_values( array_unique( array_filter( array_map( 'intval', $used_ids ), function ( $id ) {
+            return $id > 0;
+        } ) ) );
+    }
+
+    public static function get_random_briefing_featured_image_id( string $edition = 'morning', array $exclude_ids = [] ): int {
+        $pool = self::get_briefing_featured_image_ids( $edition );
         if ( empty( $pool ) ) {
             return 0;
         }
+
+        if ( ! empty( $exclude_ids ) ) {
+            $available = array_values( array_diff( $pool, array_map( 'intval', $exclude_ids ) ) );
+            if ( ! empty( $available ) ) {
+                $pool = $available;
+            }
+        }
+
         $idx = array_rand( $pool );
         return (int) $pool[ $idx ];
     }
@@ -2527,6 +2703,8 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_text_title_date_format'     => [ __CLASS__, 'sanitize_briefing_text_title_date_format' ],
             'presshub_ai_briefing_noon_text_title_prefix'     => [ __CLASS__, 'sanitize_briefing_noon_text_title_prefix' ],
             'presshub_ai_briefing_noon_podcast_title_prefix'  => [ __CLASS__, 'sanitize_briefing_noon_podcast_title_prefix' ],
+            'presshub_ai_briefing_featured_image_ids_morning' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
+            'presshub_ai_briefing_featured_image_ids_noon'    => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'presshub_ai_briefing_featured_image_ids'          => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'presshub_ai_briefing_podcast_include_text'        => [ __CLASS__, 'sanitize_briefing_podcast_include_text' ],
             'presshub_ai_briefing_text_preset'             => [ __CLASS__, 'sanitize_preset_slug' ],

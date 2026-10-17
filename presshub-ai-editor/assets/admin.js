@@ -3592,5 +3592,124 @@ jQuery(document).ready(function($) {
         var rawData = $card.attr('data-raw') || '';
         copyTextToClipboard(rawData, $(this));
     });
+
+    // =========================================================================
+    // Featured Image Pools Manager (Media Library Picker UI)
+    // =========================================================================
+
+    function markTabDirty(tabKey) {
+        if (typeof updateTabDirtyState === 'function') {
+            updateTabDirtyState(tabKey);
+        }
+    }
+
+    function syncImagePoolManager($manager) {
+        var ids = [];
+        $manager.find('.presshub-image-pool-item').each(function() {
+            var id = parseInt($(this).attr('data-id'), 10);
+            if (id > 0 && ids.indexOf(id) === -1) {
+                ids.push(id);
+            }
+        });
+
+        var $input = $manager.find('input[type="hidden"]');
+        var oldVal = $input.val();
+        var newVal = ids.join(',');
+        $input.val(newVal);
+
+        var hasImages = ids.length > 0;
+        var $emptyNotice = $manager.find('.presshub-image-pool-empty');
+        var $fallbackNotice = $manager.find('.presshub-image-pool-fallback');
+        var $clearBtn = $manager.find('.presshub-clear-pool-images-btn');
+
+        if (hasImages) {
+            $emptyNotice.hide();
+            $fallbackNotice.hide();
+            $clearBtn.show();
+        } else {
+            $emptyNotice.show();
+            $fallbackNotice.show();
+            $clearBtn.hide();
+        }
+
+        if (oldVal !== newVal) {
+            $input.trigger('change');
+            markTabDirty('briefing');
+        }
+    }
+
+    // Select images from WordPress Media Library
+    $(document).on('click', '.presshub-select-pool-images-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var $manager = $btn.closest('.presshub-image-pool-manager');
+        var $grid = $manager.find('.presshub-image-pool-grid');
+
+        if (typeof wp === 'undefined' || !wp.media) {
+            return;
+        }
+
+        var frame = wp.media({
+            title: __('Select Featured Images for Pool', 'presshub-ai-editor'),
+            button: {
+                text: __('Add to Pool', 'presshub-ai-editor')
+            },
+            multiple: true,
+            library: {
+                type: 'image'
+            }
+        });
+
+        frame.on('select', function() {
+            var selection = frame.state().get('selection');
+            selection.each(function(attachment) {
+                var att = attachment.toJSON();
+                var id = parseInt(att.id, 10);
+                if (!id || id <= 0) {
+                    return;
+                }
+
+                // Check if already in grid
+                if ($grid.find('.presshub-image-pool-item[data-id="' + id + '"]').length > 0) {
+                    return;
+                }
+
+                var thumbUrl = att.url;
+                if (att.sizes && att.sizes.thumbnail && att.sizes.thumbnail.url) {
+                    thumbUrl = att.sizes.thumbnail.url;
+                }
+
+                var itemHtml = '<div class="presshub-image-pool-item" data-id="' + presshubEsc(id) + '">' +
+                    '<img src="' + presshubEsc(thumbUrl) + '" alt="' + presshubEsc(__('Image #' + id, 'presshub-ai-editor')) + '" />' +
+                    '<span class="presshub-image-pool-badge">#' + presshubEsc(id) + '</span>' +
+                    '<button type="button" class="presshub-image-pool-remove" title="' + presshubEsc(__('Remove image from pool', 'presshub-ai-editor')) + '" aria-label="' + presshubEsc(__('Remove image', 'presshub-ai-editor')) + '">&times;</button>' +
+                    '</div>';
+
+                $grid.append(itemHtml);
+            });
+
+            syncImagePoolManager($manager);
+        });
+
+        frame.open();
+    });
+
+    // Remove single image from pool
+    $(document).on('click', '.presshub-image-pool-remove', function(e) {
+        e.preventDefault();
+        var $item = $(this).closest('.presshub-image-pool-item');
+        var $manager = $item.closest('.presshub-image-pool-manager');
+        $item.remove();
+        syncImagePoolManager($manager);
+    });
+
+    // Clear all images from pool
+    $(document).on('click', '.presshub-clear-pool-images-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var $manager = $btn.closest('.presshub-image-pool-manager');
+        $manager.find('.presshub-image-pool-grid').empty();
+        syncImagePoolManager($manager);
+    });
 });
 

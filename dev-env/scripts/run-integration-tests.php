@@ -1268,6 +1268,10 @@ run_test( 'Image Pool & Podcast: audio-only post_content, script meta, and regen
     $synth = new PressHub_AI_Audio_Synthesizer();
 
     // 1. Featured image pool configuration
+    $orig_morning = get_option( 'presshub_ai_briefing_featured_image_ids_morning', false );
+    $orig_noon    = get_option( 'presshub_ai_briefing_featured_image_ids_noon', false );
+    delete_option( 'presshub_ai_briefing_featured_image_ids_morning' );
+    delete_option( 'presshub_ai_briefing_featured_image_ids_noon' );
     update_option( 'presshub_ai_briefing_featured_image_ids', '101, 102, 103' );
     $pool = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids();
     if ( $pool !== [ 101, 102, 103 ] ) {
@@ -1335,6 +1339,12 @@ run_test( 'Image Pool & Podcast: audio-only post_content, script meta, and regen
     } finally {
         wp_delete_post( (int) $post_id, true );
         delete_option( 'presshub_ai_briefing_featured_image_ids' );
+        if ( false !== $orig_morning ) {
+            update_option( 'presshub_ai_briefing_featured_image_ids_morning', $orig_morning );
+        }
+        if ( false !== $orig_noon ) {
+            update_option( 'presshub_ai_briefing_featured_image_ids_noon', $orig_noon );
+        }
     }
 
     return true;

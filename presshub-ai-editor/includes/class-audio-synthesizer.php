@@ -931,9 +931,12 @@ class PressHub_AI_Audio_Synthesizer {
         update_post_meta( $post_id, '_presshub_audio_url', $audio_url );
         update_post_meta( $post_id, '_presshub_podcast_script', $transcript );
 
-        // Assign featured image from configured pool if available
+        // Assign featured image from configured pool if available (with collision avoidance)
+        $exclude_ids = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )
+            : [];
         $thumb_id = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id()
+            ? PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids )
             : 0;
         if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
             set_post_thumbnail( $post_id, $thumb_id );
@@ -998,10 +1001,13 @@ class PressHub_AI_Audio_Synthesizer {
         update_post_meta( $post_id, '_presshub_audio_url', $audio_url );
         update_post_meta( $post_id, '_presshub_podcast_script', $script );
 
-        // If post lacks a featured image, assign one from pool
+        // If post lacks a featured image, assign one from pool (with collision avoidance)
         if ( function_exists( 'has_post_thumbnail' ) && ! has_post_thumbnail( $post_id ) ) {
+            $exclude_ids = class_exists( 'PressHub_AI_Settings_Storage' )
+                ? PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )
+                : [];
             $thumb_id = class_exists( 'PressHub_AI_Settings_Storage' )
-                ? PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id()
+                ? PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids )
                 : 0;
             if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
                 set_post_thumbnail( $post_id, $thumb_id );

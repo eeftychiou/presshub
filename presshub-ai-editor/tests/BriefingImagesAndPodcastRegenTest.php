@@ -44,6 +44,59 @@ class BriefingImagesAndPodcastRegenTest {
             $failures[] = 'get_random_briefing_featured_image_id() on empty pool must return 0';
         }
 
+        // Separate Morning and Noon pools tests
+        update_option( 'presshub_ai_briefing_featured_image_ids_morning', '101, 102' );
+        update_option( 'presshub_ai_briefing_featured_image_ids_noon', '201, 202' );
+
+        $morning_pool = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids_morning();
+        if ( [ 101, 102 ] !== $morning_pool ) {
+            $failures[] = 'get_briefing_featured_image_ids_morning() failed; got: ' . json_encode( $morning_pool );
+        }
+
+        $noon_pool = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids_noon();
+        if ( [ 201, 202 ] !== $noon_pool ) {
+            $failures[] = 'get_briefing_featured_image_ids_noon() failed; got: ' . json_encode( $noon_pool );
+        }
+
+        // Edition-aware get_briefing_featured_image_ids
+        if ( [ 101, 102 ] !== PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'morning' ) ) {
+            $failures[] = 'get_briefing_featured_image_ids("morning") failed';
+        }
+        if ( [ 201, 202 ] !== PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'noon' ) ) {
+            $failures[] = 'get_briefing_featured_image_ids("noon") failed';
+        }
+
+        // Edition-aware random IDs
+        $rand_morning = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( 'morning' );
+        if ( ! in_array( $rand_morning, [ 101, 102 ], true ) ) {
+            $failures[] = 'get_random_briefing_featured_image_id("morning") returned unexpected ID: ' . $rand_morning;
+        }
+        $rand_noon = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( 'noon' );
+        if ( ! in_array( $rand_noon, [ 201, 202 ], true ) ) {
+            $failures[] = 'get_random_briefing_featured_image_id("noon") returned unexpected ID: ' . $rand_noon;
+        }
+
+        // Fallback to morning when noon is empty
+        update_option( 'presshub_ai_briefing_featured_image_ids_noon', '' );
+        $noon_fallback = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'noon' );
+        if ( [ 101, 102 ] !== $noon_fallback ) {
+            $failures[] = 'get_briefing_featured_image_ids("noon") fallback to morning failed; got: ' . json_encode( $noon_fallback );
+        }
+        $rand_noon_fallback = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( 'noon' );
+        if ( ! in_array( $rand_noon_fallback, [ 101, 102 ], true ) ) {
+            $failures[] = 'get_random_briefing_featured_image_id("noon") fallback returned unexpected ID: ' . $rand_noon_fallback;
+        }
+
+        // Fallback to legacy presshub_ai_briefing_featured_image_ids when morning is also empty
+        update_option( 'presshub_ai_briefing_featured_image_ids_morning', '' );
+        update_option( 'presshub_ai_briefing_featured_image_ids', '301, 302' );
+        if ( [ 301, 302 ] !== PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'morning' ) ) {
+            $failures[] = 'get_briefing_featured_image_ids("morning") legacy fallback failed';
+        }
+        if ( [ 301, 302 ] !== PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( 'noon' ) ) {
+            $failures[] = 'get_briefing_featured_image_ids("noon") legacy fallback failed';
+        }
+
         // Test podcast include text default is false (0)
         delete_option( 'presshub_ai_briefing_podcast_include_text' );
         if ( false !== PressHub_AI_Settings_Storage::get_briefing_podcast_include_text() ) {
@@ -55,9 +108,10 @@ class BriefingImagesAndPodcastRegenTest {
         }
 
         // -------------------------------------------------------------
-        // 2. Featured Image Assignment on Curation Post
+        // 2. Featured Image Assignment on Curation Post (Morning & Noon)
         // -------------------------------------------------------------
-        update_option( 'presshub_ai_briefing_featured_image_ids', '444, 555' );
+        update_option( 'presshub_ai_briefing_featured_image_ids_morning', '444, 555' );
+        update_option( 'presshub_ai_briefing_featured_image_ids_noon', '666, 777' );
         $curator = new PressHub_AI_News_Curator();
         $text_post_id = $curator->create_wordpress_post(
             'Test Curation Body with some news.',
@@ -71,7 +125,22 @@ class BriefingImagesAndPodcastRegenTest {
         } else {
             $thumb = get_post_thumbnail_id( (int) $text_post_id );
             if ( ! in_array( $thumb, [ 444, 555 ], true ) ) {
-                $failures[] = 'create_wordpress_post() did not assign featured image from pool; got: ' . $thumb;
+                $failures[] = 'create_wordpress_post(morning) did not assign featured image from morning pool; got: ' . $thumb;
+            }
+        }
+
+        $noon_text_post_id = $curator->create_wordpress_post(
+            'Test Noon Curation Body.',
+            '2026-10-16',
+            'Test Noon Curation Title',
+            'noon'
+        );
+        if ( ! is_numeric( $noon_text_post_id ) ) {
+            $failures[] = 'create_wordpress_post(noon) failed to return numeric post ID';
+        } else {
+            $noon_thumb = get_post_thumbnail_id( (int) $noon_text_post_id );
+            if ( ! in_array( $noon_thumb, [ 666, 777 ], true ) ) {
+                $failures[] = 'create_wordpress_post(noon) did not assign featured image from noon pool; got: ' . $noon_thumb;
             }
         }
 
@@ -116,7 +185,21 @@ class BriefingImagesAndPodcastRegenTest {
             // Featured image must be assigned
             $p_thumb = get_post_thumbnail_id( (int) $podcast_post_id );
             if ( ! in_array( $p_thumb, [ 444, 555 ], true ) ) {
-                $failures[] = 'create_podcast_post() did not assign featured image from pool; got: ' . $p_thumb;
+                $failures[] = 'create_podcast_post(morning) did not assign featured image from morning pool; got: ' . $p_thumb;
+            }
+
+            // Noon podcast post creation: assigns from noon pool
+            $noon_podcast_post_id = $synthesizer->create_podcast_post(
+                'http://example.test/pod_noon.mp3',
+                890,
+                $sample_script,
+                '2026-10-16',
+                'Test Noon Podcast',
+                'noon'
+            );
+            $noon_p_thumb = get_post_thumbnail_id( (int) $noon_podcast_post_id );
+            if ( ! in_array( $noon_p_thumb, [ 666, 777 ], true ) ) {
+                $failures[] = 'create_podcast_post(noon) did not assign featured image from noon pool; got: ' . $noon_p_thumb;
             }
         }
 
@@ -228,7 +311,126 @@ class BriefingImagesAndPodcastRegenTest {
             $failures[] = 'regenerate_podcast_audio AJAX must deny access to simple authors; got: ' . json_encode( $captured_error );
         }
 
+        // -------------------------------------------------------------
+        // 8. Same-Day Featured Image Collision Avoidance
+        // -------------------------------------------------------------
+        // 8a: get_used_briefing_thumbnail_ids_for_date finds thumbnails of existing posts
+        $GLOBALS['WP_TEST_POSTS'] = [
+            1001 => (object) [
+                'ID'                      => 1001,
+                '_presshub_briefing_date' => '2026-10-30',
+                '_thumbnail_id'           => 501,
+            ],
+            1002 => (object) [
+                'ID'                      => 1002,
+                '_presshub_briefing_date' => '2026-10-30',
+                '_thumbnail_id'           => 502,
+            ],
+            1003 => (object) [
+                'ID'                      => 1003,
+                '_presshub_briefing_date' => '2026-10-31',
+                '_thumbnail_id'           => 503,
+            ],
+        ];
+
+        $used_for_30 = PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( '2026-10-30' );
+        sort( $used_for_30 );
+        if ( [ 501, 502 ] !== $used_for_30 ) {
+            $failures[] = 'get_used_briefing_thumbnail_ids_for_date(2026-10-30) failed; got: ' . json_encode( $used_for_30 );
+        }
+
+        // Exclude post ID
+        $used_with_exclude = PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( '2026-10-30', 1001 );
+        if ( [ 502 ] !== $used_with_exclude ) {
+            $failures[] = 'get_used_briefing_thumbnail_ids_for_date() with exclude_post_id failed; got: ' . json_encode( $used_with_exclude );
+        }
+
+        unset( $GLOBALS['WP_TEST_POSTS'] );
+
+        // 8b: get_random_briefing_featured_image_id excludes specified IDs when alternatives exist
+        update_option( 'presshub_ai_briefing_featured_image_ids_morning', '101, 102, 103' );
+        $only_103 = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( 'morning', [ 101, 102 ] );
+        if ( 103 !== $only_103 ) {
+            $failures[] = 'get_random_briefing_featured_image_id(morning, [101, 102]) must return 103; got: ' . $only_103;
+        }
+
+        $not_103 = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( 'morning', [ 103 ] );
+        if ( ! in_array( $not_103, [ 101, 102 ], true ) ) {
+            $failures[] = 'get_random_briefing_featured_image_id(morning, [103]) must return 101 or 102; got: ' . $not_103;
+        }
+
+        // 8c: When pool is exhausted (all pool IDs in exclude_ids), gracefully falls back to pool
+        $fallback_id = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( 'morning', [ 101, 102, 103 ] );
+        if ( ! in_array( $fallback_id, [ 101, 102, 103 ], true ) || 0 === $fallback_id ) {
+            $failures[] = 'get_random_briefing_featured_image_id() when exhausted must fall back to pool; got: ' . $fallback_id;
+        }
+
+        // 8d: Morning text briefing and morning podcast created on same date receive distinct images
+        update_option( 'presshub_ai_briefing_featured_image_ids_morning', '101, 102' );
+        $same_day_date = '2026-10-25';
+
+        $morning_text_id = $curator->create_wordpress_post(
+            'Morning text briefing story content.',
+            $same_day_date,
+            'Morning Text Briefing 25/10',
+            'morning'
+        );
+        $morning_text_thumb = get_post_thumbnail_id( (int) $morning_text_id );
+
+        $morning_podcast_id = $synthesizer->create_podcast_post(
+            'http://example.test/same_day_morning.mp3',
+            911,
+            "[SPEAKER_1]: Hello morning.\n[SPEAKER_2]: Good morning.",
+            $same_day_date,
+            'Morning Podcast 25/10',
+            'morning'
+        );
+        $morning_podcast_thumb = get_post_thumbnail_id( (int) $morning_podcast_id );
+
+        if ( ! in_array( $morning_text_thumb, [ 101, 102 ], true ) ) {
+            $failures[] = 'Morning text briefing did not get image from morning pool; got: ' . $morning_text_thumb;
+        }
+        if ( ! in_array( $morning_podcast_thumb, [ 101, 102 ], true ) ) {
+            $failures[] = 'Morning podcast did not get image from morning pool; got: ' . $morning_podcast_thumb;
+        }
+        if ( $morning_text_thumb === $morning_podcast_thumb ) {
+            $failures[] = "Same-day morning text briefing and podcast collided on thumbnail ID: {$morning_text_thumb}";
+        }
+
+        // 8e: Noon text briefing and noon podcast created on same date receive distinct images
+        update_option( 'presshub_ai_briefing_featured_image_ids_noon', '201, 202' );
+
+        $noon_text_id = $curator->create_wordpress_post(
+            'Noon text briefing story content.',
+            $same_day_date,
+            'Noon Text Briefing 25/10',
+            'noon'
+        );
+        $noon_text_thumb = get_post_thumbnail_id( (int) $noon_text_id );
+
+        $noon_podcast_id = $synthesizer->create_podcast_post(
+            'http://example.test/same_day_noon.mp3',
+            912,
+            "[SPEAKER_1]: Hello noon.\n[SPEAKER_2]: Good afternoon.",
+            $same_day_date,
+            'Noon Podcast 25/10',
+            'noon'
+        );
+        $noon_podcast_thumb = get_post_thumbnail_id( (int) $noon_podcast_id );
+
+        if ( ! in_array( $noon_text_thumb, [ 201, 202 ], true ) ) {
+            $failures[] = 'Noon text briefing did not get image from noon pool; got: ' . $noon_text_thumb;
+        }
+        if ( ! in_array( $noon_podcast_thumb, [ 201, 202 ], true ) ) {
+            $failures[] = 'Noon podcast did not get image from noon pool; got: ' . $noon_podcast_thumb;
+        }
+        if ( $noon_text_thumb === $noon_podcast_thumb ) {
+            $failures[] = "Same-day noon text briefing and podcast collided on thumbnail ID: {$noon_text_thumb}";
+        }
+
         // Cleanup test options
+        delete_option( 'presshub_ai_briefing_featured_image_ids_morning' );
+        delete_option( 'presshub_ai_briefing_featured_image_ids_noon' );
         delete_option( 'presshub_ai_briefing_featured_image_ids' );
         delete_option( 'presshub_ai_briefing_podcast_include_text' );
 

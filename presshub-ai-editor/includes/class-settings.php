@@ -51,6 +51,10 @@ class PressHub_AI_Settings {
             require_once __DIR__ . '/class-provider-defaults.php';
             require_once __DIR__ . '/class-provider-store.php';
 
+            if ( function_exists( 'wp_enqueue_media' ) ) {
+                wp_enqueue_media();
+            }
+
             wp_enqueue_style( 'presshub-ai-admin-css', PRESSHUB_AI_URL . 'assets/admin.css', [], PRESSHUB_AI_VERSION );
             wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
             wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [

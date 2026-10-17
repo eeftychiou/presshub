@@ -185,7 +185,8 @@ class PressHub_AI_Social_Meta {
 
         // 2. Pool fallback if post lacks a featured image
         if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
-            $image_ids = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids();
+            $edition   = get_post_meta( $post->ID, '_presshub_briefing_edition', true ) ?: 'morning';
+            $image_ids = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( $edition );
             if ( ! empty( $image_ids ) && function_exists( 'wp_get_attachment_image_src' ) ) {
                 $first_id = (int) reset( $image_ids );
                 if ( $first_id > 0 ) {

@@ -1353,6 +1353,17 @@ if ( ! function_exists( 'wp_get_attachment_image_src' ) ) {
     }
 }
 
+if ( ! function_exists( 'wp_get_attachment_image_url' ) ) {
+    function wp_get_attachment_image_url( $attachment_id, $size = 'thumbnail', $icon = false ) {
+        $src = function_exists( 'wp_get_attachment_image_src' ) ? wp_get_attachment_image_src( $attachment_id, $size, $icon ) : false;
+        return is_array( $src ) ? $src[0] : false;
+    }
+}
+
+if ( ! function_exists( 'wp_enqueue_media' ) ) {
+    function wp_enqueue_media() {}
+}
+
 if ( ! function_exists( 'get_queried_object' ) ) {
     function get_queried_object() {
         return $GLOBALS['QUERIED_OBJECT'] ?? null;

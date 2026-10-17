@@ -562,6 +562,29 @@ When UI changes are involved, perform visual inspection in the local testing env
 
 ---
 
+## 🖼️ Featured Image Pools & Media Library Picker Guidelines
+
+> **Featured images for daily briefing posts and podcasts must be configured via dedicated, edition-aware pools and managed through an interactive Media Library picker UI.**
+
+1. **Edition-Aware Pools**:
+   - `presshub_ai_briefing_featured_image_ids_morning`: Featured image pool for Morning daily briefing and podcast posts.
+   - `presshub_ai_briefing_featured_image_ids_noon`: Featured image pool for Noon updates.
+   - `presshub_ai_briefing_featured_image_ids`: Legacy fallback option for backward compatibility.
+2. **Resolution & Fallback Precedence**:
+   - For Noon edition: `presshub_ai_briefing_featured_image_ids_noon` -> `presshub_ai_briefing_featured_image_ids_morning` -> `presshub_ai_briefing_featured_image_ids`.
+   - For Morning edition (or unassigned): `presshub_ai_briefing_featured_image_ids_morning` -> `presshub_ai_briefing_featured_image_ids`.
+   - Resolution must always be executed via `PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( $edition )` or `PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition )`.
+3. **Interactive Media Library Picker UI**:
+   - Media pickers must utilize `wp.media` frames rather than requiring manual numeric ID input.
+   - Visual cards must display attachment thumbnail previews, `#ID` badges, individual removal buttons (`&times;`), and a "Clear All" action.
+   - Form modifications must synchronize with the hidden comma-separated ID input, trigger change events, and integrate with dirty-state tracking (`updateTabDirtyState`).
+4. **Same-Day Collision Avoidance**:
+   - When multiple briefing/podcast posts are generated on the same date (e.g. Morning Text Briefing, Morning Podcast, Noon Text Briefing, Noon Podcast), the system prevents duplicate featured images between them when alternative images exist in the pool.
+   - Look up used image IDs on that date via `PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )` and pass as `$exclude_ids` to `PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids )`.
+   - If the pool is exhausted (all IDs in the pool have been assigned), gracefully fall back to the full pool rather than failing or returning 0.
+
+---
+
 ## 📋 GitHub Issue Tracking Protocol & Best Practices
 
 All bugs, regressions, edge cases, and feature tasks identified during development or debugging **must** follow this rigorous investigation and GitHub issue tracking lifecycle.
