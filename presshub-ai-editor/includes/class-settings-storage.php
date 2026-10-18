@@ -361,6 +361,14 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_text_title_prefix' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_title_prefix', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_title_prefix' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_morning_podcast_title_prefix', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_title_prefix' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_noon_podcast_title_prefix', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_podcast_title_prefix' ],
             'type'              => 'string',
@@ -621,6 +629,7 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_text_title_prefix', __( 'Text Story Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_text_title_date_format', __( 'Text Story Title Date Format', 'presshub-ai-editor' ), [ $render, 'render_briefing_text_title_date_format_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_noon_text_title_prefix', __( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_text_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_title_prefix', __( 'Morning Podcast Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_noon_podcast_title_prefix', __( 'Noon Podcast Title Prefix', 'presshub-ai-editor' ), [ $render, 'render_briefing_noon_podcast_title_prefix_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_featured_image_ids_morning', __( 'Morning Featured Image Pool', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_morning_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_featured_image_ids_noon', __( 'Noon Featured Image Pool', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_ids_noon_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -2087,6 +2096,40 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_briefing_noon_text_title_prefix( $value );
     }
 
+    public static function default_briefing_podcast_title_prefix(): string {
+        return 'Πρωινό Podcast Ενημέρωσης - ';
+    }
+
+    public static function sanitize_briefing_podcast_title_prefix( $value ): string {
+        if ( ! is_string( $value ) ) {
+            return self::default_briefing_podcast_title_prefix();
+        }
+        $clean = sanitize_text_field( wp_unslash( $value ) );
+        if ( '' === trim( $clean ) ) {
+            return self::default_briefing_podcast_title_prefix();
+        }
+        $raw = wp_unslash( $value );
+        if ( substr( $raw, -1 ) === ' ' && substr( $clean, -1 ) !== ' ' ) {
+            $clean .= ' ';
+        }
+        return mb_substr( $clean, 0, 60, 'UTF-8' );
+    }
+
+    public static function get_briefing_podcast_title_prefix(): string {
+        $value = get_option( 'presshub_ai_briefing_podcast_title_prefix', null );
+        if ( null === $value ) {
+            $value = get_option( 'presshub_ai_briefing_morning_podcast_title_prefix', null );
+        }
+        if ( null === $value ) {
+            return self::default_briefing_podcast_title_prefix();
+        }
+        return self::sanitize_briefing_podcast_title_prefix( $value );
+    }
+
+    public static function get_briefing_morning_podcast_title_prefix(): string {
+        return self::get_briefing_podcast_title_prefix();
+    }
+
     public static function default_briefing_noon_podcast_title_prefix(): string {
         return 'Μεσημβρινό Podcast Ενημέρωσης - ';
     }
@@ -2855,6 +2898,8 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_text_title_prefix'          => [ __CLASS__, 'sanitize_briefing_text_title_prefix' ],
             'presshub_ai_briefing_text_title_date_format'     => [ __CLASS__, 'sanitize_briefing_text_title_date_format' ],
             'presshub_ai_briefing_noon_text_title_prefix'     => [ __CLASS__, 'sanitize_briefing_noon_text_title_prefix' ],
+            'presshub_ai_briefing_podcast_title_prefix'       => [ __CLASS__, 'sanitize_briefing_podcast_title_prefix' ],
+            'presshub_ai_briefing_morning_podcast_title_prefix' => [ __CLASS__, 'sanitize_briefing_podcast_title_prefix' ],
             'presshub_ai_briefing_noon_podcast_title_prefix'  => [ __CLASS__, 'sanitize_briefing_noon_podcast_title_prefix' ],
             'presshub_ai_briefing_featured_image_ids_morning' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'presshub_ai_briefing_featured_image_ids_noon'    => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],

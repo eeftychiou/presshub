@@ -594,6 +594,12 @@ When UI changes are involved, perform visual inspection in the local testing env
    - When multiple briefing/podcast posts are generated on the same date (e.g. Morning Text Briefing, Morning Podcast, Noon Text Briefing, Noon Podcast), the system prevents duplicate featured images between them when alternative images exist in the pool.
    - Look up used image IDs on that date via `PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )` and pass as `$exclude_ids` to `PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids )`.
    - If the pool is exhausted (all IDs in the pool have been assigned), gracefully fall back to the full pool rather than failing or returning 0.
+5. **Podcast Dialogue Script & Excerpt Invariants**:
+   - Audio podcast posts must exclusively render the WordPress audio block (`wp:audio`) in `post_content`.
+   - Spoken scripts are stored in post meta `_presshub_podcast_script` and displayed in the editor metabox for review and one-click regeneration.
+   - `post_excerpt` in the database is kept empty (`''`) when `include_text` is off (0) to prevent dialogue leaks.
+   - `PressHub_AI_Audio_Synthesizer::filter_podcast_excerpt` hooks into `get_the_excerpt` to ensure that neither new nor legacy podcast posts expose their dialogue scripts on front-page article cards or archives.
+   - Morning Podcast Title Prefix (`presshub_ai_briefing_podcast_title_prefix`, default `"Πρωινό Podcast Ενημέρωσης - "`) and Noon Podcast Title Prefix (`presshub_ai_briefing_noon_podcast_title_prefix`, default `"Μεσημβρινό Podcast Ενημέρωσης - "`) are separate Settings-First options.
 
 ---
 

@@ -497,6 +497,14 @@ if ( ! function_exists( 'wp_html_excerpt' ) ) {
     }
 }
 
+if ( ! function_exists( 'get_the_excerpt' ) ) {
+    function get_the_excerpt( $post = null ) {
+        $post = function_exists( 'get_post' ) ? get_post( $post ) : null;
+        $excerpt = $post ? ( $post->post_excerpt ?? '' ) : '';
+        return function_exists( 'apply_filters' ) ? apply_filters( 'get_the_excerpt', $excerpt, $post ) : $excerpt;
+    }
+}
+
 if ( ! function_exists( 'wp_strip_all_tags' ) ) {
     function wp_strip_all_tags( $string, $remove_breaks = false ) {
         return strip_tags( $string );

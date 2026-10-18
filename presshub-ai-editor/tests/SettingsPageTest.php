@@ -219,6 +219,8 @@ class SettingsPageTest
             'presshub_ai_briefing_noon_harvest_time',
             'presshub_ai_briefing_noon_generation_time',
             'presshub_ai_briefing_noon_text_title_prefix',
+            'presshub_ai_briefing_podcast_title_prefix',
+            'presshub_ai_briefing_morning_podcast_title_prefix',
             'presshub_ai_briefing_noon_podcast_title_prefix',
             'presshub_ai_briefing_featured_image_ids_morning',
             'presshub_ai_briefing_featured_image_ids_noon',

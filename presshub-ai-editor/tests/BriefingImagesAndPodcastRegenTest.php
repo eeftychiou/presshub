@@ -428,11 +428,100 @@ class BriefingImagesAndPodcastRegenTest {
             $failures[] = "Same-day noon text briefing and podcast collided on thumbnail ID: {$noon_text_thumb}";
         }
 
+        // -------------------------------------------------------------
+        // 9. Morning Podcast Title Prefix Setting & Title Resolution
+        // -------------------------------------------------------------
+        if ( 'Πρωινό Podcast Ενημέρωσης - ' !== PressHub_AI_Settings_Storage::get_briefing_podcast_title_prefix() ) {
+            $failures[] = 'get_briefing_podcast_title_prefix() should default to "Πρωινό Podcast Ενημέρωσης - "; got: ' . PressHub_AI_Settings_Storage::get_briefing_podcast_title_prefix();
+        }
+        if ( 'Πρωινό Podcast Ενημέρωσης - ' !== PressHub_AI_Settings_Storage::get_briefing_morning_podcast_title_prefix() ) {
+            $failures[] = 'get_briefing_morning_podcast_title_prefix() alias should match primary getter';
+        }
+        // Custom prefix
+        update_option( 'presshub_ai_briefing_podcast_title_prefix', 'Custom Morning Pod - ' );
+        if ( 'Custom Morning Pod - ' !== PressHub_AI_Settings_Storage::get_briefing_podcast_title_prefix() ) {
+            $failures[] = 'get_briefing_podcast_title_prefix() failed to return custom prefix';
+        }
+        $auto_title_pod_id = $synthesizer->create_podcast_post(
+            'http://example.test/auto_title.mp3',
+            991,
+            "[SPEAKER_1]: Hello.\n[SPEAKER_2]: Hi.",
+            '2026-10-18',
+            '', // empty title -> should auto-format with prefix
+            'morning'
+        );
+        $auto_title_pod = get_post( (int) $auto_title_pod_id );
+        if ( ! $auto_title_pod || false === strpos( $auto_title_pod->post_title, 'Custom Morning Pod - ' ) ) {
+            $failures[] = 'create_podcast_post() did not use customized morning podcast title prefix; got: ' . ( $auto_title_pod->post_title ?? 'null' );
+        }
+        delete_option( 'presshub_ai_briefing_podcast_title_prefix' );
+
+        // -------------------------------------------------------------
+        // 10. Podcast Excerpt Suppression & Filter Tests
+        // -------------------------------------------------------------
+        delete_option( 'presshub_ai_briefing_podcast_include_text' ); // default = 0
+        $pod_post_excerpt_test_id = $synthesizer->create_podcast_post(
+            'http://example.test/excerpt_test.mp3',
+            992,
+            "[TOPIC_START: Εισαγωγή] [SPEAKER_1]: Καλωσήρθατε στο podcast.\n[SPEAKER_2]: Γεια σας.\n[TOPIC_END]",
+            '2026-10-18',
+            'Excerpt Test Pod',
+            'morning'
+        );
+        $pod_post_excerpt_obj = get_post( (int) $pod_post_excerpt_test_id );
+        if ( '' !== ( $pod_post_excerpt_obj->post_excerpt ?? '' ) ) {
+            $failures[] = 'create_podcast_post() post_excerpt must be empty string when include_text is 0; got: ' . $pod_post_excerpt_obj->post_excerpt;
+        }
+
+        // Test filter_podcast_excerpt on new post
+        $filtered_excerpt = PressHub_AI_Audio_Synthesizer::filter_podcast_excerpt( $pod_post_excerpt_obj->post_excerpt, $pod_post_excerpt_obj );
+        if ( '' !== $filtered_excerpt ) {
+            $failures[] = 'filter_podcast_excerpt() must return empty string when include_text is 0; got: ' . $filtered_excerpt;
+        }
+
+        // Test filter_podcast_excerpt on legacy post where post_excerpt was already contaminated in DB
+        $legacy_pod_post = (object) [
+            'ID'           => 993,
+            'post_title'   => 'Legacy Contaminated Podcast Post',
+            'post_content' => '<figure class="wp-block-audio"><audio controls></audio></figure>',
+            'post_excerpt' => '[TOPIC_START: Εισαγωγή] [SPEAKER_1]: Καλωσήρθατε στο σημερινό Briefing του Presshub.cy.',
+        ];
+        $GLOBALS['POSTS_STORE'][ 993 ] = (array) $legacy_pod_post;
+        $GLOBALS['POST_META_STORE'][ 993 ] = [
+            '_presshub_briefing_type'   => 'podcast',
+            '_presshub_briefing_date'   => '2026-10-18',
+            '_presshub_podcast_script' => '[TOPIC_START: Εισαγωγή] [SPEAKER_1]: Καλωσήρθατε στο σημερινό Briefing του Presshub.cy.',
+        ];
+        $legacy_filtered = PressHub_AI_Audio_Synthesizer::filter_podcast_excerpt( $legacy_pod_post->post_excerpt, $legacy_pod_post );
+        if ( '' !== $legacy_filtered ) {
+            $failures[] = 'filter_podcast_excerpt() must suppress legacy contaminated script excerpt when include_text is 0; got: ' . $legacy_filtered;
+        }
+
+        // Updating legacy post must clear post_excerpt in DB when include_text is 0
+        $synthesizer->update_podcast_post( 993, 'http://example.test/updated_pod.mp3', 994, 'Updated script', '2026-10-18', 'Updated Title', 'morning' );
+        $updated_legacy_obj = get_post( 993 );
+        if ( '' !== ( $updated_legacy_obj->post_excerpt ?? '' ) ) {
+            $failures[] = 'update_podcast_post() must clear post_excerpt to empty string when include_text is 0; got: ' . $updated_legacy_obj->post_excerpt;
+        }
+
+        // Non-podcast regular posts must NOT have their excerpts suppressed
+        $regular_post = (object) [
+            'ID'           => 995,
+            'post_title'   => 'Regular News Article',
+            'post_content' => 'Full article content.',
+            'post_excerpt' => 'This is a genuine article excerpt.',
+        ];
+        $regular_filtered = PressHub_AI_Audio_Synthesizer::filter_podcast_excerpt( $regular_post->post_excerpt, $regular_post );
+        if ( 'This is a genuine article excerpt.' !== $regular_filtered ) {
+            $failures[] = 'filter_podcast_excerpt() must not modify non-podcast posts; got: ' . $regular_filtered;
+        }
+
         // Cleanup test options
         delete_option( 'presshub_ai_briefing_featured_image_ids_morning' );
         delete_option( 'presshub_ai_briefing_featured_image_ids_noon' );
         delete_option( 'presshub_ai_briefing_featured_image_ids' );
         delete_option( 'presshub_ai_briefing_podcast_include_text' );
+        delete_option( 'presshub_ai_briefing_podcast_title_prefix' );
 
         if ( ! empty( $failures ) ) {
             echo "FAIL: BriefingImagesAndPodcastRegenTest\n";

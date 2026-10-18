@@ -50,6 +50,66 @@ class PressHub_AI_Audio_Synthesizer {
     const OPTION_STATUS = 'presshub_ai_briefing_podcast_status';
 
     /**
+     * Constructor registers excerpt filter hooks.
+     */
+    public function __construct() {
+        self::register_hooks();
+    }
+
+    /**
+     * Register WordPress filter hooks.
+     */
+    public static function register_hooks(): void {
+        if ( function_exists( 'add_filter' ) ) {
+            add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_podcast_excerpt' ], 20, 2 );
+        }
+    }
+
+    /**
+     * Filter post excerpt for podcast briefing posts.
+     *
+     * Suppresses raw dialogue script from appearing in front-page article previews,
+     * archive cards, and public RSS feeds when "Include Transcript in Podcast Post"
+     * is disabled.
+     *
+     * @param string        $excerpt Current excerpt text.
+     * @param \WP_Post|null $post    Post object.
+     * @return string Filtered excerpt text.
+     */
+    public static function filter_podcast_excerpt( $excerpt, $post = null ): string {
+        if ( empty( $post ) ) {
+            $post = function_exists( 'get_post' ) ? get_post() : null;
+        }
+        if ( ! is_object( $post ) || empty( $post->ID ) ) {
+            return (string) $excerpt;
+        }
+
+        $briefing_type = function_exists( 'get_post_meta' ) ? get_post_meta( $post->ID, '_presshub_briefing_type', true ) : '';
+        if ( 'podcast' !== $briefing_type ) {
+            return (string) $excerpt;
+        }
+
+        $include_text = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_briefing_podcast_include_text()
+            : false;
+
+        // When include_text is disabled, suppress the dialogue script excerpt completely.
+        if ( ! $include_text ) {
+            return '';
+        }
+
+        // When include_text is enabled, strip any leaked topic markers or speaker prefixes.
+        if ( false !== strpos( (string) $excerpt, 'TOPIC' ) || false !== strpos( (string) $excerpt, 'SPEAKER_' ) ) {
+            $synth   = new self();
+            $cleaned = $synth->strip_topic_markers( (string) $excerpt );
+            $cleaned = preg_replace( '/\[\s*(?:SPEAKER_\d+|Presenter\s*\d+)\s*\]\s*:\s*/iu', '', $cleaned );
+            return trim( $cleaned );
+        }
+
+        return (string) $excerpt;
+    }
+
+    /**
      * Get list of delivery styles from logosAI.
      *
      * @return array Style dictionary.
@@ -772,7 +832,14 @@ class PressHub_AI_Audio_Synthesizer {
             if ( preg_match( $topic_end_re, $trimmed ) ) {
                 continue;
             }
-            $out[] = $line;
+            // Strip any inline topic markers that appear on the same line as dialogue
+            $line = preg_replace( '/\[\s*TOPIC(?:_?START)?\s*:[^\]]*\]/iu', '', $line );
+            $line = preg_replace( '/\[\s*TOPIC_?END\s*\]/iu', '', $line );
+            $line = preg_replace( '/\<\!\-\-\s*TOPIC(?:_?START)?\s*:[^\>]*\-\-\>/iu', '', $line );
+            $line = preg_replace( '/\<\!\-\-\s*TOPIC_?END\s*\-\-\>/iu', '', $line );
+            if ( '' !== trim( $line ) ) {
+                $out[] = trim( $line );
+            }
         }
 
         // Collapse runs of 3+ consecutive blank lines into a single blank
@@ -851,7 +918,10 @@ class PressHub_AI_Audio_Synthesizer {
                     : 'Μεσημβρινό Podcast Ενημέρωσης - ';
                 $title = sprintf( '%s%s', $prefix, $formatted_date );
             } else {
-                $title = sprintf( 'Πρωινό Podcast Ενημέρωσης - %s', $formatted_date );
+                $prefix = class_exists( 'PressHub_AI_Settings_Storage' )
+                    ? PressHub_AI_Settings_Storage::get_briefing_podcast_title_prefix()
+                    : 'Πρωινό Podcast Ενημέρωσης - ';
+                $title = sprintf( '%s%s', $prefix, $formatted_date );
             }
         }
 
@@ -886,13 +956,12 @@ class PressHub_AI_Audio_Synthesizer {
                 . $formatted_transcript;
         }
 
-        $clean_excerpt = wp_trim_words( wp_strip_all_tags( $transcript ), 35 );
-
         $postarr = [
             'post_title'   => $title,
             'post_content' => wp_kses_post( $post_content ),
             'post_status'  => $post_status,
             'post_type'    => 'post',
+            'post_excerpt' => '',
             'meta_input'   => [
                 '_presshub_briefing_date'        => $date,
                 '_presshub_briefing_type'        => 'podcast',
@@ -903,8 +972,13 @@ class PressHub_AI_Audio_Synthesizer {
             ],
         ];
 
-        if ( ! empty( $clean_excerpt ) ) {
-            $postarr['post_excerpt'] = $clean_excerpt;
+        if ( $include_text ) {
+            $clean_script  = $this->strip_topic_markers( $transcript );
+            $clean_script  = preg_replace( '/\[\s*(?:SPEAKER_\d+|Presenter\s*\d+)\s*\]\s*:\s*/iu', '', $clean_script );
+            $clean_excerpt = wp_trim_words( wp_strip_all_tags( $clean_script ), 35 );
+            if ( ! empty( $clean_excerpt ) ) {
+                $postarr['post_excerpt'] = $clean_excerpt;
+            }
         }
 
         if ( ! empty( $post_category ) ) {
@@ -976,17 +1050,21 @@ class PressHub_AI_Audio_Synthesizer {
                 . $formatted_transcript;
         }
 
-        $clean_excerpt = wp_trim_words( wp_strip_all_tags( $script ), 35 );
-
         $postarr = [
             'ID'           => $post_id,
             'post_content' => wp_kses_post( $post_content ),
+            'post_excerpt' => '',
         ];
         if ( ! empty( $title ) ) {
             $postarr['post_title'] = $title;
         }
-        if ( ! empty( $clean_excerpt ) ) {
-            $postarr['post_excerpt'] = $clean_excerpt;
+        if ( $include_text ) {
+            $clean_script  = $this->strip_topic_markers( $script );
+            $clean_script  = preg_replace( '/\[\s*(?:SPEAKER_\d+|Presenter\s*\d+)\s*\]\s*:\s*/iu', '', $clean_script );
+            $clean_excerpt = wp_trim_words( wp_strip_all_tags( $clean_script ), 35 );
+            if ( ! empty( $clean_excerpt ) ) {
+                $postarr['post_excerpt'] = $clean_excerpt;
+            }
         }
 
         $result = wp_update_post( $postarr, true );
@@ -1624,9 +1702,10 @@ class PressHub_AI_Audio_Synthesizer {
         // Sideload to Media Library
         $edition_slug = ( 'noon' === $edition ) ? '-noon' : '';
         $filename = sprintf( 'podcast-briefing%s-%s-%s%s', $edition_slug, $date, uniqid(), $ext );
+        $formatted_date = function_exists( 'date_i18n' ) ? date_i18n( 'd/m/Y', strtotime( $date ) ) : $date;
         $title    = ( 'noon' === $edition )
-            ? sprintf( '%s%s', ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_noon_podcast_title_prefix() : 'Μεσημβρινό Podcast Ενημέρωσης - ' ), ( function_exists( 'date_i18n' ) ? date_i18n( 'd/m/Y', strtotime( $date ) ) : $date ) )
-            : sprintf( __( 'PressHub Daily Briefing Podcast (%s)', 'presshub-ai-editor' ), $date );
+            ? sprintf( '%s%s', ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_noon_podcast_title_prefix() : 'Μεσημβρινό Podcast Ενημέρωσης - ' ), $formatted_date )
+            : sprintf( '%s%s', ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_title_prefix() : 'Πρωινό Podcast Ενημέρωσης - ' ), $formatted_date );
         $media    = $this->sideload_audio_file( $filename, $stitched_audio, 0, $title );
 
         if ( is_wp_error( $media ) ) {

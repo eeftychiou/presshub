@@ -130,14 +130,33 @@ class PressHub_AI_Social_Meta {
      * @return string
      */
     public function get_social_description( $post ): string {
-        // 1. Post excerpt
-        $text = ! empty( $post->post_excerpt ) ? $post->post_excerpt : '';
+        $is_podcast   = function_exists( 'get_post_meta' ) && ( 'podcast' === get_post_meta( $post->ID, '_presshub_briefing_type', true ) );
+        $include_text = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_briefing_podcast_include_text();
 
-        // 2. Podcast script if post_excerpt is blank
+        // 1. Post excerpt (ignore if contaminated with raw topic or speaker tags)
+        $text = ! empty( $post->post_excerpt ) ? (string) $post->post_excerpt : '';
+        if ( false !== strpos( $text, 'TOPIC' ) || false !== strpos( $text, 'SPEAKER_' ) ) {
+            $text = '';
+        }
+
+        // For podcasts with include_text off: produce clean editorial audio description
+        if ( $is_podcast && ! $include_text && empty( $text ) ) {
+            $date = function_exists( 'get_post_meta' ) ? get_post_meta( $post->ID, '_presshub_briefing_date', true ) : '';
+            $formatted_date = ! empty( $date )
+                ? ( function_exists( 'date_i18n' ) ? date_i18n( 'd/m/Y', strtotime( $date ) ) : $date )
+                : '';
+            return ! empty( $formatted_date )
+                ? sprintf( __( 'Ακούστε το ηχητικό podcast ενημέρωσης του PressHub (%s).', 'presshub-ai-editor' ), $formatted_date )
+                : __( 'Ακούστε το ηχητικό podcast ενημέρωσης του PressHub.', 'presshub-ai-editor' );
+        }
+
+        // 2. Podcast script if post_excerpt is blank (only when include_text is enabled)
         if ( empty( $text ) && function_exists( 'get_post_meta' ) ) {
-            $script = get_post_meta( $post->ID, '_presshub_podcast_script', true );
-            if ( ! empty( $script ) ) {
-                $text = (string) $script;
+            if ( ! $is_podcast || $include_text ) {
+                $script = get_post_meta( $post->ID, '_presshub_podcast_script', true );
+                if ( ! empty( $script ) ) {
+                    $text = (string) $script;
+                }
             }
         }
 
@@ -158,6 +177,7 @@ class PressHub_AI_Social_Meta {
             $synth = new PressHub_AI_Audio_Synthesizer();
             $text  = $synth->strip_topic_markers( $text );
         }
+        $text  = preg_replace( '/\[\s*(?:SPEAKER_\d+|Presenter\s*\d+)\s*\]\s*:\s*/iu', '', $text );
         $clean = wp_strip_all_tags( html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
         // Normalize whitespace
         $clean = preg_replace( '/\s+/', ' ', $clean );

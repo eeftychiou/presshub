@@ -50,14 +50,25 @@ class SocialMetaTagsTest {
             $failures[] = 'get_social_title() unexpected result: ' . $title;
         }
 
-        // Description should fall back to _presshub_podcast_script stripped of topic markers
+        // When include_text is 0 (default), description must NOT leak dialogue script, but offer a clean audio summary
         $desc = $social->get_social_description( $mock_post );
-        if ( false === strpos( $desc, 'Καλημέρα σας από το PressHub' ) ) {
-            $failures[] = 'get_social_description() missing script content: ' . $desc;
+        if ( false === strpos( $desc, 'Ακούστε το ηχητικό podcast ενημέρωσης' ) ) {
+            $failures[] = 'get_social_description() for podcast (include_text=0) should produce clean audio description; got: ' . $desc;
         }
-        if ( false !== strpos( $desc, '[TOPIC_START' ) ) {
-            $failures[] = 'get_social_description() must not contain [TOPIC_START: ' . $desc;
+        if ( false !== strpos( $desc, 'TOPIC' ) || false !== strpos( $desc, 'SPEAKER_' ) ) {
+            $failures[] = 'get_social_description() must not contain script markers: ' . $desc;
         }
+
+        // When include_text is 1, description falls back to _presshub_podcast_script stripped of topic markers and speaker tags
+        update_option( 'presshub_ai_briefing_podcast_include_text', 1 );
+        $desc_with_text = $social->get_social_description( $mock_post );
+        if ( false === strpos( $desc_with_text, 'Καλημέρα σας από το PressHub' ) ) {
+            $failures[] = 'get_social_description() missing script content when include_text is 1: ' . $desc_with_text;
+        }
+        if ( false !== strpos( $desc_with_text, '[TOPIC_START' ) || false !== strpos( $desc_with_text, '[SPEAKER_' ) ) {
+            $failures[] = 'get_social_description() must not contain [TOPIC_START or [SPEAKER_: ' . $desc_with_text;
+        }
+        delete_option( 'presshub_ai_briefing_podcast_include_text' );
 
         // -------------------------------------------------------------
         // 3. Featured Image Resolution with Pool Fallback

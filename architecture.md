@@ -119,11 +119,16 @@ graph TD
 - **Voice Catalog**:
   - Uses canonical voice catalog (`assets/data/tts-voice-catalog.json`).
   - Supports 30+ voice personas with speed and pitch controls.
-- **Multi-Edition Audio**:
-  - Morning: `podcast.mp3` / `podcast.wav` attached to morning podcast post.
-  - Noon: `podcast-noon.mp3` / `podcast-noon.wav` attached to noon podcast post.
-  - Configurable title prefix (`presshub_ai_briefing_noon_podcast_title_prefix`, default `"Μεσημβρινό Podcast Ενημέρωσης - "`).
-  - Saves post meta `_presshub_briefing_edition` = `'noon'`.
+- **Multi-Edition Audio & Title Prefixes**:
+  - Morning: `podcast.mp3` / `podcast.wav` attached to morning podcast post. Configurable title prefix (`presshub_ai_briefing_podcast_title_prefix`, default `"Πρωινό Podcast Ενημέρωσης - "`).
+  - Noon: `podcast-noon.mp3` / `podcast-noon.wav` attached to noon podcast post. Configurable title prefix (`presshub_ai_briefing_noon_podcast_title_prefix`, default `"Μεσημβρινό Podcast Ενημέρωσης - "`).
+  - Saves post meta `_presshub_briefing_edition` (`'morning'` or `'noon'`).
+- **Podcast Excerpt & Dialogue Suppression**:
+  - Audio posts contain only the WordPress audio block (`wp:audio`) in `post_content`.
+  - The dialogue transcript is stored in post meta `_presshub_podcast_script` for editing/regeneration in the editor metabox.
+  - `post_excerpt` is explicitly set to empty (`''`) on creation and update when `include_text` is off (0).
+  - Excerpt filter (`filter_podcast_excerpt`) hooks into `get_the_excerpt` to suppress dialogue text on front-page article previews, loop cards, and archives for both newly generated and legacy podcast posts.
+  - Social metadata (`PressHub_AI_Social_Meta`) emits a clean audio summary instead of leaking private dialogue scripts or speaker aliases into OpenGraph and Twitter cards.
 
 ### 4.5 Briefing Hub Admin & Client Controller
 - **Classes**: `PressHub_AI_Briefing_Admin`, `PressHub_AI_Ajax_Handlers`, `assets/briefing-admin.js`.

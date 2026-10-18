@@ -529,6 +529,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_title_prefix"><?php echo __( 'Morning Podcast Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_title_prefix_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_noon_podcast_title_prefix"><?php echo __( 'Noon Podcast Title Prefix', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_noon_podcast_title_prefix_field(); ?>
@@ -2760,6 +2766,15 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Μεσημβρινή Ενημέρωση:', 'presshub-ai-editor' ); ?>" />
         <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Noon Text Story post title (e.g. "Μεσημβρινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Μεσημβρινή Ενημέρωση:".', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_title_prefix_field() {
+        $option = 'presshub_ai_briefing_podcast_title_prefix';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_podcast_title_prefix();
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" maxlength="60" placeholder="<?php echo esc_attr__( 'e.g. Πρωινό Podcast Ενημέρωσης - ', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo __( 'Editorial prefix prepended to the generated Morning Podcast post title (e.g. "Πρωινό Podcast Ενημέρωσης - "). Default: "Πρωινό Podcast Ενημέρωσης - ".', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

@@ -1672,6 +1672,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_noon_text_title_prefix'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_noon_text_title_prefix' ],
                 'presshub_ai_briefing_text_title_date_format'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_text_title_date_format' ],
                 'presshub_ai_briefing_podcast_status'          => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_status' ],
+                'presshub_ai_briefing_podcast_title_prefix'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_podcast_title_prefix' ],
+                'presshub_ai_briefing_morning_podcast_title_prefix' => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_podcast_title_prefix' ],
                 'presshub_ai_briefing_noon_podcast_title_prefix'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_noon_podcast_title_prefix' ],
                 'presshub_ai_briefing_text_prompt'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_prompt' ],
                 'presshub_ai_briefing_podcast_prompt'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_prompt' ],

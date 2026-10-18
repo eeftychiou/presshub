@@ -1468,6 +1468,60 @@ run_test( 'Tuning Safety: corrupted max_tokens and timeout fallback to provider 
     return true;
 } );
 
+// Test 35: Morning Podcast Title Prefix and Podcast Excerpt Suppression
+run_test( 'Podcast Titles & Excerpt: Morning prefix configuration and excerpt suppression', function() {
+    if ( ! class_exists( 'PressHub_AI_Settings_Storage' ) || ! class_exists( 'PressHub_AI_Audio_Synthesizer' ) ) {
+        return 'Required classes not loaded';
+    }
+
+    $synth = new PressHub_AI_Audio_Synthesizer();
+
+    // 1. Check default Morning Podcast Title Prefix
+    $default_prefix = PressHub_AI_Settings_Storage::get_briefing_podcast_title_prefix();
+    if ( 'Πρωινό Podcast Ενημέρωσης - ' !== $default_prefix ) {
+        return "Expected default morning podcast prefix 'Πρωινό Podcast Ενημέρωσης - '; got '{$default_prefix}'";
+    }
+
+    // 2. Custom morning podcast title prefix
+    update_option( 'presshub_ai_briefing_podcast_title_prefix', 'Test Greek Morning Pod - ' );
+    delete_option( 'presshub_ai_briefing_podcast_include_text' );
+
+    $post_id = $synth->create_podcast_post(
+        'http://example.test/live_test.mp3',
+        1,
+        "[TOPIC_START: Εισαγωγή] [SPEAKER_1]: Καλωσήρθατε στο live test.\n[SPEAKER_2]: Γεια σας.\n[TOPIC_END]",
+        '2026-10-18',
+        '', // Empty title -> auto-format with prefix
+        'morning'
+    );
+
+    if ( is_wp_error( $post_id ) || ! is_numeric( $post_id ) ) {
+        return 'Failed to create podcast post: ' . ( is_wp_error( $post_id ) ? $post_id->get_error_message() : 'non-numeric' );
+    }
+
+    $post = get_post( (int) $post_id );
+    if ( false === strpos( $post->post_title, 'Test Greek Morning Pod - ' ) ) {
+        return "Expected post title to contain custom prefix; got '{$post->post_title}'";
+    }
+
+    // 3. Excerpt in database must be empty when include_text is 0
+    if ( '' !== $post->post_excerpt ) {
+        return "Expected post_excerpt in DB to be empty when include_text=0; got '{$post->post_excerpt}'";
+    }
+
+    // 4. get_the_excerpt() must suppress script excerpt
+    $rendered_excerpt = get_the_excerpt( $post );
+    if ( '' !== $rendered_excerpt ) {
+        return "Expected get_the_excerpt() to return empty string; got '{$rendered_excerpt}'";
+    }
+
+    // 5. Cleanup
+    wp_delete_post( (int) $post_id, true );
+    delete_option( 'presshub_ai_briefing_podcast_title_prefix' );
+
+    return true;
+} );
+
 echo "\n=================================================================\n";
 echo "Integration Test Results: {$passed} Passed, {$failed} Failed\n";
 echo "=================================================================\n\n";
