@@ -1005,15 +1005,40 @@ class PressHub_AI_Audio_Synthesizer {
         update_post_meta( $post_id, '_presshub_audio_url', $audio_url );
         update_post_meta( $post_id, '_presshub_podcast_script', $transcript );
 
-        // Assign featured image from configured pool if available (with collision avoidance)
-        $exclude_ids = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )
-            : [];
-        $thumb_id = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids )
-            : 0;
-        if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
-            set_post_thumbnail( $post_id, $thumb_id );
+        // Assign featured image: auto-generate or from configured pool (with collision avoidance)
+        $img_source     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source() : 'pool';
+        $assigned_thumb = false;
+
+        if ( 'auto_generate' === $img_source && class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
+            try {
+                $client     = new PressHub_AI_API_Client();
+                $gen_prompt = $client->analyze_article_for_image_prompt( $transcript, $title );
+                if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
+                    $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );
+                    if ( ! is_wp_error( $img_res ) && ! empty( $img_res['id'] ) ) {
+                        if ( function_exists( 'set_post_thumbnail' ) ) {
+                            set_post_thumbnail( $post_id, (int) $img_res['id'] );
+                            $assigned_thumb = true;
+                        }
+                    }
+                }
+            } catch ( Throwable $t ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Auto-generation of featured image failed for podcast post: ' . $t->getMessage() );
+                }
+            }
+        }
+
+        if ( ! $assigned_thumb ) {
+            $exclude_ids = class_exists( 'PressHub_AI_Settings_Storage' )
+                ? PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )
+                : [];
+            $thumb_id = class_exists( 'PressHub_AI_Settings_Storage' )
+                ? PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids )
+                : 0;
+            if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
+                set_post_thumbnail( $post_id, $thumb_id );
+            }
         }
 
         return $post_id;
@@ -1079,16 +1104,41 @@ class PressHub_AI_Audio_Synthesizer {
         update_post_meta( $post_id, '_presshub_audio_url', $audio_url );
         update_post_meta( $post_id, '_presshub_podcast_script', $script );
 
-        // If post lacks a featured image, assign one from pool (with collision avoidance)
+        // If post lacks a featured image, assign one (auto-generate or from pool with collision avoidance)
         if ( function_exists( 'has_post_thumbnail' ) && ! has_post_thumbnail( $post_id ) ) {
-            $exclude_ids = class_exists( 'PressHub_AI_Settings_Storage' )
-                ? PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )
-                : [];
-            $thumb_id = class_exists( 'PressHub_AI_Settings_Storage' )
-                ? PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids )
-                : 0;
-            if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
-                set_post_thumbnail( $post_id, $thumb_id );
+            $img_source     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source() : 'pool';
+            $assigned_thumb = false;
+
+            if ( 'auto_generate' === $img_source && class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
+                try {
+                    $client     = new PressHub_AI_API_Client();
+                    $gen_prompt = $client->analyze_article_for_image_prompt( $script, get_the_title( $post_id ) );
+                    if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
+                        $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );
+                        if ( ! is_wp_error( $img_res ) && ! empty( $img_res['id'] ) ) {
+                            if ( function_exists( 'set_post_thumbnail' ) ) {
+                                set_post_thumbnail( $post_id, (int) $img_res['id'] );
+                                $assigned_thumb = true;
+                            }
+                        }
+                    }
+                } catch ( Throwable $t ) {
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::warning( 'Auto-generation of featured image failed for updated podcast post: ' . $t->getMessage() );
+                    }
+                }
+            }
+
+            if ( ! $assigned_thumb ) {
+                $exclude_ids = class_exists( 'PressHub_AI_Settings_Storage' )
+                    ? PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id )
+                    : [];
+                $thumb_id = class_exists( 'PressHub_AI_Settings_Storage' )
+                    ? PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids )
+                    : 0;
+                if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
+                    set_post_thumbnail( $post_id, $thumb_id );
+                }
             }
         }
 

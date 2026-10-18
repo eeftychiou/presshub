@@ -32,7 +32,7 @@ class SettingsPageTest
         $settings->register_settings();
         $sections    = $GLOBALS['SECTIONS']['presshub-ai'] ?? [];
         $section_ids = array_column( $sections, 'id' );
-        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_logging', 'presshub_ai_briefing', 'presshub_ai_github' ];
+        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_logging', 'presshub_ai_briefing', 'presshub_ai_github', 'presshub_ai_images' ];
         if ( $section_ids !== $expected ) {
             $failures[] = 'Sections should be registered in order ' . implode( ', ', $expected ) . '; got: ' . implode( ', ', $section_ids );
         }
@@ -225,6 +225,14 @@ class SettingsPageTest
             'presshub_ai_briefing_featured_image_ids_morning',
             'presshub_ai_briefing_featured_image_ids_noon',
             'presshub_ai_briefing_featured_image_ids',
+            'presshub_ai_briefing_featured_image_source',
+            'presshub_ai_briefing_podcast_featured_image_source',
+            'presshub_ai_image_feature_enabled',
+            'presshub_ai_image_prompt_provider',
+            'presshub_ai_image_prompt_model',
+            'presshub_ai_image_generation_provider',
+            'presshub_ai_image_aspect_ratio',
+            'presshub_ai_image_analysis_prompt',
             'presshub_ai_briefing_podcast_include_text',
             'presshub_ai_briefing_text_prompt',
             'presshub_ai_briefing_podcast_prompt_1',

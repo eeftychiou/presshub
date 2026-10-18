@@ -189,6 +189,15 @@ if ( ! function_exists( 'wp_update_post' ) ) {
     }
 }
 
+if ( ! function_exists( 'add_action' ) ) {
+    function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) {
+        $GLOBALS['ACTIONS'][ $hook ][] = $callback;
+        if ( 'transition_post_status' === $hook ) {
+            $GLOBALS['TRANSITION_HANDLERS'][] = $callback;
+        }
+    }
+}
+
 if ( ! function_exists( 'do_action' ) ) {
     function do_action( $hook, ...$args ) {
         $GLOBALS['DO_ACTION_LOG'][] = [ 'hook' => $hook, 'args' => $args ];

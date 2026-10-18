@@ -8,6 +8,7 @@ class PressHub_AI_Metaboxes {
         add_action( 'add_meta_boxes', [ $this, 'add_coauthor_metabox' ] );
         add_action( 'add_meta_boxes', [ $this, 'add_podcast_metabox' ], 10, 2 );
         add_action( 'save_post', [ $this, 'save_podcast_metabox_data' ] );
+        add_action( 'save_post', [ $this, 'save_post_data' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
     }
 
@@ -102,6 +103,52 @@ class PressHub_AI_Metaboxes {
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
+            </div>
+
+            <hr />
+            <h3><?php echo esc_html__( 'AI Featured Image Studio', 'presshub-ai-editor' ); ?></h3>
+            <p class="description">
+                <?php echo esc_html__( 'Analyze the article text to draft an authentic photojournalistic prompt, synthesize a realistic image, and assign it as the featured image.', 'presshub-ai-editor' ); ?>
+            </p>
+
+            <div class="presshub-image-studio-actions" style="margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <button type="button" id="presshub-ai-draft-image-prompt" class="button" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
+                    <span class="dashicons dashicons-admin-customizer" style="vertical-align: middle; margin-right: 4px;"></span>
+                    <?php echo esc_html__( 'Draft Image Prompt from Content', 'presshub-ai-editor' ); ?>
+                </button>
+                <button type="button" id="presshub-ai-generate-image-btn" class="button button-primary" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
+                    <span class="dashicons dashicons-format-image" style="vertical-align: middle; margin-right: 4px;"></span>
+                    <?php echo esc_html__( 'Generate Image', 'presshub-ai-editor' ); ?>
+                </button>
+                <span id="presshub-ai-image-spinner" class="spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+            </div>
+
+            <div class="presshub-image-studio-prompt-wrap" style="margin-bottom: 15px;">
+                <label for="presshub-ai-image-prompt" style="display: block; font-weight: 600; margin-bottom: 5px;">
+                    <?php echo esc_html__( 'Visual Image Prompt (editable):', 'presshub-ai-editor' ); ?>
+                </label>
+                <?php $current_img_prompt = (string) get_post_meta( $post->ID, '_presshub_ai_image_prompt', true ); ?>
+                <textarea id="presshub-ai-image-prompt" name="presshub_ai_image_prompt" rows="3" style="width: 100%; font-size: 13px; line-height: 1.4;" placeholder="<?php echo esc_attr__( 'Click "Draft Image Prompt from Content" or enter a custom prompt...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $current_img_prompt ); ?></textarea>
+            </div>
+
+            <?php
+            $thumb_id  = (int) get_post_thumbnail_id( $post->ID );
+            $thumb_url = $thumb_id ? wp_get_attachment_image_url( $thumb_id, 'medium_large' ) : '';
+            ?>
+            <div id="presshub-ai-image-preview-container" style="display: <?php echo $thumb_url ? 'block' : 'none'; ?>; margin-top: 15px;">
+                <label style="display: block; font-weight: 600; margin-bottom: 8px;">
+                    <?php echo esc_html__( 'Featured Image Preview:', 'presshub-ai-editor' ); ?>
+                </label>
+                <div class="presshub-image-studio-card" style="border: 1px solid #ccd0d4; background: #fff; padding: 12px; border-radius: 4px; max-width: 500px;">
+                    <img id="presshub-ai-image-preview-img" src="<?php echo esc_url( $thumb_url ); ?>" alt="<?php echo esc_attr__( 'Featured Image Preview', 'presshub-ai-editor' ); ?>" style="max-width: 100%; height: auto; display: block; border-radius: 3px; margin-bottom: 10px;" />
+                    
+                    <div class="presshub-image-studio-card-actions" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <button type="button" id="presshub-ai-set-featured-btn" class="button button-secondary" data-post-id="<?php echo esc_attr( $post->ID ); ?>" data-attachment-id="<?php echo esc_attr( $thumb_id ); ?>" <?php echo $thumb_id ? '' : 'disabled'; ?>>
+                            <?php echo esc_html__( 'Set as Featured Image', 'presshub-ai-editor' ); ?>
+                        </button>
+                        <span id="presshub-ai-image-status" style="font-weight: 600; font-size: 13px;"></span>
+                    </div>
+                </div>
             </div>
         </div>
         <?php
@@ -295,6 +342,24 @@ class PressHub_AI_Metaboxes {
         if ( isset( $_POST['presshub_podcast_script'] ) ) {
             $script = wp_unslash( $_POST['presshub_podcast_script'] );
             update_post_meta( $post_id, '_presshub_podcast_script', $script );
+        }
+    }
+
+    /**
+     * Save AI Featured Image prompt when saving a post.
+     *
+     * @param int $post_id Post ID.
+     */
+    public function save_post_data( $post_id ) {
+        if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+            return;
+        }
+        if ( ! current_user_can( 'edit_post', $post_id ) ) {
+            return;
+        }
+        if ( isset( $_POST['presshub_ai_image_prompt'] ) ) {
+            $prompt = sanitize_textarea_field( wp_unslash( $_POST['presshub_ai_image_prompt'] ) );
+            update_post_meta( $post_id, '_presshub_ai_image_prompt', $prompt );
         }
     }
 }

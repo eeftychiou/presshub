@@ -385,6 +385,38 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_featured_image_source', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_featured_image_source' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_featured_image_source', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_featured_image_source' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_image_feature_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_image_feature_enabled' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_image_prompt_provider', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_image_prompt_provider' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_image_prompt_model', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_image_prompt_model' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_image_generation_provider', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_image_generation_provider' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_image_aspect_ratio', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_image_aspect_ratio' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_image_analysis_prompt', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_image_analysis_prompt' ],
+            'type'              => 'string',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_include_text', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_include_text' ],
             'type'              => 'integer',
@@ -661,6 +693,19 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_qa_editor_email', __( 'Editor Notification Email', 'presshub-ai-editor' ), [ $render, 'render_qa_editor_email_field' ], 'presshub-ai', 'presshub_ai_general' );
         add_settings_field( 'presshub_ai_qa_article_prompt', __( 'Article QA Review Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_qa_article_prompt_field' ], 'presshub-ai', 'presshub_ai_general' );
         add_settings_field( 'presshub_ai_qa_briefing_prompt', __( 'Daily Briefing QA Review Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_qa_briefing_prompt_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+
+        // Daily Briefing Featured Image Source fields
+        add_settings_field( 'presshub_ai_briefing_featured_image_source', __( 'Text Briefing Featured Image Source', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_source_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_podcast_featured_image_source', __( 'Podcast Featured Image Source', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_featured_image_source_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+
+        // AI Featured Images section & fields
+        add_settings_section( 'presshub_ai_images', __( 'AI Featured Images', 'presshub-ai-editor' ), [ $render, 'render_images_section' ], 'presshub-ai' );
+        add_settings_field( 'presshub_ai_image_feature_enabled', __( 'Enable AI Featured Images', 'presshub-ai-editor' ), [ $render, 'render_image_feature_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_image_prompt_provider', __( 'Article Analysis AI Provider', 'presshub-ai-editor' ), [ $render, 'render_image_prompt_provider_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_image_prompt_model', __( 'Article Analysis Model Override', 'presshub-ai-editor' ), [ $render, 'render_image_prompt_model_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_image_generation_provider', __( 'Image Generation AI Provider', 'presshub-ai-editor' ), [ $render, 'render_image_generation_provider_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_image_aspect_ratio', __( 'Default Aspect Ratio', 'presshub-ai-editor' ), [ $render, 'render_image_aspect_ratio_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_image_analysis_prompt', __( 'Article Analysis Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_image_analysis_prompt_field' ], 'presshub-ai', 'presshub_ai_images' );
     }
 
 
@@ -2729,6 +2774,107 @@ class PressHub_AI_Settings_Storage {
         return (int) $pool[ $idx ];
     }
 
+    public static function default_briefing_featured_image_source(): string {
+        return 'pool';
+    }
+
+    public static function sanitize_briefing_featured_image_source( $value ): string {
+        $val = trim( (string) $value );
+        return in_array( $val, [ 'pool', 'auto_generate' ], true ) ? $val : self::default_briefing_featured_image_source();
+    }
+
+    public static function sanitize_briefing_podcast_featured_image_source( $value ): string {
+        return self::sanitize_briefing_featured_image_source( $value );
+    }
+
+    public static function get_briefing_featured_image_source(): string {
+        return (string) get_option( 'presshub_ai_briefing_featured_image_source', self::default_briefing_featured_image_source() );
+    }
+
+    public static function get_briefing_podcast_featured_image_source(): string {
+        return (string) get_option( 'presshub_ai_briefing_podcast_featured_image_source', self::default_briefing_featured_image_source() );
+    }
+
+    public static function default_image_feature_enabled(): int {
+        return 0;
+    }
+
+    public static function sanitize_image_feature_enabled( $value ): int {
+        return ( ! empty( $value ) && '0' !== $value && false !== $value ) ? 1 : 0;
+    }
+
+    public static function get_image_feature_enabled(): bool {
+        return (bool) get_option( 'presshub_ai_image_feature_enabled', self::default_image_feature_enabled() );
+    }
+
+    public static function default_image_prompt_provider(): string {
+        return '';
+    }
+
+    public static function sanitize_image_prompt_provider( $value ): string {
+        return self::sanitize_provider_id( $value );
+    }
+
+    public static function get_image_prompt_provider(): string {
+        return (string) get_option( 'presshub_ai_image_prompt_provider', self::default_image_prompt_provider() );
+    }
+
+    public static function sanitize_image_prompt_model( $value ): string {
+        return self::sanitize_model_string( $value );
+    }
+
+    public static function get_image_prompt_model(): string {
+        return (string) get_option( 'presshub_ai_image_prompt_model', '' );
+    }
+
+    public static function default_image_generation_provider(): string {
+        return '';
+    }
+
+    public static function sanitize_image_generation_provider( $value ): string {
+        return self::sanitize_provider_id( $value );
+    }
+
+    public static function get_image_generation_provider(): string {
+        return (string) get_option( 'presshub_ai_image_generation_provider', self::default_image_generation_provider() );
+    }
+
+    public static function default_image_aspect_ratio(): string {
+        return '16:9';
+    }
+
+    public static function sanitize_image_aspect_ratio( $value ): string {
+        $val = trim( (string) $value );
+        return in_array( $val, [ '16:9', '1:1', '4:3' ], true ) ? $val : self::default_image_aspect_ratio();
+    }
+
+    public static function get_image_aspect_ratio(): string {
+        return (string) get_option( 'presshub_ai_image_aspect_ratio', self::default_image_aspect_ratio() );
+    }
+
+    public static function default_image_analysis_prompt(): string {
+        if ( class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            try {
+                return PressHub_AI_Prompt_Loader::load( 'article_image_analysis_prompt.txt' );
+            } catch ( Throwable $t ) {
+            }
+        }
+        return '';
+    }
+
+    public static function sanitize_image_analysis_prompt( $value ): string {
+        $clean = trim( (string) $value );
+        return '' !== $clean ? $clean : self::default_image_analysis_prompt();
+    }
+
+    public static function get_image_analysis_prompt(): string {
+        $prompt = (string) get_option( 'presshub_ai_image_analysis_prompt', '' );
+        if ( '' === trim( $prompt ) ) {
+            return self::default_image_analysis_prompt();
+        }
+        return $prompt;
+    }
+
     public static function sanitize_briefing_podcast_include_text( $value ): int {
         return ( ! empty( $value ) && '0' !== $value && false !== $value ) ? 1 : 0;
     }
@@ -2904,6 +3050,8 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_featured_image_ids_morning' => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'presshub_ai_briefing_featured_image_ids_noon'    => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
             'presshub_ai_briefing_featured_image_ids'          => [ __CLASS__, 'sanitize_briefing_featured_image_ids' ],
+            'presshub_ai_briefing_featured_image_source'         => [ __CLASS__, 'sanitize_briefing_featured_image_source' ],
+            'presshub_ai_briefing_podcast_featured_image_source' => [ __CLASS__, 'sanitize_briefing_featured_image_source' ],
             'presshub_ai_briefing_podcast_include_text'        => [ __CLASS__, 'sanitize_briefing_podcast_include_text' ],
             'presshub_ai_briefing_text_preset'             => [ __CLASS__, 'sanitize_preset_slug' ],
             'presshub_ai_briefing_text_prompt'          => [ __CLASS__, 'sanitize_briefing_prompt' ],
@@ -3017,6 +3165,15 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_qa_briefing_prompt'   => [ __CLASS__, 'sanitize_qa_prompt' ],
         ];
 
+        $images_map = [
+            'presshub_ai_image_feature_enabled'     => [ __CLASS__, 'sanitize_image_feature_enabled' ],
+            'presshub_ai_image_prompt_provider'     => [ __CLASS__, 'sanitize_image_prompt_provider' ],
+            'presshub_ai_image_prompt_model'        => [ __CLASS__, 'sanitize_image_prompt_model' ],
+            'presshub_ai_image_generation_provider' => [ __CLASS__, 'sanitize_image_generation_provider' ],
+            'presshub_ai_image_aspect_ratio'        => [ __CLASS__, 'sanitize_image_aspect_ratio' ],
+            'presshub_ai_image_analysis_prompt'     => [ __CLASS__, 'sanitize_image_analysis_prompt' ],
+        ];
+
         switch ( $section ) {
             case 'coauthor':
                 return $coauthor_map;
@@ -3027,6 +3184,10 @@ class PressHub_AI_Settings_Storage {
                 return $qa_map;
             case 'briefing':
                 return $briefing_map;
+            case 'images':
+            case 'image':
+            case 'featured_images':
+                return $images_map;
             case 'copilot':
                 return $copilot_map;
             case 'advanced':
@@ -3045,6 +3206,7 @@ class PressHub_AI_Settings_Storage {
                     $coauthor_map,
                     $qa_map,
                     $briefing_map,
+                    $images_map,
                     $copilot_map,
                     $advanced_map
                 );

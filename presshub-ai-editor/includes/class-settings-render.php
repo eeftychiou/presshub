@@ -66,6 +66,7 @@ class PressHub_AI_Settings_Render {
                         <option value="providers" selected="selected"><?php echo esc_html__( 'AI Providers', 'presshub-ai-editor' ); ?></option>
                         <option value="coauthor"><?php echo esc_html__( 'AI Co-Author & Review', 'presshub-ai-editor' ); ?></option>
                         <option value="briefing"><?php echo esc_html__( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></option>
+                        <option value="images"><?php echo esc_html__( 'AI Featured Images', 'presshub-ai-editor' ); ?></option>
                         <option value="copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></option>
                         <option value="token_logs"><?php echo esc_html__( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></option>
                         <option value="advanced"><?php echo esc_html__( 'Advanced & System', 'presshub-ai-editor' ); ?></option>
@@ -76,6 +77,7 @@ class PressHub_AI_Settings_Render {
                     <a href="#providers" id="presshub-tab-providers" class="nav-tab nav-tab-active" data-tab="providers" role="tab" aria-selected="true" aria-controls="presshub-tab-pane-providers"><?php echo esc_html__( 'AI Providers', 'presshub-ai-editor' ); ?></a>
                     <a href="#coauthor" id="presshub-tab-coauthor" class="nav-tab" data-tab="coauthor" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-coauthor"><?php echo esc_html__( 'AI Co-Author & Review', 'presshub-ai-editor' ); ?></a>
                     <a href="#briefing" id="presshub-tab-briefing" class="nav-tab" data-tab="briefing" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-briefing"><?php echo esc_html__( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></a>
+                    <a href="#images" id="presshub-tab-images" class="nav-tab" data-tab="images" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-images"><?php echo esc_html__( 'AI Featured Images', 'presshub-ai-editor' ); ?></a>
                     <a href="#copilot" id="presshub-tab-copilot" class="nav-tab" data-tab="copilot" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></a>
                     <a href="#token_logs" id="presshub-tab-token_logs" class="nav-tab" data-tab="token_logs" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-token_logs"><?php echo esc_html__( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></a>
                     <a href="#advanced" id="presshub-tab-advanced" class="nav-tab" data-tab="advanced" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-advanced"><?php echo esc_html__( 'Advanced & System', 'presshub-ai-editor' ); ?></a>
@@ -553,6 +555,18 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_featured_image_source"><?php echo __( 'Text Briefing Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_featured_image_source_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_featured_image_source"><?php echo __( 'Podcast Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_featured_image_source_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_include_text"><?php echo __( 'Include Transcript in Podcast Post', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_include_text_field(); ?>
@@ -581,6 +595,58 @@ class PressHub_AI_Settings_Render {
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="briefing"><?php echo esc_html__( 'Save Daily Briefing Settings', 'presshub-ai-editor' ); ?></button>
+                        <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                    </div>
+                </div>
+
+                <!-- TAB: AI Featured Images -->
+                <div id="presshub-tab-pane-images" class="presshub-tab-pane" style="display: none;">
+                    <h2><?php echo __( 'AI Featured Images & Visual Studio', 'presshub-ai-editor' ); ?></h2>
+                    <p><?php echo __( 'Configure article analysis and AI image generation (powered by Google Gemini 3.1 Flash Image or OpenAI DALL-E 3) for producing authentic, realistic featured images based on story content.', 'presshub-ai-editor' ); ?></p>
+
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_image_feature_enabled"><?php echo __( 'Enable Feature', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_image_feature_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_image_prompt_provider"><?php echo __( 'Article Analysis AI Provider', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_image_prompt_provider_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_image_prompt_model"><?php echo __( 'Article Analysis Model Override', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_image_prompt_model_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_image_generation_provider"><?php echo __( 'Image Generation AI Provider', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_image_generation_provider_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_image_aspect_ratio"><?php echo __( 'Default Aspect Ratio', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_image_aspect_ratio_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_image_analysis_prompt"><?php echo __( 'Article Analysis Prompt Template', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_image_analysis_prompt_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
+                        <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="images"><?php echo esc_html__( 'Save Image Settings', 'presshub-ai-editor' ); ?></button>
                         <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
                     </div>
                 </div>
@@ -2875,6 +2941,98 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_featured_image_ids_field() {
         $this->render_briefing_featured_image_ids_morning_field();
+    }
+
+    public function render_briefing_featured_image_source_field() {
+        $option   = 'presshub_ai_briefing_featured_image_source';
+        $selected = PressHub_AI_Settings_Storage::get_briefing_featured_image_source();
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <option value="pool" <?php selected( $selected, 'pool' ); ?>><?php echo __( 'Featured Image Pool (Random Selection with Collision Avoidance)', 'presshub-ai-editor' ); ?></option>
+            <option value="auto_generate" <?php selected( $selected, 'auto_generate' ); ?>><?php echo __( 'Automatic AI Image Generation (analyzing article content)', 'presshub-ai-editor' ); ?></option>
+        </select>
+        <p class="description"><?php echo __( 'Choose whether text briefings pick an image randomly from the Featured Image Pool or automatically synthesize a custom editorial image using the configured AI image generator (with automatic fallback to the pool if generation fails).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_featured_image_source_field() {
+        $option   = 'presshub_ai_briefing_podcast_featured_image_source';
+        $selected = PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source();
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <option value="pool" <?php selected( $selected, 'pool' ); ?>><?php echo __( 'Featured Image Pool (Random Selection with Collision Avoidance)', 'presshub-ai-editor' ); ?></option>
+            <option value="auto_generate" <?php selected( $selected, 'auto_generate' ); ?>><?php echo __( 'Automatic AI Image Generation (analyzing podcast transcript)', 'presshub-ai-editor' ); ?></option>
+        </select>
+        <p class="description"><?php echo __( 'Choose whether audio podcast posts pick an image randomly from the Featured Image Pool or automatically synthesize a custom editorial image using the configured AI image generator (with automatic fallback to the pool if generation fails).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_images_section() {
+        echo '<p>' . __( 'Configure article analysis and AI image generation for producing authentic, realistic featured images based on story content.', 'presshub-ai-editor' ) . '</p>';
+    }
+
+    public function render_image_feature_enabled_field() {
+        $option  = 'presshub_ai_image_feature_enabled';
+        $checked = PressHub_AI_Settings_Storage::get_image_feature_enabled();
+        ?>
+        <label>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
+            <?php echo __( 'Enable AI Featured Image generation studio across post editor metaboxes and Daily Briefing Hub.', 'presshub-ai-editor' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_image_prompt_provider_field() {
+        $option  = 'presshub_ai_image_prompt_provider';
+        $current = PressHub_AI_Settings_Storage::get_image_prompt_provider();
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <?php echo self::get_active_providers_options( $current, __( '-- Default Text Provider --', 'presshub-ai-editor' ) ); ?>
+        </select>
+        <p class="description"><?php echo __( 'Select which AI provider analyzes the article content and drafts the descriptive visual prompt for the image generator.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_image_prompt_model_field() {
+        $option = 'presshub_ai_image_prompt_model';
+        $value  = PressHub_AI_Settings_Storage::get_image_prompt_model();
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default model', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo __( 'Optional specific model identifier for prompt drafting (e.g. gemini-2.5-flash, gpt-4o).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_image_generation_provider_field() {
+        $option  = 'presshub_ai_image_generation_provider';
+        $current = PressHub_AI_Settings_Storage::get_image_generation_provider();
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <?php echo self::get_active_providers_options( $current, __( '-- Auto-detect (Google Gemini or OpenAI) --', 'presshub-ai-editor' ) ); ?>
+        </select>
+        <p class="description"><?php echo __( 'Select the AI provider for image generation. The model configured in the chosen AI Provider record (e.g. gemini-3.1-flash-image or dall-e-3) will be used.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_image_aspect_ratio_field() {
+        $option   = 'presshub_ai_image_aspect_ratio';
+        $selected = PressHub_AI_Settings_Storage::get_image_aspect_ratio();
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <option value="16:9" <?php selected( $selected, '16:9' ); ?>><?php echo __( '16:9 Landscape (Recommended for News Featured Images)', 'presshub-ai-editor' ); ?></option>
+            <option value="1:1" <?php selected( $selected, '1:1' ); ?>><?php echo __( '1:1 Square (1024x1024)', 'presshub-ai-editor' ); ?></option>
+            <option value="4:3" <?php selected( $selected, '4:3' ); ?>><?php echo __( '4:3 Standard', 'presshub-ai-editor' ); ?></option>
+        </select>
+        <p class="description"><?php echo __( 'Target aspect ratio for synthesized featured images.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_image_analysis_prompt_field() {
+        $option = 'presshub_ai_image_analysis_prompt';
+        $value  = PressHub_AI_Settings_Storage::get_image_analysis_prompt();
+        ?>
+        <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="14" class="large-text code" style="font-family: monospace; font-size: 13px; line-height: 1.5;"><?php echo esc_textarea( $value ); ?></textarea>
+        <p class="description"><?php echo __( 'Prompt instructions used to analyze article text and compose the visual image description. Available placeholders: {title}, {content}. Leave empty to restore plugin default template.', 'presshub-ai-editor' ); ?></p>
+        <?php
     }
 
     public function render_briefing_podcast_include_text_field() {

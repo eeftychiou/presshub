@@ -810,11 +810,36 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_text_title_prefix_applied', (string) $applied_prefix );
         update_post_meta( $post_id, '_presshub_text_title_date_format_applied', (string) $applied_date_format );
 
-        // Assign featured image from configured pool if available (with collision avoidance)
-        $exclude_ids = PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id );
-        $thumb_id    = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids );
-        if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
-            set_post_thumbnail( $post_id, $thumb_id );
+        // Assign featured image: auto-generate or from configured pool (with collision avoidance)
+        $img_source     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_featured_image_source() : 'pool';
+        $assigned_thumb = false;
+
+        if ( 'auto_generate' === $img_source && class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
+            try {
+                $client     = new PressHub_AI_API_Client();
+                $gen_prompt = $client->analyze_article_for_image_prompt( $story_content, $post_title );
+                if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
+                    $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );
+                    if ( ! is_wp_error( $img_res ) && ! empty( $img_res['id'] ) ) {
+                        if ( function_exists( 'set_post_thumbnail' ) ) {
+                            set_post_thumbnail( $post_id, (int) $img_res['id'] );
+                            $assigned_thumb = true;
+                        }
+                    }
+                }
+            } catch ( Throwable $t ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Auto-generation of featured image failed for briefing text post: ' . $t->getMessage() );
+                }
+            }
+        }
+
+        if ( ! $assigned_thumb ) {
+            $exclude_ids = PressHub_AI_Settings_Storage::get_used_briefing_thumbnail_ids_for_date( $date, $post_id );
+            $thumb_id    = PressHub_AI_Settings_Storage::get_random_briefing_featured_image_id( $edition, $exclude_ids );
+            if ( $thumb_id > 0 && function_exists( 'set_post_thumbnail' ) ) {
+                set_post_thumbnail( $post_id, $thumb_id );
+            }
         }
 
         // Set clean post excerpt for search snippets, RSS, and social meta tags

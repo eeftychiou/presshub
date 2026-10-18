@@ -601,6 +601,16 @@ When UI changes are involved, perform visual inspection in the local testing env
    - `PressHub_AI_Audio_Synthesizer::filter_podcast_excerpt` hooks into `get_the_excerpt` to ensure that neither new nor legacy podcast posts expose their dialogue scripts on front-page article cards or archives.
    - Morning Podcast Title Prefix (`presshub_ai_briefing_podcast_title_prefix`, default `"Πρωινό Podcast Ενημέρωσης - "`) and Noon Podcast Title Prefix (`presshub_ai_briefing_noon_podcast_title_prefix`, default `"Μεσημβρινό Podcast Ενημέρωσης - "`) are separate Settings-First options.
 
+6. **AI Featured Image Generation & Studio Engine Guidelines**:
+   - Master option `presshub_ai_image_feature_enabled` (0/1) in Settings tab "AI Featured Images" (`#images`).
+   - Dedicated prompt analysis module (`image_prompt`) loads external prompt asset `assets/prompts/article_image_analysis_prompt.txt` to enforce editorial photojournalism realism, 35mm photography look, authentic textures, and strict prohibition of rendered typography/text.
+   - Dedicated image generation module (`image_generation`) routes to Google Gemini or OpenAI. The synthesis model is resolved directly from the chosen provider's configured `default_model` in `PressHub_AI_Provider_Store` (e.g. `gemini-3.1-flash-image` or `dall-e-3`), with no redundant module-level override field in settings per Clean Slate Architecture.
+   - Image sources for Daily Briefing Hub (`presshub_ai_briefing_featured_image_source`) and Podcasts (`presshub_ai_briefing_podcast_featured_image_source`) can be configured to either `"pool"` or `"auto_generate"`.
+   - When configured for `"auto_generate"`, both `PressHub_AI_News_Curator` and `PressHub_AI_Audio_Synthesizer` synthesize an authentic editorial featured image from article content and dialogue script, sideload it into the Media Library, and assign it as the post thumbnail.
+   - If image generation fails (due to provider downtime or quota), execution must never halt; the pipeline automatically falls back to the edition's Featured Image Pool.
+   - Post edit screens include the **"AI Featured Image Studio"** metabox allowing editors to draft a prompt, tweak it in an editable textarea, synthesize/regenerate an image, and assign it as the post's featured image.
+   - All image feature changes must be verified against `tests/FeaturedImageGeneratorTest.php` and the full test suite.
+
 ---
 
 ## 📋 GitHub Issue Tracking Protocol & Best Practices

@@ -226,6 +226,32 @@ graph TD
   - **Exposed Settings Inputs**: Exposed explicit "Maximum Output Tokens" inputs across all pipeline modules in `PressHub AI → Settings` with safe bounds (`min="64" max="65536"`).
   - **Auto-Purge Migration**: `presshub_ai_migrate_fix_corrupted_tuning_options()` cleanses corrupted database rows (`max_tokens < 64`, `timeout < 10`) on initialization.
 
+### 4.14 AI Featured Image Generation & Studio Engine
+- **Dedicated Settings Tab ("AI Featured Images")**:
+  - Located under `PressHub AI → Settings` (`#images`).
+  - Managed via `PressHub_AI_Settings_Storage`:
+    - `presshub_ai_image_feature_enabled`: Master feature toggle (0/1).
+    - `presshub_ai_image_prompt_provider` & `presshub_ai_image_prompt_model`: AI provider & model to analyze article content and formulate visual prompts.
+    - `presshub_ai_image_generation_provider`: AI provider for image synthesis (Google Gemini or OpenAI). The synthesis model is resolved directly from the chosen provider's configured `default_model` in `PressHub_AI_Provider_Store` (e.g. `gemini-3.1-flash-image` or `dall-e-3`), eliminating redundant module overrides in accordance with Clean Slate Architecture.
+    - `presshub_ai_image_aspect_ratio`: Configurable aspect ratio (`16:9`, `1:1`, `4:3`).
+    - `presshub_ai_image_analysis_prompt`: Operator-tunable prompt template (seeded from external asset `assets/prompts/article_image_analysis_prompt.txt`).
+- **Editorial Realism & Safety Invariants**:
+  - The analysis prompt template strictly enforces:
+    - Photojournalistic realism and 35mm documentary photography aesthetics.
+    - Natural lighting and authentic textures, strictly eliminating "AI plastic/wax" looks, distorted limbs, surreal saturation, or sci-fi glows.
+    - Strict prohibition of rendered text, typography, headlines, watermarks, or lettering.
+    - Strict avoidance of controversial, gory, explicit, or offensive imagery.
+- **Daily Briefing Hub Integration & Resilient Pool Fallback**:
+  - `presshub_ai_briefing_featured_image_source` (Text Briefs) & `presshub_ai_briefing_podcast_featured_image_source` (Podcasts): Allow selecting either `"pool"` (Featured Image Pool with same-day collision avoidance) or `"auto_generate"` (Automatic AI Image Generation).
+  - Both `PressHub_AI_News_Curator::create_wordpress_post()` and `PressHub_AI_Audio_Synthesizer::create_podcast_post()` automatically analyze generated content, synthesize an editorial image, sideload it to the WordPress Media Library, and assign it as the post thumbnail.
+  - If auto-generation encounters provider errors or timeouts, the pipeline automatically and gracefully falls back to the edition's Featured Image Pool without failing the publication.
+- **Interactive Post Editor Studio ("AI Featured Image Studio")**:
+  - Embedded inside the "AI Co-Author & Editorial Review" metabox on post edit screens.
+  - **Draft Image Prompt from Content**: Extracts live editor content (Gutenberg `core/editor` or Classic TinyMCE) and drafts an editorial visual prompt via AJAX (`presshub_ai_generate_image_prompt`).
+  - **Editable Prompt Textarea**: Editors can inspect, refine, or rewrite the prompt; persisted in post meta `_presshub_ai_image_prompt`.
+  - **Generate / Regenerate Image**: Dispatches to the configured image generation provider via AJAX (`presshub_ai_generate_featured_image`), saves to Media Library, and displays an instant visual preview card.
+  - **Set as Featured Image**: Assigns the media attachment as the post thumbnail via AJAX (`presshub_ai_set_featured_image`) and synchronizes Gutenberg editor state (`core/editor.editPost`).
+
 ---
 
 ## 5. Cron Schedules & Timers

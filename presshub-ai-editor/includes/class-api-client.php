@@ -210,6 +210,13 @@ class PressHub_AI_API_Client {
                             break;
                         }
                     }
+                } elseif ( 'image_generation' === $module ) {
+                    foreach ( $enabled_providers as $ep ) {
+                        if ( in_array( $ep['type'] ?? '', [ 'gemini', 'openai' ], true ) ) {
+                            $provider_record = $ep;
+                            break;
+                        }
+                    }
                 }
                 if ( null === $provider_record ) {
                     $provider_record = $enabled_providers[0];
@@ -260,6 +267,17 @@ class PressHub_AI_API_Client {
                 $model_source = "provider_store_default:{$provider_id}";
             }
             // Issue #113: No silent model fallback for TTS in resolve_module_config
+        } elseif ( 'image_generation' === $module ) {
+            if ( ! empty( $provider_record['default_model'] ) ) {
+                $model        = $provider_record['default_model'];
+                $model_source = "provider_store_default:{$provider_id}";
+            } elseif ( 'openai' === $type ) {
+                $model        = 'dall-e-3';
+                $model_source = 'module_default:openai_dalle3';
+            } else {
+                $model        = 'gemini-3.1-flash-image';
+                $model_source = 'module_default:gemini_flash_image';
+            }
         } else {
             $opt_module_model = (string) get_option( "presshub_ai_{$module}_model", '' );
             if ( '' !== $opt_module_model ) {
@@ -405,7 +423,7 @@ class PressHub_AI_API_Client {
             return;
         }
 
-        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'copilot', 'tts', 'podcast_tts' ], true ) ) {
+        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'copilot', 'tts', 'podcast_tts', 'image_prompt', 'image_generation' ], true ) ) {
             $this->set_module( $module_or_provider );
             return;
         }
@@ -1108,6 +1126,275 @@ class PressHub_AI_API_Client {
         return [
             'id'  => $media_id,
             'url' => wp_get_attachment_url( $media_id ),
+        ];
+    }
+
+    /**
+     * Analyze article content and generate a descriptive, realistic editorial image prompt.
+     *
+     * @param string $content Article content or summary.
+     * @param string $title   Optional article title or headline.
+     * @return string|WP_Error Generated image prompt string on success, WP_Error on failure.
+     */
+    public function analyze_article_for_image_prompt( string $content, string $title = '' ) {
+        $this->current_action = 'generate_image_prompt';
+        $client = new self( 'image_prompt' );
+
+        $template = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_image_analysis_prompt()
+            : '';
+
+        if ( empty( $template ) && class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+            try {
+                $template = PressHub_AI_Prompt_Loader::load( 'article_image_analysis_prompt.txt' );
+            } catch ( Throwable $t ) {
+            }
+        }
+
+        if ( empty( $template ) ) {
+            return new WP_Error( 'missing_template', __( 'Image analysis prompt template is missing.', 'presshub-ai-editor' ) );
+        }
+
+        // Strip HTML and clamp excessively long text to protect token budgets
+        $clean_content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
+        if ( mb_strlen( $clean_content ) > 8000 ) {
+            $clean_content = mb_substr( $clean_content, 0, 8000 ) . '...';
+        }
+
+        $user_prompt = str_replace(
+            [ '{title}', '{content}' ],
+            [ trim( $title ), trim( $clean_content ) ],
+            $template
+        );
+
+        $sys_prompt = 'You are a professional editorial photojournalist and visual director. You output only detailed, realistic image prompts with zero preamble.';
+
+        $result = $client->call_provider( $sys_prompt, $user_prompt, false, [], 0.3 );
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+
+        $clean_result = trim( (string) $result );
+        $clean_result = trim( $clean_result, "\"'`" );
+        if ( preg_match( '/^```(?:markdown|text)?\s*(.*?)\s*```$/is', $clean_result, $m ) ) {
+            $clean_result = trim( $m[1] );
+        }
+
+        return $clean_result;
+    }
+
+    /**
+     * Synthesize an editorial featured image using the configured AI image generation provider.
+     *
+     * @param string $prompt       Visual prompt description.
+     * @param string $aspect_ratio Desired aspect ratio ('16:9', '1:1', '4:3'). Defaults to settings option.
+     * @param int    $post_id      Optional post ID to attach the image to.
+     * @return array|WP_Error Array with 'id', 'url', 'prompt' on success, WP_Error on failure.
+     */
+    public function generate_featured_image( string $prompt, string $aspect_ratio = '', int $post_id = 0 ) {
+        $this->current_action = 'generate_image';
+        $client = new self( 'image_generation' );
+
+        if ( empty( $client->api_key ) ) {
+            $client->log_missing_api_key( 'generate_image' );
+            return new WP_Error( 'no_api_key', __( 'No API key configured for AI image generation provider.', 'presshub-ai-editor' ) );
+        }
+
+        if ( empty( $aspect_ratio ) && class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            $aspect_ratio = PressHub_AI_Settings_Storage::get_image_aspect_ratio();
+        }
+        if ( empty( $aspect_ratio ) ) {
+            $aspect_ratio = '16:9';
+        }
+
+        $type  = $client->provider_config['type'] ?? $client->provider;
+        $model = $client->model;
+
+        $start_time = microtime( true );
+        $action     = 'generate_featured_image';
+        $image_data = null;
+        $mime_type  = 'image/jpeg';
+        $ext        = 'jpg';
+
+        if ( 'gemini' === $type ) {
+            $model_name = preg_replace( '#^models/#', '', $model );
+            if ( empty( $model_name ) ) {
+                $model_name = 'gemini-3.1-flash-image';
+            }
+            $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model_name . ':generateContent';
+
+            $body = [
+                'contents' => [
+                    [
+                        'role'  => 'user',
+                        'parts' => [
+                            [ 'text' => $prompt ],
+                        ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'responseModalities' => [ 'IMAGE' ],
+                    'imageConfig'        => [
+                        'aspectRatio' => $aspect_ratio,
+                        'imageSize'   => '1K',
+                    ],
+                ],
+            ];
+
+            $response = wp_remote_post( $url, [
+                'headers' => [
+                    'Content-Type'   => 'application/json',
+                    'x-goog-api-key' => $client->api_key,
+                ],
+                'body'    => wp_json_encode( $body ),
+                'timeout' => max( 60, (int) $client->timeout ),
+            ] );
+
+            $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+
+            if ( is_wp_error( $response ) ) {
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $model_name, 0, 0, $duration_ms, 'error', $response->get_error_message() );
+                }
+                return $response;
+            }
+
+            $resp_code = wp_remote_retrieve_response_code( $response );
+            $raw_body  = wp_remote_retrieve_body( $response );
+            $json      = json_decode( $raw_body, true );
+
+            if ( 200 !== $resp_code || ! empty( $json['error'] ) ) {
+                $err_msg = $json['error']['message'] ?? ( 'Gemini image generation HTTP ' . $resp_code );
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $model_name, 0, 0, $duration_ms, 'error', $err_msg );
+                }
+                return new WP_Error( 'gemini_image_error', $err_msg );
+            }
+
+            $candidate = $json['candidates'][0] ?? [];
+            $parts     = $candidate['content']['parts'] ?? [];
+            $found_b64 = '';
+            foreach ( $parts as $p ) {
+                if ( ! empty( $p['inlineData']['data'] ) ) {
+                    $found_b64 = $p['inlineData']['data'];
+                    $mime_type = $p['inlineData']['mimeType'] ?? 'image/jpeg';
+                    break;
+                } elseif ( ! empty( $p['inline_data']['data'] ) ) {
+                    $found_b64 = $p['inline_data']['data'];
+                    $mime_type = $p['inline_data']['mime_type'] ?? 'image/jpeg';
+                    break;
+                }
+            }
+
+            if ( empty( $found_b64 ) ) {
+                return new WP_Error( 'gemini_no_image', __( 'Gemini did not return image data.', 'presshub-ai-editor' ) );
+            }
+
+            $image_data = base64_decode( $found_b64 );
+            $ext        = ( false !== strpos( $mime_type, 'png' ) ) ? 'png' : 'jpg';
+
+            if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $model_name, 0, 0, $duration_ms, 'success', '' );
+            }
+        } elseif ( 'openai' === $type ) {
+            $model_name = ! empty( $model ) ? $model : 'dall-e-3';
+            $url        = 'https://api.openai.com/v1/images/generations';
+            $size       = ( '1:1' === $aspect_ratio ) ? '1024x1024' : '1792x1024';
+
+            $body = [
+                'model'           => $model_name,
+                'prompt'          => $prompt,
+                'n'               => 1,
+                'size'            => $size,
+                'response_format' => 'b64_json',
+            ];
+
+            $headers = [
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer ' . $client->api_key,
+            ];
+            if ( ! empty( $client->headers['OpenAI-Organization'] ) ) {
+                $headers['OpenAI-Organization'] = $client->headers['OpenAI-Organization'];
+            }
+
+            $response = wp_remote_post( $url, [
+                'headers' => $headers,
+                'body'    => wp_json_encode( $body ),
+                'timeout' => max( 60, (int) $client->timeout ),
+            ] );
+
+            $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+
+            if ( is_wp_error( $response ) ) {
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $model_name, 0, 0, $duration_ms, 'error', $response->get_error_message() );
+                }
+                return $response;
+            }
+
+            $resp_code = wp_remote_retrieve_response_code( $response );
+            $raw_body  = wp_remote_retrieve_body( $response );
+            $json      = json_decode( $raw_body, true );
+
+            if ( 200 !== $resp_code || ! empty( $json['error'] ) ) {
+                $err_msg = $json['error']['message'] ?? ( 'OpenAI image generation HTTP ' . $resp_code );
+                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                    PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $model_name, 0, 0, $duration_ms, 'error', $err_msg );
+                }
+                return new WP_Error( 'openai_image_error', $err_msg );
+            }
+
+            $b64 = $json['data'][0]['b64_json'] ?? '';
+            if ( ! empty( $b64 ) ) {
+                $image_data = base64_decode( $b64 );
+                $mime_type  = 'image/png';
+                $ext        = 'png';
+            } elseif ( ! empty( $json['data'][0]['url'] ) ) {
+                $dl = wp_remote_get( $json['data'][0]['url'], [ 'timeout' => 30 ] );
+                if ( ! is_wp_error( $dl ) && 200 === wp_remote_retrieve_response_code( $dl ) ) {
+                    $image_data = wp_remote_retrieve_body( $dl );
+                    $mime_type  = 'image/png';
+                    $ext        = 'png';
+                }
+            }
+
+            if ( empty( $image_data ) ) {
+                return new WP_Error( 'openai_no_image', __( 'OpenAI did not return image data.', 'presshub-ai-editor' ) );
+            }
+
+            if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $model_name, 0, 0, $duration_ms, 'success', '' );
+            }
+        } else {
+            return new WP_Error( 'unsupported_image_provider', sprintf( __( 'Image generation is not supported for provider type "%s". Please select Gemini or OpenAI.', 'presshub-ai-editor' ), $type ) );
+        }
+
+        if ( empty( $image_data ) ) {
+            return new WP_Error( 'image_synthesis_failed', __( 'Could not synthesize image data.', 'presshub-ai-editor' ) );
+        }
+
+        // Sideload into WordPress Media Library
+        $filename = 'ai-featured-' . gmdate( 'Ymd-His' ) . '-' . ( function_exists( 'wp_generate_password' ) ? wp_generate_password( 6, false, false ) : substr( md5( uniqid( '', true ) ), 0, 6 ) ) . '.' . $ext;
+        $title    = 'AI Featured Image ' . gmdate( 'Y-m-d H:i' );
+        $sideload = $this->sideload_media( $filename, $image_data, $post_id, $title );
+
+        if ( is_wp_error( $sideload ) ) {
+            return $sideload;
+        }
+
+        $media_id = (int) $sideload['id'];
+        if ( $media_id > 0 && function_exists( 'update_post_meta' ) ) {
+            update_post_meta( $media_id, '_presshub_ai_image_prompt', $prompt );
+        }
+
+        if ( $post_id > 0 && function_exists( 'update_post_meta' ) ) {
+            update_post_meta( $post_id, '_presshub_ai_image_prompt', $prompt );
+        }
+
+        return [
+            'id'     => $media_id,
+            'url'    => $sideload['url'],
+            'prompt' => $prompt,
         ];
     }
 

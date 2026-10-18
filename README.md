@@ -5,7 +5,7 @@ Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for 
 [![Version](https://img.shields.io/badge/version-2.5.2-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
-[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
+[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-82%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Jest Workflow Tests](https://img.shields.io/badge/Jest%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-workflow/tests/)
 [![CI](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml/badge.svg)](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-GPL--2.0--or--later-orange.svg)](presshub-ai-editor/presshub-ai-editor.php)
@@ -82,9 +82,20 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 - **4-Key Editorial Scorecard & Legal Exposure Assessment**: Evaluates drafts using a structured 4-key rubric: overall publication readiness score (0–100), legal exposure rating badge (`Low`, `Medium`, or `High`), 2–3 sentence editorial feedback, and targeted legal concern alerts highlighting potential defamation or unverified claims.
 - **Block-Level Gutenberg Editing**: Modifies individual Gutenberg block attributes (`attributes.content` / `attributes.text`) without resetting document state, supporting existing article revisions.
 
-### 4. 🎛️ Instruction Presets & Prompt Studio
+### 4. 🖼️ AI Featured Image Generation & Studio Engine
+- **Photojournalistic Editorial Realism**: Analyzes article content and generates visual prompts adhering to 35mm documentary photography aesthetics with natural lighting and realistic textures, strictly barring "AI plastic" looks, surreal saturation, or typography/text in the synthesized image.
+- **Configurable Provider & Models**: Powered by Google Gemini (`gemini-3.1-flash-image` via multimodal `generateContent`) or OpenAI (`dall-e-3` via `images/generations`) with configurable aspect ratios (`16:9`, `1:1`, `4:3`). The image model is determined directly by the selected AI provider's configured model in the Provider Store.
+- **Dedicated Settings Tab ("AI Featured Images")**: Control prompt analysis templates, image generation providers, and aspect ratios directly from `PressHub AI → Settings` (`#images`).
+- **Daily Briefing Hub Selection & Resilient Pool Fallback**: Briefings and podcast production can independently select between the Featured Image Pool or Automatic AI Generation, with automatic, graceful fallback to the image pool if synthesis fails or times out.
+- **Post Editor "AI Featured Image Studio"**: Embedded inside the post editor metabox, allowing journalists to:
+  - Draft photojournalistic visual prompts from current article content with one click.
+  - Review and edit the prompt in an editable textarea (persisted in post meta `_presshub_ai_image_prompt`).
+  - Synthesize and regenerate images directly into the WordPress Media Library with live preview.
+  - Assign generated images as the article's official featured image with one click.
+
+### 5. 🎛️ Instruction Presets & Prompt Studio
 - **Multi-Tier Presets**: Admin-curated global defaults, author-specific profiles, author defaults, and per-request metabox dropdown selection. Presets append specialized instructions to base system prompts without overwriting foundational editorial safety constraints.
-- **Externalized Prompt Assets**: Prompts are stored as modular text files under `presshub-ai-editor/assets/prompts/` (e.g. `default_greek_briefing.txt`, `podcast_style_two_hosts_greek.txt`) and dynamically managed via `PressHub_AI_Prompt_Loader`.
+- **Externalized Prompt Assets**: Prompts are stored as modular text files under `presshub-ai-editor/assets/prompts/` (e.g. `default_greek_briefing.txt`, `podcast_style_two_hosts_greek.txt`, `article_image_analysis_prompt.txt`) and dynamically managed via `PressHub_AI_Prompt_Loader`.
 - **Admin Prompt Studio**: Inspect, customize, and reset prompt templates directly within WordPress settings without editing source code.
 
 ---

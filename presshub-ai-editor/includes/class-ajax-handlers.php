@@ -35,6 +35,10 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_preview_tts_payload', [ $this, 'preview_tts_payload' ] );
         add_action( 'wp_ajax_presshub_ai_regenerate_podcast_audio', [ $this, 'regenerate_podcast_audio' ] );
         add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
+        // AI Featured Image Studio endpoints
+        add_action( 'wp_ajax_presshub_ai_generate_image_prompt', [ $this, 'generate_image_prompt' ] );
+        add_action( 'wp_ajax_presshub_ai_generate_featured_image', [ $this, 'generate_featured_image' ] );
+        add_action( 'wp_ajax_presshub_ai_set_featured_image', [ $this, 'set_featured_image' ] );
         // AJAX Settings Save
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
         add_action( 'wp_ajax_presshub_ai_save_settings_section', [ $this, 'save_settings_section' ] );
@@ -2907,6 +2911,117 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'invalid'           => (int) $result['invalid'],
             'truncated'         => (bool) $result['truncated'],
             'sources'           => $result['sources'],
+        ] );
+    }
+
+    /**
+     * AJAX: Draft an AI image prompt by analyzing the current article content.
+     */
+    public function generate_image_prompt() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( __( 'Unauthorized capability to draft image prompts.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
+        $content = isset( $_POST['content'] ) ? (string) wp_unslash( $_POST['content'] ) : '';
+        $title   = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
+
+        if ( empty( trim( $content ) ) && $post_id > 0 ) {
+            $post = get_post( $post_id );
+            if ( $post ) {
+                $content = $post->post_content;
+                if ( empty( $title ) ) {
+                    $title = $post->post_title;
+                }
+            }
+        }
+
+        if ( empty( trim( $content ) ) ) {
+            wp_send_json_error( __( 'Please provide article content to analyze.', 'presshub-ai-editor' ) );
+        }
+
+        require_once __DIR__ . '/class-api-client.php';
+        $client = new PressHub_AI_API_Client();
+        $prompt = $client->analyze_article_for_image_prompt( $content, $title );
+
+        if ( is_wp_error( $prompt ) ) {
+            wp_send_json_error( $prompt->get_error_message() );
+        }
+
+        if ( $post_id > 0 && function_exists( 'update_post_meta' ) ) {
+            update_post_meta( $post_id, '_presshub_ai_image_prompt', $prompt );
+        }
+
+        wp_send_json_success( [
+            'prompt'  => $prompt,
+            'post_id' => $post_id,
+        ] );
+    }
+
+    /**
+     * AJAX: Generate an editorial featured image from a visual prompt.
+     */
+    public function generate_featured_image() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( __( 'Unauthorized capability to generate images.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $prompt  = isset( $_POST['prompt'] ) ? trim( sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) ) : '';
+        $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
+
+        if ( empty( $prompt ) ) {
+            wp_send_json_error( __( 'Please draft or enter an image prompt first.', 'presshub-ai-editor' ) );
+        }
+
+        require_once __DIR__ . '/class-api-client.php';
+        $client = new PressHub_AI_API_Client();
+        $result = $client->generate_featured_image( $prompt, '', $post_id );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        if ( $post_id > 0 && function_exists( 'update_post_meta' ) ) {
+            update_post_meta( $post_id, '_presshub_ai_image_prompt', $prompt );
+        }
+
+        wp_send_json_success( $result );
+    }
+
+    /**
+     * AJAX: Assign an image attachment as the featured image for an article.
+     */
+    public function set_featured_image() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( __( 'Unauthorized capability to assign featured images.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $post_id       = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
+        $attachment_id = isset( $_POST['attachment_id'] ) ? (int) $_POST['attachment_id'] : 0;
+        $prompt        = isset( $_POST['prompt'] ) ? trim( sanitize_textarea_field( wp_unslash( $_POST['prompt'] ) ) ) : '';
+
+        if ( $post_id <= 0 || $attachment_id <= 0 ) {
+            wp_send_json_error( __( 'Invalid post ID or attachment ID.', 'presshub-ai-editor' ) );
+        }
+
+        if ( function_exists( 'set_post_thumbnail' ) ) {
+            set_post_thumbnail( $post_id, $attachment_id );
+        }
+
+        if ( ! empty( $prompt ) && function_exists( 'update_post_meta' ) ) {
+            update_post_meta( $post_id, '_presshub_ai_image_prompt', $prompt );
+        }
+
+        wp_send_json_success( [
+            'post_id'       => $post_id,
+            'attachment_id' => $attachment_id,
+            'message'       => __( 'Featured image assigned successfully.', 'presshub-ai-editor' ),
         ] );
     }
 }

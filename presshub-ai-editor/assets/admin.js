@@ -749,6 +749,173 @@ jQuery(document).ready(function($) {
     });
 
     // ------------------------------------------------------------------
+    // AI Featured Image Studio handlers
+    // ------------------------------------------------------------------
+
+    $(document).on('click', '#presshub-ai-draft-image-prompt', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        if ($btn.prop('disabled')) {
+            return;
+        }
+
+        var postId = $btn.data('post-id') || 0;
+        var content = getEditorContent();
+        var title = '';
+        if (wp.data && wp.data.select && wp.data.select('core/editor')) {
+            title = wp.data.select('core/editor').getEditedPostAttribute('title') || '';
+        } else {
+            title = $('#title').val() || '';
+        }
+
+        var $spinner = $('#presshub-ai-image-spinner');
+        var $status = $('#presshub-ai-image-status');
+
+        $spinner.addClass('is-active');
+        $btn.prop('disabled', true);
+        $status.text('');
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'presshub_ai_generate_image_prompt',
+                nonce: presshubAI.nonce,
+                post_id: postId,
+                content: content,
+                title: title
+            }
+        }).done(function(response) {
+            if (response && response.success && response.data && response.data.prompt) {
+                $('#presshub-ai-image-prompt').val(response.data.prompt).trigger('change');
+                $status.css('color', '#46b450').text(__('Prompt drafted successfully!', 'presshub-ai-editor'));
+            } else {
+                var msg = (response && response.data) ? response.data : __('Failed to draft prompt.', 'presshub-ai-editor');
+                $status.css('color', '#dc3232').text(msg);
+            }
+        }).fail(function(xhr) {
+            var msg = __('Failed to draft prompt. Server error.', 'presshub-ai-editor');
+            if (xhr.responseJSON && xhr.responseJSON.data) {
+                msg = xhr.responseJSON.data;
+            }
+            $status.css('color', '#dc3232').text(msg);
+        }).always(function() {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+        });
+    });
+
+    $(document).on('click', '#presshub-ai-generate-image-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        if ($btn.prop('disabled')) {
+            return;
+        }
+
+        var postId = $btn.data('post-id') || 0;
+        var prompt = $('#presshub-ai-image-prompt').val() || '';
+        var $spinner = $('#presshub-ai-image-spinner');
+        var $status = $('#presshub-ai-image-status');
+
+        if (!prompt || !prompt.trim()) {
+            $status.css('color', '#dc3232').text(__('Please draft or enter an image prompt first.', 'presshub-ai-editor'));
+            return;
+        }
+
+        $spinner.addClass('is-active');
+        $btn.prop('disabled', true);
+        $status.css('color', '#2271b1').text(__('Synthesizing image… This may take up to 30 seconds.', 'presshub-ai-editor'));
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'presshub_ai_generate_featured_image',
+                nonce: presshubAI.nonce,
+                post_id: postId,
+                prompt: prompt
+            }
+        }).done(function(response) {
+            if (response && response.success && response.data && response.data.url) {
+                var imgData = response.data;
+                $('#presshub-ai-image-preview-img').attr('src', imgData.url);
+                $('#presshub-ai-image-preview-container').show();
+                var $setBtn = $('#presshub-ai-set-featured-btn');
+                $setBtn.data('attachment-id', imgData.id).prop('disabled', false);
+                $btn.html('<span class="dashicons dashicons-image-rotate" style="vertical-align: middle; margin-right: 4px;"></span> ' + __('Regenerate Image', 'presshub-ai-editor'));
+                $status.css('color', '#46b450').text(__('Image synthesized & saved to Media Library (ID: #' + imgData.id + ')', 'presshub-ai-editor'));
+            } else {
+                var msg = (response && response.data) ? response.data : __('Image generation failed.', 'presshub-ai-editor');
+                $status.css('color', '#dc3232').text(msg);
+            }
+        }).fail(function(xhr) {
+            var msg = __('Image generation failed. Server error.', 'presshub-ai-editor');
+            if (xhr.responseJSON && xhr.responseJSON.data) {
+                msg = xhr.responseJSON.data;
+            }
+            $status.css('color', '#dc3232').text(msg);
+        }).always(function() {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+        });
+    });
+
+    $(document).on('click', '#presshub-ai-set-featured-btn', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        if ($btn.prop('disabled')) {
+            return;
+        }
+
+        var postId = $btn.data('post-id') || 0;
+        var attachmentId = $btn.data('attachment-id') || 0;
+        var prompt = $('#presshub-ai-image-prompt').val() || '';
+        var $status = $('#presshub-ai-image-status');
+        var $spinner = $('#presshub-ai-image-spinner');
+
+        if (!postId || !attachmentId) {
+            $status.css('color', '#dc3232').text(__('Missing post or attachment ID.', 'presshub-ai-editor'));
+            return;
+        }
+
+        $spinner.addClass('is-active');
+        $btn.prop('disabled', true);
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'presshub_ai_set_featured_image',
+                nonce: presshubAI.nonce,
+                post_id: postId,
+                attachment_id: attachmentId,
+                prompt: prompt
+            }
+        }).done(function(response) {
+            if (response && response.success) {
+                $status.css('color', '#46b450').text(__('Assigned as Featured Image!', 'presshub-ai-editor'));
+                if (wp.data && wp.data.dispatch && wp.data.dispatch('core/editor')) {
+                    try {
+                        wp.data.dispatch('core/editor').editPost({ featured_media: parseInt(attachmentId, 10) });
+                    } catch (err) {}
+                }
+            } else {
+                var msg = (response && response.data && response.data.message) ? response.data.message : (response && response.data ? response.data : __('Failed to assign featured image.', 'presshub-ai-editor'));
+                $status.css('color', '#dc3232').text(msg);
+            }
+        }).fail(function(xhr) {
+            var msg = __('Failed to assign featured image.', 'presshub-ai-editor');
+            if (xhr.responseJSON && xhr.responseJSON.data) {
+                msg = xhr.responseJSON.data;
+            }
+            $status.css('color', '#dc3232').text(msg);
+        }).always(function() {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+        });
+    });
+
+    // ------------------------------------------------------------------
     // Wire up validation + initial button state.
     // ------------------------------------------------------------------
 
