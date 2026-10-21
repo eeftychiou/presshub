@@ -611,6 +611,11 @@ When UI changes are involved, perform visual inspection in the local testing env
    - Post edit screens include the **"AI Featured Image Studio"** metabox allowing editors to draft a prompt, tweak it in an editable textarea, synthesize/regenerate an image, and assign it as the post's featured image.
    - All image feature changes must be verified against `tests/FeaturedImageGeneratorTest.php` and the full test suite.
 
+7. **Audio Synthesis Resilience & Cron Exception Safety**:
+   - **Method Signature & Smart Parameter Shifting**: `PressHub_AI_Audio_Synthesizer::synthesize_podcast( string $date = '', ?string $custom_script = '', $edition_or_client = 'morning', ?PressHub_AI_API_Client $api_client = null, int $existing_post_id = 0 )` accepts nullable `$custom_script` and automatically shifts if a caller supplies an edition string as the second argument (`$synthesizer->synthesize_podcast($date, 'noon')`).
+   - **Try/Catch Enclosure**: Both morning and noon briefing cron callbacks in `presshub-ai-editor.php` must wrap audio podcast synthesis in `try / catch (\Throwable $t)` blocks and log exceptions to `PressHub_AI_Logger::error()` so that errors during synthesis never crash the cron runner.
+   - **Dynamic UI Mount**: In `assets/briefing-admin.js`, if the audio player DOM element was not present on page load, AJAX synthesis completion dynamically mounts the player and hides the empty card text without requiring a page reload.
+
 ---
 
 ## 📋 GitHub Issue Tracking Protocol & Best Practices

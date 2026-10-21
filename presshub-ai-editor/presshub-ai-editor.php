@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.5.5
+ * Version: 2.5.6
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -120,7 +120,7 @@ if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 
-define( 'PRESSHUB_AI_VERSION', '2.5.5' );
+define( 'PRESSHUB_AI_VERSION', '2.5.6' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -665,17 +665,27 @@ function presshub_ai_execute_generation_cron() {
 
     // 3. Audio podcast synthesis
     if ( ! is_wp_error( $results['podcast'] ) ) {
-        $synthesizer = new PressHub_AI_Audio_Synthesizer();
-        $results['synthesis'] = $synthesizer->synthesize_podcast( $date );
+        try {
+            $synthesizer = new PressHub_AI_Audio_Synthesizer();
+            $results['synthesis'] = $synthesizer->synthesize_podcast( $date );
 
-        if ( is_wp_error( $results['synthesis'] ) ) {
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::error( 'Daily News Briefing generation cron error in audio synthesis: ' . $results['synthesis']->get_error_message() );
+            if ( is_wp_error( $results['synthesis'] ) ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( 'Daily News Briefing generation cron error in audio synthesis: ' . $results['synthesis']->get_error_message() );
+                }
+            } else {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::info( 'Daily News Briefing audio podcast synthesized successfully.' );
+                }
             }
-        } else {
+        } catch ( \Throwable $t ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::info( 'Daily News Briefing audio podcast synthesized successfully.' );
+                PressHub_AI_Logger::error( 'Daily News Briefing generation cron exception in audio synthesis: ' . $t->getMessage(), [
+                    'exception' => $t->getMessage(),
+                    'trace'     => $t->getTraceAsString(),
+                ] );
             }
+            $results['synthesis'] = new WP_Error( 'synthesis_exception', $t->getMessage() );
         }
     }
 
@@ -774,17 +784,27 @@ function presshub_ai_execute_noon_generation_cron() {
 
     // 3. Audio podcast synthesis
     if ( ! is_wp_error( $results['podcast'] ) ) {
-        $synthesizer = new PressHub_AI_Audio_Synthesizer();
-        $results['synthesis'] = $synthesizer->synthesize_podcast( $date, null, 'noon' );
+        try {
+            $synthesizer = new PressHub_AI_Audio_Synthesizer();
+            $results['synthesis'] = $synthesizer->synthesize_podcast( $date, '', 'noon' );
 
-        if ( is_wp_error( $results['synthesis'] ) ) {
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::error( 'Noon News Briefing generation cron error in audio synthesis: ' . $results['synthesis']->get_error_message() );
+            if ( is_wp_error( $results['synthesis'] ) ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( 'Noon News Briefing generation cron error in audio synthesis: ' . $results['synthesis']->get_error_message() );
+                }
+            } else {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::info( 'Noon News Briefing audio podcast synthesized successfully.' );
+                }
             }
-        } else {
+        } catch ( \Throwable $t ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::info( 'Noon News Briefing audio podcast synthesized successfully.' );
+                PressHub_AI_Logger::error( 'Noon News Briefing generation cron exception in audio synthesis: ' . $t->getMessage(), [
+                    'exception' => $t->getMessage(),
+                    'trace'     => $t->getTraceAsString(),
+                ] );
             }
+            $results['synthesis'] = new WP_Error( 'synthesis_exception', $t->getMessage() );
         }
     }
 

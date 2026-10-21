@@ -399,6 +399,80 @@ class NoonBriefingUpdateTest
         }
 
         // =========================================================================
+        // Case 8: Audio Synthesizer synthesize_podcast() Parameter Resilience & Cron try/catch
+        // =========================================================================
+        self::reset_world();
+        $synthesizer = new PressHub_AI_Audio_Synthesizer();
+        $date_case8  = '2026-10-20';
+
+        // Pre-clean any leftover temporary script from previous interrupted runs
+        $harvester = new PressHub_AI_News_Harvester();
+        $snapshot_dir = $harvester->get_snapshot_dir( $date_case8 );
+        $temp_script_path = $snapshot_dir . '/podcast-script-noon.txt';
+        $temp_meta_path   = $snapshot_dir . '/podcast-script-noon.meta.json';
+        if ( file_exists( $temp_script_path ) ) {
+            @unlink( $temp_script_path );
+        }
+        if ( file_exists( $temp_meta_path ) ) {
+            @unlink( $temp_meta_path );
+        }
+
+        // 8a: synthesize_podcast($date, null, 'noon') must accept null without TypeError
+        try {
+            $res_null = $synthesizer->synthesize_podcast( $date_case8, null, 'noon' );
+            if ( ! is_wp_error( $res_null ) || 'no_script' !== $res_null->get_error_code() ) {
+                $failures[] = 'synthesize_podcast( date, null, noon ) should return no_script WP_Error when no script on disk; got: ' . ( is_wp_error( $res_null ) ? $res_null->get_error_code() : gettype( $res_null ) );
+            }
+        } catch ( \TypeError $te ) {
+            $failures[] = 'synthesize_podcast( date, null, noon ) threw TypeError: ' . $te->getMessage();
+        }
+
+        // 8b: Smart parameter shifting: synthesize_podcast($date, 'noon')
+        try {
+            $res_shift = $synthesizer->synthesize_podcast( $date_case8, 'noon' );
+            if ( ! is_wp_error( $res_shift ) || 'no_script' !== $res_shift->get_error_code() ) {
+                $failures[] = 'synthesize_podcast( date, noon ) smart shift should recognize "noon" as edition and return no_script; got: ' . ( is_wp_error( $res_shift ) ? $res_shift->get_error_code() : gettype( $res_shift ) );
+            }
+        } catch ( \Throwable $t ) {
+            $failures[] = 'synthesize_podcast( date, noon ) threw exception: ' . $t->getMessage();
+        }
+
+        // 8c: Resolving disk script when $custom_script is null
+        $producer = new PressHub_AI_Podcast_Producer();
+        $valid_dialogue = "[SPEAKER_1]: Καλό μεσημέρι σε όλους!\n[SPEAKER_2]: Γεια σου, καλό μεσημέρι!";
+        $producer->save_script( $date_case8, $valid_dialogue, 'noon' );
+
+        $loaded_noon_script = $producer->get_script( $date_case8, 'noon' );
+        if ( empty( $loaded_noon_script ) || false === strpos( $loaded_noon_script, 'Καλό μεσημέρι' ) ) {
+            $failures[] = 'Podcast Producer failed to save/load noon script for date ' . $date_case8;
+        }
+
+        // 8d: presshub_ai_execute_noon_generation_cron() error handling resilience
+        // Verify cron function executes without fatal errors even when TTS or network is not mocked
+        if ( function_exists( 'presshub_ai_execute_noon_generation_cron' ) ) {
+            try {
+                $cron_res = presshub_ai_execute_noon_generation_cron( $date_case8 );
+                if ( ! is_array( $cron_res ) ) {
+                    $failures[] = 'presshub_ai_execute_noon_generation_cron() must return results array; got: ' . gettype( $cron_res );
+                }
+            } catch ( \Throwable $t ) {
+                $failures[] = 'presshub_ai_execute_noon_generation_cron() threw unhandled exception: ' . $t->getMessage();
+            }
+        }
+
+        // Clean up temporary script
+        $harvester = new PressHub_AI_News_Harvester();
+        $snapshot_dir = $harvester->get_snapshot_dir( $date_case8 );
+        $temp_script_path = $snapshot_dir . '/podcast-script-noon.txt';
+        if ( file_exists( $temp_script_path ) ) {
+            @unlink( $temp_script_path );
+        }
+        $temp_meta_path = $snapshot_dir . '/podcast-script-noon.meta.json';
+        if ( file_exists( $temp_meta_path ) ) {
+            @unlink( $temp_meta_path );
+        }
+
+        // =========================================================================
         // Result Summary
         // =========================================================================
         if ( ! empty( $failures ) ) {

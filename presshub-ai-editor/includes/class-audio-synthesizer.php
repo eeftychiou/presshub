@@ -1253,8 +1253,15 @@ class PressHub_AI_Audio_Synthesizer {
      * @param int                          $existing_post_id  Optional existing post ID to update rather than creating a new post.
      * @return array|WP_Error Result payload array or WP_Error on failure.
      */
-    public function synthesize_podcast( string $date = '', string $custom_script = '', $edition_or_client = 'morning', ?PressHub_AI_API_Client $api_client = null, int $existing_post_id = 0 ) {
-        if ( $edition_or_client instanceof PressHub_AI_API_Client ) {
+    public function synthesize_podcast( string $date = '', ?string $custom_script = '', $edition_or_client = 'morning', ?PressHub_AI_API_Client $api_client = null, int $existing_post_id = 0 ) {
+        // Smart parameter shift: if caller called synthesize_podcast($date, 'noon') or synthesize_podcast($date, 'morning')
+        if ( in_array( $custom_script, [ 'morning', 'noon' ], true ) && ( 'morning' === $edition_or_client || $edition_or_client instanceof PressHub_AI_API_Client || null === $edition_or_client ) ) {
+            if ( $edition_or_client instanceof PressHub_AI_API_Client ) {
+                $api_client = $edition_or_client;
+            }
+            $edition       = $custom_script;
+            $custom_script = '';
+        } elseif ( $edition_or_client instanceof PressHub_AI_API_Client ) {
             $api_client = $edition_or_client;
             $edition    = 'morning';
         } else {
@@ -1273,7 +1280,7 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         // 1. Resolve script
-        $script = trim( $custom_script );
+        $script = trim( (string) $custom_script );
         if ( empty( $script ) ) {
             $producer = new PressHub_AI_Podcast_Producer();
             $stored = $producer->get_script( $date, $edition );

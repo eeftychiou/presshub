@@ -130,12 +130,18 @@ graph TD
   - Excerpt filter (`filter_podcast_excerpt`) hooks into `get_the_excerpt` to suppress dialogue text on front-page article previews, loop cards, and archives for both newly generated and legacy podcast posts.
   - Social metadata (`PressHub_AI_Social_Meta`) emits a clean audio summary instead of leaking private dialogue scripts or speaker aliases into OpenGraph and Twitter cards.
 
+- **Resilient Method Signature & Parameter Shift**:
+  - `PressHub_AI_Audio_Synthesizer::synthesize_podcast( string $date = '', ?string $custom_script = '', $edition_or_client = 'morning', ?PressHub_AI_API_Client $api_client = null, int $existing_post_id = 0 )` accepts nullable `$custom_script`.
+  - Provides smart parameter shifting: if `$custom_script` is `'morning'` or `'noon'`, it automatically maps to `$edition` and resets script to `''`, preventing PHP 8.2+ `TypeError` exceptions.
+  - When script is null or empty, it automatically resolves the saved dialogue script from disk for the specified edition.
+
 ### 4.5 Briefing Hub Admin & Client Controller
 - **Classes**: `PressHub_AI_Briefing_Admin`, `PressHub_AI_Ajax_Handlers`, `assets/briefing-admin.js`.
 - **Edition Switcher**:
   - Admin Hub displays responsive navigation tabs: **Morning Edition (Πρωινή Ενημέρωση)** vs. **Noon Update (Μεσημβρινή Ενημέρωση)**.
   - Container element carries `data-edition="morning|noon"`.
   - Client-side script maintains `currentEdition` and attaches `edition: currentEdition` to all AJAX pipeline dispatches (`briefing_get_status`, `briefing_run_harvest`, `briefing_run_curation`, `briefing_run_script`, `briefing_save_script`, `briefing_generate_audio`, `briefing_upload`).
+  - Dynamic DOM Audio Player Injection: If the audio player DOM element was absent on initial page load (pending audio), completion of AJAX synthesis dynamically creates and mounts `<audio controls>` into `#briefing-audio-container` without requiring a page reload.
   - Full backward compatibility for historical posts that lack `_presshub_briefing_edition` meta (queried as morning).
 
 ### 4.6 Featured Image Pools & Interactive Media Library Picker
@@ -263,4 +269,8 @@ graph TD
 | `presshub_noon_news_harvest` | 12:00 | `presshub_ai_briefing_noon_harvest_time` | `presshub_ai_execute_noon_harvest_cron()` |
 | `presshub_noon_news_generate` | 12:45 | `presshub_ai_briefing_noon_generation_time` | `presshub_ai_execute_noon_generation_cron()` |
 | `presshub_ai_prune_audit_logs` | Daily | Fixed 24h | `PressHub_AI_Audit_Logger::prune()` |
+
+### 5.1 Cron Execution & Error Resilience
+- Both generation cron callbacks (`presshub_ai_execute_generation_cron` and `presshub_ai_execute_noon_generation_cron`) encapsulate all pipeline stages (curation, script generation, and audio synthesis) in dedicated error-handling and `try / catch (\Throwable $t)` blocks.
+- Uncaught exceptions during synthesis are caught, logged to `PressHub_AI_Logger::error()` with full stack traces, and wrapped into `WP_Error`, ensuring that cron tasks never crash the PHP runtime or leave tasks half-executed without diagnostic trace.
 

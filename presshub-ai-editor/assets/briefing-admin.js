@@ -492,11 +492,23 @@
                 $('#btn-synthesize-audio').text('🔊 Re-synthesize Audio');
                 if ($('#briefing-audio-player').length) {
                     $('#briefing-audio-player').attr('src', status.audio_url);
+                } else {
+                    $('#milestone-audio .card-empty-desc').hide();
+                    var escAudioUrl = $('<div>').text(status.audio_url).html();
+                    var escAudioTitle = $('<div>').text(status.podcast_post_title || '').html();
+                    var playerHtml = '<audio controls src="' + escAudioUrl + '" class="presshub-audio-player" id="briefing-audio-player"></audio>';
+                    if (escAudioTitle) {
+                        playerHtml += '<p class="card-subtext">' + escAudioTitle + '</p>';
+                    }
+                    $('#milestone-audio .presshub-card-body').prepend(playerHtml);
                 }
             } else {
                 $('#milestone-audio').removeClass('card-complete').addClass('card-pending');
                 $('#status-badge-audio').removeClass('badge-success').addClass('badge-secondary').text('Pending Audio');
                 $('#btn-synthesize-audio').text('🔊 Synthesize Audio Podcast');
+                $('#briefing-audio-player').remove();
+                $('#milestone-audio .card-subtext').remove();
+                $('#milestone-audio .card-empty-desc').show();
             }
 
             // -----------------------------------------------------------------
