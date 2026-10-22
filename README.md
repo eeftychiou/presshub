@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.5.6-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.5.7-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-82%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -72,7 +72,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - **Zero Narrated Instructions**: Passes clean verbatim dialogue turns in `contents[0].parts[].text` without prepended prompt directives, eliminating prompt narration on modern models (`gemini-3.8-flash-tts` / `gemini-3.8-flash-lite-tts`).
   - **Official Gemini 3.8 TTS REST Standard (`structured` — Recommended)**: Conforms strictly to Google's official Gemini 3.8 TTS REST specification. Turn-level `speech_metadata.style` carries delivery emotion, speaking rate (`0.85x - 1.25x`), and voice pitch tuning (`-5.0 to +5.0 semitones`) without top-level system instructions. Inactive settings (e.g. system instructions) dynamically grey out in the UI with informative badges.
   - **Hybrid / System Instruction Override Mode (`hybrid_instruction`)**: Passes both turn-level `speech_metadata.style` and top-level `systemInstruction` with resolved speaker persona and rate placeholders.
-  - **Multi-Speaker Persona Mapping**: Maps Presenter 1 and Presenter 2 to distinct voice personas (e.g. Charon, Kore, Fenrir, Aoede) in `speechConfig.multiSpeakerVoiceConfig`.
+  - **Multi-Speaker Persona Mapping & Deterministic Binding**: Maps Presenter 1 and Presenter 2 to distinct voice personas (e.g. Charon, Kore, Fenrir, Aoede) in `speechConfig.multiSpeakerVoiceConfig`. Retains canonical inline speaker prefixes (`Presenter 1: ...`, `Presenter 2: ...`) in `contents[0].parts[].text` so Gemini's multi-speaker model deterministically binds turns to voices across all topic chunks without random voice swapping.
   - **RIFF WAV Header Handling**: Detects RIFF headers on incoming audio bytes from Gemini 3.8 to prevent double-wrapping WAV headers.
 - **Gemini Speech API JSON Inspector & Live Voice Testing Studio**:
   - Live preview container in Daily Briefing settings renders the exact JSON request body sent to Gemini's speech endpoint, updating dynamically as voices, speed, pitch, delivery style, or test scripts change.

@@ -458,9 +458,10 @@ The automated AI Editorial Review system (`PressHub_AI_QA_Reviewer`) evaluates d
 4. **Legacy Prepended Instruction Mode (`legacy` — Deprecated)**:
    - Backward-compatibility mode prepending style instructions directly into script text.
    - System instruction, speaking speed, and voice pitch settings dynamically grey out in the UI.
-5. **Multi-Speaker Voice Mapping & Turn Metadata**:
+5. **Multi-Speaker Voice Mapping & Deterministic Binding**:
    - Presenter 1 (`presshub_ai_briefing_voice_female`) and Presenter 2 (`presshub_ai_briefing_voice_male`) are mapped to canonical voice personas (e.g. Charon, Kore) inside `speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs`.
    - Each transcript turn is tagged with `speech_metadata.speaker` (`Presenter 1` or `Presenter 2`) and `speech_metadata.style`.
+   - **Canonical Speaker Prefix in Text**: Under Gemini's multi-speaker REST specification, the model binds voices to text based on the speaker label prefix in the prompt text. The request builder in `PressHub_AI_API_Client::build_gemini_tts_request_body()` strictly retains the canonical speaker label in `contents[0].parts[].text` (`Presenter 1: <text>`, `Presenter 2: <text>`). This guarantees deterministic voice-to-speaker binding across all stitched topic chunks and prevents voices from alternating randomly.
 6. **RIFF WAV Header Handling**:
    - Gemini 3.8 TTS responses return complete WAV files with RIFF headers; audio decoding checks for the RIFF signature before applying PCM-to-WAV wrapping to prevent audio stream corruption.
 7. **Interactive Testing Studio & Live JSON Inspector**:

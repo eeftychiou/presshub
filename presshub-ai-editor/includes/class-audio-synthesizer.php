@@ -1469,7 +1469,7 @@ class PressHub_AI_Audio_Synthesizer {
                         $dialogue_lines = [];
                         foreach ( $topic_turns as $t ) {
                             $label = ( 'female' === $t['speaker'] || 'presenter_1' === $t['speaker'] ) ? 'Presenter 1' : 'Presenter 2';
-                            $dialogue_lines[] = '[' . $label . ']: ' . $t['text'];
+                            $dialogue_lines[] = $label . ': ' . $t['text'];
                         }
                         $formatted_topic_script = implode( "\n\n", $dialogue_lines );
 

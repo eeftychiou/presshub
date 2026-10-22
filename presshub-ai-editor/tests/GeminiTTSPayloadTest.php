@@ -178,12 +178,20 @@ class GeminiTTSPayloadTest
                 }
             }
 
-            // Check speaker assignment
+            // Check speaker assignment in speech_metadata
             if ( ( $parts[0]['speech_metadata']['speaker'] ?? '' ) !== 'Presenter 1' ) {
                 $failures[] = 'Turn 0 speaker should be Presenter 1.';
             }
             if ( ( $parts[1]['speech_metadata']['speaker'] ?? '' ) !== 'Presenter 2' ) {
                 $failures[] = 'Turn 1 speaker should be Presenter 2.';
+            }
+
+            // CRITICAL: Gemini multiSpeakerVoiceConfig requires inline speaker label in text part!
+            if ( 0 !== strpos( $parts[0]['text'], 'Presenter 1: ' ) ) {
+                $failures[] = 'Turn 0 text must retain canonical prefix "Presenter 1: "; got: ' . $parts[0]['text'];
+            }
+            if ( 0 !== strpos( $parts[1]['text'], 'Presenter 2: ' ) ) {
+                $failures[] = 'Turn 1 text must retain canonical prefix "Presenter 2: "; got: ' . $parts[1]['text'];
             }
 
             // Check speed and pitch composed into style
@@ -206,6 +214,36 @@ class GeminiTTSPayloadTest
             }
             if ( ( $voice_configs[1]['speaker'] ?? '' ) !== 'Presenter 2' || ( $voice_configs[1]['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) !== 'Kore' ) {
                 $failures[] = 'Presenter 2 voice config must map to Kore.';
+            }
+        }
+
+        // 2a-2: Greek and bracketed speaker tag normalization to canonical presenter labels
+        $greek_dialogue = "[Ομιλητής 1]: Πρώτη είδηση.\n[Παρουσιαστής 2]: Δεύτερη είδηση.";
+        $body_greek = $client->build_gemini_tts_request_body(
+            $greek_dialogue,
+            'Charon',
+            true,
+            $multi_speakers,
+            'formal',
+            1.0,
+            0.0,
+            'structured'
+        );
+        $greek_parts = $body_greek['contents'][0]['parts'] ?? [];
+        if ( count( $greek_parts ) !== 2 ) {
+            $failures[] = 'Greek dialogue turns count mismatch; expected 2, got: ' . count( $greek_parts );
+        } else {
+            if ( 0 !== strpos( $greek_parts[0]['text'], 'Presenter 1: ' ) ) {
+                $failures[] = 'Greek turn 0 text should normalize to "Presenter 1: "; got: ' . ( $greek_parts[0]['text'] ?? '' );
+            }
+            if ( 0 !== strpos( $greek_parts[1]['text'], 'Presenter 2: ' ) ) {
+                $failures[] = 'Greek turn 1 text should normalize to "Presenter 2: "; got: ' . ( $greek_parts[1]['text'] ?? '' );
+            }
+            if ( ( $greek_parts[0]['speech_metadata']['speaker'] ?? '' ) !== 'Presenter 1' ) {
+                $failures[] = 'Greek turn 0 speech_metadata.speaker mismatch; got: ' . ( $greek_parts[0]['speech_metadata']['speaker'] ?? '' );
+            }
+            if ( ( $greek_parts[1]['speech_metadata']['speaker'] ?? '' ) !== 'Presenter 2' ) {
+                $failures[] = 'Greek turn 1 speech_metadata.speaker mismatch; got: ' . ( $greek_parts[1]['speech_metadata']['speaker'] ?? '' );
             }
         }
 

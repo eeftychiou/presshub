@@ -1912,7 +1912,23 @@ class PressHub_AI_API_Client {
 
         // Legacy mode: prepend instruction directly to transcript text
         if ( 'legacy' === $payload_mode ) {
-            $prompt_text = $is_multi_speaker ? ( $instruction . "\n\n" . $clean_text ) : ( $instruction . "\n\"" . $clean_text . "\"" );
+            $normalized_legacy_text = $clean_text;
+            if ( $is_multi_speaker ) {
+                $normalized_legacy_text = preg_replace_callback(
+                    '/(?:^|\n+)\[?(Presenter\s+\d+|Speaker\s+\d+|Ομιλητής\s+\d+|Παρουσιαστής\s+\d+)\]?:\s*/u',
+                    function( $m ) use ( $multi_speakers ) {
+                        $prefix = ( 0 === strpos( $m[0], "\n" ) ) ? "\n" : '';
+                        if ( preg_match( '/(\d+)/', $m[1], $num ) ) {
+                            $idx = (int) $num[1] - 1;
+                            $name = $multi_speakers[ $idx ]['speaker'] ?? ( 'Presenter ' . $num[1] );
+                            return $prefix . $name . ': ';
+                        }
+                        return $prefix . $m[1] . ': ';
+                    },
+                    $clean_text
+                );
+            }
+            $prompt_text = $is_multi_speaker ? ( $instruction . "\n\n" . $normalized_legacy_text ) : ( $instruction . "\n\"" . $clean_text . "\"" );
             return [
                 'contents' => [
                     [
@@ -1948,7 +1964,13 @@ class PressHub_AI_API_Client {
                             }
                         }
 
-                        $part = [ 'text' => $turn_text ];
+                        // Clean any leftover brackets, colons, or redundant speaker prefixes from turn text
+                        $clean_turn_text = preg_replace( '/^\[?(?:Presenter\s*\d+|Speaker\s*\d+|Ομιλητής\s*\d+|Παρουσιαστής\s*\d+|' . preg_quote( $matched_speaker, '/' ) . ')\s*\]?:\s*/iu', '', $turn_text );
+                        $clean_turn_text = trim( $clean_turn_text );
+
+                        // Retain canonical speaker label in the text part so Gemini's
+                        // multiSpeakerVoiceConfig can reliably bind each turn to its designated voice.
+                        $part = [ 'text' => $matched_speaker . ': ' . $clean_turn_text ];
                         if ( 'system_instruction' !== $payload_mode ) {
                             $part['speech_metadata'] = [
                                 'speaker' => $matched_speaker,

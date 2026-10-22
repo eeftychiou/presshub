@@ -1467,13 +1467,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         if ( $two_hosts ) {
             $multi_speakers = [
                 [
-                    'speaker'     => 'Speaker 1',
+                    'speaker'     => 'Presenter 1',
                     'voiceConfig' => [
                         'prebuiltVoiceConfig' => [ 'voiceName' => $speaker1 ],
                     ],
                 ],
                 [
-                    'speaker'     => 'Speaker 2',
+                    'speaker'     => 'Presenter 2',
                     'voiceConfig' => [
                         'prebuiltVoiceConfig' => [ 'voiceName' => $speaker2 ],
                     ],

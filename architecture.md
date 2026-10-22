@@ -106,6 +106,7 @@ graph TD
   - **Official Gemini 3.8 TTS REST Standard (`structured` — Recommended)**:
     - Strictly conforms to Google's official Gemini 3.8 TTS REST documentation (`https://ai.google.dev/gemini-api/docs/generate-content/speech-generation#rest`).
     - Presenter voices are mapped in `speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs` (or `voiceConfig` for single speaker).
+    - **Deterministic Speaker Label Binding**: In accordance with the official Gemini multi-speaker REST specification, each dialogue turn in `contents[0].parts[].text` explicitly retains its canonical speaker label prefix (e.g. `Presenter 1: <text>`, `Presenter 2: <text>`). This binds each turn to its corresponding voice configuration in `speakerVoiceConfigs` across all topic chunks, eliminating dynamic/arbitrary voice assignment and preventing voices from alternating randomly.
     - Delivery emotions, pacing/speed, and pitch tuning are passed via sustained turn-level `speech_metadata.style` composed via `PressHub_AI_API_Client::compose_tts_style_string()`.
     - Omits top-level `systemInstruction` (not part of the official Gemini 3.8 TTS REST schema).
     - In the Settings UI, the Gemini Speech System Instruction setting dynamically greys out with an informative notice badge explaining that Google controls tone, speed, and pitch directly via turn-level `speech_metadata.style`.
