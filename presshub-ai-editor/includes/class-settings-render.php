@@ -153,6 +153,14 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
+                                    <th scope="row"><label for="presshub_ai_coauthor_max_source_chars"><?php echo __( 'Max Source Material Characters', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $cur_max_chars = PressHub_AI_Settings_Storage::get_coauthor_max_source_chars(); ?>
+                                        <input type="number" min="1000" max="1000000" step="1000" name="presshub_ai_coauthor_max_source_chars" id="presshub_ai_coauthor_max_source_chars" value="<?php echo self::esc_attr_safe( (string) $cur_max_chars ); ?>" class="regular-text" />
+                                        <p class="description"><?php echo __( 'Maximum character limit allowed for pasted source material and research notes (1,000 – 1,000,000). Default 200,000 characters.', 'presshub-ai-editor' ); ?></p>
+                                    </td>
+                                </tr>
+                                <tr>
                                     <th scope="row"><?php echo __( 'Source Processing', 'presshub-ai-editor' ); ?></th>
                                     <td>
                                         <?php $this->render_fetch_urls_field(); ?>

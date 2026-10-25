@@ -107,8 +107,9 @@ class SettingsPerTabAjaxSaveTest
             'presshub_ai_coauthor_model'       => 'claude-3-5-sonnet-20241022',
             'presshub_ai_coauthor_temperature' => '0.45',
             'presshub_ai_coauthor_max_tokens'  => '8192',
-            'presshub_ai_coauthor_timeout'     => '120',
-            'presshub_ai_fetch_urls'           => '1',
+            'presshub_ai_coauthor_timeout'          => '120',
+            'presshub_ai_coauthor_max_source_chars' => '150000',
+            'presshub_ai_fetch_urls'                => '1',
         ];
 
         try {
@@ -131,6 +132,9 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( (int) get_option( 'presshub_ai_coauthor_timeout' ) !== 120 ) {
             $failures[] = 'presshub_ai_coauthor_timeout not saved correctly; got: ' . var_export( get_option( 'presshub_ai_coauthor_timeout' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_coauthor_max_source_chars' ) !== 150000 ) {
+            $failures[] = 'presshub_ai_coauthor_max_source_chars not saved correctly; got: ' . var_export( get_option( 'presshub_ai_coauthor_max_source_chars' ), true );
         }
         if ( get_option( 'presshub_ai_fetch_urls' ) !== '1' && (int) get_option( 'presshub_ai_fetch_urls' ) !== 1 ) {
             $failures[] = 'presshub_ai_fetch_urls not saved correctly; got: ' . var_export( get_option( 'presshub_ai_fetch_urls' ), true );

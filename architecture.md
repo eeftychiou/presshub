@@ -259,6 +259,17 @@ graph TD
   - **Generate / Regenerate Image**: Dispatches to the configured image generation provider via AJAX (`presshub_ai_generate_featured_image`), saves to Media Library, and displays an instant visual preview card.
   - **Set as Featured Image**: Assigns the media attachment as the post thumbnail via AJAX (`presshub_ai_set_featured_image`) and synchronizes Gutenberg editor state (`core/editor.editPost`).
 
+### 4.15 AI Co-Author Story Drafting & Source Material Capacity
+- **Problem**: Previously, source material for story drafting was restricted to a hardcoded 20,000 character limit, preventing editors from feeding full interview transcripts, investigative research dossiers, or long primary documents into large-context LLMs.
+- **Settings-First Option**:
+  - Registered option `presshub_ai_coauthor_max_source_chars`.
+  - Storage helper `PressHub_AI_Settings_Storage::get_coauthor_max_source_chars()` defaults to `200000` (200,000 characters).
+  - Sanitizer `PressHub_AI_Settings_Storage::sanitize_coauthor_max_source_chars()` clamps inputs to safe bounds (1,000 to 1,000,000 characters).
+  - Configurable in WordPress Admin under `PressHub AI → Settings → AI Co-Author & Editorial Review → Co-Author Story Drafting` (`#coauthor`).
+- **Enforcement & Localization**:
+  - `PressHub_AI_Ajax_Handlers::generate_draft()` validates source text against `get_coauthor_max_source_chars()`. If exceeded, it halts immediately with a localized error string formatted with `number_format_i18n()` displaying the active limit.
+  - `PressHub_AI_Metaboxes::render_metabox()` renders `maxlength` on `#presshub_ai_source_material` aligned with the active configured limit.
+
 ---
 
 ## 5. Cron Schedules & Timers

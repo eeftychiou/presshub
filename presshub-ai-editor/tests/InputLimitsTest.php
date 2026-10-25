@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/wp-action-wrapper.php';
+require_once __DIR__ . '/../includes/class-settings-storage.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 require_once __DIR__ . '/../includes/class-ajax-handlers.php';
 
@@ -13,15 +14,45 @@ class InputLimitsTest
     public static function run(): void {
         $failures = [];
 
-        // --- Case 1: oversized sources are rejected ---
+        // --- Case 1a: oversized sources rejected with default 200,000 limit ---
         self::reset();
-        $_POST = [ 'sources' => str_repeat( 'a', 20001 ), 'instructions' => 'short' ];
+        $_POST = [ 'sources' => str_repeat( 'a', 200001 ), 'instructions' => 'short' ];
         $msg = self::expect_json_error( function () {
             $h = new PressHub_AI_Ajax_Handlers();
             $h->generate_draft();
         } );
-        if ( false === strpos( $msg, '20,000' ) ) {
-            $failures[] = "Oversized sources not rejected with 20,000 limit. Got: {$msg}";
+        if ( false === strpos( $msg, '200,000' ) ) {
+            $failures[] = "Oversized sources not rejected with 200,000 default limit. Got: {$msg}";
+        }
+
+        // --- Case 1b: custom configured limit (e.g. 50,000) is enforced ---
+        self::reset();
+        update_option( 'presshub_ai_coauthor_max_source_chars', 50000 );
+        $_POST = [ 'sources' => str_repeat( 'a', 50001 ), 'instructions' => 'short' ];
+        $msg_custom = self::expect_json_error( function () {
+            $h = new PressHub_AI_Ajax_Handlers();
+            $h->generate_draft();
+        } );
+        if ( false === strpos( $msg_custom, '50,000' ) ) {
+            $failures[] = "Oversized sources not rejected with custom 50,000 limit. Got: {$msg_custom}";
+        }
+        delete_option( 'presshub_ai_coauthor_max_source_chars' );
+
+        // --- Case 1c: Settings storage helpers for coauthor_max_source_chars ---
+        if ( 200000 !== PressHub_AI_Settings_Storage::get_coauthor_max_source_chars() ) {
+            $failures[] = 'get_coauthor_max_source_chars() default should be 200000';
+        }
+        if ( 50000 !== PressHub_AI_Settings_Storage::sanitize_coauthor_max_source_chars( 50000 ) ) {
+            $failures[] = 'sanitize_coauthor_max_source_chars(50000) failed';
+        }
+        if ( 200000 !== PressHub_AI_Settings_Storage::sanitize_coauthor_max_source_chars( 0 ) ) {
+            $failures[] = 'sanitize_coauthor_max_source_chars(0) should default to 200000';
+        }
+        if ( 1000 !== PressHub_AI_Settings_Storage::sanitize_coauthor_max_source_chars( 500 ) ) {
+            $failures[] = 'sanitize_coauthor_max_source_chars(500) should clamp to 1000';
+        }
+        if ( 1000000 !== PressHub_AI_Settings_Storage::sanitize_coauthor_max_source_chars( 2000000 ) ) {
+            $failures[] = 'sanitize_coauthor_max_source_chars(2000000) should clamp to 1000000';
         }
 
         // --- Case 2: oversized instructions are rejected ---

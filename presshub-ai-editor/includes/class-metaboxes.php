@@ -45,7 +45,8 @@ class PressHub_AI_Metaboxes {
             <label for="presshub-ai-files"><?php echo esc_html__( 'Attach research files (PDF, DOCX, MP3, MP4, WAV, M4A)', 'presshub-ai-editor' ); ?></label>
             <input type="file" id="presshub-ai-files" multiple accept=".pdf,.docx,.mp3,.mp4,.wav,.m4a" style="margin-bottom: 10px; display: block;" />
             <label for="presshub-ai-sources"><?php echo esc_html__( 'Or paste URLs / notes', 'presshub-ai-editor' ); ?></label>
-            <textarea id="presshub-ai-sources" rows="4" maxlength="20000" style="width:100%;" placeholder="<?php echo esc_attr__( 'Paste notes or URLs here...', 'presshub-ai-editor' ); ?>"></textarea>
+            <?php $max_source_chars = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_coauthor_max_source_chars() : 200000; ?>
+            <textarea id="presshub-ai-sources" rows="4" maxlength="<?php echo esc_attr( (string) $max_source_chars ); ?>" style="width:100%;" placeholder="<?php echo esc_attr__( 'Paste notes or URLs here...', 'presshub-ai-editor' ); ?>"></textarea>
 
             <h3><label for="presshub-ai-instructions"><?php echo esc_html__( 'Journalist Instructions', 'presshub-ai-editor' ); ?></label></h3>
             <p class="description"><?php echo esc_html__( 'What should the AI focus on in this draft?', 'presshub-ai-editor' ); ?></p>

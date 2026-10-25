@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.5.7-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.5.8-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-82%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -79,7 +79,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - Interactive testing studio allows editors to audition 1-host and 2-host audio synthesis with immediate in-browser audio playback, execution metrics (duration ms, byte size), and download capabilities before publishing. Accessible directly from the Daily Briefing Hub Audio Synthesis Stage Card.
 
 ### 3. ✍️ In-Editor Editorial Co-Pilot
-- **AI Draft Generation**: Accelerates content creation by synthesizing comprehensive drafts from raw source URLs, interview transcripts, or bullet notes.
+- **AI Draft Generation & Large-Context Ingestion**: Accelerates content creation by synthesizing comprehensive drafts from raw source URLs, interview transcripts, or bullet notes. Supported by a configurable Settings-First source character cap (`presshub_ai_coauthor_max_source_chars`, default: 200,000 characters, up to 1,000,000 characters), enabling long investigative dossiers, books, or multi-document transcripts to be processed without artificial limits.
 - **4-Key Editorial Scorecard & Legal Exposure Assessment**: Evaluates drafts using a structured 4-key rubric: overall publication readiness score (0–100), legal exposure rating badge (`Low`, `Medium`, or `High`), 2–3 sentence editorial feedback, and targeted legal concern alerts highlighting potential defamation or unverified claims.
 - **Block-Level Gutenberg Editing**: Modifies individual Gutenberg block attributes (`attributes.content` / `attributes.text`) without resetting document state, supporting existing article revisions.
 

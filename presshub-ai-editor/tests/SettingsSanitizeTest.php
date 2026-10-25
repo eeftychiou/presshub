@@ -309,6 +309,9 @@ class SettingsSanitizeTest
         if ( self::sanitize( $cbs, 'presshub_ai_copilot_max_tokens', '15000' ) !== 15000 ) {
             $failures[] = "copilot max tokens 15000 should pass through.";
         }
+        if ( self::sanitize( $cbs, 'presshub_ai_coauthor_max_source_chars', '180000' ) !== 180000 ) {
+            $failures[] = "coauthor max source chars 180000 should pass through.";
+        }
 
         // --- Case 22: Issue #90 — podcast dialogue style sanitizer ---
         if ( self::sanitize( $cbs, 'presshub_ai_briefing_podcast_style', 'default_greek_chat' ) !== 'default_greek_chat' ) {

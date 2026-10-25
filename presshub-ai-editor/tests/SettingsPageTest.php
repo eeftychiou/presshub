@@ -258,6 +258,7 @@ class SettingsPageTest
             'presshub_ai_coauthor_temperature',
             'presshub_ai_coauthor_max_tokens',
             'presshub_ai_coauthor_timeout',
+            'presshub_ai_coauthor_max_source_chars',
             'presshub_ai_copilot_provider',
             'presshub_ai_copilot_model',
             'presshub_ai_copilot_temperature',

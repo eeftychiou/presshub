@@ -617,6 +617,13 @@ When UI changes are involved, perform visual inspection in the local testing env
    - **Try/Catch Enclosure**: Both morning and noon briefing cron callbacks in `presshub-ai-editor.php` must wrap audio podcast synthesis in `try / catch (\Throwable $t)` blocks and log exceptions to `PressHub_AI_Logger::error()` so that errors during synthesis never crash the cron runner.
    - **Dynamic UI Mount**: In `assets/briefing-admin.js`, if the audio player DOM element was not present on page load, AJAX synthesis completion dynamically mounts the player and hides the empty card text without requiring a page reload.
 
+8. **AI Co-Author & Editorial Review Source Material Limits**:
+   - **Settings-First Option**: `presshub_ai_coauthor_max_source_chars` controls the maximum permitted character length for source material pasted into the AI Co-Author story drafting tool.
+   - **Storage Accessor & Clamping**: `PressHub_AI_Settings_Storage::get_coauthor_max_source_chars()` returns an integer default of `200000` (200,000 characters), sanitized via `sanitize_coauthor_max_source_chars()` within safe bounds of 1,000 to 1,000,000 characters.
+   - **Admin Settings UI**: Rendered in the settings pane under `PressHub AI → Settings → AI Co-Author & Editorial Review → Co-Author Story Drafting` (`#coauthor`).
+   - **Dynamic Server Validation & Localized Feedback**: Enforced in `PressHub_AI_Ajax_Handlers::generate_draft()`. If exceeded, execution halts immediately with a localized error string formatted using `number_format_i18n()` indicating the active character limit.
+   - **Client-Side Attribute Alignment**: In `PressHub_AI_Metaboxes::render_metabox()`, the `#presshub_ai_source_material` textarea dynamically sets its `maxlength` attribute based on the active storage option.
+
 ---
 
 ## 📋 GitHub Issue Tracking Protocol & Best Practices

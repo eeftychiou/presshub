@@ -160,9 +160,10 @@ class PressHub_AI_Ajax_Handlers {
         $preset_slug = sanitize_text_field( wp_unslash( $_POST['instruction_preset_id'] ?? '' ) );
 
         // Input length limits: guard the AI endpoints against oversized
-        // payloads that would waste tokens / cost money.
-        if ( strlen( $sources ) > 20000 ) {
-            wp_send_json_error( __( 'Sources exceed the 20,000 character limit.', 'presshub-ai-editor' ) );
+        // payloads that would waste tokens / cost money (Settings-First).
+        $max_source_chars = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_coauthor_max_source_chars() : 200000;
+        if ( strlen( $sources ) > $max_source_chars ) {
+            wp_send_json_error( sprintf( __( 'Sources exceed the %s character limit.', 'presshub-ai-editor' ), number_format_i18n( $max_source_chars ) ) );
         }
         if ( strlen( $instructions ) > 5000 ) {
             wp_send_json_error( __( 'Instructions exceed the 5,000 character limit.', 'presshub-ai-editor' ) );
@@ -1699,6 +1700,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_coauthor_temperature'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_temperature' ],
                 'presshub_ai_coauthor_max_tokens'         => [ 'PressHub_AI_Settings_Storage', 'sanitize_max_tokens' ],
                 'presshub_ai_coauthor_timeout'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_timeout' ],
+                'presshub_ai_coauthor_max_source_chars'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_coauthor_max_source_chars' ],
                 'presshub_ai_qa_enabled'                  => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
                 'presshub_ai_qa_include_briefings'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_checkbox' ],
                 'presshub_ai_qa_min_score'                => [ 'PressHub_AI_Settings_Storage', 'sanitize_qa_min_score' ],

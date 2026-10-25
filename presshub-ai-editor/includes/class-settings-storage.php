@@ -463,6 +463,10 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
             'type'              => 'integer',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_coauthor_max_source_chars', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_coauthor_max_source_chars' ],
+            'type'              => 'integer',
+        ] );
 
         // Automated AI Editorial QA Review System (v2.3.9)
         register_setting( 'presshub_ai_options', 'presshub_ai_qa_enabled', [
@@ -2008,6 +2012,32 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Settings-First getter for AI Co-Author Maximum Source Material Characters.
+     * Returns clamped value between 1,000 and 1,000,000. Defaults to 200,000.
+     *
+     * @return int Clamped character limit.
+     */
+    public static function get_coauthor_max_source_chars(): int {
+        $value = (int) get_option( 'presshub_ai_coauthor_max_source_chars', 200000 );
+        return ( $value >= 1000 && $value <= 1000000 ) ? $value : 200000;
+    }
+
+    /**
+     * Sanitize AI Co-Author Maximum Source Material Characters.
+     * Clamps between 1,000 and 1,000,000 characters. Default 200,000.
+     *
+     * @param mixed $value Raw input value.
+     * @return int Sanitized character limit (1,000 - 1,000,000).
+     */
+    public static function sanitize_coauthor_max_source_chars( $value ): int {
+        $val = (int) $value;
+        if ( $val <= 0 ) {
+            return 200000;
+        }
+        return max( 1000, min( 1000000, $val ) );
+    }
+
+    /**
      * Settings-First getter for AI Copilot Maximum Output Tokens.
      * Returns 0 if unset or < 64 (meaning no module override, use provider default).
      */
@@ -3010,8 +3040,9 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_coauthor_model'       => [ __CLASS__, 'sanitize_model_string' ],
             'presshub_ai_coauthor_temperature' => [ __CLASS__, 'sanitize_temperature' ],
             'presshub_ai_coauthor_max_tokens'  => [ __CLASS__, 'sanitize_max_tokens' ],
-            'presshub_ai_coauthor_timeout'     => [ __CLASS__, 'sanitize_timeout' ],
-            'presshub_ai_fetch_urls'           => [ __CLASS__, 'sanitize_fetch_urls' ],
+            'presshub_ai_coauthor_timeout'          => [ __CLASS__, 'sanitize_timeout' ],
+            'presshub_ai_coauthor_max_source_chars' => [ __CLASS__, 'sanitize_coauthor_max_source_chars' ],
+            'presshub_ai_fetch_urls'                => [ __CLASS__, 'sanitize_fetch_urls' ],
             'presshub_ai_qa_enabled'           => [ __CLASS__, 'sanitize_checkbox' ],
             'presshub_ai_qa_include_briefings' => [ __CLASS__, 'sanitize_checkbox' ],
             'presshub_ai_qa_min_score'         => [ __CLASS__, 'sanitize_qa_min_score' ],
