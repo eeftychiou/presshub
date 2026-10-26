@@ -330,6 +330,20 @@ class SettingsSanitizeTest
             $failures[] = "empty style should fall back to 'default_greek_chat'.";
         }
 
+        // --- Case 24: Social metadata boolean sanitization ---
+        if ( self::sanitize( $cbs, 'presshub_ai_social_meta_enabled', '1' ) !== 1 ) {
+            $failures[] = "presshub_ai_social_meta_enabled '1' should sanitize to 1.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_social_meta_enabled', '0' ) !== 0 ) {
+            $failures[] = "presshub_ai_social_meta_enabled '0' should sanitize to 0.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_social_meta_all_posts', '1' ) !== 1 ) {
+            $failures[] = "presshub_ai_social_meta_all_posts '1' should sanitize to 1.";
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_social_meta_all_posts', '' ) !== 0 ) {
+            $failures[] = "presshub_ai_social_meta_all_posts '' should sanitize to 0.";
+        }
+
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
             foreach ( $failures as $f ) {

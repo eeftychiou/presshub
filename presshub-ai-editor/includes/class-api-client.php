@@ -1968,9 +1968,9 @@ class PressHub_AI_API_Client {
                         $clean_turn_text = preg_replace( '/^\[?(?:Presenter\s*\d+|Speaker\s*\d+|Ομιλητής\s*\d+|Παρουσιαστής\s*\d+|' . preg_quote( $matched_speaker, '/' ) . ')\s*\]?:\s*/iu', '', $turn_text );
                         $clean_turn_text = trim( $clean_turn_text );
 
-                        // Retain canonical speaker label in the text part so Gemini's
-                        // multiSpeakerVoiceConfig can reliably bind each turn to its designated voice.
-                        $part = [ 'text' => $matched_speaker . ': ' . $clean_turn_text ];
+                        // Clean turn text without inline speaker prefix so the TTS model does not vocalize
+                        // speaker labels ("Presenter 1" / "Presenter 2") aloud in the generated audio.
+                        $part = [ 'text' => $clean_turn_text ];
                         if ( 'system_instruction' !== $payload_mode ) {
                             $part['speech_metadata'] = [
                                 'speaker' => $matched_speaker,

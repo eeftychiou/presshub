@@ -43,8 +43,41 @@ class PressHub_AI_Social_Meta {
             return false;
         }
 
+        if ( ! function_exists( 'get_post_meta' ) ) {
+            return false;
+        }
+
+        // 1. Briefing or podcast type
         $type = get_post_meta( $post->ID, '_presshub_briefing_type', true );
-        return ! empty( $type );
+        if ( ! empty( $type ) ) {
+            return true;
+        }
+
+        // 2. AI Co-Author story draft
+        $coauthored = get_post_meta( $post->ID, '_presshub_ai_coauthored', true );
+        if ( ! empty( $coauthored ) ) {
+            return true;
+        }
+
+        // 3. AI Editorial Scorecard review
+        $scorecard = get_post_meta( $post->ID, '_presshub_ai_scorecard', true );
+        if ( ! empty( $scorecard ) ) {
+            return true;
+        }
+
+        // 4. AI Featured Image prompt
+        $img_prompt = get_post_meta( $post->ID, '_presshub_ai_image_prompt', true );
+        if ( ! empty( $img_prompt ) ) {
+            return true;
+        }
+
+        // 5. Podcast dialogue script
+        $podcast_script = get_post_meta( $post->ID, '_presshub_podcast_script', true );
+        if ( ! empty( $podcast_script ) ) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -52,6 +85,11 @@ class PressHub_AI_Social_Meta {
      */
     public function render_social_meta_tags(): void {
         if ( function_exists( 'is_singular' ) && ! is_singular( 'post' ) && function_exists( 'is_single' ) && ! is_single() ) {
+            return;
+        }
+
+        // Master toggle check (Settings-First)
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) && ! PressHub_AI_Settings_Storage::get_social_meta_enabled() ) {
             return;
         }
 
@@ -67,7 +105,8 @@ class PressHub_AI_Social_Meta {
 
         // Only emit if this is a PressHub post or if general post meta is requested
         $is_presshub = $this->is_presshub_post( $post );
-        if ( ! $is_presshub && ! apply_filters( 'presshub_ai_social_meta_all_posts', false ) ) {
+        $all_posts   = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_social_meta_all_posts();
+        if ( ! $is_presshub && ! $all_posts && ! apply_filters( 'presshub_ai_social_meta_all_posts', false ) ) {
             return;
         }
 
@@ -203,7 +242,12 @@ class PressHub_AI_Social_Meta {
             }
         }
 
-        // 2. Pool fallback if post lacks a featured image
+        // 2. First image inside post content
+        if ( ! empty( $post->post_content ) && preg_match( '/<img[^>]+src=["\']([^"\']+)["\']/i', $post->post_content, $img_m ) ) {
+            return function_exists( 'esc_url_raw' ) ? esc_url_raw( $img_m[1] ) : $img_m[1];
+        }
+
+        // 3. Pool fallback if post lacks a featured image
         if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
             $edition   = get_post_meta( $post->ID, '_presshub_briefing_edition', true ) ?: 'morning';
             $image_ids = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( $edition );
@@ -234,7 +278,14 @@ class PressHub_AI_Social_Meta {
         if ( ! $post && ! empty( $GLOBALS['post'] ) ) {
             $post = $GLOBALS['post'];
         }
-        if ( ! $this->is_presshub_post( $post ) ) {
+        // Master toggle check (Settings-First)
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) && ! PressHub_AI_Settings_Storage::get_social_meta_enabled() ) {
+            return $parts;
+        }
+
+        $is_presshub = $this->is_presshub_post( $post );
+        $all_posts   = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_social_meta_all_posts();
+        if ( ! $is_presshub && ! $all_posts && ! apply_filters( 'presshub_ai_social_meta_all_posts', false ) ) {
             return $parts;
         }
 

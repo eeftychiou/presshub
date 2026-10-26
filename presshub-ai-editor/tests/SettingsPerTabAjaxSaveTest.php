@@ -433,6 +433,8 @@ class SettingsPerTabAjaxSaveTest
             'presshub_ai_log_level'                 => 'DEBUG',
             'presshub_ai_debug_prompts'             => '1',
             'presshub_ai_log_tts_payloads'          => '1',
+            'presshub_ai_social_meta_enabled'       => '1',
+            'presshub_ai_social_meta_all_posts'     => '1',
             'presshub_ai_gcloud_project_id'         => 'presshub-test-proj',
             'presshub_ai_imagen_region'             => 'europe-west1',
         ];
@@ -462,6 +464,12 @@ class SettingsPerTabAjaxSaveTest
         if ( (int) get_option( 'presshub_ai_log_tts_payloads' ) !== 1 ) {
             $failures[] = 'presshub_ai_log_tts_payloads not saved correctly in advanced section.';
         }
+        if ( (int) get_option( 'presshub_ai_social_meta_enabled' ) !== 1 ) {
+            $failures[] = 'presshub_ai_social_meta_enabled not saved correctly in advanced section.';
+        }
+        if ( (int) get_option( 'presshub_ai_social_meta_all_posts' ) !== 1 ) {
+            $failures[] = 'presshub_ai_social_meta_all_posts not saved correctly in advanced section.';
+        }
         if ( get_option( 'presshub_ai_gcloud_project_id' ) !== 'presshub-test-proj' ) {
             $failures[] = 'presshub_ai_gcloud_project_id not saved correctly.';
         }
@@ -473,6 +481,8 @@ class SettingsPerTabAjaxSaveTest
         $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] = 1;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_log_tts_payloads'] = 1;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_rate_limit_enabled'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_social_meta_enabled'] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_social_meta_all_posts'] = 1;
 
         // Save advanced tab with all checkboxes unchecked
         $_POST = [
@@ -493,6 +503,12 @@ class SettingsPerTabAjaxSaveTest
         }
         if ( (int) get_option( 'presshub_ai_rate_limit_enabled' ) !== 0 ) {
             $failures[] = 'Unchecked checkbox presshub_ai_rate_limit_enabled in advanced tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_rate_limit_enabled' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_social_meta_enabled' ) !== 0 ) {
+            $failures[] = 'Unchecked checkbox presshub_ai_social_meta_enabled in advanced tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_social_meta_enabled' ), true );
+        }
+        if ( (int) get_option( 'presshub_ai_social_meta_all_posts' ) !== 0 ) {
+            $failures[] = 'Unchecked checkbox presshub_ai_social_meta_all_posts in advanced tab was not set to 0; got: ' . var_export( get_option( 'presshub_ai_social_meta_all_posts' ), true );
         }
 
         // -------------------------------------------------------------

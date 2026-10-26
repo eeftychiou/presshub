@@ -461,7 +461,7 @@ The automated AI Editorial Review system (`PressHub_AI_QA_Reviewer`) evaluates d
 5. **Multi-Speaker Voice Mapping & Deterministic Binding**:
    - Presenter 1 (`presshub_ai_briefing_voice_female`) and Presenter 2 (`presshub_ai_briefing_voice_male`) are mapped to canonical voice personas (e.g. Charon, Kore) inside `speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs`.
    - Each transcript turn is tagged with `speech_metadata.speaker` (`Presenter 1` or `Presenter 2`) and `speech_metadata.style`.
-   - **Canonical Speaker Prefix in Text**: Under Gemini's multi-speaker REST specification, the model binds voices to text based on the speaker label prefix in the prompt text. The request builder in `PressHub_AI_API_Client::build_gemini_tts_request_body()` strictly retains the canonical speaker label in `contents[0].parts[].text` (`Presenter 1: <text>`, `Presenter 2: <text>`). This guarantees deterministic voice-to-speaker binding across all stitched topic chunks and prevents voices from alternating randomly.
+   - **Zero-Prefix Verbatim Audio Invariant**: Speaker tags (e.g. `Presenter 1:`, `Presenter 2:`) are cleanly stripped from `contents[0].parts[].text` so the neural TTS engine does not vocalize speaker labels aloud in the audio broadcast. Each turn is attributed to its voice persona via `speech_metadata.speaker` (`Presenter 1` or `Presenter 2`), which matches `speakerVoiceConfigs`.
 6. **RIFF WAV Header Handling**:
    - Gemini 3.8 TTS responses return complete WAV files with RIFF headers; audio decoding checks for the RIFF signature before applying PCM-to-WAV wrapping to prevent audio stream corruption.
 7. **Interactive Testing Studio & Live JSON Inspector**:
@@ -623,6 +623,12 @@ When UI changes are involved, perform visual inspection in the local testing env
    - **Admin Settings UI**: Rendered in the settings pane under `PressHub AI → Settings → AI Co-Author & Editorial Review → Co-Author Story Drafting` (`#coauthor`).
    - **Dynamic Server Validation & Localized Feedback**: Enforced in `PressHub_AI_Ajax_Handlers::generate_draft()`. If exceeded, execution halts immediately with a localized error string formatted using `number_format_i18n()` indicating the active character limit.
    - **Client-Side Attribute Alignment**: In `PressHub_AI_Metaboxes::render_metabox()`, the `#presshub_ai_source_material` textarea dynamically sets its `maxlength` attribute based on the active storage option.
+
+9. **Social Metadata & Document Title Optimization**:
+   - **Settings-First Options**: `presshub_ai_social_meta_enabled` (master toggle, default: 1) and `presshub_ai_social_meta_all_posts` (scope toggle, default: 1) under `PressHub AI → Settings → Advanced & System → Social & OpenGraph Metadata`.
+   - **Universal Post Recognition**: `PressHub_AI_Social_Meta::is_presshub_post()` validates briefing posts, podcasts, AI Co-Authored posts (`_presshub_ai_coauthored`), editorial scorecards (`_presshub_ai_scorecard`), and AI Featured Image prompts (`_presshub_ai_image_prompt`).
+   - **Multi-Tier Image Fallback**: Resolves social card images via featured image thumbnail -> first `<img>` inside post content -> edition pool -> site icon.
+   - **Title Truncation Invariant**: `optimize_document_title_parts()` caps combined document title + site name to <= 60 characters with ellipsis (`…`) across all active single posts.
 
 ---
 

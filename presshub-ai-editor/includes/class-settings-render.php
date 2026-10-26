@@ -736,6 +736,9 @@ class PressHub_AI_Settings_Render {
                     <?php $this->render_section_with_fields( 'presshub_ai_logging', __( 'Diagnostic Logging Configuration', 'presshub-ai-editor' ) ); ?>
 
                     <hr style="margin: 25px 0;">
+                    <?php $this->render_section_with_fields( 'presshub_ai_social', __( 'Social & OpenGraph Metadata (Twitter/X & Facebook Cards)', 'presshub-ai-editor' ) ); ?>
+
+                    <hr style="margin: 25px 0;">
                     <h2><?php echo __( 'Connection Testing & Verification', 'presshub-ai-editor' ); ?></h2>
                     <p><?php echo __( 'Verify connectivity with any configured provider. Each test uses its own rate-limit budget and logs activity in the Token Logger dashboard.', 'presshub-ai-editor' ); ?></p>
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -1489,6 +1492,10 @@ class PressHub_AI_Settings_Render {
 
     public function render_logging_section() {
         echo '<p>' . __( 'Configure diagnostic logging verbosity, prompt/response exchange recording, and speech synthesis payload captures. All logs are stored under <code>wp-content/uploads/presshub-ai/</code> and can be reviewed or downloaded in the Diagnostic Inspector below.', 'presshub-ai-editor' ) . '</p>';
+    }
+
+    public function render_social_section() {
+        echo '<p>' . esc_html__( 'Controls automatic OpenGraph (Facebook, LinkedIn, Discord), Twitter Cards (X), meta description tags, and title length optimization (<= 60 chars) to prevent broken cards and truncated snippets on social media.', 'presshub-ai-editor' ) . '</p>';
     }
 
     // ------------------------------------------------------------------
@@ -2324,6 +2331,36 @@ class PressHub_AI_Settings_Render {
         </label>
         <p class="description">
             <?php echo esc_html__( 'Use only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_social_meta_enabled_field() {
+        $option = 'presshub_ai_social_meta_enabled';
+        $value  = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_social_meta_enabled() : true;
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <?php echo esc_html__( 'Output OpenGraph, Twitter Card, and meta description tags in wp_head.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description">
+            <?php echo esc_html__( 'Generates og:title, og:description, og:image, og:site_name, twitter:card (summary_large_image), twitter:title, twitter:description, and twitter:image.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_social_meta_all_posts_field() {
+        $option = 'presshub_ai_social_meta_all_posts';
+        $value  = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_social_meta_all_posts() : true;
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label>
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <?php echo esc_html__( 'Apply to all published single posts (Recommended if you do not use Yoast or RankMath).', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description">
+            <?php echo esc_html__( 'When checked, social metadata and title length optimization (<= 60 chars) are output on all single posts. When unchecked, metadata is only emitted for PressHub posts (Daily Briefings, Podcasts, and AI Co-Authored articles).', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

@@ -206,6 +206,16 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_boolean' ],
             'type'              => 'boolean',
         ] );
+
+        // Settings-First: Social & OpenGraph metadata master toggle and scope.
+        register_setting( 'presshub_ai_options', 'presshub_ai_social_meta_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_boolean' ],
+            'type'              => 'boolean',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_social_meta_all_posts', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_boolean' ],
+            'type'              => 'boolean',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_sources', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_sources' ],
             'type'              => 'array',
@@ -615,6 +625,10 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $render, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_debug_prompts', __( 'Log AI Prompts & Responses', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Log TTS Payload Details', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_logging' );
+
+        add_settings_section( 'presshub_ai_social', __( 'Social & OpenGraph Metadata', 'presshub-ai-editor' ), [ $render, 'render_social_section' ], 'presshub-ai' );
+        add_settings_field( 'presshub_ai_social_meta_enabled', __( 'Enable Social Metadata (OpenGraph & Twitter Cards)', 'presshub-ai-editor' ), [ $render, 'render_social_meta_enabled_field' ], 'presshub-ai', 'presshub_ai_social' );
+        add_settings_field( 'presshub_ai_social_meta_all_posts', __( 'Enable for All Published Posts', 'presshub-ai-editor' ), [ $render, 'render_social_meta_all_posts_field' ], 'presshub-ai', 'presshub_ai_social' );
 
         add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $render, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_engine', __( 'Voice Synthesis Engine', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_engine_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -2023,6 +2037,28 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Settings-First getter for OpenGraph & Twitter Cards social metadata master toggle.
+     * Defaults to true (1).
+     *
+     * @return bool
+     */
+    public static function get_social_meta_enabled(): bool {
+        $val = get_option( 'presshub_ai_social_meta_enabled', '1' );
+        return '1' === (string) $val || true === $val || 1 === $val;
+    }
+
+    /**
+     * Settings-First getter for social metadata scope (all posts vs PressHub posts only).
+     * Defaults to true (1).
+     *
+     * @return bool
+     */
+    public static function get_social_meta_all_posts(): bool {
+        $val = get_option( 'presshub_ai_social_meta_all_posts', '1' );
+        return '1' === (string) $val || true === $val || 1 === $val;
+    }
+
+    /**
      * Sanitize AI Co-Author Maximum Source Material Characters.
      * Clamps between 1,000 and 1,000,000 characters. Default 200,000.
      *
@@ -3159,6 +3195,8 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_log_level'                   => [ __CLASS__, 'sanitize_log_level' ],
             'presshub_ai_debug_prompts'               => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_log_tts_payloads'             => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_meta_enabled'          => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_meta_all_posts'        => [ __CLASS__, 'sanitize_boolean' ],
         ];
 
         $general_map = [
@@ -3223,6 +3261,9 @@ class PressHub_AI_Settings_Storage {
                 return $copilot_map;
             case 'advanced':
             case 'logging':
+            case 'social':
+            case 'social_meta':
+            case 'opengraph':
                 return $advanced_map;
             case 'general':
                 return $general_map;

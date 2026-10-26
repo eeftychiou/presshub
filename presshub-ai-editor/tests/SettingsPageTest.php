@@ -32,7 +32,7 @@ class SettingsPageTest
         $settings->register_settings();
         $sections    = $GLOBALS['SECTIONS']['presshub-ai'] ?? [];
         $section_ids = array_column( $sections, 'id' );
-        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_logging', 'presshub_ai_briefing', 'presshub_ai_github', 'presshub_ai_images' ];
+        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_logging', 'presshub_ai_briefing', 'presshub_ai_github', 'presshub_ai_social', 'presshub_ai_images' ];
         if ( $section_ids !== $expected ) {
             $failures[] = 'Sections should be registered in order ' . implode( ', ', $expected ) . '; got: ' . implode( ', ', $section_ids );
         }
@@ -101,6 +101,13 @@ class SettingsPageTest
         foreach ( [ 'presshub_ai_log_level', 'presshub_ai_debug_prompts', 'presshub_ai_log_tts_payloads' ] as $field ) {
             if ( ! in_array( $field, $logging, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_logging; got: " . implode( ', ', $logging );
+            }
+        }
+
+        $social_fields = array_column( $fields['presshub_ai_social'] ?? [], 'id' );
+        foreach ( [ 'presshub_ai_social_meta_enabled', 'presshub_ai_social_meta_all_posts' ] as $field ) {
+            if ( ! in_array( $field, $social_fields, true ) ) {
+                $failures[] = "{$field} should be registered in presshub_ai_social; got: " . implode( ', ', $social_fields );
             }
         }
 
@@ -174,6 +181,8 @@ class SettingsPageTest
             'presshub_ai_log_level',
             // Issue #80 — Settings-First: granular TTS payload debug toggle.
             'presshub_ai_log_tts_payloads',
+            'presshub_ai_social_meta_enabled',
+            'presshub_ai_social_meta_all_posts',
             'presshub_ai_remove_api_key',
             'presshub_ai_remove_google_cloud_api_key',
             'presshub_ai_remove_github_token',
@@ -335,6 +344,12 @@ class SettingsPageTest
         }
         if ( false === strpos( $html, 'name="presshub_ai_log_tts_payloads"' ) ) {
             $failures[] = 'render_settings_page() should output presshub_ai_log_tts_payloads input.';
+        }
+        if ( false === strpos( $html, 'name="presshub_ai_social_meta_enabled"' ) ) {
+            $failures[] = 'render_settings_page() should output presshub_ai_social_meta_enabled input.';
+        }
+        if ( false === strpos( $html, 'name="presshub_ai_social_meta_all_posts"' ) ) {
+            $failures[] = 'render_settings_page() should output presshub_ai_social_meta_all_posts input.';
         }
         if ( false === strpos( $html, 'name="presshub_ai_briefing_voice_pitch"' ) ) {
             $failures[] = 'render_settings_page() should output presshub_ai_briefing_voice_pitch input.';

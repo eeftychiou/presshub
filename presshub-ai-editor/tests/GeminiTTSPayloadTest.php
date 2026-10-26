@@ -186,12 +186,15 @@ class GeminiTTSPayloadTest
                 $failures[] = 'Turn 1 speaker should be Presenter 2.';
             }
 
-            // CRITICAL: Gemini multiSpeakerVoiceConfig requires inline speaker label in text part!
-            if ( 0 !== strpos( $parts[0]['text'], 'Presenter 1: ' ) ) {
-                $failures[] = 'Turn 0 text must retain canonical prefix "Presenter 1: "; got: ' . $parts[0]['text'];
+            // Text part must NOT include inline speaker prefix so TTS engine doesn't read it aloud
+            if ( 0 === strpos( $parts[0]['text'], 'Presenter 1:' ) || 0 === strpos( $parts[0]['text'], 'Presenter 1' ) ) {
+                $failures[] = 'Turn 0 text must strip speaker prefix to avoid vocalization; got: ' . $parts[0]['text'];
             }
-            if ( 0 !== strpos( $parts[1]['text'], 'Presenter 2: ' ) ) {
-                $failures[] = 'Turn 1 text must retain canonical prefix "Presenter 2: "; got: ' . $parts[1]['text'];
+            if ( 0 === strpos( $parts[1]['text'], 'Presenter 2:' ) || 0 === strpos( $parts[1]['text'], 'Presenter 2' ) ) {
+                $failures[] = 'Turn 1 text must strip speaker prefix to avoid vocalization; got: ' . $parts[1]['text'];
+            }
+            if ( false === strpos( $parts[0]['text'], 'Καλημέρα σας από το στούντιο' ) ) {
+                $failures[] = 'Turn 0 text must contain clean speech transcript; got: ' . $parts[0]['text'];
             }
 
             // Check speed and pitch composed into style
@@ -233,11 +236,14 @@ class GeminiTTSPayloadTest
         if ( count( $greek_parts ) !== 2 ) {
             $failures[] = 'Greek dialogue turns count mismatch; expected 2, got: ' . count( $greek_parts );
         } else {
-            if ( 0 !== strpos( $greek_parts[0]['text'], 'Presenter 1: ' ) ) {
-                $failures[] = 'Greek turn 0 text should normalize to "Presenter 1: "; got: ' . ( $greek_parts[0]['text'] ?? '' );
+            if ( 0 === strpos( $greek_parts[0]['text'], 'Presenter 1' ) || 0 === strpos( $greek_parts[0]['text'], 'Ομιλητής' ) ) {
+                $failures[] = 'Greek turn 0 text must strip speaker prefix; got: ' . ( $greek_parts[0]['text'] ?? '' );
             }
-            if ( 0 !== strpos( $greek_parts[1]['text'], 'Presenter 2: ' ) ) {
-                $failures[] = 'Greek turn 1 text should normalize to "Presenter 2: "; got: ' . ( $greek_parts[1]['text'] ?? '' );
+            if ( 0 === strpos( $greek_parts[1]['text'], 'Presenter 2' ) || 0 === strpos( $greek_parts[1]['text'], 'Παρουσιαστής' ) ) {
+                $failures[] = 'Greek turn 1 text must strip speaker prefix; got: ' . ( $greek_parts[1]['text'] ?? '' );
+            }
+            if ( false === strpos( $greek_parts[0]['text'], 'Πρώτη είδηση' ) ) {
+                $failures[] = 'Greek turn 0 text must contain clean transcript; got: ' . ( $greek_parts[0]['text'] ?? '' );
             }
             if ( ( $greek_parts[0]['speech_metadata']['speaker'] ?? '' ) !== 'Presenter 1' ) {
                 $failures[] = 'Greek turn 0 speech_metadata.speaker mismatch; got: ' . ( $greek_parts[0]['speech_metadata']['speaker'] ?? '' );

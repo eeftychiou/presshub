@@ -228,6 +228,10 @@ class PressHub_AI_Ajax_Handlers {
             wp_send_json_error( $draft->get_error_message() );
         }
 
+        if ( ! empty( $post_id ) && $post_id > 0 && function_exists( 'update_post_meta' ) ) {
+            update_post_meta( $post_id, '_presshub_ai_coauthored', 1 );
+        }
+
         $this->record_rate_limit();
         wp_send_json_success( [ 'draft' => wp_kses_post( $draft ) ] );
     }
@@ -1892,6 +1896,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_qa_enabled',
                 'presshub_ai_qa_include_briefings',
                 'presshub_ai_qa_notify_editor',
+                'presshub_ai_social_meta_enabled',
+                'presshub_ai_social_meta_all_posts',
             ];
 
             foreach ( $options_map as $option => $sanitizer ) {

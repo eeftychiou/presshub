@@ -106,7 +106,7 @@ graph TD
   - **Official Gemini 3.8 TTS REST Standard (`structured` — Recommended)**:
     - Strictly conforms to Google's official Gemini 3.8 TTS REST documentation (`https://ai.google.dev/gemini-api/docs/generate-content/speech-generation#rest`).
     - Presenter voices are mapped in `speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs` (or `voiceConfig` for single speaker).
-    - **Deterministic Speaker Label Binding**: In accordance with the official Gemini multi-speaker REST specification, each dialogue turn in `contents[0].parts[].text` explicitly retains its canonical speaker label prefix (e.g. `Presenter 1: <text>`, `Presenter 2: <text>`). This binds each turn to its corresponding voice configuration in `speakerVoiceConfigs` across all topic chunks, eliminating dynamic/arbitrary voice assignment and preventing voices from alternating randomly.
+    - **Zero-Prefix Verbatim Audio Invariant**: Speaker tags (e.g. `Presenter 1:`, `Presenter 2:`) are cleanly stripped from `contents[0].parts[].text` so the neural TTS engine does not vocalize speaker labels aloud in the generated audio. Turn-level `speech_metadata.speaker` (`Presenter 1` or `Presenter 2`) explicitly tags each turn to map to `speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs`.
     - Delivery emotions, pacing/speed, and pitch tuning are passed via sustained turn-level `speech_metadata.style` composed via `PressHub_AI_API_Client::compose_tts_style_string()`.
     - Omits top-level `systemInstruction` (not part of the official Gemini 3.8 TTS REST schema).
     - In the Settings UI, the Gemini Speech System Instruction setting dynamically greys out with an informative notice badge explaining that Google controls tone, speed, and pitch directly via turn-level `speech_metadata.style`.
@@ -174,15 +174,25 @@ graph TD
   - The backend method `PressHub_AI_Audio_Synthesizer::regenerate_podcast_for_post()` re-synthesizes audio turns, stitches WAV/MP3 files, updates the media attachment and post content audio block, and saves updated stats in post meta without altering post IDs or losing editorial edits.
 
 ### 4.8 Social Metadata & OpenGraph Engine (`PressHub_AI_Social_Meta`)
+- **Settings-First Configuration**:
+  - `presshub_ai_social_meta_enabled`: Master toggle (default: 1) controlling whether OpenGraph, Twitter Cards, and description tags are output in `wp_head`.
+  - `presshub_ai_social_meta_all_posts`: Scope toggle (default: 1) enabling social meta tags and title optimization across all published single posts, or restricting exclusively to PressHub posts when unchecked.
+  - Managed via `PressHub_AI_Settings_Storage::get_social_meta_enabled()` and `get_social_meta_all_posts()`, rendered under `PressHub AI → Settings → Advanced & System → Social & OpenGraph Metadata`.
+- **Expanded Post Recognition**:
+  - In addition to daily briefings and podcasts (`_presshub_briefing_type`, `_presshub_podcast_script`), `is_presshub_post()` automatically recognizes AI Co-Authored posts (`_presshub_ai_coauthored`), editorial scorecards (`_presshub_ai_scorecard`), and AI Featured Image prompts (`_presshub_ai_image_prompt`).
 - **OpenGraph & Twitter Card Tags**:
   - Hooks `wp_head` at priority 5 to output complete social sharing metadata required by Facebook, X (Twitter), LinkedIn, Slack, and Discord (tested for opengraph.xyz compliance):
     - `og:site_name`, `og:type` (`article`), `og:title`, `og:url`, `og:description`, `og:image`, `og:image:secure_url`.
     - `description` standard HTML meta tag for Google search snippets.
     - `twitter:card` (`summary_large_image`), `twitter:title`, `twitter:description`, `twitter:image`.
+- **Multi-Tier Social Image Resolution**:
+  - 1. Featured image thumbnail (`has_post_thumbnail()`).
+  - 2. First inline `<img>` extracted from `post_content`.
+  - 3. Edition Featured Image Pool (`PressHub_AI_Settings_Storage::get_briefing_featured_image_ids()`).
+  - 4. Site icon fallback (`get_site_icon_url()`).
 - **Document Title Length Optimizer**:
   - Hooks `document_title_parts` at priority 20.
-  - Ensures the combined `<title>` (post title + site name) remains **<= 60 characters** to prevent search engine snippet truncation by Google.
-  - Formats streamlined mastheads for briefing posts (e.g. `"Πρωινό Podcast (16/10/2026) - PressHub"`).
+  - Ensures the combined `<title>` (post title + site name) remains **<= 60 characters** across briefing posts, podcast episodes, and AI Co-Authored articles to eliminate search engine snippet and social card truncation.
 
 ### 4.9 Capability & Role Access Gates
 - **Editor-and-Above Enclosure**:

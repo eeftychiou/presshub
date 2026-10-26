@@ -157,8 +157,90 @@ class SocialMetaTagsTest {
             $failures[] = 'optimize_document_title_parts() did not format streamlined noon text title; got: ' . $noon_opt['title'];
         }
 
+        // -------------------------------------------------------------
+        // 6. AI Co-Author & Editorial Review Post Recognition
+        // -------------------------------------------------------------
+        $coauthored_post = (object) [ 'ID' => 304, 'post_title' => 'Coauthored Article', 'post_content' => 'Sample content', 'post_excerpt' => '' ];
+        update_post_meta( 304, '_presshub_ai_coauthored', 1 );
+        if ( ! $social->is_presshub_post( $coauthored_post ) ) {
+            $failures[] = 'is_presshub_post() failed to recognize post with _presshub_ai_coauthored = 1';
+        }
+
+        $reviewed_post = (object) [ 'ID' => 305, 'post_title' => 'Reviewed Article', 'post_content' => 'Sample content', 'post_excerpt' => '' ];
+        update_post_meta( 305, '_presshub_ai_scorecard', [ 'score' => 88 ] );
+        if ( ! $social->is_presshub_post( $reviewed_post ) ) {
+            $failures[] = 'is_presshub_post() failed to recognize post with _presshub_ai_scorecard';
+        }
+
+        $image_prompt_post = (object) [ 'ID' => 306, 'post_title' => 'Image Studio Article', 'post_content' => 'Sample content', 'post_excerpt' => '' ];
+        update_post_meta( 306, '_presshub_ai_image_prompt', 'Editorial documentary photo' );
+        if ( ! $social->is_presshub_post( $image_prompt_post ) ) {
+            $failures[] = 'is_presshub_post() failed to recognize post with _presshub_ai_image_prompt';
+        }
+
+        // -------------------------------------------------------------
+        // 7. Image Extraction Fallback from post_content
+        // -------------------------------------------------------------
+        $content_img_post = (object) [
+            'ID'           => 307,
+            'post_title'   => 'Article with Inline Image',
+            'post_content' => '<p>Leading paragraph.</p><img src="https://example.com/uploads/inline-story.jpg" alt="story" /><p>Next text.</p>',
+            'post_excerpt' => '',
+        ];
+        $content_img_url = $social->get_social_image_url( $content_img_post );
+        if ( 'https://example.com/uploads/inline-story.jpg' !== $content_img_url ) {
+            $failures[] = 'get_social_image_url() failed to extract inline img from post_content; got: ' . $content_img_url;
+        }
+
+        // -------------------------------------------------------------
+        // 8. AI Co-Author Long Title Length Optimization (<= 60 chars)
+        // -------------------------------------------------------------
+        $GLOBALS['QUERIED_OBJECT'] = $coauthored_post;
+        $coauthor_long_parts = [
+            'title' => 'Το νομοθετικό κενό στις κοινόκτητες οικοδομές: Μια ευκαιρία που δεν πρέπει να χαθεί',
+            'site'  => 'PressHub.Cy',
+        ];
+        $coauthor_opt = $social->optimize_document_title_parts( $coauthor_long_parts );
+        $coauthor_full = $coauthor_opt['title'] . ' - ' . $coauthor_opt['site'];
+        if ( mb_strlen( $coauthor_full ) > 60 ) {
+            $failures[] = sprintf( 'optimize_document_title_parts() for coauthor article exceeded 60 chars (got %d chars): "%s"', mb_strlen( $coauthor_full ), $coauthor_full );
+        }
+        if ( false === strpos( $coauthor_opt['title'], '…' ) ) {
+            $failures[] = 'optimize_document_title_parts() should append ellipsis to truncated title; got: ' . $coauthor_opt['title'];
+        }
+
+        // -------------------------------------------------------------
+        // 9. Render Social Tags for AI Co-Authored Post
+        // -------------------------------------------------------------
+        $coauthored_post->post_content = 'Αυτό είναι το πλήρες κείμενο του άρθρου που συντάχθηκε με το AI Co-Author.';
+        set_post_thumbnail( $coauthored_post, 999 );
+        $GLOBALS['QUERIED_OBJECT'] = $coauthored_post;
+        ob_start();
+        $social->render_social_meta_tags();
+        $coauthor_html = ob_get_clean();
+
+        foreach ( [ '<meta property="og:title"', '<meta property="og:description"', '<meta property="og:image"', '<meta name="twitter:card" content="summary_large_image"' ] as $tag ) {
+            if ( false === strpos( $coauthor_html, $tag ) ) {
+                $failures[] = "render_social_meta_tags() for coauthored post missing tag: {$tag}";
+            }
+        }
+
+        // -------------------------------------------------------------
+        // 10. Settings-First Toggle & Scope Control
+        // -------------------------------------------------------------
+        // Master toggle disabled -> nothing rendered
+        update_option( 'presshub_ai_social_meta_enabled', '0' );
+        ob_start();
+        $social->render_social_meta_tags();
+        $disabled_html = ob_get_clean();
+        if ( ! empty( $disabled_html ) ) {
+            $failures[] = 'render_social_meta_tags() should emit nothing when presshub_ai_social_meta_enabled is 0; got: ' . $disabled_html;
+        }
+        delete_option( 'presshub_ai_social_meta_enabled' );
+
         // Cleanup
         delete_option( 'presshub_ai_briefing_featured_image_ids' );
+        delete_option( 'presshub_ai_social_meta_all_posts' );
 
         if ( ! empty( $failures ) ) {
             echo "FAIL: SocialMetaTagsTest\n";
