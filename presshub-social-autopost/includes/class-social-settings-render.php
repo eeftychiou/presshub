@@ -138,11 +138,10 @@ class PressHub_Social_Settings_Render {
     }
 
     public function render_github_token_field(): void {
-        $this->render_secret_field(
-            'presshub_social_github_token',
-            (string) get_option( 'presshub_social_github_token', '' ),
-            __( 'Optional GitHub Personal Access Token (PAT) for automatic plugin updates if the repository is private. Automatically inherits the token from PressHub AI Editor if left blank.', 'presshub-social-autopost' )
-        );
+        $this->render_secret_field( [
+            'option' => 'presshub_social_github_token',
+            'desc'   => __( 'Optional GitHub Personal Access Token (PAT) for automatic plugin updates if the repository is private. Automatically inherits the token from PressHub AI Editor if left blank.', 'presshub-social-autopost' ),
+        ] );
     }
 
     public function render_platform_engine_field( array $args ): void {
@@ -177,18 +176,22 @@ class PressHub_Social_Settings_Render {
             <option value="" <?php selected( $current, '' ); ?>><?php echo esc_html__( '— Automatic / First Enabled Provider —', 'presshub-social-autopost' ); ?></option>
             <?php
             if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
-                $providers = PressHub_AI_Provider_Store::get_all( false );
+                $providers = PressHub_AI_Provider_Store::get_all( true );
                 foreach ( $providers as $prov ) {
-                    $id      = $prov['id'] ?? '';
-                    $name    = $prov['name'] ?? $id;
-                    $type    = $prov['type'] ?? '';
-                    $enabled = ! empty( $prov['enabled'] ) ? '' : ' (' . __( 'Disabled in AI Editor', 'presshub-social-autopost' ) . ')';
-                    echo '<option value="' . esc_attr( $id ) . '" ' . selected( $current, $id, false ) . '>' . esc_html( $name . ' [' . $type . ']' . $enabled ) . '</option>';
+                    $type = $prov['type'] ?? '';
+                    if ( empty( $prov['enabled'] ) || ( empty( $prov['api_key'] ) && 'ollama_local' !== $type ) ) {
+                        continue;
+                    }
+                    $id    = $prov['id'] ?? $type;
+                    $name  = $prov['name'] ?? ucfirst( $id );
+                    $model = $prov['default_model'] ?? '';
+                    $label = $name . ( '' !== $model ? ' (' . $model . ')' : '' );
+                    echo '<option value="' . esc_attr( $id ) . '" ' . selected( $current, $id, false ) . '>' . esc_html( $label ) . '</option>';
                 }
             }
             ?>
         </select>
-        <p class="description"><?php echo esc_html__( 'Select which configured provider generates social copy, or leave empty to use the active default provider.', 'presshub-social-autopost' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Select which configured and enabled provider generates social copy, or leave empty to use the active default provider.', 'presshub-social-autopost' ); ?></p>
         <?php
     }
 

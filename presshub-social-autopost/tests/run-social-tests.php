@@ -403,6 +403,9 @@ if ( file_exists( $base_dir . '/includes/class-social-prompt-loader.php' ) ) {
 if ( file_exists( $base_dir . '/includes/class-social-settings-storage.php' ) ) {
     require_once $base_dir . '/includes/class-social-settings-storage.php';
 }
+if ( file_exists( $base_dir . '/includes/class-social-settings-render.php' ) ) {
+    require_once $base_dir . '/includes/class-social-settings-render.php';
+}
 if ( file_exists( $base_dir . '/includes/class-social-ai-copywriter.php' ) ) {
     require_once $base_dir . '/includes/class-social-ai-copywriter.php';
 }
@@ -866,6 +869,51 @@ assert_equals( 'ghp_shared_core_token_12345', PressHub_Social_Settings_Storage::
 update_option( 'presshub_social_github_token', 'ghp_dedicated_social_token_999' );
 assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storage::get_github_token(), 'get_github_token prioritizes dedicated presshub_social_github_token when set' );
 assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storage::sanitize_github_token( 'ghp_••••••••_999' ), 'sanitize_github_token preserves existing secret when masked' );
+
+// ----------------------------------------------------------------------
+// Test Suite 16: Settings Render (GitHub Token Field & AI Provider Dropdown Filtering)
+// ----------------------------------------------------------------------
+echo "\n--- Suite 16: Settings Render & Configured AI Provider Filtering ---\n";
+$renderer = new PressHub_Social_Settings_Render();
+
+ob_start();
+$renderer->render_github_token_field();
+$gh_field_html = ob_get_clean();
+assert_true( str_contains( $gh_field_html, 'name="presshub_social_github_token"' ), 'render_github_token_field renders password input without TypeError' );
+
+update_option( 'presshub_ai_configured_providers', [
+    [
+        'id'            => 'openai_active',
+        'type'          => 'openai',
+        'name'          => 'OpenAI Configured',
+        'api_key'       => 'sk-valid-key-1234567890',
+        'default_model' => 'gpt-4o',
+        'enabled'       => true,
+    ],
+    [
+        'id'            => 'anthropic_disabled',
+        'type'          => 'anthropic',
+        'name'          => 'Anthropic Disabled',
+        'api_key'       => 'sk-ant-valid-1234567890',
+        'default_model' => 'claude-3-5-sonnet-20240620',
+        'enabled'       => false,
+    ],
+    [
+        'id'            => 'gemini_unconfigured',
+        'type'          => 'gemini',
+        'name'          => 'Gemini Missing Key',
+        'api_key'       => '',
+        'default_model' => 'gemini-2.5-flash',
+        'enabled'       => true,
+    ],
+] );
+
+ob_start();
+$renderer->render_ai_provider_field();
+$prov_html = ob_get_clean();
+assert_true( str_contains( $prov_html, 'OpenAI Configured (gpt-4o)' ), 'AI provider dropdown lists enabled and configured provider' );
+assert_true( ! str_contains( $prov_html, 'Anthropic Disabled' ), 'AI provider dropdown excludes disabled providers' );
+assert_true( ! str_contains( $prov_html, 'Gemini Missing Key' ), 'AI provider dropdown excludes unconfigured providers without API keys' );
 
 // ----------------------------------------------------------------------
 // Test Summary

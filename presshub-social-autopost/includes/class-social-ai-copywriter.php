@@ -257,8 +257,18 @@ class PressHub_Social_AI_Copywriter {
             if ( null === $provider_record ) {
                 $enabled = PressHub_AI_Provider_Store::get_all( true );
                 if ( ! empty( $enabled ) && is_array( $enabled ) ) {
-                    $provider_record = $enabled[0];
-                    $provider_source = 'store_fallback:first_enabled_provider';
+                    foreach ( $enabled as $ep ) {
+                        $ep_type = $ep['type'] ?? '';
+                        if ( ! empty( $ep['enabled'] ) && ( ! empty( $ep['api_key'] ) || 'ollama_local' === $ep_type ) ) {
+                            $provider_record = $ep;
+                            $provider_source = 'store_fallback:first_enabled_provider';
+                            break;
+                        }
+                    }
+                    if ( null === $provider_record ) {
+                        $provider_record = $enabled[0];
+                        $provider_source = 'store_fallback:first_enabled_provider';
+                    }
                 }
             }
         }
