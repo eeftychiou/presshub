@@ -3,7 +3,7 @@
  * Plugin Name: PressHub Social Auto-Post
  * Plugin URI: https://presshub.ai
  * Description: Automated multi-platform social media auto-posting pipeline for WordPress with AI copy generation, queue dispatcher, Meta API, and browser automation worker integration.
- * Version: 2.6.0
+ * Version: 2.6.1
  * Author: PressHub Team
  * Author URI: https://presshub.ai
  * Text Domain: presshub-social-autopost
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'PRESSHUB_SOCIAL_VERSION', '2.6.0' );
+define( 'PRESSHUB_SOCIAL_VERSION', '2.6.1' );
 define( 'PRESSHUB_SOCIAL_FILE', __FILE__ );
 define( 'PRESSHUB_SOCIAL_PATH', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_SOCIAL_URL', plugin_dir_url( __FILE__ ) );
@@ -62,7 +62,7 @@ add_filter( 'cron_schedules', function( array $schedules ): array {
     if ( ! isset( $schedules['presshub_social_interval'] ) ) {
         $schedules['presshub_social_interval'] = [
             'interval' => 60,
-            'display'  => __( 'Every Minute (PressHub Social)', 'presshub-social-autopost' ),
+            'display'  => did_action( 'init' ) ? __( 'Every Minute (PressHub Social)', 'presshub-social-autopost' ) : 'Every Minute (PressHub Social)',
         ];
     }
     return $schedules;
@@ -79,6 +79,33 @@ add_action( 'presshub_social_cron_dispatch', [ 'PressHub_Social_Dispatcher', 'pr
 add_action( 'transition_post_status', [ 'PressHub_Social_Dispatcher', 'handle_post_status_transition' ], 10, 3 );
 
 /**
+ * Initialize GitHub Update Checker (embedded library, matching presshub-ai-editor).
+ * PRESSHUB_AI_SKIP_UPDATE_CHECKER / PRESSHUB_SOCIAL_SKIP_UPDATE_CHECKER lets hosts
+ * and the unit-test harness disable the embedded updater.
+ */
+if ( ! defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' )
+    && ! defined( 'PRESSHUB_SOCIAL_SKIP_UPDATE_CHECKER' )
+    && file_exists( PRESSHUB_SOCIAL_PATH . 'includes/plugin-update-checker/plugin-update-checker.php' ) ) {
+    require_once PRESSHUB_SOCIAL_PATH . 'includes/plugin-update-checker/plugin-update-checker.php';
+
+    $presshub_social_update_checker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+        'https://github.com/eeftychiou/presshub/',
+        __FILE__,
+        'presshub-social-autopost'
+    );
+
+    $presshub_social_update_checker->setBranch( 'main' );
+    $presshub_social_update_checker->getVcsApi()->enableReleaseAssets( '/^presshub-social-autopost.*\.zip$/i' );
+
+    $social_github_token = class_exists( 'PressHub_Social_Settings_Storage' )
+        ? PressHub_Social_Settings_Storage::get_github_token()
+        : (string) get_option( 'presshub_ai_github_token', '' );
+    if ( ! empty( $social_github_token ) ) {
+        $presshub_social_update_checker->setAuthentication( $social_github_token );
+    }
+}
+
+/**
  * Initialize components.
  */
 add_action( 'plugins_loaded', function() {
@@ -93,22 +120,6 @@ add_action( 'plugins_loaded', function() {
     }
     if ( class_exists( 'PressHub_Social_Ajax_Handlers' ) && method_exists( 'PressHub_Social_Ajax_Handlers', 'init' ) ) {
         PressHub_Social_Ajax_Handlers::init();
-    }
-
-    // Initialize GitHub Update Checker if PluginUpdateChecker is available
-    if ( ! defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) && class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ) ) {
-        $social_update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-            'https://github.com/eeftychiou/presshub/',
-            __FILE__,
-            'presshub-social-autopost'
-        );
-        $social_update_checker->setBranch( 'main' );
-        $social_update_checker->getVcsApi()->enableReleaseAssets( '/^presshub-social-autopost.*\.zip$/i' );
-
-        $github_token = get_option( 'presshub_ai_github_token' );
-        if ( ! empty( $github_token ) ) {
-            $social_update_checker->setAuthentication( $github_token );
-        }
     }
 } );
 

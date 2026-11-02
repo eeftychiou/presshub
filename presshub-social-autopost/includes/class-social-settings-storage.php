@@ -77,6 +77,12 @@ class PressHub_Social_Settings_Storage {
             'default'           => 'ai',
         ] );
 
+        register_setting( self::OPTION_GROUP, 'presshub_social_github_token', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_github_token' ],
+            'default'           => '',
+        ] );
+
         // 2. Platform Engines
         foreach ( self::PLATFORMS as $platform ) {
             register_setting( self::OPTION_GROUP, 'presshub_social_engine_' . $platform, [
@@ -731,6 +737,18 @@ class PressHub_Social_Settings_Storage {
 
     public static function sanitize_tiktok_open_id( $value ): string {
         return sanitize_text_field( (string) $value );
+    }
+
+    public static function get_github_token(): string {
+        $token = (string) get_option( 'presshub_social_github_token', '' );
+        if ( '' !== trim( $token ) ) {
+            return trim( $token );
+        }
+        return trim( (string) get_option( 'presshub_ai_github_token', '' ) );
+    }
+
+    public static function sanitize_github_token( $value ): string {
+        return self::sanitize_secret( $value, 'presshub_social_github_token' );
     }
 
     // ------------------------------------------------------------------

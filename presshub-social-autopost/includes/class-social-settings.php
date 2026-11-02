@@ -271,6 +271,14 @@ class PressHub_Social_Settings {
             'presshub_social_general_sec'
         );
 
+        add_settings_field(
+            'presshub_social_github_token',
+            __( 'GitHub Personal Access Token (Auto-Updates)', 'presshub-social-autopost' ),
+            [ $render, 'render_github_token_field' ],
+            'presshub_social_general',
+            'presshub_social_general_sec'
+        );
+
         add_settings_section(
             'presshub_social_engines_sec',
             __( 'Platform Dispatch Engines', 'presshub-social-autopost' ),

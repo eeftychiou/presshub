@@ -137,6 +137,14 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_github_token_field(): void {
+        $this->render_secret_field(
+            'presshub_social_github_token',
+            (string) get_option( 'presshub_social_github_token', '' ),
+            __( 'Optional GitHub Personal Access Token (PAT) for automatic plugin updates if the repository is private. Automatically inherits the token from PressHub AI Editor if left blank.', 'presshub-social-autopost' )
+        );
+    }
+
     public function render_platform_engine_field( array $args ): void {
         $platform = $args['platform'] ?? 'twitter';
         $current  = PressHub_Social_Settings_Storage::get_platform_engine( $platform );

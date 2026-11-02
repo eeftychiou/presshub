@@ -853,6 +853,21 @@ assert_true( is_string( $ai_tweet ) && str_contains( $ai_tweet, 'https://presshu
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
 
 // ----------------------------------------------------------------------
+// Test Suite 15: Embedded GitHub Auto-Update Checker & Token Fallback
+// ----------------------------------------------------------------------
+echo "\n--- Suite 15: GitHub Auto-Update Checker & Token Resolution ---\n";
+$puc_entry = $base_dir . '/includes/plugin-update-checker/plugin-update-checker.php';
+assert_true( file_exists( $puc_entry ), 'Embedded plugin-update-checker library exists in presshub-social-autopost/includes/plugin-update-checker/' );
+
+delete_option( 'presshub_social_github_token' );
+update_option( 'presshub_ai_github_token', 'ghp_shared_core_token_12345' );
+assert_equals( 'ghp_shared_core_token_12345', PressHub_Social_Settings_Storage::get_github_token(), 'get_github_token inherits presshub_ai_github_token when social token is unset' );
+
+update_option( 'presshub_social_github_token', 'ghp_dedicated_social_token_999' );
+assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storage::get_github_token(), 'get_github_token prioritizes dedicated presshub_social_github_token when set' );
+assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storage::sanitize_github_token( 'ghp_••••••••_999' ), 'sanitize_github_token preserves existing secret when masked' );
+
+// ----------------------------------------------------------------------
 // Test Summary
 // ----------------------------------------------------------------------
 echo "\n=================================================================\n";
