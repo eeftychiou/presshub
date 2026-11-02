@@ -18,6 +18,7 @@ class PressHub_Social_Ajax_Handlers {
      */
     public static function init(): void {
         add_action( 'wp_ajax_presshub_social_generate_copy', [ __CLASS__, 'handle_generate_copy' ] );
+        add_action( 'wp_ajax_presshub_social_enqueue_post', [ __CLASS__, 'handle_enqueue_post' ] );
         add_action( 'wp_ajax_presshub_social_test_connection', [ __CLASS__, 'handle_test_connection' ] );
         add_action( 'wp_ajax_presshub_social_retry_job', [ __CLASS__, 'handle_retry_job' ] );
         add_action( 'wp_ajax_presshub_social_cancel_job', [ __CLASS__, 'handle_cancel_job' ] );
@@ -53,6 +54,9 @@ class PressHub_Social_Ajax_Handlers {
             if ( is_wp_error( $copy ) ) {
                 wp_send_json_error( [ 'message' => $copy->get_error_message() ], 400 );
             }
+            if ( '' !== trim( (string) $copy ) ) {
+                update_post_meta( $post_id, '_presshub_social_copy_' . $platform, (string) $copy );
+            }
             wp_send_json_success( [
                 'post_id'  => $post_id,
                 'platform' => $platform,
@@ -60,11 +64,79 @@ class PressHub_Social_Ajax_Handlers {
             ] );
         } else {
             $copies = PressHub_Social_AI_Copywriter::generate_all_for_post( $post_id );
+            if ( is_wp_error( $copies ) ) {
+                wp_send_json_error( [ 'message' => $copies->get_error_message() ], 400 );
+            }
+            if ( is_array( $copies ) ) {
+                foreach ( $copies as $plat => $copy_text ) {
+                    if ( '' !== trim( (string) $copy_text ) ) {
+                        update_post_meta( $post_id, '_presshub_social_copy_' . sanitize_key( $plat ), (string) $copy_text );
+                    }
+                }
+            }
             wp_send_json_success( [
                 'post_id' => $post_id,
                 'copy'    => $copies,
             ] );
         }
+    }
+
+    /**
+     * AJAX handler: Manually enqueue social posts for a given post ID from the editor metabox.
+     * Capability: edit_posts.
+     *
+     * @return void
+     */
+    public static function handle_enqueue_post(): void {
+        check_ajax_referer( 'presshub_social_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+        }
+
+        $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
+        if ( $post_id <= 0 ) {
+            wp_send_json_error( [ 'message' => __( 'Invalid post ID provided.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        // Persist selected platforms if passed from metabox
+        $platforms = [];
+        if ( isset( $_POST['platforms'] ) && is_array( $_POST['platforms'] ) ) {
+            foreach ( $_POST['platforms'] as $p ) {
+                $sanitized = sanitize_key( wp_unslash( $p ) );
+                if ( in_array( $sanitized, PressHub_Social_Queue::VALID_PLATFORMS, true ) ) {
+                    $platforms[] = $sanitized;
+                }
+            }
+            update_post_meta( $post_id, '_presshub_social_platforms', $platforms );
+        }
+
+        // Persist any custom copy overrides sent from metabox textareas
+        if ( isset( $_POST['copies'] ) && is_array( $_POST['copies'] ) ) {
+            foreach ( PressHub_Social_Queue::VALID_PLATFORMS as $slug ) {
+                if ( isset( $_POST['copies'][ $slug ] ) ) {
+                    $copy_val = sanitize_textarea_field( wp_unslash( $_POST['copies'][ $slug ] ) );
+                    if ( '' !== trim( $copy_val ) ) {
+                        update_post_meta( $post_id, '_presshub_social_copy_' . $slug, $copy_val );
+                    } else {
+                        delete_post_meta( $post_id, '_presshub_social_copy_' . $slug );
+                    }
+                }
+            }
+        }
+
+        $job_ids = PressHub_Social_Dispatcher::enqueue_for_post( $post_id, $platforms );
+        if ( empty( $job_ids ) ) {
+            wp_send_json_error( [
+                'message' => __( 'No social jobs were enqueued. Please ensure at least one platform is selected.', 'presshub-social-autopost' ),
+            ], 400 );
+        }
+
+        wp_send_json_success( [
+            'message' => sprintf( __( 'Successfully queued %d social post(s).', 'presshub-social-autopost' ), count( $job_ids ) ),
+            'post_id' => $post_id,
+            'job_ids' => $job_ids,
+        ] );
     }
 
     /**

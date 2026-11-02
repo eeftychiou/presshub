@@ -7,8 +7,33 @@
     $(function () {
         var nonce = (window.presshubSocial && window.presshubSocial.nonce) || $('[name="presshub_social_nonce"]').val();
 
+        // Handle Client-Side Tab Switching (preserves all 6 tabs inside the single form)
+        $(document).on('click', '.presshub-social-tab-link', function (e) {
+            var $tab = $(this);
+            var tabId = $tab.data('tab');
+            var $pane = $('#presshub-social-tab-pane-' + tabId);
+
+            if (!tabId || !$pane.length) {
+                return;
+            }
+
+            e.preventDefault();
+            $('.presshub-social-tab-link').removeClass('nav-tab-active');
+            $tab.addClass('nav-tab-active');
+
+            $('.presshub-social-tab-pane').hide();
+            $pane.show();
+
+            if (window.history && window.history.replaceState) {
+                var href = $tab.attr('href');
+                if (href) {
+                    window.history.replaceState(null, '', href);
+                }
+            }
+        });
+
         // Handle Test Connection Buttons
-        $(document).on('click', '.presshub-btn-test-connection, [data-test-platform]', function (e) {
+        $(document).on('click', '.presshub-social-test-btn, .presshub-btn-test-connection, [data-test-platform]', function (e) {
             e.preventDefault();
             var $btn = $(this);
             var platform = $btn.data('test-platform') || $btn.data('platform');
@@ -17,7 +42,38 @@
                 return;
             }
 
-            var $container = $btn.closest('td, .form-table, .presshub-test-container');
+            var $row = $btn.closest('.presshub-social-test-row');
+            if ($row.length) {
+                var $spinner = $row.find('.spinner');
+                var $status = $row.find('.presshub-social-test-status');
+                $btn.prop('disabled', true);
+                $spinner.addClass('is-active');
+                $status.css('color', '#666').text('Testing...');
+
+                $.post(ajaxurl, {
+                    action: 'presshub_social_test_connection',
+                    nonce: nonce,
+                    platform: platform
+                }).done(function (res) {
+                    if (res && res.success) {
+                        $status.css('color', '#007017').text('✓ ' + (res.data && res.data.message ? res.data.message : 'Connected'));
+                    } else {
+                        var msg = res && res.data && res.data.message ? res.data.message : 'Connection failed';
+                        $status.css('color', '#d63638').text('✕ ' + msg);
+                    }
+                }).fail(function (xhr) {
+                    var msg = 'HTTP Request Error';
+                    if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                        msg = xhr.responseJSON.data.message;
+                    }
+                    $status.css('color', '#d63638').text('✕ ' + msg);
+                }).always(function () {
+                    $btn.prop('disabled', false);
+                    $spinner.removeClass('is-active');
+                });
+                return;
+            }
+
             var $result = $btn.siblings('.presshub-test-result');
             if (!$result.length) {
                 $result = $('<span class="presshub-test-result"></span>').insertAfter($btn);

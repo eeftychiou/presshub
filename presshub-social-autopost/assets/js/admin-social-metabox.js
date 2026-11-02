@@ -113,5 +113,69 @@
                 $spinner.removeClass('is-active');
             });
         });
+
+        // Manually Enqueue Social Posts Now from Metabox
+        $('#presshub-enqueue-social-now').on('click', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var postId = $btn.data('post-id');
+            var $spinner = $('#presshub-social-global-spinner');
+
+            if (!postId) {
+                return;
+            }
+
+            var platforms = [];
+            $('input[name="presshub_social_platforms[]"]:checked').each(function () {
+                platforms.push($(this).val());
+            });
+
+            if (!platforms.length) {
+                alert('Please select at least one social media platform first.');
+                return;
+            }
+
+            var copies = {};
+            $('.presshub-copy-textarea').each(function () {
+                var id = $(this).attr('id') || '';
+                var plat = id.replace('presshub_social_copy_', '');
+                if (plat) {
+                    copies[plat] = $(this).val();
+                }
+            });
+
+            $btn.prop('disabled', true);
+            $spinner.addClass('is-active');
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'presshub_social_enqueue_post',
+                    post_id: postId,
+                    platforms: platforms,
+                    copies: copies,
+                    nonce: nonce
+                }
+            }).done(function (res) {
+                if (res && res.success) {
+                    alert(res.data && res.data.message ? res.data.message : 'Social posts queued successfully!');
+                    window.location.reload();
+                } else {
+                    var err = (res && res.data && res.data.message) ? res.data.message : 'Failed to queue social posts.';
+                    alert('Queue error: ' + err);
+                }
+            }).fail(function (xhr) {
+                var msg = 'Request failed.';
+                if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                    msg = xhr.responseJSON.data.message;
+                }
+                alert('Queue failed: ' + msg);
+            }).always(function () {
+                $btn.prop('disabled', false);
+                $spinner.removeClass('is-active');
+            });
+        });
     });
 })(jQuery);

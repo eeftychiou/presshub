@@ -33,12 +33,31 @@ class PressHub_Social_Dispatcher {
             return;
         }
 
+        // Verify post was not reverted by an earlier editorial workflow gate
+        if ( function_exists( 'get_post' ) ) {
+            $fresh = get_post( $post->ID );
+            if ( $fresh instanceof WP_Post && 'publish' !== $fresh->post_status ) {
+                return;
+            }
+        }
+
         // Check if auto-publish is globally enabled
         $auto_publish = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_auto_publish_enabled' )
             ? PressHub_Social_Settings_Storage::get_auto_publish_enabled()
             : true;
 
         if ( ! $auto_publish ) {
+            return;
+        }
+
+        // In Classic Editor, transition_post_status fires before save_post.
+        // Persist metabox selections and custom copy if present in $_POST before enqueuing.
+        if ( ! empty( $_POST['presshub_social_metabox_nonce'] ) && class_exists( 'PressHub_Social_Metabox' ) && method_exists( 'PressHub_Social_Metabox', 'save_metabox' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            PressHub_Social_Metabox::save_metabox( $post->ID, $post );
+        }
+
+        // Guard against duplicate auto-enqueuing if jobs already exist for this post
+        if ( ! empty( PressHub_Social_Queue::get_jobs_for_post( $post->ID ) ) ) {
             return;
         }
 
@@ -137,7 +156,13 @@ class PressHub_Social_Dispatcher {
             ];
 
             $job_id = PressHub_Social_Queue::enqueue( $job_data );
-            if ( ! is_wp_error( $job_id ) && $job_id > 0 ) {
+            if ( is_wp_error( $job_id ) ) {
+                if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
+                    PressHub_Social_Logger::error(
+                        sprintf( 'Failed to enqueue social job for post #%d on %s: %s', $post_id, $platform, $job_id->get_error_message() )
+                    );
+                }
+            } elseif ( $job_id > 0 ) {
                 $job_ids[] = $job_id;
                 if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'info' ) ) {
                     PressHub_Social_Logger::info(
@@ -172,10 +197,35 @@ class PressHub_Social_Dispatcher {
 
         $platform = sanitize_key( (string) ( $job['platform'] ?? '' ) );
         $engine   = sanitize_key( (string) ( $job['engine'] ?? 'api' ) );
+        $post_id  = (int) ( $job['post_id'] ?? 0 );
+
+        // If this job previously failed during AI copy generation, regenerate copy now before dispatching
+        $current_copy = (string) ( $job['post_copy'] ?? '' );
+        if ( str_starts_with( $current_copy, '[AI Copy Generation Failed:' ) && $post_id > 0 && class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+            $regenerated = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
+            if ( is_wp_error( $regenerated ) ) {
+                $error_message = $regenerated->get_error_message();
+                PressHub_Social_Queue::mark_failed( $job_id, $error_message, [ 'error_code' => $regenerated->get_error_code() ] );
+                return $regenerated;
+            }
+            $job['post_copy'] = (string) $regenerated;
+            PressHub_Social_Queue::update_job_copy( $job_id, $job['post_copy'] );
+        }
+
+        // Dynamically resolve post thumbnail if media_url was not yet attached at enqueue time
+        if ( empty( $job['media_url'] ) && $post_id > 0 && function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id ) ) {
+            $thumb_id = get_post_thumbnail_id( $post_id );
+            if ( $thumb_id ) {
+                $thumb_url = wp_get_attachment_url( $thumb_id );
+                if ( ! empty( $thumb_url ) ) {
+                    $job['media_url']  = $thumb_url;
+                    $job['media_type'] = 'image';
+                }
+            }
+        }
 
         // If media card/video generation is required for Instagram/TikTok and URL is empty, try worker
         if ( ( 'instagram' === $platform || 'tiktok' === $platform ) && empty( $job['media_url'] ) ) {
-            $post_id = (int) ( $job['post_id'] ?? 0 );
             $post    = get_post( $post_id );
             $title   = $post ? $post->post_title : 'Social Card';
 

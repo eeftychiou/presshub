@@ -916,6 +916,89 @@ assert_true( ! str_contains( $prov_html, 'Anthropic Disabled' ), 'AI provider dr
 assert_true( ! str_contains( $prov_html, 'Gemini Missing Key' ), 'AI provider dropdown excludes unconfigured providers without API keys' );
 
 // ----------------------------------------------------------------------
+// Test Suite 17: Multi-Tab Settings Persistence, v2.6.3 Auto-Repair & Batch Copy Generation
+// ----------------------------------------------------------------------
+echo "\n--- Suite 17: Multi-Tab Settings Persistence, v2.6.3 Auto-Repair & Batch Copy Generation ---\n";
+
+// 1. Verify v2.6.3 auto-repair heals options wiped by v2.6.2 single-tab form saves
+delete_option( 'presshub_social_repaired_v263' );
+update_option( 'presshub_social_auto_publish_enabled', false );
+update_option( 'presshub_social_enabled_platforms', [] );
+update_option( 'presshub_social_prompt_system', '' );
+update_option( 'presshub_social_prompt_twitter', '' );
+
+PressHub_Social_Settings_Storage::maybe_repair_v263_options();
+assert_true( PressHub_Social_Settings_Storage::get_auto_publish_enabled(), 'v2.6.3 repair restores auto_publish_enabled to true' );
+assert_equals( [ 'twitter', 'facebook', 'instagram', 'tiktok' ], PressHub_Social_Settings_Storage::get_enabled_platforms(), 'v2.6.3 repair restores enabled_platforms' );
+assert_true( strlen( PressHub_Social_Settings_Storage::get_system_prompt() ) > 20, 'v2.6.3 repair restores wiped system prompt from external asset' );
+assert_true( strlen( PressHub_Social_Settings_Storage::get_platform_prompt( 'twitter' ) ) > 20, 'v2.6.3 repair restores wiped twitter prompt from external asset' );
+
+// 2. Verify partial $_POST submission does not wipe auto_publish_enabled, enabled_platforms, or prompts
+$_POST = [ 'presshub_social_ai_provider' => 'openai_active' ];
+assert_true( PressHub_Social_Settings_Storage::sanitize_auto_publish_enabled( null ), 'sanitize_auto_publish_enabled preserves true when field omitted from partial POST' );
+assert_equals( [ 'twitter', 'facebook', 'instagram', 'tiktok' ], PressHub_Social_Settings_Storage::sanitize_enabled_platforms( null ), 'sanitize_enabled_platforms preserves platforms when field omitted from partial POST' );
+assert_true( strlen( PressHub_Social_Settings_Storage::sanitize_prompt( null, 'presshub_social_prompt_system' ) ) > 20, 'sanitize_prompt preserves existing prompt when field omitted from partial POST' );
+
+// Verify explicit uncheck when _present marker IS in $_POST works as expected
+$_POST = [
+    'presshub_social_auto_publish_enabled_present' => '1',
+    'presshub_social_enabled_platforms_present'    => '1',
+];
+assert_true( ! PressHub_Social_Settings_Storage::sanitize_auto_publish_enabled( null ), 'sanitize_auto_publish_enabled allows explicit uncheck when _present marker is submitted' );
+assert_equals( [], PressHub_Social_Settings_Storage::sanitize_enabled_platforms( null ), 'sanitize_enabled_platforms allows explicit empty selection when _present marker is submitted' );
+$_POST = [];
+
+// 3. Verify generate_all_for_post generates copy across all enabled platforms
+update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook' ] );
+update_option( 'presshub_social_copy_mode', 'template' );
+PressHub_Social_Settings_Storage::reset_prompts_to_defaults();
+$post_401 = new WP_Post( [
+    'ID'          => 401,
+    'post_type'   => 'post',
+    'post_status' => 'publish',
+    'post_title'  => 'Multi-Platform Story',
+] );
+$GLOBALS['test_posts'][401]  = $post_401;
+$GLOBALS['POSTS_STORE'][401] = [
+    'ID'           => 401,
+    'post_type'    => 'post',
+    'post_status'  => 'publish',
+    'post_title'   => 'Multi-Platform Story',
+    'post_content' => 'Full story body content.',
+    'post_excerpt' => 'Story excerpt.',
+];
+$all_copies = PressHub_Social_AI_Copywriter::generate_all_for_post( 401 );
+assert_true( is_array( $all_copies ) && isset( $all_copies['twitter'], $all_copies['facebook'] ), 'generate_all_for_post generates copy for all enabled platforms' );
+
+// 4. Verify handle_post_status_transition persists metabox $_POST before enqueuing (Classic Editor hook order)
+PressHub_Social_Queue::reset_memory_store();
+update_option( 'presshub_social_auto_publish_enabled', true );
+$post_402 = new WP_Post( [
+    'ID'          => 402,
+    'post_type'   => 'post',
+    'post_status' => 'publish',
+    'post_title'  => 'Classic Editor Publish',
+] );
+$GLOBALS['test_posts'][402]  = $post_402;
+$GLOBALS['POSTS_STORE'][402] = [
+    'ID'           => 402,
+    'post_type'    => 'post',
+    'post_status'  => 'publish',
+    'post_title'   => 'Classic Editor Publish',
+    'post_content' => 'Body content.',
+];
+$_POST = [
+    'presshub_social_metabox_nonce' => 'nonce_presshub_social_save_metabox',
+    'presshub_social_platforms'     => [ 'twitter' ],
+    'presshub_social_copy_twitter'  => 'Custom metabox copy saved during publish transition',
+];
+PressHub_Social_Dispatcher::handle_post_status_transition( 'publish', 'draft', $post_402 );
+$_POST = [];
+$jobs_402 = PressHub_Social_Queue::get_jobs_for_post( 402 );
+assert_equals( 1, count( $jobs_402 ), 'Transition draft -> publish respects metabox platform selection submitted in $_POST' );
+assert_equals( 'Custom metabox copy saved during publish transition', $jobs_402[0]['post_copy'] ?? '', 'Transition draft -> publish uses custom metabox copy submitted in $_POST' );
+
+// ----------------------------------------------------------------------
 // Test Summary
 // ----------------------------------------------------------------------
 echo "\n=================================================================\n";

@@ -64,6 +64,50 @@ class PressHub_Social_AI_Copywriter {
     }
 
     /**
+     * Generate social copy for a WordPress post across all specified (or enabled) platforms.
+     *
+     * @param int   $post_id WordPress post ID.
+     * @param array $platforms Optional list of platforms; defaults to enabled platforms.
+     * @return array|WP_Error Associative array of platform => copy string, or WP_Error on failure.
+     */
+    public static function generate_all_for_post( int $post_id, array $platforms = [] ) {
+        $article_data = self::build_article_data( $post_id );
+        if ( is_wp_error( $article_data ) ) {
+            return $article_data;
+        }
+
+        if ( empty( $platforms ) ) {
+            $platforms = PressHub_Social_Settings_Storage::get_enabled_platforms();
+        }
+        if ( empty( $platforms ) ) {
+            $platforms = PressHub_Social_Settings_Storage::PLATFORMS;
+        }
+
+        $results = [];
+        $errors  = [];
+
+        foreach ( $platforms as $platform ) {
+            $platform = sanitize_key( $platform );
+            if ( ! in_array( $platform, PressHub_Social_Settings_Storage::PLATFORMS, true ) ) {
+                continue;
+            }
+            $res = self::generate_from_data( $article_data, $platform );
+            if ( is_wp_error( $res ) ) {
+                $errors[ $platform ] = $res->get_error_message();
+            } else {
+                $results[ $platform ] = $res;
+            }
+        }
+
+        if ( empty( $results ) && ! empty( $errors ) ) {
+            $first_err = reset( $errors );
+            return new WP_Error( 'all_platforms_failed', $first_err );
+        }
+
+        return $results;
+    }
+
+    /**
      * Generate social copy from an article data array for the specified platform.
      *
      * @param array  $article_data Article metadata array (title, excerpt, content, url, site_name, hashtags).
@@ -399,28 +443,30 @@ class PressHub_Social_AI_Copywriter {
      */
     public static function build_article_data( int $post_id ) {
         $post = get_post( $post_id );
-        if ( ! $post || ! is_a( $post, 'WP_Post' ) ) {
+        if ( ! is_object( $post ) ) {
             $msg = sprintf( __( 'Post ID %d not found.', 'presshub-social-autopost' ), $post_id );
             PressHub_Social_Logger::error( $msg, [ 'post_id' => $post_id ] );
             return new WP_Error( 'invalid_post', $msg );
         }
 
-        $title = get_the_title( $post );
+        $title = function_exists( 'get_the_title' ) ? get_the_title( $post ) : (string) ( $post->post_title ?? '' );
 
         // Excerpt resolution.
-        $excerpt = has_excerpt( $post ) ? $post->post_excerpt : '';
+        $raw_content = (string) ( $post->post_content ?? '' );
+        $raw_excerpt = (string) ( $post->post_excerpt ?? '' );
+        $excerpt     = ( function_exists( 'has_excerpt' ) && has_excerpt( $post ) ) ? $raw_excerpt : $raw_excerpt;
         if ( '' === trim( $excerpt ) ) {
-            $stripped_body = wp_strip_all_tags( strip_shortcodes( $post->post_content ) );
+            $stripped_body = wp_strip_all_tags( function_exists( 'strip_shortcodes' ) ? strip_shortcodes( $raw_content ) : $raw_content );
             $excerpt       = wp_trim_words( $stripped_body, 50, '...' );
         }
 
         // Clean plain text content clamped to 3000 chars for context.
-        $content = wp_strip_all_tags( strip_shortcodes( $post->post_content ) );
+        $content = wp_strip_all_tags( function_exists( 'strip_shortcodes' ) ? strip_shortcodes( $raw_content ) : $raw_content );
         $content = preg_replace( '/\s+/', ' ', $content );
         $content = mb_substr( trim( $content ), 0, 3000, 'UTF-8' );
 
-        $url       = get_permalink( $post_id ) ?: '';
-        $site_name = get_bloginfo( 'name' );
+        $url       = function_exists( 'get_permalink' ) ? ( get_permalink( $post_id ) ?: '' ) : '';
+        $site_name = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'PressHub';
         $hashtags  = self::build_hashtags_for_post( $post_id );
 
         return [
@@ -441,7 +487,7 @@ class PressHub_Social_AI_Copywriter {
      * @return string Space-separated hashtags (e.g. "#Tech #WordPress").
      */
     public static function build_hashtags_for_post( int $post_id ): string {
-        $tags = wp_get_post_tags( $post_id );
+        $tags      = function_exists( 'wp_get_post_tags' ) ? wp_get_post_tags( $post_id ) : [];
         $tags_list = [];
 
         if ( ! empty( $tags ) && ! is_wp_error( $tags ) ) {
@@ -457,7 +503,7 @@ class PressHub_Social_AI_Copywriter {
         }
 
         if ( empty( $tags_list ) ) {
-            $categories = wp_get_post_categories( $post_id, [ 'fields' => 'all' ] );
+            $categories = function_exists( 'wp_get_post_categories' ) ? wp_get_post_categories( $post_id, [ 'fields' => 'all' ] ) : [];
             if ( ! empty( $categories ) && ! is_wp_error( $categories ) ) {
                 foreach ( $categories as $cat ) {
                     if ( 'uncategorized' === strtolower( $cat->slug ) ) {

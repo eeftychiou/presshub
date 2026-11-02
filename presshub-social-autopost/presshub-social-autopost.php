@@ -3,7 +3,7 @@
  * Plugin Name: PressHub Social Auto-Post
  * Plugin URI: https://presshub.ai
  * Description: Automated multi-platform social media auto-posting pipeline for WordPress with AI copy generation, queue dispatcher, Meta API, and browser automation worker integration.
- * Version: 2.6.2
+ * Version: 2.6.3
  * Author: PressHub Team
  * Author URI: https://presshub.ai
  * Text Domain: presshub-social-autopost
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'PRESSHUB_SOCIAL_VERSION', '2.6.2' );
+define( 'PRESSHUB_SOCIAL_VERSION', '2.6.3' );
 define( 'PRESSHUB_SOCIAL_FILE', __FILE__ );
 define( 'PRESSHUB_SOCIAL_PATH', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_SOCIAL_URL', plugin_dir_url( __FILE__ ) );
@@ -74,9 +74,9 @@ add_filter( 'cron_schedules', function( array $schedules ): array {
 add_action( 'presshub_social_cron_dispatch', [ 'PressHub_Social_Dispatcher', 'process_due_queue' ] );
 
 /**
- * Hook post status transition for auto-posting.
+ * Hook post status transition for auto-posting (priority 20 runs after editorial workflow gate).
  */
-add_action( 'transition_post_status', [ 'PressHub_Social_Dispatcher', 'handle_post_status_transition' ], 10, 3 );
+add_action( 'transition_post_status', [ 'PressHub_Social_Dispatcher', 'handle_post_status_transition' ], 20, 3 );
 
 /**
  * Initialize GitHub Update Checker (embedded library, matching presshub-ai-editor).
@@ -106,9 +106,28 @@ if ( ! defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' )
 }
 
 /**
+ * Force canonical plugin folder name during upgrades.
+ */
+add_filter(
+    'upgrader_package_options',
+    function ( $options ) {
+        if ( empty( $options['hook_extra']['plugin'] ) || ! is_string( $options['hook_extra']['plugin'] ) ) {
+            return $options;
+        }
+        if ( false !== strpos( $options['hook_extra']['plugin'], 'presshub-social-autopost.php' ) ) {
+            $options['destination_name'] = 'presshub-social-autopost';
+        }
+        return $options;
+    }
+);
+
+/**
  * Initialize components.
  */
 add_action( 'plugins_loaded', function() {
+    if ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'seed_defaults' ) ) {
+        PressHub_Social_Settings_Storage::seed_defaults();
+    }
     if ( class_exists( 'PressHub_Social_Settings' ) && method_exists( 'PressHub_Social_Settings', 'init' ) ) {
         PressHub_Social_Settings::init();
     }

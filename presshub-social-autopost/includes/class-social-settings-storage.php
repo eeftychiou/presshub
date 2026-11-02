@@ -272,17 +272,23 @@ class PressHub_Social_Settings_Storage {
         // 8. Prompts & Templates
         register_setting( self::OPTION_GROUP, 'presshub_social_prompt_system', [
             'type'              => 'string',
-            'sanitize_callback' => [ __CLASS__, 'sanitize_prompt' ],
+            'sanitize_callback' => function( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_system' );
+            },
         ] );
 
         foreach ( self::PLATFORMS as $platform ) {
             register_setting( self::OPTION_GROUP, 'presshub_social_prompt_' . $platform, [
                 'type'              => 'string',
-                'sanitize_callback' => [ __CLASS__, 'sanitize_prompt' ],
+                'sanitize_callback' => function( $val ) use ( $platform ) {
+                    return self::sanitize_prompt( $val, 'presshub_social_prompt_' . $platform );
+                },
             ] );
             register_setting( self::OPTION_GROUP, 'presshub_social_template_' . $platform, [
                 'type'              => 'string',
-                'sanitize_callback' => [ __CLASS__, 'sanitize_template' ],
+                'sanitize_callback' => function( $val ) use ( $platform ) {
+                    return self::sanitize_template( $val, 'presshub_social_template_' . $platform );
+                },
             ] );
         }
     }
@@ -292,7 +298,8 @@ class PressHub_Social_Settings_Storage {
     // ------------------------------------------------------------------
 
     /**
-     * Seed default prompts, templates, and worker secret into options if missing.
+     * Seed default prompts, templates, and worker secret into options if missing,
+     * and run one-time v2.6.3 repair for options wiped by single-tab form saves.
      *
      * @return void
      */
@@ -335,6 +342,64 @@ class PressHub_Social_Settings_Storage {
                 : bin2hex( random_bytes( 16 ) );
             update_option( 'presshub_social_worker_secret', $generated );
         }
+
+        self::maybe_repair_v263_options();
+    }
+
+    /**
+     * One-time idempotent repair for v2.6.3: heals options that were inadvertently
+     * cleared when saving non-General tabs in v2.6.0-v2.6.2.
+     *
+     * @return void
+     */
+    public static function maybe_repair_v263_options(): void {
+        if ( '1' === (string) get_option( 'presshub_social_repaired_v263', '' ) ) {
+            return;
+        }
+
+        // Restore auto-publish and enabled platforms if they were wiped to false / empty array.
+        if ( false === (bool) get_option( 'presshub_social_auto_publish_enabled', true ) ) {
+            update_option( 'presshub_social_auto_publish_enabled', true );
+        }
+
+        $enabled_platforms = get_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
+        if ( ! is_array( $enabled_platforms ) || empty( $enabled_platforms ) ) {
+            update_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
+        }
+
+        // Restore any empty prompts or templates from external asset files.
+        $sys_prompt = get_option( 'presshub_social_prompt_system', '' );
+        if ( ! is_string( $sys_prompt ) || '' === trim( $sys_prompt ) ) {
+            try {
+                update_option( 'presshub_social_prompt_system', PressHub_Social_Prompt_Loader::load( 'social_system.txt' ) );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to repair system prompt: ' . $e->getMessage() );
+            }
+        }
+
+        foreach ( self::PLATFORMS as $platform ) {
+            $prompt_opt = 'presshub_social_prompt_' . $platform;
+            $cur_prompt = get_option( $prompt_opt, '' );
+            if ( ! is_string( $cur_prompt ) || '' === trim( $cur_prompt ) ) {
+                try {
+                    update_option( $prompt_opt, PressHub_Social_Prompt_Loader::load( 'social_copy_' . $platform . '.txt' ) );
+                } catch ( Exception $e ) {
+                    PressHub_Social_Logger::error( "Failed to repair prompt for {$platform}: " . $e->getMessage() );
+                }
+            }
+
+            $template_opt = 'presshub_social_template_' . $platform;
+            $cur_template = get_option( $template_opt, '' );
+            if ( ! is_string( $cur_template ) || '' === trim( $cur_template ) ) {
+                try {
+                    update_option( $template_opt, PressHub_Social_Prompt_Loader::load( 'template_' . $platform . '.txt' ) );
+                } catch ( Exception $e ) {
+                    PressHub_Social_Logger::error( "Failed to repair template for {$platform}: " . $e->getMessage() );
+                }
+            }
+        }
+
+        update_option( 'presshub_social_repaired_v263', '1' );
     }
 
     /**
@@ -360,6 +425,9 @@ class PressHub_Social_Settings_Storage {
     }
 
     public static function sanitize_auto_publish_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_auto_publish_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_auto_publish_enabled();
+        }
         return in_array( $value, [ 1, '1', true, 'on', 'yes', 'true' ], true );
     }
 
@@ -377,6 +445,9 @@ class PressHub_Social_Settings_Storage {
     }
 
     public static function sanitize_enabled_platforms( $value ): array {
+        if ( null === $value && empty( $_POST['presshub_social_enabled_platforms_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_enabled_platforms();
+        }
         if ( ! is_array( $value ) ) {
             return [];
         }
@@ -798,7 +869,10 @@ class PressHub_Social_Settings_Storage {
         return is_string( $val ) ? trim( $val ) : '';
     }
 
-    public static function sanitize_prompt( $value ): string {
+    public static function sanitize_prompt( $value, string $option_name = '' ): string {
+        if ( null === $value && '' !== $option_name ) {
+            return (string) get_option( $option_name, '' );
+        }
         if ( ! is_string( $value ) ) {
             return '';
         }
@@ -806,7 +880,10 @@ class PressHub_Social_Settings_Storage {
         return substr( trim( $val ), 0, 10000 );
     }
 
-    public static function sanitize_template( $value ): string {
+    public static function sanitize_template( $value, string $option_name = '' ): string {
+        if ( null === $value && '' !== $option_name ) {
+            return (string) get_option( $option_name, '' );
+        }
         if ( ! is_string( $value ) ) {
             return '';
         }

@@ -76,6 +76,10 @@ class PressHub_Social_Metabox {
                         <span class="dashicons dashicons-superhero"></span>
                         <?php esc_html_e( 'Generate All Social Copy with AI', 'presshub-social-autopost' ); ?>
                     </button>
+                    <button type="button" class="button button-primary" id="presshub-enqueue-social-now" data-post-id="<?php echo esc_attr( $post_id ); ?>">
+                        <span class="dashicons dashicons-share" style="vertical-align:middle;"></span>
+                        <?php esc_html_e( 'Queue Social Posts Now', 'presshub-social-autopost' ); ?>
+                    </button>
                     <span class="spinner" id="presshub-social-global-spinner"></span>
                 </div>
             </div>

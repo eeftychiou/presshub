@@ -179,7 +179,7 @@ class PressHub_Social_Settings {
     }
 
     /**
-     * Enqueue admin assets and test-connection inline script.
+     * Enqueue admin assets.
      *
      * @param string $hook Admin page hook.
      * @return void
@@ -188,44 +188,6 @@ class PressHub_Social_Settings {
         if ( false === strpos( $hook, 'presshub-social' ) ) {
             return;
         }
-
-        $ajax_nonce = wp_create_nonce( 'presshub_social_test_nonce' );
-        $js = "
-        jQuery(document).ready(function($) {
-            $('.presshub-social-test-btn').on('click', function(e) {
-                e.preventDefault();
-                var btn = $(this);
-                var platform = btn.data('platform');
-                var row = btn.closest('.presshub-social-test-row');
-                var spinner = row.find('.spinner');
-                var status = row.find('.presshub-social-test-status');
-
-                btn.prop('disabled', true);
-                spinner.addClass('is-active');
-                status.css('color', '#666').text('Testing...');
-
-                $.post(ajaxurl, {
-                    action: 'presshub_social_test_connection',
-                    nonce: " . wp_json_encode( $ajax_nonce ) . ",
-                    platform: platform
-                }).done(function(res) {
-                    if (res && res.success) {
-                        status.css('color', '#007017').text('✓ ' + (res.data && res.data.message ? res.data.message : 'Connected'));
-                    } else {
-                        var msg = res && res.data && res.data.message ? res.data.message : 'Connection failed';
-                        status.css('color', '#d63638').text('✕ ' + msg);
-                    }
-                }).fail(function() {
-                    status.css('color', '#d63638').text('✕ HTTP Request Error');
-                }).always(function() {
-                    btn.prop('disabled', false);
-                    spinner.removeClass('is-active');
-                });
-            });
-        });
-        ";
-
-        wp_add_inline_script( 'common', $js );
     }
 
     /**

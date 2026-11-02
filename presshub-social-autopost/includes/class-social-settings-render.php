@@ -63,39 +63,47 @@ class PressHub_Social_Settings_Render {
             }
             ?>
 
-            <nav class="nav-tab-wrapper" style="margin-bottom: 20px;">
+            <nav class="nav-tab-wrapper presshub-social-nav-tabs" style="margin-bottom: 20px;">
                 <?php foreach ( $valid_tabs as $tab_id => $tab_title ) : ?>
                     <a href="<?php echo esc_url( add_query_arg( [ 'page' => 'presshub-social-settings', 'tab' => $tab_id ], admin_url( 'admin.php' ) ) ); ?>"
-                       class="nav-tab <?php echo $active_tab === $tab_id ? 'nav-tab-active' : ''; ?>">
+                       data-tab="<?php echo esc_attr( $tab_id ); ?>"
+                       class="nav-tab presshub-social-tab-link <?php echo $active_tab === $tab_id ? 'nav-tab-active' : ''; ?>">
                         <?php echo esc_html( $tab_title ); ?>
                     </a>
                 <?php endforeach; ?>
             </nav>
 
-            <form method="post" action="options.php">
-                <?php
-                settings_fields( PressHub_Social_Settings_Storage::OPTION_GROUP );
-                do_settings_sections( 'presshub_social_' . $active_tab );
-                submit_button();
-                ?>
-            </form>
+            <form method="post" action="options.php" id="presshub-social-settings-form">
+                <input type="hidden" name="presshub_social_form_full" value="1" />
+                <?php settings_fields( PressHub_Social_Settings_Storage::OPTION_GROUP ); ?>
 
-            <?php if ( 'prompts' === $active_tab ) : ?>
-                <hr style="margin: 30px 0 20px;" />
-                <div class="presshub-social-reset-box" style="background:#fff; border:1px solid #ccd0d4; padding:15px; border-radius:4px; max-width:800px;">
-                    <h3><?php echo esc_html__( 'Restore Prompts & Templates', 'presshub-social-autopost' ); ?></h3>
-                    <p class="description">
-                        <?php echo esc_html__( 'Reset all prompt templates and static formats back to the official default files from assets/prompts/. Any customizations made in the fields above will be overwritten.', 'presshub-social-autopost' ); ?>
-                    </p>
-                    <p>
-                        <a href="<?php echo esc_url( wp_nonce_url( add_query_arg( [ 'page' => 'presshub-social-settings', 'action' => 'reset_prompts' ], admin_url( 'admin.php' ) ), 'presshub_social_reset_prompts' ) ); ?>"
-                           class="button button-secondary"
-                           onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to restore all prompts to defaults? Your customized prompt changes will be lost.', 'presshub-social-autopost' ) ); ?>');">
-                            <?php echo esc_html__( 'Reset All Prompts to Defaults', 'presshub-social-autopost' ); ?>
-                        </a>
-                    </p>
-                </div>
-            <?php endif; ?>
+                <?php foreach ( $valid_tabs as $tab_id => $tab_title ) : ?>
+                    <div id="presshub-social-tab-pane-<?php echo esc_attr( $tab_id ); ?>"
+                         class="presshub-social-tab-pane"
+                         style="<?php echo $active_tab === $tab_id ? '' : 'display:none;'; ?>">
+                        <?php do_settings_sections( 'presshub_social_' . $tab_id ); ?>
+
+                        <?php if ( 'prompts' === $tab_id ) : ?>
+                            <hr style="margin: 30px 0 20px;" />
+                            <div class="presshub-social-reset-box" style="background:#fff; border:1px solid #ccd0d4; padding:15px; border-radius:4px; max-width:800px; margin-bottom:20px;">
+                                <h3><?php echo esc_html__( 'Restore Prompts & Templates', 'presshub-social-autopost' ); ?></h3>
+                                <p class="description">
+                                    <?php echo esc_html__( 'Reset all prompt templates and static formats back to the official default files from assets/prompts/. Any customizations made in the fields above will be overwritten.', 'presshub-social-autopost' ); ?>
+                                </p>
+                                <p>
+                                    <a href="<?php echo esc_url( wp_nonce_url( add_query_arg( [ 'page' => 'presshub-social-settings', 'action' => 'reset_prompts' ], admin_url( 'admin.php' ) ), 'presshub_social_reset_prompts' ) ); ?>"
+                                       class="button button-secondary"
+                                       onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to restore all prompts to defaults? Your customized prompt changes will be lost.', 'presshub-social-autopost' ) ); ?>');">
+                                        <?php echo esc_html__( 'Reset All Prompts to Defaults', 'presshub-social-autopost' ); ?>
+                                    </a>
+                                </p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+
+                <?php submit_button(); ?>
+            </form>
         </div>
         <?php
     }
@@ -107,6 +115,7 @@ class PressHub_Social_Settings_Render {
     public function render_auto_publish_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_auto_publish_enabled();
         ?>
+        <input type="hidden" name="presshub_social_auto_publish_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_auto_publish_enabled" value="1" <?php checked( $enabled, true ); ?> />
             <?php echo esc_html__( 'Automatically queue social posts when a standard WordPress post is published.', 'presshub-social-autopost' ); ?>
@@ -116,6 +125,7 @@ class PressHub_Social_Settings_Render {
 
     public function render_enabled_platforms_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_enabled_platforms();
+        echo '<input type="hidden" name="presshub_social_enabled_platforms_present" value="1" />';
         foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $platform ) {
             $is_checked = in_array( $platform, $enabled, true );
             echo '<label style="display:inline-block; margin-right:18px;">';
@@ -326,6 +336,7 @@ class PressHub_Social_Settings_Render {
     public function render_alert_email_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_alert_email_enabled();
         ?>
+        <input type="hidden" name="presshub_social_alert_email_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_alert_email_enabled" value="1" <?php checked( $enabled, true ); ?> />
             <?php echo esc_html__( 'Send email alert notifications when a social post permanently fails after maximum retry attempts.', 'presshub-social-autopost' ); ?>

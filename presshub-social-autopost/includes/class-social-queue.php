@@ -151,8 +151,20 @@ class PressHub_Social_Queue {
             global $wpdb;
             $table = PressHub_Social_Activator::get_table_name();
             $inserted = $wpdb->insert( $table, $record );
+            if ( false === $inserted && class_exists( 'PressHub_Social_Activator' ) ) {
+                // Ensure the queue table exists and retry insert once.
+                PressHub_Social_Activator::activate();
+                $inserted = $wpdb->insert( $table, $record );
+            }
             if ( false === $inserted ) {
-                return new WP_Error( 'db_insert_error', $wpdb->last_error ?: __( 'Could not insert queue record into database.', 'presshub-social-autopost' ) );
+                $db_err = $wpdb->last_error ?: __( 'Could not insert queue record into database.', 'presshub-social-autopost' );
+                if ( class_exists( 'PressHub_Social_Logger' ) ) {
+                    PressHub_Social_Logger::error(
+                        'Database insert failed in PressHub_Social_Queue::enqueue: ' . $db_err,
+                        [ 'table' => $table, 'post_id' => $post_id, 'platform' => $platform ]
+                    );
+                }
+                return new WP_Error( 'db_insert_error', $db_err );
             }
             $job_id = (int) $wpdb->insert_id;
             return $job_id;
@@ -620,6 +632,39 @@ class PressHub_Social_Queue {
 
         if ( isset( self::$memory_store[ $job_id ] ) ) {
             self::$memory_store[ $job_id ]['status']     = 'cancelled';
+            self::$memory_store[ $job_id ]['updated_at'] = $now;
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Update the post copy of an existing queue job (e.g. after regenerating failed AI copy on retry).
+     *
+     * @param int    $job_id
+     * @param string $post_copy
+     * @return bool
+     */
+    public static function update_job_copy( int $job_id, string $post_copy ): bool {
+        $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+
+        if ( self::is_db_ready() ) {
+            global $wpdb;
+            $table  = PressHub_Social_Activator::get_table_name();
+            $result = $wpdb->update(
+                $table,
+                [
+                    'post_copy'  => $post_copy,
+                    'updated_at' => $now,
+                ],
+                [ 'id' => $job_id ]
+            );
+            return false !== $result;
+        }
+
+        if ( isset( self::$memory_store[ $job_id ] ) ) {
+            self::$memory_store[ $job_id ]['post_copy']  = $post_copy;
             self::$memory_store[ $job_id ]['updated_at'] = $now;
             return true;
         }
