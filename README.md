@@ -204,7 +204,7 @@ The PHP test suite runs in isolation without external database dependencies:
 cd presshub-ai-editor
 php tests/run-all-tests.php
 
-# PressHub Social Auto-Post PHP unit tests (65 assertions):
+# PressHub Social Auto-Post PHP unit tests (18 suites, 118 assertions):
 cd ../presshub-social-autopost
 php tests/run-social-tests.php
 

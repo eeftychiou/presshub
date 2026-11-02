@@ -102,6 +102,32 @@ class PressHub_Social_Worker_Client {
      * @return array|WP_Error
      */
     public static function check_health(): array|WP_Error {
+        $secret = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_worker_secret' )
+            ? PressHub_Social_Settings_Storage::get_worker_secret()
+            : '';
+
+        if ( empty( $secret ) ) {
+            return new WP_Error(
+                'missing_worker_config',
+                __( 'Social Worker URL or Secret is not configured in Settings.', 'presshub-social-autopost' )
+            );
+        }
+
+        if ( class_exists( 'PressHub_Social_Settings_Storage' ) && 'pull' === PressHub_Social_Settings_Storage::get_worker_mode() ) {
+            $last_seen = (int) get_option( 'presshub_social_worker_last_seen', 0 );
+            if ( $last_seen > 0 && ( time() - $last_seen ) <= 180 ) {
+                return [
+                    'ok'      => true,
+                    'status'  => 'healthy',
+                    'message' => sprintf( __( 'Local Pull Worker Online (last heartbeat %ds ago)', 'presshub-social-autopost' ), time() - $last_seen ),
+                ];
+            }
+            return new WP_Error(
+                'worker_offline',
+                __( 'Pull mode active: waiting for local worker heartbeat. Start presshub-social-worker on your local machine.', 'presshub-social-autopost' )
+            );
+        }
+
         $result = self::send_request( '/health', 'GET' );
         if ( is_wp_error( $result ) ) {
             return $result;
@@ -122,7 +148,43 @@ class PressHub_Social_Worker_Client {
      */
     public static function verify_session( string $platform ): array|WP_Error {
         $platform = sanitize_key( $platform );
-        $result   = self::send_request( '/verify-session', 'POST', [ 'platform' => $platform ] );
+
+        $secret = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_worker_secret' )
+            ? PressHub_Social_Settings_Storage::get_worker_secret()
+            : '';
+
+        if ( empty( $secret ) ) {
+            return new WP_Error(
+                'missing_worker_config',
+                __( 'Social Worker URL or Secret is not configured in Settings.', 'presshub-social-autopost' )
+            );
+        }
+
+        if ( class_exists( 'PressHub_Social_Settings_Storage' ) && 'pull' === PressHub_Social_Settings_Storage::get_worker_mode() ) {
+            $last_seen = (int) get_option( 'presshub_social_worker_last_seen', 0 );
+            if ( $last_seen <= 0 || ( time() - $last_seen ) > 180 ) {
+                return new WP_Error(
+                    'worker_offline',
+                    __( 'Pull mode active: waiting for local worker heartbeat. Start presshub-social-worker on your local machine.', 'presshub-social-autopost' )
+                );
+            }
+
+            $sessions = get_option( 'presshub_social_worker_sessions', [] );
+            if ( is_array( $sessions ) && ! empty( $sessions[ $platform ] ) ) {
+                return [
+                    'ok'      => true,
+                    'valid'   => true,
+                    'message' => sprintf( __( 'Active %s session verified on local pull worker.', 'presshub-social-autopost' ), ucfirst( $platform ) ),
+                ];
+            }
+
+            return new WP_Error(
+                'session_missing',
+                sprintf( __( 'No active %s session reported by local worker. Run: npm run login -- %s', 'presshub-social-autopost' ), $platform, $platform )
+            );
+        }
+
+        $result = self::send_request( '/verify-session', 'POST', [ 'platform' => $platform ] );
 
         if ( is_wp_error( $result ) ) {
             return $result;

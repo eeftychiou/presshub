@@ -123,3 +123,34 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
       .run();
   });
 }
+
+export interface GenerateVideoParams {
+  postId?: number;
+  title?: string;
+  subtitle?: string;
+  durationSec?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  outputDir?: string;
+  siteName?: string;
+  category?: string;
+  imagePath?: string;
+  audioPath?: string;
+}
+
+export async function generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
+  return generateSocialVideo({
+    title: params.title,
+    subtitle: params.subtitle,
+    category: params.category,
+    siteName: params.siteName,
+    imagePath: params.imagePath,
+    audioPath: params.audioPath,
+    width: params.width,
+    height: params.height,
+    duration: params.durationSec ?? params.duration,
+    outputDir: params.outputDir
+  });
+}
+

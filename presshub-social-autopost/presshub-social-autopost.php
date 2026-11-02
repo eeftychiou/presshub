@@ -3,7 +3,7 @@
  * Plugin Name: PressHub Social Auto-Post
  * Plugin URI: https://presshub.ai
  * Description: Automated multi-platform social media auto-posting pipeline for WordPress with AI copy generation, queue dispatcher, Meta API, and browser automation worker integration.
- * Version: 2.6.3
+ * Version: 2.6.4
  * Author: PressHub Team
  * Author URI: https://presshub.ai
  * Text Domain: presshub-social-autopost
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'PRESSHUB_SOCIAL_VERSION', '2.6.3' );
+define( 'PRESSHUB_SOCIAL_VERSION', '2.6.4' );
 define( 'PRESSHUB_SOCIAL_FILE', __FILE__ );
 define( 'PRESSHUB_SOCIAL_PATH', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_SOCIAL_URL', plugin_dir_url( __FILE__ ) );
@@ -40,6 +40,7 @@ $includes = [
     'class-social-metabox.php',
     'class-social-queue-admin.php',
     'class-social-ajax-handlers.php',
+    'class-social-rest-controller.php',
 ];
 
 foreach ( $includes as $file ) {
@@ -48,6 +49,11 @@ foreach ( $includes as $file ) {
         require_once $filepath;
     }
 }
+
+/**
+ * Register REST API routes.
+ */
+add_action( 'rest_api_init', [ 'PressHub_Social_REST_Controller', 'register_routes' ] );
 
 /**
  * Register activation and deactivation hooks.

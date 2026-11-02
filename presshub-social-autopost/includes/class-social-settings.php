@@ -448,6 +448,14 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_worker_mode',
+            __( 'Worker Connection Mode', 'presshub-social-autopost' ),
+            [ $render, 'render_worker_mode_field' ],
+            'presshub_social_worker',
+            'presshub_social_worker_sec'
+        );
+
+        add_settings_field(
             'presshub_social_worker_url',
             __( 'Worker Service Endpoint', 'presshub-social-autopost' ),
             [ $render, 'render_worker_url_field' ],

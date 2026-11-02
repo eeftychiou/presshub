@@ -21,6 +21,9 @@ export interface PostResult {
   platform: Platform;
   externalPostUrl?: string;
   externalPostId?: string;
+  external_url?: string;
+  external_id?: string;
+  error?: string;
   mediaPath?: string;
 }
 
@@ -298,3 +301,32 @@ export async function defaultPosterHandler(options: PostOptions): Promise<PostRe
       throw new Error(`Unsupported platform: ${platform}`);
   }
 }
+
+/**
+ * Browser automation dispatcher for post execution.
+ * Returns PostResult with normalized external_id / external_url fields,
+ * catching internal execution errors into success: false result.
+ */
+export async function dispatchBrowserPost(options: PostOptions): Promise<PostResult> {
+  try {
+    const res = await defaultPosterHandler(options);
+    return {
+      ...res,
+      external_id: res.external_id || res.externalPostId,
+      external_url: res.external_url || res.externalPostUrl
+    };
+  } catch (err: any) {
+    let plat: Platform;
+    try {
+      plat = sanitizePlatform(options.platform);
+    } catch {
+      plat = 'twitter';
+    }
+    return {
+      success: false,
+      platform: plat,
+      error: err.message || 'Browser automation failed'
+    };
+  }
+}
+

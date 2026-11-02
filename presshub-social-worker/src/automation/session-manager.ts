@@ -127,3 +127,14 @@ export function saveSession(platform: string, state: object | string, sessionsDi
   fs.writeFileSync(sessionPath, content, 'utf-8');
   return sessionPath;
 }
+
+export const SessionManager = {
+  verifySession,
+  saveSession,
+  getSessionPath,
+  getSessionsDir,
+  sanitizePlatform,
+  isValidPlatform,
+  SUPPORTED_PLATFORMS
+};
+

@@ -151,6 +151,12 @@ class PressHub_Social_Settings_Storage {
         ] );
 
         // 5. Worker & Media Specifications
+        register_setting( self::OPTION_GROUP, 'presshub_social_worker_mode', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_worker_mode' ],
+            'default'           => 'pull',
+        ] );
+
         register_setting( self::OPTION_GROUP, 'presshub_social_worker_url', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_worker_url' ],
@@ -606,6 +612,19 @@ class PressHub_Social_Settings_Storage {
     // ------------------------------------------------------------------
     // Getters & Sanitizers: Worker & Specifications
     // ------------------------------------------------------------------
+
+    public static function get_worker_mode(): string {
+        $val = (string) get_option( 'presshub_social_worker_mode', 'pull' );
+        return in_array( $val, [ 'pull', 'push' ], true ) ? $val : 'pull';
+    }
+
+    public static function sanitize_worker_mode( $value ): string {
+        if ( null === $value && ! empty( $_POST ) && ! isset( $_POST['presshub_social_worker_mode'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_worker_mode();
+        }
+        $val = sanitize_key( (string) $value );
+        return in_array( $val, [ 'pull', 'push' ], true ) ? $val : 'pull';
+    }
 
     public static function get_worker_url(): string {
         $url = (string) get_option( 'presshub_social_worker_url', 'http://127.0.0.1:3456' );

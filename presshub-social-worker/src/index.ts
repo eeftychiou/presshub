@@ -1,32 +1,63 @@
+import { loadEnv, getWorkerConfig } from './config';
 import { createApp } from './app';
+import { PressHubPoller } from './poller';
 
-const PORT = parseInt(process.env.PRESSHUB_WORKER_PORT || '3456', 10);
-const SECRET = process.env.PRESSHUB_WORKER_SECRET;
+// Load .env file at startup
+loadEnv();
 
-if (!SECRET) {
-  console.warn('⚠️  WARNING: PRESSHUB_WORKER_SECRET environment variable is not set. All authenticated API requests will fail.');
+let activePoller: PressHubPoller | undefined;
+
+/**
+ * Starts the HTTP server and optionally initializes Pull Mode poller if configured.
+ */
+export function startServer() {
+  const config = getWorkerConfig();
+  const PORT = config.port;
+  const SECRET = config.workerSecret;
+  const WP_URL = config.wpUrl;
+
+  if (!SECRET) {
+    console.warn('⚠️  WARNING: PRESSHUB_WORKER_SECRET environment variable is not set. All authenticated API requests will fail.');
+  }
+
+  const app = createApp({
+    secret: () => process.env.PRESSHUB_WORKER_SECRET
+  });
+
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 PressHub Social Media Worker running on port ${PORT}`);
+    console.log(`📡 Health Check endpoint: http://localhost:${PORT}/health`);
+  });
+
+  // Pull Mode: If WordPress URL and Worker Secret are configured, start poller
+  if (WP_URL && SECRET) {
+    activePoller = new PressHubPoller({
+      wpUrl: WP_URL,
+      workerSecret: SECRET,
+      pollIntervalMs: config.pollIntervalMs
+    });
+    activePoller.start();
+  } else {
+    console.log('ℹ️  Pull Mode idle (PRESSHUB_WP_URL or PRESSHUB_WORKER_SECRET not set). Running in Push Mode.');
+  }
+
+  // Graceful shutdown handlers
+  const shutdown = () => {
+    console.log('Shutting down gracefully...');
+    if (activePoller) {
+      activePoller.stop();
+    }
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
+  return { app, server, poller: activePoller };
 }
 
-const app = createApp({
-  secret: () => process.env.PRESSHUB_WORKER_SECRET
-});
-
-const server = app.listen(PORT, () => {
-  console.log(`🚀 PressHub Social Media Worker running on port ${PORT}`);
-  console.log(`📡 Health Check endpoint: http://localhost:${PORT}/health`);
-});
-
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
-  server.close(() => {
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received. Shutting down gracefully...');
-  server.close(() => {
-    process.exit(0);
-  });
-});
+if (require.main === module) {
+  startServer();
+}

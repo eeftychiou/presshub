@@ -55,6 +55,62 @@ if ( ! function_exists( 'wp_unschedule_event' ) ) {
     }
 }
 
+// REST API stubs
+if ( ! isset( $GLOBALS['WP_REST_ROUTES'] ) ) {
+    $GLOBALS['WP_REST_ROUTES'] = [];
+}
+
+if ( ! function_exists( 'register_rest_route' ) ) {
+    function register_rest_route( $namespace, $route, $args = [] ): bool {
+        $GLOBALS['WP_REST_ROUTES'][ $namespace ][ $route ] = $args;
+        return true;
+    }
+}
+
+if ( ! function_exists( 'rest_url' ) ) {
+    function rest_url( $path = '' ): string {
+        return 'https://example.com/wp-json/' . ltrim( $path, '/' );
+    }
+}
+
+if ( ! class_exists( 'WP_REST_Request' ) ) {
+    class WP_REST_Request {
+        private string $method;
+        private string $route;
+        private array $headers = [];
+        private array $params = [];
+
+        public function __construct( string $method = 'GET', string $route = '' ) {
+            $this->method = strtoupper( $method );
+            $this->route  = $route;
+        }
+
+        public function set_header( string $key, string $value ): void {
+            $this->headers[ strtolower( $key ) ] = $value;
+        }
+
+        public function get_header( string $key ): ?string {
+            return $this->headers[ strtolower( $key ) ] ?? null;
+        }
+
+        public function set_param( string $key, $value ): void {
+            $this->params[ $key ] = $value;
+        }
+
+        public function get_param( string $key ) {
+            return $this->params[ $key ] ?? null;
+        }
+
+        public function get_params(): array {
+            return $this->params;
+        }
+
+        public function get_json_params(): array {
+            return $this->params;
+        }
+    }
+}
+
 // Fallback stubs for standalone environments
 if ( ! class_exists( 'WP_Error' ) ) {
     class WP_Error {
@@ -417,6 +473,7 @@ require_once $base_dir . '/includes/class-social-dispatcher.php';
 require_once $base_dir . '/includes/class-social-metabox.php';
 require_once $base_dir . '/includes/class-social-queue-admin.php';
 require_once $base_dir . '/includes/class-social-ajax-handlers.php';
+require_once $base_dir . '/includes/class-social-rest-controller.php';
 
 // Force queue into in-memory mode for clean unit testing
 PressHub_Social_Queue::$force_memory = true;
@@ -997,6 +1054,168 @@ $_POST = [];
 $jobs_402 = PressHub_Social_Queue::get_jobs_for_post( 402 );
 assert_equals( 1, count( $jobs_402 ), 'Transition draft -> publish respects metabox platform selection submitted in $_POST' );
 assert_equals( 'Custom metabox copy saved during publish transition', $jobs_402[0]['post_copy'] ?? '', 'Transition draft -> publish uses custom metabox copy submitted in $_POST' );
+
+// ----------------------------------------------------------------------
+// Test Suite 18: REST API Controller & Pull Mode Worker Integration
+// ----------------------------------------------------------------------
+echo "\n--- Suite 18: REST API Controller & Pull Mode Worker Integration ---\n";
+
+// 1. Verify route registration
+PressHub_Social_REST_Controller::register_routes();
+assert_true( isset( $GLOBALS['WP_REST_ROUTES']['presshub-social/v1']['/worker/heartbeat'] ), 'REST route /worker/heartbeat registered' );
+assert_true( isset( $GLOBALS['WP_REST_ROUTES']['presshub-social/v1']['/worker/claim'] ), 'REST route /worker/claim registered' );
+assert_true( isset( $GLOBALS['WP_REST_ROUTES']['presshub-social/v1']['/worker/complete'] ), 'REST route /worker/complete registered' );
+
+// 2. Secret verification
+delete_option( 'presshub_social_worker_secret' );
+$req_test_sec = new WP_REST_Request( 'POST', '/worker/heartbeat' );
+$req_test_sec->set_header( 'x-presshub-secret', 'any_secret' );
+$sec_err = PressHub_Social_REST_Controller::verify_worker_secret( $req_test_sec );
+assert_true( is_wp_error( $sec_err ) && 'missing_worker_secret' === $sec_err->get_error_code(), 'verify_worker_secret fails 401 when worker secret unset' );
+
+update_option( 'presshub_social_worker_secret', 'correct_worker_secret_9988' );
+$req_test_sec->set_header( 'x-presshub-secret', 'wrong_secret' );
+$sec_err2 = PressHub_Social_REST_Controller::verify_worker_secret( $req_test_sec );
+assert_true( is_wp_error( $sec_err2 ) && 'invalid_worker_secret' === $sec_err2->get_error_code(), 'verify_worker_secret fails 403 on secret mismatch' );
+
+$req_test_sec->set_header( 'x-presshub-secret', 'correct_worker_secret_9988' );
+assert_true( true === PressHub_Social_REST_Controller::verify_worker_secret( $req_test_sec ), 'verify_worker_secret succeeds with X-PressHub-Secret' );
+
+$req_worker_hdr = new WP_REST_Request( 'POST', '/worker/heartbeat' );
+$req_worker_hdr->set_header( 'x-worker-secret', 'correct_worker_secret_9988' );
+assert_true( true === PressHub_Social_REST_Controller::verify_worker_secret( $req_worker_hdr ), 'verify_worker_secret succeeds with X-Worker-Secret' );
+
+$req_bearer_hdr = new WP_REST_Request( 'POST', '/worker/heartbeat' );
+$req_bearer_hdr->set_header( 'authorization', 'Bearer correct_worker_secret_9988' );
+assert_true( true === PressHub_Social_REST_Controller::verify_worker_secret( $req_bearer_hdr ), 'verify_worker_secret succeeds with Authorization: Bearer' );
+
+// 3. Heartbeat handler
+update_option( 'presshub_social_worker_mode', 'pull' );
+$req_hb = new WP_REST_Request( 'POST', '/worker/heartbeat' );
+$req_hb->set_param( 'sessions', [ 'twitter' => true, 'tiktok' => false ] );
+$res_hb = PressHub_Social_REST_Controller::handle_heartbeat( $req_hb );
+assert_true( ! empty( $res_hb['ok'] ) && 'pull' === $res_hb['mode'], 'Heartbeat returns ok and mode' );
+assert_true( (int) get_option( 'presshub_social_worker_last_seen' ) > 0, 'Heartbeat updates presshub_social_worker_last_seen' );
+$hb_sessions = get_option( 'presshub_social_worker_sessions' );
+assert_true( is_array( $hb_sessions ) && true === $hb_sessions['twitter'] && false === $hb_sessions['tiktok'], 'Heartbeat persists platform sessions' );
+
+// 4. Claim handler
+PressHub_Social_Queue::reset_memory_store();
+$post_501 = new WP_Post( [
+    'ID'          => 501,
+    'post_type'   => 'post',
+    'post_status' => 'publish',
+    'post_title'  => 'Article for Worker Pull',
+] );
+$GLOBALS['test_posts'][501]  = $post_501;
+$GLOBALS['POSTS_STORE'][501] = [
+    'ID'           => 501,
+    'post_type'    => 'post',
+    'post_status'  => 'publish',
+    'post_title'   => 'Article for Worker Pull',
+    'post_content' => 'Content...',
+];
+
+$past_time = gmdate( 'Y-m-d H:i:s', time() - 60 );
+$job_auto = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 501,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => 'Automated Tweet from Pull Worker',
+    'scheduled_at' => $past_time,
+] );
+$job_api = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 501,
+    'platform'     => 'facebook',
+    'engine'       => 'api',
+    'post_copy'    => 'Graph API Post',
+    'scheduled_at' => $past_time,
+] );
+
+$req_claim = new WP_REST_Request( 'POST', '/worker/claim' );
+$res_claim = PressHub_Social_REST_Controller::handle_claim( $req_claim );
+assert_true( ! empty( $res_claim['ok'] ), 'Claim response returns ok' );
+assert_equals( 1, count( $res_claim['jobs'] ), 'Claim only claims automation engine jobs' );
+assert_equals( 'twitter', $res_claim['jobs'][0]['platform'], 'Claimed job platform is twitter' );
+assert_equals( 'Article for Worker Pull', $res_claim['jobs'][0]['post_title'], 'Claimed job has post_title attached' );
+assert_true( isset( $res_claim['jobs'][0]['specs']['instagram_card_width'], $res_claim['jobs'][0]['specs']['tiktok_video_duration'] ), 'Claimed job has media specs attached' );
+assert_equals( 'processing', PressHub_Social_Queue::get_job( $job_auto )['status'], 'Claimed job transitioned to processing status' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $job_api )['status'], 'API engine job remains untouched in pending status' );
+
+// 5. Complete handler
+$req_comp = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_comp->set_param( 'job_id', $job_auto );
+$req_comp->set_param( 'status', 'published' );
+$req_comp->set_param( 'external_post_id', 'tweet_889977' );
+$req_comp->set_param( 'external_post_url', 'https://x.com/presshub/status/889977' );
+$res_comp = PressHub_Social_REST_Controller::handle_complete( $req_comp );
+assert_true( ! empty( $res_comp['ok'] ) && 'published' === $res_comp['status'], 'Complete handler returns ok and published' );
+$published_auto_job = PressHub_Social_Queue::get_job( $job_auto );
+assert_equals( 'published', $published_auto_job['status'], 'Job transitioned to published status' );
+assert_equals( 'tweet_889977', $published_auto_job['external_post_id'], 'External post ID recorded' );
+assert_equals( 'https://x.com/presshub/status/889977', $published_auto_job['external_post_url'], 'External post URL recorded' );
+
+$job_fail = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 501,
+    'platform'     => 'tiktok',
+    'engine'       => 'automation',
+    'post_copy'    => 'TikTok Video to Fail',
+    'scheduled_at' => $past_time,
+] );
+PressHub_Social_Queue::mark_processing( $job_fail );
+$req_comp_fail = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_comp_fail->set_param( 'job_id', $job_fail );
+$req_comp_fail->set_param( 'status', 'failed' );
+$req_comp_fail->set_param( 'error', 'Playwright selector timeout' );
+$res_comp_fail = PressHub_Social_REST_Controller::handle_complete( $req_comp_fail );
+assert_true( ! empty( $res_comp_fail['ok'] ) && 'failed' === $res_comp_fail['status'], 'Complete handler records failed status' );
+$failed_job = PressHub_Social_Queue::get_job( $job_fail );
+assert_equals( 'pending', $failed_job['status'], 'Transient failure resets job to pending for backoff retry' );
+assert_equals( 'Playwright selector timeout', $failed_job['last_error'], 'Job records reported failure message' );
+
+// 6. Pull Mode health & session verification
+update_option( 'presshub_social_worker_mode', 'pull' );
+update_option( 'presshub_social_worker_secret', 'correct_worker_secret_9988' );
+
+// Health check with stale heartbeat (>180s)
+update_option( 'presshub_social_worker_last_seen', time() - 300 );
+$health_stale = PressHub_Social_Worker_Client::check_health();
+assert_true( is_wp_error( $health_stale ) && 'worker_offline' === $health_stale->get_error_code(), 'check_health returns worker_offline when heartbeat is stale' );
+
+// Health check with fresh heartbeat (<=180s)
+update_option( 'presshub_social_worker_last_seen', time() - 15 );
+$health_fresh = PressHub_Social_Worker_Client::check_health();
+assert_true( ! is_wp_error( $health_fresh ) && 'healthy' === $health_fresh['status'], 'check_health succeeds when worker heartbeat is fresh' );
+
+// Session check missing
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => false ] );
+$sess_missing = PressHub_Social_Worker_Client::verify_session( 'twitter' );
+assert_true( is_wp_error( $sess_missing ) && 'session_missing' === $sess_missing->get_error_code(), 'verify_session returns session_missing when platform session is inactive' );
+
+// Session check valid
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true ] );
+$sess_valid = PressHub_Social_Worker_Client::verify_session( 'twitter' );
+assert_true( ! is_wp_error( $sess_valid ) && ( $sess_valid['valid'] ?? false ), 'verify_session succeeds when platform session is active' );
+
+// 7. Dispatcher Pull Mode gating
+PressHub_Social_Queue::reset_memory_store();
+$job_pull_gate = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 501,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => 'Queued for Pull Worker',
+    'scheduled_at' => $past_time,
+] );
+$batch_summary = PressHub_Social_Dispatcher::process_due_queue();
+assert_equals( 1, $batch_summary['skipped'], 'process_due_queue skips automation jobs during cron in pull mode' );
+$gate_job_after_cron = PressHub_Social_Queue::get_job( $job_pull_gate );
+assert_equals( 'pending', $gate_job_after_cron['status'], 'Job remains pending after server-side cron' );
+
+$disp_res = PressHub_Social_Dispatcher::dispatch_job( $job_pull_gate );
+assert_true( is_wp_error( $disp_res ) && 'pull_mode_queued' === $disp_res->get_error_code(), 'dispatch_job returns pull_mode_queued in pull mode' );
+$gate_job_after_disp = PressHub_Social_Queue::get_job( $job_pull_gate );
+assert_equals( 'pending', $gate_job_after_disp['status'], 'Job remains pending for local worker after dispatch_job' );
+
 
 // ----------------------------------------------------------------------
 // Test Summary

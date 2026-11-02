@@ -286,3 +286,29 @@ export async function generateSocialCard(options: GenerateCardOptions): Promise<
     sizeBytes: stats.size
   };
 }
+
+export interface GenerateCardParams {
+  postId?: number;
+  title: string;
+  subtitle?: string;
+  siteName?: string;
+  category?: string;
+  width?: number;
+  height?: number;
+  outputDir?: string;
+  backgroundBuffer?: Buffer;
+}
+
+export async function generateCard(params: GenerateCardParams): Promise<CardResult> {
+  return generateSocialCard({
+    title: params.title,
+    subtitle: params.subtitle,
+    category: params.category,
+    siteName: params.siteName,
+    width: params.width,
+    height: params.height,
+    outputDir: params.outputDir,
+    backgroundBuffer: params.backgroundBuffer
+  });
+}
+

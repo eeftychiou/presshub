@@ -192,12 +192,30 @@ class PressHub_Social_Dispatcher {
             return true;
         }
 
-        // Transition job to processing
-        PressHub_Social_Queue::mark_processing( $job_id );
-
         $platform = sanitize_key( (string) ( $job['platform'] ?? '' ) );
         $engine   = sanitize_key( (string) ( $job['engine'] ?? 'api' ) );
         $post_id  = (int) ( $job['post_id'] ?? 0 );
+
+        // In Pull Mode, automation jobs are polled and executed by the local worker via REST.
+        // Keep the job pending with scheduled_at = now so it is picked up immediately on the next poll.
+        $worker_mode = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_worker_mode' )
+            ? PressHub_Social_Settings_Storage::get_worker_mode()
+            : 'pull';
+
+        if ( 'automation' === $engine && 'pull' === $worker_mode ) {
+            $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+            PressHub_Social_Queue::update_job( $job_id, [
+                'status'       => 'pending',
+                'scheduled_at' => $now,
+            ] );
+            return new WP_Error(
+                'pull_mode_queued',
+                __( 'Job is queued in Pull Mode and will be picked up automatically by your local worker on its next poll.', 'presshub-social-autopost' )
+            );
+        }
+
+        // Transition job to processing
+        PressHub_Social_Queue::mark_processing( $job_id );
 
         // If this job previously failed during AI copy generation, regenerate copy now before dispatching
         $current_copy = (string) ( $job['post_copy'] ?? '' );
@@ -284,16 +302,28 @@ class PressHub_Social_Dispatcher {
      * @return array Summary of processed batch.
      */
     public static function process_due_queue(): array {
-        $due_jobs = PressHub_Social_Queue::get_due_pending_jobs();
+        $due_jobs    = PressHub_Social_Queue::get_due_pending_jobs();
+        $worker_mode = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_worker_mode' )
+            ? PressHub_Social_Settings_Storage::get_worker_mode()
+            : 'pull';
+
         $summary  = [
             'total_due' => count( $due_jobs ),
             'succeeded' => 0,
             'failed'    => 0,
+            'skipped'   => 0,
             'job_ids'   => [],
         ];
 
         foreach ( $due_jobs as $job ) {
             $job_id = (int) $job['id'];
+
+            // In Pull Mode, automation jobs are reserved for the local worker polling via REST
+            if ( 'pull' === $worker_mode && 'automation' === ( $job['engine'] ?? '' ) ) {
+                $summary['skipped']++;
+                continue;
+            }
+
             $summary['job_ids'][] = $job_id;
 
             $res = self::dispatch_job( $job_id );

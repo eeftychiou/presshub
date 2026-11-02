@@ -313,6 +313,28 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_worker_mode_field(): void {
+        $mode     = PressHub_Social_Settings_Storage::get_worker_mode();
+        $rest_url = function_exists( 'rest_url' )
+            ? rest_url( 'presshub-social/v1/worker/claim' )
+            : ( function_exists( 'home_url' ) ? home_url( '/wp-json/presshub-social/v1/worker/claim' ) : '/wp-json/presshub-social/v1/worker/claim' );
+        ?>
+        <select id="presshub_social_worker_mode" name="presshub_social_worker_mode">
+            <option value="pull" <?php selected( $mode, 'pull' ); ?>><?php echo esc_html__( 'Pull Mode — Local Worker Polls WordPress via REST API (Recommended for Local PC)', 'presshub-social-autopost' ); ?></option>
+            <option value="push" <?php selected( $mode, 'push' ); ?>><?php echo esc_html__( 'Push Mode — WordPress Connects Directly to Worker URL', 'presshub-social-autopost' ); ?></option>
+        </select>
+        <p class="description">
+            <?php
+            printf(
+                /* translators: %s: REST claim endpoint URL */
+                esc_html__( 'In Pull Mode, your local worker polls WordPress for jobs and sends heartbeats. Endpoint URL: %s', 'presshub-social-autopost' ),
+                '<code>' . esc_html( $rest_url ) . '</code>'
+            );
+            ?>
+        </p>
+        <?php
+    }
+
     public function render_worker_url_field(): void {
         $url = PressHub_Social_Settings_Storage::get_worker_url();
         ?>

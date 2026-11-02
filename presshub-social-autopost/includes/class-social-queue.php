@@ -640,6 +640,42 @@ class PressHub_Social_Queue {
     }
 
     /**
+     * Update arbitrary fields of an existing job.
+     *
+     * @param int   $job_id
+     * @param array $data
+     * @return bool
+     */
+    public static function update_job( int $job_id, array $data ): bool {
+        if ( empty( $data ) || $job_id <= 0 ) {
+            return false;
+        }
+
+        $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+        $data['updated_at'] = $now;
+
+        if ( self::is_db_ready() ) {
+            global $wpdb;
+            $table  = PressHub_Social_Activator::get_table_name();
+            $result = $wpdb->update(
+                $table,
+                $data,
+                [ 'id' => $job_id ]
+            );
+            return false !== $result;
+        }
+
+        if ( isset( self::$memory_store[ $job_id ] ) ) {
+            foreach ( $data as $k => $v ) {
+                self::$memory_store[ $job_id ][ $k ] = $v;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Update the post copy of an existing queue job (e.g. after regenerating failed AI copy on retry).
      *
      * @param int    $job_id
