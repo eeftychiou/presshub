@@ -90,6 +90,7 @@ export interface WorkerEnvConfig {
   workerSecret?: string;
   port: number;
   pollIntervalMs: number;
+  chromeCdpUrl?: string;
 }
 
 /**
@@ -100,6 +101,7 @@ export function getWorkerConfig(): WorkerEnvConfig {
     wpUrl: process.env.PRESSHUB_WP_URL?.trim() || undefined,
     workerSecret: process.env.PRESSHUB_WORKER_SECRET?.trim() || undefined,
     port: parseInt(process.env.PRESSHUB_WORKER_PORT || '3456', 10),
-    pollIntervalMs: parseInt(process.env.PRESSHUB_POLL_INTERVAL_MS || '30000', 10)
+    pollIntervalMs: parseInt(process.env.PRESSHUB_POLL_INTERVAL_MS || '30000', 10),
+    chromeCdpUrl: process.env.PRESSHUB_CHROME_CDP_URL?.trim() || undefined
   };
 }

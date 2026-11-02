@@ -1,12 +1,18 @@
-import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import {
   Platform,
   sanitizePlatform,
   verifySession,
-  getSessionPath
+  getSessionPath,
+  saveSession
 } from './session-manager';
+import {
+  connectOrLaunchChrome,
+  ChromeConnection,
+  isCdpAvailable,
+  extractSessionFromCdp
+} from './browser-helper';
 
 export interface PostOptions {
   platform: Platform;
@@ -14,6 +20,8 @@ export interface PostOptions {
   mediaPath?: string;
   sessionsDir?: string;
   timeoutMs?: number;
+  cdpUrl?: string;
+  browserSession?: ChromeConnection;
 }
 
 export interface PostResult {
@@ -30,20 +38,22 @@ export interface PostResult {
 export type PosterHandler = (options: PostOptions) => Promise<PostResult>;
 
 /**
- * Twitter / X automation poster using saved browser session.
+ * Twitter / X automation poster using saved browser session or running Chrome.
  */
 export async function postTwitter(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('twitter', options.sessionsDir);
   const timeout = options.timeoutMs || 30000;
 
-  const browser = await chromium.launch({ headless: true });
+  const session =
+    options.browserSession ||
+    (await connectOrLaunchChrome({
+      headless: true,
+      cdpUrl: options.cdpUrl,
+      storageState: sessionPath
+    }));
+
+  const page = await session.context.newPage();
   try {
-    const context = await browser.newContext({
-      storageState: sessionPath,
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    });
-    const page = await context.newPage();
     page.setDefaultTimeout(timeout);
 
     await page.goto('https://x.com/compose/post', { waitUntil: 'domcontentloaded' });
@@ -57,7 +67,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     // If media attached, upload via file input
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
       const fileInput = page.locator('input[data-testid="fileInput"]');
-      if (await fileInput.count() > 0) {
+      if ((await fileInput.count()) > 0) {
         await fileInput.setInputFiles(path.resolve(options.mediaPath));
         // Wait for attachment preview to appear
         await page.waitForTimeout(2000);
@@ -81,12 +91,17 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       mediaPath: options.mediaPath
     };
   } finally {
-    await browser.close();
+    try {
+      await page.close();
+    } catch {}
+    if (!options.browserSession) {
+      await session.close();
+    }
   }
 }
 
 /**
- * TikTok Studio / Creator Center automation poster using saved browser session.
+ * TikTok Studio / Creator Center automation poster using saved browser session or running Chrome.
  */
 export async function postTikTok(options: PostOptions): Promise<PostResult> {
   if (!options.mediaPath || !fs.existsSync(options.mediaPath)) {
@@ -96,17 +111,21 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('tiktok', options.sessionsDir);
   const timeout = options.timeoutMs || 45000;
 
-  const browser = await chromium.launch({ headless: true });
+  const session =
+    options.browserSession ||
+    (await connectOrLaunchChrome({
+      headless: true,
+      cdpUrl: options.cdpUrl,
+      storageState: sessionPath
+    }));
+
+  const page = await session.context.newPage();
   try {
-    const context = await browser.newContext({
-      storageState: sessionPath,
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    });
-    const page = await context.newPage();
     page.setDefaultTimeout(timeout);
 
-    await page.goto('https://www.tiktok.com/creator-center/upload', { waitUntil: 'domcontentloaded' });
+    await page.goto('https://www.tiktok.com/creator-center/upload', {
+      waitUntil: 'domcontentloaded'
+    });
 
     // Upload video
     const uploadInput = page.locator('input[type="file"][accept*="video"], input[type="file"]');
@@ -117,15 +136,17 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     await page.waitForTimeout(5000);
 
     // Fill caption
-    const captionEditor = page.locator('div[contenteditable="true"], .notranslate[contenteditable="true"]');
-    if (await captionEditor.count() > 0) {
+    const captionEditor = page.locator(
+      'div[contenteditable="true"], .notranslate[contenteditable="true"]'
+    );
+    if ((await captionEditor.count()) > 0) {
       await captionEditor.first().click();
       await captionEditor.first().fill(options.copy);
     }
 
     // Submit post
     const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"]');
-    if (await postButton.count() > 0) {
+    if ((await postButton.count()) > 0) {
       await postButton.first().click();
       await page.waitForTimeout(3000);
     }
@@ -139,32 +160,39 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       mediaPath: options.mediaPath
     };
   } finally {
-    await browser.close();
+    try {
+      await page.close();
+    } catch {}
+    if (!options.browserSession) {
+      await session.close();
+    }
   }
 }
 
 /**
- * Facebook automation poster using saved browser session.
+ * Facebook automation poster using saved browser session or running Chrome.
  */
 export async function postFacebook(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('facebook', options.sessionsDir);
   const timeout = options.timeoutMs || 30000;
 
-  const browser = await chromium.launch({ headless: true });
+  const session =
+    options.browserSession ||
+    (await connectOrLaunchChrome({
+      headless: true,
+      cdpUrl: options.cdpUrl,
+      storageState: sessionPath
+    }));
+
+  const page = await session.context.newPage();
   try {
-    const context = await browser.newContext({
-      storageState: sessionPath,
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    });
-    const page = await context.newPage();
     page.setDefaultTimeout(timeout);
 
     await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' });
 
     // Create post composer
     const composerTrigger = page.locator('div[role="button"]:has-text("What\'s on your mind")');
-    if (await composerTrigger.count() > 0) {
+    if ((await composerTrigger.count()) > 0) {
       await composerTrigger.first().click();
       await page.waitForTimeout(1000);
     }
@@ -175,14 +203,14 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
 
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
       const fileInput = page.locator('input[type="file"][accept*="image"], input[type="file"]');
-      if (await fileInput.count() > 0) {
+      if ((await fileInput.count()) > 0) {
         await fileInput.first().setInputFiles(path.resolve(options.mediaPath));
         await page.waitForTimeout(2000);
       }
     }
 
     const postButton = page.locator('div[aria-label="Post"][role="button"]');
-    if (await postButton.count() > 0) {
+    if ((await postButton.count()) > 0) {
       await postButton.click();
       await page.waitForTimeout(3000);
     }
@@ -196,12 +224,17 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
       mediaPath: options.mediaPath
     };
   } finally {
-    await browser.close();
+    try {
+      await page.close();
+    } catch {}
+    if (!options.browserSession) {
+      await session.close();
+    }
   }
 }
 
 /**
- * Instagram automation poster using saved browser session.
+ * Instagram automation poster using saved browser session or running Chrome.
  */
 export async function postInstagram(options: PostOptions): Promise<PostResult> {
   if (!options.mediaPath || !fs.existsSync(options.mediaPath)) {
@@ -211,21 +244,25 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('instagram', options.sessionsDir);
   const timeout = options.timeoutMs || 35000;
 
-  const browser = await chromium.launch({ headless: true });
+  const session =
+    options.browserSession ||
+    (await connectOrLaunchChrome({
+      headless: true,
+      cdpUrl: options.cdpUrl,
+      storageState: sessionPath
+    }));
+
+  const page = await session.context.newPage();
   try {
-    const context = await browser.newContext({
-      storageState: sessionPath,
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    });
-    const page = await context.newPage();
     page.setDefaultTimeout(timeout);
 
     await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded' });
 
     // Open new post modal
-    const createNav = page.locator('svg[aria-label="New post"], a[role="link"]:has-text("Create")');
-    if (await createNav.count() > 0) {
+    const createNav = page.locator(
+      'svg[aria-label="New post"], a[role="link"]:has-text("Create")'
+    );
+    if ((await createNav.count()) > 0) {
       await createNav.first().click();
       await page.waitForTimeout(1000);
     }
@@ -236,25 +273,31 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     await page.waitForTimeout(2000);
 
     // Next button
-    const nextButton = page.locator('button:has-text("Next"), div[role="button"]:has-text("Next")');
-    if (await nextButton.count() > 0) {
+    const nextButton = page.locator(
+      'button:has-text("Next"), div[role="button"]:has-text("Next")'
+    );
+    if ((await nextButton.count()) > 0) {
       await nextButton.first().click();
       await page.waitForTimeout(1000);
-      if (await nextButton.count() > 0) {
+      if ((await nextButton.count()) > 0) {
         await nextButton.first().click();
         await page.waitForTimeout(1000);
       }
     }
 
     // Add caption
-    const captionBox = page.locator('div[aria-label*="Write a caption"], div[contenteditable="true"]');
-    if (await captionBox.count() > 0) {
+    const captionBox = page.locator(
+      'div[aria-label*="Write a caption"], div[contenteditable="true"]'
+    );
+    if ((await captionBox.count()) > 0) {
       await captionBox.first().fill(options.copy);
     }
 
     // Share button
-    const shareButton = page.locator('button:has-text("Share"), div[role="button"]:has-text("Share")');
-    if (await shareButton.count() > 0) {
+    const shareButton = page.locator(
+      'button:has-text("Share"), div[role="button"]:has-text("Share")'
+    );
+    if ((await shareButton.count()) > 0) {
       await shareButton.first().click();
       await page.waitForTimeout(3000);
     }
@@ -268,7 +311,12 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       mediaPath: options.mediaPath
     };
   } finally {
-    await browser.close();
+    try {
+      await page.close();
+    } catch {}
+    if (!options.browserSession) {
+      await session.close();
+    }
   }
 }
 
@@ -280,7 +328,19 @@ export async function defaultPosterHandler(options: PostOptions): Promise<PostRe
   const platform = sanitizePlatform(options.platform);
 
   // 1. Session verification gate
-  const verification = verifySession(platform, options.sessionsDir);
+  let verification = verifySession(platform, options.sessionsDir);
+  if (!verification.valid) {
+    // If CDP is reachable, attempt to extract session automatically
+    const cdpAvail = await isCdpAvailable(options.cdpUrl, 500);
+    if (cdpAvail) {
+      const extracted = await extractSessionFromCdp(platform, options.cdpUrl);
+      if (extracted.success && extracted.state) {
+        saveSession(platform, extracted.state, options.sessionsDir);
+        verification = verifySession(platform, options.sessionsDir);
+      }
+    }
+  }
+
   if (!verification.valid) {
     throw new Error(
       `Missing or expired browser session for ${platform}. Run 'npm run login -- ${platform}' to authenticate.`
@@ -329,4 +389,3 @@ export async function dispatchBrowserPost(options: PostOptions): Promise<PostRes
     };
   }
 }
-

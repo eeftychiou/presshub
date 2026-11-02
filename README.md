@@ -208,7 +208,7 @@ php tests/run-all-tests.php
 cd ../presshub-social-autopost
 php tests/run-social-tests.php
 
-# PressHub Social Worker TypeScript build & Jest tests (20 tests):
+# PressHub Social Worker TypeScript build & Jest tests (3 suites, 51 tests):
 cd ../presshub-social-worker
 npm test
 npm run build

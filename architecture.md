@@ -306,9 +306,14 @@ graph TD
   - **Authentication Middleware (`src/auth.ts`)**: Validates shared secret tokens (`Authorization: Bearer <secret>` or `X-PressHub-Secret`) using constant-time SHA-256 comparison (`crypto.timingSafeEqual`).
   - **Branded Card Generator (`src/media/card-generator.ts`)**: Uses `sharp` to composite XML-escaped SVG typography, category badges, and dark gradients over featured images into high-resolution PNG cards (`1080x1080` / `1080x1350`) for Instagram and social cards.
   - **Vertical Video Generator (`src/media/video-generator.ts`)**: Uses bundled `@ffmpeg-installer/ffmpeg` and `fluent-ffmpeg` to synthesize vertical `1080x1920` H.264/AAC MP4 videos (`yuv420p`) with silent/ambient stereo audio tracks (`anullsrc`) for TikTok uploads.
-  - **Session Manager (`src/automation/session-manager.ts`)**: Manages persistent Playwright `storageState` JSON files (`sessions/<platform>-session.json`), verifying cookie presence and expiration timestamps before any headless browser launch.
-  - **Playwright Posters (`src/automation/posters.ts`)**: Automates headless Chromium publishing to Twitter/X (`x.com/compose/post`), TikTok Creator Center (`tiktok.com/creator-center/upload`), Facebook, and Instagram.
-  - **Interactive Login CLI (`src/cli/login.ts`)**: One-time headed browser utility (`npm run login -- <platform>`) allowing operators to complete manual login/2FA and export persistent session state.
+  - **Browser & Stealth Helper (`src/automation/browser-helper.ts`)**: Provides real Google Chrome CDP connectivity (`http://127.0.0.1:9222`), stealth launcher (`channel: 'chrome'`, falling back to bundled Chromium in CI), `--disable-blink-features=AutomationControlled` anti-detection flags, `navigator.webdriver` removal via init scripts, and external CDP management (`isExternalCdp: true` leaves user browser open after posting).
+  - **Session Manager (`src/automation/session-manager.ts`)**: Manages persistent Playwright `storageState` JSON files (`sessions/<platform>-session.json`), verifying cookie presence and expiration timestamps, plus programmatic session builders (`buildTwitterStorageState`, `buildTikTokStorageState`) and Cookie-Editor JSON / HTTP header parsers (`parseCookieExport`, `parseCookieHeader`).
+  - **Playwright Posters (`src/automation/posters.ts`)**: Automates headless Chromium and real Chrome publishing to Twitter/X (`x.com/compose/post`), TikTok Creator Center (`tiktok.com/creator-center/upload`), Facebook, and Instagram with CDP awareness and tab-only closure when attached to existing browser sessions.
+  - **Interactive Multi-Mode Login CLI (`src/cli/login.ts`)**: 3-mode session capture utility (`npm run login -- <platform>`):
+    1. **Mode 1 (CDP Auto-Extract)**: Connects to running Chrome on port 9222, verifies essential platform cookies, and extracts session instantly.
+    2. **Mode 2 (Direct Cookie Paste)**: Prompts for `auth_token` / `ct0` (Twitter) or `sessionid` (TikTok), or parses Cookie-Editor JSON exports into valid Playwright storage states with 1-year expiration.
+    3. **Mode 3 (Real Chrome Persistent Profile)**: Launches genuine Google Chrome with persistent profile (`sessions/chrome-profile`) and `--enable-automation` stripped.
+  - **Real Chrome Launcher (`src/cli/launch-chrome.ts`)**: Convenience CLI (`npm run chrome`) detecting installed Google Chrome executable on Windows/macOS/Linux and launching with `--remote-debugging-port=9222` and persistent profile.
 
 ---
 

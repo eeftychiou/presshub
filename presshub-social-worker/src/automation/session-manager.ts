@@ -128,6 +128,198 @@ export function saveSession(platform: string, state: object | string, sessionsDi
   return sessionPath;
 }
 
+/**
+ * Builds a valid Playwright storageState JSON for Twitter / X.
+ * Configures auth_token and optional ct0 CSRF cookie for both .x.com and .twitter.com.
+ * Cookies are set to expire 1 year in the future.
+ */
+export function buildTwitterStorageState(
+  authToken: string,
+  ct0?: string
+): { cookies: any[]; origins: any[] } {
+  if (!authToken || typeof authToken !== 'string' || !authToken.trim()) {
+    throw new Error('Twitter auth_token is required');
+  }
+
+  const cleanToken = authToken.trim();
+  const cleanCt0 = ct0 ? ct0.trim() : undefined;
+  const expires = Math.floor(Date.now() / 1000) + 365 * 24 * 3600;
+
+  const cookies: any[] = [
+    {
+      name: 'auth_token',
+      value: cleanToken,
+      domain: '.x.com',
+      path: '/',
+      expires,
+      httpOnly: true,
+      secure: true,
+      sameSite: 'None'
+    },
+    {
+      name: 'auth_token',
+      value: cleanToken,
+      domain: '.twitter.com',
+      path: '/',
+      expires,
+      httpOnly: true,
+      secure: true,
+      sameSite: 'None'
+    }
+  ];
+
+  if (cleanCt0) {
+    cookies.push(
+      {
+        name: 'ct0',
+        value: cleanCt0,
+        domain: '.x.com',
+        path: '/',
+        expires,
+        httpOnly: false,
+        secure: true,
+        sameSite: 'None'
+      },
+      {
+        name: 'ct0',
+        value: cleanCt0,
+        domain: '.twitter.com',
+        path: '/',
+        expires,
+        httpOnly: false,
+        secure: true,
+        sameSite: 'None'
+      }
+    );
+  }
+
+  return {
+    cookies,
+    origins: []
+  };
+}
+
+/**
+ * Builds a valid Playwright storageState JSON for TikTok.
+ * Configures sessionid and sessionid_ss cookies for .tiktok.com.
+ * Cookies are set to expire 1 year in the future.
+ */
+export function buildTikTokStorageState(sessionId: string): { cookies: any[]; origins: any[] } {
+  if (!sessionId || typeof sessionId !== 'string' || !sessionId.trim()) {
+    throw new Error('TikTok sessionid is required');
+  }
+
+  const cleanSessionId = sessionId.trim();
+  const expires = Math.floor(Date.now() / 1000) + 365 * 24 * 3600;
+
+  return {
+    cookies: [
+      {
+        name: 'sessionid',
+        value: cleanSessionId,
+        domain: '.tiktok.com',
+        path: '/',
+        expires,
+        httpOnly: true,
+        secure: true,
+        sameSite: 'None'
+      },
+      {
+        name: 'sessionid_ss',
+        value: cleanSessionId,
+        domain: '.tiktok.com',
+        path: '/',
+        expires,
+        httpOnly: true,
+        secure: true,
+        sameSite: 'None'
+      }
+    ],
+    origins: []
+  };
+}
+
+/**
+ * Parses raw Cookie header string (e.g. "auth_token=abc; ct0=xyz") into key-value pairs.
+ */
+export function parseCookieHeader(headerStr: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const parts = headerStr.split(';');
+  for (const part of parts) {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx !== -1) {
+      const k = part.slice(0, eqIdx).trim();
+      const v = part.slice(eqIdx + 1).trim();
+      if (k && v) {
+        result[k] = v;
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Parses raw JSON cookie export (e.g. Cookie-Editor format or Playwright storageState format).
+ */
+export function parseCookieExport(input: string): { cookies: any[]; origins: any[] } {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(input);
+  } catch (err: any) {
+    throw new Error(`Invalid JSON cookie export: ${err.message}`);
+  }
+
+  let cookieArray: any[] = [];
+  let originsArray: any[] = [];
+
+  if (Array.isArray(parsed)) {
+    cookieArray = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    if (Array.isArray(parsed.cookies)) {
+      cookieArray = parsed.cookies;
+      originsArray = Array.isArray(parsed.origins) ? parsed.origins : [];
+    } else {
+      throw new Error('JSON object must contain a "cookies" array');
+    }
+  } else {
+    throw new Error('Cookie data must be a JSON array or object with "cookies"');
+  }
+
+  const normalizedCookies = cookieArray
+    .map((c) => {
+      let sameSite: 'Strict' | 'Lax' | 'None' = 'None';
+      if (typeof c.sameSite === 'string') {
+        const lower = c.sameSite.toLowerCase();
+        if (lower === 'strict') sameSite = 'Strict';
+        else if (lower === 'lax') sameSite = 'Lax';
+      }
+
+      let expires = -1;
+      if (typeof c.expirationDate === 'number') {
+        expires = Math.floor(c.expirationDate);
+      } else if (typeof c.expires === 'number') {
+        expires = Math.floor(c.expires);
+      }
+
+      return {
+        name: String(c.name || ''),
+        value: String(c.value || ''),
+        domain: String(c.domain || ''),
+        path: String(c.path || '/'),
+        expires,
+        httpOnly: Boolean(c.httpOnly),
+        secure: typeof c.secure === 'boolean' ? c.secure : true,
+        sameSite
+      };
+    })
+    .filter((c) => c.name && c.value);
+
+  return {
+    cookies: normalizedCookies,
+    origins: originsArray
+  };
+}
+
 export const SessionManager = {
   verifySession,
   saveSession,
@@ -135,6 +327,10 @@ export const SessionManager = {
   getSessionsDir,
   sanitizePlatform,
   isValidPlatform,
-  SUPPORTED_PLATFORMS
+  SUPPORTED_PLATFORMS,
+  buildTwitterStorageState,
+  buildTikTokStorageState,
+  parseCookieHeader,
+  parseCookieExport
 };
 
