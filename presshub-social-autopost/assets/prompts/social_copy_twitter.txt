@@ -1,0 +1,16 @@
+Write a punchy, engaging X/Twitter post for the following article:
+
+Article Title: {title}
+Site: {site_name}
+Article Summary: {excerpt}
+Article Content:
+{content}
+
+Article URL: {url}
+
+Platform Instructions for X/Twitter:
+- Start with a compelling, informative opening hook that sparks curiosity.
+- Include 1 or 2 highly relevant hashtags at the end.
+- Include the exact article URL: {url}
+- Strict character limit: The ENTIRE tweet (including the URL, spaces, and hashtags) must be STRICTLY under {max_chars} characters.
+- Output ONLY the final tweet text. No commentary, no quotation marks around the post.

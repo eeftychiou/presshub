@@ -35,12 +35,35 @@ jobs:
       - name: Run Jest suite
         run: npm test
 
-  php-tests:
-    name: PHP plugin tests (harness + lint)
+  social-worker-tests:
+    name: Social Worker tests (Jest + tsc)
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: presshub-ai-editor
+        working-directory: presshub-social-worker
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: presshub-social-worker/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run Jest suite
+        run: npm test
+
+  php-tests:
+    name: PHP plugin tests (harness + lint)
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,18 +73,23 @@ jobs:
         with:
           php-version: '8.2'
 
-      - name: Run PHP unit tests (TDD harness)
+      - name: Run PressHub AI Editor PHP unit tests
+        working-directory: presshub-ai-editor
         run: |
           set -e
-          # Glob-discovery: every tests/*Test.php suite runs automatically,
-          # so a new harness can never be silently omitted from CI.
           for t in tests/*Test.php; do
             echo "=== $t ==="
             php "$t"
           done
 
+      - name: Run PressHub Social Auto-Post PHP unit tests
+        working-directory: presshub-social-autopost
+        run: |
+          set -e
+          php tests/run-social-tests.php
+
       - name: PHP syntax lint (all plugin files)
         run: |
           set -e
-          find . -name '*.php' -not -path './includes/plugin-update-checker/*' -print0 \
+          find presshub-ai-editor presshub-social-autopost -name '*.php' -not -path '*/includes/plugin-update-checker/*' -print0 \
             | xargs -0 -n1 php -l > /dev/null

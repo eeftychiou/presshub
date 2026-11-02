@@ -1,0 +1,175 @@
+<?php
+/**
+ * Plugin Name: PressHub Social Auto-Post
+ * Plugin URI: https://presshub.ai
+ * Description: Automated multi-platform social media auto-posting pipeline for WordPress with AI copy generation, queue dispatcher, Meta API, and browser automation worker integration.
+ * Version: 2.6.0
+ * Author: PressHub Team
+ * Author URI: https://presshub.ai
+ * Text Domain: presshub-social-autopost
+ * License: GPL v2 or later
+ *
+ * @package PressHub_Social_Autopost
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
+
+// Plugin constants
+define( 'PRESSHUB_SOCIAL_VERSION', '2.6.0' );
+define( 'PRESSHUB_SOCIAL_FILE', __FILE__ );
+define( 'PRESSHUB_SOCIAL_PATH', plugin_dir_path( __FILE__ ) );
+define( 'PRESSHUB_SOCIAL_URL', plugin_dir_url( __FILE__ ) );
+
+/**
+ * Autoload / require all plugin classes in includes/
+ */
+$includes = [
+    'class-social-logger.php',
+    'class-social-prompt-loader.php',
+    'class-social-settings-storage.php',
+    'class-social-settings-render.php',
+    'class-social-settings.php',
+    'class-social-ai-copywriter.php',
+    'class-social-activator.php',
+    'class-social-queue.php',
+    'class-social-meta-api-client.php',
+    'class-social-worker-client.php',
+    'class-social-dispatcher.php',
+    'class-social-metabox.php',
+    'class-social-queue-admin.php',
+    'class-social-ajax-handlers.php',
+];
+
+foreach ( $includes as $file ) {
+    $filepath = PRESSHUB_SOCIAL_PATH . 'includes/' . $file;
+    if ( file_exists( $filepath ) ) {
+        require_once $filepath;
+    }
+}
+
+/**
+ * Register activation and deactivation hooks.
+ */
+register_activation_hook( __FILE__, [ 'PressHub_Social_Activator', 'activate' ] );
+register_deactivation_hook( __FILE__, [ 'PressHub_Social_Activator', 'deactivate' ] );
+
+/**
+ * Register custom cron schedule interval.
+ */
+add_filter( 'cron_schedules', function( array $schedules ): array {
+    if ( ! isset( $schedules['presshub_social_interval'] ) ) {
+        $schedules['presshub_social_interval'] = [
+            'interval' => 60,
+            'display'  => __( 'Every Minute (PressHub Social)', 'presshub-social-autopost' ),
+        ];
+    }
+    return $schedules;
+} );
+
+/**
+ * Hook cron action to dispatcher.
+ */
+add_action( 'presshub_social_cron_dispatch', [ 'PressHub_Social_Dispatcher', 'process_due_queue' ] );
+
+/**
+ * Hook post status transition for auto-posting.
+ */
+add_action( 'transition_post_status', [ 'PressHub_Social_Dispatcher', 'handle_post_status_transition' ], 10, 3 );
+
+/**
+ * Initialize components.
+ */
+add_action( 'plugins_loaded', function() {
+    if ( class_exists( 'PressHub_Social_Settings' ) && method_exists( 'PressHub_Social_Settings', 'init' ) ) {
+        PressHub_Social_Settings::init();
+    }
+    if ( class_exists( 'PressHub_Social_Metabox' ) && method_exists( 'PressHub_Social_Metabox', 'init' ) ) {
+        PressHub_Social_Metabox::init();
+    }
+    if ( class_exists( 'PressHub_Social_Queue_Admin' ) && method_exists( 'PressHub_Social_Queue_Admin', 'init' ) ) {
+        PressHub_Social_Queue_Admin::init();
+    }
+    if ( class_exists( 'PressHub_Social_Ajax_Handlers' ) && method_exists( 'PressHub_Social_Ajax_Handlers', 'init' ) ) {
+        PressHub_Social_Ajax_Handlers::init();
+    }
+
+    // Initialize GitHub Update Checker if PluginUpdateChecker is available
+    if ( ! defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) && class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ) ) {
+        $social_update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+            'https://github.com/eeftychiou/presshub/',
+            __FILE__,
+            'presshub-social-autopost'
+        );
+        $social_update_checker->setBranch( 'main' );
+        $social_update_checker->getVcsApi()->enableReleaseAssets( '/^presshub-social-autopost.*\.zip$/i' );
+
+        $github_token = get_option( 'presshub_ai_github_token' );
+        if ( ! empty( $github_token ) ) {
+            $social_update_checker->setAuthentication( $github_token );
+        }
+    }
+} );
+
+/**
+ * Enqueue admin scripts and stylesheets.
+ */
+add_action( 'admin_enqueue_scripts', function( string $hook_suffix ) {
+    $is_post_edit = in_array( $hook_suffix, [ 'post.php', 'post-new.php' ], true );
+    $is_queue_page = str_contains( $hook_suffix, 'presshub-social-queue' );
+    $is_settings_page = str_contains( $hook_suffix, 'presshub_social' ) || str_contains( $hook_suffix, 'presshub-social' );
+
+    if ( ! $is_post_edit && ! $is_queue_page && ! $is_settings_page ) {
+        return;
+    }
+
+    // Stylesheet
+    wp_enqueue_style(
+        'presshub-admin-social',
+        PRESSHUB_SOCIAL_URL . 'assets/css/admin-social.css',
+        [],
+        PRESSHUB_SOCIAL_VERSION
+    );
+
+    $js_vars = [
+        'ajaxurl' => admin_url( 'admin-ajax.php' ),
+        'nonce'   => wp_create_nonce( 'presshub_social_nonce' ),
+    ];
+
+    // Post edit screen metabox script
+    if ( $is_post_edit ) {
+        wp_enqueue_script(
+            'presshub-social-metabox',
+            PRESSHUB_SOCIAL_URL . 'assets/js/admin-social-metabox.js',
+            [ 'jquery' ],
+            PRESSHUB_SOCIAL_VERSION,
+            true
+        );
+        wp_localize_script( 'presshub-social-metabox', 'presshubSocial', $js_vars );
+    }
+
+    // Queue dashboard script
+    if ( $is_queue_page ) {
+        wp_enqueue_script(
+            'presshub-social-queue',
+            PRESSHUB_SOCIAL_URL . 'assets/js/admin-social-queue.js',
+            [ 'jquery' ],
+            PRESSHUB_SOCIAL_VERSION,
+            true
+        );
+        wp_localize_script( 'presshub-social-queue', 'presshubSocial', $js_vars );
+    }
+
+    // Settings screen script
+    if ( $is_settings_page ) {
+        wp_enqueue_script(
+            'presshub-social-settings',
+            PRESSHUB_SOCIAL_URL . 'assets/js/admin-social-settings.js',
+            [ 'jquery' ],
+            PRESSHUB_SOCIAL_VERSION,
+            true
+        );
+        wp_localize_script( 'presshub-social-settings', 'presshubSocial', $js_vars );
+    }
+} );

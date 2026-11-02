@@ -203,6 +203,15 @@ The PHP test suite runs in isolation without external database dependencies:
 ```bash
 cd presshub-ai-editor
 php tests/run-all-tests.php
+
+# PressHub Social Auto-Post PHP unit tests (65 assertions):
+cd ../presshub-social-autopost
+php tests/run-social-tests.php
+
+# PressHub Social Worker TypeScript build & Jest tests (20 tests):
+cd ../presshub-social-worker
+npm test
+npm run build
 ```
 *Executes all **73 test suites** with 100% pass rate.*
 

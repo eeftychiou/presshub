@@ -282,6 +282,34 @@ graph TD
 
 ---
 
+### 4.16 PressHub Social Auto-Post Subsystem (`presshub-social-autopost`)
+- **Overview**: An automated multi-platform social media publishing and queue dispatcher pipeline for WordPress, delivering optimized copies and media to Twitter/X, Facebook, Instagram, and TikTok via both official APIs and browser automation worker integration.
+- **Components & Responsibilities**:
+  - **`PressHub_Social_Logger`**: Structured logger delegating to `PressHub_AI_Logger` and maintaining an in-memory diagnostic ring buffer, with `mask_secret()` redaction (`sk-p••••••••7890`).
+  - **`PressHub_Social_Prompt_Loader`**: External prompt asset loader (`assets/prompts/*.txt`) enforcing directory traversal protection and Zero-Silent-Fallback error handling.
+  - **`PressHub_Social_Settings_Storage` & `PressHub_Social_Settings_Render`**: Settings-First storage and UI controller exposing all operational knobs (engines per platform, AI tuning overrides, retry caps, dispatch intervals, media dimensions, worker credentials, and platform API tokens) with clamping sanitizers.
+  - **`PressHub_Social_AI_Copywriter`**: Generates platform-tailored copy using `PressHub_AI_Provider_Store` and `PressHub_AI_API_Client` (tracking `provider_source` and `model_source`), or static templates when `copy_mode = 'template'`. Enforces Zero-Silent-Fallback when prompts or providers are missing, and preserves article URLs when truncating Twitter copy.
+  - **`PressHub_Social_Activator`**: Manages installation lifecycle, SQLite/MySQL table creation (`wp_presshub_social_queue`), options defaults seeding, and cron registration (`presshub_social_interval`).
+  - **`PressHub_Social_Queue`**: Resilient queue manager supporting database persistence and in-memory test fallback, query methods, status state machine (`pending` -> `processing` -> `published` / `failed` / `cancelled`), exponential backoff retry scheduling, and failure email alerting.
+  - **`PressHub_Social_Meta_API_Client`**: Direct official API integration for Facebook Pages (feed & photos via Graph API v21.0), Instagram Business (2-step media container creation & publishing), Twitter/X API v2 (`POST /2/tweets`), and TikTok Content Posting API with Zero-Silent-Fallback validation.
+  - **`PressHub_Social_Worker_Client`**: HTTP client communicating with the `presshub-social-worker` service (Playwright / Puppeteer automation), supporting health checks, session verification, social card generation, video generation, and headless browser dispatch.
+  - **`PressHub_Social_Dispatcher`**: Orchestrates `transition_post_status` hook gating (filtering new publishes only), inter-platform dispatch intervals, AI/template copy resolution with error preservation, media attachment resolution, and queue batch processing.
+  - **`PressHub_Social_Metabox`**: Post edit screen UI providing per-platform toggles, engine indicators (`Official API` vs `Browser Automation`), individual and batch AI copy generation buttons, live character counting, and dispatch history.
+  - **`PressHub_Social_Queue_Admin`**: Dedicated monitoring dashboard (`PressHub Social -> Social Queue`) with KPI stat cards (Total, Pending, Processing, Published, Failed), platform/status filtering, on-demand queue processing, and inline dispatch/retry/cancellation actions.
+  - **`PressHub_Social_Ajax_Handlers`**: AJAX endpoints secured by nonces (`presshub_social_nonce`) and capability gates (`edit_posts`, `manage_options`).
+
+### 4.17 PressHub Social Media Worker (`presshub-social-worker`)
+- **Overview**: A self-contained Node.js + TypeScript service listening on port `3456` (`PRESSHUB_WORKER_PORT`) that provides branded visual/video media synthesis and Playwright browser automation for platforms where official APIs are paid or gated.
+- **Components & Responsibilities**:
+  - **Authentication Middleware (`src/auth.ts`)**: Validates shared secret tokens (`Authorization: Bearer <secret>` or `X-PressHub-Secret`) using constant-time SHA-256 comparison (`crypto.timingSafeEqual`).
+  - **Branded Card Generator (`src/media/card-generator.ts`)**: Uses `sharp` to composite XML-escaped SVG typography, category badges, and dark gradients over featured images into high-resolution PNG cards (`1080x1080` / `1080x1350`) for Instagram and social cards.
+  - **Vertical Video Generator (`src/media/video-generator.ts`)**: Uses bundled `@ffmpeg-installer/ffmpeg` and `fluent-ffmpeg` to synthesize vertical `1080x1920` H.264/AAC MP4 videos (`yuv420p`) with silent/ambient stereo audio tracks (`anullsrc`) for TikTok uploads.
+  - **Session Manager (`src/automation/session-manager.ts`)**: Manages persistent Playwright `storageState` JSON files (`sessions/<platform>-session.json`), verifying cookie presence and expiration timestamps before any headless browser launch.
+  - **Playwright Posters (`src/automation/posters.ts`)**: Automates headless Chromium publishing to Twitter/X (`x.com/compose/post`), TikTok Creator Center (`tiktok.com/creator-center/upload`), Facebook, and Instagram.
+  - **Interactive Login CLI (`src/cli/login.ts`)**: One-time headed browser utility (`npm run login -- <platform>`) allowing operators to complete manual login/2FA and export persistent session state.
+
+---
+
 ## 5. Cron Schedules & Timers
 
 | Event Hook | Default Time | Configurable Option | Subsystem Callback |

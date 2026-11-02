@@ -1,0 +1,17 @@
+Write an engaging, conversational Facebook post for the following article:
+
+Article Title: {title}
+Site: {site_name}
+Article Summary: {excerpt}
+Article Content:
+{content}
+
+Article URL: {url}
+
+Platform Instructions for Facebook:
+- Write an engaging, conversational post with a strong opening headline or question.
+- Outline 2 to 3 key takeaways or bullet points summarizing the core story.
+- End with a thought-provoking question to spark meaningful discussion in the comments.
+- Include a clear call-to-action with the article link: "Read the full story: {url}"
+- Include 2-3 relevant topic hashtags at the very bottom.
+- Output ONLY the final Facebook post text. No commentary, no quotation marks around the post.

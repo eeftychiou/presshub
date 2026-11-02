@@ -1,0 +1,298 @@
+/**
+ * Stylesheet for PressHub Social Auto-Post Admin
+ */
+
+/* ==========================================================================
+   Badges
+   ========================================================================== */
+
+.presshub-status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge-pending {
+    background-color: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+.badge-processing {
+    background-color: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+}
+
+.badge-published {
+    background-color: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.badge-failed {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+.badge-cancelled {
+    background-color: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #e5e7eb;
+}
+
+.presshub-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+}
+
+.badge-engine-api {
+    background-color: #ede9fe;
+    color: #5b21b6;
+    border: 1px solid #ddd6fe;
+}
+
+.badge-engine-automation {
+    background-color: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+
+.badge-engine {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    background: #f0f0f1;
+    color: #50575e;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+/* ==========================================================================
+   KPI Cards Section
+   ========================================================================== */
+
+.presshub-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+}
+
+.presshub-kpi-card {
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.presshub-kpi-card .kpi-number {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 4px;
+    color: #1d2327;
+}
+
+.presshub-kpi-card .kpi-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #646970;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.presshub-kpi-card.kpi-total {
+    border-left: 4px solid #2271b1;
+}
+
+.presshub-kpi-card.kpi-pending {
+    border-left: 4px solid #dba617;
+}
+
+.presshub-kpi-card.kpi-processing {
+    border-left: 4px solid #72aee6;
+}
+
+.presshub-kpi-card.kpi-published {
+    border-left: 4px solid #00a32a;
+}
+
+.presshub-kpi-card.kpi-failed {
+    border-left: 4px solid #d63638;
+}
+
+/* ==========================================================================
+   Toolbar and Filters
+   ========================================================================== */
+
+.presshub-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 16px 0;
+    padding: 12px 16px;
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+}
+
+.presshub-filter-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.presshub-queue-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.presshub-admin-queue-table td {
+    vertical-align: middle;
+}
+
+.presshub-copy-preview {
+    font-size: 12px;
+    color: #2c3338;
+    line-height: 1.4;
+}
+
+.presshub-error-msg {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #b32d2e;
+    background: #fff5f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #fecaca;
+}
+
+.presshub-actions-cell {
+    white-space: nowrap;
+}
+
+.presshub-actions-cell .button {
+    margin-right: 4px;
+}
+
+/* ==========================================================================
+   Metabox Layout
+   ========================================================================== */
+
+.presshub-social-metabox-wrapper {
+    margin-top: 8px;
+}
+
+.presshub-social-metabox-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.presshub-social-metabox-header .description {
+    margin: 0;
+    font-size: 13px;
+    color: #50575e;
+}
+
+.presshub-social-platforms-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.presshub-social-platform-card {
+    background: #fafafa;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    padding: 12px 14px;
+}
+
+.presshub-social-platform-card .platform-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.presshub-social-platform-card .platform-toggle-label {
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.presshub-social-platform-card .platform-copy-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+}
+
+.presshub-social-platform-card .platform-char-count {
+    font-size: 11px;
+    color: #646970;
+}
+
+.presshub-social-platform-card .presshub-copy-textarea {
+    width: 100%;
+    resize: vertical;
+    font-size: 13px;
+    border-radius: 4px;
+}
+
+.presshub-social-platform-card .platform-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.presshub-social-post-history {
+    margin-top: 24px;
+    border-top: 1px solid #dcdcde;
+    padding-top: 16px;
+}
+
+.presshub-social-post-history h4 {
+    margin: 0 0 12px 0;
+}
+
+/* ==========================================================================
+   Settings Connection Tests
+   ========================================================================== */
+
+.presshub-test-result {
+    display: inline-block;
+    margin-left: 10px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.presshub-test-result.success {
+    color: #15803d;
+}
+
+.presshub-test-result.error {
+    color: #b91c1c;
+}

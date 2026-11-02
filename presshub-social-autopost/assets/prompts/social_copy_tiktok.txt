@@ -1,0 +1,16 @@
+Write a punchy, curiosity-driven TikTok video caption and hook for the following article:
+
+Article Title: {title}
+Site: {site_name}
+Article Summary: {excerpt}
+Article Content:
+{content}
+
+Article URL: {url}
+
+Platform Instructions for TikTok:
+- Write a high-curiosity opening hook tailored for short-form vertical video viewers.
+- Follow with a concise, fast-paced 1-2 sentence summary of the revelation or breaking development.
+- Include a call-to-action to check out the full article on {site_name}.
+- Add 3 to 5 trending and topic-specific hashtags (e.g. #news #breaking).
+- Output ONLY the final TikTok caption text. No commentary, no quotation marks around the post.

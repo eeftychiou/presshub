@@ -10,6 +10,11 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
   - `includes/`: PHP classes (API client, token logger, structured logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings).
   - `assets/`: Frontend/Admin JavaScript and CSS.
   - `tests/`: Isolated PHP unit test suite (80 test files + `run-all-tests.php`).
+- **`presshub-social-autopost/`**: Social media multi-platform auto-posting plugin (Queue, Meta API & Worker clients, Dispatcher, Metabox, Admin Dashboard).
+  - `includes/`: PHP classes (`PressHub_Social_Queue`, `PressHub_Social_Dispatcher`, `PressHub_Social_Meta_API_Client`, `PressHub_Social_Worker_Client`, `PressHub_Social_AI_Copywriter`, `PressHub_Social_Settings_Storage`, `PressHub_Social_Metabox`, `PressHub_Social_Queue_Admin`, `PressHub_Social_Ajax_Handlers`, `PressHub_Social_Settings`, etc.).
+  - `assets/`: CSS styles, admin JS handlers, external prompt templates (`assets/prompts/*.txt`).
+  - `tests/`: Isolated PHP unit test suite (`run-social-tests.php`).
+- **`presshub-social-worker/`**: Self-contained Node.js + TypeScript automation and media worker service (Express server on port `3456`, Sharp image card generator, `@ffmpeg-installer/ffmpeg` vertical MP4 video generator, Playwright browser automation for X/Twitter & TikTok, interactive `npm run login` CLI, and Jest test suite).
 - **`presshub-workflow/`**: TypeScript workflow and MCP server components (Jest test suite).
 - **`dev-env/`**: Fully configured, self-contained local WordPress development and testing environment powered by the official WordPress Core SQLite database engine (zero external database services required).
 
