@@ -42,6 +42,9 @@ PRESSHUB_WORKER_PORT=3456
 
 # Polling interval in milliseconds for Pull Mode (default: 30000ms / 30 seconds)
 PRESSHUB_POLL_INTERVAL_MS=30000
+
+# Browser automation headless mode (false to launch visible Chrome locally; true for headless/CI)
+PRESSHUB_HEADLESS=false
 ```
 
 ### Build & Run

@@ -16,6 +16,10 @@ export interface GenerateVideoOptions {
   siteName?: string;
   imagePath?: string;
   audioPath?: string;
+  mediaUrl?: string;
+  backgroundUrl?: string;
+  audioUrl?: string;
+  isPodcast?: boolean;
   width?: number;
   height?: number;
   duration?: number;
@@ -50,7 +54,30 @@ export function clampDuration(val: number | undefined, defaultVal: number = 10, 
 }
 
 /**
+ * Downloads remote audio file to a local temporary path.
+ */
+async function downloadAudio(url: string, outputDir: string): Promise<string | null> {
+  try {
+    const extMatch = url.match(/\.(wav|mp3|aac|m4a|ogg)(\?.*)?$/i);
+    const ext = extMatch ? `.${extMatch[1]}` : '.wav';
+    const tempAudioPath = path.join(outputDir, `audio-${Date.now()}-${crypto.randomBytes(3).toString('hex')}${ext}`);
+
+    console.log(`[PressHub Video Generator] Downloading audio track from ${url}...`);
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 PressHub-VideoGenerator/1.0' } });
+    if (res.ok) {
+      const buffer = Buffer.from(await res.arrayBuffer());
+      fs.writeFileSync(tempAudioPath, buffer);
+      return tempAudioPath;
+    }
+  } catch (err: any) {
+    console.warn(`[PressHub Video Generator] Failed to download audio from ${url}:`, err.message);
+  }
+  return null;
+}
+
+/**
  * Generates a vertical MP4 video (libx264 / aac) with audio track.
+ * Supports using featured images, composited icons, real podcast audio tracks, and PressHub branding.
  */
 export async function generateSocialVideo(options: GenerateVideoOptions): Promise<VideoResult> {
   const width = clampEven(options.width, 1080, 540, 2160);
@@ -66,11 +93,20 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
   let generatedTempImage = false;
 
   if (!resolvedImagePath || !fs.existsSync(resolvedImagePath)) {
+    const isPodcast = Boolean(
+      options.isPodcast ||
+      options.title?.toLowerCase().includes('podcast') ||
+      options.category?.toLowerCase().includes('podcast')
+    );
+
     const cardResult = await generateSocialCard({
       title: options.title || 'Breaking Update',
       subtitle: options.subtitle,
-      category: options.category || 'PRESS BRIEFING',
-      siteName: options.siteName || 'PressHub AI',
+      category: options.category || (isPodcast ? 'PODCAST BRIEFING' : 'PRESS BRIEFING'),
+      siteName: options.siteName || 'PressHub.Cy',
+      mediaUrl: options.mediaUrl,
+      backgroundUrl: options.backgroundUrl,
+      isPodcast,
       width,
       height,
       outputDir
@@ -79,10 +115,20 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
     generatedTempImage = true;
   }
 
+  // Resolve audio path (either local file or downloaded from audioUrl)
+  let resolvedAudioPath = options.audioPath;
+  let downloadedTempAudio: string | null = null;
+
+  if ((!resolvedAudioPath || !fs.existsSync(resolvedAudioPath)) && options.audioUrl) {
+    downloadedTempAudio = await downloadAudio(options.audioUrl, outputDir);
+    if (downloadedTempAudio) {
+      resolvedAudioPath = downloadedTempAudio;
+    }
+  }
+
+  const hasAudioFile = Boolean(resolvedAudioPath && fs.existsSync(resolvedAudioPath));
   const videoFileName = `video-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.mp4`;
   const outputFilePath = path.join(outputDir, videoFileName);
-
-  const hasAudioFile = Boolean(options.audioPath && fs.existsSync(options.audioPath));
 
   return new Promise<VideoResult>((resolve, reject) => {
     let command = ffmpeg();
@@ -91,7 +137,8 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
     command = command.input(resolvedImagePath!).inputOption('-loop 1');
 
     if (hasAudioFile) {
-      command = command.input(options.audioPath!);
+      console.log(`[PressHub Video Generator] Using audio track: ${resolvedAudioPath}`);
+      command = command.input(resolvedAudioPath!);
     } else {
       // Lavfi silent stereo stream so video always has a valid AAC audio track
       command = command.input('anullsrc=r=44100:cl=stereo').inputOption('-f lavfi');
@@ -104,12 +151,19 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
         '-pix_fmt yuv420p',
         '-shortest',
         `-t ${duration}`,
-        `-vf scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1`
+        `-vf scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1`,
+        '-movflags +faststart'
       ])
       .audioCodec('aac')
       .audioBitrate('192k')
       .output(outputFilePath)
       .on('end', () => {
+        // Clean up downloaded temp audio file if any
+        if (downloadedTempAudio && fs.existsSync(downloadedTempAudio)) {
+          try {
+            fs.unlinkSync(downloadedTempAudio);
+          } catch {}
+        }
         resolve({
           filePath: outputFilePath,
           width,
@@ -118,6 +172,11 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
         });
       })
       .on('error', (err) => {
+        if (downloadedTempAudio && fs.existsSync(downloadedTempAudio)) {
+          try {
+            fs.unlinkSync(downloadedTempAudio);
+          } catch {}
+        }
         reject(new Error(`FFmpeg video generation failed: ${err.message}`));
       })
       .run();
@@ -137,6 +196,10 @@ export interface GenerateVideoParams {
   category?: string;
   imagePath?: string;
   audioPath?: string;
+  mediaUrl?: string;
+  backgroundUrl?: string;
+  audioUrl?: string;
+  isPodcast?: boolean;
 }
 
 export async function generateVideo(params: GenerateVideoParams): Promise<VideoResult> {
@@ -147,10 +210,13 @@ export async function generateVideo(params: GenerateVideoParams): Promise<VideoR
     siteName: params.siteName,
     imagePath: params.imagePath,
     audioPath: params.audioPath,
+    mediaUrl: params.mediaUrl,
+    backgroundUrl: params.backgroundUrl,
+    audioUrl: params.audioUrl,
+    isPodcast: params.isPodcast,
     width: params.width,
     height: params.height,
     duration: params.durationSec ?? params.duration,
     outputDir: params.outputDir
   });
 }
-

@@ -133,6 +133,40 @@ export class PressHubPoller {
   }
 
   /**
+   * Resolves media assets (featured image URL and podcast audio URL) for a job from WordPress.
+   */
+  public async resolveJobMedia(
+    job: ClaimedJob
+  ): Promise<{ imageUrl?: string; audioUrl?: string }> {
+    let imageUrl = job.media_url ? String(job.media_url) : undefined;
+    let audioUrl: string | undefined;
+
+    if (job.post_id && (!imageUrl || !audioUrl)) {
+      try {
+        const endpoint = `${this.wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/posts/${job.post_id}?_embed`;
+        const res = await this.fetchFn(endpoint, {
+          headers: { 'User-Agent': 'Mozilla/5.0 PressHub-Poller/1.0' }
+        });
+        if (res && res.ok) {
+          const data: any = await res.json();
+          if (!imageUrl && data?._embedded?.['wp:featuredmedia']?.[0]?.source_url) {
+            imageUrl = data._embedded['wp:featuredmedia'][0].source_url;
+          }
+          if (data?.content?.rendered) {
+            const audioMatch = String(data.content.rendered).match(/<audio[^>]+src=["']([^"']+)["']/i);
+            if (audioMatch && audioMatch[1]) {
+              audioUrl = audioMatch[1];
+            }
+          }
+        }
+      } catch {
+        // Best effort media resolution
+      }
+    }
+    return { imageUrl, audioUrl };
+  }
+
+  /**
    * Executes a single poll cycle: claims jobs from WordPress, executes them,
    * and reports results back to WordPress.
    */
@@ -201,6 +235,12 @@ export class PressHubPoller {
 
           let mediaPath: string | undefined;
 
+          const { imageUrl, audioUrl } = await this.resolveJobMedia(job);
+          const isPodcast = Boolean(
+            title.toLowerCase().includes('podcast') ||
+            copy.toLowerCase().includes('podcast')
+          );
+
           if (platform === 'tiktok') {
             console.log(`${jobTag} Generating vertical video (${job.specs?.tiktok_video_width || 1080}x${job.specs?.tiktok_video_height || 1920}, ${job.specs?.tiktok_video_duration || 10}s)...`);
             const video = await this.generateVideoFn({
@@ -210,6 +250,10 @@ export class PressHubPoller {
               durationSec: job.specs?.tiktok_video_duration || 10,
               width: job.specs?.tiktok_video_width || 1080,
               height: job.specs?.tiktok_video_height || 1920,
+              mediaUrl: imageUrl,
+              audioUrl: audioUrl,
+              isPodcast,
+              siteName: job.site_name || 'PressHub.Cy',
               outputDir: this.outputDir
             });
             mediaPath = video?.filePath;
@@ -219,7 +263,9 @@ export class PressHubPoller {
             const card = await this.generateCardFn({
               postId: Number(job.post_id) || 1,
               title,
-              siteName: job.site_name || 'PressHub',
+              siteName: job.site_name || 'PressHub.Cy',
+              mediaUrl: imageUrl,
+              isPodcast,
               width: job.specs?.instagram_card_width || 1080,
               height: job.specs?.instagram_card_height || 1080,
               outputDir: this.outputDir

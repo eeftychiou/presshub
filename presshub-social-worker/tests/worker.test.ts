@@ -15,7 +15,9 @@ import {
   generateSocialCard,
   escapeXml,
   wrapText,
-  clampDimension
+  clampDimension,
+  getMediaAssetPath,
+  fetchImageBuffer
 } from '../src/media/card-generator';
 import {
   generateSocialVideo,
@@ -219,6 +221,37 @@ describe('PressHub Social Media Worker Suite', () => {
       expect(fs.existsSync(result.filePath)).toBe(true);
       expect(result.width).toBe(1200);
       expect(result.height).toBe(1200);
+    });
+
+    test('getMediaAssetPath locates existing media files and returns null for missing ones', () => {
+      const icon = getMediaAssetPath('cropped-PressHub-Cy-ICON.png');
+      expect(icon).not.toBeNull();
+      expect(fs.existsSync(icon!)).toBe(true);
+
+      const mic = getMediaAssetPath('PressHub.cy Mic.png');
+      expect(mic).not.toBeNull();
+      expect(fs.existsSync(mic!)).toBe(true);
+
+      const missing = getMediaAssetPath('non-existent-image-12345.png');
+      expect(missing).toBeNull();
+    });
+
+    test('generates vertical card compositing mic and logo icons with website branding', async () => {
+      const result = await generateSocialCard({
+        title: 'Morning Briefing & Analysis Podcast',
+        subtitle: 'Key political and economic updates of the day',
+        category: 'PODCAST',
+        siteName: 'PressHub.Cy',
+        width: 600,
+        height: 960,
+        isPodcast: true,
+        outputDir: TEST_OUTPUT_DIR
+      });
+
+      expect(fs.existsSync(result.filePath)).toBe(true);
+      expect(result.width).toBe(600);
+      expect(result.height).toBe(960);
+      expect(result.sizeBytes).toBeGreaterThan(1000);
     });
   });
 

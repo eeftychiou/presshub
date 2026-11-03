@@ -279,6 +279,16 @@ class PressHub_Social_REST_Controller {
                 $post_url = home_url( '/?p=' . $post_id );
             }
 
+            // Resolve post thumbnail if media_url was not explicitly attached to queue record
+            if ( empty( $job['media_url'] ) && $post_id > 0 && function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id ) ) {
+                $thumb_id  = get_post_thumbnail_id( $post_id );
+                $thumb_url = wp_get_attachment_url( $thumb_id );
+                if ( ! empty( $thumb_url ) ) {
+                    $job['media_url']  = $thumb_url;
+                    $job['media_type'] = 'image';
+                }
+            }
+
             $job['post_title'] = $post_title;
             $job['post_url']   = $post_url;
             $job['site_name']  = $site_name;

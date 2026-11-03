@@ -21,7 +21,9 @@ export {
 export const STEALTH_ARGS = [
   '--disable-blink-features=AutomationControlled',
   '--no-first-run',
-  '--no-default-browser-check'
+  '--no-default-browser-check',
+  '--disable-infobars',
+  '--window-size=1280,900'
 ];
 
 export const STEALTH_INIT_SCRIPT = `Object.defineProperty(navigator, 'webdriver', { get: () => undefined });`;
@@ -34,6 +36,20 @@ export interface ChromeConnectionOptions {
   cdpUrl?: string;
   userDataDir?: string;
   storageState?: string;
+}
+
+/**
+ * Resolves whether Chrome should run headless based on options and PRESSHUB_HEADLESS env var.
+ * Defaults to false when running locally to avoid bot detection and allow visual observation.
+ */
+export function resolveHeadless(optionsHeadless?: boolean): boolean {
+  if (typeof optionsHeadless === 'boolean') {
+    return optionsHeadless;
+  }
+  if (process.env.PRESSHUB_HEADLESS !== undefined) {
+    return process.env.PRESSHUB_HEADLESS.toLowerCase() === 'true';
+  }
+  return false;
 }
 
 export interface ChromeConnection {
@@ -186,25 +202,27 @@ export async function connectOrLaunchChrome(
   }
 
   // 2. Otherwise launch real installed Google Chrome with stealth flags
+  const headless = resolveHeadless(options.headless);
+
   if (options.userDataDir) {
     let context: BrowserContext;
     try {
       context = await chromium.launchPersistentContext(options.userDataDir, {
         channel: 'chrome',
-        headless: options.headless ?? false,
+        headless,
         ignoreDefaultArgs: ['--enable-automation'],
         args: STEALTH_ARGS,
         userAgent: REAL_CHROME_USER_AGENT,
-        viewport: null
+        viewport: headless ? { width: 1280, height: 800 } : null
       });
     } catch {
       // Fallback to default Chromium if channel 'chrome' is absent (e.g. CI)
       context = await chromium.launchPersistentContext(options.userDataDir, {
-        headless: options.headless ?? false,
+        headless,
         ignoreDefaultArgs: ['--enable-automation'],
         args: STEALTH_ARGS,
         userAgent: REAL_CHROME_USER_AGENT,
-        viewport: null
+        viewport: headless ? { width: 1280, height: 800 } : null
       });
     }
 
@@ -223,26 +241,27 @@ export async function connectOrLaunchChrome(
   }
 
   // Non-persistent launch
-  console.log(`[PressHub Browser] Launching Google Chrome (headless: ${options.headless ?? true}, storageState: ${options.storageState ? path.basename(options.storageState) : 'none'})...`);
+  console.log(`[PressHub Browser] Launching Google Chrome (headless: ${headless}, storageState: ${options.storageState ? path.basename(options.storageState) : 'none'})...`);
   let browser: Browser;
   try {
     browser = await chromium.launch({
       channel: 'chrome',
-      headless: options.headless ?? true,
+      headless,
       ignoreDefaultArgs: ['--enable-automation'],
       args: STEALTH_ARGS
     });
   } catch {
     // Fallback to default Chromium if channel 'chrome' is absent (e.g. CI)
     browser = await chromium.launch({
-      headless: options.headless ?? true,
+      headless,
       ignoreDefaultArgs: ['--enable-automation'],
       args: STEALTH_ARGS
     });
   }
 
   const contextOptions: any = {
-    userAgent: REAL_CHROME_USER_AGENT
+    userAgent: REAL_CHROME_USER_AGENT,
+    viewport: headless ? { width: 1280, height: 800 } : null
   };
   if (options.storageState && fs.existsSync(options.storageState)) {
     contextOptions.storageState = options.storageState;

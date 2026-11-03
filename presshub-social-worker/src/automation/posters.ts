@@ -22,6 +22,7 @@ export interface PostOptions {
   timeoutMs?: number;
   cdpUrl?: string;
   browserSession?: ChromeConnection;
+  headless?: boolean;
 }
 
 export interface PostResult {
@@ -72,7 +73,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
   const session =
     options.browserSession ||
     (await connectOrLaunchChrome({
-      headless: true,
+      headless: options.headless,
       cdpUrl: options.cdpUrl,
       storageState: sessionPath
     }));
@@ -88,6 +89,14 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     const currentUrl = page.url();
     if (currentUrl.includes('/login') || currentUrl.includes('/i/flow/login')) {
       throw new Error(`Twitter session invalid or expired: redirected to login page (${currentUrl})`);
+    }
+
+    // Dismiss Twitter cookie banner if visible
+    const cookieAccept = page.locator('button:has-text("Accept all cookies"), button:has-text("Refuse non-essential cookies")').first();
+    if ((await cookieAccept.count()) > 0 && await cookieAccept.isVisible().catch(() => false)) {
+      console.log('[Twitter Automation] Dismissing cookie banner...');
+      await cookieAccept.click().catch(() => {});
+      await page.waitForTimeout(500);
     }
 
     console.log('[Twitter Automation] Finding tweet text area...');
@@ -115,18 +124,49 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       if ((await fileInput.count()) > 0) {
         await fileInput.setInputFiles(path.resolve(options.mediaPath));
         // Wait for attachment preview to appear
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(3000);
       }
     }
 
-    console.log('[Twitter Automation] Clicking Post button...');
+    console.log('[Twitter Automation] Finding Post button...');
     const modalButton = page.locator('div[role="dialog"] [data-testid="tweetButton"], div[role="dialog"] [data-testid="tweetButtonInline"]').first();
     const postButton = (await modalButton.count()) > 0
       ? modalButton
       : page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]').first();
 
-    await postButton.waitFor({ state: 'visible', timeout: 15000 });
-    await postButton.click();
+    await postButton.waitFor({ state: 'visible', timeout: 20000 });
+
+    // Wait if button is disabled (e.g. video/image still processing)
+    for (let i = 0; i < 30; i++) {
+      const cb = page.locator('button:has-text("Accept all cookies"), button:has-text("Refuse non-essential cookies")').first();
+      if ((await cb.count()) > 0 && await cb.isVisible().catch(() => false)) {
+        await cb.click().catch(() => {});
+      }
+
+      const ariaDisabled = await postButton.getAttribute('aria-disabled');
+      const disabled = await postButton.getAttribute('disabled');
+      if (ariaDisabled !== 'true' && disabled === null) {
+        break;
+      }
+      console.log(`[Twitter Automation] Waiting for tweet media processing and Post button to be actionable (${i + 1}/30)...`);
+      await page.waitForTimeout(1000);
+    }
+
+    // Dismiss any remaining cookie banners before clicking post
+    const cookieBtn = page.locator('button:has-text("Refuse non-essential cookies"), button:has-text("Accept all cookies")').first();
+    if ((await cookieBtn.count()) > 0) {
+      console.log('[Twitter Automation] Dismissing cookie banner before posting...');
+      await cookieBtn.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(500);
+    }
+
+    console.log('[Twitter Automation] Clicking Post button...');
+    try {
+      await postButton.click({ timeout: 5000 });
+    } catch {
+      console.log('[Twitter Automation] Pointer event intercepted by layer, clicking Post with force: true...');
+      await postButton.click({ force: true });
+    }
 
     console.log('[Twitter Automation] Waiting for tweet submission confirmation...');
     // Wait for the modal dialog to disappear or notification toast to appear
@@ -222,7 +262,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
   const session =
     options.browserSession ||
     (await connectOrLaunchChrome({
-      headless: true,
+      headless: options.headless,
       cdpUrl: options.cdpUrl,
       storageState: sessionPath
     }));
@@ -230,6 +270,31 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
   const page = await session.context.newPage();
   try {
     page.setDefaultTimeout(timeout);
+
+    // Dismiss any popups, cookie banners or onboarding modals that TikTok overlays on the upload view
+    const dismissTikTokOverlays = async () => {
+      // 1. Cookie consent banner
+      const cookieBtn = page.locator('button:has-text("Allow all"), button:has-text("Decline optional cookies"), button:has-text("Accept all")').first();
+      if ((await cookieBtn.count()) > 0 && await cookieBtn.isVisible().catch(() => false)) {
+        console.log('[TikTok Automation] Dismissing cookie banner...');
+        await cookieBtn.click().catch(() => {});
+        await page.waitForTimeout(500);
+      }
+      // 2. Automatic content checks dialog ("Turn on automatic content checks?")
+      const checkBtn = page.locator('button:has-text("Turn on"), button:has-text("Cancel")').first();
+      if ((await checkBtn.count()) > 0 && await checkBtn.isVisible().catch(() => false)) {
+        console.log('[TikTok Automation] Dismissing automatic content checks dialog...');
+        await checkBtn.click().catch(() => {});
+        await page.waitForTimeout(500);
+      }
+      // 3. "Got it" onboarding tooltip / modal
+      const gotItBtn = page.locator('button:has-text("Got it")').first();
+      if ((await gotItBtn.count()) > 0 && await gotItBtn.isVisible().catch(() => false)) {
+        console.log('[TikTok Automation] Dismissing "Got it" dialog...');
+        await gotItBtn.click().catch(() => {});
+        await page.waitForTimeout(500);
+      }
+    };
 
     console.log('[TikTok Automation] Navigating to compose URL (https://www.tiktok.com/creator-center/upload)...');
     await page.goto('https://www.tiktok.com/creator-center/upload', {
@@ -242,6 +307,8 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       throw new Error(`TikTok session invalid or expired: redirected to login page (${currentUrl})`);
     }
 
+    await dismissTikTokOverlays();
+
     console.log('[TikTok Automation] Finding video upload input element...');
     const uploadInput = page.locator('input[type="file"][accept*="video"], input[type="file"]').first();
     await uploadInput.waitFor({ state: 'attached', timeout });
@@ -251,6 +318,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     console.log('[TikTok Automation] Waiting for video processing & caption editor...');
     await page.waitForTimeout(5000);
+    await dismissTikTokOverlays();
 
     console.log(`[TikTok Automation] Typing post copy (${options.copy.length} chars)...`);
     const captionEditor = page.locator(
@@ -260,14 +328,42 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       await captionEditor.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
       await captionEditor.click();
       await captionEditor.fill(options.copy);
+      await page.waitForTimeout(1000);
     }
 
-    console.log('[TikTok Automation] Clicking Post button...');
-    const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"]').first();
+    await dismissTikTokOverlays();
+
+    console.log('[TikTok Automation] Finding Post button...');
+    const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"], button.btn-post').first();
     if ((await postButton.count()) > 0) {
-      await postButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
-      await postButton.click();
+      await postButton.waitFor({ state: 'visible', timeout: 25000 }).catch(() => {});
+
+      // Wait if disabled (e.g. video file still processing or uploading)
+      for (let i = 0; i < 30; i++) {
+        await dismissTikTokOverlays();
+        const disabled = await postButton.getAttribute('disabled');
+        const ariaDisabled = await postButton.getAttribute('aria-disabled');
+        if (disabled === null && ariaDisabled !== 'true') {
+          break;
+        }
+        console.log(`[TikTok Automation] Waiting for video upload/processing to complete (${i + 1}/30)...`);
+        await page.waitForTimeout(1000);
+      }
+
+      console.log('[TikTok Automation] Clicking Post button...');
+      try {
+        await postButton.click({ timeout: 5000 });
+      } catch {
+        console.log('[TikTok Automation] Standard click intercepted, clicking Post with force: true...');
+        await postButton.click({ force: true });
+      }
       await page.waitForTimeout(3000);
+
+      console.log('[TikTok Automation] Waiting for video submission confirmation...');
+      await Promise.race([
+        page.waitForURL((url) => !url.toString().includes('/upload'), { timeout: 25000 }),
+        page.locator('text="Your video has been uploaded", text="Manage your posts", button:has-text("Manage your posts")').first().waitFor({ state: 'visible', timeout: 25000 })
+      ]).catch(() => {});
     }
 
     const generatedId = `tt-${Date.now()}`;
@@ -314,7 +410,7 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
   const session =
     options.browserSession ||
     (await connectOrLaunchChrome({
-      headless: true,
+      headless: options.headless,
       cdpUrl: options.cdpUrl,
       storageState: sessionPath
     }));
@@ -417,7 +513,7 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
   const session =
     options.browserSession ||
     (await connectOrLaunchChrome({
-      headless: true,
+      headless: options.headless,
       cdpUrl: options.cdpUrl,
       storageState: sessionPath
     }));

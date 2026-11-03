@@ -12,11 +12,13 @@
 - `src/media/card-generator.ts`: SVG layout generator & `sharp` PNG compositor (`generateSocialCard`, `generateCard`).
 - `src/media/video-generator.ts`: `fluent-ffmpeg` vertical MP4 generator with audio fallback (`generateSocialVideo`, `generateVideo`).
 - `src/automation/session-manager.ts`: Cookie validation, platform allowlisting, and storageState persistence (`SessionManager`, `verifySession`).
-- `src/automation/posters.ts`: Playwright automation implementations for Twitter, TikTok, Facebook, Instagram (`dispatchBrowserPost`, `defaultPosterHandler`, `captureErrorScreenshot`).
+- `src/automation/browser-helper.ts`: Chrome launcher & CDP connection with `resolveHeadless` (reads `PRESSHUB_HEADLESS`), stealth arguments, and Windows visible browser support.
+- `src/automation/posters.ts`: Playwright automation implementations for Twitter, TikTok, Facebook, Instagram (`dispatchBrowserPost`, `defaultPosterHandler`, `captureErrorScreenshot`, overlay/cookie dismissal, and force-click fallback).
 - `src/cli/login.ts`: Interactive login CLI to generate storageState JSON files.
 - `src/app.ts`: Express application factory with injection hooks for testing.
 - `src/index.ts`: Production entrypoint; auto-starts `PressHubPoller` if `PRESSHUB_WP_URL` and `PRESSHUB_WORKER_SECRET` are configured.
 - `tests/worker.test.ts`: Express HTTP and media generation unit tests.
+- `tests/browser-helper.test.ts`: Stealth configuration, CDP probing, and `resolveHeadless` unit tests.
 - `tests/poller.test.ts`: `.env` parser and Pull Mode poller unit tests.
 - `tests/posters.test.ts`: Playwright poster automation unit tests (strict-mode violation prevention, dialog vs timeline scoping, toast URL extraction).
 

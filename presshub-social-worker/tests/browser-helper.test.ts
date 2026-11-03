@@ -7,6 +7,7 @@ import {
   isCdpAvailable,
   findChromeExecutable,
   connectOrLaunchChrome,
+  resolveHeadless,
   buildTwitterStorageState,
   buildTikTokStorageState,
   parseCookieExport,
@@ -48,6 +49,30 @@ describe('Browser Helper, Stealth & Session Builders Suite', () => {
     test('REAL_CHROME_USER_AGENT matches genuine Chrome user-agent without Headless', () => {
       expect(REAL_CHROME_USER_AGENT).toMatch(/Chrome\/\d+/);
       expect(REAL_CHROME_USER_AGENT).not.toContain('HeadlessChrome');
+    });
+
+    test('resolveHeadless prioritizes explicit option over env and defaults to false', () => {
+      const origEnv = process.env.PRESSHUB_HEADLESS;
+      try {
+        delete process.env.PRESSHUB_HEADLESS;
+        expect(resolveHeadless(undefined)).toBe(false);
+        expect(resolveHeadless(true)).toBe(true);
+        expect(resolveHeadless(false)).toBe(false);
+
+        process.env.PRESSHUB_HEADLESS = 'true';
+        expect(resolveHeadless(undefined)).toBe(true);
+        expect(resolveHeadless(false)).toBe(false);
+
+        process.env.PRESSHUB_HEADLESS = 'false';
+        expect(resolveHeadless(undefined)).toBe(false);
+        expect(resolveHeadless(true)).toBe(true);
+      } finally {
+        if (origEnv !== undefined) {
+          process.env.PRESSHUB_HEADLESS = origEnv;
+        } else {
+          delete process.env.PRESSHUB_HEADLESS;
+        }
+      }
     });
 
     test('findChromeExecutable detects Chrome or honors PRESSHUB_CHROME_BIN override', () => {

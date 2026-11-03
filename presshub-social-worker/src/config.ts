@@ -91,6 +91,7 @@ export interface WorkerEnvConfig {
   port: number;
   pollIntervalMs: number;
   chromeCdpUrl?: string;
+  headless: boolean;
 }
 
 /**
@@ -102,6 +103,9 @@ export function getWorkerConfig(): WorkerEnvConfig {
     workerSecret: process.env.PRESSHUB_WORKER_SECRET?.trim() || undefined,
     port: parseInt(process.env.PRESSHUB_WORKER_PORT || '3456', 10),
     pollIntervalMs: parseInt(process.env.PRESSHUB_POLL_INTERVAL_MS || '30000', 10),
-    chromeCdpUrl: process.env.PRESSHUB_CHROME_CDP_URL?.trim() || undefined
+    chromeCdpUrl: process.env.PRESSHUB_CHROME_CDP_URL?.trim() || undefined,
+    headless: process.env.PRESSHUB_HEADLESS !== undefined
+      ? process.env.PRESSHUB_HEADLESS.toLowerCase() === 'true'
+      : false
   };
 }
