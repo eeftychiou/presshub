@@ -153,6 +153,7 @@ export async function connectOrLaunchChrome(
   const hasCdp = await isCdpAvailable(cdpTarget, 500);
   if (hasCdp) {
     try {
+      console.log(`[PressHub Browser] Connected to existing Chrome instance over CDP: ${cdpTarget}`);
       const browser = await chromium.connectOverCDP(cdpTarget);
       const contexts = browser.contexts();
       const context = contexts[0] || (await browser.newContext({ userAgent: REAL_CHROME_USER_AGENT }));
@@ -222,6 +223,7 @@ export async function connectOrLaunchChrome(
   }
 
   // Non-persistent launch
+  console.log(`[PressHub Browser] Launching Google Chrome (headless: ${options.headless ?? true}, storageState: ${options.storageState ? path.basename(options.storageState) : 'none'})...`);
   let browser: Browser;
   try {
     browser = await chromium.launch({

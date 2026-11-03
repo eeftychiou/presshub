@@ -430,4 +430,50 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(poller.getRunningStatus()).toBe(false);
     });
   });
+
+  describe('6. Rich Debugging & Screenshot Capture', () => {
+    test('pollOnce logs session status and empty queue status', async () => {
+      const logs: string[] = [];
+      const spyLog = jest.spyOn(console, 'log').mockImplementation((...args) => {
+        logs.push(args.join(' '));
+      });
+
+      const mockFetch: typeof fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, jobs: [] })
+      } as any);
+
+      const poller = new PressHubPoller({
+        wpUrl: 'https://presshub.cy',
+        workerSecret: 'test-secret',
+        fetchFn: mockFetch,
+        sessionsDir: TEST_SESSIONS_DIR
+      });
+
+      const stats = await poller.pollOnce();
+      expect(stats.claimed).toBe(0);
+
+      spyLog.mockRestore();
+
+      expect(logs.some((l) => l.includes('[PressHub Poller] Active sessions reported:'))).toBe(true);
+      expect(logs.some((l) => l.includes('Polled WordPress -> claimed 0 jobs'))).toBe(true);
+    });
+
+    test('captureErrorScreenshot saves screenshot file to output directory', async () => {
+      const { captureErrorScreenshot } = require('../src/automation/posters');
+      const mockPage = {
+        screenshot: jest.fn().mockImplementation(async ({ path: p }: { path: string }) => {
+          fs.writeFileSync(p, 'fake-screenshot-data');
+        })
+      };
+
+      const outDir = path.join(TEST_DIR, 'debug-screens');
+      const savedPath = await captureErrorScreenshot(mockPage, 'twitter', outDir);
+
+      expect(savedPath).toBeDefined();
+      expect(fs.existsSync(savedPath!)).toBe(true);
+      expect(savedPath!).toContain('debug-error-twitter-');
+      expect(mockPage.screenshot).toHaveBeenCalledTimes(1);
+    });
+  });
 });

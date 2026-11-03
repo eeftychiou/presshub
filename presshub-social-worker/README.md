@@ -64,6 +64,9 @@ npm run dev
 When `PRESSHUB_WP_URL` and `PRESSHUB_WORKER_SECRET` are set in `.env`:
 - The worker automatically polls `${PRESSHUB_WP_URL}/wp-json/presshub-social/v1/worker/claim` every 30 seconds.
 - It sends session availability statuses (`twitter`, `tiktok`, `facebook`, `instagram`) and claims pending automation jobs.
+- Clear, timestamped cycle logging tracks queue activity: e.g. `[PressHub Poller 20:31:00] Polled WordPress -> claimed 0 jobs (queue is empty or no due automation jobs)` or `Claimed 2 jobs: [#12 Twitter, #13 TikTok]`.
+- Step-by-step progress logging details browser navigation, login verification, selector matching, and posting.
+- In case of failure or selector timeout, a full-page debug screenshot is automatically saved to `output/debug-error-<platform>-<timestamp>.png`.
 - The worker generates required media (PNG cards or vertical MP4s), executes browser automation in headless Chromium, and reports completion to `/worker/complete`.
 - **Zero router port forwarding or public static IP required.**
 
