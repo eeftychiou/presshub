@@ -91,17 +91,27 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     }
 
     console.log('[Twitter Automation] Finding tweet text area...');
-    const tweetBox = page.locator('[data-testid="tweetTextarea_0"]');
-    await tweetBox.waitFor({ state: 'visible', timeout });
+    // Scoped to modal dialog when /compose/post is loaded, or fallback to timeline box without strict mode violation
+    const modalTextarea = page.locator('div[role="dialog"] [data-testid="tweetTextarea_0"]');
+    const isModalVisible = await modalTextarea.first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+    const textarea = isModalVisible
+      ? modalTextarea.first()
+      : page.locator('div[role="dialog"] [data-testid="tweetTextarea_0"]').or(page.locator('[data-testid="tweetTextarea_0"]').first());
+
+    await textarea.waitFor({ state: 'visible', timeout: 15000 });
 
     console.log(`[Twitter Automation] Typing tweet copy (${options.copy.length} chars)...`);
-    await tweetBox.click();
-    await tweetBox.fill(options.copy);
+    await textarea.click();
+    try {
+      await textarea.fill(options.copy);
+    } catch {
+      await page.keyboard.type(options.copy, { delay: 10 });
+    }
 
     // If media attached, upload via file input
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
       console.log(`[Twitter Automation] Uploading media attachment: ${options.mediaPath}...`);
-      const fileInput = page.locator('input[data-testid="fileInput"]');
+      const fileInput = page.locator('div[role="dialog"] input[data-testid="fileInput"], input[data-testid="fileInput"]').first();
       if ((await fileInput.count()) > 0) {
         await fileInput.setInputFiles(path.resolve(options.mediaPath));
         // Wait for attachment preview to appear
@@ -110,22 +120,71 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     }
 
     console.log('[Twitter Automation] Clicking Post button...');
-    const tweetButton = page.locator('[data-testid="tweetButton"]');
-    await tweetButton.waitFor({ state: 'visible', timeout });
-    await tweetButton.click();
+    const modalButton = page.locator('div[role="dialog"] [data-testid="tweetButton"], div[role="dialog"] [data-testid="tweetButtonInline"]').first();
+    const postButton = (await modalButton.count()) > 0
+      ? modalButton
+      : page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]').first();
 
-    // Allow request dispatch
-    await page.waitForTimeout(3000);
+    await postButton.waitFor({ state: 'visible', timeout: 15000 });
+    await postButton.click();
 
-    const generatedId = `tw-${Date.now()}`;
-    const postUrl = `https://x.com/status/${generatedId}`;
-    console.log(`[Twitter Automation] Post completed! URL: ${postUrl}`);
+    console.log('[Twitter Automation] Waiting for tweet submission confirmation...');
+    // Wait for the modal dialog to disappear or notification toast to appear
+    await Promise.race([
+      page.locator('div[role="dialog"]').first().waitFor({ state: 'detached', timeout: 15000 }),
+      page.locator('[data-testid="toast"]').first().waitFor({ state: 'visible', timeout: 15000 })
+    ]).catch(() => {});
+
+    await page.waitForTimeout(1000);
+
+    // Extract tweet URL and ID
+    let tweetUrl: string | undefined;
+    let tweetId: string | undefined;
+
+    try {
+      // Check if toast notification contains a direct link to the published tweet
+      const toastLink = page.locator('[data-testid="toast"] a[href*="/status/"]').first();
+      if ((await toastLink.count()) > 0) {
+        const href = await toastLink.getAttribute('href');
+        if (href) {
+          tweetUrl = href.startsWith('http') ? href : `https://x.com${href}`;
+          const match = tweetUrl.match(/\/status\/(\d+)/);
+          if (match) {
+            tweetId = match[1];
+          }
+        }
+      }
+    } catch {
+      // Toast link extraction is best-effort
+    }
+
+    // Check page URL if it redirected to the status
+    if (!tweetUrl) {
+      try {
+        const pageUrl = page.url();
+        const urlMatch = pageUrl.match(/\/status\/(\d+)/);
+        if (urlMatch) {
+          tweetId = urlMatch[1];
+          tweetUrl = pageUrl;
+        }
+      } catch {}
+    }
+
+    // Default fallback if not explicitly parsed
+    if (!tweetUrl || !tweetId) {
+      tweetId = tweetId || `tw-${Date.now()}`;
+      tweetUrl = tweetUrl || `https://x.com/status/${tweetId}`;
+    }
+
+    console.log(`[Twitter Automation] Post completed! URL: ${tweetUrl}`);
 
     return {
       success: true,
       platform: 'twitter',
-      externalPostId: generatedId,
-      externalPostUrl: postUrl,
+      externalPostId: tweetId,
+      externalPostUrl: tweetUrl,
+      external_id: tweetId,
+      external_url: tweetUrl,
       mediaPath: options.mediaPath
     };
   } catch (err: any) {
@@ -184,7 +243,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     }
 
     console.log('[TikTok Automation] Finding video upload input element...');
-    const uploadInput = page.locator('input[type="file"][accept*="video"], input[type="file"]');
+    const uploadInput = page.locator('input[type="file"][accept*="video"], input[type="file"]').first();
     await uploadInput.waitFor({ state: 'attached', timeout });
 
     console.log(`[TikTok Automation] Uploading video file: ${options.mediaPath}...`);
@@ -196,16 +255,18 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     console.log(`[TikTok Automation] Typing post copy (${options.copy.length} chars)...`);
     const captionEditor = page.locator(
       'div[contenteditable="true"], .notranslate[contenteditable="true"]'
-    );
+    ).first();
     if ((await captionEditor.count()) > 0) {
-      await captionEditor.first().click();
-      await captionEditor.first().fill(options.copy);
+      await captionEditor.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+      await captionEditor.click();
+      await captionEditor.fill(options.copy);
     }
 
     console.log('[TikTok Automation] Clicking Post button...');
-    const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"]');
+    const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"]').first();
     if ((await postButton.count()) > 0) {
-      await postButton.first().click();
+      await postButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+      await postButton.click();
       await page.waitForTimeout(3000);
     }
 
@@ -218,6 +279,8 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       platform: 'tiktok',
       externalPostId: generatedId,
       externalPostUrl: postUrl,
+      external_id: generatedId,
+      external_url: postUrl,
       mediaPath: options.mediaPath
     };
   } catch (err: any) {
@@ -270,30 +333,37 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
     }
 
     console.log('[Facebook Automation] Finding composer trigger...');
-    const composerTrigger = page.locator('div[role="button"]:has-text("What\'s on your mind")');
+    const composerTrigger = page.locator('div[role="button"]:has-text("What\'s on your mind")').first();
     if ((await composerTrigger.count()) > 0) {
-      await composerTrigger.first().click();
+      await composerTrigger.click();
       await page.waitForTimeout(1000);
     }
 
     console.log('[Facebook Automation] Finding post text box...');
-    const postBox = page.locator('div[role="textbox"][contenteditable="true"]');
+    const modalPostBox = page.locator('div[role="dialog"] div[role="textbox"][contenteditable="true"]').first();
+    const postBox = (await modalPostBox.count()) > 0
+      ? modalPostBox
+      : page.locator('div[role="textbox"][contenteditable="true"]').first();
     await postBox.waitFor({ state: 'visible', timeout });
 
     console.log(`[Facebook Automation] Typing post copy (${options.copy.length} chars)...`);
+    await postBox.click();
     await postBox.fill(options.copy);
 
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
       console.log(`[Facebook Automation] Uploading media attachment: ${options.mediaPath}...`);
-      const fileInput = page.locator('input[type="file"][accept*="image"], input[type="file"]');
+      const fileInput = page.locator('input[type="file"][accept*="image"], input[type="file"]').first();
       if ((await fileInput.count()) > 0) {
-        await fileInput.first().setInputFiles(path.resolve(options.mediaPath));
+        await fileInput.setInputFiles(path.resolve(options.mediaPath));
         await page.waitForTimeout(2000);
       }
     }
 
     console.log('[Facebook Automation] Clicking Post button...');
-    const postButton = page.locator('div[aria-label="Post"][role="button"]');
+    const modalPostBtn = page.locator('div[role="dialog"] div[aria-label="Post"][role="button"], div[role="dialog"] div[aria-label="Post"]').first();
+    const postButton = (await modalPostBtn.count()) > 0
+      ? modalPostBtn
+      : page.locator('div[aria-label="Post"][role="button"]').first();
     if ((await postButton.count()) > 0) {
       await postButton.click();
       await page.waitForTimeout(3000);
@@ -308,6 +378,8 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
       platform: 'facebook',
       externalPostId: generatedId,
       externalPostUrl: postUrl,
+      external_id: generatedId,
+      external_url: postUrl,
       mediaPath: options.mediaPath
     };
   } catch (err: any) {
@@ -366,14 +438,14 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     console.log('[Instagram Automation] Opening create/new post modal...');
     const createNav = page.locator(
       'svg[aria-label="New post"], a[role="link"]:has-text("Create")'
-    );
+    ).first();
     if ((await createNav.count()) > 0) {
-      await createNav.first().click();
+      await createNav.click();
       await page.waitForTimeout(1000);
     }
 
     console.log(`[Instagram Automation] Uploading media attachment: ${options.mediaPath}...`);
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.locator('input[type="file"]').first();
     await fileInput.waitFor({ state: 'attached', timeout });
     await fileInput.setInputFiles(path.resolve(options.mediaPath));
     await page.waitForTimeout(2000);
@@ -381,12 +453,12 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     console.log('[Instagram Automation] Advancing Next buttons...');
     const nextButton = page.locator(
       'button:has-text("Next"), div[role="button"]:has-text("Next")'
-    );
+    ).first();
     if ((await nextButton.count()) > 0) {
-      await nextButton.first().click();
+      await nextButton.click();
       await page.waitForTimeout(1000);
       if ((await nextButton.count()) > 0) {
-        await nextButton.first().click();
+        await nextButton.click();
         await page.waitForTimeout(1000);
       }
     }
@@ -394,17 +466,20 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     console.log(`[Instagram Automation] Typing caption (${options.copy.length} chars)...`);
     const captionBox = page.locator(
       'div[aria-label*="Write a caption"], div[contenteditable="true"]'
-    );
+    ).first();
     if ((await captionBox.count()) > 0) {
-      await captionBox.first().fill(options.copy);
+      await captionBox.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+      await captionBox.click();
+      await captionBox.fill(options.copy);
     }
 
     console.log('[Instagram Automation] Clicking Share button...');
     const shareButton = page.locator(
       'button:has-text("Share"), div[role="button"]:has-text("Share")'
-    );
+    ).first();
     if ((await shareButton.count()) > 0) {
-      await shareButton.first().click();
+      await shareButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+      await shareButton.click();
       await page.waitForTimeout(3000);
     }
 
@@ -417,6 +492,8 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       platform: 'instagram',
       externalPostId: generatedId,
       externalPostUrl: postUrl,
+      external_id: generatedId,
+      external_url: postUrl,
       mediaPath: options.mediaPath
     };
   } catch (err: any) {

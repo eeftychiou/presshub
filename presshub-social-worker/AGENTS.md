@@ -18,6 +18,7 @@
 - `src/index.ts`: Production entrypoint; auto-starts `PressHubPoller` if `PRESSHUB_WP_URL` and `PRESSHUB_WORKER_SECRET` are configured.
 - `tests/worker.test.ts`: Express HTTP and media generation unit tests.
 - `tests/poller.test.ts`: `.env` parser and Pull Mode poller unit tests.
+- `tests/posters.test.ts`: Playwright poster automation unit tests (strict-mode violation prevention, dialog vs timeline scoping, toast URL extraction).
 
 ## Verification Commands
 Before submitting PRs or finalizing tasks:
