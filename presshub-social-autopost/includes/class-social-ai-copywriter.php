@@ -436,6 +436,70 @@ class PressHub_Social_AI_Copywriter {
     }
 
     /**
+     * Clean podcast dialogue script by stripping topic markers and speaker tags.
+     *
+     * @param string $script Raw podcast script text.
+     * @return string Cleaned plain text script.
+     */
+    public static function clean_podcast_script( string $script ): string {
+        if ( '' === trim( $script ) ) {
+            return '';
+        }
+
+        // Delegate to Audio Synthesizer strip_topic_markers if loaded
+        if ( class_exists( 'PressHub_AI_Audio_Synthesizer' ) ) {
+            $synth = new PressHub_AI_Audio_Synthesizer();
+            if ( method_exists( $synth, 'strip_topic_markers' ) ) {
+                $script = $synth->strip_topic_markers( $script );
+            }
+        }
+
+        // Strip line-level topic markers
+        $lines = preg_split( '/\r?\n/', $script );
+        $out   = [];
+        foreach ( $lines as $line ) {
+            $trimmed = trim( $line );
+            if ( '' === $trimmed ) {
+                continue;
+            }
+            if ( preg_match( '/^(?:\[|\<\!\-\-|\={2,3}|\#{2,3})?\s*TOPIC(?:_?START)?\s*(?::[^\n\]\>\=]*)?(?:\]|\-\-\>|\={2,3})?$/iu', $trimmed ) ||
+                 preg_match( '/^(?:\[|\<\!\-\-)?\s*TOPIC_?END\s*(?:\]|\-\-\>)?$/iu', $trimmed ) ) {
+                continue;
+            }
+            $out[] = $line;
+        }
+        $script = implode( "\n", $out );
+
+        // Strip inline topic markers
+        $script = preg_replace( '/\[\s*TOPIC(?:_?START)?\s*(?::[^\]]*)?\]/iu', '', $script );
+        $script = preg_replace( '/\[\s*TOPIC_?END\s*\]/iu', '', $script );
+        $script = preg_replace( '/\<\!\-\-\s*TOPIC(?:_?START)?\s*(?::[^\>]*)?\-\-\>/iu', '', $script );
+        $script = preg_replace( '/\<\!\-\-\s*TOPIC_?END\s*\-\-\>/iu', '', $script );
+        $script = preg_replace( '/(?:\={2,3}|\#{2,3})\s*TOPIC(?:_?START)?\s*(?::[^\=\#\n]*)?(?:\={2,3}|\#{2,3})/iu', '', $script );
+
+        // Strip speaker tags:
+        // Bracketed tags: [SPEAKER_0]:, **[SPEAKER_1]:**, [Presenter 1]:, [Host 1]:, etc.
+        $script = preg_replace( '/(?:\*{1,2})?\[\s*(?:SPEAKER_\d+|Presenter\s*\d+|Host\s*\d+|Speaker\s*\d+)(?:\s*\([^)]*\))?\s*\](?:\*{1,2})?\s*:\s*(?:\*{1,2})?/iu', '', $script );
+        // Unbracketed tags: SPEAKER_0:, Presenter 1:, Host 1:, etc.
+        $script = preg_replace( '/\b(?:SPEAKER_\d+|Presenter\s*\d+|Host\s*\d+)(?:\s*\([^)]*\))?\s*:\s*/iu', '', $script );
+
+        // Strip shortcodes if WordPress function is present
+        if ( function_exists( 'strip_shortcodes' ) ) {
+            $script = strip_shortcodes( $script );
+        }
+
+        // Strip HTML tags and decode entities
+        $clean = function_exists( 'wp_strip_all_tags' )
+            ? wp_strip_all_tags( html_entity_decode( $script, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) )
+            : strip_tags( html_entity_decode( $script, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+
+        // Collapse multiple whitespace/newlines into a single space
+        $clean = preg_replace( '/\s+/', ' ', $clean );
+
+        return trim( $clean );
+    }
+
+    /**
      * Build normalized article data from a WordPress post.
      *
      * @param int $post_id WordPress post ID.
@@ -464,6 +528,99 @@ class PressHub_Social_AI_Copywriter {
         $content = wp_strip_all_tags( function_exists( 'strip_shortcodes' ) ? strip_shortcodes( $raw_content ) : $raw_content );
         $content = preg_replace( '/\s+/', ' ', $content );
         $content = mb_substr( trim( $content ), 0, 3000, 'UTF-8' );
+
+        // Podcast script ingestion:
+        // When content is empty or if post is a podcast (_presshub_briefing_type === 'podcast'),
+        // look up dialogue script from postmeta (_presshub_podcast_script) or snapshot files.
+        $briefing_type = function_exists( 'get_post_meta' ) ? (string) get_post_meta( $post_id, '_presshub_briefing_type', true ) : '';
+        $is_podcast    = ( 'podcast' === $briefing_type );
+
+        if ( '' === trim( $content ) || $is_podcast ) {
+            // 1. Check canonical postmeta _presshub_podcast_script
+            $podcast_script = function_exists( 'get_post_meta' ) ? (string) get_post_meta( $post_id, '_presshub_podcast_script', true ) : '';
+
+            // 2. Check alternative common podcast script meta keys
+            if ( '' === trim( $podcast_script ) && function_exists( 'get_post_meta' ) ) {
+                $alt_keys = [ '_presshub_script', 'presshub_podcast_script', 'podcast_script' ];
+                foreach ( $alt_keys as $alt_key ) {
+                    $alt_val = (string) get_post_meta( $post_id, $alt_key, true );
+                    if ( '' !== trim( $alt_val ) ) {
+                        $podcast_script = $alt_val;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Fallback to Harvester/Producer snapshot files on disk
+            if ( '' === trim( $podcast_script ) ) {
+                $date    = function_exists( 'get_post_meta' ) ? (string) get_post_meta( $post_id, '_presshub_briefing_date', true ) : '';
+                if ( '' === trim( $date ) && ! empty( $post->post_date ) ) {
+                    $date = substr( (string) $post->post_date, 0, 10 );
+                }
+                $edition = function_exists( 'get_post_meta' ) ? (string) get_post_meta( $post_id, '_presshub_briefing_edition', true ) : 'morning';
+                if ( '' === trim( $edition ) ) {
+                    $edition = 'morning';
+                }
+
+                if ( ! empty( $date ) ) {
+                    if ( class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
+                        $producer = new PressHub_AI_Podcast_Producer();
+                        if ( method_exists( $producer, 'get_script' ) ) {
+                            $file_script = $producer->get_script( $date, $edition );
+                            if ( ! empty( $file_script ) ) {
+                                $podcast_script = (string) $file_script;
+                            }
+                        }
+                    }
+
+                    $snapshot_dir = '';
+                    if ( class_exists( 'PressHub_AI_News_Harvester' ) ) {
+                        $harvester = new PressHub_AI_News_Harvester();
+                        if ( method_exists( $harvester, 'get_snapshot_dir' ) ) {
+                            $snapshot_dir = $harvester->get_snapshot_dir( $date );
+                        }
+                    }
+                    if ( empty( $snapshot_dir ) && function_exists( 'wp_upload_dir' ) ) {
+                        $uploads = wp_upload_dir();
+                        if ( ! empty( $uploads['basedir'] ) ) {
+                            $clean_date   = preg_replace( '/[^0-9\-]/', '', $date );
+                            $snapshot_dir = rtrim( $uploads['basedir'], '/\\' ) . '/presshub-briefings/' . $clean_date;
+                        }
+                    }
+
+                    if ( ! empty( $snapshot_dir ) ) {
+                        $slash_dir = function_exists( 'trailingslashit' ) ? trailingslashit( $snapshot_dir ) : rtrim( $snapshot_dir, '/\\' ) . '/';
+                        $filenames = ( 'noon' === $edition )
+                            ? [ 'podcast-script-noon.txt', 'podcast-script.txt' ]
+                            : [ 'podcast-script.txt', 'podcast-script-noon.txt' ];
+
+                        foreach ( $filenames as $fn ) {
+                            $fpath = $slash_dir . $fn;
+                            if ( file_exists( $fpath ) ) {
+                                $fcontent = @file_get_contents( $fpath );
+                                if ( false !== $fcontent && '' !== trim( $fcontent ) ) {
+                                    $podcast_script = $fcontent;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Ingest and clean podcast script
+            if ( '' !== trim( $podcast_script ) ) {
+                $cleaned = self::clean_podcast_script( $podcast_script );
+                if ( '' !== $cleaned ) {
+                    if ( '' === trim( $content ) || $is_podcast ) {
+                        $content = mb_substr( $cleaned, 0, 3000, 'UTF-8' );
+                    }
+                    if ( '' === trim( $excerpt ) || false !== strpos( $excerpt, 'TOPIC' ) || false !== strpos( $excerpt, 'SPEAKER_' ) ) {
+                        $excerpt = function_exists( 'wp_trim_words' ) ? wp_trim_words( $cleaned, 50, '...' ) : mb_substr( $cleaned, 0, 250, 'UTF-8' );
+                    }
+                }
+            }
+        }
 
         $url       = function_exists( 'get_permalink' ) ? ( get_permalink( $post_id ) ?: '' ) : '';
         $site_name = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'PressHub';

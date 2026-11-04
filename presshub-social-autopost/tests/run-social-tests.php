@@ -243,6 +243,32 @@ if ( ! function_exists( 'untrailingslashit' ) ) {
     }
 }
 
+if ( ! function_exists( 'trailingslashit' ) ) {
+    function trailingslashit( $string ): string {
+        return untrailingslashit( $string ) . '/';
+    }
+}
+
+if ( ! function_exists( 'has_excerpt' ) ) {
+    function has_excerpt( $post = null ): bool {
+        $p = is_object( $post ) ? $post : get_post( $post );
+        return ! empty( $p->post_excerpt );
+    }
+}
+
+if ( ! function_exists( 'wp_upload_dir' ) ) {
+    function wp_upload_dir() {
+        $tmp = sys_get_temp_dir() . '/presshub_social_test_uploads';
+        if ( ! is_dir( $tmp ) ) {
+            @mkdir( $tmp, 0777, true );
+        }
+        return [
+            'basedir' => $tmp,
+            'baseurl' => 'http://example.com/wp-content/uploads',
+        ];
+    }
+}
+
 if ( ! function_exists( 'wp_strip_all_tags' ) ) {
     function wp_strip_all_tags( $string ): string {
         return strip_tags( (string) $string );
@@ -354,6 +380,9 @@ if ( ! class_exists( 'WP_Post' ) ) {
         public int $ID = 0;
         public string $post_type = 'post';
         public string $post_title = '';
+        public string $post_content = '';
+        public string $post_excerpt = '';
+        public string $post_date = '';
         public string $post_status = 'publish';
 
         public function __construct( array $data = [] ) {
@@ -911,6 +940,109 @@ $ai_tweet = PressHub_Social_AI_Copywriter::generate_from_data( [
 assert_true( is_string( $ai_tweet ) && mb_strlen( $ai_tweet ) <= 120, 'AI copywriter truncates tweet to configured max_chars' );
 assert_true( is_string( $ai_tweet ) && str_contains( $ai_tweet, 'https://presshub.ai/story' ), 'AI copywriter preserves article URL during truncation' );
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
+
+// 4. Podcast Script Ingestion & Cleanup Tests
+$raw_podcast_script = "[TOPIC_START: Εισαγωγή]\n[SPEAKER_1]: Καλημέρα σας από το PressHub.\n[Presenter 2]: Σήμερα αναλύουμε τις εξελίξεις.\n**[SPEAKER_1]:** Ακριβώς.\n[TOPIC_END]\n[TOPIC_START: Οικονομία]\nSPEAKER_0: Τα επιτόκια παραμένουν σταθερά.\n[TOPIC_END]";
+$cleaned_script = PressHub_Social_AI_Copywriter::clean_podcast_script( $raw_podcast_script );
+assert_true(
+    ! str_contains( $cleaned_script, 'TOPIC' ) &&
+    ! str_contains( $cleaned_script, 'SPEAKER' ) &&
+    ! str_contains( $cleaned_script, 'Presenter' ) &&
+    str_contains( $cleaned_script, 'Καλημέρα σας από το PressHub.' ) &&
+    str_contains( $cleaned_script, 'Σήμερα αναλύουμε τις εξελίξεις.' ) &&
+    str_contains( $cleaned_script, 'Ακριβώς.' ) &&
+    str_contains( $cleaned_script, 'Τα επιτόκια παραμένουν σταθερά.' ),
+    'clean_podcast_script strips topic markers and speaker tags'
+);
+
+// 5. Podcast post with empty content and _presshub_podcast_script meta populates content & excerpt
+$podcast_post_id = 901;
+$podcast_post_obj = new WP_Post( [
+    'ID'           => $podcast_post_id,
+    'post_title'   => 'PressHub Podcast: Daily Briefing',
+    'post_content' => '[audio src="https://presshub.ai/audio/briefing.mp3"]',
+    'post_excerpt' => '',
+] );
+$GLOBALS['test_posts'][ $podcast_post_id ]  = $podcast_post_obj;
+$GLOBALS['POSTS_STORE'][ $podcast_post_id ] = [
+    'ID'           => $podcast_post_id,
+    'post_title'   => 'PressHub Podcast: Daily Briefing',
+    'post_content' => '[audio src="https://presshub.ai/audio/briefing.mp3"]',
+    'post_excerpt' => '',
+    'post_status'  => 'publish',
+];
+update_post_meta( $podcast_post_id, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $podcast_post_id, '_presshub_podcast_script', "[TOPIC_START: Εισαγωγή]\n[SPEAKER_1]: Καλωσήρθατε στο ημερήσιο podcast του PressHub.\n[SPEAKER_2]: Έχουμε πολλές ενδιαφέρουσες ειδήσεις για σήμερα.\n[TOPIC_END]" );
+
+$podcast_article_data = PressHub_Social_AI_Copywriter::build_article_data( $podcast_post_id );
+assert_true(
+    is_array( $podcast_article_data ) &&
+    str_contains( $podcast_article_data['content'], 'Καλωσήρθατε στο ημερήσιο podcast του PressHub. Έχουμε πολλές ενδιαφέρουσες ειδήσεις για σήμερα.' ) &&
+    ! str_contains( $podcast_article_data['content'], 'TOPIC' ) &&
+    ! str_contains( $podcast_article_data['content'], 'SPEAKER' ),
+    'build_article_data populates content with cleaned podcast script when post_content is audio shortcode'
+);
+assert_true(
+    ! empty( $podcast_article_data['excerpt'] ) &&
+    str_contains( $podcast_article_data['excerpt'], 'Καλωσήρθατε στο ημερήσιο podcast' ) &&
+    ! str_contains( $podcast_article_data['excerpt'], 'TOPIC' ) &&
+    ! str_contains( $podcast_article_data['excerpt'], 'SPEAKER' ),
+    'build_article_data populates excerpt with first 50 words of cleaned podcast script'
+);
+
+// 6. Passing cleaned podcast script to AI copywriter user prompt
+$captured_user_prompt = '';
+PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $config ) use ( &$captured_user_prompt ) {
+    $captured_user_prompt = $user;
+    return 'Podcast Tweet: ' . mb_substr( $user, 0, 80 );
+} );
+$podcast_generated_copy = PressHub_Social_AI_Copywriter::generate_for_post( $podcast_post_id, 'twitter' );
+assert_true(
+    str_contains( $captured_user_prompt, 'Καλωσήρθατε στο ημερήσιο podcast του PressHub.' ),
+    'generate_for_post passes cleaned podcast script into AI copywriter user prompt'
+);
+assert_true(
+    is_string( $podcast_generated_copy ) && str_starts_with( $podcast_generated_copy, 'Podcast Tweet:' ),
+    'generate_for_post returns generated copy for podcast post'
+);
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+
+// 7. Fallback to snapshot file on disk when postmeta is empty
+$snapshot_post_id = 902;
+$upload_dir = wp_upload_dir();
+$briefing_date = '2026-11-04';
+$briefing_dir = $upload_dir['basedir'] . '/presshub-briefings/' . $briefing_date;
+if ( ! is_dir( $briefing_dir ) ) {
+    @mkdir( $briefing_dir, 0777, true );
+}
+file_put_contents( $briefing_dir . '/podcast-script.txt', "[TOPIC_START: Snapshot]\n[SPEAKER_1]: Ηχογράφηση από αρχείο snapshot δίσκου.\n[TOPIC_END]" );
+
+$snapshot_post_obj = new WP_Post( [
+    'ID'           => $snapshot_post_id,
+    'post_title'   => 'Snapshot Podcast',
+    'post_content' => '',
+    'post_excerpt' => '',
+    'post_date'    => '2026-11-04 10:00:00',
+] );
+$GLOBALS['test_posts'][ $snapshot_post_id ]  = $snapshot_post_obj;
+$GLOBALS['POSTS_STORE'][ $snapshot_post_id ] = [
+    'ID'           => $snapshot_post_id,
+    'post_title'   => 'Snapshot Podcast',
+    'post_content' => '',
+    'post_excerpt' => '',
+    'post_date'    => '2026-11-04 10:00:00',
+    'post_status'  => 'publish',
+];
+update_post_meta( $snapshot_post_id, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $snapshot_post_id, '_presshub_briefing_date', $briefing_date );
+update_post_meta( $snapshot_post_id, '_presshub_briefing_edition', 'morning' );
+
+$snapshot_article_data = PressHub_Social_AI_Copywriter::build_article_data( $snapshot_post_id );
+assert_true(
+    str_contains( $snapshot_article_data['content'], 'Ηχογράφηση από αρχείο snapshot δίσκου.' ) &&
+    ! str_contains( $snapshot_article_data['content'], 'TOPIC' ),
+    'build_article_data falls back to Harvester/Producer snapshot file when postmeta is empty'
+);
 
 // ----------------------------------------------------------------------
 // Test Suite 15: Embedded GitHub Auto-Update Checker & Token Fallback
