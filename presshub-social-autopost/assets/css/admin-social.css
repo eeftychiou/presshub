@@ -165,6 +165,18 @@
     gap: 8px;
 }
 
+.presshub-table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 12px;
+}
+
+.presshub-admin-queue-table {
+    table-layout: auto !important;
+    width: 100%;
+}
+
 .presshub-admin-queue-table td {
     vertical-align: middle;
 }
@@ -173,6 +185,7 @@
     font-size: 12px;
     color: #2c3338;
     line-height: 1.4;
+    word-break: break-word;
 }
 
 .presshub-error-msg {
@@ -183,14 +196,37 @@
     padding: 2px 6px;
     border-radius: 4px;
     border: 1px solid #fecaca;
+    word-break: break-word;
 }
 
 .presshub-actions-cell {
-    white-space: nowrap;
+    white-space: normal;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    justify-content: flex-start;
 }
 
 .presshub-actions-cell .button {
-    margin-right: 4px;
+    margin: 0;
+    padding: 0 6px;
+    height: 26px;
+    line-height: 24px;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+    border-radius: 4px;
+}
+
+.presshub-actions-cell .button .dashicons {
+    font-size: 13px;
+    width: 13px;
+    height: 13px;
+    line-height: 13px;
+    vertical-align: middle;
 }
 
 /* ==========================================================================
@@ -300,17 +336,6 @@
 /* ==========================================================================
    Queue Copy Preview & Edit
    ========================================================================== */
-
-.presshub-copy-preview-wrapper {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.presshub-copy-preview-wrapper .presshub-copy-preview {
-    flex: 1;
-}
 
 .presshub-copy-preview.flash-update {
     animation: presshub-highlight 1.5s ease-out;
