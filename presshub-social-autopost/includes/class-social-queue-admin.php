@@ -154,7 +154,7 @@ class PressHub_Social_Queue_Admin {
                         <th style="width: 70px;"><?php esc_html_e( 'Attempts', 'presshub-social-autopost' ); ?></th>
                         <th><?php esc_html_e( 'Copy Preview', 'presshub-social-autopost' ); ?></th>
                         <th style="width: 150px;"><?php esc_html_e( 'Scheduled / Dispatched', 'presshub-social-autopost' ); ?></th>
-                        <th style="width: 160px;"><?php esc_html_e( 'Actions / Link', 'presshub-social-autopost' ); ?></th>
+                        <th style="width: 230px;"><?php esc_html_e( 'Actions / Link', 'presshub-social-autopost' ); ?></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -202,8 +202,22 @@ class PressHub_Social_Queue_Admin {
                                 </td>
                                 <td><?php echo esc_html( $job['attempts'] . '/' . $job['max_attempts'] ); ?></td>
                                 <td>
-                                    <div class="presshub-copy-preview" title="<?php echo esc_attr( $job['post_copy'] ); ?>">
-                                        <?php echo esc_html( wp_trim_words( $job['post_copy'], 15 ) ); ?>
+                                    <div class="presshub-copy-preview-wrapper">
+                                        <div class="presshub-copy-preview" id="copy-preview-<?php echo esc_attr( $job_id ); ?>" title="<?php echo esc_attr( $job['post_copy'] ); ?>">
+                                            <?php echo esc_html( wp_trim_words( $job['post_copy'], 15 ) ); ?>
+                                        </div>
+                                        <button type="button" class="button button-small button-link btn-open-edit-modal"
+                                            data-job-id="<?php echo esc_attr( $job_id ); ?>"
+                                            data-post-id="<?php echo esc_attr( $post_id ); ?>"
+                                            data-platform="<?php echo esc_attr( $platform ); ?>"
+                                            data-engine="<?php echo esc_attr( $engine ); ?>"
+                                            data-status="<?php echo esc_attr( $status ); ?>"
+                                            data-post-title="<?php echo esc_attr( $post_title ); ?>"
+                                            data-full-copy="<?php echo esc_attr( $job['post_copy'] ); ?>"
+                                            title="<?php esc_attr_e( 'Modify preview and post again', 'presshub-social-autopost' ); ?>">
+                                            <span class="dashicons dashicons-edit" style="font-size:14px; width:14px; height:14px; vertical-align:middle;"></span>
+                                            <?php esc_html_e( 'Edit / Re-post', 'presshub-social-autopost' ); ?>
+                                        </button>
                                     </div>
                                     <?php if ( ! empty( $job['last_error'] ) ) : ?>
                                         <div class="presshub-error-msg" title="<?php echo esc_attr( $job['last_error'] ); ?>">
@@ -223,22 +237,48 @@ class PressHub_Social_Queue_Admin {
                                 </td>
                                 <td class="presshub-actions-cell">
                                     <?php if ( 'published' === $status && ! empty( $job['external_post_url'] ) ) : ?>
-                                        <a href="<?php echo esc_url( $job['external_post_url'] ); ?>" target="_blank" rel="noopener noreferrer" class="button button-small">
+                                        <a href="<?php echo esc_url( $job['external_post_url'] ); ?>" target="_blank" rel="noopener noreferrer" class="button button-small" title="<?php esc_attr_e( 'View live post on platform', 'presshub-social-autopost' ); ?>">
                                             <?php esc_html_e( 'View Post ↗', 'presshub-social-autopost' ); ?>
                                         </a>
                                     <?php endif; ?>
 
+                                    <!-- Regenerate AI Copy Button -->
+                                    <button type="button" class="button button-small btn-regenerate-job-copy"
+                                        data-job-id="<?php echo esc_attr( $job_id ); ?>"
+                                        data-post-id="<?php echo esc_attr( $post_id ); ?>"
+                                        data-platform="<?php echo esc_attr( $platform ); ?>"
+                                        title="<?php esc_attr_e( 'Regenerate post copy using AI prompts', 'presshub-social-autopost' ); ?>">
+                                        <span class="dashicons dashicons-update" style="font-size:14px; width:14px; height:14px; vertical-align:middle;"></span>
+                                        <?php esc_html_e( 'Regen AI', 'presshub-social-autopost' ); ?>
+                                    </button>
+
+                                    <!-- Edit & Re-post Button -->
+                                    <button type="button" class="button button-small btn-open-edit-modal"
+                                        data-job-id="<?php echo esc_attr( $job_id ); ?>"
+                                        data-post-id="<?php echo esc_attr( $post_id ); ?>"
+                                        data-platform="<?php echo esc_attr( $platform ); ?>"
+                                        data-engine="<?php echo esc_attr( $engine ); ?>"
+                                        data-status="<?php echo esc_attr( $status ); ?>"
+                                        data-post-title="<?php echo esc_attr( $post_title ); ?>"
+                                        data-full-copy="<?php echo esc_attr( $job['post_copy'] ); ?>"
+                                        title="<?php esc_attr_e( 'Modify copy and post again as a new job', 'presshub-social-autopost' ); ?>">
+                                        <span class="dashicons dashicons-edit" style="font-size:14px; width:14px; height:14px; vertical-align:middle;"></span>
+                                        <?php esc_html_e( 'Edit', 'presshub-social-autopost' ); ?>
+                                    </button>
+
                                     <?php if ( 'pending' === $status ) : ?>
-                                        <button type="button" class="button button-small btn-dispatch-now" data-job-id="<?php echo esc_attr( $job_id ); ?>">
+                                        <button type="button" class="button button-small btn-dispatch-now" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Dispatch this job now', 'presshub-social-autopost' ); ?>">
                                             <?php esc_html_e( 'Dispatch', 'presshub-social-autopost' ); ?>
                                         </button>
-                                        <button type="button" class="button button-small button-link-delete btn-cancel-job" data-job-id="<?php echo esc_attr( $job_id ); ?>">
+                                        <button type="button" class="button button-small button-link-delete btn-cancel-job" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Cancel scheduled job', 'presshub-social-autopost' ); ?>">
                                             <?php esc_html_e( 'Cancel', 'presshub-social-autopost' ); ?>
                                         </button>
                                     <?php endif; ?>
 
-                                    <?php if ( 'failed' === $status || 'cancelled' === $status ) : ?>
-                                        <button type="button" class="button button-small button-secondary btn-retry-job" data-job-id="<?php echo esc_attr( $job_id ); ?>">
+                                    <!-- Retry Button: Available for failed, cancelled, and published jobs -->
+                                    <?php if ( 'failed' === $status || 'cancelled' === $status || 'published' === $status ) : ?>
+                                        <button type="button" class="button button-small button-secondary btn-retry-job" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Retry or re-post this job to social media', 'presshub-social-autopost' ); ?>">
+                                            <span class="dashicons dashicons-controls-repeat" style="font-size:14px; width:14px; height:14px; vertical-align:middle;"></span>
                                             <?php esc_html_e( 'Retry', 'presshub-social-autopost' ); ?>
                                         </button>
                                     <?php endif; ?>
@@ -248,6 +288,56 @@ class PressHub_Social_Queue_Admin {
                     <?php endif; ?>
                 </tbody>
             </table>
+
+            <!-- Edit & Re-post Modal Dialog -->
+            <div id="presshub-edit-copy-modal" class="presshub-modal-backdrop" style="display:none;">
+                <div class="presshub-modal-container">
+                    <div class="presshub-modal-header">
+                        <h3 class="presshub-modal-title">
+                            <span class="dashicons dashicons-edit" style="vertical-align:middle; margin-right:4px;"></span>
+                            <?php esc_html_e( 'Modify Social Post Copy & Preview', 'presshub-social-autopost' ); ?>
+                        </h3>
+                        <button type="button" class="presshub-modal-close-btn" aria-label="<?php esc_attr_e( 'Close', 'presshub-social-autopost' ); ?>">&times;</button>
+                    </div>
+                    <div class="presshub-modal-body">
+                        <div class="presshub-modal-details-grid">
+                            <div><strong><?php esc_html_e( 'Job ID:', 'presshub-social-autopost' ); ?></strong> #<span id="modal-job-id-text"></span></div>
+                            <div><strong><?php esc_html_e( 'Platform:', 'presshub-social-autopost' ); ?></strong> <span id="modal-platform-text" class="platform-name"></span></div>
+                            <div><strong><?php esc_html_e( 'Status:', 'presshub-social-autopost' ); ?></strong> <span id="modal-status-text"></span></div>
+                            <div style="grid-column: 1 / -1;">
+                                <strong><?php esc_html_e( 'Article:', 'presshub-social-autopost' ); ?></strong> <span id="modal-title-text"></span>
+                            </div>
+                        </div>
+
+                        <div class="presshub-modal-editor-section">
+                            <div class="presshub-modal-editor-header">
+                                <label for="modal-post-copy-input"><strong><?php esc_html_e( 'Post Copy / Preview:', 'presshub-social-autopost' ); ?></strong></label>
+                                <span class="presshub-modal-char-count"><span id="modal-char-counter">0</span> <?php esc_html_e( 'chars', 'presshub-social-autopost' ); ?></span>
+                            </div>
+                            <textarea id="modal-post-copy-input" rows="7" class="widefat" style="font-size:13px; line-height:1.5; font-family:inherit;"></textarea>
+                        </div>
+
+                        <div id="modal-feedback-notice" class="presshub-modal-notice" style="display:none;"></div>
+                    </div>
+                    <div class="presshub-modal-footer">
+                        <div class="presshub-modal-footer-left">
+                            <button type="button" class="button button-secondary" id="modal-btn-regen-ai">
+                                <span class="dashicons dashicons-update" style="vertical-align:middle;"></span>
+                                <?php esc_html_e( 'Regenerate with AI', 'presshub-social-autopost' ); ?>
+                            </button>
+                        </div>
+                        <div class="presshub-modal-footer-right">
+                            <button type="button" class="button button-secondary" id="modal-btn-save-existing" title="<?php esc_attr_e( 'Save changes to this existing job in the queue', 'presshub-social-autopost' ); ?>">
+                                <?php esc_html_e( 'Save to this Job', 'presshub-social-autopost' ); ?>
+                            </button>
+                            <button type="button" class="button button-primary" id="modal-btn-repost-new" title="<?php esc_attr_e( 'Create a new job with this modified copy and post it to social media', 'presshub-social-autopost' ); ?>">
+                                <span class="dashicons dashicons-share-alt" style="vertical-align:middle;"></span>
+                                <?php esc_html_e( 'Post Again as New Job', 'presshub-social-autopost' ); ?>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         <?php
     }

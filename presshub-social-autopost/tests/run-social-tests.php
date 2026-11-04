@@ -1348,6 +1348,98 @@ assert_true( is_wp_error( $disp_res ) && 'pull_mode_queued' === $disp_res->get_e
 $gate_job_after_disp = PressHub_Social_Queue::get_job( $job_pull_gate );
 assert_equals( 'pending', $gate_job_after_disp['status'], 'Job remains pending for local worker after dispatch_job' );
 
+// ----------------------------------------------------------------------
+// Test Suite 19: Copy Regeneration, Published Job Retry & Re-post Operations
+// ----------------------------------------------------------------------
+echo "\n--- Suite 19: Copy Regeneration, Published Job Retry & Re-post Operations ---\n";
+PressHub_Social_Queue::reset_memory_store();
+
+// 1. Retry on a Published job
+$pub_job_id = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 601,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => 'Initial published tweet',
+] );
+PressHub_Social_Queue::mark_published( $pub_job_id, 'tw-999', 'https://x.com/post/999' );
+$job_before_retry = PressHub_Social_Queue::get_job( $pub_job_id );
+assert_equals( 'published', $job_before_retry['status'], 'Job initially published' );
+assert_equals( 'tw-999', $job_before_retry['external_post_id'], 'External post ID present' );
+
+$retry_success = PressHub_Social_Queue::retry_job( $pub_job_id );
+assert_true( $retry_success, 'retry_job succeeds on published job' );
+$job_after_retry = PressHub_Social_Queue::get_job( $pub_job_id );
+assert_equals( 'pending', $job_after_retry['status'], 'retry_job resets published job to pending' );
+assert_equals( 0, (int) $job_after_retry['attempts'], 'retry_job resets attempts to 0' );
+assert_true( empty( $job_after_retry['dispatched_at'] ), 'retry_job clears dispatched_at on published job' );
+assert_true( empty( $job_after_retry['external_post_id'] ), 'retry_job clears external_post_id on published job' );
+assert_true( empty( $job_after_retry['external_post_url'] ), 'retry_job clears external_post_url on published job' );
+
+// 2. update_job_copy
+$update_copy_res = PressHub_Social_Queue::update_job_copy( $pub_job_id, 'Updated tweet content after retry' );
+assert_true( $update_copy_res, 'update_job_copy successfully updates copy' );
+$job_after_update = PressHub_Social_Queue::get_job( $pub_job_id );
+assert_equals( 'Updated tweet content after retry', $job_after_update['post_copy'], 'get_job returns updated post copy' );
+
+assert_true( false === PressHub_Social_Queue::update_job_copy( 999999, 'Non-existent' ), 'update_job_copy returns false on non-existent job' );
+assert_true( false === PressHub_Social_Queue::update_job_copy( $pub_job_id, '   ' ), 'update_job_copy returns false on empty copy' );
+
+// 3. repost_as_new_job
+$reposted_job_id = PressHub_Social_Queue::repost_as_new_job( $pub_job_id, 'Brand new modified copy for separate post' );
+assert_true( is_int( $reposted_job_id ) && $reposted_job_id > $pub_job_id, 'repost_as_new_job returns a new distinct job ID' );
+
+$new_job = PressHub_Social_Queue::get_job( $reposted_job_id );
+assert_equals( 'Brand new modified copy for separate post', $new_job['post_copy'], 'New job contains the modified copy' );
+assert_equals( 'pending', $new_job['status'], 'New job is initialized to pending' );
+assert_equals( 601, (int) $new_job['post_id'], 'New job shares the same post_id' );
+assert_equals( 'twitter', $new_job['platform'], 'New job shares the same platform' );
+assert_equals( 'automation', $new_job['engine'], 'New job shares the same engine' );
+
+// Original job is intact and unmodified
+$orig_job_check = PressHub_Social_Queue::get_job( $pub_job_id );
+assert_equals( 'Updated tweet content after retry', $orig_job_check['post_copy'], 'Original job copy remains intact' );
+assert_equals( $pub_job_id, (int) $orig_job_check['id'], 'Original job ID unchanged' );
+
+// repost_as_new_job with invalid source
+$invalid_repost = PressHub_Social_Queue::repost_as_new_job( 888888, 'Fail copy' );
+assert_true( is_wp_error( $invalid_repost ), 'repost_as_new_job returns WP_Error for non-existent source job' );
+
+// 4. AI Copywriter Regeneration Integration
+update_option( 'presshub_social_copy_mode', 'ai' );
+update_option( 'presshub_social_prompt_twitter', 'Write tweet for: {title} {content}' );
+PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $config ) {
+    return 'Regenerated fresh AI tweet hook: ' . mb_substr( $user, 0, 50 );
+} );
+$regen_post_id = 602;
+$regen_post_obj = new WP_Post( [
+    'ID'           => $regen_post_id,
+    'post_title'   => 'Breaking News on Climate Summit',
+    'post_content' => 'Leaders reached a historic agreement today.',
+    'post_excerpt' => 'Historic agreement reached today.',
+] );
+$GLOBALS['test_posts'][ $regen_post_id ]  = $regen_post_obj;
+$GLOBALS['POSTS_STORE'][ $regen_post_id ] = [
+    'ID'           => $regen_post_id,
+    'post_title'   => 'Breaking News on Climate Summit',
+    'post_content' => 'Leaders reached a historic agreement today.',
+    'post_excerpt' => 'Historic agreement reached today.',
+    'post_status'  => 'publish',
+];
+$regen_job_id = PressHub_Social_Queue::enqueue( [
+    'post_id'   => $regen_post_id,
+    'platform'  => 'twitter',
+    'engine'    => 'automation',
+    'post_copy' => 'Old stale copy',
+] );
+
+// Call copywriter directly to regenerate and update
+$new_ai_copy = PressHub_Social_AI_Copywriter::generate_for_post( $regen_post_id, 'twitter' );
+assert_true( is_string( $new_ai_copy ) && str_starts_with( $new_ai_copy, 'Regenerated fresh AI tweet hook:' ), 'AI copywriter generates new text for queue job' );
+PressHub_Social_Queue::update_job_copy( $regen_job_id, $new_ai_copy );
+$regen_job_after = PressHub_Social_Queue::get_job( $regen_job_id );
+assert_equals( $new_ai_copy, $regen_job_after['post_copy'], 'Queue job copy updated with newly regenerated AI copy' );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+
 
 // ----------------------------------------------------------------------
 // Test Summary

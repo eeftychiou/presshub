@@ -23,6 +23,9 @@ class PressHub_Social_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_social_retry_job', [ __CLASS__, 'handle_retry_job' ] );
         add_action( 'wp_ajax_presshub_social_cancel_job', [ __CLASS__, 'handle_cancel_job' ] );
         add_action( 'wp_ajax_presshub_social_dispatch_now', [ __CLASS__, 'handle_dispatch_now' ] );
+        add_action( 'wp_ajax_presshub_social_regenerate_job_copy', [ __CLASS__, 'handle_regenerate_job_copy' ] );
+        add_action( 'wp_ajax_presshub_social_update_job_copy', [ __CLASS__, 'handle_update_job_copy' ] );
+        add_action( 'wp_ajax_presshub_social_repost_job', [ __CLASS__, 'handle_repost_job' ] );
     }
 
     /**
@@ -284,5 +287,153 @@ class PressHub_Social_Ajax_Handlers {
                 'summary' => $summary,
             ] );
         }
+    }
+
+    /**
+     * AJAX handler: Regenerate social media copy for an existing queue job using AI prompts.
+     * Capability: edit_posts or manage_options.
+     *
+     * @return void
+     */
+    public static function handle_regenerate_job_copy(): void {
+        check_ajax_referer( 'presshub_social_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+        }
+
+        $job_id = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
+        if ( $job_id <= 0 ) {
+            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        $job = PressHub_Social_Queue::get_job( $job_id );
+        if ( ! $job ) {
+            wp_send_json_error( [ 'message' => __( 'Job not found in queue.', 'presshub-social-autopost' ) ], 404 );
+        }
+
+        $post_id  = (int) ( $job['post_id'] ?? 0 );
+        $platform = sanitize_key( (string) ( $job['platform'] ?? '' ) );
+
+        if ( $post_id <= 0 || empty( $platform ) ) {
+            wp_send_json_error( [ 'message' => __( 'Job is missing post ID or platform.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        if ( ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+            wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-social-autopost' ) ], 500 );
+        }
+
+        $new_copy = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
+        if ( is_wp_error( $new_copy ) ) {
+            wp_send_json_error( [ 'message' => $new_copy->get_error_message() ], 400 );
+        }
+
+        $new_copy_str = trim( (string) $new_copy );
+        if ( '' === $new_copy_str ) {
+            wp_send_json_error( [ 'message' => __( 'Generated copy was empty.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        // Update the queue record's copy
+        PressHub_Social_Queue::update_job_copy( $job_id, $new_copy_str );
+
+        // Also sync postmeta for consistency
+        update_post_meta( $post_id, '_presshub_social_copy_' . $platform, $new_copy_str );
+
+        wp_send_json_success( [
+            'message'  => sprintf( __( 'AI copy regenerated for %s.', 'presshub-social-autopost' ), ucfirst( $platform ) ),
+            'job_id'   => $job_id,
+            'post_id'  => $post_id,
+            'platform' => $platform,
+            'new_copy' => $new_copy_str,
+            'preview'  => wp_trim_words( $new_copy_str, 15 ),
+        ] );
+    }
+
+    /**
+     * AJAX handler: Update the copy of an existing queue job.
+     * Capability: edit_posts or manage_options.
+     *
+     * @return void
+     */
+    public static function handle_update_job_copy(): void {
+        check_ajax_referer( 'presshub_social_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+        }
+
+        $job_id    = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
+        $post_copy = isset( $_POST['post_copy'] ) ? sanitize_textarea_field( wp_unslash( $_POST['post_copy'] ) ) : '';
+
+        if ( $job_id <= 0 ) {
+            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        if ( '' === trim( $post_copy ) ) {
+            wp_send_json_error( [ 'message' => __( 'Post copy cannot be empty.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        $job = PressHub_Social_Queue::get_job( $job_id );
+        if ( ! $job ) {
+            wp_send_json_error( [ 'message' => __( 'Job not found.', 'presshub-social-autopost' ) ], 404 );
+        }
+
+        $updated = PressHub_Social_Queue::update_job_copy( $job_id, $post_copy );
+        if ( ! $updated ) {
+            wp_send_json_error( [ 'message' => __( 'Could not update post copy.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        if ( ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
+            update_post_meta( (int) $job['post_id'], '_presshub_social_copy_' . sanitize_key( $job['platform'] ), $post_copy );
+        }
+
+        wp_send_json_success( [
+            'message'   => __( 'Job copy updated successfully.', 'presshub-social-autopost' ),
+            'job_id'    => $job_id,
+            'post_copy' => $post_copy,
+            'preview'   => wp_trim_words( $post_copy, 15 ),
+        ] );
+    }
+
+    /**
+     * AJAX handler: Create a new queue job from an existing job with modified copy and dispatch it.
+     * Leaves the original job completely untouched.
+     * Capability: edit_posts or manage_options.
+     *
+     * @return void
+     */
+    public static function handle_repost_job(): void {
+        check_ajax_referer( 'presshub_social_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+        }
+
+        $source_job_id = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
+        $custom_copy   = isset( $_POST['post_copy'] ) ? sanitize_textarea_field( wp_unslash( $_POST['post_copy'] ) ) : '';
+        $dispatch_now  = ! isset( $_POST['dispatch_now'] ) || ! empty( $_POST['dispatch_now'] );
+
+        if ( $source_job_id <= 0 ) {
+            wp_send_json_error( [ 'message' => __( 'Invalid source job ID.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        $new_job_id = PressHub_Social_Queue::repost_as_new_job( $source_job_id, $custom_copy );
+        if ( is_wp_error( $new_job_id ) ) {
+            wp_send_json_error( [ 'message' => $new_job_id->get_error_message() ], 400 );
+        }
+
+        $dispatch_message = '';
+        if ( $dispatch_now ) {
+            $dispatch_result = PressHub_Social_Dispatcher::dispatch_job( $new_job_id );
+            if ( is_wp_error( $dispatch_result ) ) {
+                $dispatch_message = sprintf( __( ' (Warning: dispatch encountered: %s)', 'presshub-social-autopost' ), $dispatch_result->get_error_message() );
+            }
+        }
+
+        wp_send_json_success( [
+            'message'    => sprintf( __( 'New social post #%d created and queued.%s', 'presshub-social-autopost' ), $new_job_id, $dispatch_message ),
+            'new_job_id' => $new_job_id,
+            'source_id'  => $source_job_id,
+        ] );
     }
 }

@@ -579,11 +579,14 @@ class PressHub_Social_Queue {
             $result = $wpdb->update(
                 $table,
                 [
-                    'status'       => 'pending',
-                    'attempts'     => 0,
-                    'scheduled_at' => $now,
-                    'last_error'   => null,
-                    'updated_at'   => $now,
+                    'status'            => 'pending',
+                    'attempts'          => 0,
+                    'scheduled_at'      => $now,
+                    'last_error'        => null,
+                    'dispatched_at'     => null,
+                    'external_post_id'  => null,
+                    'external_post_url' => null,
+                    'updated_at'        => $now,
                 ],
                 [ 'id' => $job_id ]
             );
@@ -591,15 +594,58 @@ class PressHub_Social_Queue {
         }
 
         if ( isset( self::$memory_store[ $job_id ] ) ) {
-            self::$memory_store[ $job_id ]['status']       = 'pending';
-            self::$memory_store[ $job_id ]['attempts']     = 0;
-            self::$memory_store[ $job_id ]['scheduled_at'] = $now;
-            self::$memory_store[ $job_id ]['last_error']   = null;
-            self::$memory_store[ $job_id ]['updated_at']   = $now;
+            self::$memory_store[ $job_id ]['status']            = 'pending';
+            self::$memory_store[ $job_id ]['attempts']          = 0;
+            self::$memory_store[ $job_id ]['scheduled_at']      = $now;
+            self::$memory_store[ $job_id ]['last_error']        = null;
+            self::$memory_store[ $job_id ]['dispatched_at']     = null;
+            self::$memory_store[ $job_id ]['external_post_id']  = null;
+            self::$memory_store[ $job_id ]['external_post_url'] = null;
+            self::$memory_store[ $job_id ]['updated_at']        = $now;
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * Re-post an existing job as a brand new queue item with optional modified copy.
+     * Leaves the original job record completely intact.
+     *
+     * @param int    $source_job_id Original job ID.
+     * @param string $custom_copy   Optional modified copy; uses source job's copy if blank.
+     * @return int|WP_Error New job ID on success or WP_Error on failure.
+     */
+    public static function repost_as_new_job( int $source_job_id, string $custom_copy = '' ): int|WP_Error {
+        $source = self::get_job( $source_job_id );
+        if ( ! $source ) {
+            return new WP_Error( 'job_not_found', sprintf( __( 'Source job #%d not found.', 'presshub-social-autopost' ), $source_job_id ) );
+        }
+
+        $post_copy = trim( $custom_copy );
+        if ( '' === $post_copy ) {
+            $post_copy = (string) ( $source['post_copy'] ?? '' );
+        }
+
+        if ( '' === $post_copy ) {
+            return new WP_Error( 'empty_copy', __( 'Post copy content cannot be empty.', 'presshub-social-autopost' ) );
+        }
+
+        $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+
+        $new_job_data = [
+            'post_id'      => (int) $source['post_id'],
+            'platform'     => (string) $source['platform'],
+            'engine'       => (string) ( $source['engine'] ?? 'api' ),
+            'post_copy'    => $post_copy,
+            'media_url'    => $source['media_url'] ?? null,
+            'media_type'   => $source['media_type'] ?? null,
+            'status'       => 'pending',
+            'scheduled_at' => $now,
+            'metadata'     => ! empty( $source['metadata'] ) ? ( is_string( $source['metadata'] ) ? json_decode( $source['metadata'], true ) : $source['metadata'] ) : null,
+        ];
+
+        return self::enqueue( $new_job_data );
     }
 
     /**
@@ -683,6 +729,16 @@ class PressHub_Social_Queue {
      * @return bool
      */
     public static function update_job_copy( int $job_id, string $post_copy ): bool {
+        $job = self::get_job( $job_id );
+        if ( ! $job ) {
+            return false;
+        }
+
+        $post_copy = trim( $post_copy );
+        if ( '' === $post_copy ) {
+            return false;
+        }
+
         $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
 
         if ( self::is_db_ready() ) {
