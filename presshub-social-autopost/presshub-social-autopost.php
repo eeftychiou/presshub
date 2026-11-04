@@ -3,7 +3,7 @@
  * Plugin Name: PressHub Social Auto-Post
  * Plugin URI: https://presshub.ai
  * Description: Automated multi-platform social media auto-posting pipeline for WordPress with AI copy generation, queue dispatcher, Meta API, and browser automation worker integration.
- * Version: 2.6.4
+ * Version: 2.6.5
  * Author: PressHub Team
  * Author URI: https://presshub.ai
  * Text Domain: presshub-social-autopost
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'PRESSHUB_SOCIAL_VERSION', '2.6.4' );
+define( 'PRESSHUB_SOCIAL_VERSION', '2.6.5' );
 define( 'PRESSHUB_SOCIAL_FILE', __FILE__ );
 define( 'PRESSHUB_SOCIAL_PATH', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_SOCIAL_URL', plugin_dir_url( __FILE__ ) );

@@ -9,7 +9,7 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
 - **`presshub-ai-editor/`**: The core WordPress plugin source code.
   - `includes/`: PHP classes (API client, token logger, structured logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings).
   - `assets/`: Frontend/Admin JavaScript and CSS.
-  - `tests/`: Isolated PHP unit test suite (80 test files + `run-all-tests.php`).
+  - `tests/`: Isolated PHP unit test suite (82 test files + `run-all-tests.php`).
 - **`presshub-social-autopost/`**: Social media multi-platform auto-posting plugin (Queue, Meta API & Worker clients, Dispatcher, Metabox, Admin Dashboard).
   - `includes/`: PHP classes (`PressHub_Social_Queue`, `PressHub_Social_Dispatcher`, `PressHub_Social_REST_Controller`, `PressHub_Social_Meta_API_Client`, `PressHub_Social_Worker_Client`, `PressHub_Social_AI_Copywriter`, `PressHub_Social_Settings_Storage`, `PressHub_Social_Metabox`, `PressHub_Social_Queue_Admin`, `PressHub_Social_Ajax_Handlers`, `PressHub_Social_Settings`, etc.).
   - `assets/`: CSS styles, admin JS handlers, external prompt templates (`assets/prompts/*.txt`).
