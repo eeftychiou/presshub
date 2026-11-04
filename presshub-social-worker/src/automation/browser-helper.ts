@@ -3,6 +3,7 @@ import http from 'http';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
+import { WorkerLogger } from '../logger';
 import {
   Platform,
   buildTwitterStorageState,
@@ -169,18 +170,20 @@ export async function connectOrLaunchChrome(
   const hasCdp = await isCdpAvailable(cdpTarget, 500);
   if (hasCdp) {
     try {
-      console.log(`[PressHub Browser] Connected to existing Chrome instance over CDP: ${cdpTarget}`);
+      WorkerLogger.info('Browser', `Connected to existing Chrome instance over CDP: ${cdpTarget}`);
       const browser = await chromium.connectOverCDP(cdpTarget);
       const contexts = browser.contexts();
       const context = contexts[0] || (await browser.newContext({ userAgent: REAL_CHROME_USER_AGENT }));
 
       await context.addInitScript(STEALTH_INIT_SCRIPT);
+      WorkerLogger.debug('Browser', 'Applied stealth initialization script to CDP context');
 
       if (options.storageState && fs.existsSync(options.storageState)) {
         try {
           const raw = JSON.parse(fs.readFileSync(options.storageState, 'utf-8'));
           if (Array.isArray(raw?.cookies) && raw.cookies.length > 0) {
             await context.addCookies(raw.cookies);
+            WorkerLogger.debug('Browser', `Added ${raw.cookies.length} storageState cookies to CDP context`);
           }
         } catch {}
       }
@@ -195,8 +198,9 @@ export async function connectOrLaunchChrome(
         }
       };
     } catch (err: any) {
-      console.warn(
-        `[PressHub Browser] CDP connection failed (${err.message}). Launching local Chrome...`
+      WorkerLogger.warn(
+        'Browser',
+        `CDP connection failed (${err.message}). Launching local Chrome...`
       );
     }
   }
@@ -205,6 +209,7 @@ export async function connectOrLaunchChrome(
   const headless = resolveHeadless(options.headless);
 
   if (options.userDataDir) {
+    WorkerLogger.info('Browser', `Launching persistent Chrome context (userDataDir: ${options.userDataDir}, headless: ${headless})...`);
     let context: BrowserContext;
     try {
       context = await chromium.launchPersistentContext(options.userDataDir, {
@@ -241,7 +246,7 @@ export async function connectOrLaunchChrome(
   }
 
   // Non-persistent launch
-  console.log(`[PressHub Browser] Launching Google Chrome (headless: ${headless}, storageState: ${options.storageState ? path.basename(options.storageState) : 'none'})...`);
+  WorkerLogger.info('Browser', `Launching Google Chrome (headless: ${headless}, storageState: ${options.storageState ? path.basename(options.storageState) : 'none'})...`);
   let browser: Browser;
   try {
     browser = await chromium.launch({
@@ -265,6 +270,7 @@ export async function connectOrLaunchChrome(
   };
   if (options.storageState && fs.existsSync(options.storageState)) {
     contextOptions.storageState = options.storageState;
+    WorkerLogger.debug('Browser', `Using storageState file: ${options.storageState}`);
   }
 
   const context = await browser.newContext(contextOptions);
@@ -293,9 +299,12 @@ export async function extractSessionFromCdp(
   cdpUrl: string = process.env.PRESSHUB_CHROME_CDP_URL || 'http://127.0.0.1:9222'
 ): Promise<{ success: boolean; cookieCount: number; state?: any; error?: string }> {
   try {
+    WorkerLogger.info('Browser', `Extracting ${platform} session from CDP endpoint: ${cdpUrl}...`);
     const isAvail = await isCdpAvailable(cdpUrl, 1000);
     if (!isAvail) {
-      return { success: false, cookieCount: 0, error: `CDP endpoint not reachable at ${cdpUrl}` };
+      const errMsg = `CDP endpoint not reachable at ${cdpUrl}`;
+      WorkerLogger.warn('Browser', errMsg);
+      return { success: false, cookieCount: 0, error: errMsg };
     }
 
     const browser = await chromium.connectOverCDP(cdpUrl);
@@ -333,24 +342,29 @@ export async function extractSessionFromCdp(
     }
 
     if (!hasEssentialCookies) {
+      const errMsg = missingNote || `No valid session cookies found for ${platform}`;
+      WorkerLogger.warn('Browser', `CDP session extraction incomplete: ${errMsg} (Total cookies: ${cookies.length})`);
       return {
         success: false,
         cookieCount: cookies.length,
         state: storageState,
-        error: missingNote || `No valid session cookies found for ${platform}`
+        error: errMsg
       };
     }
 
+    WorkerLogger.info('Browser', `Successfully extracted session cookies for ${platform} via CDP (${cookies.length} cookies)`);
     return {
       success: true,
       cookieCount: cookies.length,
       state: storageState
     };
   } catch (err: any) {
+    const errMsg = `Failed to extract session over CDP: ${err.message}`;
+    WorkerLogger.error('Browser', errMsg, err);
     return {
       success: false,
       cookieCount: 0,
-      error: `Failed to extract session over CDP: ${err.message}`
+      error: errMsg
     };
   }
 }

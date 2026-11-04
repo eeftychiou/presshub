@@ -1,9 +1,13 @@
 import { loadEnv, getWorkerConfig } from './config';
 import { createApp } from './app';
 import { PressHubPoller } from './poller';
+import { WorkerLogger } from './logger';
+
+export { WorkerLogger } from './logger';
 
 // Load .env file at startup
 loadEnv();
+WorkerLogger.init();
 
 let activePoller: PressHubPoller | undefined;
 
@@ -16,8 +20,10 @@ export function startServer() {
   const SECRET = config.workerSecret;
   const WP_URL = config.wpUrl;
 
+  WorkerLogger.info('Server', `Log file initialized at: ${WorkerLogger.getLogPath()}`);
+
   if (!SECRET) {
-    console.warn('⚠️  WARNING: PRESSHUB_WORKER_SECRET environment variable is not set. All authenticated API requests will fail.');
+    WorkerLogger.warn('Server', 'PRESSHUB_WORKER_SECRET environment variable is not set. All authenticated API requests will fail.');
   }
 
   const app = createApp({
@@ -25,8 +31,8 @@ export function startServer() {
   });
 
   const server = app.listen(PORT, () => {
-    console.log(`🚀 PressHub Social Media Worker running on port ${PORT}`);
-    console.log(`📡 Health Check endpoint: http://localhost:${PORT}/health`);
+    WorkerLogger.info('Server', `🚀 PressHub Social Media Worker running on port ${PORT}`);
+    WorkerLogger.info('Server', `📡 Health Check endpoint: http://localhost:${PORT}/health`);
   });
 
   // Pull Mode: If WordPress URL and Worker Secret are configured, start poller
@@ -38,12 +44,12 @@ export function startServer() {
     });
     activePoller.start();
   } else {
-    console.log('ℹ️  Pull Mode idle (PRESSHUB_WP_URL or PRESSHUB_WORKER_SECRET not set). Running in Push Mode.');
+    WorkerLogger.info('Server', 'ℹ️  Pull Mode idle (PRESSHUB_WP_URL or PRESSHUB_WORKER_SECRET not set). Running in Push Mode.');
   }
 
   // Graceful shutdown handlers
   const shutdown = () => {
-    console.log('Shutting down gracefully...');
+    WorkerLogger.info('Server', 'Shutting down gracefully...');
     if (activePoller) {
       activePoller.stop();
     }

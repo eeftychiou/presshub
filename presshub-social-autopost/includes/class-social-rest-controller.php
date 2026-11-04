@@ -289,6 +289,22 @@ class PressHub_Social_REST_Controller {
                 }
             }
 
+            // Resolve audio URL if post has podcast audio attached
+            if ( empty( $job['audio_url'] ) && $post_id > 0 ) {
+                if ( function_exists( 'get_post_meta' ) ) {
+                    $audio_meta = get_post_meta( $post_id, '_presshub_audio_url', true );
+                    if ( ! empty( $audio_meta ) ) {
+                        $job['audio_url'] = esc_url_raw( (string) $audio_meta );
+                    }
+                }
+                if ( empty( $job['audio_url'] ) && $post ) {
+                    $content = is_object( $post ) ? ( $post->post_content ?? '' ) : ( $post['post_content'] ?? '' );
+                    if ( ! empty( $content ) && preg_match( '/<audio[^>]+src=["\']([^"\']+)["\']/i', $content, $audio_matches ) ) {
+                        $job['audio_url'] = esc_url_raw( $audio_matches[1] );
+                    }
+                }
+            }
+
             $job['post_title'] = $post_title;
             $job['post_url']   = $post_url;
             $job['site_name']  = $site_name;

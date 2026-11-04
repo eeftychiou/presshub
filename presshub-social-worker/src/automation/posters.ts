@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { WorkerLogger } from '../logger';
 import {
   Platform,
   sanitizePlatform,
@@ -55,11 +56,55 @@ export async function captureErrorScreenshot(
     const timestamp = Date.now();
     const screenshotPath = path.join(outputDir, `debug-error-${platform}-${timestamp}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
+    WorkerLogger.debug('Screenshot', `Saved debug screenshot to ${screenshotPath}`);
     return screenshotPath;
   } catch (err: any) {
-    console.warn(`[Screenshot] Failed to capture debug error screenshot for ${platform}: ${err.message}`);
+    WorkerLogger.warn('Screenshot', `Failed to capture debug error screenshot for ${platform}: ${err.message}`);
     return undefined;
   }
+}
+
+/**
+ * Captures comprehensive failure diagnostic information (URL, DOM state snippet, full-page screenshot)
+ * and logs it via WorkerLogger.error.
+ */
+export async function captureAutomationFailure(
+  page: any,
+  platform: string,
+  err: any
+): Promise<{ screenshotPath?: string; currentUrl: string; domState: string }> {
+  let currentUrl = 'unknown';
+  let domState = 'unavailable';
+  let screenshotPath: string | undefined;
+
+  try {
+    currentUrl = page.url();
+  } catch {}
+
+  try {
+    screenshotPath = await captureErrorScreenshot(page, platform);
+  } catch {}
+
+  try {
+    domState = await page.evaluate(() => {
+      const doc = (globalThis as any).document;
+      const title = doc?.title || 'no title';
+      const body = doc?.body ? doc.body.innerText.replace(/\s+/g, ' ').slice(0, 500) : '';
+      return `Title: "${title}" | Body: "${body}"`;
+    });
+  } catch {}
+
+  WorkerLogger.error(
+    `${platform.toUpperCase()} Automation`,
+    `Playwright automation failure: ${err.message}`,
+    {
+      pageUrl: currentUrl,
+      screenshot: screenshotPath || 'none',
+      domState
+    }
+  );
+
+  return { screenshotPath, currentUrl, domState };
 }
 
 /**
@@ -69,7 +114,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('twitter', options.sessionsDir);
   const timeout = options.timeoutMs || 30000;
 
-  console.log('[Twitter Automation] Connecting/launching browser...');
+  WorkerLogger.info('Twitter Automation', 'Connecting/launching browser for Twitter...');
   const session =
     options.browserSession ||
     (await connectOrLaunchChrome({
@@ -82,10 +127,10 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
   try {
     page.setDefaultTimeout(timeout);
 
-    console.log('[Twitter Automation] Navigating to compose URL (https://x.com/compose/post)...');
+    WorkerLogger.info('Twitter Automation', 'Navigating to compose URL (https://x.com/compose/post)...');
     await page.goto('https://x.com/compose/post', { waitUntil: 'domcontentloaded' });
 
-    console.log('[Twitter Automation] Checking if logged in...');
+    WorkerLogger.debug('Twitter Automation', 'Checking if logged in...');
     const currentUrl = page.url();
     if (currentUrl.includes('/login') || currentUrl.includes('/i/flow/login')) {
       throw new Error(`Twitter session invalid or expired: redirected to login page (${currentUrl})`);
@@ -94,12 +139,12 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     // Dismiss Twitter cookie banner if visible
     const cookieAccept = page.locator('button:has-text("Accept all cookies"), button:has-text("Refuse non-essential cookies")').first();
     if ((await cookieAccept.count()) > 0 && await cookieAccept.isVisible().catch(() => false)) {
-      console.log('[Twitter Automation] Dismissing cookie banner...');
+      WorkerLogger.debug('Twitter Automation', 'Dismissing cookie banner...');
       await cookieAccept.click().catch(() => {});
       await page.waitForTimeout(500);
     }
 
-    console.log('[Twitter Automation] Finding tweet text area...');
+    WorkerLogger.debug('Twitter Automation', 'Finding tweet text area...');
     // Scoped to modal dialog when /compose/post is loaded, or fallback to timeline box without strict mode violation
     const modalTextarea = page.locator('div[role="dialog"] [data-testid="tweetTextarea_0"]');
     const isModalVisible = await modalTextarea.first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
@@ -109,7 +154,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     await textarea.waitFor({ state: 'visible', timeout: 15000 });
 
-    console.log(`[Twitter Automation] Typing tweet copy (${options.copy.length} chars)...`);
+    WorkerLogger.info('Twitter Automation', `Typing tweet copy (${options.copy.length} chars)...`);
     await textarea.click();
     try {
       await textarea.fill(options.copy);
@@ -119,7 +164,8 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     // If media attached, upload via file input
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
-      console.log(`[Twitter Automation] Uploading media attachment: ${options.mediaPath}...`);
+      const mediaSize = fs.statSync(options.mediaPath).size;
+      WorkerLogger.info('Twitter Automation', `Uploading media attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
       const fileInput = page.locator('div[role="dialog"] input[data-testid="fileInput"], input[data-testid="fileInput"]').first();
       if ((await fileInput.count()) > 0) {
         await fileInput.setInputFiles(path.resolve(options.mediaPath));
@@ -128,7 +174,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       }
     }
 
-    console.log('[Twitter Automation] Finding Post button...');
+    WorkerLogger.debug('Twitter Automation', 'Finding Post button...');
     const modalButton = page.locator('div[role="dialog"] [data-testid="tweetButton"], div[role="dialog"] [data-testid="tweetButtonInline"]').first();
     const postButton = (await modalButton.count()) > 0
       ? modalButton
@@ -148,27 +194,27 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       if (ariaDisabled !== 'true' && disabled === null) {
         break;
       }
-      console.log(`[Twitter Automation] Waiting for tweet media processing and Post button to be actionable (${i + 1}/30)...`);
+      WorkerLogger.debug('Twitter Automation', `Waiting for tweet media processing and Post button to be actionable (${i + 1}/30)...`);
       await page.waitForTimeout(1000);
     }
 
     // Dismiss any remaining cookie banners before clicking post
     const cookieBtn = page.locator('button:has-text("Refuse non-essential cookies"), button:has-text("Accept all cookies")').first();
     if ((await cookieBtn.count()) > 0) {
-      console.log('[Twitter Automation] Dismissing cookie banner before posting...');
+      WorkerLogger.debug('Twitter Automation', 'Dismissing cookie banner before posting...');
       await cookieBtn.click({ force: true }).catch(() => {});
       await page.waitForTimeout(500);
     }
 
-    console.log('[Twitter Automation] Clicking Post button...');
+    WorkerLogger.info('Twitter Automation', 'Clicking Post button...');
     try {
       await postButton.click({ timeout: 5000 });
     } catch {
-      console.log('[Twitter Automation] Pointer event intercepted by layer, clicking Post with force: true...');
+      WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted by layer, clicking Post with force: true...');
       await postButton.click({ force: true });
     }
 
-    console.log('[Twitter Automation] Waiting for tweet submission confirmation...');
+    WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
     // Wait for the modal dialog to disappear or notification toast to appear
     await Promise.race([
       page.locator('div[role="dialog"]').first().waitFor({ state: 'detached', timeout: 15000 }),
@@ -216,7 +262,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       tweetUrl = tweetUrl || `https://x.com/status/${tweetId}`;
     }
 
-    console.log(`[Twitter Automation] Post completed! URL: ${tweetUrl}`);
+    WorkerLogger.info('Twitter Automation', `Post completed! URL: ${tweetUrl}, ID: ${tweetId}`);
 
     return {
       success: true,
@@ -228,14 +274,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       mediaPath: options.mediaPath
     };
   } catch (err: any) {
-    let currentUrl = 'unknown';
-    try {
-      currentUrl = page.url();
-    } catch {}
-    const screenshot = await captureErrorScreenshot(page, 'twitter');
-    console.error(
-      `[Twitter Automation] Error: ${err.message} (Page URL: ${currentUrl})${screenshot ? ` [Screenshot: ${screenshot}]` : ''}`
-    );
+    await captureAutomationFailure(page, 'Twitter', err);
     throw err;
   } finally {
     try {
@@ -258,7 +297,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('tiktok', options.sessionsDir);
   const timeout = options.timeoutMs || 45000;
 
-  console.log('[TikTok Automation] Connecting/launching browser...');
+  WorkerLogger.info('TikTok Automation', 'Connecting/launching browser for TikTok...');
   const session =
     options.browserSession ||
     (await connectOrLaunchChrome({
@@ -276,32 +315,32 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       // 1. Cookie consent banner
       const cookieBtn = page.locator('button:has-text("Allow all"), button:has-text("Decline optional cookies"), button:has-text("Accept all")').first();
       if ((await cookieBtn.count()) > 0 && await cookieBtn.isVisible().catch(() => false)) {
-        console.log('[TikTok Automation] Dismissing cookie banner...');
+        WorkerLogger.debug('TikTok Automation', 'Dismissing cookie banner...');
         await cookieBtn.click().catch(() => {});
         await page.waitForTimeout(500);
       }
       // 2. Automatic content checks dialog ("Turn on automatic content checks?")
       const checkBtn = page.locator('button:has-text("Turn on"), button:has-text("Cancel")').first();
       if ((await checkBtn.count()) > 0 && await checkBtn.isVisible().catch(() => false)) {
-        console.log('[TikTok Automation] Dismissing automatic content checks dialog...');
+        WorkerLogger.debug('TikTok Automation', 'Dismissing automatic content checks dialog...');
         await checkBtn.click().catch(() => {});
         await page.waitForTimeout(500);
       }
       // 3. "Got it" onboarding tooltip / modal
       const gotItBtn = page.locator('button:has-text("Got it")').first();
       if ((await gotItBtn.count()) > 0 && await gotItBtn.isVisible().catch(() => false)) {
-        console.log('[TikTok Automation] Dismissing "Got it" dialog...');
+        WorkerLogger.debug('TikTok Automation', 'Dismissing "Got it" dialog...');
         await gotItBtn.click().catch(() => {});
         await page.waitForTimeout(500);
       }
     };
 
-    console.log('[TikTok Automation] Navigating to compose URL (https://www.tiktok.com/creator-center/upload)...');
+    WorkerLogger.info('TikTok Automation', 'Navigating to compose URL (https://www.tiktok.com/creator-center/upload)...');
     await page.goto('https://www.tiktok.com/creator-center/upload', {
       waitUntil: 'domcontentloaded'
     });
 
-    console.log('[TikTok Automation] Checking if logged in...');
+    WorkerLogger.debug('TikTok Automation', 'Checking if logged in...');
     const currentUrl = page.url();
     if (currentUrl.includes('/login') || currentUrl.includes('login_redirect')) {
       throw new Error(`TikTok session invalid or expired: redirected to login page (${currentUrl})`);
@@ -309,18 +348,19 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     await dismissTikTokOverlays();
 
-    console.log('[TikTok Automation] Finding video upload input element...');
+    WorkerLogger.debug('TikTok Automation', 'Finding video upload input element...');
     const uploadInput = page.locator('input[type="file"][accept*="video"], input[type="file"]').first();
     await uploadInput.waitFor({ state: 'attached', timeout });
 
-    console.log(`[TikTok Automation] Uploading video file: ${options.mediaPath}...`);
+    const mediaSize = fs.statSync(options.mediaPath).size;
+    WorkerLogger.info('TikTok Automation', `Uploading video file: ${options.mediaPath} (${mediaSize} bytes)...`);
     await uploadInput.setInputFiles(path.resolve(options.mediaPath));
 
-    console.log('[TikTok Automation] Waiting for video processing & caption editor...');
+    WorkerLogger.debug('TikTok Automation', 'Waiting for video processing & caption editor...');
     await page.waitForTimeout(5000);
     await dismissTikTokOverlays();
 
-    console.log(`[TikTok Automation] Typing post copy (${options.copy.length} chars)...`);
+    WorkerLogger.info('TikTok Automation', `Typing post copy (${options.copy.length} chars)...`);
     const captionEditor = page.locator(
       'div[contenteditable="true"], .notranslate[contenteditable="true"]'
     ).first();
@@ -333,7 +373,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     await dismissTikTokOverlays();
 
-    console.log('[TikTok Automation] Finding Post button...');
+    WorkerLogger.debug('TikTok Automation', 'Finding Post button...');
     const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"], button.btn-post').first();
     if ((await postButton.count()) > 0) {
       await postButton.waitFor({ state: 'visible', timeout: 25000 }).catch(() => {});
@@ -346,20 +386,20 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         if (disabled === null && ariaDisabled !== 'true') {
           break;
         }
-        console.log(`[TikTok Automation] Waiting for video upload/processing to complete (${i + 1}/30)...`);
+        WorkerLogger.debug('TikTok Automation', `Waiting for video upload/processing to complete (${i + 1}/30)...`);
         await page.waitForTimeout(1000);
       }
 
-      console.log('[TikTok Automation] Clicking Post button...');
+      WorkerLogger.info('TikTok Automation', 'Clicking Post button...');
       try {
         await postButton.click({ timeout: 5000 });
       } catch {
-        console.log('[TikTok Automation] Standard click intercepted, clicking Post with force: true...');
+        WorkerLogger.debug('TikTok Automation', 'Standard click intercepted, clicking Post with force: true...');
         await postButton.click({ force: true });
       }
       await page.waitForTimeout(3000);
 
-      console.log('[TikTok Automation] Waiting for video submission confirmation...');
+      WorkerLogger.info('TikTok Automation', 'Waiting for video submission confirmation...');
       await Promise.race([
         page.waitForURL((url) => !url.toString().includes('/upload'), { timeout: 25000 }),
         page.locator('text="Your video has been uploaded", text="Manage your posts", button:has-text("Manage your posts")').first().waitFor({ state: 'visible', timeout: 25000 })
@@ -368,7 +408,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     const generatedId = `tt-${Date.now()}`;
     const postUrl = `https://www.tiktok.com/@creator/video/${generatedId}`;
-    console.log(`[TikTok Automation] Post completed! URL: ${postUrl}`);
+    WorkerLogger.info('TikTok Automation', `Post completed! URL: ${postUrl}, ID: ${generatedId}`);
 
     return {
       success: true,
@@ -380,14 +420,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       mediaPath: options.mediaPath
     };
   } catch (err: any) {
-    let currentUrl = 'unknown';
-    try {
-      currentUrl = page.url();
-    } catch {}
-    const screenshot = await captureErrorScreenshot(page, 'tiktok');
-    console.error(
-      `[TikTok Automation] Error: ${err.message} (Page URL: ${currentUrl})${screenshot ? ` [Screenshot: ${screenshot}]` : ''}`
-    );
+    await captureAutomationFailure(page, 'TikTok', err);
     throw err;
   } finally {
     try {
@@ -406,7 +439,7 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('facebook', options.sessionsDir);
   const timeout = options.timeoutMs || 30000;
 
-  console.log('[Facebook Automation] Connecting/launching browser...');
+  WorkerLogger.info('Facebook Automation', 'Connecting/launching browser for Facebook...');
   const session =
     options.browserSession ||
     (await connectOrLaunchChrome({
@@ -419,35 +452,36 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
   try {
     page.setDefaultTimeout(timeout);
 
-    console.log('[Facebook Automation] Navigating to compose URL (https://www.facebook.com)...');
+    WorkerLogger.info('Facebook Automation', 'Navigating to compose URL (https://www.facebook.com)...');
     await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' });
 
-    console.log('[Facebook Automation] Checking if logged in...');
+    WorkerLogger.debug('Facebook Automation', 'Checking if logged in...');
     const currentUrl = page.url();
     if (currentUrl.includes('/login') || currentUrl.includes('login_attempt')) {
       throw new Error(`Facebook session invalid or expired: redirected to login page (${currentUrl})`);
     }
 
-    console.log('[Facebook Automation] Finding composer trigger...');
+    WorkerLogger.debug('Facebook Automation', 'Finding composer trigger...');
     const composerTrigger = page.locator('div[role="button"]:has-text("What\'s on your mind")').first();
     if ((await composerTrigger.count()) > 0) {
       await composerTrigger.click();
       await page.waitForTimeout(1000);
     }
 
-    console.log('[Facebook Automation] Finding post text box...');
+    WorkerLogger.debug('Facebook Automation', 'Finding post text box...');
     const modalPostBox = page.locator('div[role="dialog"] div[role="textbox"][contenteditable="true"]').first();
     const postBox = (await modalPostBox.count()) > 0
       ? modalPostBox
       : page.locator('div[role="textbox"][contenteditable="true"]').first();
     await postBox.waitFor({ state: 'visible', timeout });
 
-    console.log(`[Facebook Automation] Typing post copy (${options.copy.length} chars)...`);
+    WorkerLogger.info('Facebook Automation', `Typing post copy (${options.copy.length} chars)...`);
     await postBox.click();
     await postBox.fill(options.copy);
 
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
-      console.log(`[Facebook Automation] Uploading media attachment: ${options.mediaPath}...`);
+      const mediaSize = fs.statSync(options.mediaPath).size;
+      WorkerLogger.info('Facebook Automation', `Uploading media attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
       const fileInput = page.locator('input[type="file"][accept*="image"], input[type="file"]').first();
       if ((await fileInput.count()) > 0) {
         await fileInput.setInputFiles(path.resolve(options.mediaPath));
@@ -455,7 +489,7 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
       }
     }
 
-    console.log('[Facebook Automation] Clicking Post button...');
+    WorkerLogger.info('Facebook Automation', 'Clicking Post button...');
     const modalPostBtn = page.locator('div[role="dialog"] div[aria-label="Post"][role="button"], div[role="dialog"] div[aria-label="Post"]').first();
     const postButton = (await modalPostBtn.count()) > 0
       ? modalPostBtn
@@ -467,7 +501,7 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
 
     const generatedId = `fb-${Date.now()}`;
     const postUrl = `https://facebook.com/${generatedId}`;
-    console.log(`[Facebook Automation] Post completed! URL: ${postUrl}`);
+    WorkerLogger.info('Facebook Automation', `Post completed! URL: ${postUrl}, ID: ${generatedId}`);
 
     return {
       success: true,
@@ -479,14 +513,7 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
       mediaPath: options.mediaPath
     };
   } catch (err: any) {
-    let currentUrl = 'unknown';
-    try {
-      currentUrl = page.url();
-    } catch {}
-    const screenshot = await captureErrorScreenshot(page, 'facebook');
-    console.error(
-      `[Facebook Automation] Error: ${err.message} (Page URL: ${currentUrl})${screenshot ? ` [Screenshot: ${screenshot}]` : ''}`
-    );
+    await captureAutomationFailure(page, 'Facebook', err);
     throw err;
   } finally {
     try {
@@ -509,7 +536,7 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('instagram', options.sessionsDir);
   const timeout = options.timeoutMs || 35000;
 
-  console.log('[Instagram Automation] Connecting/launching browser...');
+  WorkerLogger.info('Instagram Automation', 'Connecting/launching browser for Instagram...');
   const session =
     options.browserSession ||
     (await connectOrLaunchChrome({
@@ -522,16 +549,16 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
   try {
     page.setDefaultTimeout(timeout);
 
-    console.log('[Instagram Automation] Navigating to compose URL (https://www.instagram.com)...');
+    WorkerLogger.info('Instagram Automation', 'Navigating to compose URL (https://www.instagram.com)...');
     await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded' });
 
-    console.log('[Instagram Automation] Checking if logged in...');
+    WorkerLogger.debug('Instagram Automation', 'Checking if logged in...');
     const currentUrl = page.url();
     if (currentUrl.includes('/accounts/login')) {
       throw new Error(`Instagram session invalid or expired: redirected to login page (${currentUrl})`);
     }
 
-    console.log('[Instagram Automation] Opening create/new post modal...');
+    WorkerLogger.debug('Instagram Automation', 'Opening create/new post modal...');
     const createNav = page.locator(
       'svg[aria-label="New post"], a[role="link"]:has-text("Create")'
     ).first();
@@ -540,13 +567,14 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       await page.waitForTimeout(1000);
     }
 
-    console.log(`[Instagram Automation] Uploading media attachment: ${options.mediaPath}...`);
+    const mediaSize = fs.statSync(options.mediaPath).size;
+    WorkerLogger.info('Instagram Automation', `Uploading media attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
     const fileInput = page.locator('input[type="file"]').first();
     await fileInput.waitFor({ state: 'attached', timeout });
     await fileInput.setInputFiles(path.resolve(options.mediaPath));
     await page.waitForTimeout(2000);
 
-    console.log('[Instagram Automation] Advancing Next buttons...');
+    WorkerLogger.debug('Instagram Automation', 'Advancing Next buttons...');
     const nextButton = page.locator(
       'button:has-text("Next"), div[role="button"]:has-text("Next")'
     ).first();
@@ -559,7 +587,7 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       }
     }
 
-    console.log(`[Instagram Automation] Typing caption (${options.copy.length} chars)...`);
+    WorkerLogger.info('Instagram Automation', `Typing caption (${options.copy.length} chars)...`);
     const captionBox = page.locator(
       'div[aria-label*="Write a caption"], div[contenteditable="true"]'
     ).first();
@@ -569,7 +597,7 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       await captionBox.fill(options.copy);
     }
 
-    console.log('[Instagram Automation] Clicking Share button...');
+    WorkerLogger.info('Instagram Automation', 'Clicking Share button...');
     const shareButton = page.locator(
       'button:has-text("Share"), div[role="button"]:has-text("Share")'
     ).first();
@@ -581,7 +609,7 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
 
     const generatedId = `ig-${Date.now()}`;
     const postUrl = `https://instagram.com/p/${generatedId}`;
-    console.log(`[Instagram Automation] Post completed! URL: ${postUrl}`);
+    WorkerLogger.info('Instagram Automation', `Post completed! URL: ${postUrl}, ID: ${generatedId}`);
 
     return {
       success: true,
@@ -593,14 +621,7 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       mediaPath: options.mediaPath
     };
   } catch (err: any) {
-    let currentUrl = 'unknown';
-    try {
-      currentUrl = page.url();
-    } catch {}
-    const screenshot = await captureErrorScreenshot(page, 'instagram');
-    console.error(
-      `[Instagram Automation] Error: ${err.message} (Page URL: ${currentUrl})${screenshot ? ` [Screenshot: ${screenshot}]` : ''}`
-    );
+    await captureAutomationFailure(page, 'Instagram', err);
     throw err;
   } finally {
     try {
@@ -619,31 +640,32 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
 export async function defaultPosterHandler(options: PostOptions): Promise<PostResult> {
   const platform = sanitizePlatform(options.platform);
 
-  console.log(`[Browser Automation] Verifying session for ${platform}...`);
+  WorkerLogger.info('Browser Automation', `Verifying session for ${platform}...`);
   // 1. Session verification gate
   let verification = verifySession(platform, options.sessionsDir);
-  console.log(
-    `[Browser Automation] Session file check for ${platform}: ${
+  WorkerLogger.debug(
+    'Browser Automation',
+    `Session file check for ${platform}: ${
       verification.valid ? 'VALID' : 'INVALID or MISSING'
     } (${verification.reason || 'OK'})`
   );
 
   if (!verification.valid) {
     // If CDP is reachable, attempt to extract session automatically
-    console.log(`[Browser Automation] Checking if Chrome CDP is available at ${options.cdpUrl || 'default'}...`);
+    WorkerLogger.debug('Browser Automation', `Checking if Chrome CDP is available at ${options.cdpUrl || 'default'}...`);
     const cdpAvail = await isCdpAvailable(options.cdpUrl, 500);
     if (cdpAvail) {
-      console.log(`[Browser Automation] CDP is available. Attempting auto-extraction of session for ${platform}...`);
+      WorkerLogger.info('Browser Automation', `CDP is available. Attempting auto-extraction of session for ${platform}...`);
       const extracted = await extractSessionFromCdp(platform, options.cdpUrl);
       if (extracted.success && extracted.state) {
-        console.log(`[Browser Automation] Auto-extracted ${extracted.cookieCount} cookies from CDP for ${platform}.`);
+        WorkerLogger.info('Browser Automation', `Auto-extracted ${extracted.cookieCount} cookies from CDP for ${platform}.`);
         saveSession(platform, extracted.state, options.sessionsDir);
         verification = verifySession(platform, options.sessionsDir);
       } else {
-        console.warn(`[Browser Automation] Auto-extraction from CDP failed: ${extracted.error}`);
+        WorkerLogger.warn('Browser Automation', `Auto-extraction from CDP failed: ${extracted.error}`);
       }
     } else {
-      console.log(`[Browser Automation] Chrome CDP not available.`);
+      WorkerLogger.debug('Browser Automation', `Chrome CDP not available.`);
     }
   }
 
@@ -688,7 +710,7 @@ export async function dispatchBrowserPost(options: PostOptions): Promise<PostRes
     } catch {
       plat = 'twitter';
     }
-    console.error(`[Browser Automation] [${plat.toUpperCase()}] Execution error:`, err.message);
+    WorkerLogger.error('Browser Automation', `[${plat.toUpperCase()}] Execution error: ${err.message}`, err);
     return {
       success: false,
       platform: plat,

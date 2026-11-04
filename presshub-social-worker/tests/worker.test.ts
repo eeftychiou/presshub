@@ -22,7 +22,9 @@ import {
 import {
   generateSocialVideo,
   clampEven,
-  clampDuration
+  clampDuration,
+  probeAudioDuration,
+  TIKTOK_MAX_DURATION
 } from '../src/media/video-generator';
 import { PostOptions, PostResult } from '../src/automation/posters';
 import sharp from 'sharp';
@@ -264,6 +266,11 @@ describe('PressHub Social Media Worker Suite', () => {
       expect(clampDuration(15)).toBe(15);
     });
 
+    test('probeAudioDuration returns null for non-existent file', async () => {
+      const duration = await probeAudioDuration('/path/to/non-existent-file.mp3');
+      expect(duration).toBeNull();
+    });
+
     test('generates vertical MP4 video with silent audio track from card', async () => {
       const videoResult = await generateSocialVideo({
         title: 'Breaking Video Story for TikTok & Reels',
@@ -283,6 +290,47 @@ describe('PressHub Social Media Worker Suite', () => {
       const stats = fs.statSync(videoResult.filePath);
       expect(stats.size).toBeGreaterThan(5000); // Has both video and audio streams
     }, 45000);
+
+    test('probes audio duration and generates video matching full audio track duration', async () => {
+      // 1. Create a 7-second audio file using ffmpeg installer
+      const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+      const { execFileSync } = require('child_process');
+      const testAudioPath = path.join(TEST_OUTPUT_DIR, 'test-podcast-7s.wav');
+
+      execFileSync(ffmpegInstaller.path, [
+        '-f', 'lavfi',
+        '-i', 'sine=frequency=440:duration=7',
+        '-y',
+        testAudioPath
+      ]);
+
+      expect(fs.existsSync(testAudioPath)).toBe(true);
+
+      // 2. Probe audio duration
+      const probed = await probeAudioDuration(testAudioPath);
+      expect(probed).toBeGreaterThanOrEqual(6.9);
+      expect(probed).toBeLessThanOrEqual(7.2);
+
+      // 3. Generate social video with attached audio track
+      // Pass duration: 10 (the default still duration) to verify it is overridden by the full probed audio duration!
+      const videoResult = await generateSocialVideo({
+        title: 'Podcast Episode 42 Audio Test',
+        subtitle: 'Full audio duration test',
+        audioPath: testAudioPath,
+        width: 720,
+        height: 1280,
+        duration: 10,
+        outputDir: TEST_OUTPUT_DIR
+      });
+
+      expect(fs.existsSync(videoResult.filePath)).toBe(true);
+      // Duration should match full audio (Math.ceil(7) = 7s) instead of 10s default
+      expect(videoResult.duration).toBe(7);
+    }, 45000);
+
+    test('TIKTOK_MAX_DURATION constant is set to 600s', () => {
+      expect(TIKTOK_MAX_DURATION).toBe(600);
+    });
   });
 
   describe('5. Express HTTP Endpoints', () => {

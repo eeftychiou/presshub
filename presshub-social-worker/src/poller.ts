@@ -2,6 +2,7 @@ import { SessionManager, Platform } from './automation/session-manager';
 import { dispatchBrowserPost, PosterHandler, PostResult } from './automation/posters';
 import { generateCard, CardResult } from './media/card-generator';
 import { generateVideo, VideoResult } from './media/video-generator';
+import { WorkerLogger } from './logger';
 
 export interface ClaimedJob {
   id: number | string;
@@ -112,6 +113,7 @@ export class PressHubPoller {
     error?: string;
   }): Promise<void> {
     const url = `${this.wpUrl}/wp-json/presshub-social/v1/worker/complete`;
+    WorkerLogger.info('Poller', `Reporting '${payload.status}' status for job #${payload.job_id} to WordPress...`, payload);
     try {
       const res = await this.fetchFn(url, {
         method: 'POST',
@@ -122,13 +124,19 @@ export class PressHubPoller {
         },
         body: JSON.stringify(payload)
       });
+      let responseBody: any = null;
+      try {
+        if (res && typeof res.json === 'function') {
+          responseBody = await res.json();
+        }
+      } catch {}
       if (res && typeof res.ok === 'boolean' && !res.ok) {
-        console.warn(`[PressHub Poller] Failed to report complete for job #${payload.job_id} to ${url}: HTTP ${res.status}`);
+        WorkerLogger.warn(`Poller`, `Failed to report complete for job #${payload.job_id} to ${url}: HTTP ${res.status}`, responseBody);
       } else {
-        console.log(`[PressHub Poller] Job #${payload.job_id} completion reported successfully (status: ${payload.status}).`);
+        WorkerLogger.info(`Poller`, `Job #${payload.job_id} completion reported successfully (status: ${payload.status}).`, responseBody);
       }
     } catch (err: any) {
-      console.error(`[PressHub Poller] Failed to report complete to ${url}:`, err.message);
+      WorkerLogger.error(`Poller`, `Failed to report complete to ${url}: ${err.message}`, err);
     }
   }
 
@@ -139,7 +147,7 @@ export class PressHubPoller {
     job: ClaimedJob
   ): Promise<{ imageUrl?: string; audioUrl?: string }> {
     let imageUrl = job.media_url ? String(job.media_url) : undefined;
-    let audioUrl: string | undefined;
+    let audioUrl: string | undefined = job.audio_url ? String(job.audio_url) : undefined;
 
     if (job.post_id && (!imageUrl || !audioUrl)) {
       try {
@@ -152,17 +160,18 @@ export class PressHubPoller {
           if (!imageUrl && data?._embedded?.['wp:featuredmedia']?.[0]?.source_url) {
             imageUrl = data._embedded['wp:featuredmedia'][0].source_url;
           }
-          if (data?.content?.rendered) {
+          if (!audioUrl && data?.content?.rendered) {
             const audioMatch = String(data.content.rendered).match(/<audio[^>]+src=["']([^"']+)["']/i);
             if (audioMatch && audioMatch[1]) {
               audioUrl = audioMatch[1];
             }
           }
         }
-      } catch {
-        // Best effort media resolution
+      } catch (err: any) {
+        WorkerLogger.debug('Poller', `Error during REST API media resolution for post #${job.post_id}: ${err.message}`);
       }
     }
+    WorkerLogger.debug('Poller', `Resolved media for job #${job.id}: imageUrl=${imageUrl || 'none'}, audioUrl=${audioUrl || 'none'}`);
     return { imageUrl, audioUrl };
   }
 
@@ -180,7 +189,7 @@ export class PressHubPoller {
     try {
       const claimUrl = `${this.wpUrl}/wp-json/presshub-social/v1/worker/claim`;
       const sessions = this.getSessionStatuses();
-      console.log(`[PressHub Poller] Active sessions reported:`, JSON.stringify(sessions));
+      WorkerLogger.debug('PressHub Poller', `Active sessions reported: ${JSON.stringify(sessions)}`);
 
       const claimRes = await this.fetchFn(claimUrl, {
         method: 'POST',
@@ -196,7 +205,7 @@ export class PressHubPoller {
       });
 
       if (!claimRes.ok) {
-        console.warn(`[PressHub Poller ${timeStr}] Claim request failed with HTTP ${claimRes.status}`);
+        WorkerLogger.warn('Poller', `Claim request failed with HTTP ${claimRes.status}`);
         return { claimed: 0, succeeded: 0, failed: 0 };
       }
 
@@ -204,30 +213,55 @@ export class PressHubPoller {
       try {
         data = await claimRes.json();
       } catch (parseErr: any) {
-        console.warn(`[PressHub Poller ${timeStr}] Failed to parse claim JSON response:`, parseErr.message);
+        WorkerLogger.warn('Poller', `Failed to parse claim JSON response: ${parseErr.message}`);
         return { claimed: 0, succeeded: 0, failed: 0 };
       }
 
       if (!data || !data.jobs || !Array.isArray(data.jobs)) {
-        console.warn(`[PressHub Poller ${timeStr}] Claim response missing jobs array`);
+        WorkerLogger.warn('Poller', `Claim response missing jobs array`);
         return { claimed: 0, succeeded: 0, failed: 0 };
       }
 
       const jobs: ClaimedJob[] = data.jobs;
       if (jobs.length === 0) {
-        console.log(`[PressHub Poller ${timeStr}] Polled WordPress -> claimed 0 jobs (queue is empty or no due automation jobs)`);
+        WorkerLogger.debug('Poller', `Polled WordPress -> claimed 0 jobs (queue is empty or no due automation jobs)`);
         return { claimed: 0, succeeded: 0, failed: 0 };
       }
 
       const jobList = jobs.map((j) => `#${j.id} ${j.platform}`).join(', ');
-      console.log(`[PressHub Poller ${timeStr}] Claimed ${jobs.length} jobs: [${jobList}]`);
+      WorkerLogger.info('Poller', `Claimed ${jobs.length} jobs: [${jobList}]`, {
+        count: jobs.length,
+        jobs: jobs.map((j) => ({
+          id: j.id,
+          platform: j.platform,
+          post_id: j.post_id,
+          post_title: j.post_title,
+          post_copy: j.post_copy,
+          media_url: j.media_url,
+          audio_url: j.audio_url,
+          specs: j.specs
+        }))
+      });
 
       let succeeded = 0;
       let failed = 0;
 
       for (const job of jobs) {
-        const jobTag = `[PressHub Poller] [Job #${job.id} - ${job.platform}]`;
-        console.log(`${jobTag} Starting processing... Post ID: ${job.post_id || 'N/A'}, Title: "${job.post_title || ''}"`);
+        const jobTag = `[Job #${job.id} - ${job.platform}]`;
+        WorkerLogger.info(
+          'Poller',
+          `${jobTag} Starting processing... Post ID: ${job.post_id || 'N/A'}, Title: "${job.post_title || ''}"`,
+          {
+            id: job.id,
+            platform: job.platform,
+            post_id: job.post_id,
+            post_title: job.post_title,
+            post_copy: job.post_copy,
+            media_url: job.media_url,
+            audio_url: job.audio_url,
+            specs: job.specs
+          }
+        );
         try {
           const platform = (job.platform || '').toLowerCase().trim();
           const copy = job.post_copy || '';
@@ -242,7 +276,11 @@ export class PressHubPoller {
           );
 
           if (platform === 'tiktok') {
-            console.log(`${jobTag} Generating vertical video (${job.specs?.tiktok_video_width || 1080}x${job.specs?.tiktok_video_height || 1920}, ${job.specs?.tiktok_video_duration || 10}s)...`);
+            const hasAudio = Boolean(audioUrl);
+            WorkerLogger.info(
+              'Poller',
+              `${jobTag} Generating vertical video (${job.specs?.tiktok_video_width || 1080}x${job.specs?.tiktok_video_height || 1920}${hasAudio ? ', with audio track' : `, ${job.specs?.tiktok_video_duration || 10}s`})...`
+            );
             const video = await this.generateVideoFn({
               postId: Number(job.post_id) || 1,
               title,
@@ -257,9 +295,9 @@ export class PressHubPoller {
               outputDir: this.outputDir
             });
             mediaPath = video?.filePath;
-            console.log(`${jobTag} Video generated at: ${mediaPath}`);
+            WorkerLogger.info('Poller', `${jobTag} Video generated at: ${mediaPath}`);
           } else if (platform === 'instagram') {
-            console.log(`${jobTag} Generating square card (${job.specs?.instagram_card_width || 1080}x${job.specs?.instagram_card_height || 1080})...`);
+            WorkerLogger.info('Poller', `${jobTag} Generating square card (${job.specs?.instagram_card_width || 1080}x${job.specs?.instagram_card_height || 1080})...`);
             const card = await this.generateCardFn({
               postId: Number(job.post_id) || 1,
               title,
@@ -271,10 +309,10 @@ export class PressHubPoller {
               outputDir: this.outputDir
             });
             mediaPath = card?.filePath;
-            console.log(`${jobTag} Card generated at: ${mediaPath}`);
+            WorkerLogger.info('Poller', `${jobTag} Card generated at: ${mediaPath}`);
           }
 
-          console.log(`${jobTag} Dispatching browser automation poster...`);
+          WorkerLogger.info('Poller', `${jobTag} Dispatching browser automation poster...`);
           const result: PostResult = await this.posterHandler({
             platform: platform as Platform,
             copy,
@@ -283,8 +321,9 @@ export class PressHubPoller {
           });
 
           if (result && result.success) {
-            console.log(`${jobTag} Automation succeeded! External URL: ${result.external_url || result.externalPostUrl || result.external_id || result.externalPostId}`);
-            console.log(`${jobTag} Reporting 'published' status to WordPress...`);
+            const extUrl = result.external_url || result.externalPostUrl || result.external_id || result.externalPostId;
+            WorkerLogger.info('Poller', `${jobTag} Automation succeeded! External URL: ${extUrl}`);
+            WorkerLogger.info('Poller', `${jobTag} Reporting 'published' status to WordPress...`);
             await this.reportComplete({
               job_id: job.id,
               status: 'published',
@@ -293,8 +332,8 @@ export class PressHubPoller {
             });
             succeeded++;
           } else {
-            console.warn(`${jobTag} Automation failed: ${result?.error || 'Browser automation failed'}`);
-            console.log(`${jobTag} Reporting 'failed' status to WordPress...`);
+            WorkerLogger.warn('Poller', `${jobTag} Automation failed: ${result?.error || 'Browser automation failed'}`);
+            WorkerLogger.info('Poller', `${jobTag} Reporting 'failed' status to WordPress...`);
             await this.reportComplete({
               job_id: job.id,
               status: 'failed',
@@ -303,16 +342,16 @@ export class PressHubPoller {
             failed++;
           }
         } catch (jobErr: any) {
-          console.error(`${jobTag} Error executing job #${job.id}:`, jobErr.message);
+          WorkerLogger.error('Poller', `${jobTag} Error executing job #${job.id}: ${jobErr.message}`, jobErr);
           try {
-            console.log(`${jobTag} Reporting 'failed' status to WordPress...`);
+            WorkerLogger.info('Poller', `${jobTag} Reporting 'failed' status to WordPress...`);
             await this.reportComplete({
               job_id: job.id,
               status: 'failed',
               error: jobErr.message || 'Worker automation failed'
             });
           } catch (reportErr: any) {
-            console.error(`${jobTag} Failed to report failure for job #${job.id}:`, reportErr.message);
+            WorkerLogger.error('Poller', `${jobTag} Failed to report failure for job #${job.id}: ${reportErr.message}`, reportErr);
           }
           failed++;
         }
@@ -324,7 +363,7 @@ export class PressHubPoller {
         failed
       };
     } catch (err: any) {
-      console.warn(`[PressHub Poller ${timeStr}] Error during poll cycle:`, err.message);
+      WorkerLogger.warn('Poller', `Error during poll cycle: ${err.message}`);
       return { claimed: 0, succeeded: 0, failed: 0 };
     } finally {
       this.isPolling = false;
@@ -339,11 +378,11 @@ export class PressHubPoller {
       return;
     }
     this.isRunning = true;
-    console.log(`[PressHub Worker] Pull mode active -> polling ${this.wpUrl} every ${this.pollIntervalMs / 1000}s`);
+    WorkerLogger.info('Poller', `Pull mode active -> polling ${this.wpUrl} every ${this.pollIntervalMs / 1000}s`);
 
     // Run immediate poll
     this.pollOnce().catch(err => {
-      console.error('[PressHub Poller] Immediate poll failed:', err.message);
+      WorkerLogger.error('Poller', `Immediate poll failed: ${err.message}`, err);
     });
 
     this.pollTimer = setInterval(async () => {
@@ -351,7 +390,7 @@ export class PressHubPoller {
       try {
         await this.pollOnce();
       } catch (err: any) {
-        console.error('[PressHub Poller] Scheduled poll failed:', err.message);
+        WorkerLogger.error('Poller', `Scheduled poll failed: ${err.message}`, err);
       }
     }, this.pollIntervalMs);
 
@@ -369,7 +408,7 @@ export class PressHubPoller {
       clearInterval(this.pollTimer);
       this.pollTimer = undefined;
     }
-    console.log('[PressHub Worker] Pull mode poller stopped.');
+    WorkerLogger.info('Poller', 'Pull mode poller stopped.');
   }
 
   /**

@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { WorkerLogger } from '../logger';
 
 export interface GenerateCardOptions {
   title: string;
@@ -326,14 +327,26 @@ export async function generateSocialCard(options: GenerateCardOptions): Promise<
   const fileName = `card-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.png`;
   const filePath = path.join(outputDir, fileName);
 
+  WorkerLogger.info('CardGenerator', `Starting card generation for "${options.title}" (${width}x${height})`, {
+    width,
+    height,
+    category: options.category,
+    siteName: options.siteName,
+    outputDir,
+    hasMediaUrl: Boolean(options.mediaUrl || options.backgroundUrl)
+  });
+
   // Resolve background buffer: either provided directly or fetched from mediaUrl/backgroundUrl
   let backgroundBuffer = options.backgroundBuffer;
   if (!backgroundBuffer && (options.mediaUrl || options.backgroundUrl)) {
     const targetUrl = options.mediaUrl || options.backgroundUrl;
-    console.log(`[PressHub Card Generator] Downloading featured image: ${targetUrl}...`);
+    WorkerLogger.info('CardGenerator', `Downloading featured image from ${targetUrl}...`);
     const fetched = await fetchImageBuffer(targetUrl!);
     if (fetched && fetched.length > 0) {
       backgroundBuffer = fetched;
+      WorkerLogger.debug('CardGenerator', `Featured background image fetched successfully (${fetched.length} bytes)`);
+    } else {
+      WorkerLogger.warn('CardGenerator', `Failed to fetch background image from ${targetUrl}`);
     }
   }
 
@@ -352,6 +365,14 @@ export async function generateSocialCard(options: GenerateCardOptions): Promise<
   // Check for PressHub mic in media/ folder
   const micPath = getMediaAssetPath('PressHub.cy Mic.png');
   const hasMicIcon = Boolean(micPath && fs.existsSync(micPath) && (isPodcast || isVertical));
+
+  WorkerLogger.debug('CardGenerator', `Building SVG layout`, {
+    hasCustomBackground,
+    hasLogoIcon,
+    hasMicIcon,
+    isVertical,
+    isPodcast
+  });
 
   const svg = buildCardSvg({
     title: options.title || 'Breaking Update',
@@ -388,8 +409,9 @@ export async function generateSocialCard(options: GenerateCardOptions): Promise<
         .toBuffer();
 
       composites.push({ input: logoBuffer, top: Math.max(0, logoTop), left: Math.max(0, logoLeft) });
+      WorkerLogger.debug('CardGenerator', `Composited logo icon from ${iconPath} at (${logoLeft}, ${logoTop})`);
     } catch (logoErr: any) {
-      console.warn(`[PressHub Card Generator] Could not composite logo icon: ${logoErr.message}`);
+      WorkerLogger.warn('CardGenerator', `Could not composite logo icon: ${logoErr.message}`);
     }
   }
 
@@ -406,8 +428,9 @@ export async function generateSocialCard(options: GenerateCardOptions): Promise<
         .toBuffer();
 
       composites.push({ input: micBuffer, top: Math.max(0, micTop), left: Math.max(0, micLeft) });
+      WorkerLogger.debug('CardGenerator', `Composited mic icon from ${micPath} at (${micLeft}, ${micTop})`);
     } catch (micErr: any) {
-      console.warn(`[PressHub Card Generator] Could not composite mic icon: ${micErr.message}`);
+      WorkerLogger.warn('CardGenerator', `Could not composite mic icon: ${micErr.message}`);
     }
   }
 
@@ -415,11 +438,13 @@ export async function generateSocialCard(options: GenerateCardOptions): Promise<
 
   if (hasCustomBackground && backgroundBuffer) {
     // Resize featured image to cover canvas and composite SVG and icon overlays
+    WorkerLogger.debug('CardGenerator', `Resizing background buffer (${width}x${height}) and compositing ${composites.length} layers`);
     sharpInstance = sharp(backgroundBuffer)
       .resize(width, height, { fit: 'cover' })
       .composite(composites);
   } else {
     // Blank dark slate canvas with composite layers
+    WorkerLogger.debug('CardGenerator', `Creating dark canvas (${width}x${height}) and compositing ${composites.length} layers`);
     sharpInstance = sharp({
       create: {
         width,
@@ -430,9 +455,11 @@ export async function generateSocialCard(options: GenerateCardOptions): Promise<
     }).composite(composites);
   }
 
+  WorkerLogger.debug('CardGenerator', `Rendering PNG to ${filePath}...`);
   await sharpInstance.png({ compressionLevel: 9 }).toFile(filePath);
 
   const stats = fs.statSync(filePath);
+  WorkerLogger.info('CardGenerator', `Card successfully generated: ${filePath} (${stats.size} bytes, ${width}x${height})`);
 
   return {
     filePath,

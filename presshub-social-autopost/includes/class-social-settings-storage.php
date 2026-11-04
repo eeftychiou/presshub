@@ -709,12 +709,12 @@ class PressHub_Social_Settings_Storage {
 
     public static function get_tiktok_video_duration(): int {
         $val = (int) get_option( 'presshub_social_tiktok_video_duration', 10 );
-        return max( 5, min( 60, $val ) );
+        return max( 5, min( 600, $val ) );
     }
 
     public static function sanitize_tiktok_video_duration( $value ): int {
         $val = (int) $value;
-        return max( 5, min( 60, $val ) );
+        return max( 5, min( 600, $val ) );
     }
 
     // ------------------------------------------------------------------

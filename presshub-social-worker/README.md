@@ -45,6 +45,11 @@ PRESSHUB_POLL_INTERVAL_MS=30000
 
 # Browser automation headless mode (false to launch visible Chrome locally; true for headless/CI)
 PRESSHUB_HEADLESS=false
+# Dedicated log file destination (default: logs/worker.log)
+PRESSHUB_LOG_FILE=logs/worker.log
+
+# Log level (DEBUG, INFO, WARN, ERROR; default: DEBUG)
+PRESSHUB_LOG_LEVEL=DEBUG
 ```
 
 ### Build & Run
@@ -78,7 +83,25 @@ When `PRESSHUB_WP_URL` is omitted, the worker runs as a pure Express HTTP server
 
 ---
 
-## 🔐 Authentication & Session Login
+## 🪵 Production Logging (`WorkerLogger`)
+
+The worker incorporates a dedicated logging module (`src/logger.ts`) that writes synchronized logs to both standard output/stderr and `logs/worker.log`:
+- **ISO-8601 Timestamps & Severity**: Every line formatted as `[<TIMESTAMP>] [<LEVEL>] [<TAG>] <MESSAGE>`.
+- **WordPress Payloads**: Records full `/worker/claim` responses including post title, copy/LLM text, media URLs, audio URLs, and specs.
+- **Media Generation**: Logs Sharp SVG layouts, layer compositing, and output file sizes.
+- **FFmpeg & Audio Probing**: Logs exact FFmpeg spawn commands, audio duration probe results, video filters, and completion status.
+- **Playwright Automation**: Tracks browser launch mode, navigation URLs, selector evaluations, and text input lengths.
+- **Failure Diagnostics**: Captures full-page screenshots to `output/debug-error-<platform>-<timestamp>.png` and logs current page URL and DOM state snippet upon failure.
+
+---
+
+## 🎵 Full Audio Track & Podcast Duration Probing
+
+When generating video clips for TikTok and Reels:
+- If a podcast audio file or audio URL is attached (MP3/WAV), `video-generator.ts` uses FFmpeg metadata inspection to probe the **exact audio duration** and renders the vertical video to match the full audio track length.
+- Prevents premature cutoff (e.g. 10s default still-image duration).
+- If the audio track exceeds TikTok Web Creator Center's maximum 600s (10 minutes) limit, it safely clamps to 600s and emits a `[WARN]` diagnostic.
+- If no audio file is attached, the still-image duration (default 10s, clamped 5-60s) applies with a silent stereo track.
 
 ### Interactive Session Login
 To authenticate a platform for browser automation:
