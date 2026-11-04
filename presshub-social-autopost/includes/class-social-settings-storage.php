@@ -350,6 +350,32 @@ class PressHub_Social_Settings_Storage {
         }
 
         self::maybe_repair_v263_options();
+        self::maybe_upgrade_prompts_v269();
+    }
+
+    /**
+     * One-time idempotent upgrade for v2.6.9: upgrades default Twitter prompt from
+     * the generic English prompt to the rich Greek conversational editorial prompt.
+     *
+     * @return void
+     */
+    public static function maybe_upgrade_prompts_v269(): void {
+        if ( '1' === (string) get_option( 'presshub_social_upgraded_prompts_v269', '' ) ) {
+            return;
+        }
+
+        $twitter_prompt = (string) get_option( 'presshub_social_prompt_twitter', '' );
+        if ( '' === trim( $twitter_prompt ) || false !== strpos( $twitter_prompt, 'Write a punchy, engaging X/Twitter post for the following article:' ) ) {
+            try {
+                $new_twitter = PressHub_Social_Prompt_Loader::load( 'social_copy_twitter.txt' );
+                update_option( 'presshub_social_prompt_twitter', $new_twitter );
+                PressHub_Social_Logger::info( 'Upgraded Twitter prompt to v2.6.9 Greek editorial prompt.' );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to upgrade Twitter prompt: ' . $e->getMessage() );
+            }
+        }
+
+        update_option( 'presshub_social_upgraded_prompts_v269', '1' );
     }
 
     /**

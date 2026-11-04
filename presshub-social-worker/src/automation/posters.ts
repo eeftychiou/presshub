@@ -207,12 +207,28 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     }
 
     WorkerLogger.info('Twitter Automation', 'Clicking Post button...');
+    await postButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+    await postButton.focus().catch(() => {});
+    await postButton.hover().catch(() => {});
     try {
       await postButton.click({ timeout: 5000 });
     } catch {
       WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted by layer, clicking Post with force: true...');
       await postButton.click({ force: true });
     }
+    // Native DOM dispatch ensures framework handlers fire even under complex overlay styling
+    await postButton.evaluate((el: any) => {
+      if (el && typeof el.click === 'function') {
+        el.focus();
+        const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+        if (win && typeof win.MouseEvent === 'function') {
+          el.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+          el.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+          el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+        }
+        el.click();
+      }
+    }).catch(() => {});
 
     WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
     // Wait for the modal dialog to disappear or notification toast to appear
@@ -394,7 +410,22 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     };
 
     WorkerLogger.debug('TikTok Automation', 'Finding Post button and awaiting video processing...');
-    const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"], button.btn-post').first();
+
+    // Resilient Post button resolver: prioritizes the action button next to Discard or with exact "Post" text
+    const resolvePostButton = () => {
+      // 1. Footer button located beside the Discard button in TikTok Studio
+      const footerBtn = page.locator('div:has(> button:has-text("Discard")) button:has-text("Post"), .button-group button:has-text("Post")').first();
+      // 2. Class/data-attribute selectors
+      const classBtn = page.locator('button.btn-post, button[data-e2e="post_video_drop"]').first();
+      // 3. Exact button name "Post" (prevents matching "When to post", radio options, or tooltips)
+      const exactBtn = page.getByRole('button', { name: /^Post$/i }).last();
+      // 4. Last button on page containing "Post" (footer button is near page bottom)
+      const lastPostBtn = page.locator('button:has-text("Post")').last();
+
+      return footerBtn.or(classBtn).or(exactBtn).or(lastPostBtn).first();
+    };
+
+    const postButton = resolvePostButton();
     await postButton.waitFor({ state: 'attached', timeout: 30000 });
 
     // Wait up to 120 seconds for video upload and server-side processing to complete
@@ -403,18 +434,23 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     for (let i = 0; i < 120; i++) {
       await dismissTikTokOverlays();
 
-      const isUploadedIndicator = await page.locator('text="Uploaded", text="Uploaded 100%", text="Upload complete"').first().isVisible().catch(() => false);
-      const hasVideoPreview = (await page.locator('video, .video-player, [data-e2e="uploaded_video_preview"]').count()) > 0;
-      const disabled = await isPostButtonDisabled(postButton);
+      const currentPostBtn = resolvePostButton();
+      const disabled = await isPostButtonDisabled(currentPostBtn);
 
-      if (!disabled && (isUploadedIndicator || hasVideoPreview || i >= 25)) {
-        WorkerLogger.info('TikTok Automation', `Video ready for posting after ${i + 1}s (uploaded text: ${isUploadedIndicator}, video preview: ${hasVideoPreview}).`);
+      // Check upload state indicators in DOM:
+      // When complete, TikTok shows "Uploaded(13.6MB)" or "Uploaded" or "Upload complete"
+      const isUploadedIndicator = await page.locator('text=/Uploaded/i, text=/Upload complete/i').first().isVisible().catch(() => false);
+      const isUploading = await page.locator('text=/Uploading/i, text=/Transcoding/i, .progress-bar, [role="progressbar"]').first().isVisible().catch(() => false);
+
+      // Require upload completion indicator (or at least 20s if already disabled=false and not uploading)
+      if (!disabled && !isUploading && (isUploadedIndicator || i >= 20)) {
+        WorkerLogger.info('TikTok Automation', `Video ready for posting after ${i + 1}s (uploaded: ${isUploadedIndicator}, button enabled: ${!disabled}).`);
         uploadReady = true;
         break;
       }
 
       if (i % 5 === 0) {
-        WorkerLogger.debug('TikTok Automation', `Waiting for upload/transcode (${i + 1}/120s, button disabled: ${disabled})...`);
+        WorkerLogger.debug('TikTok Automation', `Waiting for upload/transcode (${i + 1}/120s, button disabled: ${disabled}, uploading: ${isUploading}, uploaded: ${isUploadedIndicator})...`);
       }
       await page.waitForTimeout(1000);
     }
@@ -423,13 +459,40 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       WorkerLogger.warn('TikTok Automation', 'Upload ready state not explicitly confirmed after 120s, attempting post click anyway...');
     }
 
+    const targetPostBtn = resolvePostButton();
     WorkerLogger.info('TikTok Automation', 'Clicking Post button...');
+
+    // 1. Scroll button into view to ensure viewport visibility
+    await targetPostBtn.scrollIntoViewIfNeeded({ timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(500);
+
+    // 2. Focus
+    await targetPostBtn.focus().catch(() => {});
+    await page.waitForTimeout(200);
+
+    // 3. Hover and click via Playwright
+    await targetPostBtn.hover().catch(() => {});
     try {
-      await postButton.click({ timeout: 5000 });
+      await targetPostBtn.click({ timeout: 5000 });
     } catch {
       WorkerLogger.debug('TikTok Automation', 'Standard click intercepted, clicking Post with force: true...');
-      await postButton.click({ force: true });
+      await targetPostBtn.click({ force: true });
     }
+
+    // 4. Multi-event DOM click dispatch to ensure React/Semi UI event handlers trigger
+    await targetPostBtn.evaluate((el: any) => {
+      if (el && typeof el.click === 'function') {
+        el.focus();
+        const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+        if (win && typeof win.MouseEvent === 'function') {
+          el.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+          el.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+          el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+        }
+        el.click();
+      }
+    }).catch(() => {});
+
     await page.waitForTimeout(3000);
 
     // Check for and dismiss/confirm any secondary confirmation dialogs (e.g. "Post anyway", "Post now", "Turn on")
