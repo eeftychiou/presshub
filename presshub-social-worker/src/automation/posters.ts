@@ -356,8 +356,8 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     WorkerLogger.info('TikTok Automation', `Uploading video file: ${options.mediaPath} (${mediaSize} bytes)...`);
     await uploadInput.setInputFiles(path.resolve(options.mediaPath));
 
-    WorkerLogger.debug('TikTok Automation', 'Waiting for video processing & caption editor...');
-    await page.waitForTimeout(5000);
+    WorkerLogger.debug('TikTok Automation', 'Waiting for upload stream and caption editor to mount...');
+    await page.waitForTimeout(4000);
     await dismissTikTokOverlays();
 
     WorkerLogger.info('TikTok Automation', `Typing post copy (${options.copy.length} chars)...`);
@@ -367,44 +367,139 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     if ((await captionEditor.count()) > 0) {
       await captionEditor.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
       await captionEditor.click();
+      await page.keyboard.press('Control+A').catch(() => {});
       await captionEditor.fill(options.copy);
       await page.waitForTimeout(1000);
     }
 
     await dismissTikTokOverlays();
 
-    WorkerLogger.debug('TikTok Automation', 'Finding Post button...');
-    const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"], button.btn-post').first();
-    if ((await postButton.count()) > 0) {
-      await postButton.waitFor({ state: 'visible', timeout: 25000 }).catch(() => {});
-
-      // Wait if disabled (e.g. video file still processing or uploading)
-      for (let i = 0; i < 30; i++) {
-        await dismissTikTokOverlays();
-        const disabled = await postButton.getAttribute('disabled');
-        const ariaDisabled = await postButton.getAttribute('aria-disabled');
-        if (disabled === null && ariaDisabled !== 'true') {
-          break;
-        }
-        WorkerLogger.debug('TikTok Automation', `Waiting for video upload/processing to complete (${i + 1}/30)...`);
-        await page.waitForTimeout(1000);
-      }
-
-      WorkerLogger.info('TikTok Automation', 'Clicking Post button...');
+    // Helper: Determine if Post button is currently disabled
+    const isPostButtonDisabled = async (btn: any): Promise<boolean> => {
       try {
-        await postButton.click({ timeout: 5000 });
+        if ((await btn.count()) === 0) return true;
+        const isVis = await btn.isVisible().catch(() => false);
+        if (!isVis) return true;
+        const disabledAttr = await btn.getAttribute('disabled');
+        if (disabledAttr !== null) return true;
+        const ariaDisabled = await btn.getAttribute('aria-disabled');
+        if (ariaDisabled === 'true') return true;
+        const classNames = (await btn.getAttribute('class')) || '';
+        if (/disabled|is-disabled|btn-disabled/i.test(classNames)) return true;
+        const isEnabled = await btn.isEnabled().catch(() => false);
+        return !isEnabled;
       } catch {
-        WorkerLogger.debug('TikTok Automation', 'Standard click intercepted, clicking Post with force: true...');
-        await postButton.click({ force: true });
+        return false;
       }
-      await page.waitForTimeout(3000);
+    };
 
-      WorkerLogger.info('TikTok Automation', 'Waiting for video submission confirmation...');
-      await Promise.race([
-        page.waitForURL((url) => !url.toString().includes('/upload'), { timeout: 25000 }),
-        page.locator('text="Your video has been uploaded", text="Manage your posts", button:has-text("Manage your posts")').first().waitFor({ state: 'visible', timeout: 25000 })
-      ]).catch(() => {});
+    WorkerLogger.debug('TikTok Automation', 'Finding Post button and awaiting video processing...');
+    const postButton = page.locator('button:has-text("Post"), button[data-e2e="post_video_drop"], button.btn-post').first();
+    await postButton.waitFor({ state: 'attached', timeout: 30000 });
+
+    // Wait up to 120 seconds for video upload and server-side processing to complete
+    WorkerLogger.info('TikTok Automation', 'Waiting for video upload and processing to complete (up to 120s)...');
+    let uploadReady = false;
+    for (let i = 0; i < 120; i++) {
+      await dismissTikTokOverlays();
+
+      const isUploadedIndicator = await page.locator('text="Uploaded", text="Uploaded 100%", text="Upload complete"').first().isVisible().catch(() => false);
+      const hasVideoPreview = (await page.locator('video, .video-player, [data-e2e="uploaded_video_preview"]').count()) > 0;
+      const disabled = await isPostButtonDisabled(postButton);
+
+      if (!disabled && (isUploadedIndicator || hasVideoPreview || i >= 25)) {
+        WorkerLogger.info('TikTok Automation', `Video ready for posting after ${i + 1}s (uploaded text: ${isUploadedIndicator}, video preview: ${hasVideoPreview}).`);
+        uploadReady = true;
+        break;
+      }
+
+      if (i % 5 === 0) {
+        WorkerLogger.debug('TikTok Automation', `Waiting for upload/transcode (${i + 1}/120s, button disabled: ${disabled})...`);
+      }
+      await page.waitForTimeout(1000);
     }
+
+    if (!uploadReady) {
+      WorkerLogger.warn('TikTok Automation', 'Upload ready state not explicitly confirmed after 120s, attempting post click anyway...');
+    }
+
+    WorkerLogger.info('TikTok Automation', 'Clicking Post button...');
+    try {
+      await postButton.click({ timeout: 5000 });
+    } catch {
+      WorkerLogger.debug('TikTok Automation', 'Standard click intercepted, clicking Post with force: true...');
+      await postButton.click({ force: true });
+    }
+    await page.waitForTimeout(3000);
+
+    // Check for and dismiss/confirm any secondary confirmation dialogs (e.g. "Post anyway", "Post now", "Turn on")
+    for (let c = 0; c < 5; c++) {
+      await dismissTikTokOverlays();
+      const confirmModalBtn = page.locator(
+        'button:has-text("Post anyway"), button:has-text("Post now"), button:has-text("Confirm")'
+      ).first();
+      if ((await confirmModalBtn.count()) > 0 && await confirmModalBtn.isVisible().catch(() => false)) {
+        WorkerLogger.info('TikTok Automation', `Clicking secondary post confirmation button: "${await confirmModalBtn.textContent()}"...`);
+        await confirmModalBtn.click().catch(() => {});
+        await page.waitForTimeout(2000);
+      } else {
+        break;
+      }
+    }
+
+    WorkerLogger.info('TikTok Automation', 'Waiting for video submission confirmation (up to 60s)...');
+    const successLocators = page.locator([
+      'text="Your video has been uploaded"',
+      'text="Your video is being processed"',
+      'text="Manage your posts"',
+      'button:has-text("Manage your posts")',
+      'text="Upload another video"',
+      'button:has-text("Upload another video")',
+      'text="View profile"',
+      'button:has-text("View profile")',
+      '.upload-success-container'
+    ].join(', ')).first();
+
+    let isConfirmed = false;
+    let finalUrl = page.url();
+    const waitStartTime = Date.now();
+
+    while (Date.now() - waitStartTime < 60000) {
+      finalUrl = page.url();
+
+      // 1. Navigation away from /upload to content or manage page
+      if (!finalUrl.includes('/upload')) {
+        WorkerLogger.info('TikTok Automation', `Navigation away from /upload detected: ${finalUrl}`);
+        isConfirmed = true;
+        break;
+      }
+
+      // 2. Success dialog visible
+      if (await successLocators.isVisible().catch(() => false)) {
+        WorkerLogger.info('TikTok Automation', 'Success dialog ("Your video has been uploaded" / "Manage your posts") confirmed.');
+        isConfirmed = true;
+        break;
+      }
+
+      // 3. Late confirmation modal check
+      const lateConfirmBtn = page.locator('button:has-text("Post anyway"), button:has-text("Post now"), button:has-text("Confirm")').first();
+      if (await lateConfirmBtn.isVisible().catch(() => false)) {
+        WorkerLogger.info('TikTok Automation', 'Late confirmation button visible, clicking it...');
+        await lateConfirmBtn.click().catch(() => {});
+      }
+
+      await page.waitForTimeout(2000);
+    }
+
+    if (!isConfirmed) {
+      // Capture failure screenshot and DOM state for diagnosis
+      const errScreenshot = await captureErrorScreenshot(page, 'tiktok');
+      WorkerLogger.error('TikTok Automation', `Post submission not confirmed within 60s. Screenshot captured: ${errScreenshot || 'none'}`);
+      throw new Error(`TikTok post submission was not confirmed within 60s (URL remained ${finalUrl}). Screenshot: ${errScreenshot || 'none'}`);
+    }
+
+    // Give TikTok a few seconds to finalize background API dispatches before page close
+    await page.waitForTimeout(3000);
 
     const generatedId = `tt-${Date.now()}`;
     const postUrl = `https://www.tiktok.com/@creator/video/${generatedId}`;

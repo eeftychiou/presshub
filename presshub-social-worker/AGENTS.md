@@ -14,7 +14,7 @@
 - `src/media/video-generator.ts`: `fluent-ffmpeg` vertical MP4 generator with `probeAudioDuration` for full podcast playback and TikTok 600s clamping (`generateSocialVideo`, `generateVideo`).
 - `src/automation/session-manager.ts`: Cookie validation, platform allowlisting, and storageState persistence (`SessionManager`, `verifySession`).
 - `src/automation/browser-helper.ts`: Chrome launcher & CDP connection with `resolveHeadless` (reads `PRESSHUB_HEADLESS`), stealth arguments, and Windows visible browser support.
-- `src/automation/posters.ts`: Playwright automation implementations for Twitter, TikTok, Facebook, Instagram (`dispatchBrowserPost`, `defaultPosterHandler`, `captureErrorScreenshot`, `captureAutomationFailure`, overlay/cookie dismissal, and force-click fallback).
+- `src/automation/posters.ts`: Playwright automation implementations for Twitter, TikTok, Facebook, Instagram (`dispatchBrowserPost`, `defaultPosterHandler`, `captureErrorScreenshot`, `captureAutomationFailure`, overlay/cookie dismissal, force-click fallback, TikTok upload progress observation up to 120s, post confirmation verification up to 60s, and Zero-Silent-Fallback error propagation).
 - `src/cli/login.ts`: Interactive login CLI to generate storageState JSON files.
 - `src/app.ts`: Express application factory with injection hooks for testing.
 - `src/index.ts`: Production entrypoint; auto-starts `PressHubPoller` if `PRESSHUB_WP_URL` and `PRESSHUB_WORKER_SECRET` are configured.

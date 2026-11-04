@@ -174,6 +174,13 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
             <div class="notranslate" contenteditable="true">Caption 2</div>
             <button data-e2e="post_video_drop">Post</button>
             <button>Post</button>
+            <script>
+              document.querySelector("[data-e2e=post_video_drop]").addEventListener("click", () => {
+                const msg = document.createElement("div");
+                msg.textContent = "Your video has been uploaded";
+                document.body.appendChild(msg);
+              });
+            </script>
           </body></html>`;
           page.goto = async () => {
             await page.setContent(html);
