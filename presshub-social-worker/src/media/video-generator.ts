@@ -15,9 +15,10 @@ if (ffmpegInstaller && ffmpegInstaller.path) {
 }
 
 /**
- * TikTok web creator center maximum upload duration in seconds (10 minutes).
+ * TikTok web creator center maximum upload duration in seconds.
+ * Clamped safely to 590s (~9m 50s) to guarantee FFmpeg container & audio packet rounding never exceeds 600.00s.
  */
-export const TIKTOK_MAX_DURATION = 600;
+export const TIKTOK_MAX_DURATION = 590;
 
 export interface GenerateVideoOptions {
   title?: string;
@@ -184,15 +185,15 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
     const probed = await probeAudioDuration(resolvedAudioPath!);
     if (probed && probed > 0) {
       WorkerLogger.info('VideoGenerator', `Probed audio duration: ${probed.toFixed(2)}s`);
-      if (probed > TIKTOK_MAX_DURATION) {
+      if (probed >= TIKTOK_MAX_DURATION) {
         WorkerLogger.warn(
           'VideoGenerator',
-          `Audio duration (${probed.toFixed(1)}s) exceeds TikTok max upload duration (${TIKTOK_MAX_DURATION}s). Clamping video duration to ${TIKTOK_MAX_DURATION}s.`
+          `Audio duration (${probed.toFixed(1)}s) exceeds TikTok safe max upload duration (${TIKTOK_MAX_DURATION}s). Clamping video duration to ${TIKTOK_MAX_DURATION}s.`
         );
         duration = TIKTOK_MAX_DURATION;
       } else {
-        // Use full audio duration (ceiling to guarantee no end-of-speech truncation)
-        duration = Math.max(5, Math.ceil(probed));
+        // Use full audio duration clamped safely under TIKTOK_MAX_DURATION
+        duration = Math.min(TIKTOK_MAX_DURATION, Math.max(5, Math.ceil(probed)));
       }
 
       // Check if caller specified a lower custom clamp

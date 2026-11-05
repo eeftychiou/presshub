@@ -410,8 +410,10 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
           } catch {}
           cb.remove();
         }
-        // Joyride onboarding tour portals and full-viewport overlays
-        doc.querySelectorAll('#react-joyride-portal, .react-joyride__overlay, .react-joyride__beacon').forEach((el: any) => el.remove());
+        // Neutralize Joyride transparent overlay intercepts without unmounting React portal nodes
+        doc.querySelectorAll('.react-joyride__overlay').forEach((el: any) => {
+          el.style.pointerEvents = 'none';
+        });
       }).catch(() => {});
 
       // 2. Cookie consent banner fallback buttons
@@ -447,12 +449,20 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         await page.waitForTimeout(300);
       }
 
-      // 5. "Got it" onboarding tooltip / modal (e.g. "New editing features added")
-      const gotItBtn = page.locator('button:has-text("Got it")').first();
-      if ((await gotItBtn.count()) > 0 && await gotItBtn.isVisible().catch(() => false)) {
-        WorkerLogger.debug('TikTok Automation', 'Dismissing "Got it" dialog...');
-        await gotItBtn.click({ force: true }).catch(() => {});
+      // 5. Joyride onboarding tooltip / modal (e.g. "Got it", "Next", "Done")
+      const joyrideBtn = page.locator('#react-joyride-portal button, .react-joyride__tooltip button, button:has-text("Got it"), button:has-text("Done"), button:has-text("Next")').first();
+      if ((await joyrideBtn.count()) > 0 && await joyrideBtn.isVisible().catch(() => false)) {
+        WorkerLogger.debug('TikTok Automation', `Dismissing onboarding tour dialog (${await joyrideBtn.textContent().catch(() => '')})...`);
+        await joyrideBtn.click({ force: true }).catch(() => {});
         await page.waitForTimeout(300);
+      }
+
+      // 6. "Something went wrong" / transient error retry button
+      const retryBtn = page.locator('div:has-text("Something went wrong") button:has-text("Retry"), button:has-text("Retry")').first();
+      if ((await retryBtn.count()) > 0 && await retryBtn.isVisible().catch(() => false)) {
+        WorkerLogger.warn('TikTok Automation', 'Detected "Something went wrong" banner, clicking "Retry"...');
+        await retryBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(1000);
       }
     };
 
@@ -483,7 +493,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     WorkerLogger.info('TikTok Automation', `Typing post copy (${options.copy.length} chars)...`);
     const captionEditor = page.locator(
-      'div[contenteditable="true"], .notranslate[contenteditable="true"]'
+      '.notranslate.public-DraftEditor-content, div[contenteditable="true"], .notranslate[contenteditable="true"]'
     ).first();
     if ((await captionEditor.count()) > 0) {
       await captionEditor.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
@@ -493,8 +503,11 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         WorkerLogger.debug('TikTok Automation', 'Caption editor click intercepted, clicking with force: true...');
         await captionEditor.click({ force: true }).catch(() => {});
       }
+      await page.waitForTimeout(300);
       await page.keyboard.press('Control+A').catch(() => {});
-      await captionEditor.fill(options.copy);
+      await page.keyboard.press('Backspace').catch(() => {});
+      await page.waitForTimeout(200);
+      await page.keyboard.insertText(options.copy);
       await page.waitForTimeout(500);
       await page.keyboard.press('Escape').catch(() => {});
       await page.waitForTimeout(500);
@@ -557,7 +570,17 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     };
 
     const postButton = resolvePostButton();
-    await postButton.waitFor({ state: 'attached', timeout: 30000 });
+    try {
+      await postButton.waitFor({ state: 'attached', timeout: 30000 });
+    } catch (waitErr: any) {
+      await dismissTikTokOverlays();
+      const domBody = await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        return doc && doc.body ? doc.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+      }).catch(() => '');
+      WorkerLogger.error('TikTok Automation', `Post button not found within 30s. Current page text: "${domBody}"`);
+      throw waitErr;
+    }
 
     // Wait up to 180 seconds for video upload and server-side processing to complete
     WorkerLogger.info('TikTok Automation', 'Waiting for video upload and processing to complete (up to 180s)...');

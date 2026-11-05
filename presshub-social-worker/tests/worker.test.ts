@@ -328,8 +328,8 @@ describe('PressHub Social Media Worker Suite', () => {
       expect(videoResult.duration).toBe(7);
     }, 45000);
 
-    test('TIKTOK_MAX_DURATION constant is set to 600s', () => {
-      expect(TIKTOK_MAX_DURATION).toBe(600);
+    test('TIKTOK_MAX_DURATION constant is set to safe 590s limit', () => {
+      expect(TIKTOK_MAX_DURATION).toBe(590);
     });
   });
 
