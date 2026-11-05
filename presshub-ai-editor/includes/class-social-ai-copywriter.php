@@ -161,14 +161,7 @@ class PressHub_Social_AI_Copywriter {
             $rendered = trim( $rendered );
 
             if ( 'twitter' === $platform ) {
-                $rendered = preg_replace_callback( '#(?:https?://)?(?:www\.)?presshub\.cy/?\b#iu', function( $matches ) use ( $url ) {
-                    if ( '' !== $url && false !== strpos( $url, $matches[0] ) ) {
-                        return $matches[0];
-                    }
-                    return 'PressHub';
-                }, $rendered );
-                $max_chars = PressHub_Social_Settings_Storage::get_twitter_max_chars();
-                $rendered  = self::truncate_twitter_text( $rendered, $max_chars, $url );
+                $rendered = self::sanitize_twitter_copy( $rendered, $url, true );
             }
 
             return $rendered;
@@ -289,27 +282,7 @@ class PressHub_Social_AI_Copywriter {
 
         // For Twitter, enforce single URL rule and character cap cleanly while preserving article URL.
         if ( 'twitter' === $platform ) {
-            // Replace any standalone domain mentions like presshub.cy or PressHub.Cy outside of the article URL with plain "PressHub"
-            // to prevent X/Twitter from auto-linking the homepage and suppressing the article's featured image card.
-            $copy = preg_replace_callback( '#(?:https?://)?(?:www\.)?presshub\.cy/?\b#iu', function( $matches ) use ( $url ) {
-                if ( '' !== $url && false !== strpos( $url, $matches[0] ) ) {
-                    return $matches[0];
-                }
-                return 'PressHub';
-            }, $copy );
-
-            // If there are other URLs besides the designated article $url, ensure only $url remains as an active link.
-            if ( '' !== $url ) {
-                $copy = preg_replace_callback( '#https?://[^\s]+#iu', function( $matches ) use ( $url ) {
-                    if ( rtrim( $matches[0], '/' ) === rtrim( $url, '/' ) ) {
-                        return $url;
-                    }
-                    return '';
-                }, $copy );
-                $copy = preg_replace( '/[ \t]+/', ' ', $copy );
-            }
-
-            $copy = self::truncate_twitter_text( $copy, $max_chars, $url );
+            $copy = self::sanitize_twitter_copy( $copy, $url, true );
         }
 
         return $copy;
@@ -751,6 +724,79 @@ class PressHub_Social_AI_Copywriter {
         // Twitter counts any URL as exactly 23 characters (t.co shortlink).
         $without_urls = preg_replace( '#https?://[^\s]+#iu', str_repeat( 'X', 23 ), $text );
         return mb_strlen( $without_urls, 'UTF-8' );
+    }
+
+    /**
+     * Strictly sanitize tweet copy enforcing the Single URL Rule and Brand Sanitization:
+     * 1. Guarantees at most one URL (the article permalink) is present in the tweet.
+     * 2. Strips any secondary URLs, homepage links (e.g. https://presshub.cy), or extra links.
+     * 3. Replaces standalone domain names like 'PressHub.Cy' or 'presshub.cy' outside the article URL with plain 'PressHub'
+     *    so X/Twitter does not auto-link them as a second URL and suppress the featured image card.
+     * 4. Enforces the Twitter character cap via truncate_twitter_text().
+     *
+     * @param string $text Raw tweet text.
+     * @param string $url  Designated article URL.
+     * @param bool   $append_if_missing Whether to append the article URL if not present. Default false.
+     * @return string Cleaned tweet text with at most one link.
+     */
+    public static function sanitize_twitter_copy( string $text, string $url = '', bool $append_if_missing = false ): string {
+        $text = trim( $text );
+        if ( '' === $text ) {
+            return '';
+        }
+
+        // 1. Detect target URL if not explicitly provided
+        $target_url = trim( $url );
+        if ( '' === $target_url ) {
+            if ( preg_match_all( '#https?://\S+#i', $text, $url_matches ) && ! empty( $url_matches[0] ) ) {
+                $longest = '';
+                foreach ( $url_matches[0] as $u ) {
+                    if ( strlen( $u ) > strlen( $longest ) ) {
+                        $longest = $u;
+                    }
+                }
+                $target_url = $longest;
+            }
+        }
+
+        // 2. Protect the designated article URL with a placeholder token
+        $has_url = false;
+        if ( '' !== $target_url ) {
+            $clean_target = rtrim( $target_url, '/' );
+            $pattern      = '#https?://' . preg_quote( preg_replace( '#^https?://#i', '', $clean_target ), '#' ) . '/?#i';
+            if ( preg_match( $pattern, $text ) ) {
+                $has_url = true;
+                $text    = preg_replace( $pattern, '___PRESSHUB_SINGLE_URL_TOKEN___', $text, 1 );
+            }
+        }
+
+        // 3. Strip ANY remaining http:// or https:// URLs from the tweet
+        $text = preg_replace( '#https?://\S+#i', '', $text );
+
+        // 4. Replace any standalone domain names that Twitter auto-links as secondary URLs
+        $text = preg_replace( '#(?:https?://)?(?:www\.)?presshub\.cy/?\b#iu', 'PressHub', $text );
+        $text = preg_replace( '#\bPressHub\.(?:cy|com)\b#u', 'PressHub', $text );
+        $text = preg_replace( '#\bpresshub\.(?:cy|com)\b#iu', 'PressHub', $text );
+        $text = preg_replace( '#PressHub\.Cy#u', 'PressHub', $text );
+        $text = preg_replace( '#PressHub\.cy#u', 'PressHub', $text );
+        $text = preg_replace( '#presshub\.cy#iu', 'PressHub', $text );
+
+        // 5. Restore the single protected article URL
+        if ( $has_url ) {
+            $text = str_replace( '___PRESSHUB_SINGLE_URL_TOKEN___', $target_url, $text );
+        } elseif ( $append_if_missing && '' !== $target_url ) {
+            $text = rtrim( $text ) . "\n\n" . $target_url;
+            $has_url = true;
+        }
+
+        // 6. Clean up whitespace
+        $text = preg_replace( '/[ \t]+/', ' ', $text );
+        $text = preg_replace( '/\n{3,}/', "\n\n", $text );
+        $text = trim( $text );
+
+        // 7. Enforce Twitter character cap
+        $max_chars = PressHub_Social_Settings_Storage::get_twitter_max_chars();
+        return self::truncate_twitter_text( $text, $max_chars, $has_url ? $target_url : '' );
     }
 
     /**

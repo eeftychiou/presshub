@@ -664,6 +664,11 @@ class PressHub_Social_Queue {
             return new WP_Error( 'empty_copy', __( 'Post copy content cannot be empty.', 'presshub-social-autopost' ) );
         }
 
+        if ( 'twitter' === ( $source['platform'] ?? '' ) && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
+            $post_url  = function_exists( 'get_permalink' ) ? ( get_permalink( (int) $source['post_id'] ) ?: '' ) : '';
+            $post_copy = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $post_copy, $post_url );
+        }
+
         $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
 
         $new_job_data = [
@@ -770,6 +775,11 @@ class PressHub_Social_Queue {
         $post_copy = trim( $post_copy );
         if ( '' === $post_copy ) {
             return false;
+        }
+
+        if ( 'twitter' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
+            $post_url  = function_exists( 'get_permalink' ) ? ( get_permalink( (int) ( $job['post_id'] ?? 0 ) ) ?: '' ) : '';
+            $post_copy = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $post_copy, $post_url );
         }
 
         $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );

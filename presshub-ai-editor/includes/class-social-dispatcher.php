@@ -143,6 +143,11 @@ class PressHub_Social_Dispatcher {
                 }
             }
 
+            if ( 'twitter' === $platform && ! $failed_error && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
+                $article_url = function_exists( 'get_permalink' ) ? ( get_permalink( $post_id ) ?: '' ) : '';
+                $copy        = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $copy, $article_url );
+            }
+
             $job_data = [
                 'post_id'      => $post_id,
                 'platform'     => $platform,

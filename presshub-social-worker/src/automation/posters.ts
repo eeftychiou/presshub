@@ -108,6 +108,50 @@ export async function captureAutomationFailure(
 }
 
 /**
+ * Strictly enforce Single Link Rule and Brand Sanitization for Twitter:
+ * 1. Guarantees only ONE URL (the article permalink) is present in the tweet.
+ * 2. Strips any secondary URLs or homepage links (e.g. https://presshub.cy).
+ * 3. Replaces standalone domain names like 'PressHub.Cy' or 'presshub.cy' with plain 'PressHub'
+ *    so X/Twitter does not auto-link them as a second URL and suppress the featured image card.
+ */
+export function sanitizeTwitterCopy(copy: string): string {
+  if (!copy || typeof copy !== 'string') return '';
+  let text = copy.trim();
+
+  // Find all URLs in the copy
+  const urlRegex = /https?:\/\/[^\s]+/gi;
+  const matches = text.match(urlRegex) || [];
+
+  let targetUrl = '';
+  if (matches.length > 0 && matches[0]) {
+    // If multiple URLs exist, find the longest one (article permalink vs short homepage URL)
+    targetUrl = matches.reduce((longest: string, current: string) => (current.length > longest.length ? current : longest), matches[0]);
+
+    // Protect target URL with a placeholder
+    text = text.replace(targetUrl, '___TARGET_ARTICLE_URL___');
+
+    // Remove any remaining secondary URLs
+    text = text.replace(/https?:\/\/[^\s]+/gi, '');
+  }
+
+  // Replace any standalone domain mentions that Twitter autolinks as secondary links
+  text = text.replace(/(?:https?:\/\/)?(?:www\.)?presshub\.cy\/?/gi, 'PressHub');
+  text = text.replace(/\bPressHub\.Cy\b/g, 'PressHub');
+  text = text.replace(/\bPressHub\.cy\b/g, 'PressHub');
+  text = text.replace(/\bpresshub\.cy\b/gi, 'PressHub');
+
+  // Restore the single target article URL
+  if (targetUrl) {
+    text = text.replace('___TARGET_ARTICLE_URL___', targetUrl);
+  }
+
+  // Clean up whitespace and empty lines
+  text = text.replace(/[ \t]+/g, ' ');
+  text = text.replace(/\n{3,}/g, '\n\n');
+  return text.trim();
+}
+
+/**
  * Twitter / X automation poster using saved browser session or running Chrome.
  */
 export async function postTwitter(options: PostOptions): Promise<PostResult> {
@@ -171,12 +215,13 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     await textarea.waitFor({ state: 'visible', timeout: 15000 });
 
-    WorkerLogger.info('Twitter Automation', `Typing tweet copy (${options.copy.length} chars)...`);
+    const tweetCopy = sanitizeTwitterCopy(options.copy);
+    WorkerLogger.info('Twitter Automation', `Typing tweet copy (${tweetCopy.length} chars, sanitized for single-link)...`);
     await textarea.click();
     try {
-      await textarea.fill(options.copy);
+      await textarea.fill(tweetCopy);
     } catch {
-      await page.keyboard.type(options.copy, { delay: 10 });
+      await page.keyboard.type(tweetCopy, { delay: 10 });
     }
 
     // If media attached, upload via file input

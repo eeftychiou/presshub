@@ -246,6 +246,10 @@ class PressHub_Social_Metabox {
             if ( isset( $_POST[ $field_name ] ) ) {
                 $copy = sanitize_textarea_field( wp_unslash( $_POST[ $field_name ] ) );
                 if ( '' !== trim( $copy ) ) {
+                    if ( 'twitter' === $slug && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
+                        $article_url = function_exists( 'get_permalink' ) ? ( get_permalink( $post_id ) ?: '' ) : '';
+                        $copy        = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $copy, $article_url );
+                    }
                     update_post_meta( $post_id, '_' . $field_name, $copy );
                 } else {
                     delete_post_meta( $post_id, '_' . $field_name );

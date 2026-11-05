@@ -120,6 +120,10 @@ class PressHub_Social_Ajax_Handlers {
                 if ( isset( $_POST['copies'][ $slug ] ) ) {
                     $copy_val = sanitize_textarea_field( wp_unslash( $_POST['copies'][ $slug ] ) );
                     if ( '' !== trim( $copy_val ) ) {
+                        if ( 'twitter' === $slug && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
+                            $article_url = function_exists( 'get_permalink' ) ? ( get_permalink( $post_id ) ?: '' ) : '';
+                            $copy_val    = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $copy_val, $article_url );
+                        }
                         update_post_meta( $post_id, '_presshub_social_copy_' . $slug, $copy_val );
                     } else {
                         delete_post_meta( $post_id, '_presshub_social_copy_' . $slug );

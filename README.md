@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.8.5-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.8.6-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-83%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -215,7 +215,7 @@ cd ../presshub-social-worker
 npm test
 npm run build
 ```
-*Executes all **83 AI Editor test suites**, **19 Social Auto-Post test suites (156 tests)**, and **5 Social Worker suites (69 tests)** with 100% pass rate.*
+*Executes all **83 AI Editor test suites**, **19 Social Auto-Post test suites (171 tests)**, and **5 Social Worker suites (69 tests)** with 100% pass rate.*
 
 ### 3. Running TypeScript & MCP Workflow Tests
 The workflow package integrates Model Context Protocol (MCP) servers and editorial automation:

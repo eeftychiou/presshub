@@ -1012,6 +1012,16 @@ assert_true( ! str_contains( $tpl_res, 'Forced AI' ), 'Default template mode ret
 $forced_res = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Cyprus Story', 'url' => 'https://example.com' ], 'twitter', true );
 assert_true( str_contains( $forced_res, 'Forced AI' ), 'force_ai=true invokes AI copywriter even when copy_mode is template' );
 
+// Twitter Single Link Rule and Brand Sanitization tests
+$two_url_tweet = "Όλες οι εξελίξεις στο podcast του PressHub.Cy: https://presshub.cy/ και https://presshub.cy/mesimvrino-podcast-enimerosis-05-11-2026/ #Cyprus";
+$sanitized_tweet = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $two_url_tweet, 'https://presshub.cy/mesimvrino-podcast-enimerosis-05-11-2026/' );
+assert_true( ! str_contains( $sanitized_tweet, 'PressHub.Cy' ), 'sanitize_twitter_copy strips PressHub.Cy domain to plain PressHub' );
+assert_true( str_contains( $sanitized_tweet, 'podcast του PressHub' ), 'Brand name rendered as plain PressHub' );
+assert_true( str_contains( $sanitized_tweet, 'https://presshub.cy/mesimvrino-podcast-enimerosis-05-11-2026/' ), 'Article URL is preserved' );
+assert_true( ! str_contains( $sanitized_tweet, 'https://presshub.cy/ ' ) && ! str_contains( $sanitized_tweet, 'https://presshub.cy/ και' ), 'Secondary homepage URL is removed' );
+preg_match_all( '#https?://\S+#i', $sanitized_tweet, $final_urls );
+assert_equals( 1, count( $final_urls[0] ), 'Strictly exactly one URL remains in sanitized tweet' );
+
 // Reset copy mode back to ai
 update_option( 'presshub_social_copy_mode', 'ai' );
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
