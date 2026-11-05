@@ -61,8 +61,24 @@ export function parseEnv(content: string): Record<string, string> {
  * @returns Record of keys loaded into process.env
  */
 export function loadEnv(envPath?: string): Record<string, string> {
-  const targetPath = envPath || path.resolve(process.cwd(), '.env');
-  if (!fs.existsSync(targetPath)) {
+  const candidatePaths = envPath
+    ? [envPath]
+    : [
+        path.resolve(process.cwd(), '.env'),
+        path.resolve(process.cwd(), 'presshub-social-worker/.env'),
+        path.resolve(__dirname, '../.env'),
+        path.resolve(__dirname, '../../.env')
+      ];
+
+  let targetPath = '';
+  for (const candidate of candidatePaths) {
+    if (fs.existsSync(candidate)) {
+      targetPath = candidate;
+      break;
+    }
+  }
+
+  if (!targetPath) {
     return {};
   }
 

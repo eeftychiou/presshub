@@ -25,7 +25,9 @@ export class WorkerLogger {
    * Initializes the logger, ensuring logs directory exists and paths are resolved.
    */
   public static init(customPath?: string): void {
-    const defaultLogDir = path.resolve(process.cwd(), 'logs');
+    const defaultLogDir = fs.existsSync(path.resolve(process.cwd(), 'presshub-social-worker/logs'))
+      ? path.resolve(process.cwd(), 'presshub-social-worker/logs')
+      : path.resolve(__dirname, '../logs');
     const defaultLogPath = path.join(defaultLogDir, 'worker.log');
 
     const configuredPath = customPath || process.env.PRESSHUB_LOG_FILE || defaultLogPath;

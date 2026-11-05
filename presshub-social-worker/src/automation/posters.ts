@@ -49,7 +49,10 @@ export async function captureErrorScreenshot(
   customOutputDir?: string
 ): Promise<string | undefined> {
   try {
-    const outputDir = customOutputDir || path.resolve(process.cwd(), 'output');
+    const outputDir = customOutputDir ||
+      (fs.existsSync(path.resolve(process.cwd(), 'presshub-social-worker/output'))
+        ? path.resolve(process.cwd(), 'presshub-social-worker/output')
+        : path.resolve(process.cwd(), 'output'));
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
@@ -170,6 +173,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
   const page = await session.context.newPage();
   try {
     page.setDefaultTimeout(timeout);
+    await page.bringToFront().catch(() => {});
 
     WorkerLogger.info('Twitter Automation', 'Navigating to compose URL (https://x.com/compose/post)...');
     await page.goto('https://x.com/compose/post', { waitUntil: 'domcontentloaded' });
@@ -389,6 +393,7 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
   const page = await session.context.newPage();
   try {
     page.setDefaultTimeout(timeout);
+    await page.bringToFront().catch(() => {});
 
     // Dismiss any popups, cookie banners or onboarding modals that TikTok overlays on the upload view
     const dismissTikTokOverlays = async () => {
@@ -490,7 +495,9 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       }
       await page.keyboard.press('Control+A').catch(() => {});
       await captionEditor.fill(options.copy);
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(500);
+      await page.keyboard.press('Escape').catch(() => {});
+      await page.waitForTimeout(500);
     }
 
     await dismissTikTokOverlays();
@@ -510,7 +517,18 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         const classNames = (await btn.getAttribute('class')) || '';
         if (/disabled|is-disabled|btn-disabled/i.test(classNames)) return true;
         const isEnabled = await btn.isEnabled().catch(() => false);
-        return !isEnabled;
+        if (!isEnabled) return true;
+
+        // If upload_status_container is present in DOM, check its upload transfer status
+        const statusContainer = page.locator('[data-e2e="upload_status_container"]').first();
+        if ((await statusContainer.count()) > 0) {
+          const statusText = (await statusContainer.textContent().catch(() => '')) || '';
+          if (/left|Cancel|\d+%/i.test(statusText)) {
+            return true; // Still uploading video chunks
+          }
+        }
+
+        return false;
       } catch {
         return false;
       }
@@ -518,57 +536,64 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     WorkerLogger.debug('TikTok Automation', 'Finding Post button and awaiting video processing...');
 
-    // Resilient Post button resolver: prioritizes the action button next to Discard or with exact "Post" text
+    // Resilient Post button resolver: strictly isolates the form submission Post button from navigation sidebar
     const resolvePostButton = () => {
-      // 1. TikTok Studio button with data-e2e="post_video_button"
+      // 1. TikTok Studio official e2e attribute (the exact submit button)
       const e2eBtn = page.locator('button[data-e2e="post_video_button"]').first();
-      // 2. Footer button located beside the Discard button in TikTok Studio
-      const footerBtn = page.locator('.button-group button:has-text("Post"), div:has(> button:has-text("Discard")) button:has-text("Post")').first();
-      // 3. Class/data-attribute selectors
-      const classBtn = page.locator('button.btn-post, button[data-e2e="post_video_drop"]').first();
-      // 4. Exact button name "Post" (prevents matching "When to post", radio options, or tooltips)
-      const exactBtn = page.getByRole('button', { name: /^Post$/i }).last();
-      // 5. Last button on page containing "Post" (footer button is near page bottom)
-      const lastPostBtn = page.locator('button:has-text("Post")').last();
+      // 2. Fallback e2e attribute used in test mocks / creator center
+      const dropBtn = page.locator('button[data-e2e="post_video_drop"]').first();
+      // 3. Action button in the footer group next to Discard button (scoped to discard sibling)
+      const footerBtn = page.locator('div:has(> button[data-e2e="discard_post_button"]) button, div:has(> button:has-text("Discard")) button')
+        .filter({ hasText: /^Post$/i })
+        .first();
+      // 4. Action button inside form / upload-stage with class btn-post
+      const classBtn = page.locator('button.btn-post').first();
+      // 5. Content-area button with exact text "Post" (strictly excluding navigation sidebar)
+      const contentBtn = page.locator('div.jsx-2094875959 button, .upload-stage button, main button, form button')
+        .filter({ hasText: /^Post$/i })
+        .first();
 
-      return e2eBtn.or(footerBtn).or(classBtn).or(exactBtn).or(lastPostBtn).first();
+      return e2eBtn.or(dropBtn).or(footerBtn).or(classBtn).or(contentBtn).first();
     };
 
     const postButton = resolvePostButton();
     await postButton.waitFor({ state: 'attached', timeout: 30000 });
 
-    // Wait up to 120 seconds for video upload and server-side processing to complete
-    WorkerLogger.info('TikTok Automation', 'Waiting for video upload and processing to complete (up to 120s)...');
+    // Wait up to 180 seconds for video upload and server-side processing to complete
+    WorkerLogger.info('TikTok Automation', 'Waiting for video upload and processing to complete (up to 180s)...');
     let uploadReady = false;
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 180; i++) {
       await dismissTikTokOverlays();
 
       const currentPostBtn = resolvePostButton();
       const disabled = await isPostButtonDisabled(currentPostBtn);
 
-      // Check upload state indicators in DOM:
-      // When complete, TikTok shows "Uploaded(13.6MB)" or "Uploaded" or "Upload complete"
-      const isUploadedIndicator = await page.locator('text=/Uploaded/i, text=/Upload complete/i').first().isVisible().catch(() => false);
-      const isUploading = await page.locator('text=/Uploading/i, text=/Transcoding/i, .progress-bar, [role="progressbar"]').first().isVisible().catch(() => false);
+      const statusContainer = page.locator('[data-e2e="upload_status_container"]').first();
+      const hasStatusContainer = (await statusContainer.count()) > 0;
+      const statusText = hasStatusContainer ? ((await statusContainer.textContent().catch(() => '')) || '') : '';
+      const isUploading = /left|Cancel|\d+%/i.test(statusText) ||
+                          await page.locator('.progress-bar, [role="progressbar"]').first().isVisible().catch(() => false);
+      const isUploaded = hasStatusContainer ? /Uploaded|Replace/i.test(statusText) : true;
 
-      // Require upload completion indicator (or at least 3s if already disabled=false and not uploading)
-      if (!disabled && !isUploading && (isUploadedIndicator || i >= 3)) {
-        WorkerLogger.info('TikTok Automation', `Video ready for posting after ${i + 1}s (uploaded: ${isUploadedIndicator}, button enabled: ${!disabled}).`);
+      // Require real upload completion: post button MUST be fully enabled (not disabled) AND video must be uploaded (not actively transferring chunks)
+      if (!disabled && !isUploading && isUploaded) {
+        WorkerLogger.info('TikTok Automation', `Video ready for posting after ${i + 1}s (uploaded: true, button enabled: true, status: "${statusText.replace(/\s+/g, ' ').trim()}").`);
         uploadReady = true;
         break;
       }
 
       if (i % 5 === 0) {
-        WorkerLogger.debug('TikTok Automation', `Waiting for upload/transcode (${i + 1}/120s, button disabled: ${disabled}, uploading: ${isUploading}, uploaded: ${isUploadedIndicator})...`);
+        WorkerLogger.debug('TikTok Automation', `Waiting for upload/transcode (${i + 1}/180s, button disabled: ${disabled}, uploading: ${isUploading}, uploaded: ${isUploaded}, status: "${statusText.replace(/\s+/g, ' ').trim()}")...`);
       }
       await page.waitForTimeout(1000);
     }
 
     if (!uploadReady) {
-      WorkerLogger.warn('TikTok Automation', 'Upload ready state not explicitly confirmed after 120s, attempting post click anyway...');
+      WorkerLogger.warn('TikTok Automation', 'Upload ready state not explicitly confirmed after 180s, attempting post click anyway...');
     }
 
-    // Dismiss any overlays right before clicking
+    // Dismiss any overlays and close hashtag dropdowns right before clicking
+    await page.keyboard.press('Escape').catch(() => {});
     await dismissTikTokOverlays();
 
     const targetPostBtn = resolvePostButton();
@@ -612,13 +637,13 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       }
     }).catch(() => {});
 
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(2000);
 
     // Check for and dismiss/confirm any secondary confirmation dialogs (e.g. "Post anyway", "Post now", "Turn on", "Confirm")
     for (let c = 0; c < 5; c++) {
       await dismissTikTokOverlays();
       const confirmModalBtn = page.locator(
-        'button:has-text("Post anyway"), button:has-text("Post now"), button:has-text("Confirm"), button:has-text("Turn on")'
+        'button:has-text("Post now"), button:has-text("Post anyway"), button:has-text("Confirm"), button:has-text("Turn on")'
       ).first();
       if ((await confirmModalBtn.count()) > 0 && await confirmModalBtn.isVisible().catch(() => false)) {
         WorkerLogger.info('TikTok Automation', `Clicking secondary post confirmation button: "${await confirmModalBtn.textContent()}"...`);
@@ -670,39 +695,16 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         break;
       }
 
-      // 3. Late confirmation modal check
-      const lateConfirmBtn = page.locator('button:has-text("Post anyway"), button:has-text("Post now"), button:has-text("Confirm"), button:has-text("Turn on")').first();
-      if (await lateConfirmBtn.isVisible().catch(() => false)) {
-        WorkerLogger.info('TikTok Automation', 'Late confirmation button visible, clicking it...');
+      // 3. Late confirmation modal check (e.g. content check prompt)
+      const lateConfirmBtn = page.locator('button:has-text("Post now"), button:has-text("Post anyway"), button:has-text("Confirm"), button:has-text("Turn on")').first();
+      if ((await lateConfirmBtn.count()) > 0 && await lateConfirmBtn.isVisible().catch(() => false)) {
+        WorkerLogger.info('TikTok Automation', `Late confirmation button visible ("${await lateConfirmBtn.textContent()}"), clicking it...`);
         await lateConfirmBtn.click({ force: true }).catch(() => {});
         await page.waitForTimeout(1000);
       }
 
       // 4. Dismiss any blocking modal overlays that may have appeared
       await dismissTikTokOverlays();
-
-      // 5. If post button is still on page, visible, and enabled (meaning prior click was swallowed or blocked), retry clicking it
-      const currentPostBtn = resolvePostButton();
-      if ((await currentPostBtn.count()) > 0 && await currentPostBtn.isVisible().catch(() => false)) {
-        const stillDisabled = await isPostButtonDisabled(currentPostBtn);
-        if (!stillDisabled) {
-          WorkerLogger.debug('TikTok Automation', 'Post button remains enabled after initial click, dispatching follow-up click...');
-          await currentPostBtn.click({ force: true }).catch(() => {});
-          await currentPostBtn.evaluate((el: any) => {
-            if (el) {
-              const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
-              if (win && typeof win.MouseEvent === 'function') {
-                ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
-                  el.dispatchEvent(new win.MouseEvent(evt, { bubbles: true, cancelable: true, view: win }));
-                });
-              }
-              if (typeof el.click === 'function') {
-                el.click();
-              }
-            }
-          }).catch(() => {});
-        }
-      }
 
       await page.waitForTimeout(2000);
     }
@@ -762,6 +764,7 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
   const page = await session.context.newPage();
   try {
     page.setDefaultTimeout(timeout);
+    await page.bringToFront().catch(() => {});
 
     WorkerLogger.info('Facebook Automation', 'Navigating to compose URL (https://www.facebook.com)...');
     await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded' });
@@ -859,6 +862,7 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
   const page = await session.context.newPage();
   try {
     page.setDefaultTimeout(timeout);
+    await page.bringToFront().catch(() => {});
 
     WorkerLogger.info('Instagram Automation', 'Navigating to compose URL (https://www.instagram.com)...');
     await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded' });

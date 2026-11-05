@@ -32,11 +32,21 @@ export function sanitizePlatform(platform: string): Platform {
 }
 
 export function getSessionsDir(customDir?: string): string {
-  const dir = customDir || path.resolve(process.cwd(), 'sessions');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  if (customDir) {
+    if (!fs.existsSync(customDir)) {
+      fs.mkdirSync(customDir, { recursive: true });
+    }
+    return customDir;
   }
-  return dir;
+  const defaultDir = fs.existsSync(path.resolve(process.cwd(), 'presshub-social-worker/sessions'))
+    ? path.resolve(process.cwd(), 'presshub-social-worker/sessions')
+    : (fs.existsSync(path.resolve(__dirname, '../../sessions'))
+        ? path.resolve(__dirname, '../../sessions')
+        : path.resolve(process.cwd(), 'sessions'));
+  if (!fs.existsSync(defaultDir)) {
+    fs.mkdirSync(defaultDir, { recursive: true });
+  }
+  return defaultDir;
 }
 
 export function getSessionPath(platform: string, sessionsDir?: string): string {
