@@ -844,6 +844,35 @@ $saved_copy = get_post_meta( $test_post_id, '_presshub_social_copy_twitter', tru
 assert_equals( [ 'twitter', 'instagram' ], $saved_plat, 'Metabox successfully persists selected platforms' );
 assert_equals( 'Custom tweet copy for launch', $saved_copy, 'Metabox successfully persists custom platform copy' );
 
+// 3. Saving an existing published post with 0 queue jobs auto-enqueues
+$test_pub_post_id = 302;
+$GLOBALS['wp_test_posts'][ $test_pub_post_id ] = new WP_Post( [
+    'ID'          => $test_pub_post_id,
+    'post_status' => 'publish',
+    'post_type'   => 'post',
+    'post_title'  => 'Published Article Title',
+] );
+$_POST['presshub_social_metabox_nonce'] = 'nonce_presshub_social_save_metabox';
+$_POST['presshub_social_platforms']     = [ 'twitter' ];
+$_POST['presshub_social_copy_twitter']  = 'Published tweet copy';
+unset( $_POST['presshub_social_requeue_on_save'] );
+
+PressHub_Social_Metabox::save_metabox( $test_pub_post_id, $GLOBALS['wp_test_posts'][ $test_pub_post_id ] );
+$jobs_after_save = PressHub_Social_Queue::get_jobs_for_post( $test_pub_post_id );
+assert_true( count( $jobs_after_save ) === 1, 'Saving published post with zero jobs auto-enqueues into queue' );
+
+// 4. Updating an existing published post that already has jobs does NOT re-enqueue duplicates by default
+PressHub_Social_Metabox::save_metabox( $test_pub_post_id, $GLOBALS['wp_test_posts'][ $test_pub_post_id ] );
+$jobs_after_second_save = PressHub_Social_Queue::get_jobs_for_post( $test_pub_post_id );
+assert_true( count( $jobs_after_second_save ) === 1, 'Routine edit of published post with existing jobs does not duplicate queue' );
+
+// 5. Updating an existing published post with presshub_social_requeue_on_save=1 explicitly re-enqueues
+$_POST['presshub_social_requeue_on_save'] = '1';
+PressHub_Social_Metabox::save_metabox( $test_pub_post_id, $GLOBALS['wp_test_posts'][ $test_pub_post_id ] );
+$jobs_after_requeue = PressHub_Social_Queue::get_jobs_for_post( $test_pub_post_id );
+assert_true( count( $jobs_after_requeue ) === 2, 'Explicit presshub_social_requeue_on_save re-enqueues new job' );
+unset( $_POST['presshub_social_requeue_on_save'] );
+
 // ----------------------------------------------------------------------
 // Test Suite 11: Logger & Secret Redaction
 // ----------------------------------------------------------------------

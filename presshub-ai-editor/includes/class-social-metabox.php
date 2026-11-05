@@ -80,6 +80,10 @@ class PressHub_Social_Metabox {
                         <span class="dashicons dashicons-share" style="vertical-align:middle;"></span>
                         <?php esc_html_e( 'Queue Social Posts Now', 'presshub-social-autopost' ); ?>
                     </button>
+                    <label style="display:inline-flex; align-items:center; gap:5px; margin-left:12px; font-weight:normal; font-size:13px; cursor:pointer;" title="<?php esc_attr_e( 'Check this box before updating the post to enqueue it into the social publishing queue.', 'presshub-social-autopost' ); ?>">
+                        <input type="checkbox" name="presshub_social_requeue_on_save" value="1" />
+                        <span><?php esc_html_e( 'Queue on Update', 'presshub-social-autopost' ); ?></span>
+                    </label>
                     <span class="spinner" id="presshub-social-global-spinner"></span>
                 </div>
             </div>
@@ -246,6 +250,25 @@ class PressHub_Social_Metabox {
                 } else {
                     delete_post_meta( $post_id, '_' . $field_name );
                 }
+            }
+        }
+
+        // Auto-enqueue or explicit re-queue upon saving a published post
+        $is_published = ( $post instanceof WP_Post && 'publish' === $post->post_status );
+        if ( ! $is_published && function_exists( 'get_post_status' ) ) {
+            $is_published = ( 'publish' === get_post_status( $post_id ) );
+        }
+
+        if ( $is_published ) {
+            $explicit_requeue = ! empty( $_POST['presshub_social_requeue_on_save'] );
+            $auto_publish     = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_auto_publish_enabled' )
+                ? PressHub_Social_Settings_Storage::get_auto_publish_enabled()
+                : true;
+            $existing_jobs    = PressHub_Social_Queue::get_jobs_for_post( $post_id );
+
+            // If explicitly requested OR if auto-publish is active and post currently has zero queue jobs:
+            if ( $explicit_requeue || ( $auto_publish && empty( $existing_jobs ) ) ) {
+                PressHub_Social_Dispatcher::enqueue_for_post( $post_id, $platforms );
             }
         }
     }
