@@ -197,7 +197,8 @@ class PressHub_Social_AI_Copywriter {
 
         $site_name = ! empty( $article_data['site_name'] ) ? $article_data['site_name'] : ( function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : '' );
         $url       = $article_data['url'] ?? '';
-        $max_chars = ( 'twitter' === $platform ) ? PressHub_Social_Settings_Storage::get_twitter_max_chars() : 280;
+        $max_chars        = ( 'twitter' === $platform ) ? PressHub_Social_Settings_Storage::get_twitter_max_chars() : 280;
+        $prompt_max_chars = ( 'twitter' === $platform ) ? max( 280, $max_chars ) : $max_chars;
 
         $replacements = [
             '{title}'     => $article_data['title'] ?? '',
@@ -205,7 +206,7 @@ class PressHub_Social_AI_Copywriter {
             '{content}'   => $article_data['content'] ?? '',
             '{url}'       => $url,
             '{site_name}' => $site_name,
-            '{max_chars}' => (string) $max_chars,
+            '{max_chars}' => (string) $prompt_max_chars,
             '{hashtags}'  => $article_data['hashtags'] ?? '',
         ];
 

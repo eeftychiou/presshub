@@ -362,12 +362,21 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         await page.waitForTimeout(300);
       }
 
-      // 3. If "Sure you want to cancel your upload?" modal popped up, click "No" to preserve upload!
-      const cancelModalNoBtn = page.locator('div:has-text("Sure you want to cancel") button:has-text("No")').first();
-      if ((await cancelModalNoBtn.count()) > 0 && await cancelModalNoBtn.isVisible().catch(() => false)) {
-        WorkerLogger.warn('TikTok Automation', 'Dismissing accidental "Sure you want to cancel your upload?" modal by clicking "No"...');
-        await cancelModalNoBtn.click({ force: true }).catch(() => {});
-        await page.waitForTimeout(300);
+      // 3. If "Are you sure that you want to exit?" or "Sure you want to cancel your upload?" modal popped up:
+      // In TikTok Studio, "Are you sure that you want to exit?" has [Exit] (destructive discard) and [Cancel] (stay/keep upload).
+      // We must click [Cancel] to stay on the upload page and dismiss the modal!
+      const exitModalCancelBtn = page.locator(
+        'div[role="dialog"]:has-text("want to exit") button:has-text("Cancel"), ' +
+        'div:has-text("Are you sure that you want to exit") button:has-text("Cancel"), ' +
+        '.TUXModal:has-text("want to exit") button:has-text("Cancel"), ' +
+        'div:has-text("Your progress and changes will not be saved") button:has-text("Cancel"), ' +
+        'div:has-text("Sure you want to cancel") button:has-text("No"), ' +
+        'div[role="dialog"]:has-text("cancel your upload") button:has-text("No")'
+      ).first();
+      if ((await exitModalCancelBtn.count()) > 0 && await exitModalCancelBtn.isVisible().catch(() => false)) {
+        WorkerLogger.warn('TikTok Automation', `Dismissing exit/cancel upload modal by clicking "${await exitModalCancelBtn.textContent()}"...`);
+        await exitModalCancelBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(400);
       }
 
       // 4. "Turn on automatic content checks?" modal (scoped specifically to content check dialogs, never generic Cancel!)
@@ -607,10 +616,37 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       }
 
       // 3. Late confirmation modal check
-      const lateConfirmBtn = page.locator('button:has-text("Post anyway"), button:has-text("Post now"), button:has-text("Confirm")').first();
+      const lateConfirmBtn = page.locator('button:has-text("Post anyway"), button:has-text("Post now"), button:has-text("Confirm"), button:has-text("Turn on")').first();
       if (await lateConfirmBtn.isVisible().catch(() => false)) {
         WorkerLogger.info('TikTok Automation', 'Late confirmation button visible, clicking it...');
-        await lateConfirmBtn.click().catch(() => {});
+        await lateConfirmBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(1000);
+      }
+
+      // 4. Dismiss any blocking modal overlays that may have appeared
+      await dismissTikTokOverlays();
+
+      // 5. If post button is still on page, visible, and enabled (meaning prior click was swallowed or blocked), retry clicking it
+      const currentPostBtn = resolvePostButton();
+      if ((await currentPostBtn.count()) > 0 && await currentPostBtn.isVisible().catch(() => false)) {
+        const stillDisabled = await isPostButtonDisabled(currentPostBtn);
+        if (!stillDisabled) {
+          WorkerLogger.debug('TikTok Automation', 'Post button remains enabled after initial click, dispatching follow-up click...');
+          await currentPostBtn.click({ force: true }).catch(() => {});
+          await currentPostBtn.evaluate((el: any) => {
+            if (el) {
+              const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+              if (win && typeof win.MouseEvent === 'function') {
+                ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
+                  el.dispatchEvent(new win.MouseEvent(evt, { bubbles: true, cancelable: true, view: win }));
+                });
+              }
+              if (typeof el.click === 'function') {
+                el.click();
+              }
+            }
+          }).catch(() => {});
+        }
       }
 
       await page.waitForTimeout(2000);

@@ -15,5 +15,5 @@ Platform Instructions for X/Twitter:
 - Call to action: Invite readers to explore the full story on {site_name}.
 - Link: Include the exact article URL: {url}
 - Hashtags: Include 2 to 3 highly relevant hashtags (e.g. #Cyprus #News).
-- Character Limit: The entire tweet (including URL, hashtags, and spaces) must fit naturally under {max_chars} characters.
+- Character Limit: The entire tweet (text, hashtags, and URL) must fit within {max_chars} characters. Note that on X/Twitter, any URL counts as exactly 23 characters regardless of its length. Write a strong Greek hook and summary (~180-220 characters) followed by the URL and hashtags.
 - Output ONLY the final tweet text. No meta-commentary, no quotation marks around the post.
