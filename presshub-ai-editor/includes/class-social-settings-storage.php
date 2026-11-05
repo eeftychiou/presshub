@@ -352,6 +352,12 @@ class PressHub_Social_Settings_Storage {
             update_option( 'presshub_social_worker_secret', $generated );
         }
 
+        // Auto-heal Twitter max characters if corrupted or set below Twitter standard 280.
+        $twitter_max = (int) get_option( 'presshub_social_twitter_max_chars', 280 );
+        if ( $twitter_max < 280 ) {
+            update_option( 'presshub_social_twitter_max_chars', 280 );
+        }
+
         self::maybe_repair_v263_options();
         self::maybe_upgrade_prompts_v269();
     }
@@ -688,12 +694,18 @@ class PressHub_Social_Settings_Storage {
 
     public static function get_twitter_max_chars(): int {
         $val = (int) get_option( 'presshub_social_twitter_max_chars', 280 );
-        return max( 100, min( 4000, $val ) );
+        if ( $val < 280 ) {
+            return 280;
+        }
+        return min( 4000, $val );
     }
 
     public static function sanitize_twitter_max_chars( $value ): int {
         $val = (int) $value;
-        return max( 100, min( 4000, $val ) );
+        if ( $val < 280 ) {
+            return 280;
+        }
+        return min( 4000, $val );
     }
 
     public static function get_instagram_card_width(): int {

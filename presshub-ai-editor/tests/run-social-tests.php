@@ -948,15 +948,15 @@ update_option( 'presshub_ai_configured_providers', [
         'enabled'       => true,
     ],
 ] );
-update_option( 'presshub_social_twitter_max_chars', 120 );
+update_option( 'presshub_social_twitter_max_chars', 280 );
 PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $config ) {
-    return str_repeat( 'Breaking news update ', 10 ) . 'https://presshub.ai/story #News';
+    return str_repeat( 'Breaking news update ', 25 ) . 'https://presshub.ai/story #News';
 } );
 $ai_tweet = PressHub_Social_AI_Copywriter::generate_from_data( [
     'title' => 'Big Story',
     'url'   => 'https://presshub.ai/story',
 ], 'twitter' );
-assert_true( is_string( $ai_tweet ) && mb_strlen( $ai_tweet ) <= 120, 'AI copywriter truncates tweet to configured max_chars' );
+assert_true( is_string( $ai_tweet ) && PressHub_Social_AI_Copywriter::get_twitter_effective_length( $ai_tweet ) <= 280, 'AI copywriter truncates tweet to configured max_chars' );
 assert_true( is_string( $ai_tweet ) && str_contains( $ai_tweet, 'https://presshub.ai/story' ), 'AI copywriter preserves article URL during truncation' );
 
 // Twitter t.co character counting & Greek URL truncation test

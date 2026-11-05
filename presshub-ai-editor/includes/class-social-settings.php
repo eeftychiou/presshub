@@ -501,7 +501,7 @@ class PressHub_Social_Settings {
             'presshub_social_media_specs_sec',
             [
                 'option' => 'presshub_social_twitter_max_chars',
-                'min'    => 100,
+                'min'    => 280,
                 'max'    => 4000,
                 'desc'   => __( 'Standard limit is 280; set up to 4000 if your account has X Premium.', 'presshub-social-autopost' ),
             ]
