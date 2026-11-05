@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.7.2
+ * Version: 2.8.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -120,9 +120,23 @@ if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 
-define( 'PRESSHUB_AI_VERSION', '2.7.2' );
+define( 'PRESSHUB_AI_VERSION', '2.8.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
+
+// PressHub Social Subsystem Constants (Unified)
+if ( ! defined( 'PRESSHUB_SOCIAL_VERSION' ) ) {
+    define( 'PRESSHUB_SOCIAL_VERSION', PRESSHUB_AI_VERSION );
+}
+if ( ! defined( 'PRESSHUB_SOCIAL_FILE' ) ) {
+    define( 'PRESSHUB_SOCIAL_FILE', __FILE__ );
+}
+if ( ! defined( 'PRESSHUB_SOCIAL_PATH' ) ) {
+    define( 'PRESSHUB_SOCIAL_PATH', PRESSHUB_AI_DIR );
+}
+if ( ! defined( 'PRESSHUB_SOCIAL_URL' ) ) {
+    define( 'PRESSHUB_SOCIAL_URL', PRESSHUB_AI_URL );
+}
 
 // Include classes
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-defaults.php';
@@ -159,6 +173,43 @@ require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
+
+// Social Auto-Post Subsystem Classes
+require_once PRESSHUB_AI_DIR . 'includes/class-social-logger.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-prompt-loader.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-settings-storage.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-activator.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-queue.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-meta-api-client.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-worker-client.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-ai-copywriter.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-dispatcher.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-metabox.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-queue-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-settings-render.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-settings.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-ajax-handlers.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-rest-controller.php';
+
+// Register Social REST API routes
+add_action( 'rest_api_init', [ 'PressHub_Social_REST_Controller', 'register_routes' ] );
+
+// Register Social custom cron schedule interval
+add_filter( 'cron_schedules', function( array $schedules ): array {
+    if ( ! isset( $schedules['presshub_social_interval'] ) ) {
+        $schedules['presshub_social_interval'] = [
+            'interval' => 60,
+            'display'  => did_action( 'init' ) ? __( 'Every Minute (PressHub Social)', 'presshub-ai-editor' ) : 'Every Minute (PressHub Social)',
+        ];
+    }
+    return $schedules;
+} );
+
+// Hook Social cron action to dispatcher
+add_action( 'presshub_social_cron_dispatch', [ 'PressHub_Social_Dispatcher', 'process_due_queue' ] );
+
+// Hook post status transition for social auto-posting (priority 20 runs after editorial workflow gate)
+add_action( 'transition_post_status', [ 'PressHub_Social_Dispatcher', 'handle_post_status_transition' ], 20, 3 );
 
 /**
  * Auto-update hardening: force the canonical plugin folder name during
@@ -202,6 +253,9 @@ function presshub_ai_activate() {
     if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
         wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
     }
+    if ( class_exists( 'PressHub_Social_Activator' ) ) {
+        PressHub_Social_Activator::activate();
+    }
 }
 register_activation_hook( __FILE__, 'presshub_ai_activate' );
 
@@ -219,6 +273,9 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_token_logs' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_audit_logs' );
+    if ( class_exists( 'PressHub_Social_Activator' ) ) {
+        PressHub_Social_Activator::deactivate();
+    }
 }
 register_deactivation_hook( __FILE__, 'presshub_ai_deactivate' );
 
@@ -286,8 +343,90 @@ function presshub_ai_init() {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
         }
     }
+
+    // Initialize Social Auto-Post Subsystem
+    if ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'seed_defaults' ) ) {
+        PressHub_Social_Settings_Storage::seed_defaults();
+    }
+    if ( class_exists( 'PressHub_Social_Settings' ) && method_exists( 'PressHub_Social_Settings', 'init' ) ) {
+        PressHub_Social_Settings::init();
+    }
+    if ( class_exists( 'PressHub_Social_Metabox' ) && method_exists( 'PressHub_Social_Metabox', 'init' ) ) {
+        PressHub_Social_Metabox::init();
+    }
+    if ( class_exists( 'PressHub_Social_Queue_Admin' ) && method_exists( 'PressHub_Social_Queue_Admin', 'init' ) ) {
+        PressHub_Social_Queue_Admin::init();
+    }
+    if ( class_exists( 'PressHub_Social_Ajax_Handlers' ) && method_exists( 'PressHub_Social_Ajax_Handlers', 'init' ) ) {
+        PressHub_Social_Ajax_Handlers::init();
+    }
+    if ( class_exists( 'PressHub_Social_Activator' ) ) {
+        PressHub_Social_Activator::activate();
+    }
 }
 add_action( 'plugins_loaded', 'presshub_ai_init' );
+
+/**
+ * Enqueue Social Auto-Post admin scripts and stylesheets.
+ */
+add_action( 'admin_enqueue_scripts', function( string $hook_suffix ) {
+    $is_post_edit     = in_array( $hook_suffix, [ 'post.php', 'post-new.php' ], true );
+    $is_queue_page    = str_contains( $hook_suffix, 'presshub-social-queue' );
+    $is_settings_page = str_contains( $hook_suffix, 'presshub_social' ) || str_contains( $hook_suffix, 'presshub-social' );
+
+    if ( ! $is_post_edit && ! $is_queue_page && ! $is_settings_page ) {
+        return;
+    }
+
+    // Stylesheet
+    wp_enqueue_style(
+        'presshub-admin-social',
+        PRESSHUB_SOCIAL_URL . 'assets/css/admin-social.css',
+        [],
+        PRESSHUB_SOCIAL_VERSION
+    );
+
+    $js_vars = [
+        'ajaxurl' => admin_url( 'admin-ajax.php' ),
+        'nonce'   => wp_create_nonce( 'presshub_social_nonce' ),
+    ];
+
+    // Post edit screen metabox script
+    if ( $is_post_edit ) {
+        wp_enqueue_script(
+            'presshub-social-metabox',
+            PRESSHUB_SOCIAL_URL . 'assets/js/admin-social-metabox.js',
+            [ 'jquery' ],
+            PRESSHUB_SOCIAL_VERSION,
+            true
+        );
+        wp_localize_script( 'presshub-social-metabox', 'presshubSocial', $js_vars );
+    }
+
+    // Queue dashboard script
+    if ( $is_queue_page ) {
+        wp_enqueue_script(
+            'presshub-social-queue',
+            PRESSHUB_SOCIAL_URL . 'assets/js/admin-social-queue.js',
+            [ 'jquery' ],
+            PRESSHUB_SOCIAL_VERSION,
+            true
+        );
+        wp_localize_script( 'presshub-social-queue', 'presshubSocial', $js_vars );
+    }
+
+    // Settings screen script
+    if ( $is_settings_page ) {
+        wp_enqueue_script(
+            'presshub-social-settings',
+            PRESSHUB_SOCIAL_URL . 'assets/js/admin-social-settings.js',
+            [ 'jquery' ],
+            PRESSHUB_SOCIAL_VERSION,
+            true
+        );
+        wp_localize_script( 'presshub-social-settings', 'presshubSocial', $js_vars );
+    }
+} );
 
 add_action( 'init', function() {
     register_post_type( 'presshub_research', [

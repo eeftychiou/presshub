@@ -1,0 +1,7 @@
+{title}
+
+{excerpt}
+
+More at {site_name} ({url})
+
+{hashtags}

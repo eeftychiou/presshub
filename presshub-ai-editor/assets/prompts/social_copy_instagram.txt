@@ -1,0 +1,17 @@
+Write an engaging Instagram caption for the following article:
+
+Article Title: {title}
+Site: {site_name}
+Article Summary: {excerpt}
+Article Content:
+{content}
+
+Article URL: {url}
+
+Platform Instructions for Instagram:
+- Open with a bold, scroll-stopping headline or hook.
+- Use visual storytelling formatting with clean line breaks and emojis where appropriate to make it easy to skim.
+- Summarize the key insights and why this news matters to readers.
+- Include a clear call-to-action: "Link in bio / read more at {site_name} ({url})".
+- Add 5 to 8 relevant, high-traffic hashtags at the very bottom, separated by a blank line.
+- Output ONLY the final Instagram caption. No commentary, no quotation marks around the post.

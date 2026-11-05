@@ -1,0 +1,19 @@
+Write a punchy, engaging X/Twitter post in Greek for the following article / podcast:
+
+Article Title: {title}
+Site: {site_name}
+Article Summary: {excerpt}
+Article Content:
+{content}
+
+Article URL: {url}
+
+Platform Instructions for X/Twitter:
+- Language: Greek (matching the article).
+- Opening Hook: Start with a compelling question or high-curiosity insight that highlights the most critical revelation.
+- Summary: Follow with 1-2 concise, impactful sentences capturing the core news development from the content.
+- Call to action: Invite readers to explore the full story on {site_name}.
+- Link: Include the exact article URL: {url}
+- Hashtags: Include 2 to 3 highly relevant hashtags (e.g. #Cyprus #News).
+- Character Limit: The entire tweet (including URL, hashtags, and spaces) must fit naturally under {max_chars} characters.
+- Output ONLY the final tweet text. No meta-commentary, no quotation marks around the post.
