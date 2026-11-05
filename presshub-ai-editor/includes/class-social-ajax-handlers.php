@@ -53,7 +53,7 @@ class PressHub_Social_Ajax_Handlers {
         }
 
         if ( ! empty( $platform ) ) {
-            $copy = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
+            $copy = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform, true );
             if ( is_wp_error( $copy ) ) {
                 wp_send_json_error( [ 'message' => $copy->get_error_message() ], 400 );
             }
@@ -66,7 +66,7 @@ class PressHub_Social_Ajax_Handlers {
                 'copy'     => $copy,
             ] );
         } else {
-            $copies = PressHub_Social_AI_Copywriter::generate_all_for_post( $post_id );
+            $copies = PressHub_Social_AI_Copywriter::generate_all_for_post( $post_id, [], true );
             if ( is_wp_error( $copies ) ) {
                 wp_send_json_error( [ 'message' => $copies->get_error_message() ], 400 );
             }
@@ -335,7 +335,7 @@ class PressHub_Social_Ajax_Handlers {
             wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-social-autopost' ) ], 500 );
         }
 
-        $new_copy = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
+        $new_copy = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform, true );
         if ( is_wp_error( $new_copy ) ) {
             wp_send_json_error( [ 'message' => $new_copy->get_error_message() ], 400 );
         }

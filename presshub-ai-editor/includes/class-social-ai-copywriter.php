@@ -52,15 +52,16 @@ class PressHub_Social_AI_Copywriter {
      *
      * @param int    $post_id WordPress post ID.
      * @param string $platform Target platform (twitter, facebook, instagram, tiktok).
+     * @param bool   $force_ai Whether to force AI dynamic copywriting even if copy_mode is set to template.
      * @return string|WP_Error Generated social text or WP_Error on failure.
      */
-    public static function generate_for_post( int $post_id, string $platform ) {
+    public static function generate_for_post( int $post_id, string $platform, bool $force_ai = false ) {
         $article_data = self::build_article_data( $post_id );
         if ( is_wp_error( $article_data ) ) {
             return $article_data;
         }
 
-        return self::generate_from_data( $article_data, $platform );
+        return self::generate_from_data( $article_data, $platform, $force_ai );
     }
 
     /**
@@ -68,9 +69,10 @@ class PressHub_Social_AI_Copywriter {
      *
      * @param int   $post_id WordPress post ID.
      * @param array $platforms Optional list of platforms; defaults to enabled platforms.
+     * @param bool  $force_ai Whether to force AI dynamic copywriting.
      * @return array|WP_Error Associative array of platform => copy string, or WP_Error on failure.
      */
-    public static function generate_all_for_post( int $post_id, array $platforms = [] ) {
+    public static function generate_all_for_post( int $post_id, array $platforms = [], bool $force_ai = false ) {
         $article_data = self::build_article_data( $post_id );
         if ( is_wp_error( $article_data ) ) {
             return $article_data;
@@ -91,7 +93,7 @@ class PressHub_Social_AI_Copywriter {
             if ( ! in_array( $platform, PressHub_Social_Settings_Storage::PLATFORMS, true ) ) {
                 continue;
             }
-            $res = self::generate_from_data( $article_data, $platform );
+            $res = self::generate_from_data( $article_data, $platform, $force_ai );
             if ( is_wp_error( $res ) ) {
                 $errors[ $platform ] = $res->get_error_message();
             } else {
@@ -112,9 +114,10 @@ class PressHub_Social_AI_Copywriter {
      *
      * @param array  $article_data Article metadata array (title, excerpt, content, url, site_name, hashtags).
      * @param string $platform Target platform (twitter, facebook, instagram, tiktok).
+     * @param bool   $force_ai Whether to force AI dynamic copywriting even if copy_mode is set to template.
      * @return string|WP_Error Generated social copy or WP_Error on failure.
      */
-    public static function generate_from_data( array $article_data, string $platform ) {
+    public static function generate_from_data( array $article_data, string $platform, bool $force_ai = false ) {
         $platform = sanitize_key( $platform );
 
         if ( ! in_array( $platform, PressHub_Social_Settings_Storage::PLATFORMS, true ) ) {
@@ -126,9 +129,9 @@ class PressHub_Social_AI_Copywriter {
         $copy_mode = PressHub_Social_Settings_Storage::get_copy_mode();
 
         // ------------------------------------------------------------------
-        // Mode 1: Static Template Substitution
+        // Mode 1: Static Template Substitution (bypassed if $force_ai is true)
         // ------------------------------------------------------------------
-        if ( 'template' === $copy_mode ) {
+        if ( 'template' === $copy_mode && ! $force_ai ) {
             $template = PressHub_Social_Settings_Storage::get_platform_template( $platform );
 
             // Zero-Silent-Fallback: Fail loudly if template is empty.
@@ -292,9 +295,15 @@ class PressHub_Social_AI_Copywriter {
 
         if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
             if ( '' !== $module_provider_id ) {
-                $provider_record = PressHub_AI_Provider_Store::get( $module_provider_id );
-                if ( null !== $provider_record ) {
+                $candidate = PressHub_AI_Provider_Store::get( $module_provider_id );
+                if ( null !== $candidate && ! empty( $candidate['enabled'] ) && ( ! empty( $candidate['api_key'] ) || 'ollama_local' === ( $candidate['type'] ?? '' ) ) ) {
+                    $provider_record = $candidate;
                     $provider_source = 'module_override:presshub_social_ai_provider';
+                } else {
+                    PressHub_Social_Logger::warning(
+                        sprintf( 'Module configured provider "%s" is disabled or missing an API key. Falling back to active store provider.', $module_provider_id ),
+                        [ 'module_provider' => $module_provider_id ]
+                    );
                 }
             }
 
@@ -529,13 +538,21 @@ class PressHub_Social_AI_Copywriter {
         $content = preg_replace( '/\s+/', ' ', $content );
         $content = mb_substr( trim( $content ), 0, 3000, 'UTF-8' );
 
-        // Podcast script ingestion:
-        // When content is empty or if post is a podcast (_presshub_briefing_type === 'podcast'),
-        // look up dialogue script from postmeta (_presshub_podcast_script) or snapshot files.
-        $briefing_type = function_exists( 'get_post_meta' ) ? (string) get_post_meta( $post_id, '_presshub_briefing_type', true ) : '';
-        $is_podcast    = ( 'podcast' === $briefing_type );
+        // Podcast script / dialogue ingestion:
+        // When content is short (< 300 chars), or post is marked as podcast/briefing,
+        // or post has podcast script meta attached, look up dialogue script from postmeta
+        // (_presshub_podcast_script) or snapshot files to provide full editorial context.
+        $briefing_type     = function_exists( 'get_post_meta' ) ? (string) get_post_meta( $post_id, '_presshub_briefing_type', true ) : '';
+        $is_podcast        = ( 'podcast' === $briefing_type );
+        $has_podcast_meta  = false;
+        if ( function_exists( 'get_post_meta' ) ) {
+            $m = (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
+            if ( '' !== trim( $m ) ) {
+                $has_podcast_meta = true;
+            }
+        }
 
-        if ( '' === trim( $content ) || $is_podcast ) {
+        if ( mb_strlen( trim( $content ), 'UTF-8' ) < 300 || $is_podcast || 'briefing' === $briefing_type || $has_podcast_meta ) {
             // 1. Check canonical postmeta _presshub_podcast_script
             $podcast_script = function_exists( 'get_post_meta' ) ? (string) get_post_meta( $post_id, '_presshub_podcast_script', true ) : '';
 
@@ -612,10 +629,10 @@ class PressHub_Social_AI_Copywriter {
             if ( '' !== trim( $podcast_script ) ) {
                 $cleaned = self::clean_podcast_script( $podcast_script );
                 if ( '' !== $cleaned ) {
-                    if ( '' === trim( $content ) || $is_podcast ) {
-                        $content = mb_substr( $cleaned, 0, 3000, 'UTF-8' );
+                    if ( mb_strlen( $cleaned, 'UTF-8' ) > mb_strlen( $content, 'UTF-8' ) || $is_podcast || '' === trim( $content ) ) {
+                        $content = mb_substr( $cleaned, 0, 4000, 'UTF-8' );
                     }
-                    if ( '' === trim( $excerpt ) || false !== strpos( $excerpt, 'TOPIC' ) || false !== strpos( $excerpt, 'SPEAKER_' ) ) {
+                    if ( '' === trim( $excerpt ) || mb_strlen( $excerpt, 'UTF-8' ) < 40 || false !== strpos( $excerpt, 'TOPIC' ) || false !== strpos( $excerpt, 'SPEAKER_' ) ) {
                         $excerpt = function_exists( 'wp_trim_words' ) ? wp_trim_words( $cleaned, 50, '...' ) : mb_substr( $cleaned, 0, 250, 'UTF-8' );
                     }
                 }
@@ -685,65 +702,86 @@ class PressHub_Social_AI_Copywriter {
     }
 
     /**
-     * Truncate text strictly to max_chars for Twitter/X while ensuring the article URL
-     * is fully preserved without truncation.
+     * Calculate effective Twitter character length according to Twitter/X standards.
+     * All URLs (http:// or https://) are converted to 23-character t.co shortlinks.
      *
      * @param string $text Raw tweet text.
-     * @param int    $max_chars Maximum allowed characters.
+     * @return int Effective character length.
+     */
+    public static function get_twitter_effective_length( string $text ): int {
+        // Twitter counts any URL as exactly 23 characters (t.co shortlink).
+        $without_urls = preg_replace( '#https?://[^\s]+#iu', str_repeat( 'X', 23 ), $text );
+        return mb_strlen( $without_urls, 'UTF-8' );
+    }
+
+    /**
+     * Truncate text strictly to max_chars for Twitter/X while ensuring the article URL
+     * is fully preserved without truncation, correctly counting URLs as 23 characters (t.co).
+     *
+     * @param string $text Raw tweet text.
+     * @param int    $max_chars Maximum allowed characters (typically 280).
      * @param string $url Article URL to preserve.
      * @return string Truncated tweet text.
      */
     public static function truncate_twitter_text( string $text, int $max_chars, string $url = '' ): string {
-        $text   = trim( $text );
-        $length = mb_strlen( $text, 'UTF-8' );
+        $text = trim( $text );
+        if ( '' === $text ) {
+            return '';
+        }
 
-        if ( $length <= $max_chars ) {
+        // If effective Twitter length fits within max_chars, return text as-is.
+        if ( self::get_twitter_effective_length( $text ) <= $max_chars ) {
             return $text;
         }
 
-        // If no URL is provided or URL is not found in text, simple ellipsis truncation.
-        if ( '' === $url || false === mb_strpos( $text, $url, 0, 'UTF-8' ) ) {
-            $clamp_target = max( 10, $max_chars - 3 );
-            $truncated    = mb_substr( $text, 0, $clamp_target, 'UTF-8' );
-            $last_space   = mb_strrpos( $truncated, ' ', 0, 'UTF-8' );
+        $has_url = ( '' !== $url && false !== mb_strpos( $text, $url, 0, 'UTF-8' ) );
+
+        // Case 1: URL is present in the text: isolate the URL and truncate editorial prefix text.
+        if ( $has_url ) {
+            $parts  = explode( $url, $text, 2 );
+            $prefix = trim( $parts[0] );
+            $suffix = isset( $parts[1] ) ? trim( $parts[1] ) : '';
+
+            // Calculate effective length of suffix (e.g. hashtags).
+            $suffix_eff = '' !== $suffix ? self::get_twitter_effective_length( $suffix ) : 0;
+
+            // Twitter standard: URL counts as 23 chars. Add room for spaces and ellipsis.
+            $reserved_chars = 23 + 4 + ( $suffix_eff > 0 ? ( $suffix_eff + 1 ) : 0 );
+            $available_prefix = max( 20, $max_chars - $reserved_chars );
+
+            $truncated_prefix = mb_substr( $prefix, 0, $available_prefix, 'UTF-8' );
+            $last_space       = mb_strrpos( $truncated_prefix, ' ', 0, 'UTF-8' );
+            if ( false !== $last_space && $last_space > 20 ) {
+                $truncated_prefix = mb_substr( $truncated_prefix, 0, $last_space, 'UTF-8' );
+            }
+
+            $result = rtrim( $truncated_prefix ) . '... ' . $url;
+            if ( '' !== $suffix ) {
+                $result .= ' ' . $suffix;
+            }
+
+            return trim( $result );
+        }
+
+        // Case 2: URL is provided but not in text: append URL to truncated text.
+        if ( '' !== $url ) {
+            // URL takes 23 chars + 4 for "... " and space.
+            $avail_text = max( 20, $max_chars - 23 - 4 );
+            $truncated  = mb_substr( $text, 0, $avail_text, 'UTF-8' );
+            $last_space = mb_strrpos( $truncated, ' ', 0, 'UTF-8' );
             if ( false !== $last_space && $last_space > 20 ) {
                 $truncated = mb_substr( $truncated, 0, $last_space, 'UTF-8' );
             }
-            return rtrim( $truncated ) . '...';
+            return rtrim( $truncated ) . '... ' . $url;
         }
 
-        // URL is present in the text: isolate the URL and truncate prefix text.
-        $url_len = mb_strlen( $url, 'UTF-8' );
-        // Allow room for "... \n" and the URL.
-        $available_prefix = $max_chars - $url_len - 5;
-
-        if ( $available_prefix <= 20 ) {
-            // URL takes up almost all characters; return URL alone.
-            return $url;
+        // Case 3: No URL provided: simple ellipsis truncation.
+        $clamp_target = max( 10, $max_chars - 3 );
+        $truncated    = mb_substr( $text, 0, $clamp_target, 'UTF-8' );
+        $last_space   = mb_strrpos( $truncated, ' ', 0, 'UTF-8' );
+        if ( false !== $last_space && $last_space > 20 ) {
+            $truncated = mb_substr( $truncated, 0, $last_space, 'UTF-8' );
         }
-
-        $parts        = explode( $url, $text, 2 );
-        $prefix       = trim( $parts[0] );
-        $suffix       = isset( $parts[1] ) ? trim( $parts[1] ) : '';
-
-        // If suffix has hashtags, see if suffix fits.
-        $suffix_len = mb_strlen( $suffix, 'UTF-8' );
-        if ( $suffix_len > 0 && ( $available_prefix - $suffix_len ) > 20 ) {
-            $available_prefix -= ( $suffix_len + 1 );
-            $truncated_prefix = mb_substr( $prefix, 0, $available_prefix, 'UTF-8' );
-            $last_space       = mb_strrpos( $truncated_prefix, ' ', 0, 'UTF-8' );
-            if ( false !== $last_space && $last_space > 15 ) {
-                $truncated_prefix = mb_substr( $truncated_prefix, 0, $last_space, 'UTF-8' );
-            }
-            return rtrim( $truncated_prefix ) . '... ' . $url . ( '' !== $suffix ? ' ' . $suffix : '' );
-        }
-
-        $truncated_prefix = mb_substr( $prefix, 0, $available_prefix, 'UTF-8' );
-        $last_space       = mb_strrpos( $truncated_prefix, ' ', 0, 'UTF-8' );
-        if ( false !== $last_space && $last_space > 15 ) {
-            $truncated_prefix = mb_substr( $truncated_prefix, 0, $last_space, 'UTF-8' );
-        }
-
-        return rtrim( $truncated_prefix ) . '... ' . $url;
+        return rtrim( $truncated ) . '...';
     }
 }

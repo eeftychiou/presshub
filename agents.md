@@ -970,3 +970,18 @@ gh pr view <id>                   # View PR details
 gh pr checks <id>                 # Check status of PR CI checks
 gh pr merge <id> --squash         # Merge PR into main branch
 ```
+
+---
+
+## 🐦 Social Copy & Twitter/X Length Standards
+
+1. **Twitter URL Character Standard (`t.co`)**:
+   - Twitter/X automatically shortens all URLs to a `t.co` wrapper that counts as exactly **23 characters**, regardless of how long the raw or percent-encoded URL string is (e.g. 200+ char Greek permalinks).
+   - In `PressHub_Social_AI_Copywriter`:
+     - Use `get_twitter_effective_length( $text )` to calculate length against Twitter's limit.
+     - When truncating in `truncate_twitter_text( $text, $max_chars, $url )`, never subtract raw `$url_len` directly from `$max_chars`. Subtract `23` for the URL to avoid chopping Greek editorial copy down to 30–50 characters.
+2. **Explicit AI Generation Gating (`$force_ai`)**:
+   - The queue table **"Regen AI"** button and metabox generator must always pass `$force_ai = true` to `PressHub_Social_AI_Copywriter::generate_for_post()` so that user-initiated AI actions bypass static template substitution even if the site-wide default `copy_mode` is set to `'template'`.
+3. **Dialogue & Podcast Transcript Ingestion**:
+   - For podcast/briefing posts or whenever `post_content` is short (< 300 characters, e.g. player shortcodes), `build_article_data()` must look up dialogue transcripts in `_presshub_podcast_script` or snapshot files (`podcast-script.txt`), stripping speaker tags and topic markers to provide full editorial context into `{content}` and `{excerpt}`.
+

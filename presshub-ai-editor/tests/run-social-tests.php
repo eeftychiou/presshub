@@ -958,6 +958,33 @@ $ai_tweet = PressHub_Social_AI_Copywriter::generate_from_data( [
 ], 'twitter' );
 assert_true( is_string( $ai_tweet ) && mb_strlen( $ai_tweet ) <= 120, 'AI copywriter truncates tweet to configured max_chars' );
 assert_true( is_string( $ai_tweet ) && str_contains( $ai_tweet, 'https://presshub.ai/story' ), 'AI copywriter preserves article URL during truncation' );
+
+// Twitter t.co character counting & Greek URL truncation test
+$greek_url = 'https://presshub.cy/%ce%b1%cf%80%ce%ac%ce%bd%cf%84%ce%b7%cf%83%ce%b7-%cf%83%cf%84%ce%b7-%cf%81%ce%b7%cf%84%ce%bf%cf%81%ce%b9%ce%ba%ce%ae-%cf%84%ce%bf%cf%85-%cf%86%cf%8c%ce%b2%ce%bf%cf%85-%ce%b7-%ce%ba%cf%8d%cf%80%cf%81/';
+$tweet_with_greek_url = 'Πώς μπορεί η Κύπρος να μετατραπεί σε «Ελβετία της Αν. Μεσογείου»; Αντί για ρητορική φόβου, η περιφερειακή συνεργασία σε ενέργεια και υποδομές ανοίγει νέες προοπτικές. Διαβάστε την ανάλυση: ' . $greek_url . ' #Cyprus #Analysis';
+assert_true( mb_strlen( $greek_url, 'UTF-8' ) > 200, 'Greek URL is over 200 characters long' );
+$eff_len = PressHub_Social_AI_Copywriter::get_twitter_effective_length( $tweet_with_greek_url );
+assert_true( $eff_len < 280, 'Twitter effective length counts URL as 23 chars (under 280)' );
+
+PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $cfg ) use ( $tweet_with_greek_url ) {
+    return $tweet_with_greek_url;
+} );
+update_option( 'presshub_social_twitter_max_chars', 280 );
+$preserved_tweet = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Cyprus Story', 'url' => $greek_url ], 'twitter' );
+assert_true( str_contains( $preserved_tweet, 'περιφερειακή συνεργασία' ), 'Greek tweet text is preserved without premature URL length truncation' );
+
+// force_ai parameter test
+update_option( 'presshub_social_copy_mode', 'template' );
+PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $cfg ) {
+    return 'Forced AI Generated Tweet Content';
+} );
+$tpl_res = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Cyprus Story', 'url' => 'https://example.com' ], 'twitter', false );
+assert_true( ! str_contains( $tpl_res, 'Forced AI' ), 'Default template mode returns static template when force_ai is false' );
+$forced_res = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Cyprus Story', 'url' => 'https://example.com' ], 'twitter', true );
+assert_true( str_contains( $forced_res, 'Forced AI' ), 'force_ai=true invokes AI copywriter even when copy_mode is template' );
+
+// Reset copy mode back to ai
+update_option( 'presshub_social_copy_mode', 'ai' );
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
 
 // 4. Podcast Script Ingestion & Cleanup Tests

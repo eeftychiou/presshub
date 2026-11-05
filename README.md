@@ -206,7 +206,7 @@ The PHP test suite runs in isolation without external database dependencies:
 cd presshub-ai-editor
 php tests/run-all-tests.php
 
-# PressHub Social Auto-Post PHP unit tests (19 suites, 147 assertions):
+# PressHub Social Auto-Post PHP unit tests (19 suites, 156 assertions):
 cd ../presshub-social-autopost
 php tests/run-social-tests.php
 
@@ -215,7 +215,7 @@ cd ../presshub-social-worker
 npm test
 npm run build
 ```
-*Executes all **82 AI Editor test suites**, **19 Social Auto-Post test suites (147 tests)**, and **5 Social Worker suites (69 tests)** with 100% pass rate.*
+*Executes all **83 AI Editor test suites**, **19 Social Auto-Post test suites (156 tests)**, and **5 Social Worker suites (69 tests)** with 100% pass rate.*
 
 ### 3. Running TypeScript & MCP Workflow Tests
 The workflow package integrates Model Context Protocol (MCP) servers and editorial automation:

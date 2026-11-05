@@ -310,7 +310,8 @@ class PressHub_Social_Settings_Storage {
      * @return void
      */
     public static function seed_defaults(): void {
-        if ( false === get_option( 'presshub_social_prompt_system', false ) ) {
+        $sys_prompt = get_option( 'presshub_social_prompt_system', false );
+        if ( false === $sys_prompt || '' === trim( (string) $sys_prompt ) ) {
             try {
                 $content = PressHub_Social_Prompt_Loader::load( 'social_system.txt' );
                 update_option( 'presshub_social_prompt_system', $content );
@@ -321,7 +322,8 @@ class PressHub_Social_Settings_Storage {
 
         foreach ( self::PLATFORMS as $platform ) {
             $prompt_opt = 'presshub_social_prompt_' . $platform;
-            if ( false === get_option( $prompt_opt, false ) ) {
+            $prompt_val = get_option( $prompt_opt, false );
+            if ( false === $prompt_val || '' === trim( (string) $prompt_val ) ) {
                 try {
                     $content = PressHub_Social_Prompt_Loader::load( 'social_copy_' . $platform . '.txt' );
                     update_option( $prompt_opt, $content );
@@ -331,7 +333,8 @@ class PressHub_Social_Settings_Storage {
             }
 
             $template_opt = 'presshub_social_template_' . $platform;
-            if ( false === get_option( $template_opt, false ) ) {
+            $template_val = get_option( $template_opt, false );
+            if ( false === $template_val || '' === trim( (string) $template_val ) ) {
                 try {
                     $content = PressHub_Social_Prompt_Loader::load( 'template_' . $platform . '.txt' );
                     update_option( $template_opt, $content );
@@ -880,37 +883,59 @@ class PressHub_Social_Settings_Storage {
      * @return string System prompt or empty string if not configured.
      */
     public static function get_system_prompt(): string {
-        $val = get_option( 'presshub_social_prompt_system', '' );
+        $val = get_option( 'presshub_social_prompt_system', false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_system.txt' );
+                update_option( 'presshub_social_prompt_system', $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
         return is_string( $val ) ? trim( $val ) : '';
     }
 
     /**
      * Get platform prompt template from options.
      *
-     * In accordance with Zero-Silent-Fallback, returns the exact trimmed option value.
-     * Does NOT silently substitute an inline fallback string.
+     * Seeds from asset if option does not exist yet; preserves empty string if cleared.
      *
      * @param string $platform Platform slug.
      * @return string Prompt template or empty string if not configured.
      */
     public static function get_platform_prompt( string $platform ): string {
         $platform = sanitize_key( $platform );
-        $val      = get_option( 'presshub_social_prompt_' . $platform, '' );
+        $val      = get_option( 'presshub_social_prompt_' . $platform, false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_copy_' . $platform . '.txt' );
+                update_option( 'presshub_social_prompt_' . $platform, $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
         return is_string( $val ) ? trim( $val ) : '';
     }
 
     /**
      * Get platform fallback template from options.
      *
-     * In accordance with Zero-Silent-Fallback, returns the exact trimmed option value.
-     * Does NOT silently substitute an inline fallback string.
+     * Seeds from asset if option does not exist yet; preserves empty string if cleared.
      *
      * @param string $platform Platform slug.
      * @return string Template or empty string if not configured.
      */
     public static function get_platform_template( string $platform ): string {
         $platform = sanitize_key( $platform );
-        $val      = get_option( 'presshub_social_template_' . $platform, '' );
+        $val      = get_option( 'presshub_social_template_' . $platform, false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'template_' . $platform . '.txt' );
+                update_option( 'presshub_social_template_' . $platform, $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
         return is_string( $val ) ? trim( $val ) : '';
     }
 

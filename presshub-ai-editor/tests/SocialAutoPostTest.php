@@ -18,5 +18,5 @@ if ( 0 !== $exit_code || false === strpos( $output_str, 'ALL TESTS PASSED SUCCES
     exit( 1 );
 }
 
-echo "OK (151 social unit tests passed)\n";
+echo "OK (156 social unit tests passed)\n";
 exit( 0 );
