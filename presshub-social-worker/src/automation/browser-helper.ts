@@ -20,6 +20,7 @@ export {
 };
 
 export const STEALTH_ARGS = [
+  '--remote-allow-origins=*',
   '--disable-blink-features=AutomationControlled',
   '--no-first-run',
   '--no-default-browser-check',

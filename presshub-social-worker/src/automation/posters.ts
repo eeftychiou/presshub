@@ -352,8 +352,6 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         }
         // Joyride onboarding tour portals and full-viewport overlays
         doc.querySelectorAll('#react-joyride-portal, .react-joyride__overlay, .react-joyride__beacon').forEach((el: any) => el.remove());
-        // Floating UI portals or modal backdrops that intercept clicks
-        doc.querySelectorAll('.TUXModal-overlay').forEach((el: any) => el.remove());
       }).catch(() => {});
 
       // 2. Cookie consent banner fallback buttons
@@ -363,14 +361,24 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         await cookieBtn.click({ force: true }).catch(() => {});
         await page.waitForTimeout(300);
       }
-      // 3. Automatic content checks dialog ("Turn on automatic content checks?")
-      const checkBtn = page.locator('button:has-text("Turn on"), button:has-text("Cancel")').first();
-      if ((await checkBtn.count()) > 0 && await checkBtn.isVisible().catch(() => false)) {
-        WorkerLogger.debug('TikTok Automation', 'Dismissing automatic content checks dialog...');
-        await checkBtn.click({ force: true }).catch(() => {});
+
+      // 3. If "Sure you want to cancel your upload?" modal popped up, click "No" to preserve upload!
+      const cancelModalNoBtn = page.locator('div:has-text("Sure you want to cancel") button:has-text("No")').first();
+      if ((await cancelModalNoBtn.count()) > 0 && await cancelModalNoBtn.isVisible().catch(() => false)) {
+        WorkerLogger.warn('TikTok Automation', 'Dismissing accidental "Sure you want to cancel your upload?" modal by clicking "No"...');
+        await cancelModalNoBtn.click({ force: true }).catch(() => {});
         await page.waitForTimeout(300);
       }
-      // 4. "Got it" onboarding tooltip / modal
+
+      // 4. "Turn on automatic content checks?" modal (scoped specifically to content check dialogs, never generic Cancel!)
+      const contentCheckBtn = page.locator('div[role="dialog"]:has-text("content check") button:has-text("Turn on"), div.TUXModal:has-text("content check") button:has-text("Turn on")').first();
+      if ((await contentCheckBtn.count()) > 0 && await contentCheckBtn.isVisible().catch(() => false)) {
+        WorkerLogger.debug('TikTok Automation', 'Dismissing automatic content checks dialog...');
+        await contentCheckBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(300);
+      }
+
+      // 5. "Got it" onboarding tooltip / modal (e.g. "New editing features added")
       const gotItBtn = page.locator('button:has-text("Got it")').first();
       if ((await gotItBtn.count()) > 0 && await gotItBtn.isVisible().catch(() => false)) {
         WorkerLogger.debug('TikTok Automation', 'Dismissing "Got it" dialog...');
@@ -410,7 +418,12 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     ).first();
     if ((await captionEditor.count()) > 0) {
       await captionEditor.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
-      await captionEditor.click();
+      try {
+        await captionEditor.click({ timeout: 5000 });
+      } catch {
+        WorkerLogger.debug('TikTok Automation', 'Caption editor click intercepted, clicking with force: true...');
+        await captionEditor.click({ force: true }).catch(() => {});
+      }
       await page.keyboard.press('Control+A').catch(() => {});
       await captionEditor.fill(options.copy);
       await page.waitForTimeout(1000);
@@ -516,29 +529,36 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     // 4. Multi-event DOM click dispatch to ensure React/Semi UI event handlers trigger
     await targetPostBtn.evaluate((el: any) => {
-      if (el && typeof el.click === 'function') {
+      if (el) {
         el.focus();
         const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
-        if (win && typeof win.MouseEvent === 'function') {
-          el.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
-          el.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
-          el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+        const targets = [el, el.firstElementChild || el];
+        for (const t of targets) {
+          if (win && typeof win.MouseEvent === 'function') {
+            t.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+          }
         }
-        el.click();
+        if (typeof el.click === 'function') {
+          el.click();
+        }
       }
     }).catch(() => {});
 
     await page.waitForTimeout(3000);
 
-    // Check for and dismiss/confirm any secondary confirmation dialogs (e.g. "Post anyway", "Post now", "Turn on")
+    // Check for and dismiss/confirm any secondary confirmation dialogs (e.g. "Post anyway", "Post now", "Turn on", "Confirm")
     for (let c = 0; c < 5; c++) {
       await dismissTikTokOverlays();
       const confirmModalBtn = page.locator(
-        'button:has-text("Post anyway"), button:has-text("Post now"), button:has-text("Confirm")'
+        'button:has-text("Post anyway"), button:has-text("Post now"), button:has-text("Confirm"), button:has-text("Turn on")'
       ).first();
       if ((await confirmModalBtn.count()) > 0 && await confirmModalBtn.isVisible().catch(() => false)) {
         WorkerLogger.info('TikTok Automation', `Clicking secondary post confirmation button: "${await confirmModalBtn.textContent()}"...`);
-        await confirmModalBtn.click().catch(() => {});
+        await confirmModalBtn.click({ force: true }).catch(() => {});
         await page.waitForTimeout(2000);
       } else {
         break;
