@@ -13,14 +13,16 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
   let dummyImagePath: string;
 
   beforeAll(async () => {
+    browser = await chromium.launch({ headless: true });
+    context = await browser.newContext();
+  });
+
+  beforeEach(() => {
     fs.mkdirSync(TMP_MEDIA_DIR, { recursive: true });
     dummyVideoPath = path.join(TMP_MEDIA_DIR, 'dummy.mp4');
     dummyImagePath = path.join(TMP_MEDIA_DIR, 'dummy.jpg');
     fs.writeFileSync(dummyVideoPath, 'dummy video binary content');
     fs.writeFileSync(dummyImagePath, 'dummy image binary content');
-
-    browser = await chromium.launch({ headless: true });
-    context = await browser.newContext();
   });
 
   afterAll(async () => {

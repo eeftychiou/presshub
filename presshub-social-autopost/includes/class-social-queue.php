@@ -229,10 +229,12 @@ class PressHub_Social_Queue {
     /**
      * Retrieve due pending jobs ready for dispatch.
      *
-     * @param int $limit Maximum number of jobs to fetch.
+     * @param int         $limit     Maximum number of jobs to fetch.
+     * @param string|null $engine    Optional engine filter (e.g. 'automation' or 'api').
+     * @param array       $platforms Optional list of platforms to filter by.
      * @return array<int, array>
      */
-    public static function get_due_pending_jobs( int $limit = 0 ): array {
+    public static function get_due_pending_jobs( int $limit = 0, ?string $engine = null, array $platforms = [] ): array {
         if ( $limit <= 0 ) {
             $limit = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_batch_size' )
                 ? PressHub_Social_Settings_Storage::get_batch_size()
@@ -241,23 +243,54 @@ class PressHub_Social_Queue {
 
         $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
 
+        $clean_platforms = [];
+        foreach ( $platforms as $p ) {
+            $pk = sanitize_key( (string) $p );
+            if ( '' !== $pk ) {
+                $clean_platforms[] = $pk;
+            }
+        }
+
         if ( self::is_db_ready() ) {
             global $wpdb;
-            $table = PressHub_Social_Activator::get_table_name();
-            $sql   = $wpdb->prepare(
-                "SELECT * FROM {$table} WHERE status = 'pending' AND scheduled_at <= %s ORDER BY scheduled_at ASC, id ASC LIMIT %d",
-                $now,
-                $limit
+            $table  = PressHub_Social_Activator::get_table_name();
+            $where  = "status = 'pending' AND scheduled_at <= %s";
+            $params = [ $now ];
+
+            if ( ! empty( $engine ) ) {
+                $where    .= " AND engine = %s";
+                $params[] = sanitize_key( $engine );
+            }
+
+            if ( ! empty( $clean_platforms ) ) {
+                $placeholders = implode( ', ', array_fill( 0, count( $clean_platforms ), '%s' ) );
+                $where       .= " AND platform IN ({$placeholders})";
+                foreach ( $clean_platforms as $cp ) {
+                    $params[] = $cp;
+                }
+            }
+
+            $params[] = $limit;
+            $sql      = $wpdb->prepare(
+                "SELECT * FROM {$table} WHERE {$where} ORDER BY scheduled_at ASC, id ASC LIMIT %d",
+                ...$params
             );
-            $rows  = $wpdb->get_results( $sql, ARRAY_A );
+            $rows     = $wpdb->get_results( $sql, ARRAY_A );
             return is_array( $rows ) ? $rows : [];
         }
 
         $due = [];
         foreach ( self::$memory_store as $job ) {
-            if ( 'pending' === $job['status'] && $job['scheduled_at'] <= $now ) {
-                $due[] = $job;
+            if ( 'pending' !== $job['status'] || $job['scheduled_at'] > $now ) {
+                continue;
             }
+            if ( ! empty( $engine ) && ( $job['engine'] ?? 'api' ) !== $engine ) {
+                continue;
+            }
+            if ( ! empty( $clean_platforms ) && ! in_array( $job['platform'] ?? '', $clean_platforms, true ) ) {
+                continue;
+            }
+            $due[] = $job;
         }
 
         usort( $due, function( $a, $b ) {

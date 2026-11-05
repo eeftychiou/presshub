@@ -665,6 +665,25 @@ $due = PressHub_Social_Queue::get_due_pending_jobs( 10 );
 assert_equals( 2, count( $due ), 'Only past/due jobs are returned by get_due_pending_jobs' );
 assert_equals( $id_past2, (int) $due[0]['id'], 'Due jobs are sorted chronologically ASC' );
 
+// Test engine and platform filtering
+$id_past_auto = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 4,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => 'Twitter auto',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 50 ),
+] );
+
+$due_auto = PressHub_Social_Queue::get_due_pending_jobs( 10, 'automation' );
+assert_equals( 1, count( $due_auto ), 'Filtering by engine=automation returns only automation jobs' );
+assert_equals( $id_past_auto, (int) $due_auto[0]['id'], 'Matched automation job ID' );
+
+$due_tiktok = PressHub_Social_Queue::get_due_pending_jobs( 10, 'automation', [ 'tiktok' ] );
+assert_equals( 0, count( $due_tiktok ), 'Filtering by active platforms excludes non-matching platforms' );
+
+$due_twitter = PressHub_Social_Queue::get_due_pending_jobs( 10, 'automation', [ 'twitter' ] );
+assert_equals( 1, count( $due_twitter ), 'Filtering by matching active platform returns Twitter job' );
+
 // ----------------------------------------------------------------------
 // Test Suite 5: State Transitions, Backoff & Permanent Failure Alert
 // ----------------------------------------------------------------------

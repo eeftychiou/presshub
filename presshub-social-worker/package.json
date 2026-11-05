@@ -1,6 +1,6 @@
 {
   "name": "presshub-social-worker",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "PressHub Social Media Worker service for image card rendering, vertical video generation, and Playwright browser automation",
   "main": "dist/index.js",
   "scripts": {

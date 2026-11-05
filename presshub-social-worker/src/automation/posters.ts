@@ -137,12 +137,29 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     }
 
     // Dismiss Twitter cookie banner if visible
-    const cookieAccept = page.locator('button:has-text("Accept all cookies"), button:has-text("Refuse non-essential cookies")').first();
-    if ((await cookieAccept.count()) > 0 && await cookieAccept.isVisible().catch(() => false)) {
-      WorkerLogger.debug('Twitter Automation', 'Dismissing cookie banner...');
-      await cookieAccept.click().catch(() => {});
-      await page.waitForTimeout(500);
-    }
+    const dismissTwitterCookies = async () => {
+      await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        if (!doc) return;
+        doc.querySelectorAll('div[data-testid="BottomBar"]').forEach((el: any) => {
+          if (el.textContent && /cookie/i.test(el.textContent)) {
+            el.querySelectorAll('button').forEach((b: any) => {
+              if (/refuse|accept|decline/i.test(b.textContent || '')) {
+                if (typeof b.click === 'function') b.click();
+              }
+            });
+          }
+        });
+      }).catch(() => {});
+      const cookieAccept = page.locator('button:has-text("Accept all cookies"), button:has-text("Refuse non-essential cookies")').first();
+      if ((await cookieAccept.count()) > 0 && await cookieAccept.isVisible().catch(() => false)) {
+        WorkerLogger.debug('Twitter Automation', 'Dismissing cookie banner...');
+        await cookieAccept.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(500);
+      }
+    };
+
+    await dismissTwitterCookies();
 
     WorkerLogger.debug('Twitter Automation', 'Finding tweet text area...');
     // Scoped to modal dialog when /compose/post is loaded, or fallback to timeline box without strict mode violation
@@ -176,18 +193,16 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     WorkerLogger.debug('Twitter Automation', 'Finding Post button...');
     const modalButton = page.locator('div[role="dialog"] [data-testid="tweetButton"], div[role="dialog"] [data-testid="tweetButtonInline"]').first();
-    const postButton = (await modalButton.count()) > 0
+    const isModalBtn = (await modalButton.count()) > 0;
+    const postButton = isModalBtn
       ? modalButton
-      : page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]').first();
+      : page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"], button:has-text("Post")').first();
 
     await postButton.waitFor({ state: 'visible', timeout: 20000 });
 
     // Wait if button is disabled (e.g. video/image still processing)
     for (let i = 0; i < 30; i++) {
-      const cb = page.locator('button:has-text("Accept all cookies"), button:has-text("Refuse non-essential cookies")').first();
-      if ((await cb.count()) > 0 && await cb.isVisible().catch(() => false)) {
-        await cb.click().catch(() => {});
-      }
+      await dismissTwitterCookies();
 
       const ariaDisabled = await postButton.getAttribute('aria-disabled');
       const disabled = await postButton.getAttribute('disabled');
@@ -198,13 +213,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       await page.waitForTimeout(1000);
     }
 
-    // Dismiss any remaining cookie banners before clicking post
-    const cookieBtn = page.locator('button:has-text("Refuse non-essential cookies"), button:has-text("Accept all cookies")').first();
-    if ((await cookieBtn.count()) > 0) {
-      WorkerLogger.debug('Twitter Automation', 'Dismissing cookie banner before posting...');
-      await cookieBtn.click({ force: true }).catch(() => {});
-      await page.waitForTimeout(500);
-    }
+    await dismissTwitterCookies();
 
     WorkerLogger.info('Twitter Automation', 'Clicking Post button...');
     await postButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
@@ -328,26 +337,45 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     // Dismiss any popups, cookie banners or onboarding modals that TikTok overlays on the upload view
     const dismissTikTokOverlays = async () => {
-      // 1. Cookie consent banner
+      // 1. Purge shadow-DOM cookie banners, joyride onboarding overlays, and modal veils directly in page context
+      await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        if (!doc) return;
+        // Shadow-DOM or custom element cookie banners
+        const cb = doc.querySelector('tiktok-cookie-banner');
+        if (cb) {
+          try {
+            const btn = cb.shadowRoot?.querySelector('button');
+            if (btn && typeof btn.click === 'function') btn.click();
+          } catch {}
+          cb.remove();
+        }
+        // Joyride onboarding tour portals and full-viewport overlays
+        doc.querySelectorAll('#react-joyride-portal, .react-joyride__overlay, .react-joyride__beacon').forEach((el: any) => el.remove());
+        // Floating UI portals or modal backdrops that intercept clicks
+        doc.querySelectorAll('.TUXModal-overlay').forEach((el: any) => el.remove());
+      }).catch(() => {});
+
+      // 2. Cookie consent banner fallback buttons
       const cookieBtn = page.locator('button:has-text("Allow all"), button:has-text("Decline optional cookies"), button:has-text("Accept all")').first();
       if ((await cookieBtn.count()) > 0 && await cookieBtn.isVisible().catch(() => false)) {
         WorkerLogger.debug('TikTok Automation', 'Dismissing cookie banner...');
-        await cookieBtn.click().catch(() => {});
-        await page.waitForTimeout(500);
+        await cookieBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(300);
       }
-      // 2. Automatic content checks dialog ("Turn on automatic content checks?")
+      // 3. Automatic content checks dialog ("Turn on automatic content checks?")
       const checkBtn = page.locator('button:has-text("Turn on"), button:has-text("Cancel")').first();
       if ((await checkBtn.count()) > 0 && await checkBtn.isVisible().catch(() => false)) {
         WorkerLogger.debug('TikTok Automation', 'Dismissing automatic content checks dialog...');
-        await checkBtn.click().catch(() => {});
-        await page.waitForTimeout(500);
+        await checkBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(300);
       }
-      // 3. "Got it" onboarding tooltip / modal
+      // 4. "Got it" onboarding tooltip / modal
       const gotItBtn = page.locator('button:has-text("Got it")').first();
       if ((await gotItBtn.count()) > 0 && await gotItBtn.isVisible().catch(() => false)) {
         WorkerLogger.debug('TikTok Automation', 'Dismissing "Got it" dialog...');
-        await gotItBtn.click().catch(() => {});
-        await page.waitForTimeout(500);
+        await gotItBtn.click({ force: true }).catch(() => {});
+        await page.waitForTimeout(300);
       }
     };
 
@@ -400,6 +428,8 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         if (disabledAttr !== null) return true;
         const ariaDisabled = await btn.getAttribute('aria-disabled');
         if (ariaDisabled === 'true') return true;
+        const dataDisabled = await btn.getAttribute('data-disabled');
+        if (dataDisabled === 'true') return true;
         const classNames = (await btn.getAttribute('class')) || '';
         if (/disabled|is-disabled|btn-disabled/i.test(classNames)) return true;
         const isEnabled = await btn.isEnabled().catch(() => false);
@@ -413,16 +443,18 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     // Resilient Post button resolver: prioritizes the action button next to Discard or with exact "Post" text
     const resolvePostButton = () => {
-      // 1. Footer button located beside the Discard button in TikTok Studio
-      const footerBtn = page.locator('div:has(> button:has-text("Discard")) button:has-text("Post"), .button-group button:has-text("Post")').first();
-      // 2. Class/data-attribute selectors
+      // 1. TikTok Studio button with data-e2e="post_video_button"
+      const e2eBtn = page.locator('button[data-e2e="post_video_button"]').first();
+      // 2. Footer button located beside the Discard button in TikTok Studio
+      const footerBtn = page.locator('.button-group button:has-text("Post"), div:has(> button:has-text("Discard")) button:has-text("Post")').first();
+      // 3. Class/data-attribute selectors
       const classBtn = page.locator('button.btn-post, button[data-e2e="post_video_drop"]').first();
-      // 3. Exact button name "Post" (prevents matching "When to post", radio options, or tooltips)
+      // 4. Exact button name "Post" (prevents matching "When to post", radio options, or tooltips)
       const exactBtn = page.getByRole('button', { name: /^Post$/i }).last();
-      // 4. Last button on page containing "Post" (footer button is near page bottom)
+      // 5. Last button on page containing "Post" (footer button is near page bottom)
       const lastPostBtn = page.locator('button:has-text("Post")').last();
 
-      return footerBtn.or(classBtn).or(exactBtn).or(lastPostBtn).first();
+      return e2eBtn.or(footerBtn).or(classBtn).or(exactBtn).or(lastPostBtn).first();
     };
 
     const postButton = resolvePostButton();
@@ -442,8 +474,8 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       const isUploadedIndicator = await page.locator('text=/Uploaded/i, text=/Upload complete/i').first().isVisible().catch(() => false);
       const isUploading = await page.locator('text=/Uploading/i, text=/Transcoding/i, .progress-bar, [role="progressbar"]').first().isVisible().catch(() => false);
 
-      // Require upload completion indicator (or at least 20s if already disabled=false and not uploading)
-      if (!disabled && !isUploading && (isUploadedIndicator || i >= 20)) {
+      // Require upload completion indicator (or at least 3s if already disabled=false and not uploading)
+      if (!disabled && !isUploading && (isUploadedIndicator || i >= 3)) {
         WorkerLogger.info('TikTok Automation', `Video ready for posting after ${i + 1}s (uploaded: ${isUploadedIndicator}, button enabled: ${!disabled}).`);
         uploadReady = true;
         break;
@@ -458,6 +490,9 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     if (!uploadReady) {
       WorkerLogger.warn('TikTok Automation', 'Upload ready state not explicitly confirmed after 120s, attempting post click anyway...');
     }
+
+    // Dismiss any overlays right before clicking
+    await dismissTikTokOverlays();
 
     const targetPostBtn = resolvePostButton();
     WorkerLogger.info('TikTok Automation', 'Clicking Post button...');
@@ -511,21 +546,17 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     }
 
     WorkerLogger.info('TikTok Automation', 'Waiting for video submission confirmation (up to 60s)...');
-    const successLocators = page.locator([
-      'text="Your video has been uploaded"',
-      'text="Your video is being processed"',
-      'text="Manage your posts"',
-      'button:has-text("Manage your posts")',
-      'text="Upload another video"',
-      'button:has-text("Upload another video")',
-      'text="View profile"',
-      'button:has-text("View profile")',
-      '.upload-success-container'
-    ].join(', ')).first();
-
     let isConfirmed = false;
     let finalUrl = page.url();
     const waitStartTime = Date.now();
+
+    const successKeywords = [
+      'Your video has been uploaded',
+      'Your video is being processed',
+      'Manage your posts',
+      'Upload another video',
+      'View profile'
+    ];
 
     while (Date.now() - waitStartTime < 60000) {
       finalUrl = page.url();
@@ -537,9 +568,20 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
         break;
       }
 
-      // 2. Success dialog visible
-      if (await successLocators.isVisible().catch(() => false)) {
-        WorkerLogger.info('TikTok Automation', 'Success dialog ("Your video has been uploaded" / "Manage your posts") confirmed.');
+      // 2. Success dialog text visible
+      for (const kw of successKeywords) {
+        const kwLoc = page.getByText(kw, { exact: false }).first();
+        if ((await kwLoc.count()) > 0 && await kwLoc.isVisible().catch(() => false)) {
+          WorkerLogger.info('TikTok Automation', `Success indicator confirmed: "${kw}"`);
+          isConfirmed = true;
+          break;
+        }
+      }
+      if (isConfirmed) break;
+
+      const successBox = page.locator('.upload-success-container').first();
+      if ((await successBox.count()) > 0 && await successBox.isVisible().catch(() => false)) {
+        WorkerLogger.info('TikTok Automation', 'Success container confirmed.');
         isConfirmed = true;
         break;
       }

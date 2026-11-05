@@ -242,12 +242,18 @@ class PressHub_Social_REST_Controller {
             ? (int) $limit_param
             : PressHub_Social_Settings_Storage::get_batch_size();
 
-        $due_jobs = PressHub_Social_Queue::get_due_pending_jobs( 20 );
-        $automation_jobs = array_values( array_filter( $due_jobs, function( $j ) {
-            return 'automation' === ( $j['engine'] ?? '' );
-        } ) );
+        $sessions = self::get_param( $request, 'sessions' );
+        $active_platforms = [];
+        if ( is_array( $sessions ) ) {
+            foreach ( $sessions as $p => $active ) {
+                if ( ! empty( $active ) ) {
+                    $active_platforms[] = sanitize_key( (string) $p );
+                }
+            }
+        }
 
-        $to_claim     = array_slice( $automation_jobs, 0, max( 1, $limit ) );
+        $due_jobs = PressHub_Social_Queue::get_due_pending_jobs( max( 1, $limit ), 'automation', $active_platforms );
+        $to_claim = $due_jobs;
         $claimed_jobs = [];
 
         $site_name = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'PressHub';
