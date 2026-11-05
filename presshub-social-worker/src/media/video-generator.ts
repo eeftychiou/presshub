@@ -15,10 +15,10 @@ if (ffmpegInstaller && ffmpegInstaller.path) {
 }
 
 /**
- * TikTok web creator center maximum upload duration in seconds.
- * Clamped safely to 590s (~9m 50s) to guarantee FFmpeg container & audio packet rounding never exceeds 600.00s.
+ * TikTok web creator center maximum upload duration in seconds (up to 60 minutes).
+ * Allows full long-form podcast playback on TikTok Studio web without truncation.
  */
-export const TIKTOK_MAX_DURATION = 590;
+export const TIKTOK_MAX_DURATION = 3600;
 
 export interface GenerateVideoOptions {
   title?: string;

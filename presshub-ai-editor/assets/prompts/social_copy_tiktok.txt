@@ -11,6 +11,6 @@ Article URL: {url}
 Platform Instructions for TikTok:
 - Write a high-curiosity opening hook tailored for short-form vertical video viewers.
 - Follow with a concise, fast-paced 1-2 sentence summary of the revelation or breaking development.
-- Include a call-to-action to check out the full article on {site_name}.
+- Include the exact article URL ({url}) in the caption text with a clear call-to-action directing viewers to read or listen to the full story at {url}.
 - Add 3 to 5 trending and topic-specific hashtags (e.g. #news #breaking).
 - Output ONLY the final TikTok caption text. No commentary, no quotation marks around the post.

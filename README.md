@@ -6,7 +6,7 @@ Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for 
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-83%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
-[![Social Autopost Tests](https://img.shields.io/badge/Social%20Tests-166%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
+[![Social Autopost Tests](https://img.shields.io/badge/Social%20Tests-171%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Worker Tests](https://img.shields.io/badge/Worker%20Tests-69%20passed%20%7C%20100%25-brightgreen.svg)](presshub-social-worker/tests/)
 [![Jest Workflow Tests](https://img.shields.io/badge/Jest%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-workflow/tests/)
 [![CI](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml/badge.svg)](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml)
@@ -206,8 +206,7 @@ The PHP test suite runs in isolation without external database dependencies:
 cd presshub-ai-editor
 php tests/run-all-tests.php
 
-# PressHub Social Auto-Post PHP unit tests (19 suites, 156 assertions):
-cd ../presshub-social-autopost
+# PressHub Social Auto-Post PHP unit tests (19 suites, 171 assertions):
 php tests/run-social-tests.php
 
 # PressHub Social Worker TypeScript build & Jest tests (5 suites, 69 tests):

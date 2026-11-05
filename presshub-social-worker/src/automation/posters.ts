@@ -582,10 +582,10 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       throw waitErr;
     }
 
-    // Wait up to 180 seconds for video upload and server-side processing to complete
-    WorkerLogger.info('TikTok Automation', 'Waiting for video upload and processing to complete (up to 180s)...');
+    // Wait up to 300 seconds for video upload and server-side processing to complete
+    WorkerLogger.info('TikTok Automation', 'Waiting for video upload and processing to complete (up to 300s)...');
     let uploadReady = false;
-    for (let i = 0; i < 180; i++) {
+    for (let i = 0; i < 300; i++) {
       await dismissTikTokOverlays();
 
       const currentPostBtn = resolvePostButton();
