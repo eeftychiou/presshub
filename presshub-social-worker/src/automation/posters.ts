@@ -219,25 +219,35 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     await postButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
     await postButton.focus().catch(() => {});
     await postButton.hover().catch(() => {});
+    let clicked = false;
     try {
       await postButton.click({ timeout: 5000 });
+      clicked = true;
     } catch {
       WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted by layer, clicking Post with force: true...');
-      await postButton.click({ force: true });
-    }
-    // Native DOM dispatch ensures framework handlers fire even under complex overlay styling
-    await postButton.evaluate((el: any) => {
-      if (el && typeof el.click === 'function') {
-        el.focus();
-        const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
-        if (win && typeof win.MouseEvent === 'function') {
-          el.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
-          el.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
-          el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
-        }
-        el.click();
+      try {
+        await postButton.click({ force: true, timeout: 3000 });
+        clicked = true;
+      } catch (err: any) {
+        WorkerLogger.warn('Twitter Automation', `Playwright click failed: ${err?.message || err}`);
       }
-    }).catch(() => {});
+    }
+    // Only dispatch fallback native DOM events if Playwright click did not succeed
+    if (!clicked) {
+      WorkerLogger.debug('Twitter Automation', 'Dispatching fallback DOM click...');
+      await postButton.evaluate((el: any) => {
+        if (el && typeof el.click === 'function') {
+          el.focus();
+          const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+          if (win && typeof win.MouseEvent === 'function') {
+            el.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+            el.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+            el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+          }
+          el.click();
+        }
+      }).catch(() => {});
+    }
 
     WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
     // Wait for the modal dialog to disappear or notification toast to appear

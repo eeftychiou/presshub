@@ -141,7 +141,11 @@ class PressHub_Social_AI_Copywriter {
                 return new WP_Error( 'missing_social_template', $msg );
             }
 
-            $site_name = ! empty( $article_data['site_name'] ) ? $article_data['site_name'] : ( function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : '' );
+            $site_name = ! empty( $article_data['site_name'] ) ? $article_data['site_name'] : ( function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'PressHub' );
+            $site_name = preg_replace( '/\.(?:cy|com|org|net|ai|io|gr)$/iu', '', $site_name );
+            if ( '' === trim( $site_name ) ) {
+                $site_name = 'PressHub';
+            }
             $url       = $article_data['url'] ?? '';
 
             $replacements = [
@@ -157,6 +161,12 @@ class PressHub_Social_AI_Copywriter {
             $rendered = trim( $rendered );
 
             if ( 'twitter' === $platform ) {
+                $rendered = preg_replace_callback( '#(?:https?://)?(?:www\.)?presshub\.cy/?\b#iu', function( $matches ) use ( $url ) {
+                    if ( '' !== $url && false !== strpos( $url, $matches[0] ) ) {
+                        return $matches[0];
+                    }
+                    return 'PressHub';
+                }, $rendered );
                 $max_chars = PressHub_Social_Settings_Storage::get_twitter_max_chars();
                 $rendered  = self::truncate_twitter_text( $rendered, $max_chars, $url );
             }
@@ -195,7 +205,11 @@ class PressHub_Social_AI_Copywriter {
             return $resolved_config;
         }
 
-        $site_name = ! empty( $article_data['site_name'] ) ? $article_data['site_name'] : ( function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : '' );
+        $site_name = ! empty( $article_data['site_name'] ) ? $article_data['site_name'] : ( function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'PressHub' );
+        $site_name = preg_replace( '/\.(?:cy|com|org|net|ai|io|gr)$/iu', '', $site_name );
+        if ( '' === trim( $site_name ) ) {
+            $site_name = 'PressHub';
+        }
         $url       = $article_data['url'] ?? '';
         $max_chars        = ( 'twitter' === $platform ) ? PressHub_Social_Settings_Storage::get_twitter_max_chars() : 280;
         $prompt_max_chars = ( 'twitter' === $platform ) ? max( 280, $max_chars ) : $max_chars;
@@ -273,8 +287,28 @@ class PressHub_Social_AI_Copywriter {
             $copy = trim( mb_substr( $copy, 1, -1, 'UTF-8' ) );
         }
 
-        // For Twitter, enforce character cap cleanly while preserving article URL.
+        // For Twitter, enforce single URL rule and character cap cleanly while preserving article URL.
         if ( 'twitter' === $platform ) {
+            // Replace any standalone domain mentions like presshub.cy or PressHub.Cy outside of the article URL with plain "PressHub"
+            // to prevent X/Twitter from auto-linking the homepage and suppressing the article's featured image card.
+            $copy = preg_replace_callback( '#(?:https?://)?(?:www\.)?presshub\.cy/?\b#iu', function( $matches ) use ( $url ) {
+                if ( '' !== $url && false !== strpos( $url, $matches[0] ) ) {
+                    return $matches[0];
+                }
+                return 'PressHub';
+            }, $copy );
+
+            // If there are other URLs besides the designated article $url, ensure only $url remains as an active link.
+            if ( '' !== $url ) {
+                $copy = preg_replace_callback( '#https?://[^\s]+#iu', function( $matches ) use ( $url ) {
+                    if ( rtrim( $matches[0], '/' ) === rtrim( $url, '/' ) ) {
+                        return $url;
+                    }
+                    return '';
+                }, $copy );
+                $copy = preg_replace( '/[ \t]+/', ' ', $copy );
+            }
+
             $copy = self::truncate_twitter_text( $copy, $max_chars, $url );
         }
 
@@ -642,6 +676,10 @@ class PressHub_Social_AI_Copywriter {
 
         $url       = function_exists( 'get_permalink' ) ? ( get_permalink( $post_id ) ?: '' ) : '';
         $site_name = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'PressHub';
+        $site_name = preg_replace( '/\.(?:cy|com|org|net|ai|io|gr)$/iu', '', $site_name );
+        if ( '' === trim( $site_name ) ) {
+            $site_name = 'PressHub';
+        }
         $hashtags  = self::build_hashtags_for_post( $post_id );
 
         return [

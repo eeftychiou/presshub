@@ -360,6 +360,35 @@ class PressHub_Social_Settings_Storage {
 
         self::maybe_repair_v263_options();
         self::maybe_upgrade_prompts_v269();
+        self::maybe_upgrade_prompts_v284();
+    }
+
+    /**
+     * One-time idempotent upgrade for v2.8.4: upgrades default Twitter prompt
+     * to enforce plain "PressHub" brand and Single Link Rule to prevent
+     * domain auto-linking from breaking Twitter Card featured image previews.
+     *
+     * @return void
+     */
+    public static function maybe_upgrade_prompts_v284(): void {
+        if ( '1' === (string) get_option( 'presshub_social_upgraded_prompts_v284', '' ) ) {
+            return;
+        }
+
+        $twitter_prompt = (string) get_option( 'presshub_social_prompt_twitter', '' );
+        if ( '' === trim( $twitter_prompt ) ||
+             false !== strpos( $twitter_prompt, 'explore the full story on {site_name}' ) ||
+             false === strpos( $twitter_prompt, 'Single Link Rule' ) ) {
+            try {
+                $new_twitter = PressHub_Social_Prompt_Loader::load( 'social_copy_twitter.txt' );
+                update_option( 'presshub_social_prompt_twitter', $new_twitter );
+                PressHub_Social_Logger::info( 'Upgraded Twitter prompt to v2.8.4 single-link editorial prompt.' );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to upgrade Twitter prompt for v2.8.4: ' . $e->getMessage() );
+            }
+        }
+
+        update_option( 'presshub_social_upgraded_prompts_v284', '1' );
     }
 
     /**

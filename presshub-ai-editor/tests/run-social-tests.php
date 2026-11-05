@@ -1090,6 +1090,35 @@ assert_true(
     'build_article_data falls back to Harvester/Producer snapshot file when postmeta is empty'
 );
 
+// 8. Site Name Brand Sanitization (.cy domain stripped)
+$GLOBALS['test_bloginfo_name'] = 'PressHub.Cy';
+$brand_article_data = PressHub_Social_AI_Copywriter::build_article_data( $snapshot_post_id );
+assert_equals( 'PressHub', $brand_article_data['site_name'], 'build_article_data strips .Cy domain extension from site_name' );
+
+// 9. Twitter Single Link & Domain Auto-link Neutralization
+PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $config ) {
+    return "Έρχεται καμπή στο Κυπριακό; Ο Πρόεδρος Χριστοδουλίδης... Διαβάστε στο PressHub.Cy:\n\nhttps://presshub.cy/article-slug/ https://presshub.cy/extra #Cyprus";
+} );
+$clean_tweet = PressHub_Social_AI_Copywriter::generate_from_data( [
+    'title'     => 'Article Title',
+    'url'       => 'https://presshub.cy/article-slug/',
+    'site_name' => 'PressHub',
+], 'twitter', true );
+
+assert_true( ! str_contains( $clean_tweet, 'PressHub.Cy' ), 'Twitter copy replaces standalone PressHub.Cy with plain PressHub' );
+assert_true( str_contains( $clean_tweet, 'στο PressHub:' ), 'Twitter copy contains plain brand "στο PressHub:"' );
+assert_true( str_contains( $clean_tweet, 'https://presshub.cy/article-slug/' ), 'Twitter copy preserves the single article URL' );
+assert_true( ! str_contains( $clean_tweet, 'https://presshub.cy/extra' ), 'Twitter copy strips conflicting secondary URLs' );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+
+// 10. maybe_upgrade_prompts_v284 upgrades prompt
+delete_option( 'presshub_social_upgraded_prompts_v284' );
+update_option( 'presshub_social_prompt_twitter', 'Write a post: explore the full story on {site_name}.' );
+PressHub_Social_Settings_Storage::maybe_upgrade_prompts_v284();
+$upgraded_prompt = PressHub_Social_Settings_Storage::get_platform_prompt( 'twitter' );
+assert_true( str_contains( $upgraded_prompt, 'Single Link Rule' ), 'maybe_upgrade_prompts_v284 installs Single Link Rule' );
+assert_true( str_contains( $upgraded_prompt, 'Refer to the publisher strictly as "PressHub"' ), 'maybe_upgrade_prompts_v284 installs plain PressHub brand instruction' );
+
 // ----------------------------------------------------------------------
 // Test Suite 15: Embedded GitHub Auto-Update Checker & Token Fallback
 // ----------------------------------------------------------------------

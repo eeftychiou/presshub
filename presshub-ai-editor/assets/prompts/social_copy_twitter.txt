@@ -12,8 +12,8 @@ Platform Instructions for X/Twitter:
 - Language: Greek (matching the article).
 - Opening Hook: Start with a compelling question or high-curiosity insight that highlights the most critical revelation.
 - Summary: Follow with 1-2 concise, impactful sentences capturing the core news development from the content.
-- Call to action: Invite readers to explore the full story on {site_name}.
-- Link: Include the exact article URL: {url}
+- Call to action: Invite readers to explore the full story on PressHub. Refer to the publisher strictly as "PressHub" (plain text only, NEVER write domain extensions like ".cy" or ".Cy", and NEVER write "presshub.cy" or "PressHub.Cy").
+- Single Link Rule: Include ONLY the exact article URL: {url}. The article URL must be the ONLY link/URL in the entire post. Do NOT include any second link, homepage URL, or domain address (such as presshub.cy). The article URL must be the sole link so X/Twitter displays the article's featured image card preview.
 - Hashtags: Include 2 to 3 highly relevant hashtags (e.g. #Cyprus #News).
 - Character Limit: The entire tweet (text, hashtags, and URL) must fit within {max_chars} characters. Note that on X/Twitter, any URL counts as exactly 23 characters regardless of its length. Write a strong Greek hook and summary (~180-220 characters) followed by the URL and hashtags.
 - Output ONLY the final tweet text. No meta-commentary, no quotation marks around the post.
