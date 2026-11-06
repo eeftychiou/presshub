@@ -10,6 +10,8 @@ yarn-error.log*
 
 # Build artifacts & archives
 *.zip
+output/
+presshub-social-worker/output/
 
 
 # System and IDE

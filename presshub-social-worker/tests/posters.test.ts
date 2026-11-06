@@ -32,14 +32,14 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     } catch {}
   });
 
-  test('postTwitter resolves modal dialog textarea when both dialog and timeline are present without strict mode error', async () => {
+  test('postTwitter resolves modal dialog textarea and confirms tweet via direct navigation', async () => {
     const mockSession: ChromeConnection = {
       browser,
       isExternalCdp: false,
       context: {
         newPage: async () => {
           const page = await context.newPage();
-          const html = `<html><body>
+          const composeHtml = `<html><body>
             <div class="timeline">
               <div data-testid="tweetTextarea_0">Timeline Textarea (background)</div>
               <button data-testid="tweetButtonInline">Inline Tweet</button>
@@ -61,8 +61,12 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
               });
             </script>
           </body></html>`;
-          page.goto = async () => {
-            await page.setContent(html);
+          page.goto = async (url: string) => {
+            if (url && url.includes('/status/')) {
+              await page.setContent(`<html><body><article data-testid="tweet"><div>Automated test tweet with strict mode check</div></article></body></html>`);
+              return null as any;
+            }
+            await page.setContent(composeHtml);
             return null as any;
           };
           return page;
@@ -85,14 +89,15 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     expect(res.external_url).toBe('https://x.com/user/status/1999888777');
   });
 
-  test('postTwitter gracefully falls back to generated status url if toast link is missing', async () => {
+  test('postTwitter resolves tweet via profile lookup when toast is missing and confirms publication', async () => {
     const mockSession: ChromeConnection = {
       browser,
       isExternalCdp: false,
       context: {
         newPage: async () => {
           const page = await context.newPage();
-          const html = `<html><body>
+          const composeHtml = `<html><body>
+            <a data-testid="AppTabBar_Profile_Link" href="/presshubcy">Profile</a>
             <div role="dialog">
               <div data-testid="tweetTextarea_0" contenteditable="true"></div>
               <button id="post-btn" data-testid="tweetButton">Post</button>
@@ -103,8 +108,21 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
               });
             </script>
           </body></html>`;
-          page.goto = async () => {
-            await page.setContent(html);
+          page.goto = async (url: string) => {
+            if (url && url.includes('/presshubcy')) {
+              await page.setContent(`<html><body>
+                <article data-testid="tweet">
+                  <div>Profile fallback test tweet</div>
+                  <a href="/presshubcy/status/2888777666">Timestamp</a>
+                </article>
+              </body></html>`);
+              return null as any;
+            }
+            if (url && url.includes('/status/2888777666')) {
+              await page.setContent(`<html><body><article data-testid="tweet"><div>Profile fallback test tweet</div></article></body></html>`);
+              return null as any;
+            }
+            await page.setContent(composeHtml);
             return null as any;
           };
           return page;
@@ -115,13 +133,59 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
 
     const res = await postTwitter({
       platform: 'twitter',
-      copy: 'Fallback test tweet',
+      copy: 'Profile fallback test tweet',
       browserSession: mockSession
     });
 
     expect(res.success).toBe(true);
-    expect(res.externalPostUrl).toMatch(/https:\/\/x\.com\/status\/tw-\d+/);
-    expect(res.externalPostId).toMatch(/tw-\d+/);
+    expect(res.externalPostUrl).toBe('https://x.com/presshubcy/status/2888777666');
+    expect(res.externalPostId).toBe('2888777666');
+  });
+
+  test('postTwitter throws descriptive error when post confirmation verification fails', async () => {
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          const page = await context.newPage();
+          const composeHtml = `<html><body>
+            <div role="dialog">
+              <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+              <button id="post-btn" data-testid="tweetButton">Post</button>
+            </div>
+            <script>
+              document.getElementById("post-btn").addEventListener("click", () => {
+                document.querySelector("[role=dialog]").remove();
+                const toast = document.createElement("div");
+                toast.setAttribute("data-testid", "toast");
+                const link = document.createElement("a");
+                link.setAttribute("href", "/user/status/9999999999");
+                link.textContent = "View";
+                toast.appendChild(link);
+                document.body.appendChild(toast);
+              });
+            </script>
+          </body></html>`;
+          page.goto = async (url: string) => {
+            if (url && url.includes('/status/')) {
+              await page.setContent(`<html><body><div data-testid="error-detail">This Post doesn’t exist</div></body></html>`);
+              return null as any;
+            }
+            await page.setContent(composeHtml);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    await expect(postTwitter({
+      platform: 'twitter',
+      copy: 'Failing confirmation tweet',
+      browserSession: mockSession
+    })).rejects.toThrow(/Twitter post verification failed/);
   });
 
   test('postFacebook handles multiple textboxes and buttons without strict mode violation', async () => {

@@ -184,26 +184,35 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       throw new Error(`Twitter session invalid or expired: redirected to login page (${currentUrl})`);
     }
 
-    // Dismiss Twitter cookie banner if visible
+    // Dismiss Twitter cookie banner if visible and neutralize fixed bottom overlays
     const dismissTwitterCookies = async () => {
       await page.evaluate(() => {
         const doc = (globalThis as any).document;
         if (!doc) return;
-        doc.querySelectorAll('div[data-testid="BottomBar"]').forEach((el: any) => {
-          if (el.textContent && /cookie/i.test(el.textContent)) {
-            el.querySelectorAll('button').forEach((b: any) => {
-              if (/refuse|accept|decline/i.test(b.textContent || '')) {
-                if (typeof b.click === 'function') b.click();
-              }
-            });
+        // Neutralize bottom cookie bar overlay directly without causing page reload
+        doc.querySelectorAll('div[data-testid="BottomBar"], div[style*="bottom: 0px"]').forEach((el: any) => {
+          if (/cookie|cookies/i.test(el.innerText || el.textContent || '')) {
+            el.style.display = 'none';
+            el.style.pointerEvents = 'none';
+            if (el.parentElement) {
+              el.parentElement.style.pointerEvents = 'none';
+            }
+          }
+        });
+        // Neutralize fixed viewport interceptor divs
+        doc.querySelectorAll('.r-1p0dtai.r-1d2f490.r-1xcajam.r-zchlnj.r-ipm5af').forEach((el: any) => {
+          if (/cookies/i.test(el.innerText || el.textContent || '')) {
+            el.style.display = 'none';
+            el.style.pointerEvents = 'none';
           }
         });
       }).catch(() => {});
-      const cookieAccept = page.locator('button:has-text("Accept all cookies"), button:has-text("Refuse non-essential cookies")').first();
+
+      const cookieAccept = page.locator('button:has-text("Refuse non-essential cookies"), button:has-text("Accept all cookies")').first();
       if ((await cookieAccept.count()) > 0 && await cookieAccept.isVisible().catch(() => false)) {
-        WorkerLogger.debug('Twitter Automation', 'Dismissing cookie banner...');
+        WorkerLogger.debug('Twitter Automation', 'Dismissing cookie banner button...');
         await cookieAccept.click({ force: true }).catch(() => {});
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(300);
       }
     };
 
@@ -228,6 +237,11 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       await page.keyboard.type(tweetCopy, { delay: 10 });
     }
 
+    // Dismiss any hashtag or mention auto-suggest popups that intercept clicks
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(300);
+
     // If media attached, upload via file input
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
       const mediaSize = fs.statSync(options.mediaPath).size;
@@ -241,16 +255,16 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     }
 
     WorkerLogger.debug('Twitter Automation', 'Finding Post button...');
-    const modalButton = page.locator('div[role="dialog"] [data-testid="tweetButton"], div[role="dialog"] [data-testid="tweetButtonInline"]').first();
+    const modalButton = page.locator('div[role="dialog"] [data-testid="tweetButton"]').first();
     const isModalBtn = (await modalButton.count()) > 0;
     const postButton = isModalBtn
       ? modalButton
-      : page.locator('[data-testid="tweetButton"], [data-testid="tweetButtonInline"], button:has-text("Post")').first();
+      : page.locator('[data-testid="tweetButton"]').first();
 
     await postButton.waitFor({ state: 'visible', timeout: 20000 });
 
     // Wait if button is disabled (e.g. video/image still processing)
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 15; i++) {
       await dismissTwitterCookies();
 
       const ariaDisabled = await postButton.getAttribute('aria-disabled');
@@ -258,11 +272,19 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       if (ariaDisabled !== 'true' && disabled === null) {
         break;
       }
-      WorkerLogger.debug('Twitter Automation', `Waiting for tweet media processing and Post button to be actionable (${i + 1}/30)...`);
+      WorkerLogger.debug('Twitter Automation', `Waiting for Post button to become actionable (${i + 1}/15)...`);
       await page.waitForTimeout(1000);
     }
 
     await dismissTwitterCookies();
+    await page.keyboard.press('Escape').catch(() => {});
+
+    // Validate button actionability before clicking
+    const finalAriaDisabled = await postButton.getAttribute('aria-disabled');
+    const finalDisabled = await postButton.getAttribute('disabled');
+    if (finalAriaDisabled === 'true' || finalDisabled !== null) {
+      throw new Error(`Twitter Post button is disabled (aria-disabled="${finalAriaDisabled}", disabled="${finalDisabled}"). Content may exceed character limits or input was not registered.`);
+    }
 
     WorkerLogger.info('Twitter Automation', 'Clicking Post button...');
     await postButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
@@ -273,7 +295,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       await postButton.click({ timeout: 5000 });
       clicked = true;
     } catch {
-      WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted by layer, clicking Post with force: true...');
+      WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted, clicking Post with force: true...');
       try {
         await postButton.click({ force: true, timeout: 3000 });
         clicked = true;
@@ -281,22 +303,27 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
         WorkerLogger.warn('Twitter Automation', `Playwright click failed: ${err?.message || err}`);
       }
     }
-    // Only dispatch fallback native DOM events if Playwright click did not succeed
-    if (!clicked) {
-      WorkerLogger.debug('Twitter Automation', 'Dispatching fallback DOM click...');
-      await postButton.evaluate((el: any) => {
-        if (el && typeof el.click === 'function') {
-          el.focus();
-          const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+
+    // Full DOM event cycle dispatch to guarantee React synthetic click handlers fire
+    await postButton.evaluate((el: any) => {
+      if (el) {
+        el.focus();
+        const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+        const targets = [el, el.firstElementChild || el];
+        for (const t of targets) {
           if (win && typeof win.MouseEvent === 'function') {
-            el.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
-            el.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
-            el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+            t.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
           }
+        }
+        if (typeof el.click === 'function') {
           el.click();
         }
-      }).catch(() => {});
-    }
+      }
+    }).catch(() => {});
 
     WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
     // Wait for the modal dialog to disappear or notification toast to appear
@@ -305,7 +332,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       page.locator('[data-testid="toast"]').first().waitFor({ state: 'visible', timeout: 15000 })
     ]).catch(() => {});
 
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
     // Extract tweet URL and ID
     let tweetUrl: string | undefined;
@@ -340,13 +367,68 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       } catch {}
     }
 
-    // Default fallback if not explicitly parsed
+    // Fallback: If toast link was not captured, look up user profile timeline to find newly published tweet
     if (!tweetUrl || !tweetId) {
-      tweetId = tweetId || `tw-${Date.now()}`;
-      tweetUrl = tweetUrl || `https://x.com/status/${tweetId}`;
+      try {
+        WorkerLogger.info('Twitter Automation', 'Toast link not captured, inspecting user profile to locate newly published tweet...');
+        const profileLink = page.locator('[data-testid="AppTabBar_Profile_Link"]').first();
+        let username = 'presshubcy';
+        if ((await profileLink.count()) > 0) {
+          const href = await profileLink.getAttribute('href');
+          if (href && href.startsWith('/')) {
+            username = href.replace(/^\//, '').split('/')[0] || username;
+          }
+        }
+        await page.goto(`https://x.com/${username}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await page.waitForTimeout(3000);
+
+        const tweetArticles = await page.locator('article[data-testid="tweet"]').all();
+        for (const article of tweetArticles.slice(0, 3)) {
+          const articleText = (await article.innerText().catch(() => '')) || '';
+          const statusLink = article.locator('a[href*="/status/"]').first();
+          if ((await statusLink.count()) > 0) {
+            const href = await statusLink.getAttribute('href');
+            if (href) {
+              const match = href.match(/\/status\/(\d+)/);
+              if (match) {
+                const snippet = tweetCopy.slice(0, 25).replace(/[^a-zA-Z0-9\u0370-\u03FF]/g, '');
+                const cleanArticleText = articleText.replace(/[^a-zA-Z0-9\u0370-\u03FF]/g, '');
+                const copyUrl = (tweetCopy.match(/https?:\/\/[^\s]+/i) || [])[0];
+                if (cleanArticleText.includes(snippet) || (copyUrl && articleText.includes(copyUrl))) {
+                  tweetId = match[1];
+                  tweetUrl = href.startsWith('http') ? href : `https://x.com${href}`;
+                  WorkerLogger.info('Twitter Automation', `Found published tweet on profile timeline: ${tweetUrl}`);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        WorkerLogger.warn('Twitter Automation', `Profile timeline lookup failed: ${err?.message || err}`);
+      }
     }
 
-    WorkerLogger.info('Twitter Automation', `Post completed! URL: ${tweetUrl}, ID: ${tweetId}`);
+    // Strict Zero-Silent-Fallback: Never generate a fake tw-timestamp fallback ID
+    if (!tweetUrl || !tweetId) {
+      throw new Error('Twitter automation failed: Tweet submission could not be confirmed (no status link found in toast or profile timeline).');
+    }
+
+    // MANDATORY POST-CONFIRMATION CHECK: Actually load the posted tweet URL to confirm it exists and is public on X
+    WorkerLogger.info('Twitter Automation', `Verifying published tweet by loading URL: ${tweetUrl}...`);
+    await page.goto(tweetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForTimeout(3000);
+
+    const tweetArticle = page.locator('article[data-testid="tweet"]').first();
+    const isArticleVisible = await tweetArticle.isVisible().catch(() => false);
+    const pageBodyText = (await page.innerText('body').catch(() => '')) || '';
+    const isErrorPage = /doesn’t exist|does not exist|unavailable|Something went wrong/i.test(pageBodyText);
+
+    if (!isArticleVisible || isErrorPage) {
+      throw new Error(`Twitter post verification failed: Tweet URL ${tweetUrl} could not be confirmed on X (article visible: ${isArticleVisible}, error page: ${isErrorPage}).`);
+    }
+
+    WorkerLogger.info('Twitter Automation', `Tweet publication verified successfully on X! URL: ${tweetUrl}, ID: ${tweetId}`);
 
     return {
       success: true,
