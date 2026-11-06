@@ -340,6 +340,27 @@ graph TD
     3. **Mode 3 (Real Chrome Persistent Profile)**: Launches genuine Google Chrome with persistent profile (`sessions/chrome-profile`) and `--enable-automation` stripped.
   - **Real Chrome Launcher (`src/cli/launch-chrome.ts`)**: Convenience CLI (`npm run chrome`) detecting installed Google Chrome executable on Windows/macOS/Linux and launching with `--remote-debugging-port=9222` and persistent profile.
 
+### 4.18 Turn-by-Turn Podcast Audio Synthesis & Voice Identity Isolation
+- **Problem & Root Cause Analysis**:
+  - Multi-host podcast generation previously attempted single-call topic batching using `multiSpeakerVoiceConfig` with `speech_metadata.speaker`. Because Gemini REST does not steer per-part speaker routing via `speech_metadata.speaker`, the neural TTS model drifted between voices across turns, resulting in inconsistent audio delivery.
+- **Turn-by-Turn Synthesis Architecture**:
+  - Unified across 1, 2, and 3 hosts: `PressHub_AI_Audio_Synthesizer::synthesize_podcast()` iterates through structured dialogue turns (`$topic['turns']`) and synthesizes each turn individually via `synthesize_turn()` using a dedicated single-speaker `voiceConfig` with `prebuiltVoiceConfig.voiceName`.
+  - Zero `multiSpeakerVoiceConfig` is used in podcast audio streams, guaranteeing absolute voice identity isolation and eliminating neural baseline drift.
+  - Turn audio chunks are stitched together using `stitch_wav_chunks()` (Gemini 24kHz PCM) or `stitch_audio_chunks()` (Google Cloud MP3) with natural configurable pauses.
+- **Resumable Turn Disk Cache**:
+  - Each synthesized turn is deterministically hashed (`hash('sha256', implode('|', [$engine, $model, $voice, $style, $speed, $pitch, $payload_mode, $text]))`) and persisted in `wp-content/uploads/presshub-ai/tts-cache/{date}/turn_{hash}.{wav|mp3}`.
+  - Interrupted or failed syntheses resume seamlessly from the first un-synthesized turn without re-calling the API for cached turns, saving costs and avoiding quota waste.
+- **Settings-First Audio Controls**:
+  - `presshub_ai_briefing_tts_turn_pause_ms`: Configurable pause between dialogue turns (default: 250ms).
+  - `presshub_ai_briefing_tts_topic_pause_ms`: Configurable pause between topic sections (default: 600ms).
+  - `presshub_ai_briefing_tts_request_delay_ms`: Inter-request throttling delay (default: 250ms) to prevent hitting provider rate limits.
+  - `presshub_ai_briefing_tts_max_retries`: Maximum retry attempts on HTTP 429/503 (default: 2).
+  - `presshub_ai_briefing_tts_retry_backoff_ms`: Base exponential backoff delay (default: 2000ms).
+- **Zero-Silent-Fallback & Strict Logging**:
+  - `synthesize_speech_via_gemini()` and `build_gemini_tts_request_body()` default `$voice_name = ''`, strictly requiring callers to provide a voice persona or failing loudly with `WP_Error('missing_tts_voice')` and logging `ERROR`.
+  - Missing TTS models fail loudly with `WP_Error('missing_tts_model')` with zero silent fallbacks.
+  - Unknown speaker labels and rogue presenter tags in solo-host briefings log structured `ERROR` events to `PressHub_AI_Logger`.
+
 ---
 
 ## 5. Cron Schedules & Timers

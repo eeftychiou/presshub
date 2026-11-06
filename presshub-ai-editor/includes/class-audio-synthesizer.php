@@ -370,7 +370,7 @@ class PressHub_AI_Audio_Synthesizer {
             }
         }
         if ( '' === $api_key ) {
-            $api_key = (string) get_option( 'presshub_ai_gemini_api_key', (string) get_option( 'presshub_ai_api_key', '' ) );
+            $api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
         }
         if ( '' === $api_key ) {
             return $manifest_slice;
@@ -556,7 +556,7 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( sprintf( '[LogosAI Synthesizer] Unknown speaker label "%s" in get_voice_for_speaker. Falling back to presenter 1 voice.', $clean ) );
+            PressHub_AI_Logger::error( sprintf( '[LogosAI Synthesizer] Unknown speaker label "%s" in get_voice_for_speaker. Falling back to presenter 1 voice.', $clean ) );
         }
 
         return trim( $p1_voice );
@@ -991,14 +991,14 @@ class PressHub_AI_Audio_Synthesizer {
                     || ( '' !== trim( $male_host ) && function_exists( 'mb_stripos' ) && false !== mb_stripos( $raw_label, trim( $male_host ) ) )
                 ) {
                     if ( 1 === $host_count && class_exists( 'PressHub_AI_Logger' ) ) {
-                        PressHub_AI_Logger::warning( sprintf( '[LogosAI Transcript] Unexpected presenter 2 label "%s" in solo host briefing transcript.', $raw_label ) );
+                        PressHub_AI_Logger::error( sprintf( '[LogosAI Transcript] Unexpected presenter 2 label "%s" in solo host briefing transcript.', $raw_label ) );
                     }
                     $speaker_display = $male_host;
                 } elseif ( in_array( $label_lower, [ 'speaker_3', 'speaker 3', 'speaker3', 'presenter_3', 'presenter 3', 'presenter3', 'host_3', 'host 3', 'host3', 'tertiary' ], true )
                     || ( '' !== trim( $tertiary_host ) && function_exists( 'mb_stripos' ) && false !== mb_stripos( $raw_label, trim( $tertiary_host ) ) )
                 ) {
                     if ( 1 === $host_count && class_exists( 'PressHub_AI_Logger' ) ) {
-                        PressHub_AI_Logger::warning( sprintf( '[LogosAI Transcript] Unexpected presenter 3 label "%s" in solo host briefing transcript.', $raw_label ) );
+                        PressHub_AI_Logger::error( sprintf( '[LogosAI Transcript] Unexpected presenter 3 label "%s" in solo host briefing transcript.', $raw_label ) );
                     }
                     $speaker_display = $tertiary_host;
                 } else {

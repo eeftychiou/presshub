@@ -472,9 +472,13 @@ The automated AI Editorial Review system (`PressHub_AI_QA_Reviewer`) evaluates d
 7. **Exponential Backoff & Structured Error Logging**:
    - Transient network errors (HTTP 429, 500, 502, 503, 504, cURL timeouts) automatically retry up to `presshub_ai_briefing_tts_max_retries` (default 2) with exponential backoff (`presshub_ai_briefing_tts_retry_backoff_ms * 2^attempt`, default 2000ms).
    - Response errors are captured with error message, status code, and truncated raw body in structured payload logs.
-8. **RIFF WAV Header Handling**:
+8. **Zero-Silent-Fallback Enforcement in Audio Functions**:
+   - Function signatures (`synthesize_speech_via_gemini()`, `build_gemini_tts_request_body()`) default `$voice_name = ''`, strictly failing with `WP_Error('missing_tts_voice')` and logging `ERROR` if no voice persona is configured or provided.
+   - Missing TTS models fail loudly with `WP_Error('missing_tts_model')` rather than substituting hardcoded fallbacks.
+   - Unknown speaker labels and mismatched solo-host speaker tags log structured `ERROR` events to `PressHub_AI_Logger`.
+9. **RIFF WAV Header Handling**:
    - Gemini 3.8 TTS responses return complete WAV files with RIFF headers; audio decoding checks for the RIFF signature before applying PCM-to-WAV wrapping to prevent audio stream corruption.
-9. **Interactive Testing Studio & Live JSON Inspector**:
+10. **Interactive Testing Studio & Live JSON Inspector**:
    - The settings page provides a live JSON inspector updating dynamically whenever audio options change.
    - Editors can test 1-host and 2-host audio synthesis in real time via AJAX endpoints `presshub_ai_preview_tts_payload` and `presshub_ai_test_tts_synthesis` (gated by `edit_others_posts`).
 
@@ -490,7 +494,7 @@ Validates plugin activation, database tables, logger outputs, options persistenc
 php dev-env/scripts/run-integration-tests.php
 ```
 
-### 2. Plugin Unit Tests (73 test files)
+### 2. Plugin Unit Tests (83 test files covering 240+ assertions)
 Runs all unit tests in process-isolated PHP runners:
 ```bash
 php presshub-ai-editor/tests/run-all-tests.php

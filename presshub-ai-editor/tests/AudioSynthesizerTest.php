@@ -34,8 +34,12 @@ defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE
 require_once dirname( __DIR__ ) . '/presshub-ai-editor.php';
 
 $failures = 0;
+$checks   = 0;
+$failures = 0;
+
 function as_check( $label, $condition ) {
-    global $failures;
+    global $failures, $checks;
+    $checks++;
     if ( ! $condition ) {
         fwrite( STDERR, "FAIL: {$label}\n" );
         $failures++;
@@ -954,6 +958,91 @@ as_check( 'transcript_mapping: SPEAKER_1 maps to Ελένη', false !== strpos( 
 as_check( 'transcript_mapping: SPEAKER_2 maps to Γιώργος', false !== strpos( $transcript_html, '<strong>Γιώργος:</strong>' ) );
 as_check( 'transcript_mapping: SPEAKER_3 maps to Δημήτρης', false !== strpos( $transcript_html, '<strong>Δημήτρης:</strong>' ) );
 
+// 14f: Regression for voice identity: 2-host topic sends isolated voiceConfig (never multiSpeakerVoiceConfig)
+PressHub_AI_Audio_Synthesizer::clear_turn_cache( '2026-09-15' );
+$captured_turn_requests = [];
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_female'] = 'Aoede';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_voice_male']   = 'Charon';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model']    = 'gemini-2.5-flash-preview-tts';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_count']   = 2;
+$GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$captured_turn_requests ) {
+    $args = is_array( $req ) && isset( $req[1] ) ? $req[1] : $req;
+    $body = json_decode( $args['body'] ?? '{}', true );
+    $captured_turn_requests[] = $body;
+    $fake_pcm = str_repeat( "\x55\x66", 1200 );
+    return [
+        'response' => [ 'code' => 200, 'message' => 'OK' ],
+        'body'     => json_encode( [
+            'candidates' => [
+                [
+                    'content' => [
+                        'parts' => [
+                            [
+                                'inlineData' => [
+                                    'mimeType' => 'audio/pcm;rate=24000',
+                                    'data'     => base64_encode( $fake_pcm ),
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ] ),
+    ];
+};
+
+$two_turn_script = "[Presenter 1]: Πρώτη στροφή διαλόγου.\n[Presenter 2]: Δεύτερη στροφή διαλόγου.";
+$res_voice_ident = $synthesizer->synthesize_podcast( '2026-09-15', $two_turn_script, null );
+as_check( 'voice_identity: 2-turn podcast succeeds', is_array( $res_voice_ident ) && ( $res_voice_ident['success'] ?? false ) );
+as_check( 'voice_identity: captured 2 distinct turn HTTP requests', count( $captured_turn_requests ) === 2 );
+if ( count( $captured_turn_requests ) === 2 ) {
+    $req1 = $captured_turn_requests[0];
+    $req2 = $captured_turn_requests[1];
+    as_check( 'voice_identity: turn 1 body has no multiSpeakerVoiceConfig', empty( $req1['generationConfig']['speechConfig']['multiSpeakerVoiceConfig'] ) );
+    as_check( 'voice_identity: turn 2 body has no multiSpeakerVoiceConfig', empty( $req2['generationConfig']['speechConfig']['multiSpeakerVoiceConfig'] ) );
+    as_check( 'voice_identity: turn 1 voiceConfig is Aoede', ( $req1['generationConfig']['speechConfig']['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Aoede' );
+    as_check( 'voice_identity: turn 2 voiceConfig is Charon', ( $req2['generationConfig']['speechConfig']['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ) === 'Charon' );
+}
+PressHub_AI_Audio_Synthesizer::clear_turn_cache( '2026-09-15' );
+
+// 14g: Colon in dialogue: turn containing δήλωσε: stays one turn with the right speaker
+$producer = new PressHub_AI_Podcast_Producer();
+$colon_script = "[SPEAKER_1]: Ο υπουργός δήλωσε: «Θα προχωρήσουμε σε μεταρρυθμίσεις άμεσα».\n[SPEAKER_2]: Η αντιπολίτευση σχολίασε: «Αναμένουμε τα αποτελέσματα».";
+$colon_turns = $producer->parse_script_turns( $colon_script, 'Μαρία', 'Νίκος' );
+as_check( 'colon_dialogue: exactly 2 turns parsed despite mid-sentence colons', count( $colon_turns ) === 2 );
+as_check( 'colon_dialogue: turn 1 speaker is female', ( $colon_turns[0]['speaker'] ?? '' ) === 'female' );
+as_check( 'colon_dialogue: turn 1 contains complete quote with colon', false !== strpos( $colon_turns[0]['text'] ?? '', 'δήλωσε: «Θα προχωρήσουμε' ) );
+as_check( 'colon_dialogue: turn 2 speaker is male', ( $colon_turns[1]['speaker'] ?? '' ) === 'male' );
+as_check( 'colon_dialogue: turn 2 contains complete quote with colon', false !== strpos( $colon_turns[1]['text'] ?? '', 'σχολίασε: «Αναμένουμε' ) );
+
+// 14h: Retry exhaustion: HTTP 429 beyond max_retries returns WP_Error
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_max_retries'] = 2;
+$exhausted_attempts = 0;
+$GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$exhausted_attempts ) {
+    $exhausted_attempts++;
+    return [
+        'response' => [ 'code' => 429, 'message' => 'Too Many Requests' ],
+        'body'     => json_encode( [
+            'error' => [
+                'code'    => 429,
+                'message' => 'Resource has been exhausted (rate limit).',
+                'status'  => 'RESOURCE_EXHAUSTED',
+            ],
+        ] ),
+    ];
+};
+$exhaust_client = new PressHub_AI_API_Client();
+$res_exhaust = $exhaust_client->synthesize_speech_via_gemini( 'Δοκιμή υπέρβασης ορίου.', 'Kore' );
+as_check( 'retry_exhaustion: returns WP_Error when 429 persists', is_wp_error( $res_exhaust ) );
+as_check( 'retry_exhaustion: attempted exactly max_retries + 1 times (3 total)', $exhausted_attempts === 3 );
+
+// 14i: Empty TTS model fails loudly with missing_tts_model WP_Error
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = '';
+delete_option( 'presshub_ai_briefing_tts_model' );
+$no_model_client = new PressHub_AI_API_Client();
+$res_no_model = $no_model_client->synthesize_speech_via_gemini( 'Δοκιμή χωρίς μοντέλο.', 'Kore' );
+as_check( 'fail_loudly: missing TTS model returns missing_tts_model WP_Error', is_wp_error( $res_no_model ) && 'missing_tts_model' === $res_no_model->get_error_code() );
+
 
 
 if ( is_dir( $test_upload_dir ) ) {
@@ -972,4 +1061,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "AudioSynthesizerTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "AudioSynthesizerTest: OK (163 checks)\n";
+echo "AudioSynthesizerTest: OK ({$checks} checks)\n";

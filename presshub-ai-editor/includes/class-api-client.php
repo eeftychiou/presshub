@@ -1909,7 +1909,7 @@ class PressHub_AI_API_Client {
      */
     public static function build_gemini_tts_request_body(
         string $text,
-        string $voice_name = 'Kore',
+        string $voice_name = '',
         bool $is_multi_speaker = false,
         array $multi_speakers = [],
         string $style = 'formal',
@@ -2336,7 +2336,7 @@ class PressHub_AI_API_Client {
 
     public function synthesize_speech_via_gemini(
         string $text,
-        string $voice_name = 'Kore',
+        string $voice_name = '',
         bool $as_wav = true,
         string $style = 'formal',
         $speaker_configs = null,
@@ -2405,14 +2405,14 @@ class PressHub_AI_API_Client {
         $provider_record = null;
         $tts_provider_id = class_exists( 'PressHub_AI_Settings_Storage' )
             ? PressHub_AI_Settings_Storage::get_briefing_podcast_tts_provider()
-            : (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
+            : '';
         if ( ! empty( $tts_provider_id ) && class_exists( 'PressHub_AI_Provider_Store' ) ) {
             $provider_record = PressHub_AI_Provider_Store::get( $tts_provider_id );
         }
 
         $configured_model = ! empty( $this->model ) && 'gemini' === $this->provider && ( 'tts' === $this->module || false !== strpos( (string) $this->model, 'tts' ) )
             ? $this->model
-            : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : (string) get_option( 'presshub_ai_briefing_tts_model', '' ) );
+            : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : '' );
         if ( empty( $configured_model ) && ! empty( $provider_record['default_model'] ) && ( 'gemini' !== ( $provider_record['type'] ?? '' ) || false !== strpos( (string) $provider_record['default_model'], 'tts' ) ) ) {
             $configured_model = $provider_record['default_model'];
         }
