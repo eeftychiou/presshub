@@ -3337,13 +3337,17 @@ jQuery(document).ready(function($) {
         var count = parseInt($('#presshub_ai_briefing_host_count').val(), 10) || 2;
         if (count >= 2) {
             $('#presshub-voice-male-row').show();
+            $('#presshub-host-male-row').show();
         } else {
             $('#presshub-voice-male-row').hide();
+            $('#presshub-host-male-row').hide();
         }
         if (count >= 3) {
             $('#presshub-voice-tertiary-row').show();
+            $('#presshub-host-tertiary-row').show();
         } else {
             $('#presshub-voice-tertiary-row').hide();
+            $('#presshub-host-tertiary-row').hide();
         }
     }
     $(document).on('change', '#presshub_ai_briefing_host_count', updateBriefingHostRows);
@@ -3491,8 +3495,8 @@ jQuery(document).ready(function($) {
         return {
             nonce: nonce,
             text: $('#presshub-tts-test-text').val() || '',
-            speaker1: $('#presshub_ai_briefing_voice_female').val() || 'Charon',
-            speaker2: $('#presshub_ai_briefing_voice_male').val() || 'Kore',
+            speaker1: $('#presshub_ai_briefing_voice_female').val() || 'Kore',
+            speaker2: $('#presshub_ai_briefing_voice_male').val() || 'Fenrir',
             speed: parseFloat($('#presshub_ai_briefing_voice_speed').val()) || 1.0,
             pitch: parseFloat($('#presshub_ai_briefing_voice_pitch').val()) || 0.0,
             style: $('#presshub_ai_briefing_tts_style').val() || 'formal',

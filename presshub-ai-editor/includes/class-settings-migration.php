@@ -137,39 +137,39 @@ class PressHub_AI_Settings_Migration {
     }
 
     public static function default_briefing_target_duration(): string {
-        return '5_min';
+        return PressHub_AI_Settings_Storage::default_briefing_target_duration();
     }
 
     public static function default_briefing_host_female(): string {
-        return 'Μαρία';
+        return PressHub_AI_Settings_Storage::default_briefing_host_female();
     }
 
     public static function default_briefing_host_male(): string {
-        return 'Νίκος';
+        return PressHub_AI_Settings_Storage::default_briefing_host_male();
     }
 
     public static function default_briefing_tts_engine(): string {
-        return 'gemini';
+        return PressHub_AI_Settings_Storage::default_briefing_tts_engine();
     }
 
     public static function default_briefing_tts_model(): string {
-        return 'gemini-3.1-flash-tts-preview';
+        return PressHub_AI_Settings_Storage::default_briefing_tts_model();
     }
 
     public static function default_briefing_voice_female(): string {
-        return 'Kore';
+        return PressHub_AI_Settings_Storage::default_briefing_voice_female();
     }
 
     public static function default_briefing_voice_male(): string {
-        return 'Fenrir';
+        return PressHub_AI_Settings_Storage::default_briefing_voice_male();
     }
 
     public static function default_briefing_tts_style(): string {
-        return 'formal';
+        return PressHub_AI_Settings_Storage::default_briefing_tts_style();
     }
 
     public static function default_briefing_tts_custom_style(): string {
-        return '';
+        return PressHub_AI_Settings_Storage::default_briefing_tts_custom_style();
     }
 
 

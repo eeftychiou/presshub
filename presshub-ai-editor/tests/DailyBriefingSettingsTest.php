@@ -707,15 +707,15 @@ class DailyBriefingSettingsTest
             $failures[] = 'render_settings_page should render Section 3: Podcast Dialogue Styles & Prompt Studio.';
         }
 
-        // Issue #108: Assert obsolete host name inputs and dialogue preset are absent
-        if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_host_female"' ) ) {
-            $failures[] = 'render_settings_page must not render obsolete host female input.';
+        // Assert host name inputs are rendered (Component 3)
+        if ( false === strpos( $page_html, 'name="presshub_ai_briefing_host_female"' ) ) {
+            $failures[] = 'render_settings_page should render host female input.';
         }
-        if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_host_male"' ) ) {
-            $failures[] = 'render_settings_page must not render obsolete host male input.';
+        if ( false === strpos( $page_html, 'name="presshub_ai_briefing_host_male"' ) ) {
+            $failures[] = 'render_settings_page should render host male input.';
         }
-        if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_host_tertiary"' ) ) {
-            $failures[] = 'render_settings_page must not render obsolete host tertiary input.';
+        if ( false === strpos( $page_html, 'name="presshub_ai_briefing_host_tertiary"' ) ) {
+            $failures[] = 'render_settings_page should render host tertiary input.';
         }
         if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_podcast_preset"' ) ) {
             $failures[] = 'render_settings_page must not render obsolete podcast preset dropdown.';

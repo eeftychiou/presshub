@@ -117,9 +117,27 @@ graph TD
     - System instruction, speaking speed, and voice pitch settings dynamically grey out in the UI.
   - **RIFF WAV Header Handling**:
     - Gemini 3.8 TTS returns full WAV files with RIFF headers; audio decoding checks for the RIFF signature before applying PCM-to-WAV wrapping to prevent audio stream corruption.
-- **Voice Catalog**:
+- **Unified Turn-by-Turn Synthesis & Voice Isolation**:
+  - Eliminates neural voice drift and speaker bleeding across 1, 2, and 3 hosts by synthesizing every dialogue turn individually as an isolated single-speaker request via `synthesize_turn()`.
+  - Zero `multiSpeakerVoiceConfig` in podcast audio; every speaker turn uses dedicated `voiceConfig` with isolated persona assignments.
+  - Turns within each topic or whole-script mode are stitched with Settings-First natural pauses (`presshub_ai_briefing_tts_turn_pause_ms`, default 250ms), and topics are stitched with topic pauses (`presshub_ai_briefing_tts_topic_pause_ms`, default 600ms) and optional intro/transition/outro SFX.
+  - Inter-turn throttling (`presshub_ai_briefing_tts_request_delay_ms`, default 250ms) protects against API rate limiting (automatically bypassed in unit test mock harnesses).
+- **Resumable Turn-by-Turn Disk Cache**:
+  - Each synthesized turn is hashed deterministically (`hash('sha256', engine|model|voice|style|speed|pitch|payload_mode|text)`) and cached in `wp-content/uploads/presshub-ai/tts-cache/{date}/turn_{hash}.{wav|mp3}`.
+  - On retry of a failed or interrupted podcast generation, completed turns are served instantly from disk cache, eliminating redundant API cost and ensuring rapid resumption.
+- **Speaker Parsing & Greek Dialogue Colon Protection**:
+  - Tightened regex ensures sentences with mid-sentence colons (`Ο υπουργός δήλωσε: τα μέτρα...`) are never falsely parsed as speaker turns.
+  - Canonical speaker tags (`[SPEAKER_1]`, `[SPEAKER_2]`, `[SPEAKER_3]`, `[Presenter 1]`, etc.) are mapped to configured host names in transcript output.
+- **Exponential Backoff & Structured Error Logging**:
+  - Transient HTTP `429`, `500`, `502`, `503`, `504` or connection errors retry automatically up to `presshub_ai_briefing_tts_max_retries` (default 2) with exponential backoff (`presshub_ai_briefing_tts_retry_backoff_ms * 2^attempt`, default 2000ms base).
+  - Response error messages, statuses, and truncated bodies are captured in structured payload logs.
+- **Centralized Diagnostic Prompt Logging**:
+  - `call_provider()` centralizes prompt/response debugging via `presshub_ai_log_prompts()` with caller suppression flags (`$suppress_provider_prompt_log`) to eliminate duplicate logs. Image generation (`generate_image`) and TTS dispatches (`podcast_tts`) emit dedicated trace entries.
+- **Voice Catalog & Presenter Configuration**:
   - Uses canonical voice catalog (`assets/data/tts-voice-catalog.json`).
-  - Supports 30+ voice personas with speed and pitch controls.
+  - Supports 30+ voice personas with speed and pitch controls, grouped in WP Admin by gender `<optgroup>`s (Female Voices first for Presenter 1, Male Voices first for Presenter 2 & 3).
+  - Configurable Presenter Names (`presshub_ai_briefing_host_female` / `Presenter 1 Name`, `presshub_ai_briefing_host_male` / `Presenter 2 Name`, `presshub_ai_briefing_host_tertiary` / `Presenter 3 Name`) with single source of truth getters in `PressHub_AI_Settings_Storage`.
+  - Settings-First TTS timing & retry controls: `presshub_ai_briefing_tts_turn_pause_ms` (0-2000 ms, default 250), `presshub_ai_briefing_tts_topic_pause_ms` (0-5000 ms, default 600), `presshub_ai_briefing_tts_request_delay_ms` (0-5000 ms, default 250), `presshub_ai_briefing_tts_max_retries` (0-5, default 2), and `presshub_ai_briefing_tts_retry_backoff_ms` (500-15000 ms, default 2000).
 - **Multi-Edition Audio & Title Prefixes**:
   - Morning: `podcast.mp3` / `podcast.wav` attached to morning podcast post. Configurable title prefix (`presshub_ai_briefing_podcast_title_prefix`, default `"Πρωινό Podcast Ενημέρωσης - "`).
   - Noon: `podcast-noon.mp3` / `podcast-noon.wav` attached to noon podcast post. Configurable title prefix (`presshub_ai_briefing_noon_podcast_title_prefix`, default `"Μεσημβρινό Podcast Ενημέρωσης - "`).

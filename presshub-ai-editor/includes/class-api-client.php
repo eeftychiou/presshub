@@ -99,6 +99,14 @@ class PressHub_AI_API_Client {
     private $model_source = '';
 
     /**
+     * When true, call_provider() will not log to presshub_ai_log_prompts().
+     * Used by endpoints (like generate_draft, scorecard) that manage their own prompt logging.
+     *
+     * @var bool
+     */
+    public $suppress_provider_prompt_log = false;
+
+    /**
      * Request-config line for the debug log: mirrors the constructor's
      * option resolution (provider, model, max_tokens) so truncation is
      * diagnosable at a glance (a saved max_tokens option overrides the
@@ -157,7 +165,7 @@ class PressHub_AI_API_Client {
         $provider_id     = '';
         $provider_source = '';
         if ( 'tts' === $module || 'podcast_tts' === $module ) {
-            $provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
+            $provider_id = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_tts_provider() : (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
             if ( '' !== $provider_id ) {
                 $provider_source = 'module_option:presshub_ai_briefing_podcast_tts_provider';
             } else {
@@ -258,7 +266,7 @@ class PressHub_AI_API_Client {
         $model        = '';
         $model_source = '';
         if ( 'tts' === $module || 'podcast_tts' === $module ) {
-            $opt_tts_model = (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+            $opt_tts_model = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : (string) get_option( 'presshub_ai_briefing_tts_model', '' );
             if ( '' !== $opt_tts_model ) {
                 $model        = $opt_tts_model;
                 $model_source = 'module_override:presshub_ai_briefing_tts_model';
@@ -981,7 +989,9 @@ class PressHub_AI_API_Client {
             . "\n\nFormat the draft as clean HTML for a WordPress post: use <h2> for section headings, <p> for paragraphs and <strong> for emphasis. Do NOT use Markdown syntax (no **, ## or *), and do NOT wrap the output in code fences.";
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 
+        $this->suppress_provider_prompt_log = true;
         $result = $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
+        $this->suppress_provider_prompt_log = false;
 
         // 1.2.9: models often return Markdown — convert to clean HTML so
         // the inserted draft renders properly in the WordPress editor.
@@ -1031,7 +1041,9 @@ class PressHub_AI_API_Client {
         }
         $user_prompt = apply_filters( 'presshub_ai_scorecard_user_prompt', $user_prompt, $content );
 
+        $this->suppress_provider_prompt_log = true;
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [] );
+        $this->suppress_provider_prompt_log = false;
         presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, self::current_request_meta() );
         
         if ( is_wp_error( $result ) ) return $result;
@@ -1048,7 +1060,7 @@ class PressHub_AI_API_Client {
     }
 
     public function classify_intent( $prompt ) {
-        $this->current_action = 'copilot_chat';
+        $this->current_action = 'classify_intent';
         $sys_prompt = __( "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else.", 'presshub-ai-editor' );
         $sys_prompt = apply_filters( 'presshub_ai_classify_intent_prompt', $sys_prompt );
 
@@ -1379,6 +1391,10 @@ class PressHub_AI_API_Client {
         $sideload = $this->sideload_media( $filename, $image_data, $post_id, $title );
 
         if ( is_wp_error( $sideload ) ) {
+            if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+                $meta_line = sprintf( 'provider=%s model=%s aspect_ratio=%s', $type, $model_name, $aspect_ratio );
+                presshub_ai_log_prompts( 'generate_image', 'Generate featured image (aspect ratio: ' . $aspect_ratio . ')', $prompt, 'ERROR: ' . $sideload->get_error_message(), $meta_line );
+            }
             return $sideload;
         }
 
@@ -1389,6 +1405,12 @@ class PressHub_AI_API_Client {
 
         if ( $post_id > 0 && function_exists( 'update_post_meta' ) ) {
             update_post_meta( $post_id, '_presshub_ai_image_prompt', $prompt );
+        }
+
+        if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+            $meta_line = sprintf( 'provider=%s model=%s aspect_ratio=%s', $type, $model_name, $aspect_ratio );
+            $resp_desc = sprintf( 'Image generated successfully (ID: %d, URL: %s)', $media_id, $sideload['url'] );
+            presshub_ai_log_prompts( 'generate_image', 'Generate featured image (aspect ratio: ' . $aspect_ratio . ')', $prompt, $resp_desc, $meta_line );
         }
 
         return [
@@ -1441,17 +1463,28 @@ class PressHub_AI_API_Client {
 
         if ( isset( $res_body['predictions'][0]['bytesBase64Encoded'] ) ) {
             $image_data = base64_decode( $res_body['predictions'][0]['bytesBase64Encoded'] );
-            return $this->sideload_media(
+            $ret = $this->sideload_media(
                 'ai-image-' . time() . '-' . uniqid() . '.jpg',
                 $image_data,
                 0,
                 $prompt
             );
+            if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+                $resp_desc = is_array( $ret ) && isset( $ret['id'] )
+                    ? sprintf( 'Image generated successfully via Imagen (ID: %d, URL: %s)', (int) $ret['id'], (string) ( $ret['url'] ?? '' ) )
+                    : ( is_wp_error( $ret ) ? 'ERROR: ' . $ret->get_error_message() : 'Prediction received' );
+                presshub_ai_log_prompts( 'generate_image', 'Vertex AI Imagen 3.0 image generation', $prompt, $resp_desc, 'provider=google_cloud model=imagen-3.0' );
+            }
+            return $ret;
         }
 
         // Mock / fallback if endpoint is not accessible or setup failed:
         // Generate a default geometric placeholder image so the feature doesn't completely block
-        return $this->mock_image_generation($prompt);
+        $mock_res = $this->mock_image_generation($prompt);
+        if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+            presshub_ai_log_prompts( 'generate_image', 'Vertex AI Imagen 3.0 image generation', $prompt, 'Fallback placeholder image generated', 'provider=google_cloud model=imagen-3.0' );
+        }
+        return $mock_res;
     }
 
     private function mock_image_generation($prompt) {
@@ -1599,20 +1632,39 @@ class PressHub_AI_API_Client {
 
         if ( is_wp_error( $response ) ) {
             error_log( 'PressHub AI [tts] API error: ' . $response->get_error_message() );
+            if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+                $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
+                presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, 'ERROR: ' . $response->get_error_message(), $meta_line );
+            }
             return $response;
         }
 
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $res_body['error']['message'] ) ) {
             error_log( 'PressHub AI [tts] API error: ' . $res_body['error']['message'] );
+            if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+                $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
+                presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, 'ERROR: ' . $res_body['error']['message'], $meta_line );
+            }
             return new WP_Error( 'tts_api_error', $res_body['error']['message'] );
         }
 
         if ( isset( $res_body['audioContent'] ) ) {
-            return base64_decode( $res_body['audioContent'] );
+            $mp3_bytes = base64_decode( $res_body['audioContent'] );
+            if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+                $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
+                $resp_desc = sprintf( 'Audio MP3 generated (%d bytes)', strlen( (string) $mp3_bytes ) );
+                presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, $resp_desc, $meta_line );
+            }
+            return $mp3_bytes;
         }
 
-        return new WP_Error( 'tts_empty_response', __( 'Empty or invalid audio content returned from Google Cloud TTS.', 'presshub-ai-editor' ) );
+        $empty_err = new WP_Error( 'tts_empty_response', __( 'Empty or invalid audio content returned from Google Cloud TTS.', 'presshub-ai-editor' ) );
+        if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+            $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
+            presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, 'ERROR: ' . $empty_err->get_error_message(), $meta_line );
+        }
+        return $empty_err;
     }
 
     /**
@@ -1753,7 +1805,7 @@ class PressHub_AI_API_Client {
      * @return string API key or empty string.
      */
     public function resolve_gemini_api_key(): string {
-        $tts_provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
+        $tts_provider_id = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_tts_provider() : (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
         $provider_record = null;
 
         if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
@@ -1948,7 +2000,16 @@ class PressHub_AI_API_Client {
         // Modern modes ('structured', 'hybrid_instruction', 'speech_metadata', 'system_instruction')
         $parts = [];
         if ( $is_multi_speaker ) {
-            $pattern = '/(?:^|\n+)\[?(Presenter\s+\d+|Speaker\s+\d+|Ομιλητής\s+\d+|Παρουσιαστής\s+\d+|[^\n:]+)\]?:\s*(.+?)(?=(?:\n+\[?(?:Presenter\s+\d+|Speaker\s+\d+|Ομιλητής\s+\d+|Παρουσιαστής\s+\d+|[^\n:]+)\]?:)|$)/us';
+            $speaker_tags = [ 'Presenter\s*\d+', 'Speaker[_\s]*\d+', 'Host[_\s]*\d+', 'Ομιλητής\s*\d+', 'Παρουσιαστής\s*\d+' ];
+            if ( ! empty( $multi_speakers ) ) {
+                foreach ( $multi_speakers as $ms ) {
+                    if ( ! empty( $ms['speaker'] ) ) {
+                        $speaker_tags[] = preg_quote( trim( $ms['speaker'] ), '/' );
+                    }
+                }
+            }
+            $tag_regex = implode( '|', array_unique( $speaker_tags ) );
+            $pattern   = '/(?:^|\n+)\[?(' . $tag_regex . ')\]?:\s*(.+?)(?=(?:\n+\[?(?:' . $tag_regex . ')\]?:)|$)/usi';
             if ( preg_match_all( $pattern, $clean_text, $matches, PREG_SET_ORDER ) ) {
                 foreach ( $matches as $m ) {
                     $speaker_tag = trim( $m[1] );
@@ -1984,7 +2045,7 @@ class PressHub_AI_API_Client {
         }
 
         if ( empty( $parts ) ) {
-            $monologue_clean = preg_replace( '/^\[?(?:Presenter\s+\d+|Speaker\s+\d+)\]?:\s*/u', '', $clean_text );
+            $monologue_clean = preg_replace( '/^\s*\[?(?:Presenter\s*\d+|Speaker[_\s]*\d+|Host[_\s]*\d+|Ομιλητής\s*\d+|Παρουσιαστής\s*\d+|SPEAKER_\d+|HOST_\d+)\]?:\s*/ui', '', $clean_text );
             $part = [ 'text' => $monologue_clean ];
             if ( 'system_instruction' !== $payload_mode ) {
                 $part['speech_metadata'] = [
@@ -2013,7 +2074,7 @@ class PressHub_AI_API_Client {
                 ? $custom_system_instruction
                 : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_system_instruction() : '' );
             if ( empty( $sys_template ) ) {
-                $sys_template = "You are an expert news broadcaster and podcast host delivering a professional news update in Greek.\nDelivery tone: {style_instruction}\nSpeaking rate multiplier: {speed}\nPitch adjustment: {pitch}\nPresenter Personas:\n- Speaker 1 (Presenter 1) persona: {speaker1}\n- Speaker 2 (Presenter 2) persona: {speaker2}\n\nStrict broadcast rules:\n- Speak strictly the verbatim transcript text.\n- Never read aloud instructions, prompt metadata, speaker aliases (such as \"Presenter 1:\" or \"Presenter 2:\"), brackets, or stage directions.\n- Transition naturally and seamlessly between dialogue turns with broadcast cadence.";
+                $sys_template = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::default_briefing_tts_system_instruction() : '';
             }
 
             $p1_v = $voice_name;
@@ -2058,8 +2119,8 @@ class PressHub_AI_API_Client {
         $engine           = ! empty( $args['engine'] ) ? (string) $args['engine'] : 'gemini';
         $style            = ! empty( $args['style'] ) ? (string) $args['style'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_style() : 'formal' );
         $custom_style     = $args['custom_style'] ?? ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_custom_style() : '' );
-        $p1_voice         = ! empty( $args['speaker1'] ) ? (string) $args['speaker1'] : ( ! empty( $args['presenter_1_voice'] ) ? (string) $args['presenter_1_voice'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_female() : 'Charon' ) );
-        $p2_voice         = ! empty( $args['speaker2'] ) ? (string) $args['speaker2'] : ( ! empty( $args['presenter_2_voice'] ) ? (string) $args['presenter_2_voice'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_male() : 'Kore' ) );
+        $p1_voice         = ! empty( $args['speaker1'] ) ? (string) $args['speaker1'] : ( ! empty( $args['presenter_1_voice'] ) ? (string) $args['presenter_1_voice'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_presenter_1() : 'Kore' ) );
+        $p2_voice         = ! empty( $args['speaker2'] ) ? (string) $args['speaker2'] : ( ! empty( $args['presenter_2_voice'] ) ? (string) $args['presenter_2_voice'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_presenter_2() : 'Fenrir' ) );
         $speed            = isset( $args['speed'] ) ? (float) $args['speed'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_speed() : 1.0 );
         $pitch            = isset( $args['pitch'] ) ? (float) $args['pitch'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_pitch() : 0.0 );
         $payload_mode     = ! empty( $args['payload_mode'] ) ? (string) $args['payload_mode'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured' );
@@ -2103,8 +2164,31 @@ class PressHub_AI_API_Client {
         if ( empty( $configured_model ) ) {
             $configured_model = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : (string) get_option( 'presshub_ai_briefing_tts_model', '' );
         }
-        if ( empty( $configured_model ) ) {
-            $configured_model = 'gemini-3.8-flash-lite-tts';
+        if ( empty( $configured_model ) && class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            $tts_provider_id = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_tts_provider() : (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
+            $provider_record = ! empty( $tts_provider_id ) ? PressHub_AI_Provider_Store::get( $tts_provider_id ) : null;
+            if ( null === $provider_record ) {
+                $all_providers = PressHub_AI_Provider_Store::get_all( true );
+                foreach ( $all_providers as $p ) {
+                    if ( ( $p['type'] ?? '' ) === 'gemini' ) {
+                        $provider_record = $p;
+                        break;
+                    }
+                }
+            }
+            if ( ! empty( $provider_record['default_model'] ) && ( 'gemini' !== ( $provider_record['type'] ?? '' ) || false !== strpos( (string) $provider_record['default_model'], 'tts' ) ) ) {
+                $configured_model = $provider_record['default_model'];
+            }
+        }
+        if ( empty( $configured_model ) || 'journey' === $configured_model ) {
+            if ( ! empty( $args['preview_only'] ) ) {
+                $configured_model = 'unconfigured';
+            } else {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::error( '[TTS] Missing required TTS model in test_synthesize_speech.' );
+                }
+                return new WP_Error( 'missing_tts_model', __( 'No Speech AI model configured. Please specify a TTS model in Daily Briefing Settings or configure a default model on your Gemini provider.', 'presshub-ai-editor' ) );
+            }
         }
 
         $tts_api_key = $this->resolve_gemini_api_key();
@@ -2269,8 +2353,12 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'no_gemini_key', $err_msg );
         }
 
-        if ( empty( trim( $voice_name ) ) ) {
-            $voice_name = 'Kore';
+        if ( empty( trim( $voice_name ) ) && empty( $speaker_configs ) ) {
+            $err_msg = __( 'No TTS voice persona configured for speech synthesis.', 'presshub-ai-editor' );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( '[LogosAI Speech] ' . $err_msg );
+            }
+            return new WP_Error( 'missing_tts_voice', $err_msg );
         }
 
         $clean_text       = trim( $text );
@@ -2315,16 +2403,16 @@ class PressHub_AI_API_Client {
 
         // Resolve Model cascade
         $provider_record = null;
-        if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
-            $tts_provider_id = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
-            if ( ! empty( $tts_provider_id ) ) {
-                $provider_record = PressHub_AI_Provider_Store::get( $tts_provider_id );
-            }
+        $tts_provider_id = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_briefing_podcast_tts_provider()
+            : (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' );
+        if ( ! empty( $tts_provider_id ) && class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            $provider_record = PressHub_AI_Provider_Store::get( $tts_provider_id );
         }
 
         $configured_model = ! empty( $this->model ) && 'gemini' === $this->provider && ( 'tts' === $this->module || false !== strpos( (string) $this->model, 'tts' ) )
             ? $this->model
-            : (string) get_option( 'presshub_ai_briefing_tts_model', '' );
+            : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : (string) get_option( 'presshub_ai_briefing_tts_model', '' ) );
         if ( empty( $configured_model ) && ! empty( $provider_record['default_model'] ) && ( 'gemini' !== ( $provider_record['type'] ?? '' ) || false !== strpos( (string) $provider_record['default_model'], 'tts' ) ) ) {
             $configured_model = $provider_record['default_model'];
         }
@@ -2362,23 +2450,24 @@ class PressHub_AI_API_Client {
             PressHub_AI_Settings_Storage::get_briefing_tts_timeout()
         );
 
+        $max_retries = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_max_retries() : 2;
+        $backoff_ms  = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_retry_backoff_ms() : 2000;
+
         foreach ( $tts_models as $model ) {
-            $gen_url  = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
+            $gen_url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
 
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::debug( sprintf( '[LogosAI Speech] POST %s with model "%s"', 'generateContent', $model ) );
             }
 
-            // Capture full TTS request payload before dispatch if logging enabled
             $tts_payload_log_enabled = class_exists( 'PressHub_AI_Settings_Storage' )
                 && PressHub_AI_Settings_Storage::get_log_tts_payloads();
-            $tts_call_started_at = microtime( true );
-            $tts_request_payload = null;
-            $tts_response_payload = null;
-            if ( $tts_payload_log_enabled ) {
-                $tts_request_payload = self::build_tts_payload_log_entry(
-                    'request',
-                    [
+
+            for ( $attempt = 0; $attempt <= $max_retries; $attempt++ ) {
+                $tts_call_started_at = microtime( true );
+
+                if ( $tts_payload_log_enabled ) {
+                    $tts_req_entry = [
                         'model'           => $model,
                         'endpoint_masked' => self::mask_api_key_in_url( $gen_url ),
                         'headers'         => [
@@ -2397,75 +2486,121 @@ class PressHub_AI_API_Client {
                         'is_multi_speaker' => $is_multi_speaker,
                         'request_body'     => $gen_body,
                         'chars'            => mb_strlen( $clean_text ),
-                    ]
-                );
-                self::write_tts_payload_log( $tts_request_payload );
-            }
+                    ];
+                    if ( $attempt > 0 ) {
+                        $tts_req_entry['retry_attempt'] = $attempt;
+                    }
+                    self::write_tts_payload_log( self::build_tts_payload_log_entry( 'request', $tts_req_entry ) );
+                }
 
-            $gen_res = wp_remote_post( $gen_url, [
-                'headers' => [
-                    'Content-Type'   => 'application/json',
-                    'x-goog-api-key' => $tts_api_key,
-                    'User-Agent'     => 'aistudio-build',
-                ],
-                'body'    => wp_json_encode( $gen_body ),
-                'timeout' => $http_timeout,
-            ] );
+                $gen_res = wp_remote_post( $gen_url, [
+                    'headers' => [
+                        'Content-Type'   => 'application/json',
+                        'x-goog-api-key' => $tts_api_key,
+                        'User-Agent'     => 'aistudio-build',
+                    ],
+                    'body'    => wp_json_encode( $gen_body ),
+                    'timeout' => $http_timeout,
+                ] );
 
-            if ( $tts_payload_log_enabled ) {
                 $tts_latency_ms = (int) round( ( microtime( true ) - $tts_call_started_at ) * 1000 );
-                $tts_log_meta   = [
-                    'model'      => $model,
-                    'endpoint'   => self::mask_api_key_in_url( $gen_url ),
-                    'latency_ms' => $tts_latency_ms,
-                ];
-                if ( is_wp_error( $gen_res ) ) {
-                    $tts_log_meta['wp_error']     = true;
-                    $tts_log_meta['error_code']   = $gen_res->get_error_code();
-                    $tts_log_meta['error_message'] = $gen_res->get_error_message();
-                } else {
-                    $tts_log_meta['http_code'] = wp_remote_retrieve_response_code( $gen_res );
-                    $tts_log_meta['mime_type'] = wp_remote_retrieve_header( $gen_res, 'content-type' );
-                    $tts_log_meta['bytes']     = strlen( (string) wp_remote_retrieve_body( $gen_res ) );
-                }
-                $tts_response_payload = self::build_tts_payload_log_entry( 'response', $tts_log_meta );
-                self::write_tts_payload_log( $tts_response_payload );
-            }
+                $is_wp_err      = is_wp_error( $gen_res );
+                $code           = $is_wp_err ? 0 : wp_remote_retrieve_response_code( $gen_res );
+                $raw_body       = $is_wp_err ? '' : (string) wp_remote_retrieve_body( $gen_res );
+                $res_body       = json_decode( $raw_body, true );
 
-            if ( ! is_wp_error( $gen_res ) ) {
-                if ( function_exists( 'wp_raise_memory_limit' ) ) {
-                    wp_raise_memory_limit( 'admin' );
-                }
-                $code     = wp_remote_retrieve_response_code( $gen_res );
-                $res_body = json_decode( wp_remote_retrieve_body( $gen_res ), true );
+                $error_msg_from_body = $res_body['error']['message'] ?? '';
+                $error_status        = $res_body['error']['status'] ?? '';
+                $error_body_excerpt  = ( '' !== $raw_body && 200 !== $code ) ? substr( $raw_body, 0, 500 ) : '';
 
-                if ( 200 === $code && isset( $res_body['candidates'][0]['content']['parts'] ) ) {
-                    foreach ( $res_body['candidates'][0]['content']['parts'] as $part ) {
-                        if ( ! empty( $part['inlineData']['data'] ) ) {
-                            $audio_base64 = $part['inlineData']['data'];
-                            $mime_type    = $part['inlineData']['mimeType'] ?? $mime_type;
-                            $used_model   = $model;
-                            break 2;
-                        } elseif ( ! empty( $part['inline_data']['data'] ) ) {
-                            $audio_base64 = $part['inline_data']['data'];
-                            $mime_type    = $part['inline_data']['mime_type'] ?? $mime_type;
-                            $used_model   = $model;
-                            break 2;
+                if ( $tts_payload_log_enabled ) {
+                    $tts_log_meta = [
+                        'model'      => $model,
+                        'endpoint'   => self::mask_api_key_in_url( $gen_url ),
+                        'latency_ms' => $tts_latency_ms,
+                    ];
+                    if ( $is_wp_err ) {
+                        $tts_log_meta['wp_error']      = true;
+                        $tts_log_meta['error_code']    = $gen_res->get_error_code();
+                        $tts_log_meta['error_message'] = $gen_res->get_error_message();
+                    } else {
+                        $tts_log_meta['http_code'] = $code;
+                        $tts_log_meta['mime_type'] = wp_remote_retrieve_header( $gen_res, 'content-type' );
+                        $tts_log_meta['bytes']     = strlen( $raw_body );
+                    }
+                    if ( 200 !== $code ) {
+                        if ( '' !== $error_msg_from_body ) {
+                            $tts_log_meta['error_message'] = $error_msg_from_body;
+                        }
+                        if ( '' !== $error_status ) {
+                            $tts_log_meta['error_status'] = $error_status;
+                        }
+                        if ( '' !== $error_body_excerpt ) {
+                            $tts_log_meta['error_body'] = $error_body_excerpt;
                         }
                     }
+                    if ( $attempt > 0 ) {
+                        $tts_log_meta['retry_attempt'] = $attempt;
+                        $tts_log_meta['backoff_ms']    = (int) ( $backoff_ms * ( 2 ** ( $attempt - 1 ) ) );
+                    }
+                    self::write_tts_payload_log( self::build_tts_payload_log_entry( 'response', $tts_log_meta ) );
                 }
 
-                if ( isset( $res_body['error']['message'] ) ) {
-                    $last_error = $res_body['error']['message'];
+                if ( ! $is_wp_err ) {
+                    if ( function_exists( 'wp_raise_memory_limit' ) ) {
+                        wp_raise_memory_limit( 'admin' );
+                    }
+                    if ( 200 === $code && isset( $res_body['candidates'][0]['content']['parts'] ) ) {
+                        foreach ( $res_body['candidates'][0]['content']['parts'] as $part ) {
+                            if ( ! empty( $part['inlineData']['data'] ) ) {
+                                $audio_base64 = $part['inlineData']['data'];
+                                $mime_type    = $part['inlineData']['mimeType'] ?? $mime_type;
+                                $used_model   = $model;
+                                break 2;
+                            } elseif ( ! empty( $part['inline_data']['data'] ) ) {
+                                $audio_base64 = $part['inline_data']['data'];
+                                $mime_type    = $part['inline_data']['mime_type'] ?? $mime_type;
+                                $used_model   = $model;
+                                break 2;
+                            }
+                        }
+                    }
+
+                    if ( '' !== $error_msg_from_body ) {
+                        $last_error = $error_msg_from_body;
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::warning( sprintf( '[LogosAI Speech] Model "%s" HTTP %d error: %s', $model, $code, $last_error ) );
+                        }
+                    }
+                } else {
+                    $last_error = $gen_res->get_error_message();
                     if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                        PressHub_AI_Logger::warning( sprintf( '[LogosAI Speech] Model "%s" HTTP %d error: %s', $model, $code, $last_error ) );
+                        PressHub_AI_Logger::warning( sprintf( '[LogosAI Speech] Model "%s" connection error: %s', $model, $last_error ) );
                     }
                 }
-            } else {
-                $last_error = $gen_res->get_error_message();
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::warning( sprintf( '[LogosAI Speech] Model "%s" connection error: %s', $model, $last_error ) );
+
+                // Check if retryable (HTTP 429, 500, 502, 503, 504 or WP_Error)
+                $is_retryable = $is_wp_err || in_array( $code, [ 429, 500, 502, 503, 504 ], true );
+                if ( $is_retryable && $attempt < $max_retries ) {
+                    $current_backoff = (int) ( $backoff_ms * ( 2 ** $attempt ) );
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::warning( sprintf(
+                            '[LogosAI Speech] Retryable %s on model "%s" (attempt %d/%d). Backing off %d ms...',
+                            $is_wp_err ? 'connection error' : "HTTP {$code}",
+                            $model,
+                            $attempt + 1,
+                            $max_retries,
+                            $current_backoff
+                        ) );
+                    }
+                    $is_mocked = ! empty( $GLOBALS['HTTP_MOCK'] ) || ! empty( $GLOBALS['WP_REMOTE_POST_CALLBACK'] ) || ! empty( $GLOBALS['MOCK_HTTP_RESPONSES'] ) || ! empty( $GLOBALS['CAPTURE_FILTER'] ) || defined( 'PRESSHUB_AI_UNIT_TEST' );
+                    if ( ! $is_mocked && $current_backoff > 0 ) {
+                        usleep( $current_backoff * 1000 );
+                    }
+                    continue;
                 }
+
+                break;
             }
         }
 
@@ -2480,6 +2615,11 @@ class PressHub_AI_API_Client {
             }
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_tts_request( $log_action, 'gemini', $configured_model, mb_strlen( $clean_text ), $duration_ms, 'error', $err_msg );
+            }
+            if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+                $sys_desc = ! empty( $sys_instruction ) ? $sys_instruction : ( 'Delivery tone: ' . $style );
+                $meta_line = sprintf( 'engine=gemini model=%s voice=%s style=%s speed=%.2f pitch=%.1f chars=%d', $configured_model, $voice_name, $style, $speed, $pitch, mb_strlen( $clean_text ) );
+                presshub_ai_log_prompts( 'podcast_tts', $sys_desc, $clean_text, 'ERROR: ' . $err_msg, $meta_line );
             }
             return new WP_Error( 'gemini_audio_error', $err_msg );
         }
@@ -2503,10 +2643,16 @@ class PressHub_AI_API_Client {
             $sample_rate = (int) $m[1];
         }
 
-        if ( $as_wav ) {
-            return ( substr( $raw_audio, 0, 4 ) === 'RIFF' ) ? $raw_audio : self::pcm_to_wav( $raw_audio, $sample_rate );
+        $final_audio = ( $as_wav && substr( $raw_audio, 0, 4 ) !== 'RIFF' ) ? self::pcm_to_wav( $raw_audio, $sample_rate ) : $raw_audio;
+
+        if ( function_exists( 'presshub_ai_log_prompts' ) ) {
+            $sys_desc = ! empty( $sys_instruction ) ? $sys_instruction : ( 'Delivery tone: ' . $style );
+            $meta_line = sprintf( 'engine=gemini model=%s voice=%s style=%s speed=%.2f pitch=%.1f chars=%d', $used_model ?: $configured_model, $voice_name, $style, $speed, $pitch, mb_strlen( $clean_text ) );
+            $resp_desc = sprintf( 'Audio generated (%d bytes, mime: %s)', strlen( (string) $final_audio ), $mime_type );
+            presshub_ai_log_prompts( 'podcast_tts', $sys_desc, $clean_text, $resp_desc, $meta_line );
         }
-        return $raw_audio;
+
+        return $final_audio;
     }
 
     /**
@@ -2523,9 +2669,9 @@ class PressHub_AI_API_Client {
      */
     public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null, array $metadata = [] ) {
         if ( $this->provider === 'anthropic' ) {
-            return $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature, $metadata );
+            $result = $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature, $metadata );
         } elseif ( $this->provider === 'gemini' ) {
-            return $this->call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
+            $result = $this->call_gemini( $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
         } elseif ( $this->provider === 'custom_openai' || in_array( $this->provider, [ 'groq', 'mistral', 'deepseek', 'ollama_local' ], true ) || ( ! empty( $this->base_url ) && false === strpos( $this->base_url, 'api.openai.com' ) ) ) {
             $config = is_array( $this->provider_config ) ? $this->provider_config : [
                 'type'        => $this->provider,
@@ -2537,10 +2683,30 @@ class PressHub_AI_API_Client {
                 'timeout'     => $this->timeout,
                 'headers'     => $this->headers,
             ];
-            return $this->call_custom_openai( $config, $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
+            $result = $this->call_custom_openai( $config, $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
         } else {
-            return $this->call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
+            $result = $this->call_openai( $sys_prompt, $user_prompt, $json_mode, $files, $temperature, $metadata );
         }
+
+        if ( empty( $this->suppress_provider_prompt_log ) && function_exists( 'presshub_ai_log_prompts' ) ) {
+            $action_map = [
+                'coauthor_draft'     => 'draft',
+                'coauthor_scorecard' => 'scorecard',
+                'briefing_curation'  => 'curation',
+                'podcast_script'     => 'podcast_script',
+                'copilot_chat'       => 'chat',
+                'classify_intent'    => 'classify_intent',
+                'summarize_url'      => 'summarize_url',
+                'generate_title'     => 'generate_title',
+                'research'           => 'research',
+            ];
+            $action_key = $this->get_action();
+            $endpoint   = $action_map[ $action_key ] ?? ( 0 === strpos( $action_key, 'social_copy' ) ? 'social_copy' : $action_key );
+            $resp_str   = is_wp_error( $result ) ? ( 'ERROR: ' . $result->get_error_message() ) : (string) $result;
+            presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt, $resp_str, self::current_request_meta() );
+        }
+
+        return $result;
     }
 
     /**

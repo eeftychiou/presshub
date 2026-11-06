@@ -187,8 +187,70 @@ if ( file_exists( $log_file ) ) {
 @rmdir( $log_dir );
 unset( $GLOBALS['UPLOAD_DIR'], $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] );
 
+// --- Case 5: classify_intent, generate_image, podcast_tts emit exactly 1 prompt_log each ---
+add_filter( 'presshub_ai_debug_prompts', '__return_true' );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key']       = 'test-key';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model']   = 'gemini-2.5-flash-preview-tts';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'test-gc-key';
+$api = new PressHub_AI_API_Client();
+
+// 5a: classify_intent
+$GLOBALS['DO_ACTION_LOG'] = [];
+$GLOBALS['CAPTURE_FILTER'] = function() {
+    return [
+        'response' => [ 'code' => 200 ],
+        'body'     => json_encode( [
+            'candidates' => [
+                [ 'content' => [ 'parts' => [ [ 'text' => 'politics' ] ] ] ],
+            ],
+        ] ),
+    ];
+};
+$api->classify_intent( 'Ειδήσεις για τις εκλογές' );
+$logged_intent = array_values( array_filter(
+    $GLOBALS['DO_ACTION_LOG'],
+    fn ( $e ) => isset( $e['hook'] ) && 'presshub_ai_prompt_log' === $e['hook'] && ( $e['args'][0] ?? '' ) === 'classify_intent'
+) );
+pdl_check( 'classify_intent: exactly 1 prompt_log emitted', count( $logged_intent ) === 1 );
+
+// 5b: generate_image
+$GLOBALS['DO_ACTION_LOG'] = [];
+$GLOBALS['CAPTURE_FILTER'] = function() {
+    return [
+        'response' => [ 'code' => 200 ],
+        'body'     => json_encode( [
+            'predictions' => [ [ 'bytesBase64Encoded' => base64_encode( 'fake-image-bytes' ) ] ],
+        ] ),
+    ];
+};
+$api->generate_image_via_imagen( 'A photo of Athens parliament' );
+$logged_image = array_values( array_filter(
+    $GLOBALS['DO_ACTION_LOG'],
+    fn ( $e ) => isset( $e['hook'] ) && 'presshub_ai_prompt_log' === $e['hook'] && ( $e['args'][0] ?? '' ) === 'generate_image'
+) );
+pdl_check( 'generate_image: exactly 1 prompt_log emitted', count( $logged_image ) === 1 );
+
+// 5c: podcast_tts
+$GLOBALS['DO_ACTION_LOG'] = [];
+$GLOBALS['CAPTURE_FILTER'] = function() {
+    return [
+        'response' => [ 'code' => 200 ],
+        'body'     => json_encode( [
+            'candidates' => [
+                [ 'content' => [ 'parts' => [ [ 'inlineData' => [ 'mimeType' => 'audio/pcm;rate=24000', 'data' => base64_encode( str_repeat( "\x12\x34", 100 ) ) ] ] ] ] ],
+            ],
+        ] ),
+    ];
+};
+$api->synthesize_speech_via_gemini( 'Καλημέρα σας.', 'Kore' );
+$logged_tts = array_values( array_filter(
+    $GLOBALS['DO_ACTION_LOG'],
+    fn ( $e ) => isset( $e['hook'] ) && 'presshub_ai_prompt_log' === $e['hook'] && ( $e['args'][0] ?? '' ) === 'podcast_tts'
+) );
+pdl_check( 'podcast_tts: exactly 1 prompt_log emitted', count( $logged_tts ) === 1 );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "PromptDebugLogTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PromptDebugLogTest: OK (26 checks)\n";
+echo "PromptDebugLogTest: OK (29 checks)\n";

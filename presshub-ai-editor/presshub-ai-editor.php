@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.8.6
+ * Version: 2.8.7
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -120,7 +120,7 @@ if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 
-define( 'PRESSHUB_AI_VERSION', '2.8.6' );
+define( 'PRESSHUB_AI_VERSION', '2.8.7' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -529,7 +529,9 @@ function presshub_ai_execute_research_job( $research_id ) {
 
     $user_prompt = "User prompt / request: " . $prompt . "\n\nAssociated Post Content Context:\n" . $post_content;
 
+    $api->suppress_provider_prompt_log = true;
     $report = $api->call_provider( $sys_prompt, $user_prompt, false, [] );
+    $api->suppress_provider_prompt_log = false;
 
     // 1.2.9: research syntheses are inserted as HTML blocks — convert
     // Markdown output so the editor renders them properly.

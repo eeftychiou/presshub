@@ -311,11 +311,36 @@ class GeminiTTSPayloadTest
             $failures[] = 'Legacy mode should prepend instruction string.';
         }
 
+        // 2d: Mid-sentence colons in dialogue are NEVER parsed as speaker tags
+        $colon_dialogue = "[Presenter 1]: Ο υπουργός δήλωσε: τα μέτρα θα ισχύσουν από αύριο.\n[Presenter 2]: Η απόφαση είναι οριστική: δεν αλλάζει.";
+        $body_colon = $client->build_gemini_tts_request_body(
+            $colon_dialogue,
+            'Kore',
+            true,
+            $multi_speakers,
+            'formal',
+            1.0,
+            0.0,
+            'structured'
+        );
+        $colon_parts = $body_colon['contents'][0]['parts'] ?? [];
+        if ( count( $colon_parts ) !== 2 ) {
+            $failures[] = 'Mid-sentence colons should not split dialogue turns; expected 2 parts, got: ' . count( $colon_parts );
+        } else {
+            if ( false === strpos( $colon_parts[0]['text'], 'Ο υπουργός δήλωσε: τα μέτρα' ) ) {
+                $failures[] = 'Part 0 must preserve colon in sentence; got: ' . ( $colon_parts[0]['text'] ?? '' );
+            }
+            if ( false === strpos( $colon_parts[1]['text'], 'Η απόφαση είναι οριστική: δεν αλλάζει' ) ) {
+                $failures[] = 'Part 1 must preserve colon in sentence; got: ' . ( $colon_parts[1]['text'] ?? '' );
+            }
+        }
+
         // =========================================================================
         // Case 3: Live Synthesis Test Method (test_synthesize_speech)
         // =========================================================================
         self::reset_world();
         update_option( 'presshub_ai_briefing_tts_api_key', 'test-gemini-key-12345' );
+        update_option( 'presshub_ai_briefing_tts_model', 'gemini-2.5-flash-preview-tts' );
 
         // Mock wp_remote_post to return a fake base64 audio response via CAPTURE_FILTER
         $GLOBALS['CAPTURE_FILTER'] = function() {

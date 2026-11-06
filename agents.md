@@ -460,13 +460,21 @@ The automated AI Editorial Review system (`PressHub_AI_QA_Reviewer`) evaluates d
 4. **Legacy Prepended Instruction Mode (`legacy` — Deprecated)**:
    - Backward-compatibility mode prepending style instructions directly into script text.
    - System instruction, speaking speed, and voice pitch settings dynamically grey out in the UI.
-5. **Multi-Speaker Voice Mapping & Deterministic Binding**:
-   - Presenter 1 (`presshub_ai_briefing_voice_female`) and Presenter 2 (`presshub_ai_briefing_voice_male`) are mapped to canonical voice personas (e.g. Charon, Kore) inside `speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs`.
-   - Each transcript turn is tagged with `speech_metadata.speaker` (`Presenter 1` or `Presenter 2`) and `speech_metadata.style`.
-   - **Zero-Prefix Verbatim Audio Invariant**: Speaker tags (e.g. `Presenter 1:`, `Presenter 2:`) are cleanly stripped from `contents[0].parts[].text` so the neural TTS engine does not vocalize speaker labels aloud in the audio broadcast. Each turn is attributed to its voice persona via `speech_metadata.speaker` (`Presenter 1` or `Presenter 2`), which matches `speakerVoiceConfigs`.
-6. **RIFF WAV Header Handling**:
+5. **Unified Turn-by-Turn Synthesis & Voice Identity Isolation**:
+   - For all host counts (1, 2, and 3 hosts), podcast synthesis dispatches each dialogue turn individually via `synthesize_turn()` using a dedicated single-speaker `voiceConfig`.
+   - Zero `multiSpeakerVoiceConfig` in podcast audio streams; eliminates neural voice bleeding, persona swapping, and multiSpeaker drift.
+   - Turns are stitched with Settings-First natural pauses (`presshub_ai_briefing_tts_turn_pause_ms`, default 250ms), topics with topic pauses (`presshub_ai_briefing_tts_topic_pause_ms`, default 600ms) and SFX, and throttled by `presshub_ai_briefing_tts_request_delay_ms` (default 250ms).
+   - **Zero-Prefix Verbatim Audio Invariant**: Speaker tags (e.g. `[SPEAKER_1]:`, `Presenter 1:`, etc.) are cleanly stripped from turn text so the neural TTS engine does not vocalize speaker labels aloud.
+   - **Greek Dialogue Colon Protection**: Mid-sentence colons (e.g. `Ο υπουργός δήλωσε: τα μέτρα...`) are never treated as speaker tags.
+6. **Resumable Turn-by-Turn WAV Cache**:
+   - Each synthesized turn is deterministically hashed across engine, model, voice persona, style, speed, pitch, payload mode, and text, and saved to `wp-content/uploads/presshub-ai/tts-cache/{date}/turn_{hash}.{wav|mp3}`.
+   - Interrupted or failed syntheses resume seamlessly from the first un-synthesized turn without re-calling the API for cached turns.
+7. **Exponential Backoff & Structured Error Logging**:
+   - Transient network errors (HTTP 429, 500, 502, 503, 504, cURL timeouts) automatically retry up to `presshub_ai_briefing_tts_max_retries` (default 2) with exponential backoff (`presshub_ai_briefing_tts_retry_backoff_ms * 2^attempt`, default 2000ms).
+   - Response errors are captured with error message, status code, and truncated raw body in structured payload logs.
+8. **RIFF WAV Header Handling**:
    - Gemini 3.8 TTS responses return complete WAV files with RIFF headers; audio decoding checks for the RIFF signature before applying PCM-to-WAV wrapping to prevent audio stream corruption.
-7. **Interactive Testing Studio & Live JSON Inspector**:
+9. **Interactive Testing Studio & Live JSON Inspector**:
    - The settings page provides a live JSON inspector updating dynamically whenever audio options change.
    - Editors can test 1-host and 2-host audio synthesis in real time via AJAX endpoints `presshub_ai_preview_tts_payload` and `presshub_ai_test_tts_synthesis` (gated by `edit_others_posts`).
 

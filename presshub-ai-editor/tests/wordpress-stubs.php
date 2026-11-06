@@ -710,6 +710,14 @@ if ( ! function_exists( 'apply_filters' ) ) {
     }
 }
 
+if ( ! function_exists( '__return_true' ) ) {
+    function __return_true() { return true; }
+}
+
+if ( ! function_exists( '__return_false' ) ) {
+    function __return_false() { return false; }
+}
+
 if ( ! function_exists( 'get_posts' ) ) {
     function get_posts( $args = [] ) {
         return $GLOBALS['GET_POSTS_RESULT'] ?? [];
@@ -869,6 +877,12 @@ if ( ! function_exists( 'sanitize_key' ) ) {
     function sanitize_key( $key ) {
         $key = strtolower( (string) $key );
         return preg_replace( '/[^a-z0-9_\-]/', '', $key );
+    }
+}
+
+if ( ! function_exists( 'sanitize_file_name' ) ) {
+    function sanitize_file_name( $filename ) {
+        return preg_replace( '/[^a-zA-Z0-9_\-\.]/', '', (string) $filename );
     }
 }
 

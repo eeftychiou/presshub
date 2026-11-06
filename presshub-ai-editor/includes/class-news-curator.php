@@ -704,11 +704,11 @@ class PressHub_AI_News_Curator {
         $post_title = $this->compose_text_story_title( $headline, $formatted_date, $edition );
 
         // Read category setting
-        $category_id = (int) get_option( self::OPTION_CATEGORY, 0 );
+        $category_id = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_text_category() : (int) get_option( self::OPTION_CATEGORY, 0 );
         $post_category = ( $category_id > 0 ) ? [ $category_id ] : [];
 
         // Read status setting (default 'pending')
-        $post_status = (string) get_option( self::OPTION_STATUS, 'pending' );
+        $post_status = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_text_status() : (string) get_option( self::OPTION_STATUS, 'pending' );
         if ( empty( trim( $post_status ) ) ) {
             $post_status = 'pending';
         }
@@ -1058,7 +1058,9 @@ class PressHub_AI_News_Curator {
             );
         }
 
+        $api_client->suppress_provider_prompt_log = true;
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $curation_metadata );
+        $api_client->suppress_provider_prompt_log = false;
 
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
             $req_meta = method_exists( $api_client, 'get_request_meta' )

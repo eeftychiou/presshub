@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.8.6-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.8.7-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-83%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -74,7 +74,10 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - **Zero Narrated Instructions**: Passes clean verbatim dialogue turns in `contents[0].parts[].text` without prepended prompt directives, eliminating prompt narration on modern models (`gemini-3.8-flash-tts` / `gemini-3.8-flash-lite-tts`).
   - **Official Gemini 3.8 TTS REST Standard (`structured` — Recommended)**: Conforms strictly to Google's official Gemini 3.8 TTS REST specification. Turn-level `speech_metadata.style` carries delivery emotion, speaking rate (`0.85x - 1.25x`), and voice pitch tuning (`-5.0 to +5.0 semitones`) without top-level system instructions. Inactive settings (e.g. system instructions) dynamically grey out in the UI with informative badges.
   - **Hybrid / System Instruction Override Mode (`hybrid_instruction`)**: Passes both turn-level `speech_metadata.style` and top-level `systemInstruction` with resolved speaker persona and rate placeholders.
-  - **Multi-Speaker Persona Mapping & Zero-Prefix Audio**: Maps Presenter 1 and Presenter 2 to distinct voice personas (e.g. Charon, Kore, Fenrir, Aoede) in `speechConfig.multiSpeakerVoiceConfig`. Strips inline speaker prefixes from `contents[0].parts[].text` so the neural model never vocalizes speaker tags aloud, while binding each turn via `speech_metadata.speaker`.
+  - **Unified Turn-by-Turn Synthesis & Voice Identity Isolation**: Synthesizes turns individually via `synthesize_turn()` with dedicated single-speaker `voiceConfig` across 1, 2, and 3 hosts, completely eliminating voice identity bleeding and multiSpeaker drift.
+  - **Resumable Turn Disk Cache**: Deterministically caches each synthesized WAV/MP3 chunk (`tts-cache/{date}/turn_{hash}`), allowing failed or interrupted runs to resume instantly without re-calling the API for completed turns.
+  - **Settings-First Pauses & Throttling**: Configurable turn pauses (`presshub_ai_briefing_tts_turn_pause_ms`, default 250ms), topic pauses (`presshub_ai_briefing_tts_topic_pause_ms`, default 600ms), and inter-turn request delays (`presshub_ai_briefing_tts_request_delay_ms`, default 250ms) with intro/transition/outro SFX stitching.
+  - **Exponential Backoff & Dialogue Colon Protection**: Automatically retries HTTP 429/5xx errors with exponential backoff (`retry_backoff_ms * 2^attempt`). Tightened regex prevents mid-sentence colons in Greek dialogue from being misidentified as speaker turns.
   - **RIFF WAV Header Handling**: Detects RIFF headers on incoming audio bytes from Gemini 3.8 to prevent double-wrapping WAV headers.
 - **Gemini Speech API JSON Inspector & Live Voice Testing Studio**:
   - Live preview container in Daily Briefing settings renders the exact JSON request body sent to Gemini's speech endpoint, updating dynamically as voices, speed, pitch, delivery style, or test scripts change.

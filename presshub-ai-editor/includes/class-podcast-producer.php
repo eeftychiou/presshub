@@ -194,7 +194,7 @@ class PressHub_AI_Podcast_Producer {
         }
 
         if ( empty( $duration ) ) {
-            $duration = (string) get_option( self::OPTION_DURATION, '5_min' );
+            $duration = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_target_duration() : (string) get_option( self::OPTION_DURATION, '5_min' );
         }
 
         $specs = $this->get_duration_specs( $duration );
@@ -278,7 +278,7 @@ class PressHub_AI_Podcast_Producer {
         }
 
         if ( empty( $preset_id ) ) {
-            $preset_id = (string) get_option( self::OPTION_PRESET, '' );
+            $preset_id = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_preset() : (string) get_option( self::OPTION_PRESET, '' );
         }
 
         $preset = PressHub_AI_Preset_Resolver::resolve_for_user( $user_id, 'podcast', $preset_id );
@@ -852,7 +852,7 @@ class PressHub_AI_Podcast_Producer {
 
         $style = class_exists( 'PressHub_AI_Settings_Storage' )
             ? PressHub_AI_Settings_Storage::get_podcast_style()
-            : (string) get_option( 'presshub_ai_podcast_style', 'default_greek_chat' );
+            : 'default_greek_chat';
 
         $model_source    = method_exists( $api_client, 'get_model_source' ) ? $api_client->get_model_source() : '';
         $provider_source = method_exists( $api_client, 'get_provider_source' ) ? $api_client->get_provider_source() : '';
@@ -880,7 +880,9 @@ class PressHub_AI_Podcast_Producer {
             'edition'         => $edition,
         ];
 
+        $api_client->suppress_provider_prompt_log = true;
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $turn_metadata );
+        $api_client->suppress_provider_prompt_log = false;
 
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
             $req_meta = method_exists( $api_client, 'get_request_meta' )
@@ -903,19 +905,19 @@ class PressHub_AI_Podcast_Producer {
         }
 
         // 4. Parse turns
-        $host1 = (string) get_option( self::OPTION_HOST_FEMALE, 'Presenter 1' );
+        $host1 = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_female() : (string) get_option( self::OPTION_HOST_FEMALE, 'Μαρία' );
         if ( empty( trim( $host1 ) ) ) {
-            $host1 = 'Presenter 1';
+            $host1 = 'Μαρία';
         }
         $host1 = apply_filters( 'presshub_ai_podcast_host1_name', $host1 );
 
-        $host2 = (string) get_option( self::OPTION_HOST_MALE, 'Presenter 2' );
+        $host2 = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_male() : (string) get_option( self::OPTION_HOST_MALE, 'Νίκος' );
         if ( empty( trim( $host2 ) ) ) {
-            $host2 = 'Presenter 2';
+            $host2 = 'Νίκος';
         }
         $host2 = apply_filters( 'presshub_ai_podcast_host2_name', $host2 );
 
-        $host3 = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_tertiary() : (string) get_option( 'presshub_ai_briefing_host_tertiary', 'Presenter 3' );
+        $host3 = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_tertiary() : 'Presenter 3';
         if ( empty( trim( $host3 ) ) ) {
             $host3 = 'Presenter 3';
         }
