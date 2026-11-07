@@ -6,7 +6,8 @@ import {
   sanitizePlatform,
   verifySession,
   getSessionPath,
-  saveSession
+  saveSession,
+  markSessionInvalid
 } from './session-manager';
 import {
   connectOrLaunchChrome,
@@ -180,8 +181,25 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     WorkerLogger.debug('Twitter Automation', 'Checking if logged in...');
     const currentUrl = page.url();
-    if (currentUrl.includes('/login') || currentUrl.includes('/i/flow/login')) {
-      throw new Error(`Twitter session invalid or expired: redirected to login page (${currentUrl})`);
+    const isLoginPage =
+      currentUrl.includes('/login') ||
+      currentUrl.includes('/i/flow/login') ||
+      currentUrl.includes('/i/jf/onboarding') ||
+      currentUrl.includes('mode=login') ||
+      currentUrl.includes('/onboarding');
+
+    if (isLoginPage) {
+      markSessionInvalid('twitter', `Redirected to login (${currentUrl})`);
+      throw new Error(`Twitter session invalid or expired: redirected to login page (${currentUrl}). Re-authenticate via: npm run login -- twitter`);
+    }
+
+    const loginBodyText = (await page.innerText('body').catch(() => '')) || '';
+    if (
+      /See what’?s happening|Select an option below|Continue with Google|Sign in to X/i.test(loginBodyText) &&
+      !loginBodyText.includes('What’s happening?')
+    ) {
+      markSessionInvalid('twitter', `Login modal detected on ${currentUrl}`);
+      throw new Error(`Twitter session invalid or expired: login prompt detected on ${currentUrl}. Re-authenticate via: npm run login -- twitter`);
     }
 
     // Dismiss Twitter cookie banner if visible and neutralize fixed bottom overlays
@@ -304,26 +322,29 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       }
     }
 
-    // Full DOM event cycle dispatch to guarantee React synthetic click handlers fire
-    await postButton.evaluate((el: any) => {
-      if (el) {
-        el.focus();
-        const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
-        const targets = [el, el.firstElementChild || el];
-        for (const t of targets) {
-          if (win && typeof win.MouseEvent === 'function') {
-            t.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
-            t.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
-            t.dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
-            t.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
-            t.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+    // Full DOM event cycle dispatch to guarantee React synthetic click handlers fire ONLY if standard click was intercepted
+    if (!clicked) {
+      WorkerLogger.debug('Twitter Automation', 'Standard clicks failed or intercepted, attempting fallback native DOM event dispatch...');
+      await postButton.evaluate((el: any) => {
+        if (el) {
+          el.focus();
+          const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+          const targets = [el, el.firstElementChild || el];
+          for (const t of targets) {
+            if (win && typeof win.MouseEvent === 'function') {
+              t.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
+              t.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+              t.dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
+              t.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+              t.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+            }
+          }
+          if (typeof el.click === 'function') {
+            el.click();
           }
         }
-        if (typeof el.click === 'function') {
-          el.click();
-        }
-      }
-    }).catch(() => {});
+      }).catch(() => {});
+    }
 
     WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
     // Wait for the modal dialog to disappear or notification toast to appear
@@ -714,33 +735,43 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 
     // 3. Hover and click via Playwright
     await targetPostBtn.hover().catch(() => {});
+    let clicked = false;
     try {
       await targetPostBtn.click({ timeout: 5000 });
+      clicked = true;
     } catch {
       WorkerLogger.debug('TikTok Automation', 'Standard click intercepted, clicking Post with force: true...');
-      await targetPostBtn.click({ force: true });
+      try {
+        await targetPostBtn.click({ force: true, timeout: 3000 });
+        clicked = true;
+      } catch (err: any) {
+        WorkerLogger.warn('TikTok Automation', `Playwright click failed: ${err?.message || err}`);
+      }
     }
 
-    // 4. Multi-event DOM click dispatch to ensure React/Semi UI event handlers trigger
-    await targetPostBtn.evaluate((el: any) => {
-      if (el) {
-        el.focus();
-        const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
-        const targets = [el, el.firstElementChild || el];
-        for (const t of targets) {
-          if (win && typeof win.MouseEvent === 'function') {
-            t.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
-            t.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
-            t.dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
-            t.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
-            t.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+    // 4. Multi-event DOM click dispatch to ensure React/Semi UI event handlers trigger ONLY if click was intercepted
+    if (!clicked) {
+      WorkerLogger.debug('TikTok Automation', 'Standard clicks failed or intercepted, attempting fallback native DOM event dispatch...');
+      await targetPostBtn.evaluate((el: any) => {
+        if (el) {
+          el.focus();
+          const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+          const targets = [el, el.firstElementChild || el];
+          for (const t of targets) {
+            if (win && typeof win.MouseEvent === 'function') {
+              t.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
+              t.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+              t.dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
+              t.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+              t.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+            }
+          }
+          if (typeof el.click === 'function') {
+            el.click();
           }
         }
-        if (typeof el.click === 'function') {
-          el.click();
-        }
-      }
-    }).catch(() => {});
+      }).catch(() => {});
+    }
 
     await page.waitForTimeout(2000);
 

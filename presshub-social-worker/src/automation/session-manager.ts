@@ -55,6 +55,22 @@ export function getSessionPath(platform: string, sessionsDir?: string): string {
   return path.join(dir, `${validatedPlatform}-session.json`);
 }
 
+const invalidatedPlatforms = new Set<string>();
+
+export function markSessionInvalid(platform: string, reason?: string): void {
+  try {
+    const p = sanitizePlatform(platform);
+    invalidatedPlatforms.add(p);
+  } catch {}
+}
+
+export function clearSessionInvalid(platform: string): void {
+  try {
+    const p = sanitizePlatform(platform);
+    invalidatedPlatforms.delete(p);
+  } catch {}
+}
+
 export function verifySession(platform: string, sessionsDir?: string): SessionVerificationResult {
   let validatedPlatform: Platform;
   try {
@@ -65,6 +81,15 @@ export function verifySession(platform: string, sessionsDir?: string): SessionVe
       platform,
       cookieCount: 0,
       reason: err.message
+    };
+  }
+
+  if (invalidatedPlatforms.has(validatedPlatform)) {
+    return {
+      valid: false,
+      platform: validatedPlatform,
+      cookieCount: 0,
+      reason: `Session marked invalid: re-authentication required`
     };
   }
 
@@ -127,6 +152,7 @@ export function verifySession(platform: string, sessionsDir?: string): SessionVe
 
 export function saveSession(platform: string, state: object | string, sessionsDir?: string): string {
   const validatedPlatform = sanitizePlatform(platform);
+  clearSessionInvalid(validatedPlatform);
   const sessionPath = getSessionPath(validatedPlatform, sessionsDir);
   const dir = path.dirname(sessionPath);
   if (!fs.existsSync(dir)) {

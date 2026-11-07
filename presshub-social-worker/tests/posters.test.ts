@@ -3,6 +3,7 @@ import path from 'path';
 import { chromium, Browser, BrowserContext } from 'playwright';
 import { postTwitter, postTikTok, postFacebook, postInstagram } from '../src/automation/posters';
 import { ChromeConnection } from '../src/automation/browser-helper';
+import { markSessionInvalid, clearSessionInvalid, verifySession } from '../src/automation/session-manager';
 
 const TMP_MEDIA_DIR = path.resolve(__dirname, 'tmp-posters-test');
 
@@ -307,5 +308,88 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     expect(res.success).toBe(true);
     expect(res.platform).toBe('instagram');
     expect(res.externalPostUrl).toMatch(/https:\/\/instagram\.com\/p\/ig-\d+/);
+  });
+
+  test('postTwitter detects login onboarding redirect, marks session invalid, and throws re-authentication error', async () => {
+    clearSessionInvalid('twitter');
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          const page = await context.newPage();
+          page.goto = async () => {
+            await page.setContent('<html><body><div class="login-wrapper">See what’s happening<input autocomplete="username" /></div></body></html>');
+            return null as any;
+          };
+          // simulate redirect URL
+          page.url = () => 'https://x.com/i/jf/onboarding/web?redirect_after_login=%2Fcompose%2Fpost&mode=login';
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    await expect(postTwitter({
+      platform: 'twitter',
+      copy: 'Test tweet on expired session',
+      browserSession: mockSession
+    })).rejects.toThrow(/Twitter session invalid or expired/);
+
+    const verification = verifySession('twitter');
+    expect(verification.valid).toBe(false);
+    expect(verification.reason).toMatch(/Session marked invalid/);
+  });
+
+  test('postTwitter executes single click and does not dispatch duplicate event cycle when click succeeds', async () => {
+    clearSessionInvalid('twitter');
+    let clickCount = 0;
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          const page = await context.newPage();
+          const composeHtml = `<html><body>
+            <div role="dialog">
+              <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+              <button id="post-btn" data-testid="tweetButton">Post</button>
+            </div>
+            <script>
+              document.getElementById("post-btn").addEventListener("click", () => {
+                window.__clickEventsCount = (window.__clickEventsCount || 0) + 1;
+                document.querySelector("[role=dialog]").remove();
+                const toast = document.createElement("div");
+                toast.setAttribute("data-testid", "toast");
+                const link = document.createElement("a");
+                link.setAttribute("href", "/user/status/3344556677");
+                link.textContent = "View";
+                toast.appendChild(link);
+                document.body.appendChild(toast);
+              });
+            </script>
+          </body></html>`;
+          page.goto = async (url: string) => {
+            if (url && url.includes('/status/')) {
+              await page.setContent('<html><body><article data-testid="tweet"><div>Single click test</div></article></body></html>');
+              return null as any;
+            }
+            await page.setContent(composeHtml);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    const res = await postTwitter({
+      platform: 'twitter',
+      copy: 'Single click verified tweet',
+      browserSession: mockSession
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.externalPostId).toBe('3344556677');
   });
 });
