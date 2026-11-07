@@ -1787,7 +1787,7 @@ class PressHub_AI_Settings_Render {
             <option value="ERROR" <?php echo 'ERROR' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'ERROR (Only critical failures)', 'presshub-ai-editor' ); ?></option>
             <option value="OFF" <?php echo 'OFF' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'OFF (Disable file logging)', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Control verbosity of the internal diagnostic log file (stored at wp-content/uploads/presshub-ai/presshub-debug.log).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Control verbosity of the internal diagnostic log file (stored at wp-content/uploads/presshub-ai/presshub-debug.log). When not set explicitly, the default is DEBUG if WP_DEBUG is on and INFO otherwise. Prompt debugging no longer changes the log level.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

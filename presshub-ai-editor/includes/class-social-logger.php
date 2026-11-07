@@ -65,7 +65,10 @@ class PressHub_Social_Logger {
     public static function log( string $level, string $message, array $context = [] ): void {
         $normalized_level = strtoupper( trim( $level ) );
 
-        // Maintain in-memory ring buffer.
+        // Maintain in-memory ring buffer (context masked; never hold plain secrets).
+        if ( class_exists( 'PressHub_AI_Secret_Masker' ) ) {
+            $context = PressHub_AI_Secret_Masker::mask_array( $context );
+        }
         self::$recent_logs[] = [
             'timestamp' => time(),
             'level'     => $normalized_level,
@@ -159,14 +162,11 @@ class PressHub_Social_Logger {
      */
     public static function audit( string $event_type, string $entity_type, $entity_id, string $summary, array $changes = [] ): void {
         if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
-            $user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
             PressHub_AI_Audit_Logger::log(
                 $event_type,
                 $entity_type,
                 (string) $entity_id,
-                $summary,
-                $changes,
-                $user_id
+                [ 'summary' => $summary, 'changes' => $changes ]
             );
         }
     }

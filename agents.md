@@ -54,6 +54,12 @@ php dev-env/scripts/setup.php
 > four logging layers is a violation of this protocol. The empirical record always wins over
 > the developer's intuition.
 
+**Writing logs (rules for new code):**
+- Log through `PressHub_AI_Logger::debug/info/warning/error()` with structured context (for provider calls: `provider`, `model`, `action`, `http_code`, `duration_ms`). **Never call `error_log()` directly**: the logger already mirrors WARNING and above to the PHP error log, tags lines with the trace ID, and shows them in the plugin's log viewer. The only raw `error_log()` calls allowed are inside `PressHub_AI_Logger` and the `WP_DEBUG` fallback in `PressHub_Social_Logger`.
+- Secrets are masked centrally by `PressHub_AI_Secret_Masker`: the logger masks context arrays (`mask_array()`) and messages (`mask_text()`), and the audit logger masks details. Still never pass raw credentials to a logger on purpose. Prompt and response bodies in the prompt debug log are deliberately left verbatim.
+- Audit events go through `PressHub_AI_Audit_Logger::log( $event_type, $entity_type, $entity_id, array $details )`. Clearing the audit log records an `audit_log_cleared` event as the first row of the new trail.
+- The audit log stores `REMOTE_ADDR` by default. Behind a trusted proxy, set the `presshub_ai_client_ip_header` filter (e.g. to `HTTP_CF_CONNECTING_IP`); never trust `X-Forwarded-For` otherwise.
+
 Every agent — whether triaging a bug, writing a test, implementing a feature, or reviewing a
 PR — **must** run the following phase-appropriate commands. The output of these commands
 becomes the evidence attached to issues, the assertions inside tests, and the proof in PR

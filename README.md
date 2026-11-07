@@ -140,6 +140,16 @@ PressHub AI implements a 4-layer logging architecture to provide total transpare
 | **Layer 4: WordPress Core** | PHP runtime warnings, fatal tracebacks, cURL/environment issues | `wp-content/debug.log` | `php dev-env/scripts/tail-logs.php --source=wp` |
 | **Generation Records** | Everything that went into each briefing and podcast-script generation: exact system and user prompts, the real provider/model/temperature/max tokens/timeout, the articles sent and dropped (with the reason), memory used, the response, token usage, and the TTS settings used for the podcast audio. Linked to the post via `_presshub_generation_record_ids`; kept for `presshub_ai_generation_record_retention_days` (default 90). Recorded always, independent of the debug-log toggles. | `wp_presshub_ai_generation_records` | `php dev-env/scripts/query-db.php "SELECT id, kind, briefing_date, edition, status, post_id FROM wp_presshub_ai_generation_records ORDER BY id DESC LIMIT 5"` |
 
+**Secrets and provider errors:** API keys and Bearer tokens are masked automatically in every log layer (`PressHub_AI_Secret_Masker`). Provider API failures (OpenAI, Anthropic, Gemini, custom endpoints, Imagen, TTS) appear in the plugin log viewer as `ERROR` lines with the provider, model, action, HTTP code and trace ID.
+
+**Audit log behind a proxy:** the audit log records the visitor IP from `REMOTE_ADDR`. If the site sits behind a trusted reverse proxy or CDN, add a filter so the real client IP is used, for example:
+
+```php
+add_filter( 'presshub_ai_client_ip_header', fn() => 'HTTP_CF_CONNECTING_IP' );
+```
+
+Only set this behind a proxy you control: otherwise clients can spoof the header.
+
 ### CLI Observability Cheat-Sheet
 
 ```bash

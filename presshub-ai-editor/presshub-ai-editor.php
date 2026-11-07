@@ -142,6 +142,7 @@ if ( ! defined( 'PRESSHUB_SOCIAL_URL' ) ) {
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-defaults.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-trace.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-secret-masker.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-logger.php';
 // Concern #2 split: load settings modules in parallel with the
 // legacy facade. Cutover happens in T5; until then the
@@ -566,11 +567,12 @@ function presshub_ai_execute_research_job( $research_id ) {
     if ( is_wp_error( $report ) ) {
         update_post_meta( $research_id, '_research_status', 'failed' );
         update_post_meta( $research_id, '_error_message', $report->get_error_message() );
-        error_log( sprintf(
-            'PressHub AI: research job %d failed (provider error): %s',
-            $research_id,
-            $report->get_error_message()
-        ) );
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error(
+                sprintf( 'PressHub AI: research job %d failed (provider error): %s', $research_id, $report->get_error_message() ),
+                [ 'research_id' => (int) $research_id, 'stage' => 'provider', 'error' => $report->get_error_message() ]
+            );
+        }
         return;
     }
     
@@ -583,11 +585,12 @@ function presshub_ai_execute_research_job( $research_id ) {
         $update_error = is_wp_error( $updated ) ? $updated->get_error_message() : 'Failed to update research post content.';
         update_post_meta( $research_id, '_research_status', 'failed' );
         update_post_meta( $research_id, '_error_message', $update_error );
-        error_log( sprintf(
-            'PressHub AI: research job %d failed (post update): %s',
-            $research_id,
-            $update_error
-        ) );
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error(
+                sprintf( 'PressHub AI: research job %d failed (post update): %s', $research_id, $update_error ),
+                [ 'research_id' => (int) $research_id, 'stage' => 'post_update', 'error' => $update_error ]
+            );
+        }
         return;
     }
 
