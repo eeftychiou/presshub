@@ -394,7 +394,8 @@ export class PressHubPoller {
       }
     }, this.pollIntervalMs);
 
-    if (this.pollTimer.unref) {
+    // In test suites, unref timer so Jest can exit cleanly; in production, keep the event loop alive
+    if (process.env.NODE_ENV === 'test' && this.pollTimer.unref) {
       this.pollTimer.unref();
     }
   }
