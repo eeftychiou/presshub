@@ -133,9 +133,12 @@ class PressHub_Social_Settings_Render {
             $engine        = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
             $engine_label  = ( 'automation' === $engine ) ? __( 'Automation Worker', 'presshub-social-autopost' ) : __( 'Official REST API', 'presshub-social-autopost' );
 
-            $badge = $is_configured
+            $session_ok    = PressHub_Social_Settings_Storage::is_platform_session_active( $platform );
+            $badge = ( $is_configured && ! $session_ok )
+                ? '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#fff3cd; color:#856404;">' . esc_html__( '⏸ Session inactive — jobs will wait', 'presshub-social-autopost' ) . '</span>'
+                : ( $is_configured
                 ? '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#d4edda; color:#155724;">' . esc_html__( '✓ Configured', 'presshub-social-autopost' ) . '</span>'
-                : '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#f8d7da; color:#721c24;">' . esc_html__( '⚠ Not Configured', 'presshub-social-autopost' ) . '</span>';
+                : '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#f8d7da; color:#721c24;">' . esc_html__( '⚠ Not Configured', 'presshub-social-autopost' ) . '</span>' );
 
             echo '<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#fff; border:1px solid #ccd0d4; border-radius:4px;">';
             echo '<label style="font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">';
@@ -176,9 +179,12 @@ class PressHub_Social_Settings_Render {
         $is_configured = PressHub_Social_Settings_Storage::is_platform_configured( $platform );
         $opt_name      = 'presshub_social_engine_' . $platform;
 
-        $badge_html = $is_configured
+        $session_ok    = PressHub_Social_Settings_Storage::is_platform_session_active( $platform );
+        $badge_html = ( $is_configured && ! $session_ok )
+            ? '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#fff3cd; color:#856404;">' . esc_html__( '⏸ Session inactive — jobs will wait', 'presshub-social-autopost' ) . '</span>'
+            : ( $is_configured
             ? '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#d4edda; color:#155724;">' . esc_html__( '✓ Configured', 'presshub-social-autopost' ) . '</span>'
-            : '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#f8d7da; color:#721c24;">' . esc_html__( '⚠ Not Configured — posts will not be queued', 'presshub-social-autopost' ) . '</span>';
+            : '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#f8d7da; color:#721c24;">' . esc_html__( '⚠ Not Configured — posts will not be queued', 'presshub-social-autopost' ) . '</span>' );
         ?>
         <div style="display:flex; align-items:center;">
             <select id="<?php echo esc_attr( $opt_name ); ?>" name="<?php echo esc_attr( $opt_name ); ?>">

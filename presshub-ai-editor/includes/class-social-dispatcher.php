@@ -109,7 +109,8 @@ class PressHub_Social_Dispatcher {
                 }
                 if ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_configured' ) && ! PressHub_Social_Settings_Storage::is_platform_configured( $platform ) ) {
                     if ( class_exists( 'PressHub_Social_Logger' ) ) {
-                        PressHub_Social_Logger::info( sprintf( 'Skipping social queue for post #%d on %s: platform is not configured.', $post_id, $platform ) );
+                        // WARNING: the platform is enabled but cannot post, so the operator should see it.
+                        PressHub_Social_Logger::warning( sprintf( 'Skipping social queue for post #%d on %s: platform is enabled but not configured.', $post_id, $platform ) );
                     }
                     continue;
                 }

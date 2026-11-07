@@ -1628,9 +1628,25 @@ update_option( 'presshub_social_worker_url', 'http://127.0.0.1:3456' );
 update_option( 'presshub_social_worker_secret', 'sec123' );
 assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Push mode automation configured when URL and secret present' );
 update_option( 'presshub_social_worker_sessions', [ 'twitter' => false ] );
-assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Push mode automation unconfigured when session explicitly inactive' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Push mode stays configured when the session is momentarily inactive (jobs wait)' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_session_active( 'twitter' ), 'is_platform_session_active reports the inactive session for the badge' );
 update_option( 'presshub_social_worker_sessions', [ 'twitter' => true ] );
 assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Push mode automation configured when session active' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_session_active( 'twitter' ), 'is_platform_session_active true when session active' );
+
+// 4b. Pull mode: a momentarily inactive session must NOT drop posts (review of #128).
+update_option( 'presshub_social_worker_mode', 'pull' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => false ] );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Pull mode: platform reported by the worker stays configured while its session is inactive' );
+delete_option( 'presshub_social_worker_sessions' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Pull mode: platform never reported by the worker is not configured' );
+update_option( 'presshub_social_engine_twitter', 'api' );
+update_option( 'presshub_social_twitter_access_token', 'tw-access-only' );
+delete_option( 'presshub_social_twitter_bearer_token' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Twitter API engine configured with an Access token alone (matches the poster)' );
+delete_option( 'presshub_social_twitter_access_token' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Twitter API engine unconfigured without Bearer or Access token' );
+update_option( 'presshub_social_engine_twitter', 'automation' );
 
 // 5. Per-platform enable/disable settings
 update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook', 'instagram', 'tiktok' ] );
@@ -1691,6 +1707,15 @@ $platforms_enqueued = array_column( $jobs_501, 'platform' );
 assert_true( in_array( 'twitter', $platforms_enqueued, true ) && in_array( 'tiktok', $platforms_enqueued, true ), 'Enqueued platforms match twitter and tiktok' );
 assert_false( in_array( 'facebook', $platforms_enqueued, true ), 'Disabled platform facebook was skipped' );
 assert_false( in_array( 'instagram', $platforms_enqueued, true ), 'Unconfigured platform instagram was skipped' );
+
+// 7b. Pull mode: an article published while the worker reports Twitter's session as inactive is still queued.
+PressHub_Social_Queue::reset_memory_store();
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => false, 'tiktok' => true ] );
+$enqueued_inactive = PressHub_Social_Dispatcher::enqueue_for_post( 501, [ 'twitter', 'tiktok' ] );
+$platforms_inactive = array_column( PressHub_Social_Queue::get_jobs_for_post( 501 ), 'platform' );
+assert_true( in_array( 'twitter', $platforms_inactive, true ), 'Twitter job is queued even though its session is momentarily inactive' );
+assert_equals( 2, count( $enqueued_inactive ), 'Both automation platforms queued while one session is inactive' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'tiktok' => true ] );
 
 // 8. Dispatcher returns empty array when only unconfigured or disabled platforms are requested
 $enqueued_empty = PressHub_Social_Dispatcher::enqueue_for_post( 501, [ 'facebook', 'instagram' ] );

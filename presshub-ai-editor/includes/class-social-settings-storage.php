@@ -664,11 +664,8 @@ class PressHub_Social_Settings_Storage {
                 case 'instagram':
                     return '' !== trim( self::get_instagram_account_id() ) && '' !== trim( self::get_meta_access_token() );
                 case 'twitter':
+                    // Mirrors PressHub_Social_Meta_API_Client: a Bearer token, or an Access token used as Bearer.
                     return '' !== trim( self::get_twitter_bearer_token() )
-                        || ( '' !== trim( self::get_twitter_api_key() )
-                            && '' !== trim( self::get_twitter_api_secret() )
-                            && '' !== trim( self::get_twitter_access_token() )
-                            && '' !== trim( self::get_twitter_access_secret() ) )
                         || '' !== trim( self::get_twitter_access_token() );
                 case 'tiktok':
                     return '' !== trim( self::get_tiktok_access_token() ) && '' !== trim( self::get_tiktok_open_id() );
@@ -678,25 +675,33 @@ class PressHub_Social_Settings_Storage {
         }
 
         if ( 'automation' === $engine ) {
-            $mode     = self::get_worker_mode();
-            $sessions = get_option( 'presshub_social_worker_sessions', [] );
-
-            if ( 'pull' === $mode ) {
-                return is_array( $sessions ) && ! empty( $sessions[ $platform ] );
+            // Configured means the worker can post for this platform at all. Whether its
+            // browser session is active *right now* is deliberately not part of it: jobs
+            // queued while a session is down simply wait, because /worker/claim only hands
+            // out jobs for platforms whose session is active. Gating on the live session
+            // would silently drop every article published while the worker restarts.
+            if ( 'pull' === self::get_worker_mode() ) {
+                $sessions = get_option( 'presshub_social_worker_sessions', [] );
+                return is_array( $sessions ) && array_key_exists( $platform, $sessions );
             }
-
-            if ( 'push' === $mode ) {
-                if ( '' === trim( self::get_worker_url() ) || '' === trim( self::get_worker_secret() ) ) {
-                    return false;
-                }
-                if ( is_array( $sessions ) && array_key_exists( $platform, $sessions ) ) {
-                    return (bool) $sessions[ $platform ];
-                }
-                return true;
-            }
+            return '' !== trim( self::get_worker_url() ) && '' !== trim( self::get_worker_secret() );
         }
 
         return false;
+    }
+
+    /**
+     * Whether the automation worker last reported an active browser session for a platform.
+     * Display-only (badges): queuing does not depend on it, see is_platform_configured().
+     * Always true for the Official API engine.
+     */
+    public static function is_platform_session_active( string $platform ): bool {
+        $platform = sanitize_key( $platform );
+        if ( 'automation' !== self::get_platform_engine( $platform ) ) {
+            return true;
+        }
+        $sessions = get_option( 'presshub_social_worker_sessions', [] );
+        return is_array( $sessions ) && ! empty( $sessions[ $platform ] );
     }
 
     /**

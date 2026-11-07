@@ -126,6 +126,10 @@ class PressHub_Social_Metabox {
                                     <span class="presshub-badge badge-engine-unconfigured" style="background:#d9534f; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
                                         <?php esc_html_e( 'Not Configured', 'presshub-social-autopost' ); ?>
                                     </span>
+                                <?php elseif ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_session_active' ) && ! PressHub_Social_Settings_Storage::is_platform_session_active( $slug ) ) : ?>
+                                    <span class="presshub-badge badge-engine-session-inactive" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
+                                        <?php esc_html_e( 'Session inactive — will post when the worker is back', 'presshub-social-autopost' ); ?>
+                                    </span>
                                 <?php endif; ?>
                                 <span class="presshub-badge <?php echo esc_attr( $badge_cls ); ?>">
                                     <?php echo esc_html( $badge_text ); ?>
