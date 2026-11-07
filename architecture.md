@@ -459,6 +459,42 @@ graph TD
 - **Query helper**: `PressHub_AI_Generation_Inspector::query_records( $filters )` (filters sanitized and bound through `$wpdb->prepare()`; invalid values dropped). The recorder class is unchanged.
 - **Tests**: `tests/GenerationInspectorTest.php` (capability and nonce gates, field loader, inert `<script>` content, no-record behaviour, list filters).
 
+### 4.23 Tiered Editorial Memory Prompt Injection (Issue #135)
+- **Overview**: Injects tiered editorial memory into curation and podcast prompts to maintain narrative continuity without fact repetition across editions.
+- **Context Builder (`PressHub_AI_Memory_Context_Builder`)**:
+  - Assembles memory text and structured manifest for `target = 'briefing'` or `'podcast'`.
+  - **Tier 1 (Same-Day Morning Digest)**: Included only for the noon edition. When present, it replaces the raw morning post dump delimiter, eliminating prompt duplication while preserving noon context. Consolidated logging guarantees exactly one warning per build when missing or inactive.
+  - **Tier 2 (Recent Daily Digests)**: Past `daily_days` days (excluding today), ordered newest first.
+  - **Tier 3 (Background Context)**: Active weekly rollups within the `background_days` window plus gap-filling daily digests for days not covered by rollups, with strict zero-gap and zero-overlap guarantees.
+  - **Podcast Lines**: Ingests `podcast.opening_line` and `closing_line` into a dedicated section when `target === 'podcast'`.
+- **Status & Inclusion Filtering**:
+  - Only `active` and `stale` entries are included (omitting `excluded`, `failed`, and `pending`).
+  - Stale entries are flagged with `'stale' => true` on the entry and `'has_stale' => true` on the manifest root, accompanied by structured warnings.
+  - Individual stories with `include === false` are omitted from rendered prompts.
+- **Prompt Hygiene & Sanitization**:
+  - Rendered memory text is wrapped in explicit boundary markers: `=== ΑΡΧΗ ΣΥΝΤΑΚΤΙΚΗΣ ΜΝΗΜΗΣ ===` and `=== ΤΕΛΟΣ ΣΥΝΤΑΚΤΙΚΗΣ ΜΝΗΜΗΣ ===`.
+  - Story fields (`title`, `development`, `narrative`) and podcast lines are sanitized: newlines (`\r\n`, `\r`, `\n`) are collapsed to single spaces and `#` headings are stripped to avoid markdown confusion.
+- **Deterministic Trimming Hierarchy & Phantom Trim Guard**:
+  - If rendered memory text exceeds the character budget, entries are trimmed in strict order:
+    1. Oldest background entries first.
+    2. Oldest recent days.
+    3. Within a day, `resolved` stories before `developing` stories.
+  - Storyless entries (e.g. podcast-only lines) are popped without recording phantom empty-key rows in `manifest.trimmed`.
+  - Every trimmed item is recorded in `manifest.trimmed` and logs a structured warning.
+- **Context Estimator Budget Shrinking & Token Accounting**:
+  - `PressHub_AI_Context_Estimator::compute_memory_budget_for_context()`: Shrinks the memory budget dynamically if the sum of full prompt size (hydrated system template + preset + primary context articles/briefing) and configured memory budget exceeds the model's configured context tokens threshold (from `presshub_ai_briefing_text_max_tokens` / `presshub_ai_briefing_podcast_max_tokens`, falling back to safe default 40k).
+  - `PressHub_AI_Context_Estimator::estimate_prompt_with_memory()`: Invoked in NewsCurator and PodcastProducer to calculate combined input + memory token footprints.
+  - Manifest includes `budgets`: `['configured' => int, 'effective' => int, 'shrunk' => bool]` and `missing_digests`: array of unseeded/missing dates in the lookback window.
+  - Manifest `entries` include per-entry character counts in `chars` (`mb_strlen($text, 'UTF-8')`).
+- **Prompt Hydration & Operator Override Fallback**:
+  - Default prompts in `assets/prompts/curation/` and `assets/prompts/podcast/` support the `{memory_context}` placeholder.
+  - If an operator's customized template omits `{memory_context}`, the memory block is automatically injected into `user_prompt` before the articles/briefing text.
+  - Includes Greek editorial memory instructions from `assets/prompts/memory/context_instructions.txt` (loaded via `PressHub_AI_Prompt_Loader::get_memory_context_instructions()`).
+- **Generation Record Persistence**:
+  - Attaches the complete memory manifest directly via `'memory' => $manifest` to `PressHub_AI_Generation_Recorder::record()` for persistence in `wp_presshub_ai_generation_records.memory_json` for both text briefing and podcast script generations.
+- **Strict Gating Invariant**:
+  - When `presshub_ai_memory_enabled` is disabled or lookback days are 0, prompts remain 100% byte-identical to pre-#135 prompts (verified by strict `===` test assertions for morning, noon, and podcast prompts).
+
 ## 5. Cron Schedules & Timers
 
 | Event Hook | Default Time | Configurable Option | Subsystem Callback |

@@ -47,6 +47,23 @@ class PressHub_AI_Podcast_Producer {
     private static $last_input_breakdown = [];
 
     /**
+     * @internal Issue #135 - editorial memory manifest for the most recent build_dialogue_prompt() call.
+     *
+     * @var array<string,mixed>
+     */
+    private static array $last_memory_manifest = [];
+
+    /**
+     * @internal Issue #135 - character count of the rendered memory block in the most recent build_dialogue_prompt() call.
+     */
+    private static int $last_memory_chars = 0;
+
+    /**
+     * @internal Issue #135 - estimated token cost of the rendered memory block in the most recent build_dialogue_prompt() call.
+     */
+    private static int $last_memory_tokens_estimate = 0;
+
+    /**
      * Get duration and pacing specifications based on duration option.
      *
      * @param string $duration_option Duration option (e.g. '3_min', '5_min', '10_min').
@@ -163,6 +180,27 @@ class PressHub_AI_Podcast_Producer {
         return is_array( self::$last_input_breakdown ) ? self::$last_input_breakdown : [];
     }
 
+    /**
+     * Issue #135 - editorial memory manifest from the most recent build_dialogue_prompt() call.
+     */
+    public function last_memory_manifest(): array {
+        return self::$last_memory_manifest;
+    }
+
+    /**
+     * Issue #135 - character count of the rendered memory block from the most recent build_dialogue_prompt() call.
+     */
+    public function last_memory_chars(): int {
+        return self::$last_memory_chars;
+    }
+
+    /**
+     * Issue #135 - estimated tokens of the rendered memory block from the most recent build_dialogue_prompt() call.
+     */
+    public function last_memory_tokens_estimate(): int {
+        return self::$last_memory_tokens_estimate;
+    }
+
     public function get_sources_list( array $articles ): string {
         $sources = [];
         foreach ( $articles as $article ) {
@@ -270,7 +308,10 @@ class PressHub_AI_Podcast_Producer {
 
         // Issue #131 - start each build with a clean input breakdown.
         $not_selected = [];
-        self::$last_input_breakdown = [];
+        self::$last_input_breakdown         = [];
+        self::$last_memory_manifest        = [];
+        self::$last_memory_chars           = 0;
+        self::$last_memory_tokens_estimate = 0;
 
         // Filter articles if selected_article_ids is provided and non-empty
         if ( ! empty( $selected_article_ids ) && is_array( $selected_article_ids ) ) {
@@ -342,7 +383,8 @@ class PressHub_AI_Podcast_Producer {
         }
 
         $base_prompt = apply_filters( 'presshub_ai_podcast_producer_system_prompt', $base_prompt );
-        $articles_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
+        $has_memory_in_system = ( false !== strpos( $base_prompt, '{memory_context}' ) );
+        $articles_in_system   = ( false !== strpos( $base_prompt, '{articles_context}' ) );
 
         // 2. Hydrate placeholders (Issue #90: no host-name args).
         $system_prompt = $this->hydrate_prompt( $base_prompt, $date, $articles, $duration );
@@ -394,21 +436,76 @@ class PressHub_AI_Podcast_Producer {
                     ? __( 'μεσημβρινή ενημέρωση', 'presshub-ai-editor' )
                     : __( 'πρωινή ενημέρωση', 'presshub-ai-editor' );
 
+                $briefing_chars = function_exists( 'mb_strlen' ) ? (int) mb_strlen( trim( $briefing_text ), 'UTF-8' ) : (int) strlen( trim( $briefing_text ) );
+
+                // Issue #135: Compute effective memory budget and build tiered memory context
+                $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_podcast_budget_chars();
+                $configured_context_tokens = class_exists( 'PressHub_AI_Settings_Storage' )
+                    ? PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens()
+                    : 0;
+                if ( $configured_context_tokens <= 0 ) {
+                    $configured_context_tokens = PressHub_AI_Context_Estimator::DEFAULT_MAX_CONTEXT_TOKENS;
+                }
+
+                $full_prompt_chars    = mb_strlen( $system_prompt, 'UTF-8' ) + $briefing_chars;
+                $effective_mem_budget = PressHub_AI_Context_Estimator::compute_memory_budget_for_context(
+                    $configured_mem_budget,
+                    $full_prompt_chars,
+                    $configured_context_tokens
+                );
+
+                if ( $effective_mem_budget < $configured_mem_budget && class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning(
+                        'Memory budget shrunk to fit model context limit alongside podcast input',
+                        [
+                            'configured_budget' => $configured_mem_budget,
+                            'effective_budget'  => $effective_mem_budget,
+                            'input_chars'       => $full_prompt_chars,
+                        ]
+                    );
+                }
+
+                $mem = class_exists( 'PressHub_AI_Memory_Context_Builder' )
+                    ? PressHub_AI_Memory_Context_Builder::build( $date, $edition, 'podcast', $effective_mem_budget )
+                    : [ 'text' => '', 'used_morning_digest' => false, 'manifest' => [ 'enabled' => false ] ];
+
+                self::$last_memory_manifest        = $mem['manifest'] ?? [];
+                self::$last_memory_chars           = (int) ( $mem['manifest']['used_chars'] ?? 0 );
+                self::$last_memory_tokens_estimate = (int) ( $mem['manifest']['tokens_estimate'] ?? 0 );
+
+                if ( class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+                    PressHub_AI_Context_Estimator::estimate_prompt_with_memory( trim( $briefing_text ), (string) ( $mem['text'] ?? '' ) );
+                }
+
+                if ( $has_memory_in_system ) {
+                    if ( '' !== ( $mem['text'] ?? '' ) ) {
+                        $system_prompt = str_replace( '{memory_context}', $mem['text'], $system_prompt );
+                    } else {
+                        $system_prompt = PressHub_AI_Memory_Context_Builder::strip_placeholder( $system_prompt );
+                    }
+                    $memory_user_block = '';
+                } else {
+                    $memory_user_block = ( '' !== ( $mem['text'] ?? '' ) ) ? "\n\n" . trim( $mem['text'] ) . "\n" : '';
+                }
+
                 self::$last_input_breakdown = [
                     'context_mode'              => $context_mode,
                     'context_used'              => 'curated_briefing',
                     'briefing_text_used'        => true,
-                    'briefing_chars'            => function_exists( 'mb_strlen' ) ? (int) mb_strlen( trim( $briefing_text ) ) : (int) strlen( trim( $briefing_text ) ),
+                    'briefing_chars'            => $briefing_chars,
+                    'memory_chars'              => self::$last_memory_chars,
+                    'memory_tokens_estimate'    => self::$last_memory_tokens_estimate,
                     'articles_in_system_prompt' => $articles_in_system,
                     'articles'                  => $articles_in_system ? self::breakdown_articles( $articles ) : [],
                     'not_selected'              => $not_selected,
                 ];
 
                 $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\n\nΠαρακάτω ακολουθεί το συνταχθέν κείμενο της %s:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο %s στα Ελληνικά με %s βασισμένο στην παραπάνω %s.",
+                    "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις%s\n\nΠαρακάτω ακολουθεί το συνταχθέν κείμενο της %s:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο %s στα Ελληνικά με %s βασισμένο στην παραπάνω %s.",
                     $date,
                     $specs['description'],
                     $specs['target_words'],
+                    $memory_user_block,
                     $edition_label,
                     trim( $briefing_text ),
                     $podcast_task_label,
@@ -424,27 +521,83 @@ class PressHub_AI_Podcast_Producer {
         }
 
         // Default / Fallback: 'harvested_articles' mode
+        $sources = $this->get_sources_list( $articles );
+        $context = $this->format_articles_context( $articles );
+        $articles_chars = function_exists( 'mb_strlen' ) ? (int) mb_strlen( $context, 'UTF-8' ) : (int) strlen( $context );
+
+        // Issue #135: Compute effective memory budget and build tiered memory context
+        $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_podcast_budget_chars();
+        $configured_context_tokens = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens()
+            : 0;
+        if ( $configured_context_tokens <= 0 ) {
+            $configured_context_tokens = PressHub_AI_Context_Estimator::DEFAULT_MAX_CONTEXT_TOKENS;
+        }
+
+        $full_prompt_chars    = mb_strlen( $system_prompt, 'UTF-8' ) + $articles_chars;
+        $effective_mem_budget = PressHub_AI_Context_Estimator::compute_memory_budget_for_context(
+            $configured_mem_budget,
+            $full_prompt_chars,
+            $configured_context_tokens
+        );
+
+        if ( $effective_mem_budget < $configured_mem_budget && class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::warning(
+                'Memory budget shrunk to fit model context limit alongside podcast input',
+                [
+                    'configured_budget' => $configured_mem_budget,
+                    'effective_budget'  => $effective_mem_budget,
+                    'input_chars'       => $full_prompt_chars,
+                ]
+            );
+        }
+
+        $mem = class_exists( 'PressHub_AI_Memory_Context_Builder' )
+            ? PressHub_AI_Memory_Context_Builder::build( $date, $edition, 'podcast', $effective_mem_budget )
+            : [ 'text' => '', 'used_morning_digest' => false, 'manifest' => [ 'enabled' => false ] ];
+
+        self::$last_memory_manifest        = $mem['manifest'] ?? [];
+        self::$last_memory_chars           = (int) ( $mem['manifest']['used_chars'] ?? 0 );
+        self::$last_memory_tokens_estimate = (int) ( $mem['manifest']['tokens_estimate'] ?? 0 );
+
+        if ( class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+            PressHub_AI_Context_Estimator::estimate_prompt_with_memory( $context, (string) ( $mem['text'] ?? '' ) );
+        }
+
+        if ( $has_memory_in_system ) {
+            if ( '' !== ( $mem['text'] ?? '' ) ) {
+                $system_prompt = str_replace( '{memory_context}', $mem['text'], $system_prompt );
+            } else {
+                $system_prompt = PressHub_AI_Memory_Context_Builder::strip_placeholder( $system_prompt );
+            }
+            $memory_user_block = '';
+        } else {
+            $memory_user_block = ( '' !== ( $mem['text'] ?? '' ) ) ? "\n\n" . trim( $mem['text'] ) . "\n" : '';
+        }
+
         self::$last_input_breakdown = [
             'context_mode'              => $context_mode,
             'context_used'              => 'harvested_articles',
             'briefing_text_used'        => false,
             'briefing_chars'            => 0,
+            'memory_chars'              => self::$last_memory_chars,
+            'memory_tokens_estimate'    => self::$last_memory_tokens_estimate,
             'articles_in_system_prompt' => $articles_in_system,
             'articles'                  => self::breakdown_articles( $articles ),
             'not_selected'              => $not_selected,
         ];
-        $sources = $this->get_sources_list( $articles );
-        $context = $this->format_articles_context( $articles );
+
         $podcast_task_label = ( 'noon' === $edition )
             ? __( 'μεσημβρινού podcast', 'presshub-ai-editor' )
             : __( 'podcast', 'presshub-ai-editor' );
 
         $user_prompt = sprintf(
-            "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο %s στα Ελληνικά με %s.",
+            "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\nΠηγές: %s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο %s στα Ελληνικά με %s.",
             $date,
             $specs['description'],
             $specs['target_words'],
             $sources,
+            $memory_user_block,
             $context,
             $podcast_task_label,
             $presenter_mention
@@ -1039,6 +1192,7 @@ class PressHub_AI_Podcast_Producer {
                 'edition'       => $edition,
                 'status'        => is_wp_error( $response ) ? 'error' : 'success',
                 'error_message' => is_wp_error( $response ) ? $response->get_error_message() : '',
+                'memory'        => $this->last_memory_manifest(),
                 'config'        => PressHub_AI_Generation_Recorder::build_client_config(
                     $api_client,
                     [

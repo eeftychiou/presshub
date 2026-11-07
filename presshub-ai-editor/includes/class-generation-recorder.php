@@ -47,9 +47,6 @@ class PressHub_AI_Generation_Recorder {
         'usage_json'  => 'usage',
     ];
 
-    /** @var array|null Pending memory context consumed by the next record() call. */
-    private static $pending_memory = null;
-
     /**
      * Get table name with WordPress prefix.
      *
@@ -111,25 +108,6 @@ class PressHub_AI_Generation_Recorder {
     }
 
     /**
-     * Set the pending memory context consumed (and cleared) by the next record() call.
-     *
-     * @param array $memory Memory context (e.g. entries used for prompt injection).
-     * @return void
-     */
-    public static function set_memory_context( array $memory ): void {
-        self::$pending_memory = $memory;
-    }
-
-    /**
-     * Clear any pending memory context.
-     *
-     * @return void
-     */
-    public static function clear_memory_context(): void {
-        self::$pending_memory = null;
-    }
-
-    /**
      * Insert one generation record.
      *
      * Never throws: a recording failure must never break generation.
@@ -147,10 +125,6 @@ class PressHub_AI_Generation_Recorder {
                 $trace_id = (string) PressHub_AI_Trace::get_or_create_trace_id();
             }
 
-            // Consume the pending memory context exactly once, even if the insert fails.
-            $pending_memory       = self::$pending_memory;
-            self::$pending_memory = null;
-
             if ( ! in_array( $kind, self::KINDS, true ) ) {
                 self::log_failure( 'Generation record rejected: unknown kind', $trace_id, $kind );
                 return null;
@@ -164,7 +138,7 @@ class PressHub_AI_Generation_Recorder {
 
             $memory = ( isset( $data['memory'] ) && is_array( $data['memory'] ) )
                 ? $data['memory']
-                : ( null !== $pending_memory ? $pending_memory : [ 'enabled' => false ] );
+                : [ 'enabled' => false ];
 
             $post_id = isset( $data['post_id'] ) ? (int) $data['post_id'] : 0;
 

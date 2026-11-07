@@ -287,7 +287,19 @@ php dev-env/scripts/reset-db.php
 7. **Backfill Workflow**:
    - Resumable, idempotent backfill across date ranges via `PressHub_AI_Memory_Digest_Builder::start_backfill()` and single-step cron (`presshub_ai_memory_backfill_step`).
    - Exposed via Briefing Hub UI, AJAX endpoints (`presshub_ai_memory_start_backfill`, `presshub_ai_memory_backfill_status`), and WP-CLI command (`wp presshub memory backfill [--from=...] [--to=...] [--force]`).
-
+8. **Tiered Editorial Memory Prompt Injection (Issue #135)**:
+   - Assembled via `PressHub_AI_Memory_Context_Builder::build( $date, $edition, $target, $budget_override )`.
+   - Tier 1: Same-day morning digest (noon edition only). Replaces the legacy raw morning text dump delimiter when present.
+   - Tier 2: Recent daily digests for `daily_days` days (newest first).
+   - Tier 3: Background weekly rollups + gap-filling daily digests within `background_days` with no gap and no overlap.
+   - Podcast lines: Includes opening and closing lines when `target === 'podcast'`.
+   - Status: Only `active` and `stale` entries are included; excluded/failed/pending are skipped; stories with `include === false` are omitted.
+   - Trimming: When exceeding character budget, trims (1) oldest background, (2) oldest recent days, (3) within a day, resolved stories before developing.
+   - Greek instructions: Embedded from `assets/prompts/memory/context_instructions.txt` enforcing continuity over repetition, natural referencing, strict factual grounding, and no meta-commentary.
+   - Context Estimator: Shrinks memory budget dynamically when articles + prompt + memory exceed the model's max context limit.
+   - Hydration: Replaces `{memory_context}` in system or user prompt, falling back to prepending before articles in the user prompt when the placeholder is absent.
+   - Generation Records: Persists complete manifest in `wp_presshub_ai_generation_records.memory_json`.
+   - Strict Gating: Prompts remain byte-identical when memory is disabled (`enabled=0`) or lookback days are 0.
 
 ---
 

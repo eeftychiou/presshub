@@ -11,6 +11,7 @@
  *  - Zero-Silent-Fallback: missing template files throw RuntimeException
  *  - Path traversal protection: relative paths with '..' throw InvalidArgumentException
  *  - Settings Storage get_curation_prompt() loads custom override or fallback default
+ *  - Memory context instructions exist, load correctly and contain editorial principles
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
@@ -55,6 +56,14 @@ plt_check( 'load curation prompt', ! empty( $curation_prompt ) && false !== strp
 // 3b. Verify scorecard prompt loads and contains temporal/factual directive
 $scorecard_prompt = PressHub_AI_Prompt_Loader::get_scorecard_system_prompt();
 plt_check( 'load scorecard prompt', ! empty( $scorecard_prompt ) && false !== strpos( $scorecard_prompt, 'CRITICAL FACTUAL AND TEMPORAL DIRECTIVE' ) && false !== strpos( $scorecard_prompt, 'knowledge cutoff' ) );
+
+// 3c. Verify memory context instructions prompt loads and contains 4 editorial principles
+$memory_prompt = PressHub_AI_Prompt_Loader::get_memory_context_instructions();
+plt_check( 'load memory context instructions', ! empty( $memory_prompt ) && false !== strpos( $memory_prompt, 'ΟΔΗΓΙΕΣ ΑΞΙΟΠΟΙΗΣΗΣ ΣΥΝΤΑΚΤΙΚΗΣ ΜΝΗΜΗΣ' ) );
+plt_check( 'memory instructions principle 1: Συνέχεια αντί για Επανάληψη', false !== strpos( $memory_prompt, 'Συνέχεια αντί για Επανάληψη' ) );
+plt_check( 'memory instructions principle 2: Σύνδεση με Προηγούμενα Γεγονότα', false !== strpos( $memory_prompt, 'Σύνδεση με Προηγούμενα Γεγονότα' ) );
+plt_check( 'memory instructions principle 3: Αυστηρή Ακρίβεια', false !== strpos( $memory_prompt, 'Αυστηρή Ακρίβεια' ) );
+plt_check( 'memory instructions principle 4: Φυσική Αρχειακή Αναφορά', false !== strpos( $memory_prompt, 'Φυσική Αρχειακή Αναφορά' ) );
 
 // 4. Verify Zero-Silent-Fallback on missing template
 $caught_missing = false;

@@ -158,6 +158,15 @@ class PressHub_AI_Prompt_Loader {
     }
 
     /**
+     * Get the built-in default editorial memory context instructions.
+     *
+     * @return string Loaded memory context instructions prompt template.
+     */
+    public static function get_memory_context_instructions(): string {
+        return self::load( 'memory/context_instructions.txt' );
+    }
+
+    /**
      * Get the built-in default daily memory digest prompt.
      *
      * @return string Loaded daily digest prompt template.

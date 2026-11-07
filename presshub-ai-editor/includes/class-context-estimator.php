@@ -14,6 +14,9 @@
  *   - summarize( $text )                returns ['words' => int, 'tokens' => int].
  *   - clamp_max_context_tokens( $value) validates the briefing max-context-token
  *                                       threshold option against safe bounds.
+ *   - compute_memory_budget_for_context() calculates remaining char budget for memory
+ *                                       within safe model context window.
+ *   - estimate_prompt_with_memory()     combined breakdown of article + memory tokens.
  *
  * The word-count algorithm:
  *     1. Strip HTML tags, decode HTML entities.
@@ -191,5 +194,60 @@ class PressHub_AI_Context_Estimator {
             return self::MAX_MAX_CONTEXT_TOKENS;
         }
         return $value;
+    }
+
+    /**
+     * Compute effective memory character budget within a model's max context limit.
+     *
+     * Shrinks the configured memory character budget if the sum of articles
+     * and configured memory exceeds the context threshold, ensuring the memory
+     * budget yields first rather than dropping primary news articles.
+     *
+     * @param int      $configured_memory_budget_chars Configured character budget for memory.
+     * @param int      $articles_chars                 Actual character count of primary context (articles/briefing).
+     * @param int|null $max_context_tokens             Model max context tokens threshold (optional).
+     * @return int Effective character budget for memory (>= 0).
+     */
+    public static function compute_memory_budget_for_context( int $configured_memory_budget_chars, int $articles_chars, ?int $max_context_tokens = null ): int {
+        if ( $configured_memory_budget_chars <= 0 ) {
+            return 0;
+        }
+
+        if ( null === $max_context_tokens || $max_context_tokens <= 0 ) {
+            $max_context_tokens = self::DEFAULT_MAX_CONTEXT_TOKENS;
+        }
+
+        $max_total_chars = $max_context_tokens * self::CHARS_PER_TOKEN;
+        $articles_chars  = max( 0, $articles_chars );
+
+        if ( ( $configured_memory_budget_chars + $articles_chars ) > $max_total_chars ) {
+            $shrunk = max( 0, $max_total_chars - $articles_chars );
+            return min( $configured_memory_budget_chars, $shrunk );
+        }
+
+        return $configured_memory_budget_chars;
+    }
+
+    /**
+     * Estimate token and character breakdown for a prompt with injected memory.
+     *
+     * @param string $articles_text Primary context text.
+     * @param string $memory_text   Rendered memory block text.
+     * @return array{articles_chars:int,articles_tokens:int,memory_chars:int,memory_tokens:int,total_chars:int,total_tokens:int}
+     */
+    public static function estimate_prompt_with_memory( string $articles_text, string $memory_text ): array {
+        $articles_chars  = mb_strlen( $articles_text, 'UTF-8' );
+        $articles_tokens = self::estimate_tokens( $articles_text );
+        $memory_chars    = mb_strlen( $memory_text, 'UTF-8' );
+        $memory_tokens   = self::estimate_tokens( $memory_text );
+
+        return [
+            'articles_chars'  => $articles_chars,
+            'articles_tokens' => $articles_tokens,
+            'memory_chars'    => $memory_chars,
+            'memory_tokens'   => $memory_tokens,
+            'total_chars'     => $articles_chars + $memory_chars,
+            'total_tokens'    => $articles_tokens + $memory_tokens,
+        ];
     }
 }
