@@ -526,6 +526,14 @@ if ( ! function_exists( 'sanitize_textarea_field' ) ) {
     }
 }
 
+if ( ! function_exists( 'sanitize_title' ) ) {
+    function sanitize_title( $title ) {
+        $title = strtolower( trim( (string) $title ) );
+        $title = preg_replace( '/[^a-z0-9_\-\s]/', '', $title );
+        return preg_replace( '/[\s_]+/', '-', $title );
+    }
+}
+
 if ( ! function_exists( 'get_current_user_id' ) ) {
     function get_current_user_id() {
         return (int) ( $GLOBALS['CURRENT_USER_ID'] ?? 0 );
@@ -1164,6 +1172,63 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
             return $query;
         }
 
+        public function update( $table, $data, $where, $format = null, $where_format = null ) {
+            $this->queries[] = [ 'update', $table, $data, $where ];
+            if ( ! isset( $this->tables[ $table ] ) ) {
+                return 0;
+            }
+            $updated = 0;
+            foreach ( $this->tables[ $table ] as &$row ) {
+                $match = true;
+                foreach ( $where as $wk => $wv ) {
+                    if ( (string) ( $row[ $wk ] ?? '' ) !== (string) $wv ) {
+                        $match = false;
+                        break;
+                    }
+                }
+                if ( $match ) {
+                    foreach ( $data as $dk => $dv ) {
+                        $row[ $dk ] = $dv;
+                    }
+                    $updated++;
+                }
+            }
+            return $updated;
+        }
+
+        public function delete( $table, $where, $where_format = null ) {
+            $this->queries[] = [ 'delete', $table, $where ];
+            if ( ! isset( $this->tables[ $table ] ) ) {
+                return 0;
+            }
+            $before = count( $this->tables[ $table ] );
+            $this->tables[ $table ] = array_values( array_filter( $this->tables[ $table ], function( $row ) use ( $where ) {
+                foreach ( $where as $wk => $wv ) {
+                    if ( (string) ( $row[ $wk ] ?? '' ) === (string) $wv ) {
+                        return false;
+                    }
+                }
+                return true;
+            } ) );
+            return $before - count( $this->tables[ $table ] );
+        }
+
+        public function replace( $table, $data, $format = null ) {
+            $this->queries[] = [ 'replace', $table, $data ];
+            if ( ! isset( $this->tables[ $table ] ) ) {
+                $this->tables[ $table ] = [];
+            }
+            // Remove existing row matching primary/unique keys if any
+            $this->tables[ $table ] = array_values( array_filter( $this->tables[ $table ], function( $row ) use ( $data ) {
+                if ( isset( $data['rollup_id'], $data['digest_id'] ) ) {
+                    if ( (int) ($row['rollup_id'] ?? 0) === (int) $data['rollup_id'] && (int) ($row['digest_id'] ?? 0) === (int) $data['digest_id'] ) return false;
+                }
+                return true;
+            } ) );
+            $this->tables[ $table ][] = $data;
+            return 1;
+        }
+
         public function insert( $table, $data, $format = null ) {
             $this->queries[] = [ 'insert', $table, $data ];
             if ( ! isset( $this->tables[ $table ] ) ) {
@@ -1241,30 +1306,63 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
 
         public function get_results( $sql, $output = OBJECT ) {
             $this->queries[] = $sql;
-            if ( preg_match( '/SELECT \* FROM `?([a-zA-Z0-9_]+)`?(?: WHERE (.*?))?(?: ORDER BY ([a-zA-Z0-9_]+) (ASC|DESC))?(?: LIMIT (\d+)(?: OFFSET (\d+))?)?$/i', $sql, $m ) ) {
-                $tbl     = $m[1];
-                $where   = $m[2] ?? '';
-                $orderby = $m[3] ?? '';
-                $order   = strtoupper( $m[4] ?? 'ASC' );
+            if ( preg_match( '/SELECT r\.id FROM `?([a-zA-Z0-9_]+)`? r\s+INNER JOIN `?([a-zA-Z0-9_]+)`? l ON r\.id = l\.rollup_id\s+WHERE l\.digest_id = (\d+) AND r\.scope = \'weekly\' AND r\.status != \'stale\'/is', $sql, $m ) ) {
+                $rtbl = $m[1];
+                $ltbl = $m[2];
+                $did  = (int) $m[3];
+                $linked_rollups = [];
+                foreach ( $this->tables[ $ltbl ] ?? [] as $link ) {
+                    if ( (int) ( $link['digest_id'] ?? 0 ) === $did ) {
+                        $linked_rollups[] = (int) ( $link['rollup_id'] ?? 0 );
+                    }
+                }
+                $matching = [];
+                foreach ( $this->tables[ $rtbl ] ?? [] as $r ) {
+                    if ( in_array( (int) ( $r['id'] ?? 0 ), $linked_rollups, true ) && ( $r['scope'] ?? '' ) === 'weekly' && ( $r['status'] ?? '' ) !== 'stale' ) {
+                        $matching[] = [ 'id' => (int) $r['id'] ];
+                    }
+                }
+                if ( OBJECT === $output ) {
+                    return array_map( function( $r ) { return (object) $r; }, $matching );
+                }
+                return $matching;
+            }
+
+            if ( preg_match( '/SELECT (\*|id) FROM `?([a-zA-Z0-9_]+)`?(?: WHERE (.*?))?(?: ORDER BY ((?:[a-zA-Z0-9_]+ (?:ASC|DESC)(?:,\s*)?)+))?(?: LIMIT (\d+)(?: OFFSET (\d+))?)?$/i', $sql, $m ) ) {
+                $cols    = $m[1];
+                $tbl     = $m[2];
+                $where   = $m[3] ?? '';
+                $order_clause = trim( $m[4] ?? '' );
                 $limit   = isset( $m[5] ) && '' !== $m[5] ? (int) $m[5] : null;
                 $offset  = isset( $m[6] ) && '' !== $m[6] ? (int) $m[6] : 0;
 
                 $rows = $this->filter_rows( $tbl, $where );
 
-                if ( ! empty( $orderby ) ) {
-                    usort( $rows, function( $a, $b ) use ( $orderby, $order ) {
-                        $va = $a[ $orderby ] ?? '';
-                        $vb = $b[ $orderby ] ?? '';
-                        if ( $va == $vb ) return 0;
-                        if ( 'DESC' === $order ) {
-                            return ( $va < $vb ) ? 1 : -1;
-                        }
-                        return ( $va > $vb ) ? 1 : -1;
-                    } );
+                if ( ! empty( $order_clause ) ) {
+                    // Check first order by column and direction
+                    if ( preg_match( '/^([a-zA-Z0-9_]+)\s*(ASC|DESC)?/i', $order_clause, $om ) ) {
+                        $orderby = $om[1];
+                        $order   = strtoupper( $om[2] ?? 'ASC' );
+                        usort( $rows, function( $a, $b ) use ( $orderby, $order ) {
+                            $va = $a[ $orderby ] ?? '';
+                            $vb = $b[ $orderby ] ?? '';
+                            if ( $va == $vb ) return 0;
+                            if ( 'DESC' === $order ) {
+                                return ( $va < $vb ) ? 1 : -1;
+                            }
+                            return ( $va > $vb ) ? 1 : -1;
+                        } );
+                    }
                 }
 
                 if ( null !== $limit ) {
                     $rows = array_slice( $rows, $offset, $limit );
+                }
+
+                if ( 'id' === $cols ) {
+                    $rows = array_map( function( $r ) {
+                        return [ 'id' => (int) ( $r['id'] ?? 0 ) ];
+                    }, $rows );
                 }
 
                 if ( OBJECT === $output ) {
@@ -1325,6 +1423,30 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                         }
                     }
                     if ( ! $matched ) return false;
+                }
+                if ( preg_match( "/\bid = (\d+)/", $where, $m ) ) {
+                    if ( (int) ( $row['id'] ?? 0 ) !== (int) $m[1] ) return false;
+                }
+                if ( preg_match( "/source_post_id = (\d+)/", $where, $m ) ) {
+                    if ( (int) ( $row['source_post_id'] ?? 0 ) !== (int) $m[1] ) return false;
+                }
+                if ( preg_match( "/scope = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['scope'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/edition = '([^']*)'/", $where, $m ) ) {
+                    if ( (string) ( $row['edition'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/period_start = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['period_start'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/period_start <= '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['period_start'] ?? '' ) > $m[1] ) return false;
+                }
+                if ( preg_match( "/period_end >= '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['period_end'] ?? '' ) < $m[1] ) return false;
+                }
+                if ( preg_match( "/period_end < '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['period_end'] ?? '' ) >= $m[1] ) return false;
                 }
                 return true;
             } ) );

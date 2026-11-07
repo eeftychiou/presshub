@@ -1730,6 +1730,18 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_podcast_temperature'=> [ 'PressHub_AI_Settings_Storage', 'sanitize_temperature' ],
                 'presshub_ai_briefing_podcast_max_tokens' => [ 'PressHub_AI_Settings_Storage', 'sanitize_max_tokens' ],
                 'presshub_ai_briefing_podcast_timeout'    => [ 'PressHub_AI_Settings_Storage', 'sanitize_timeout' ],
+                // Issue #132 — Editorial Memory
+                'presshub_ai_memory_enabled'               => [ 'PressHub_AI_Settings_Storage', 'sanitize_memory_enabled' ],
+                'presshub_ai_memory_daily_days'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_memory_daily_days' ],
+                'presshub_ai_memory_background_days'       => [ 'PressHub_AI_Settings_Storage', 'sanitize_memory_background_days' ],
+                'presshub_ai_memory_briefing_budget_chars' => [ 'PressHub_AI_Settings_Storage', 'sanitize_memory_briefing_budget_chars' ],
+                'presshub_ai_memory_podcast_budget_chars'  => [ 'PressHub_AI_Settings_Storage', 'sanitize_memory_podcast_budget_chars' ],
+                'presshub_ai_memory_retention_days'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_memory_retention_days' ],
+                'presshub_ai_briefing_memory_provider'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_provider_id' ],
+                'presshub_ai_briefing_memory_model'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_model_string' ],
+                'presshub_ai_briefing_memory_temperature'  => [ 'PressHub_AI_Settings_Storage', 'sanitize_temperature' ],
+                'presshub_ai_briefing_memory_max_tokens'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_max_tokens' ],
+                'presshub_ai_briefing_memory_timeout'      => [ 'PressHub_AI_Settings_Storage', 'sanitize_timeout' ],
             ];
 
             $saved_count = 0;

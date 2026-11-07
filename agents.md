@@ -257,6 +257,22 @@ php dev-env/scripts/reset-db.php
 
 ---
 
+## 🧠 Editorial Memory Stream Protocol (Issue #132)
+
+> **Edit-Protection & Stale Propagation**: Editorial memory entries (`wp_presshub_ai_memory_entries`) preserve human editor revisions across regenerations. Never overwrite `origin='edited'` entries during automated regeneration.
+
+1. **Edit-Protection Invariant**:
+   - When `origin='edited'`, `PressHub_AI_Memory_Store::upsert_generated()` updates `generated_json` and `updated_at`, but preserves `content_json`, `version_hash`, and `origin`, returning `preserved_edit => true`.
+   - Editors can revert to generated content explicitly via `PressHub_AI_Memory_Store::reset_to_generated()`.
+2. **Stale Rollup Propagation**:
+   - Editing a daily digest or changing its status (`excluded`/`active`) marks all linked weekly rollups as `stale` (`PressHub_AI_Memory_Store::mark_dependents_stale()`) and logs audit records.
+3. **Clean Slate Post Deletion Hook**:
+   - When a briefing post is deleted (`before_delete_post`), its associated daily digests and memory entry links must be cleanly deleted.
+4. **Settings-First Memory Knobs**:
+   - All memory thresholds (`presshub_ai_memory_daily_days`, `presshub_ai_memory_background_days`, `presshub_ai_memory_briefing_budget_chars`, `presshub_ai_memory_podcast_budget_chars`, `presshub_ai_memory_retention_days`) are registered with clamping sanitizers and accessed via `PressHub_AI_Settings_Storage` helpers.
+
+---
+
 ## 🔒 Security & Hardening Standards
 
 All code contributions must strictly adhere to WordPress security best practices:

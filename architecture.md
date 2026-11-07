@@ -374,6 +374,34 @@ graph TD
 
 ---
 
+
+### 4.19 Editorial Memory Stream (Store, Settings & Retention - Issue #132)
+- **Overview**: Editorial memory maintains multi-day storyline continuity across daily briefings and weekly digests.
+- **Database Tables** (dbDelta-managed, SQLite & MySQL compatible):
+  - `wp_presshub_ai_memory_entries`: Stores structured memory entries with `scope` (`daily` | `weekly`), `period_start`, `period_end`, `edition`, `generated_json`, `content_json`, `origin` (`generated` | `edited`), `status` (`active` | `excluded` | `stale` | `failed` | `pending`), `version_hash` (sha256), `source_post_id`, `generation_record_id`, and editor audit fields.
+  - `wp_presshub_ai_memory_entry_links`: Many-to-many relationship tracking weekly rollup entries to the daily digest entry IDs they were constructed from.
+- **Strict Content Schema Validation**:
+  - `stories`: Array of objects containing stable slug `key`, non-empty `title`, summary `development`, `status` (`new` | `developing` | `resolved`), `entities` list, `source_urls` list, and `include` boolean.
+  - `podcast`: Object with `opening_line` and `closing_line`.
+  - `narrative`: Compact background narrative string (weekly rollups).
+- **Edit-Protection Invariant**:
+  - When an editor modifies `content_json`, `origin` is permanently set to `edited` and a new `version_hash` is computed.
+  - Subsequent AI regeneration calls via `upsert_generated()` update `generated_json` and `updated_at`, but strictly preserve the editor-edited `content_json` (`origin='edited'`), returning `preserved_edit => true`.
+  - The editor can deliberately revert to AI output using `reset_to_generated()`.
+- **Stale Propagation**:
+  - When a daily digest entry is edited or its status changes (`excluded` / `active`), any weekly rollups linked in `wp_presshub_ai_memory_entry_links` automatically transition to `stale` status, and an audit entry is logged.
+- **Clean Slate Post Deletion Lifecycle**:
+  - Deleting a daily briefing post (`before_delete_post`) deletes associated daily digest records and associated links in `wp_presshub_ai_memory_entry_links`, marking any dependent weekly rollups stale.
+- **Settings-First Memory Controls**:
+  - `presshub_ai_memory_enabled`: Master switch (default: true).
+  - `presshub_ai_memory_daily_days`: Active daily digest lookback window (default: 7, bounds: 0–14).
+  - `presshub_ai_memory_background_days`: Background weekly rollup lookback window (default: 30, bounds: 0–90, clamped >= daily days).
+  - `presshub_ai_memory_briefing_budget_chars`: Prompt injection character budget for daily briefing (default: 12,000, bounds: 0–60,000).
+  - `presshub_ai_memory_podcast_budget_chars`: Prompt injection character budget for podcast (default: 6,000, bounds: 0–60,000).
+  - `presshub_ai_memory_retention_days`: Database retention threshold for old memory entries (default: 180, bounds: 30–730).
+- **Daily Prune Cron Job**:
+  - Scheduled event `presshub_ai_prune_memory_entries` runs daily via WP-Cron and purges entries older than `presshub_ai_memory_retention_days` and their links, recording audit logs.
+
 ## 5. Cron Schedules & Timers
 
 | Event Hook | Default Time | Configurable Option | Subsystem Callback |
@@ -383,6 +411,7 @@ graph TD
 | `presshub_noon_news_harvest` | 12:00 | `presshub_ai_briefing_noon_harvest_time` | `presshub_ai_execute_noon_harvest_cron()` |
 | `presshub_noon_news_generate` | 12:45 | `presshub_ai_briefing_noon_generation_time` | `presshub_ai_execute_noon_generation_cron()` |
 | `presshub_ai_prune_audit_logs` | Daily | Fixed 24h | `PressHub_AI_Audit_Logger::prune()` |
+| `presshub_ai_prune_memory_entries` | Daily | `presshub_ai_memory_retention_days` | `PressHub_AI_Memory_Store::prune_old_entries()` |
 
 ### 5.1 Cron Execution & Error Resilience
 - Both generation cron callbacks (`presshub_ai_execute_generation_cron` and `presshub_ai_execute_noon_generation_cron`) encapsulate all pipeline stages (curation, script generation, and audio synthesis) in dedicated error-handling and `try / catch (\Throwable $t)` blocks.
