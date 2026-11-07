@@ -1092,6 +1092,11 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_source_context_count', (int) $source_context['count'] );
         update_post_meta( $post_id, '_presshub_source_context_preset', (string) $source_context['preset'] );
 
+        // Issue #134: schedule daily memory digest construction
+        if ( class_exists( 'PressHub_AI_Memory_Digest_Builder' ) ) {
+            PressHub_AI_Memory_Digest_Builder::schedule_for_post( (int) $post_id, 30 );
+        }
+
         return $post_id;
     }
 

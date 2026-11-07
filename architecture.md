@@ -18,7 +18,7 @@
 4. **Clean Slate Architecture**:
    - No deprecated multi-tier fallbacks or legacy option chains. `PressHub_AI_Provider_Store` is the sole source of truth for AI providers and models.
 5. **4-Layer Enterprise Observability**:
-   - **Layer 1**: Structured log (`wp-content/uploads/presshub-logs/`)
+   - **Layer 1**: Structured log (`wp-content/uploads/presshub-ai/presshub-debug-<suffix>.log`). All three file logs (app, prompts, TTS) resolve through `PressHub_AI_Log_Paths`: random suffix (`presshub_ai_log_file_suffix`), deny files (`.htaccess`, `index.php`, `web.config`) kept in the folder, optional `PRESSHUB_AI_LOG_DIR` outside the web root (no fallback to uploads when it is unusable), and a web-exposure self-check (`PressHub_AI_Log_Exposure_Check`) on the Logs tab
    - **Layer 2**: Token log database (`wp_presshub_ai_token_logs`)
    - **Layer 3**: Audit log (`wp_presshub_ai_audit_log`)
    - **Layer 4**: WordPress `debug.log`
@@ -314,6 +314,7 @@ graph TD
   - **`PressHub_Social_Prompt_Loader`**: External prompt asset loader (`assets/prompts/*.txt`) enforcing directory traversal protection and Zero-Silent-Fallback error handling.
   - **`PressHub_Social_Settings_Storage` & `PressHub_Social_Settings_Render`**: Settings-First storage and UI controller exposing all operational knobs (worker mode `pull` vs `push`, engines per platform, AI tuning overrides, retry caps, dispatch intervals, media dimensions, worker credentials, platform API tokens, and `presshub_social_github_token` for automatic GitHub release updates) with clamping sanitizers, unified multi-tab form rendering (`#presshub-social-settings-form` containing all 6 tab panes to prevent partial-submission option wiping), and automatic `v2.6.3` option repair.
   - **`PressHub_Social_REST_Controller`**: REST API controller (`presshub-social/v1`) powering **Pull Mode** for local workers. Provides `/worker/heartbeat`, `/worker/claim`, and `/worker/complete` authenticated via constant-time token verification (`X-PressHub-Secret`, `X-Worker-Secret`, or `Authorization: Bearer`). Claims due automation jobs and delivers them bundled with post metadata, audio enclosure URLs (`audio_url`), and rendering specs (`instagram_card_*`, `tiktok_video_*`).
+  - **`PressHub_Social_TikTok_Narrator`**: Gemini TTS voice-over for text-only TikTok posts (e.g. Daily Briefing articles with no podcast audio). On `/worker/claim`, a TikTok job with no `audio_url` gets narration: the TikTok copy with hashtags, emojis, URLs and any sentence mentioning `presshub.cy` removed, followed by the outro (`presshub_social_tiktok_narration_outro`, default *"Για το πλήρες άρθρο, επισκεφθείτε το presshub.cy"*). Audio is synthesized via `PressHub_AI_Audio_Synthesizer::synthesize_turn()` with `presshub_social_tiktok_narration_voice` (empty = Daily Briefing Presenter 1 voice) and the briefing speed/pitch, sideloaded as `tiktok-narration-job-<id>-<hash>.wav`, and returned as `audio_url` so the worker renders a spoken video whose length matches the audio. The result is cached in job `metadata.tiktok_narration` keyed by a SHA-256 of voice + spoken text (retries reuse it; edited copy re-synthesizes). Podcast audio always takes precedence. Zero-Silent-Fallback: if narration is enabled (`presshub_social_tiktok_narration_enabled`, default on) and synthesis fails or the copy has nothing speakable, the job is marked failed with the TTS error and is not handed to the worker. Pull Mode only; TikTok Stories and clickable links are not available through TikTok Studio web, so the post is a normal video and `presshub.cy` stays plain text in the caption.
   - **Unified Release Pipeline**: Managed under the primary `presshub-ai-editor` update checker and GitHub release pipeline, completely eliminating version desynchronization and update notification loops.
   - **`PressHub_Social_AI_Copywriter`**: Generates platform-tailored copy (`generate_for_post()` and batch `generate_all_for_post()`) using `PressHub_AI_Provider_Store` and `PressHub_AI_API_Client` (tracking `provider_source`, `model_source`, token metrics, and duration in `wp_presshub_ai_token_logs`), or static templates when `copy_mode = 'template'`. Supports `$force_ai = true` flag used by the queue **"Regen AI"** button and metabox generator to guarantee AI execution regardless of default site `copy_mode`. Features intelligent podcast script and briefing transcript ingestion in `build_article_data()`: for podcast/briefing posts or whenever post content is short (< 300 chars, e.g. audio players), automatically extracts dialogue scripts from postmeta (`_presshub_podcast_script` or common fallbacks) or Harvester/Producer snapshot files (`podcast-script.txt`), sanitizing topic markers (`TOPIC: ...`, `TOPIC_START`, `TOPIC_END`) and speaker tags (`[SPEAKER_0]:`, `[Presenter 1]:`, `**[SPEAKER_1]:**`, `Host 1:`) via `clean_podcast_script()` to populate article content (up to 4,000 chars) and excerpt (first 50 words). Enforces Twitter/X character standard in `get_twitter_effective_length()` and `truncate_twitter_text()`, counting any URL as exactly 23 characters (`t.co`), thereby preventing 200+ character Greek percent-encoded permalinks from prematurely truncating Greek editorial copy. For Twitter/X, enforces the **Single Link Rule** and **Brand Sanitization**: strips domain extensions (e.g. `.cy`, `.com`) from `$site_name` so the brand is rendered strictly as plain text `"PressHub"`, post-processes generated tweets to replace standalone `PressHub.Cy` / `presshub.cy` outside the article URL with `"PressHub"`, and strips extraneous secondary URLs so that Twitter automatically renders the article's rich OpenGraph `summary_large_image` Twitter Card with its featured image. Enforces Zero-Silent-Fallback when prompts are missing, and resilient provider store fallback if a module provider override lacks an API key.
   - **`PressHub_Social_Activator`**: Manages installation lifecycle, SQLite/MySQL table creation (`wp_presshub_social_queue`), options defaults seeding, and cron registration (`presshub_social_interval`).
@@ -422,7 +423,43 @@ graph TD
 - **Daily Prune Cron Job**:
   - Scheduled event `presshub_ai_prune_memory_entries` runs daily via WP-Cron and purges entries older than `presshub_ai_memory_retention_days` and their links, recording audit logs.
 
-### 4.21 Tiered Editorial Memory Prompt Injection (Issue #135)
+### 4.21 Daily Memory Digest Builder & Backfill Workflow (Issue #134)
+- **Automatic Scheduling**:
+  - `PressHub_AI_Memory_Digest_Builder` registers single-event background cron scheduling (`presshub_ai_memory_build_digest`, 30s delay) triggered upon briefing post creation (`create_wordpress_post`) or post update (`save_post_post`).
+  - Gated by `PressHub_AI_Settings_Storage::get_memory_enabled()`; skips revisions, autosaves, trashed posts, and non-text briefings with duplicate prevention.
+- **Story Continuity & Schema Extraction**:
+  - Dedicated Greek archivist prompt (`assets/prompts/memory/daily_digest.txt`) loaded via `PressHub_AI_Prompt_Loader::get_daily_digest_prompt()`.
+  - Continuously extracts structured daily memory digests (`stories`, `entities`, `key` slugs, `source_urls`).
+  - Queries `PressHub_AI_Memory_Store::get_entries_for_range()` for the previous 7 days' story keys/titles, forcing the LLM to reuse existing slugs and tag continuing stories with `"status": "developing"|"resolved"`.
+- **Validation, Retry & Observability**:
+  - Validates output strictly against the `#132` memory schema, strips markdown code fences, and forces `narrative: ""` on daily digests.
+  - Automatically retries once on schema validation errors with the error message appended in Greek.
+  - Records all attempts as `memory_digest` generation records in `PressHub_AI_Generation_Recorder` attached to the briefing post.
+  - On persistent failure, records `status='failed'` in `PressHub_AI_Memory_Store` with diagnostic error message without storing partial or guessed stories.
+- **Deterministic Podcast Line Capture**:
+  - `PressHub_AI_Podcast_Producer::save_script()` deterministically extracts first and last speaker turns and writes them to `podcast.opening_line` and `podcast.closing_line` in the daily digest without extra LLM calls.
+- **Backfill Workflow**:
+  - Discoverable and resumable queue processor via `find_briefing_editions_in_range()`, `start_backfill()`, and single-step cron `handle_backfill_step()` (`presshub_ai_memory_backfill_step`).
+  - Available via Admin Briefing Hub UI, AJAX endpoints (`presshub_ai_memory_start_backfill`, `presshub_ai_memory_backfill_status`), and WP-CLI command (`wp presshub memory backfill [--from=...] [--to=...] [--force]`).
+  - Strictly preserves `origin='edited'` content (`preserved_edit=true`) across all rebuilds and backfill operations.
+
+### 4.22 Generation Inspector (`PressHub_AI_Generation_Inspector` - Issue #133)
+- **Purpose**: read-only editorial transparency over the records of §4.19. Editors see everything that went into a generation without database access. The inspector never writes to a record.
+- **Surfaces**:
+  - Metabox **Generation Inspector** on posts whose `_presshub_briefing_type` is `text` (Daily Briefing) or `podcast`. It is a normal `add_meta_box()` box, so it appears in the block editor's meta-box area and in the classic editor. It reads `_presshub_generation_record_ids`, lists the records newest first (timestamp, kind, status) and shows "No generation record (generated before records were introduced)" when a post has none.
+  - **Daily Briefing Hub -> Generation records** (submenu `presshub-ai-generation-records`, registered from `PressHub_AI_Briefing_Admin::add_admin_menu()`): per-date list (date, kind, edition, status, linked post, model) filterable by date range (`briefing_date`), kind and status, newest 200 rows. "Open" shows the same inspector for that record (`&record_id=`).
+- **Tabs**: Overview (kind, date, edition, status/error, duration, `trace_id`, provider/model with their sources, temperature, max tokens, timeout, preset, token usage, input token estimate, truncation flags), System prompt, User prompt, Articles (cap values, sent table with title linked to the source URL, source, characters sent, truncated; dropped table with reason), Memory (entries with tier, period, edition, characters, origin, status; trimmed entries; budgets; explicit "Memory was disabled for this generation" when `memory.enabled` is false), Response, TTS (podcast script records: engine, model, voices, style, speed, pitch, payload mode, turns, `script_source`), Raw JSON (download of the complete record). Both article shapes are handled: briefing `inputs.articles = {sent, dropped}` and podcast `inputs.articles = [...]` plus `inputs.not_selected`.
+- **Memory editor link**: memory entries link to the memory editor (#137) only when a URL is supplied through the `presshub_ai_memory_editor_url` filter (`$url, $entry_id`); otherwise they are plain text.
+- **Endpoints** (all `wp_ajax_*`, all call `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` and require `edit_others_posts`):
+  - `presshub_ai_inspector_tab` (`record_id`, `tab` in `overview|articles|memory|tts`): server-escaped HTML fragment.
+  - `presshub_ai_inspector_field` (`record_id`, `field` in `system_prompt|user_prompt|response_text`): JSON `{field, value, chars}`; any other field name is rejected with HTTP 400, so the endpoint cannot read other columns.
+  - `presshub_ai_inspector_raw` (GET `record_id`, `nonce`): JSON attachment of `PressHub_AI_Generation_Recorder::get()`.
+- **Performance**: the edit-screen HTML contains only the record selector and empty tab shells. Every tab is fetched when opened (and cached client-side per record); the selector and the list use light queries that never select the prompt/response columns. Assets (`generation-inspector.js/.css`) load only on briefing/podcast post screens and the records page.
+- **Escaping**: prompts, responses and article text are scraped third-party content. Structured tabs escape every value with `esc_html`/`esc_attr`/`esc_url`; article links are emitted only for `http(s)` URLs (with `rel="noopener noreferrer nofollow"`). Prompts and response travel as JSON and are inserted with `textContent` by the client, never as HTML. No HTML from a record is ever rendered.
+- **Query helper**: `PressHub_AI_Generation_Inspector::query_records( $filters )` (filters sanitized and bound through `$wpdb->prepare()`; invalid values dropped). The recorder class is unchanged.
+- **Tests**: `tests/GenerationInspectorTest.php` (capability and nonce gates, field loader, inert `<script>` content, no-record behaviour, list filters).
+
+### 4.23 Tiered Editorial Memory Prompt Injection (Issue #135)
 - **Overview**: Injects tiered editorial memory into curation and podcast prompts to maintain narrative continuity without fact repetition across editions.
 - **Context Builder (`PressHub_AI_Memory_Context_Builder`)**:
   - Assembles memory text and structured manifest for `target = 'briefing'` or `'podcast'`.
@@ -466,9 +503,12 @@ graph TD
 | `presshub_daily_news_generate` | 07:15 | `presshub_ai_briefing_generation_time` | `presshub_ai_execute_generation_cron()` |
 | `presshub_noon_news_harvest` | 12:00 | `presshub_ai_briefing_noon_harvest_time` | `presshub_ai_execute_noon_harvest_cron()` |
 | `presshub_noon_news_generate` | 12:45 | `presshub_ai_briefing_noon_generation_time` | `presshub_ai_execute_noon_generation_cron()` |
-| `presshub_ai_prune_audit_logs` | Daily | Fixed 24h | `PressHub_AI_Audit_Logger::prune()` |
+| `presshub_ai_prune_audit_logs` | Daily | `presshub_ai_audit_log_retention_days` (default 90) | `PressHub_AI_Audit_Logger::prune_logs()` |
 | `presshub_ai_prune_memory_entries` | Daily | `presshub_ai_memory_retention_days` | `PressHub_AI_Memory_Store::prune_old_entries()` |
 | `presshub_ai_prune_generation_records` | Daily | `presshub_ai_generation_record_retention_days` (retention window) | `PressHub_AI_Generation_Recorder::prune()` |
+| `presshub_ai_memory_build_digest` | Post-save (+30s) | Single-event | `PressHub_AI_Memory_Digest_Builder::handle_cron_build_digest()` |
+| `presshub_ai_memory_backfill_step` | Dynamic (+5s) | Single-event | `PressHub_AI_Memory_Digest_Builder::handle_backfill_step()` |
+| `presshub_ai_prune_log_files` | Daily | `presshub_ai_log_file_retention_days` (default 14) | Deletes rotated log files older than the window |
 
 ### 5.1 Cron Execution & Error Resilience
 - Both generation cron callbacks (`presshub_ai_execute_generation_cron` and `presshub_ai_execute_noon_generation_cron`) encapsulate all pipeline stages (curation, script generation, and audio synthesis) in dedicated error-handling and `try / catch (\Throwable $t)` blocks.

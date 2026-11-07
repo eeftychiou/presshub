@@ -738,6 +738,14 @@ class PressHub_AI_Podcast_Producer {
                 if ( 0 === strpos( $trimmed_line, '#' ) && empty( $current_text_lines ) ) {
                     continue;
                 }
+                // Ignore horizontal divider lines like "---" or "___"
+                if ( preg_match( '/^[-=_*]{3,}$/', $trimmed_line ) ) {
+                    continue;
+                }
+                // Ignore stage directions enclosed entirely in parentheses, brackets, or braces, e.g. (μουσική), [intro music]
+                if ( preg_match( '/^\s*[\(\[\{].*?[\)\]\}]\s*$/u', $trimmed_line ) ) {
+                    continue;
+                }
                 $current_text_lines[] = $trimmed_line;
             }
         }
@@ -962,6 +970,33 @@ class PressHub_AI_Podcast_Producer {
                 'generation_record_id' => max( 0, $generation_record_id ),
             ];
             @file_put_contents( $meta_path, wp_json_encode( $meta, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) );
+        }
+
+        // Issue #134: deterministic podcast opening/closing line capture for editorial memory
+        if ( $saved && class_exists( 'PressHub_AI_Memory_Store' ) ) {
+            if ( class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_memory_enabled() ) {
+                $turns = $this->parse_script_turns( $script );
+                if ( ! empty( $turns ) ) {
+                    $first_turn   = reset( $turns );
+                    $last_turn    = end( $turns );
+                    $opening_line = trim( (string) ( $first_turn['text'] ?? '' ) );
+                    $closing_line = trim( (string) ( $last_turn['text'] ?? '' ) );
+                    PressHub_AI_Memory_Store::update_podcast_lines(
+                        $date,
+                        $edition,
+                        $opening_line,
+                        $closing_line,
+                        $source_post_id > 0 ? $source_post_id : null
+                    );
+                }
+            } else {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::info(
+                        'Podcast memory lines update skipped: editorial memory is disabled',
+                        [ 'date' => $date, 'edition' => $edition ]
+                    );
+                }
+            }
         }
 
         return $saved;

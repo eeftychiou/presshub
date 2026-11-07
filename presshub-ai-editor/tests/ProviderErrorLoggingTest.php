@@ -107,7 +107,7 @@ class ProviderErrorLoggingTest
             require_once __DIR__ . '/../includes/class-secret-masker.php';
             $GLOBALS['OPTIONS_STORE'] = [ 'presshub_ai_debug_prompts' => '1' ];
             $uploads  = wp_upload_dir();
-            $dbg_file = trailingslashit( $uploads['basedir'] ) . 'presshub-ai/presshub-ai-debug.log';
+            $dbg_file = PressHub_AI_Log_Paths::get_file( 'prompts' );
             @unlink( $dbg_file );
             $secret = 'sk-proj-ABCDEFGHIJKLMNOP1234';
             $sys    = 'SYSTEM keep sk-proj-VERBATIMKEY1234 here';
