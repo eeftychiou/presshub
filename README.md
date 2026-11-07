@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.11.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.13.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-84%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -68,6 +68,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - **Spoken Date Formatting**: All dates are converted to natural spoken-language phrasing (e.g. *"3rd of May 2026"* or *"3 Μαΐου 2026"*).
 - **Configurable Title Prefixes**: Separate editorial title prefix options for Morning Podcast (`presshub_ai_briefing_podcast_title_prefix`, default *"Πρωινό Podcast Ενημέρωσης - "*) and Noon Podcast (`presshub_ai_briefing_noon_podcast_title_prefix`, default *"Μεσημβρινό Podcast Ενημέρωσης - "*), configurable from Settings.
 - **Clean Audio Post Content & Front-Page Excerpt Suppression**: By default, podcast post content displays exclusively the audio player block (`wp:audio`), and raw dialogue text is suppressed from `post_excerpt` and filtered out of front-page post previews, loop cards, and public RSS feeds (configurable via `presshub_ai_briefing_podcast_include_text`). Social meta tags emit a clean editorial audio description instead of leaking dialogue turns.
+- **TikTok Narration for Text-Only Articles (`PressHub_Social_TikTok_Narrator`)**: Articles without podcast audio (e.g. the Daily Brief) are posted to TikTok as a spoken video. The TikTok copy is read aloud with Gemini TTS (hashtags, emojis, links and the copy's own presshub.cy sentence are skipped) and ends with *"Για το πλήρες άρθρο, επισκεφθείτε το presshub.cy"*. Configurable under **PressHub Social → Settings → Automation Worker → Media & Video Specifications** (`presshub_social_tiktok_narration_enabled`, `_outro`, `_voice`); a TTS failure fails the job instead of posting silently.
 - **Podcast Dialogue Editor Metabox & One-Click Audio Regeneration**: Editors can review and refine spoken scripts in the **"Podcast Audio & Dialogue Editor"** metabox on podcast edit screens, and click **"Regenerate Audio from Script"** to re-synthesize and stitch the episode in real time.
 - **Resilient Audio Synthesis & Cron Error Isolation**: Synthesizer accepts nullable custom scripts and automatically shifts parameters (e.g. `synthesize_podcast($date, 'noon')`), while briefing crons encapsulate generation and synthesis in try/catch blocks with structured logging to eliminate unhandled runtime fatal errors.
 - **Broadcast Audio Synthesizer & Gemini 3.8 TTS REST Architecture (`PressHub_AI_Audio_Synthesizer` & `PressHub_AI_API_Client`)**:
@@ -101,8 +102,11 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - Assign generated images as the article's official featured image with one click.
 
 ### 5. 🎛️ Instruction Presets & Prompt Studio
-### 6. 🧠 Editorial Memory Stream & Story Continuity (Issue #132)
+### 6. 🧠 Editorial Memory Stream & Story Continuity (Issue #132, #134)
 - **Editorial Continuity**: Multi-day storyline tracking across daily briefings and weekly digests.
+- **Daily Memory Digest Builder**: Automatically scheduled in the background (`wp_schedule_single_event`, 30s delay) after briefing text post creation or update (`PressHub_AI_Memory_Digest_Builder`). Extracts structured JSON stories (`assets/prompts/memory/daily_digest.txt`), enforces story continuity by feeding the previous 7 days' story keys/titles, and retries once on schema/validation errors with the error message in Greek.
+- **Deterministic Podcast Lines**: `PressHub_AI_Podcast_Producer::save_script()` automatically parses speaker turns and updates `podcast.opening_line` and `podcast.closing_line` in the daily digest deterministically without any extra LLM call.
+- **Backfill Workflow**: Batch extracts daily memory digests across existing briefing posts over a configurable date range (via Briefing Hub UI, background single-step cron, or `wp presshub memory backfill [--from=...] [--to=...] [--force]`). Idempotent and resumable, strictly preserving human editor edits.
 - **Edit-Protection Invariant**: Human editor revisions (`origin='edited'`) in `wp_presshub_ai_memory_entries` are preserved across regenerations; editors can deliberately reset to generated content via `reset_to_generated()`.
 - **Stale Propagation**: Revisions or exclusions to daily digests automatically mark dependent weekly rollups as `stale`.
 - **Clean Slate Post Deletion**: Deleting a daily briefing post automatically deletes associated daily memory entries and cleans links in `wp_presshub_ai_memory_entry_links`.
@@ -219,6 +223,7 @@ Navigate to **PressHub AI → Settings** to configure the platform across respon
 - **News Harvester**: Configure RSS source URLs, fetch timeout budgets, domain polite delays, concurrency limits, and lead article filtering.
 - **News Curation**: Set curation LLM models, curation temperature, maximum article candidate pools, character caps, and language presets.
 - **Podcast & Audio Studio**: Configure default podcast presenter personas, audio synthesis voices (male/female, accents), speaking rate, pitch modulation, and audio segment stitching.
+- **Social Settings → Automation Worker**: Card and video dimensions, plus TikTok narration (enable, outro sentence, Gemini voice) for articles without audio.
 - **Prompt Studio**: Customize system prompts and editorial guidelines for drafts, research, daily briefings, and podcast scripts.
 - **Rate Limits & Security**: Enforce per-user request rate limiting windows, IP safeguards, and automated research-log retention sweeps.
 - **Logs & Maintenance**: Configure log retention days, log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`), prompt debug logging, token usage analytics, and **Generation Record Retention** (7–365 days, default 90; pruned daily by `presshub_ai_prune_generation_records`).

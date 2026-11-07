@@ -834,6 +834,30 @@ class PressHub_AI_Briefing_Admin {
             'curation_total_ms'   => (int) ( $stage_events['curation']['duration_ms'] ?? 0 ),
             'script_total_ms'     => (int) ( $stage_events['script']['duration_ms'] ?? 0 ),
             'audio_total_ms'      => (int) ( $stage_events['audio']['duration_ms'] ?? 0 ),
+            // Issue #134: daily memory digest & backfill state
+            'memory_digest'         => ( function() use ( $date, $edition ) {
+                if ( ! class_exists( 'PressHub_AI_Memory_Store' ) ) {
+                    return null;
+                }
+                $entry = PressHub_AI_Memory_Store::get_daily_entry( $date, $edition );
+                return $entry ? [
+                    'id'            => (int) $entry['id'],
+                    'status'        => (string) $entry['status'],
+                    'origin'        => (string) $entry['origin'],
+                    'error_message' => (string) ( $entry['error_message'] ?? '' ),
+                    'updated_at'    => (string) ( $entry['updated_at'] ?? '' ),
+                ] : null;
+            } )(),
+            'failed_memory_digests' => ( function() {
+                global $wpdb;
+                if ( ! class_exists( 'PressHub_AI_Memory_Store' ) || ! isset( $wpdb ) || ! method_exists( $wpdb, 'get_results' ) ) {
+                    return [];
+                }
+                $table = PressHub_AI_Memory_Store::get_entries_table();
+                $rows  = $wpdb->get_results( "SELECT id, scope, period_start, edition, error_message, updated_at FROM {$table} WHERE scope = 'daily' AND status = 'failed' ORDER BY period_start DESC LIMIT 10", ARRAY_A );
+                return is_array( $rows ) ? $rows : [];
+            } )(),
+            'memory_backfill_state' => get_option( 'presshub_ai_memory_backfill_state', null ),
         ];
     }
 
@@ -985,6 +1009,47 @@ class PressHub_AI_Briefing_Admin {
             </nav>
 
             <div id="presshub-briefing-notices" class="presshub-notices-container" aria-live="polite"></div>
+
+            <!-- Daily Memory Digest Failed Alert Banner (Issue #134) -->
+            <?php
+            $memory_enabled = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_memory_enabled() : true;
+            $current_mem_digest = $status['memory_digest'] ?? null;
+            $current_digest_failed = ( $current_mem_digest && 'failed' === ( $current_mem_digest['status'] ?? '' ) );
+            $failed_digests_list = $status['failed_memory_digests'] ?? [];
+            ?>
+            <?php if ( $memory_enabled && ( $current_digest_failed || ! empty( $failed_digests_list ) ) ) : ?>
+            <div id="presshub-memory-digest-failed-alert" class="presshub-alert presshub-alert-error" style="margin-top: 15px; margin-bottom: 20px;">
+                <div class="presshub-alert-icon">⚠️</div>
+                <div class="presshub-alert-content">
+                    <strong><?php echo esc_html__( 'Daily Memory Digest Notice', 'presshub-ai-editor' ); ?></strong>
+                    <?php if ( $current_digest_failed ) : ?>
+                        <p>
+                            <?php echo esc_html( sprintf( __( 'The daily memory digest for %s (%s) failed: %s', 'presshub-ai-editor' ), $date, $edition, $current_mem_digest['error_message'] ?? '' ) ); ?>
+                        </p>
+                        <p class="presshub-alert-action-text">
+                            <button type="button" class="button button-primary button-small" id="btn-retry-memory-digest" data-post-id="<?php echo esc_attr( $status['text_post_id'] ?? 0 ); ?>" data-date="<?php echo esc_attr( $date ); ?>" data-edition="<?php echo esc_attr( $edition ); ?>">
+                                🔄 <?php echo esc_html__( 'Retry Memory Digest Generation', 'presshub-ai-editor' ); ?>
+                            </button>
+                        </p>
+                    <?php elseif ( ! empty( $failed_digests_list ) ) : ?>
+                        <p>
+                            <?php echo esc_html( sprintf( __( 'There are %d failed daily memory digest(s) requiring attention:', 'presshub-ai-editor' ), count( $failed_digests_list ) ) ); ?>
+                        </p>
+                        <ul style="margin: 5px 0 10px 20px; list-style-type: disc;">
+                            <?php foreach ( array_slice( $failed_digests_list, 0, 5 ) as $fitem ) : ?>
+                                <li>
+                                    <strong><?php echo esc_html( $fitem['period_start'] . ' (' . $fitem['edition'] . ')' ); ?>:</strong>
+                                    <?php echo esc_html( $fitem['error_message'] ); ?>
+                                    <button type="button" class="button button-secondary button-small btn-retry-item-memory-digest" style="margin-left: 8px; vertical-align: middle;" data-date="<?php echo esc_attr( $fitem['period_start'] ); ?>" data-edition="<?php echo esc_attr( $fitem['edition'] ); ?>">
+                                        🔄 <?php echo esc_html__( 'Retry', 'presshub-ai-editor' ); ?>
+                                    </button>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Blocked Sources Alert Banner -->
             <div id="presshub-blocked-sources-alert" class="presshub-alert presshub-alert-warning" style="<?php echo empty( $status['blocked_sources'] ) ? 'display:none;' : ''; ?>">
@@ -1769,6 +1834,40 @@ class PressHub_AI_Briefing_Admin {
                         <span class="spinner" id="upload-spinner"></span>
                     </div>
                 </form>
+            </section>
+
+            <!-- Daily Memory Backfill Section (Issue #134) -->
+            <section class="presshub-section-container presshub-memory-backfill-section" id="presshub-memory-backfill-section" style="margin-top: 30px;">
+                <div class="presshub-section-header">
+                    <h2>🧠 <?php echo esc_html__( 'Build Memory from Existing Briefings (Backfill)', 'presshub-ai-editor' ); ?></h2>
+                    <p class="description">
+                        <?php echo esc_html__( 'Backfill structured daily memory digests from existing briefing editions across a date range. Idempotent and resumable.', 'presshub-ai-editor' ); ?>
+                    </p>
+                </div>
+                <div style="background: #fff; border: 1px solid #ccd0d4; padding: 15px 20px; border-radius: 4px; margin-top: 10px;">
+                    <form id="presshub-memory-backfill-form" onsubmit="return false;" style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 15px;">
+                        <div>
+                            <label for="presshub-memory-backfill-from"><strong><?php echo esc_html__( 'From Date:', 'presshub-ai-editor' ); ?></strong></label><br>
+                            <input type="date" id="presshub-memory-backfill-from" name="from" value="<?php echo esc_attr( gmdate( 'Y-m-d', strtotime( $date . ' -30 days' ) ) ); ?>" class="regular-text" style="width: 160px;" />
+                        </div>
+                        <div>
+                            <label for="presshub-memory-backfill-to"><strong><?php echo esc_html__( 'To Date:', 'presshub-ai-editor' ); ?></strong></label><br>
+                            <input type="date" id="presshub-memory-backfill-to" name="to" value="<?php echo esc_attr( $date ); ?>" class="regular-text" style="width: 160px;" />
+                        </div>
+                        <div>
+                            <label>
+                                <input type="checkbox" id="presshub-memory-backfill-force" name="force" value="1" />
+                                <?php echo esc_html__( 'Force rebuild existing digests (preserves human edits)', 'presshub-ai-editor' ); ?>
+                            </label>
+                        </div>
+                        <div>
+                            <button type="button" class="button button-secondary" id="btn-start-memory-backfill">
+                                🚀 <?php echo esc_html__( 'Start Memory Backfill', 'presshub-ai-editor' ); ?>
+                            </button>
+                        </div>
+                    </form>
+                    <div id="presshub-memory-backfill-status" style="margin-top: 15px; display: none; padding: 10px; background: #f0f6fc; border-left: 4px solid #72aee6;"></div>
+                </div>
             </section>
 
         </div>

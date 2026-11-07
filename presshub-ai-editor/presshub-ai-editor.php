@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.11.0
+ * Version: 2.13.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -120,7 +120,7 @@ if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 
-define( 'PRESSHUB_AI_VERSION', '2.11.0' );
+define( 'PRESSHUB_AI_VERSION', '2.13.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -180,6 +180,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-inspector.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-memory-digest-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 // Social Auto-Post Subsystem Classes
@@ -188,6 +189,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-prompt-loader.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-settings-storage.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-activator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-queue.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-narrator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-worker-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-ai-copywriter.php';
@@ -375,6 +377,7 @@ function presshub_ai_init() {
         PressHub_AI_Log_Exposure_Check::register();
     }
     PressHub_AI_Memory_Store::register_hooks();
+    PressHub_AI_Memory_Digest_Builder::init();
 
     // Issue #138 (Clean Slate): once per upgrade, drop the old fixed-name log files.
     PressHub_AI_Log_Paths::run_upgrade();

@@ -7,7 +7,7 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
 ## 🏗️ Repository Architecture
 
 - **`presshub-ai-editor/`**: The unified WordPress plugin source code (incorporating both PressHub AI Co-Pilot newsroom/editorial suite and the Social Auto-Post multi-platform queue/dispatcher subsystem).
-  - `includes/`: PHP classes (API client, token logger, structured logger, audit logger, generation recorder (`PressHub_AI_Generation_Recorder`), rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings, plus unified social subsystem: `PressHub_Social_Queue`, `PressHub_Social_Dispatcher`, `PressHub_Social_REST_Controller`, `PressHub_Social_Meta_API_Client`, `PressHub_Social_Worker_Client`, `PressHub_Social_AI_Copywriter`, `PressHub_Social_Settings_Storage`, `PressHub_Social_Metabox`, `PressHub_Social_Queue_Admin`, `PressHub_Social_Ajax_Handlers`, `PressHub_Social_Settings`).
+  - `includes/`: PHP classes (API client, token logger, structured logger, audit logger, generation recorder (`PressHub_AI_Generation_Recorder`), rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings, plus unified social subsystem: `PressHub_Social_Queue`, `PressHub_Social_Dispatcher`, `PressHub_Social_REST_Controller`, `PressHub_Social_TikTok_Narrator`, `PressHub_Social_Meta_API_Client`, `PressHub_Social_Worker_Client`, `PressHub_Social_AI_Copywriter`, `PressHub_Social_Settings_Storage`, `PressHub_Social_Metabox`, `PressHub_Social_Queue_Admin`, `PressHub_Social_Ajax_Handlers`, `PressHub_Social_Settings`).
   - `assets/`: Frontend/Admin JavaScript, CSS, and prompt templates (`assets/prompts/*.txt`, including `social_*.txt`).
   - `tests/`: Isolated PHP unit test suite (83 test files covering 233+ unit tests via `run-all-tests.php` + 19 social test suites covering 171 assertions via `run-social-tests.php`).
 - **`presshub-social-autopost/`**: Legacy standalone plugin shim maintained for backward compatibility (gracefully yields to `presshub-ai-editor` v2.7.2+ to prevent duplicate hooks or class conflicts).
@@ -264,7 +264,7 @@ php dev-env/scripts/reset-db.php
 
 ---
 
-## 🧠 Editorial Memory Stream Protocol (Issue #132)
+## 🧠 Editorial Memory Stream Protocol (Issue #132, #134)
 
 > **Edit-Protection & Stale Propagation**: Editorial memory entries (`wp_presshub_ai_memory_entries`) preserve human editor revisions across regenerations. Never overwrite `origin='edited'` entries during automated regeneration.
 
@@ -277,6 +277,17 @@ php dev-env/scripts/reset-db.php
    - When a briefing post is deleted (`before_delete_post`), its associated daily digests and memory entry links must be cleanly deleted.
 4. **Settings-First Memory Knobs**:
    - All memory thresholds (`presshub_ai_memory_daily_days`, `presshub_ai_memory_background_days`, `presshub_ai_memory_briefing_budget_chars`, `presshub_ai_memory_podcast_budget_chars`, `presshub_ai_memory_retention_days`) are registered with clamping sanitizers and accessed via `PressHub_AI_Settings_Storage` helpers.
+5. **Daily Memory Digest Builder (Issue #134)**:
+   - Built asynchronously via `PressHub_AI_Memory_Digest_Builder::schedule_for_post()` (`presshub_ai_memory_build_digest`, single-event cron with 30s delay) on briefing text post creation or update.
+   - Extracts structured JSON stories (`assets/prompts/memory/daily_digest.txt`), injecting the previous 7 days' story keys/titles (`{existing_story_keys}`) so running threads maintain stable slugs and transition to `"status": "developing"|"resolved"`.
+   - Retries once on invalid JSON / schema validation errors with the error message in Greek; records all attempts as `memory_digest` generation records in `PressHub_AI_Generation_Recorder`.
+   - If both attempts fail, records `status='failed'` in `wp_presshub_ai_memory_entries` with diagnostic error message; surfaces alert notice on the Briefing Hub page with retry action.
+6. **Deterministic Podcast Lines**:
+   - `PressHub_AI_Podcast_Producer::save_script()` extracts the first and last speaker turns and writes them to `podcast.opening_line` and `podcast.closing_line` in the daily digest deterministically without extra LLM calls.
+7. **Backfill Workflow**:
+   - Resumable, idempotent backfill across date ranges via `PressHub_AI_Memory_Digest_Builder::start_backfill()` and single-step cron (`presshub_ai_memory_backfill_step`).
+   - Exposed via Briefing Hub UI, AJAX endpoints (`presshub_ai_memory_start_backfill`, `presshub_ai_memory_backfill_status`), and WP-CLI command (`wp presshub memory backfill [--from=...] [--to=...] [--force]`).
+
 
 ---
 
@@ -1043,4 +1054,12 @@ gh pr merge <id> --squash         # Merge PR into main branch
    - **Zero-Silent-Fallback**: Never generate synthetic or dummy tweet IDs (`tw-${Date.now()}`) when a post fails or toast status URL is missed. If the toast link is missed, perform a profile timeline lookup (`https://x.com/${username}`) matching article text or permalink. If neither succeeds, throw a loud, descriptive error.
    - **Timeline Match Freshness Gate**: A profile-timeline match is only accepted if the tweet was created by *this* submission. The creation time is decoded from the status ID (snowflake: `floor(id / 2^22) + 1288834974657` ms, via `getTwitterSnowflakeTimestampMs()`), and candidates older than `submitStartedAt - TWITTER_TIMELINE_MAX_CLOCK_SKEW_MS` (60s) are rejected with a `WARN` log. An empty text snippet (copy with no letters or digits in its first 30 characters) never counts as a match. This prevents an earlier attempt's tweet, a pinned tweet, or a previous post with the same opening words from being reported as published. Test fixtures must build timeline status IDs with `makeTwitterSnowflakeId(Date.now())`.
    - **Mandatory Post-Confirmation Loading**: After obtaining the candidate `tweetUrl`, the worker must navigate directly to the tweet (`page.goto(tweetUrl)`), verify that `<article data-testid="tweet">` or a standard `<article>` containing an anchor linking to `/status/${tweetId}` is rendered and visible, and confirm that the page contains no error notices ("This Post doesn’t exist", "unavailable", "Something went wrong"). Only upon successful post confirmation can the job be reported as published.
+5. **TikTok Narration for Text-Only Articles (`PressHub_Social_TikTok_Narrator`)**:
+   - When the worker claims a TikTok job with no `audio_url` (no `_presshub_audio_url` meta and no inline `<audio>`), `handle_claim()` calls `attach_narration()`, which synthesizes a Gemini TTS voice-over and sets `audio_url`, so the worker's video generator produces a spoken video instead of a silent 10s card.
+   - Spoken text: the TikTok copy minus hashtags, emojis, URLs and any sentence mentioning `presshub.cy` (the copy's own CTA), then the outro from `presshub_social_tiktok_narration_outro` (default `Για το πλήρες άρθρο, επισκεφθείτε το presshub.cy`). Never read the site name twice.
+   - Settings-First: `presshub_social_tiktok_narration_enabled` (default on), `presshub_social_tiktok_narration_outro`, `presshub_social_tiktok_narration_voice` (empty = Daily Briefing Presenter 1 voice, logged at INFO) under **PressHub Social → Settings → Automation Worker → Media & Video Specifications**.
+   - Cache the result in job `metadata.tiktok_narration` (`hash`, `audio_url`, `attachment_id`, `voice`, `text`). `mark_published()` merges worker metadata into existing metadata so this record survives publishing.
+   - Zero-Silent-Fallback: a TTS failure or empty speakable text marks the job failed (`tiktok_narration_failed` / `tiktok_narration_empty`) and keeps it out of the claim batch. Never post a silent video when narration is enabled.
+   - Tests inject a fake synthesizer with `PressHub_Social_TikTok_Narrator::set_synthesizer()` and must reset it to `null` afterwards.
+   - TikTok Stories and clickable links cannot be posted from TikTok Studio web; do not attempt them in `postTikTok()` without first confirming the account and UI support them.
 
