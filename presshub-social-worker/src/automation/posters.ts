@@ -276,74 +276,92 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     WorkerLogger.debug('Twitter Automation', 'Finding Post button...');
     const postButton = isModal
-      ? modalSurface.locator('button:has-text("Post"), [data-testid="tweetButton"]').first()
-      : page.locator('div[data-slot="xds-modal-surface"] button:has-text("Post"), div[role="dialog"] button:has-text("Post"), button.x-button:has-text("Post"), button:has-text("Post"), [data-testid="tweetButton"]').first();
+      ? modalSurface.getByRole('button', { name: /^Post$/i, exact: true })
+          .or(modalSurface.locator('button[data-slot="xds-button"]:has-text("Post"), [data-testid="tweetButton"]').filter({ hasNotText: 'New Post' }))
+          .first()
+      : page.locator('div[data-slot="xds-modal-surface"] button[data-slot="xds-button"]:has-text("Post"), div[role="dialog"] [data-testid="tweetButton"], button.x-button:has-text("Post"), [data-testid="tweetButton"]').filter({ hasNotText: 'New Post' }).first();
 
-    await postButton.waitFor({ state: 'visible', timeout: 20000 });
+    // Fast-path: Keyboard shortcut submission (ControlOrMeta+Enter) directly inside composer
+    WorkerLogger.info('Twitter Automation', 'Attempting keyboard shortcut submission (ControlOrMeta+Enter)...');
+    await textarea.focus().catch(() => {});
+    await page.keyboard.press('ControlOrMeta+Enter').catch(() => {});
 
-    // Wait if button is disabled (e.g. video/image still processing)
-    for (let i = 0; i < 15; i++) {
+    // Check if keyboard shortcut immediately detached the modal or triggered submission
+    const modalDetachedEarly = await Promise.race([
+      modalSurface.waitFor({ state: 'detached', timeout: 3000 }).then(() => true).catch(() => false),
+      page.locator('[data-testid="toast"], [data-slot="xds-toast"]').first().waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)
+    ]);
+
+    if (modalDetachedEarly) {
+      WorkerLogger.info('Twitter Automation', 'Tweet submitted successfully via keyboard shortcut (modal detached/toast appeared).');
+    } else {
+      WorkerLogger.debug('Twitter Automation', 'Keyboard shortcut did not detach modal immediately, proceeding with Post button click fallback...');
+      await postButton.waitFor({ state: 'visible', timeout: 15000 });
+
+      // Wait if button is disabled (e.g. video/image still processing)
+      for (let i = 0; i < 15; i++) {
+        await dismissTwitterCookies();
+
+        const ariaDisabled = await postButton.getAttribute('aria-disabled');
+        const disabled = await postButton.getAttribute('disabled');
+        if (ariaDisabled !== 'true' && disabled === null) {
+          break;
+        }
+        WorkerLogger.debug('Twitter Automation', `Waiting for Post button to become actionable (${i + 1}/15)...`);
+        await page.waitForTimeout(1000);
+      }
+
       await dismissTwitterCookies();
+      await page.keyboard.press('Escape').catch(() => {});
 
-      const ariaDisabled = await postButton.getAttribute('aria-disabled');
-      const disabled = await postButton.getAttribute('disabled');
-      if (ariaDisabled !== 'true' && disabled === null) {
-        break;
+      // Validate button actionability before clicking
+      const finalAriaDisabled = await postButton.getAttribute('aria-disabled');
+      const finalDisabled = await postButton.getAttribute('disabled');
+      if (finalAriaDisabled === 'true' || finalDisabled !== null) {
+        throw new Error(`Twitter Post button is disabled (aria-disabled="${finalAriaDisabled}", disabled="${finalDisabled}"). Content may exceed character limits or input was not registered.`);
       }
-      WorkerLogger.debug('Twitter Automation', `Waiting for Post button to become actionable (${i + 1}/15)...`);
-      await page.waitForTimeout(1000);
-    }
 
-    await dismissTwitterCookies();
-    await page.keyboard.press('Escape').catch(() => {});
-
-    // Validate button actionability before clicking
-    const finalAriaDisabled = await postButton.getAttribute('aria-disabled');
-    const finalDisabled = await postButton.getAttribute('disabled');
-    if (finalAriaDisabled === 'true' || finalDisabled !== null) {
-      throw new Error(`Twitter Post button is disabled (aria-disabled="${finalAriaDisabled}", disabled="${finalDisabled}"). Content may exceed character limits or input was not registered.`);
-    }
-
-    WorkerLogger.info('Twitter Automation', 'Clicking Post button...');
-    await postButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
-    await postButton.focus().catch(() => {});
-    await postButton.hover().catch(() => {});
-    let clicked = false;
-    try {
-      await postButton.click({ timeout: 5000 });
-      clicked = true;
-    } catch {
-      WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted, clicking Post with force: true...');
+      WorkerLogger.info('Twitter Automation', 'Clicking Post button...');
+      await postButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+      await postButton.focus().catch(() => {});
+      await postButton.hover().catch(() => {});
+      let clicked = false;
       try {
-        await postButton.click({ force: true, timeout: 3000 });
+        await postButton.click({ timeout: 5000 });
         clicked = true;
-      } catch (err: any) {
-        WorkerLogger.warn('Twitter Automation', `Playwright click failed: ${err?.message || err}`);
+      } catch {
+        WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted, clicking Post with force: true...');
+        try {
+          await postButton.click({ force: true, timeout: 3000 });
+          clicked = true;
+        } catch (err: any) {
+          WorkerLogger.warn('Twitter Automation', `Playwright click failed: ${err?.message || err}`);
+        }
       }
-    }
 
-    // Full DOM event cycle dispatch to guarantee React synthetic click handlers fire ONLY if standard click was intercepted
-    if (!clicked) {
-      WorkerLogger.debug('Twitter Automation', 'Standard clicks failed or intercepted, attempting fallback native DOM event dispatch...');
-      await postButton.evaluate((el: any) => {
-        if (el) {
-          el.focus();
-          const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
-          const targets = [el, el.firstElementChild || el];
-          for (const t of targets) {
-            if (win && typeof win.MouseEvent === 'function') {
-              t.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
-              t.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
-              t.dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
-              t.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
-              t.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+      // Full DOM event cycle dispatch to guarantee React synthetic click handlers fire ONLY if standard click was intercepted
+      if (!clicked) {
+        WorkerLogger.debug('Twitter Automation', 'Standard clicks failed or intercepted, attempting fallback native DOM event dispatch...');
+        await postButton.evaluate((el: any) => {
+          if (el) {
+            el.focus();
+            const win = (el.ownerDocument && el.ownerDocument.defaultView) || null;
+            const targets = [el, el.firstElementChild || el];
+            for (const t of targets) {
+              if (win && typeof win.MouseEvent === 'function') {
+                t.dispatchEvent(new win.MouseEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
+                t.dispatchEvent(new win.MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+                t.dispatchEvent(new win.MouseEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
+                t.dispatchEvent(new win.MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+                t.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+              }
+            }
+            if (typeof el.click === 'function') {
+              el.click();
             }
           }
-          if (typeof el.click === 'function') {
-            el.click();
-          }
-        }
-      }).catch(() => {});
+        }).catch(() => {});
+      }
     }
 
     WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
