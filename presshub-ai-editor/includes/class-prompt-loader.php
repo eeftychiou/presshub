@@ -174,4 +174,13 @@ class PressHub_AI_Prompt_Loader {
     public static function get_daily_digest_prompt(): string {
         return self::load( 'memory/daily_digest.txt' );
     }
+
+    /**
+     * Load the weekly background rollup prompt template (Issue #136).
+     *
+     * @return string
+     */
+    public static function get_weekly_rollup_prompt(): string {
+        return self::load( 'memory/weekly_rollup.txt' );
+    }
 }

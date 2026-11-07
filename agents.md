@@ -300,6 +300,12 @@ php dev-env/scripts/reset-db.php
    - Hydration: Replaces `{memory_context}` in system or user prompt, falling back to prepending before articles in the user prompt when the placeholder is absent.
    - Generation Records: Persists complete manifest in `wp_presshub_ai_generation_records.memory_json`.
    - Strict Gating: Prompts remain byte-identical when memory is disabled (`enabled=0`) or lookback days are 0.
+9. **Weekly Background Rollups (Issue #136)**:
+   - `PressHub_AI_Memory_Rollup_Builder`: daily cron `presshub_ai_memory_build_rollups` schedules one single event (`presshub_ai_memory_build_rollup_week`) per completed ISO week in `background_days` that has digests but no rollup. Stale/failed rollups are never rebuilt automatically.
+   - Input is the week's `active` daily digests' `content_json` (editor edits propagate) plus the previous week's narrative; prompt `assets/prompts/memory/weekly_rollup.txt` via `PressHub_AI_Prompt_Loader::get_weekly_rollup_prompt()`; no outside knowledge; story keys must already exist.
+   - Same Zero-Silent-Fallback as digests: retry once with the error appended, then `PressHub_AI_Memory_Store::record_failed_rollup()` + ERROR log; never store partial content. Missing days are stored in `content_json.missing_dates` and logged.
+   - Editor/CLI entry points: `rebuild( $rollup_id )`, `build_week( $week_start, $force )`, `wp presshub memory rollups --from --to [--force]`. A rebuild never overwrites an edited rollup's `content_json`.
+   - Each call is a `memory_rollup` generation record linked from `generation_record_id`; `replace_rollup_links()` keeps the digest links exact. Everything is gated by `presshub_ai_memory_enabled`.
 
 ---
 
