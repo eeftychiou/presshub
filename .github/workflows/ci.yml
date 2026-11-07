@@ -55,6 +55,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # tests/posters.test.ts launches a real headless Chromium; npm ci only
+      # installs the Playwright library, not its browser binaries.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Build TypeScript
         run: npm run build
 
