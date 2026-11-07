@@ -619,8 +619,9 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
         await page.goto(`https://x.com/${username}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
         await page.waitForTimeout(3000);
 
-        const tweetArticles = await page.locator('article[data-testid="tweet"]').all();
-        for (const article of tweetArticles.slice(0, 3)) {
+        await page.locator('article[data-testid="tweet"], article').first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
+        const tweetArticles = await page.locator('article[data-testid="tweet"], article').all();
+        for (const article of tweetArticles.slice(0, 6)) {
           const articleText = (await article.innerText().catch(() => '')) || '';
           const statusLink = article.locator('a[href*="/status/"]').first();
           if ((await statusLink.count()) > 0) {
@@ -628,8 +629,8 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
             if (href) {
               const match = href.match(/\/status\/(\d+)/);
               if (match) {
-                const snippet = tweetCopy.slice(0, 25).replace(/[^a-zA-Z0-9\u0370-\u03FF]/g, '');
-                const cleanArticleText = articleText.replace(/[^a-zA-Z0-9\u0370-\u03FF]/g, '');
+                const snippet = tweetCopy.slice(0, 30).replace(/[^a-zA-Z0-9\u0370-\u03FF\u1F00-\u1FFF]/g, '').slice(0, 20);
+                const cleanArticleText = articleText.replace(/[^a-zA-Z0-9\u0370-\u03FF\u1F00-\u1FFF]/g, '');
                 const copyUrl = (tweetCopy.match(/https?:\/\/[^\s]+/i) || [])[0];
                 if (cleanArticleText.includes(snippet) || (copyUrl && articleText.includes(copyUrl))) {
                   tweetId = match[1];
@@ -789,7 +790,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     await page.goto(tweetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForTimeout(3000);
 
-    const tweetArticle = page.locator('article[data-testid="tweet"]').first();
+    const tweetArticle = page.locator('article[data-testid="tweet"], article').first();
     const isArticleVisible = await tweetArticle.isVisible().catch(() => false);
     const pageBodyText = (await page.innerText('body').catch(() => '')) || '';
     const isErrorPage = /doesn’t exist|does not exist|unavailable|Something went wrong/i.test(pageBodyText);
