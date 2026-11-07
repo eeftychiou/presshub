@@ -526,6 +526,10 @@ function assert_true( bool $condition, string $message ): void {
     }
 }
 
+function assert_false( bool $condition, string $message ): void {
+    assert_true( ! $condition, $message );
+}
+
 function assert_equals( $expected, $actual, string $message ): void {
     $matched = ( $expected === $actual );
     if ( ! $matched ) {
@@ -804,6 +808,23 @@ assert_true( is_wp_error( $w_disp ) && 'missing_worker_config' === $w_disp->get_
 // ----------------------------------------------------------------------
 echo "\n--- Suite 9: Dispatcher Hook Gating ---\n";
 PressHub_Social_Queue::reset_memory_store();
+
+// Setup valid credentials and worker sessions for dispatcher and metabox tests
+update_option( 'presshub_social_meta_page_id', '12345' );
+update_option( 'presshub_social_meta_access_token', 'valid_token' );
+update_option( 'presshub_social_instagram_account_id', '67890' );
+update_option( 'presshub_social_twitter_bearer_token', 'valid_bearer_token' );
+update_option( 'presshub_social_tiktok_access_token', 'valid_tiktok_token' );
+update_option( 'presshub_social_tiktok_open_id', 'valid_tiktok_openid' );
+update_option( 'presshub_social_worker_url', 'http://127.0.0.1:3456' );
+update_option( 'presshub_social_worker_secret', 'test-secret' );
+update_option( 'presshub_social_worker_sessions', [
+    'twitter'   => true,
+    'facebook'  => true,
+    'instagram' => true,
+    'tiktok'    => true,
+] );
+update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook', 'instagram', 'tiktok' ] );
 
 // Transition from publish -> publish should be ignored
 $published_post = new WP_Post( [ 'ID' => 201, 'post_type' => 'post', 'post_status' => 'publish', 'post_title' => 'Article One' ] );
@@ -1554,6 +1575,151 @@ PressHub_Social_Queue::update_job_copy( $regen_job_id, $new_ai_copy );
 $regen_job_after = PressHub_Social_Queue::get_job( $regen_job_id );
 assert_equals( $new_ai_copy, $regen_job_after['post_copy'], 'Queue job copy updated with newly regenerated AI copy' );
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
+
+// ----------------------------------------------------------------------
+// Test Suite 20: Per-Platform Enable/Disable & Configuration Gating
+// ----------------------------------------------------------------------
+echo "\n--- Suite 20: Per-Platform Enable/Disable & Configuration Gating ---\n";
+
+// 1. Wipe credentials and sessions to test unconfigured baseline
+delete_option( 'presshub_social_meta_page_id' );
+delete_option( 'presshub_social_meta_access_token' );
+delete_option( 'presshub_social_instagram_account_id' );
+delete_option( 'presshub_social_twitter_bearer_token' );
+delete_option( 'presshub_social_twitter_api_key' );
+delete_option( 'presshub_social_twitter_api_secret' );
+delete_option( 'presshub_social_twitter_access_token' );
+delete_option( 'presshub_social_twitter_access_secret' );
+delete_option( 'presshub_social_tiktok_access_token' );
+delete_option( 'presshub_social_tiktok_open_id' );
+delete_option( 'presshub_social_worker_sessions' );
+update_option( 'presshub_social_engine_facebook', 'api' );
+update_option( 'presshub_social_engine_instagram', 'api' );
+update_option( 'presshub_social_engine_twitter', 'automation' );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'facebook' ), 'Facebook API engine unconfigured when credentials missing' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'instagram' ), 'Instagram API engine unconfigured when credentials missing' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Twitter automation engine unconfigured when pull sessions empty' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'tiktok' ), 'TikTok automation engine unconfigured when pull sessions empty' );
+
+// 2. Configure worker sessions for twitter and tiktok
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'tiktok' => true ] );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Twitter automation engine configured when pull session active' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'tiktok' ), 'TikTok automation engine configured when pull session active' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'facebook' ), 'Facebook still unconfigured in API engine' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'instagram' ), 'Instagram still unconfigured in API engine' );
+
+// 3. Configure API engine for Facebook and Instagram
+update_option( 'presshub_social_meta_page_id', '1000123' );
+update_option( 'presshub_social_meta_access_token', 'EAABtest_token' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'facebook' ), 'Facebook API engine configured with Page ID and token' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'instagram' ), 'Instagram API engine unconfigured without Instagram Account ID' );
+update_option( 'presshub_social_instagram_account_id', 'inst_9988' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'instagram' ), 'Instagram API engine configured with Account ID and token' );
+
+// 4. Test Push mode automation configuration
+update_option( 'presshub_social_engine_twitter', 'automation' );
+update_option( 'presshub_social_worker_mode', 'push' );
+delete_option( 'presshub_social_worker_secret' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Push mode automation unconfigured when worker secret missing' );
+update_option( 'presshub_social_worker_url', 'http://127.0.0.1:3456' );
+update_option( 'presshub_social_worker_secret', 'sec123' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Push mode automation configured when URL and secret present' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => false ] );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Push mode stays configured when the session is momentarily inactive (jobs wait)' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_session_active( 'twitter' ), 'is_platform_session_active reports the inactive session for the badge' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true ] );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Push mode automation configured when session active' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_session_active( 'twitter' ), 'is_platform_session_active true when session active' );
+
+// 4b. Pull mode: a momentarily inactive session must NOT drop posts (review of #128).
+update_option( 'presshub_social_worker_mode', 'pull' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => false ] );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Pull mode: platform reported by the worker stays configured while its session is inactive' );
+delete_option( 'presshub_social_worker_sessions' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Pull mode: platform never reported by the worker is not configured' );
+update_option( 'presshub_social_engine_twitter', 'api' );
+update_option( 'presshub_social_twitter_access_token', 'tw-access-only' );
+delete_option( 'presshub_social_twitter_bearer_token' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Twitter API engine configured with an Access token alone (matches the poster)' );
+delete_option( 'presshub_social_twitter_access_token' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'twitter' ), 'Twitter API engine unconfigured without Bearer or Access token' );
+update_option( 'presshub_social_engine_twitter', 'automation' );
+
+// 5. Per-platform enable/disable settings
+update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook', 'instagram', 'tiktok' ] );
+delete_option( 'presshub_social_enabled_facebook' );
+delete_option( 'presshub_social_enabled_twitter' );
+delete_option( 'presshub_social_enabled_instagram' );
+delete_option( 'presshub_social_enabled_tiktok' );
+update_option( 'presshub_social_engine_twitter', 'automation' );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_engine_facebook', 'api' );
+update_option( 'presshub_social_engine_instagram', 'api' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'tiktok' => true ] );
+
+PressHub_Social_Settings_Storage::set_platform_enabled( 'twitter', false );
+assert_false( PressHub_Social_Settings_Storage::is_platform_enabled( 'twitter' ), 'set_platform_enabled(twitter, false) disables twitter' );
+assert_false( in_array( 'twitter', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms excludes disabled twitter' );
+
+PressHub_Social_Settings_Storage::set_platform_enabled( 'twitter', true );
+assert_true( PressHub_Social_Settings_Storage::is_platform_enabled( 'twitter' ), 'set_platform_enabled(twitter, true) re-enables twitter' );
+assert_true( in_array( 'twitter', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms includes re-enabled twitter' );
+
+update_option( 'presshub_social_enabled_facebook', false );
+assert_false( PressHub_Social_Settings_Storage::is_platform_enabled( 'facebook' ), 'Option presshub_social_enabled_facebook=false disables facebook' );
+assert_false( in_array( 'facebook', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms reflects individual facebook option' );
+
+// 6. Platform readiness checks
+// Twitter: enabled=true, configured=true
+// TikTok: enabled=true, configured=true
+// Facebook: enabled=false, configured=true
+// Instagram: enabled=true, configured=false
+delete_option( 'presshub_social_instagram_account_id' );
+delete_option( 'presshub_social_meta_access_token' );
+update_option( 'presshub_social_enabled_instagram', true );
+
+assert_true( PressHub_Social_Settings_Storage::is_platform_ready( 'twitter' ), 'Twitter is ready (enabled and configured)' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_ready( 'tiktok' ), 'TikTok is ready (enabled and configured)' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_ready( 'facebook' ), 'Facebook is not ready because it is disabled' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_ready( 'instagram' ), 'Instagram is not ready because it is unconfigured' );
+assert_equals( [ 'twitter', 'tiktok' ], PressHub_Social_Settings_Storage::get_ready_platforms(), 'get_ready_platforms returns only ready platforms' );
+
+// 7. Dispatcher queuing gating
+PressHub_Social_Queue::reset_memory_store();
+$GLOBALS['POSTS_STORE'][501] = [
+    'ID'           => 501,
+    'post_title'   => 'Article for Gating Test',
+    'post_content' => 'Content for testing gating.',
+    'post_excerpt' => 'Excerpt for testing gating.',
+    'post_status'  => 'publish',
+];
+$GLOBALS['test_posts'][501] = new WP_Post( $GLOBALS['POSTS_STORE'][501] );
+
+$enqueued_501 = PressHub_Social_Dispatcher::enqueue_for_post( 501, [ 'twitter', 'facebook', 'instagram', 'tiktok' ] );
+assert_equals( 2, count( $enqueued_501 ), 'Dispatcher enqueues jobs only for ready platforms (twitter, tiktok)' );
+
+$jobs_501 = PressHub_Social_Queue::get_jobs_for_post( 501 );
+$platforms_enqueued = array_column( $jobs_501, 'platform' );
+assert_true( in_array( 'twitter', $platforms_enqueued, true ) && in_array( 'tiktok', $platforms_enqueued, true ), 'Enqueued platforms match twitter and tiktok' );
+assert_false( in_array( 'facebook', $platforms_enqueued, true ), 'Disabled platform facebook was skipped' );
+assert_false( in_array( 'instagram', $platforms_enqueued, true ), 'Unconfigured platform instagram was skipped' );
+
+// 7b. Pull mode: an article published while the worker reports Twitter's session as inactive is still queued.
+PressHub_Social_Queue::reset_memory_store();
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => false, 'tiktok' => true ] );
+$enqueued_inactive = PressHub_Social_Dispatcher::enqueue_for_post( 501, [ 'twitter', 'tiktok' ] );
+$platforms_inactive = array_column( PressHub_Social_Queue::get_jobs_for_post( 501 ), 'platform' );
+assert_true( in_array( 'twitter', $platforms_inactive, true ), 'Twitter job is queued even though its session is momentarily inactive' );
+assert_equals( 2, count( $enqueued_inactive ), 'Both automation platforms queued while one session is inactive' );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'tiktok' => true ] );
+
+// 8. Dispatcher returns empty array when only unconfigured or disabled platforms are requested
+$enqueued_empty = PressHub_Social_Dispatcher::enqueue_for_post( 501, [ 'facebook', 'instagram' ] );
+assert_equals( [], $enqueued_empty, 'enqueue_for_post returns empty array when only unconfigured or disabled platforms are requested' );
 
 
 // ----------------------------------------------------------------------

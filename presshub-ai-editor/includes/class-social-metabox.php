@@ -50,11 +50,15 @@ class PressHub_Social_Metabox {
 
         $post_id          = $post->ID;
         $saved_platforms  = get_post_meta( $post_id, '_presshub_social_platforms', true );
-        $default_platforms = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_enabled_platforms' )
-            ? PressHub_Social_Settings_Storage::get_enabled_platforms()
-            : [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+        $ready_platforms  = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_ready_platforms' )
+            ? PressHub_Social_Settings_Storage::get_ready_platforms()
+            : ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_enabled_platforms' )
+                ? PressHub_Social_Settings_Storage::get_enabled_platforms()
+                : [ 'twitter', 'facebook', 'instagram', 'tiktok' ] );
 
-        $enabled_platforms = is_array( $saved_platforms ) ? $saved_platforms : $default_platforms;
+        $enabled_platforms = is_array( $saved_platforms )
+            ? array_values( array_intersect( $saved_platforms, $ready_platforms ) )
+            : $ready_platforms;
 
         $platforms = [
             'twitter'   => [ 'label' => 'Twitter / X', 'char_limit' => 280 ],
@@ -90,23 +94,47 @@ class PressHub_Social_Metabox {
 
             <div class="presshub-social-platforms-grid">
                 <?php foreach ( $platforms as $slug => $data ) :
-                    $is_checked = in_array( $slug, $enabled_platforms, true );
-                    $engine     = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_platform_engine' )
+                    $is_enabled    = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_enabled' )
+                        ? PressHub_Social_Settings_Storage::is_platform_enabled( $slug )
+                        : true;
+                    $is_configured = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_configured' )
+                        ? PressHub_Social_Settings_Storage::is_platform_configured( $slug )
+                        : true;
+                    $is_ready      = $is_enabled && $is_configured;
+                    $is_checked    = $is_ready && in_array( $slug, $enabled_platforms, true );
+                    $engine        = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_platform_engine' )
                         ? PressHub_Social_Settings_Storage::get_platform_engine( $slug )
                         : 'api';
-                    $copy       = (string) get_post_meta( $post_id, '_presshub_social_copy_' . $slug, true );
-                    $badge_text = ( 'automation' === $engine ) ? __( 'Browser Automation', 'presshub-social-autopost' ) : __( 'Official API', 'presshub-social-autopost' );
-                    $badge_cls  = ( 'automation' === $engine ) ? 'badge-engine-automation' : 'badge-engine-api';
+                    $copy          = (string) get_post_meta( $post_id, '_presshub_social_copy_' . $slug, true );
+                    $badge_text    = ( 'automation' === $engine ) ? __( 'Browser Automation', 'presshub-social-autopost' ) : __( 'Official API', 'presshub-social-autopost' );
+                    $badge_cls     = ( 'automation' === $engine ) ? 'badge-engine-automation' : 'badge-engine-api';
+                    $card_style    = ! $is_ready ? 'opacity: 0.65;' : '';
+                    $disabled_attr = ! $is_ready ? 'disabled="disabled"' : '';
                 ?>
-                    <div class="presshub-social-platform-card" data-platform="<?php echo esc_attr( $slug ); ?>">
+                    <div class="presshub-social-platform-card" data-platform="<?php echo esc_attr( $slug ); ?>" style="<?php echo esc_attr( $card_style ); ?>">
                         <div class="platform-card-header">
                             <label class="platform-toggle-label">
-                                <input type="checkbox" name="presshub_social_platforms[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( $is_checked ); ?> />
+                                <input type="checkbox" name="presshub_social_platforms[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( $is_checked ); ?> <?php echo $disabled_attr; ?> />
                                 <strong><?php echo esc_html( $data['label'] ); ?></strong>
                             </label>
-                            <span class="presshub-badge <?php echo esc_attr( $badge_cls ); ?>">
-                                <?php echo esc_html( $badge_text ); ?>
-                            </span>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <?php if ( ! $is_enabled ) : ?>
+                                    <span class="presshub-badge badge-engine-disabled" style="background:#6c757d; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
+                                        <?php esc_html_e( 'Disabled in Settings', 'presshub-social-autopost' ); ?>
+                                    </span>
+                                <?php elseif ( ! $is_configured ) : ?>
+                                    <span class="presshub-badge badge-engine-unconfigured" style="background:#d9534f; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
+                                        <?php esc_html_e( 'Not Configured', 'presshub-social-autopost' ); ?>
+                                    </span>
+                                <?php elseif ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_session_active' ) && ! PressHub_Social_Settings_Storage::is_platform_session_active( $slug ) ) : ?>
+                                    <span class="presshub-badge badge-engine-session-inactive" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
+                                        <?php esc_html_e( 'Session inactive — will post when the worker is back', 'presshub-social-autopost' ); ?>
+                                    </span>
+                                <?php endif; ?>
+                                <span class="presshub-badge <?php echo esc_attr( $badge_cls ); ?>">
+                                    <?php echo esc_html( $badge_text ); ?>
+                                </span>
+                            </div>
                         </div>
 
                         <div class="platform-card-body">
@@ -234,6 +262,11 @@ class PressHub_Social_Metabox {
             foreach ( $_POST['presshub_social_platforms'] as $p ) {
                 $sanitized = sanitize_key( $p );
                 if ( in_array( $sanitized, PressHub_Social_Queue::VALID_PLATFORMS, true ) ) {
+                    if ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_ready' ) ) {
+                        if ( ! PressHub_Social_Settings_Storage::is_platform_ready( $sanitized ) ) {
+                            continue;
+                        }
+                    }
                     $platforms[] = $sanitized;
                 }
             }
