@@ -126,6 +126,23 @@ class PressHub_AI_News_Curator {
     private static $last_articles_placement = '';
 
     /**
+     * @internal Issue #135 - editorial memory manifest for the most recent build_prompt() call.
+     *
+     * @var array<string,mixed>
+     */
+    private static array $last_memory_manifest = [];
+
+    /**
+     * @internal Issue #135 - character count of the rendered memory block in the most recent build_prompt() call.
+     */
+    private static int $last_memory_chars = 0;
+
+    /**
+     * @internal Issue #135 - estimated token cost of the rendered memory block in the most recent build_prompt() call.
+     */
+    private static int $last_memory_tokens_estimate = 0;
+
+    /**
      * Get the base curation prompt with template placeholders.
      *
      * @return string Base system prompt with placeholders.
@@ -322,6 +339,27 @@ class PressHub_AI_News_Curator {
     }
 
     /**
+     * Issue #135 - editorial memory manifest from the most recent build_prompt() call.
+     */
+    public function last_memory_manifest(): array {
+        return self::$last_memory_manifest;
+    }
+
+    /**
+     * Issue #135 - character count of the rendered memory block from the most recent build_prompt() call.
+     */
+    public function last_memory_chars(): int {
+        return self::$last_memory_chars;
+    }
+
+    /**
+     * Issue #135 - estimated tokens of the rendered memory block from the most recent build_prompt() call.
+     */
+    public function last_memory_tokens_estimate(): int {
+        return self::$last_memory_tokens_estimate;
+    }
+
+    /**
      * Returns whether the most recent format_articles_context() call truncated the input set.
      * The flag is updated inside the method via a static stash so callers (e.g. generate_briefing)
      * can surface a notice when the LLM received a reduced prompt.
@@ -515,11 +553,14 @@ class PressHub_AI_News_Curator {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
-        // Issue #131 - start each build with clean breakdown stashes.
+        // Issue #131 & #135 - start each build with clean breakdown and memory stashes.
         self::$last_breakdown_sent         = [];
         self::$last_breakdown_dropped_cap  = [];
         self::$last_breakdown_not_selected = [];
         self::$last_articles_placement     = '';
+        self::$last_memory_manifest        = [];
+        self::$last_memory_chars           = 0;
+        self::$last_memory_tokens_estimate = 0;
 
         // Filter articles if selected_article_ids is provided and non-empty
         if ( ! empty( $selected_article_ids ) && is_array( $selected_article_ids ) ) {
@@ -557,14 +598,61 @@ class PressHub_AI_News_Curator {
             $articles = array_values( $filtered );
         }
 
+        // Context formatting to determine capped articles character footprint
+        $sources = $this->get_sources_list( $articles );
+        $count   = count( $articles );
+        $context = $this->format_articles_context( $articles );
+
+        // Issue #135: Compute effective memory budget and build tiered memory context
+        $configured_mem_budget = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars()
+            : 12000;
+        $effective_mem_budget  = class_exists( 'PressHub_AI_Context_Estimator' )
+            ? PressHub_AI_Context_Estimator::compute_memory_budget_for_context( $configured_mem_budget, $this->last_capped_chars() )
+            : $configured_mem_budget;
+
+        if ( $effective_mem_budget < $configured_mem_budget && class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::warning(
+                'Memory budget shrunk to fit model context limit alongside articles',
+                [
+                    'configured_budget' => $configured_mem_budget,
+                    'effective_budget'  => $effective_mem_budget,
+                    'articles_chars'    => $this->last_capped_chars(),
+                ]
+            );
+        }
+
+        $mem = class_exists( 'PressHub_AI_Memory_Context_Builder' )
+            ? PressHub_AI_Memory_Context_Builder::build( $date, $edition, 'briefing', $effective_mem_budget )
+            : [ 'text' => '', 'used_morning_digest' => false, 'manifest' => [ 'enabled' => false ] ];
+
+        self::$last_memory_manifest        = $mem['manifest'] ?? [];
+        self::$last_memory_chars           = (int) ( $mem['manifest']['used_chars'] ?? 0 );
+        self::$last_memory_tokens_estimate = (int) ( $mem['manifest']['tokens_estimate'] ?? 0 );
+
+        if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            PressHub_AI_Generation_Recorder::set_memory_context( self::$last_memory_manifest );
+        }
+
         // 1. Base curation prompt & filter
         $base_prompt = class_exists( 'PressHub_AI_Settings_Storage' )
             ? PressHub_AI_Settings_Storage::get_curation_prompt()
             : $this->get_default_curation_prompt();
         $base_prompt = apply_filters( 'presshub_ai_curator_system_prompt', $base_prompt );
 
+        $has_memory_in_system  = ( false !== strpos( $base_prompt, '{memory_context}' ) );
+        $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
+        self::$last_articles_placement = $has_context_in_system ? 'system' : 'user';
+
         // 2. Hydrate placeholders
         $system_prompt = $this->hydrate_prompt( $base_prompt, $date, $articles );
+        if ( $has_memory_in_system ) {
+            if ( '' !== ( $mem['text'] ?? '' ) ) {
+                $system_prompt = str_replace( '{memory_context}', $mem['text'], $system_prompt );
+            } else {
+                $system_prompt = str_replace( [ "\n\n{memory_context}\n", "\n\n{memory_context}", "{memory_context}\n", "{memory_context}" ], '', $system_prompt );
+            }
+        }
 
         // 3. Resolve author/org/plugin preset
         $user_id = get_current_user_id();
@@ -580,63 +668,66 @@ class PressHub_AI_News_Curator {
         $system_prompt = apply_filters( 'presshub_ai_composed_curator_system_prompt', $system_prompt );
 
         // 5. Build user prompt
-        $sources = $this->get_sources_list( $articles );
-        $count   = count( $articles );
-        $context = $this->format_articles_context( $articles );
-
-        // Deduplication guard: if the system prompt already contains the formatted
-        // articles (e.g. from an operator custom template that used {articles_context}),
-        // do not duplicate the article text in the user prompt.
-        $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
-        self::$last_articles_placement = $has_context_in_system ? 'system' : 'user';
-
         $morning_briefing_block = '';
         if ( 'noon' === $edition ) {
-            $morning_content = $this->get_briefing_content( $date, 'morning' );
-            if ( ! empty( $morning_content ) ) {
-                $morning_briefing_block = sprintf(
-                    "\n\n--- ΠΡΩΙΝΗ ΕΝΗΜΕΡΩΣΗ (%s) ---\n%s\n---------------------------------\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Λάβε υπόψη την πρωινή ενημέρωση και συνέταξε μια νέα επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις από το πρωί.\n",
-                    $date,
-                    trim( $morning_content )
-                );
+            if ( ! empty( $mem['used_morning_digest'] ) ) {
+                $morning_briefing_block = "\n\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Λάβε υπόψη την πρωινή ενημέρωση στη συντακτική μνήμη και συνέταξε μια νέα επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις από το πρωί.\n";
             } else {
-                $morning_briefing_block = "\n\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Συνέταξε μια επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις της ημέρας.\n";
+                $morning_content = $this->get_briefing_content( $date, 'morning' );
+                if ( ! empty( $morning_content ) ) {
+                    $morning_briefing_block = sprintf(
+                        "\n\n--- ΠΡΩΙΝΗ ΕΝΗΜΕΡΩΣΗ (%s) ---\n%s\n---------------------------------\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Λάβε υπόψη την πρωινή ενημέρωση και συνέταξε μια νέα επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις από το πρωί.\n",
+                        $date,
+                        trim( $morning_content )
+                    );
+                } else {
+                    $morning_briefing_block = "\n\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Συνέταξε μια επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις της ημέρας.\n";
+                }
             }
         }
+
+        // Fallback placement: if template lacks {memory_context}, insert memory in user prompt before articles
+        $memory_user_block = ( ! $has_memory_in_system && '' !== ( $mem['text'] ?? '' ) )
+            ? "\n\n" . trim( $mem['text'] ) . "\n"
+            : '';
 
         if ( 'noon' === $edition ) {
             if ( $has_context_in_system ) {
                 $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
-                    $date,
-                    $count,
-                    $sources,
-                    $morning_briefing_block
-                );
-            } else {
-                $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
                     $date,
                     $count,
                     $sources,
                     $morning_briefing_block,
+                    $memory_user_block
+                );
+            } else {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    $date,
+                    $count,
+                    $sources,
+                    $morning_briefing_block,
+                    $memory_user_block,
                     $context
                 );
             }
         } else {
             if ( $has_context_in_system ) {
                 $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
-                    $date,
-                    $count,
-                    $sources
-                );
-            } else {
-                $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
                     $date,
                     $count,
                     $sources,
+                    $memory_user_block
+                );
+            } else {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    $date,
+                    $count,
+                    $sources,
+                    $memory_user_block,
                     $context
                 );
             }
@@ -1153,6 +1244,8 @@ class PressHub_AI_News_Curator {
             'articles_truncated'     => (bool) $this->was_context_truncated(),
             'model_source'           => method_exists( $api_client, 'get_model_source' ) ? $api_client->get_model_source() : '',
             'provider_source'        => method_exists( $api_client, 'get_provider_source' ) ? $api_client->get_provider_source() : '',
+            'memory_chars'           => (int) $this->last_memory_chars(),
+            'memory_tokens_estimate' => (int) $this->last_memory_tokens_estimate(),
         ];
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -1194,6 +1287,7 @@ class PressHub_AI_News_Curator {
                 'edition'       => $edition,
                 'status'        => is_wp_error( $response ) ? 'error' : 'success',
                 'error_message' => is_wp_error( $response ) ? $response->get_error_message() : '',
+                'memory'        => $this->last_memory_manifest(),
                 'config'        => PressHub_AI_Generation_Recorder::build_client_config(
                     $api_client,
                     [

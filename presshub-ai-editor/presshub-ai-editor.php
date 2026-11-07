@@ -175,6 +175,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-memory-context-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 // Social Auto-Post Subsystem Classes

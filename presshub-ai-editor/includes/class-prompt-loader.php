@@ -156,4 +156,13 @@ class PressHub_AI_Prompt_Loader {
     public static function get_briefing_qa_prompt(): string {
         return self::load( 'scorecard/briefing_qa_user_prompt.txt' );
     }
+
+    /**
+     * Get the built-in default editorial memory context instructions.
+     *
+     * @return string Loaded memory context instructions prompt template.
+     */
+    public static function get_memory_context_instructions(): string {
+        return self::load( 'memory/context_instructions.txt' );
+    }
 }

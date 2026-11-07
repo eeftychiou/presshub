@@ -276,6 +276,19 @@ php dev-env/scripts/reset-db.php
    - When a briefing post is deleted (`before_delete_post`), its associated daily digests and memory entry links must be cleanly deleted.
 4. **Settings-First Memory Knobs**:
    - All memory thresholds (`presshub_ai_memory_daily_days`, `presshub_ai_memory_background_days`, `presshub_ai_memory_briefing_budget_chars`, `presshub_ai_memory_podcast_budget_chars`, `presshub_ai_memory_retention_days`) are registered with clamping sanitizers and accessed via `PressHub_AI_Settings_Storage` helpers.
+5. **Tiered Editorial Memory Prompt Injection (Issue #135)**:
+   - Assembled via `PressHub_AI_Memory_Context_Builder::build( $date, $edition, $target, $budget_override )`.
+   - Tier 1: Same-day morning digest (noon edition only). Replaces the legacy raw morning text dump delimiter when present.
+   - Tier 2: Recent daily digests for `daily_days` days (newest first).
+   - Tier 3: Background weekly rollups + gap-filling daily digests within `background_days` with no gap and no overlap.
+   - Podcast lines: Includes opening and closing lines when `target === 'podcast'`.
+   - Status: Only `active` and `stale` entries are included; excluded/failed/pending are skipped; stories with `include === false` are omitted.
+   - Trimming: When exceeding character budget, trims (1) oldest background, (2) oldest recent days, (3) within a day, resolved stories before developing.
+   - Greek instructions: Embedded from `assets/prompts/memory/context_instructions.txt` enforcing continuity over repetition, natural referencing, strict factual grounding, and no meta-commentary.
+   - Context Estimator: Shrinks memory budget dynamically when articles + prompt + memory exceed the model's max context limit.
+   - Hydration: Replaces `{memory_context}` in system or user prompt, falling back to prepending before articles in the user prompt when the placeholder is absent.
+   - Generation Records: Persists complete manifest in `wp_presshub_ai_generation_records.memory_json`.
+   - Strict Gating: Prompts remain byte-identical when memory is disabled (`enabled=0`) or lookback days are 0.
 
 ---
 
