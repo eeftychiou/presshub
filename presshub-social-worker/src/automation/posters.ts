@@ -237,12 +237,12 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     await dismissTwitterCookies();
 
     WorkerLogger.debug('Twitter Automation', 'Finding tweet text area...');
-    // Scoped to modal dialog when /compose/post is loaded, or fallback to timeline box without strict mode violation
-    const modalTextarea = page.locator('div[role="dialog"] [data-testid="tweetTextarea_0"]');
-    const isModalVisible = await modalTextarea.first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
-    const textarea = isModalVisible
-      ? modalTextarea.first()
-      : page.locator('div[role="dialog"] [data-testid="tweetTextarea_0"]').or(page.locator('[data-testid="tweetTextarea_0"]').first());
+    const modalSurface = page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first();
+    const isModal = (await modalSurface.count()) > 0 && await modalSurface.isVisible().catch(() => false);
+
+    const textarea = isModal
+      ? modalSurface.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]').first()
+      : page.locator('div[data-slot="xds-modal-surface"] textarea, div[role="dialog"] textarea, textarea[placeholder*="happening"], textarea[aria-label*="happening"], [data-testid="tweetTextarea_0"], div[role="dialog"] [data-testid="tweetTextarea_0"]').first();
 
     await textarea.waitFor({ state: 'visible', timeout: 15000 });
 
@@ -264,7 +264,9 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
       const mediaSize = fs.statSync(options.mediaPath).size;
       WorkerLogger.info('Twitter Automation', `Uploading media attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
-      const fileInput = page.locator('div[role="dialog"] input[data-testid="fileInput"], input[data-testid="fileInput"]').first();
+      const fileInput = isModal
+        ? modalSurface.locator('input[type="file"], input[data-testid="fileInput"]').first()
+        : page.locator('div[data-slot="xds-modal-surface"] input[type="file"], div[role="dialog"] input[type="file"], input[type="file"], input[data-testid="fileInput"]').first();
       if ((await fileInput.count()) > 0) {
         await fileInput.setInputFiles(path.resolve(options.mediaPath));
         // Wait for attachment preview to appear
@@ -273,11 +275,9 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     }
 
     WorkerLogger.debug('Twitter Automation', 'Finding Post button...');
-    const modalButton = page.locator('div[role="dialog"] [data-testid="tweetButton"]').first();
-    const isModalBtn = (await modalButton.count()) > 0;
-    const postButton = isModalBtn
-      ? modalButton
-      : page.locator('[data-testid="tweetButton"]').first();
+    const postButton = isModal
+      ? modalSurface.locator('button:has-text("Post"), [data-testid="tweetButton"]').first()
+      : page.locator('div[data-slot="xds-modal-surface"] button:has-text("Post"), div[role="dialog"] button:has-text("Post"), button.x-button:has-text("Post"), button:has-text("Post"), [data-testid="tweetButton"]').first();
 
     await postButton.waitFor({ state: 'visible', timeout: 20000 });
 
@@ -349,7 +349,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
     // Wait for the modal dialog to disappear or notification toast to appear
     await Promise.race([
-      page.locator('div[role="dialog"]').first().waitFor({ state: 'detached', timeout: 15000 }),
+      page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first().waitFor({ state: 'detached', timeout: 15000 }),
       page.locator('[data-testid="toast"]').first().waitFor({ state: 'visible', timeout: 15000 })
     ]).catch(() => {});
 
