@@ -81,7 +81,7 @@ class PressHub_AI_Settings_Storage {
         ] );
 
         // Prompt inspection toggle (1.2.5): appends the exact SYSTEM/USER
-        // prompts to wp-content/uploads/presshub-ai/presshub-ai-debug.log.
+        // prompts to the protected log folder (prompts channel).
         register_setting( 'presshub_ai_options', 'presshub_ai_debug_prompts', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_fetch_urls' ],
             'type'              => 'boolean',
@@ -199,12 +199,37 @@ class PressHub_AI_Settings_Storage {
         ] );
         // Issue #80 — Settings-First: TTS payload debug log toggle. When enabled
         // every Gemini TTS API call appends detailed request/response JSON
-        // entries to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
+        // entries to the protected log folder (tts channel) via the
         // `presshub_ai_tts_payload_log` action, so operators can diagnose
         // voice drift or unexpected voice allocation without touching code.
         register_setting( 'presshub_ai_options', 'presshub_ai_log_tts_payloads', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_boolean' ],
             'type'              => 'boolean',
+        ] );
+
+        // Issue #131 - Settings-First: generation record retention (days). Daily cron
+        // prunes presshub_ai_generation_records rows older than this window.
+        register_setting( 'presshub_ai_options', 'presshub_ai_generation_record_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_generation_record_retention_days' ],
+            'type'              => 'integer',
+            'default'           => 90,
+        ] );
+
+        // Issue #138 - Settings-First: log retention windows (days).
+        register_setting( 'presshub_ai_options', 'presshub_ai_log_file_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_log_file_retention_days' ],
+            'type'              => 'integer',
+            'default'           => 14,
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_token_log_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_token_log_retention_days' ],
+            'type'              => 'integer',
+            'default'           => 60,
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_audit_log_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_audit_log_retention_days' ],
+            'type'              => 'integer',
+            'default'           => 90,
         ] );
 
         // Settings-First: Social & OpenGraph metadata master toggle and scope.
@@ -594,6 +619,40 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_provider_id' ],
             'type'              => 'string',
         ] );
+
+        // Editorial Memory Options (Issue #132)
+        register_setting( 'presshub_ai_options', 'presshub_ai_memory_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_memory_enabled' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_memory_daily_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_memory_daily_days' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_memory_background_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_memory_background_days' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_memory_briefing_budget_chars', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_memory_briefing_budget_chars' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_memory_podcast_budget_chars', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_memory_podcast_budget_chars' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_memory_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_memory_retention_days' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_memory_provider', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_provider_id' ],
+            'type'              => 'string',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_memory_model', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_model_string' ],
+            'type'              => 'string',
+        ] );
         // Issue #90 — Settings-First: podcast dialogue style selector.
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_style', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_podcast_style' ],
@@ -649,6 +708,10 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $render, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_debug_prompts', __( 'Log AI Prompts & Responses', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Log TTS Payload Details', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_generation_record_retention_days', __( 'Generation Record Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_generation_record_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_log_file_retention_days', __( 'Log File Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_log_file_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_token_log_retention_days', __( 'Token Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_token_log_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_audit_log_retention_days', __( 'Audit Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_audit_log_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
 
         add_settings_section( 'presshub_ai_social', __( 'Social & OpenGraph Metadata', 'presshub-ai-editor' ), [ $render, 'render_social_section' ], 'presshub-ai' );
         add_settings_field( 'presshub_ai_social_meta_enabled', __( 'Enable Social Metadata (OpenGraph & Twitter Cards)', 'presshub-ai-editor' ), [ $render, 'render_social_meta_enabled_field' ], 'presshub-ai', 'presshub_ai_social' );
@@ -742,6 +805,16 @@ class PressHub_AI_Settings_Storage {
         // Daily Briefing Featured Image Source fields
         add_settings_field( 'presshub_ai_briefing_featured_image_source', __( 'Text Briefing Featured Image Source', 'presshub-ai-editor' ), [ $render, 'render_briefing_featured_image_source_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_podcast_featured_image_source', __( 'Podcast Featured Image Source', 'presshub-ai-editor' ), [ $render, 'render_briefing_podcast_featured_image_source_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+
+        // Issue #132 — Settings-First: Editorial Memory Section Fields
+        add_settings_field( 'presshub_ai_memory_enabled', __( 'Enable Editorial Memory', 'presshub-ai-editor' ), [ $render, 'render_memory_enabled_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_memory_daily_days', __( 'Recent Memory Window (days)', 'presshub-ai-editor' ), [ $render, 'render_memory_daily_days_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_memory_background_days', __( 'Background Memory Window (days)', 'presshub-ai-editor' ), [ $render, 'render_memory_background_days_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_memory_briefing_budget_chars', __( 'Briefing Memory Budget (chars)', 'presshub-ai-editor' ), [ $render, 'render_memory_briefing_budget_chars_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_memory_podcast_budget_chars', __( 'Podcast Memory Budget (chars)', 'presshub-ai-editor' ), [ $render, 'render_memory_podcast_budget_chars_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_memory_retention_days', __( 'Memory Retention Window (days)', 'presshub-ai-editor' ), [ $render, 'render_memory_retention_days_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_memory_provider', __( 'Memory Model Provider', 'presshub-ai-editor' ), [ $render, 'render_briefing_memory_provider_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_memory_model', __( 'Memory Model Override', 'presshub-ai-editor' ), [ $render, 'render_briefing_memory_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
 
         // AI Featured Images section & fields
         add_settings_section( 'presshub_ai_images', __( 'AI Featured Images', 'presshub-ai-editor' ), [ $render, 'render_images_section' ], 'presshub-ai' );
@@ -876,6 +949,110 @@ class PressHub_AI_Settings_Storage {
     public static function sanitize_research_retention_days( $value ) {
         $n = (int) wp_unslash( $value );
         return max( 1, min( 3650, $n ) );
+    }
+
+    /**
+     * Sanitize the generation record retention window (days).
+     * Non-numeric input falls back to the documented default of 90; numeric input is clamped to 7-365.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_generation_record_retention_days( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 90;
+        }
+        return max( 7, min( 365, (int) $value ) );
+    }
+
+    /**
+     * Generation record retention window in days (default 90, clamped 7-365).
+     *
+     * @return int
+     */
+    public static function get_generation_record_retention_days(): int {
+        return self::sanitize_generation_record_retention_days( get_option( 'presshub_ai_generation_record_retention_days', 90 ) );
+    }
+
+    /**
+     * Sanitize the log_file_retention_days window (days).
+     * Non-numeric input falls back to the default of 14; numeric input is clamped to 1-90.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_log_file_retention_days( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 14;
+        }
+        return max( 1, min( 90, (int) $value ) );
+    }
+
+    /**
+     * log_file_retention_days in days (default 14, clamped 1-90).
+     *
+     * @return int
+     */
+    public static function get_log_file_retention_days(): int {
+        return self::sanitize_log_file_retention_days( get_option( 'presshub_ai_log_file_retention_days', 14 ) );
+    }
+
+    /**
+     * Sanitize the token_log_retention_days window (days).
+     * Non-numeric input falls back to the default of 60; numeric input is clamped to 7-365.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_token_log_retention_days( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 60;
+        }
+        return max( 7, min( 365, (int) $value ) );
+    }
+
+    /**
+     * token_log_retention_days in days (default 60, clamped 7-365).
+     *
+     * @return int
+     */
+    public static function get_token_log_retention_days(): int {
+        return self::sanitize_token_log_retention_days( get_option( 'presshub_ai_token_log_retention_days', 60 ) );
+    }
+
+    /**
+     * Sanitize the audit_log_retention_days window (days).
+     * Non-numeric input falls back to the default of 90; numeric input is clamped to 30-730.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_audit_log_retention_days( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 90;
+        }
+        return max( 30, min( 730, (int) $value ) );
+    }
+
+    /**
+     * audit_log_retention_days in days (default 90, clamped 30-730).
+     *
+     * @return int
+     */
+    public static function get_audit_log_retention_days(): int {
+        return self::sanitize_audit_log_retention_days( get_option( 'presshub_ai_audit_log_retention_days', 90 ) );
     }
 
     public static function sanitize_model( $value, $provider = 'openai' ) {
@@ -2057,7 +2234,7 @@ class PressHub_AI_Settings_Storage {
      * toggle. Issue #80 — Settings-First: when enabled, every Gemini TTS API
      * call appends a detailed JSON entry (endpoint URL, masked headers,
      * speaker-voice mapping, prompt text, full request body, response
-     * metadata) to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
+     * metadata) to the protected log folder (tts channel) via the
      * `presshub_ai_tts_payload_log` action. Defaults to false so production
      * log size is preserved.
      *
@@ -3335,6 +3512,15 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_tts_request_delay_ms' => [ __CLASS__, 'sanitize_briefing_tts_request_delay_ms' ],
             'presshub_ai_briefing_tts_max_retries'      => [ __CLASS__, 'sanitize_briefing_tts_max_retries' ],
             'presshub_ai_briefing_tts_retry_backoff_ms' => [ __CLASS__, 'sanitize_briefing_tts_retry_backoff_ms' ],
+            // Issue #132 — Editorial Memory
+            'presshub_ai_memory_enabled'               => [ __CLASS__, 'sanitize_memory_enabled' ],
+            'presshub_ai_memory_daily_days'            => [ __CLASS__, 'sanitize_memory_daily_days' ],
+            'presshub_ai_memory_background_days'       => [ __CLASS__, 'sanitize_memory_background_days' ],
+            'presshub_ai_memory_briefing_budget_chars' => [ __CLASS__, 'sanitize_memory_briefing_budget_chars' ],
+            'presshub_ai_memory_podcast_budget_chars'  => [ __CLASS__, 'sanitize_memory_podcast_budget_chars' ],
+            'presshub_ai_memory_retention_days'        => [ __CLASS__, 'sanitize_memory_retention_days' ],
+            'presshub_ai_briefing_memory_provider'     => [ __CLASS__, 'sanitize_provider_id' ],
+            'presshub_ai_briefing_memory_model'        => [ __CLASS__, 'sanitize_model_string' ],
         ];
 
         $copilot_map = [
@@ -3359,6 +3545,10 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_log_level'                   => [ __CLASS__, 'sanitize_log_level' ],
             'presshub_ai_debug_prompts'               => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_log_tts_payloads'             => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_generation_record_retention_days' => [ __CLASS__, 'sanitize_generation_record_retention_days' ],
+            'presshub_ai_log_file_retention_days' => [ __CLASS__, 'sanitize_log_file_retention_days' ],
+            'presshub_ai_token_log_retention_days' => [ __CLASS__, 'sanitize_token_log_retention_days' ],
+            'presshub_ai_audit_log_retention_days' => [ __CLASS__, 'sanitize_audit_log_retention_days' ],
             'presshub_ai_social_meta_enabled'          => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_social_meta_all_posts'        => [ __CLASS__, 'sanitize_boolean' ],
         ];
@@ -3472,5 +3662,117 @@ class PressHub_AI_Settings_Storage {
         }
         return null;
     }
-}
+    // ------------------------------------------------------------------
+    // Issue #132: Editorial Memory Settings Getters & Sanitizers
+    // ------------------------------------------------------------------
 
+    public static function get_memory_enabled(): bool {
+        $val = get_option( 'presshub_ai_memory_enabled', null );
+        if ( null === $val ) {
+            return true;
+        }
+        return 1 === (int) $val;
+    }
+
+    public static function sanitize_memory_enabled( $value ): int {
+        if ( null === $value && empty( $_POST['presshub_ai_memory_enabled_present'] ) && ! empty( $_POST ) ) {
+            return self::get_memory_enabled() ? 1 : 0;
+        }
+        return ( '1' === (string) $value || 1 === $value || 'on' === (string) $value || true === $value ) ? 1 : 0;
+    }
+
+    public static function get_memory_daily_days(): int {
+        $val = (int) get_option( 'presshub_ai_memory_daily_days', 7 );
+        return ( $val >= 0 && $val <= 14 ) ? $val : 7;
+    }
+
+    public static function sanitize_memory_daily_days( $value ): int {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 7;
+        }
+        $n = (int) $value;
+        return max( 0, min( 14, $n ) );
+    }
+
+    public static function get_memory_background_days(): int {
+        $daily = self::get_memory_daily_days();
+        $val   = (int) get_option( 'presshub_ai_memory_background_days', 30 );
+        if ( $val < $daily ) {
+            $val = $daily;
+        }
+        return ( $val >= 0 && $val <= 90 ) ? $val : max( 30, $daily );
+    }
+
+    public static function sanitize_memory_background_days( $value, ?int $context_daily = null ): int {
+        $value = wp_unslash( $value );
+        $daily = null !== $context_daily ? $context_daily : self::get_memory_daily_days();
+        if ( null === $context_daily ) {
+            if ( isset( $GLOBALS['presshub_ai_save_post_data']['presshub_ai_memory_daily_days'] ) ) {
+                $daily = self::sanitize_memory_daily_days( $GLOBALS['presshub_ai_save_post_data']['presshub_ai_memory_daily_days'] );
+            } elseif ( isset( $_POST['presshub_ai_memory_daily_days'] ) ) {
+                $daily = self::sanitize_memory_daily_days( $_POST['presshub_ai_memory_daily_days'] );
+            }
+        }
+        if ( ! is_numeric( $value ) ) {
+            return max( 30, $daily );
+        }
+        $n = (int) $value;
+        $n = max( 0, min( 90, $n ) );
+        if ( $n < $daily ) {
+            $n = $daily;
+        }
+        return $n;
+    }
+
+    public static function get_memory_briefing_budget_chars(): int {
+        $val = (int) get_option( 'presshub_ai_memory_briefing_budget_chars', 12000 );
+        return ( $val >= 0 && $val <= 60000 ) ? $val : 12000;
+    }
+
+    public static function sanitize_memory_briefing_budget_chars( $value ): int {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 12000;
+        }
+        $n = (int) $value;
+        return max( 0, min( 60000, $n ) );
+    }
+
+    public static function get_memory_podcast_budget_chars(): int {
+        $val = (int) get_option( 'presshub_ai_memory_podcast_budget_chars', 6000 );
+        return ( $val >= 0 && $val <= 60000 ) ? $val : 6000;
+    }
+
+    public static function sanitize_memory_podcast_budget_chars( $value ): int {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 6000;
+        }
+        $n = (int) $value;
+        return max( 0, min( 60000, $n ) );
+    }
+
+    public static function get_memory_retention_days(): int {
+        $val = (int) get_option( 'presshub_ai_memory_retention_days', 180 );
+        return ( $val >= 30 && $val <= 730 ) ? $val : 180;
+    }
+
+    public static function sanitize_memory_retention_days( $value ): int {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return 180;
+        }
+        $n = (int) $value;
+        return max( 30, min( 730, $n ) );
+    }
+
+    public static function get_briefing_memory_provider(): string {
+        return self::sanitize_provider_id( (string) get_option( 'presshub_ai_briefing_memory_provider', '' ) );
+    }
+
+    public static function get_briefing_memory_model(): string {
+        return self::sanitize_model_string( (string) get_option( 'presshub_ai_briefing_memory_model', '' ) );
+    }
+
+}

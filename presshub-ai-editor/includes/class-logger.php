@@ -3,6 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-log-paths.php';
+
 /**
  * PressHub AI Logger
  *
@@ -37,19 +39,17 @@ class PressHub_AI_Logger {
     }
 
     /**
-     * Get absolute path to the log file.
+     * Get absolute path to the log file, or a WP_Error when PRESSHUB_AI_LOG_DIR
+     * is misconfigured (see PressHub_AI_Log_Paths). A path set through
+     * set_log_file_path() takes precedence.
+     *
+     * @return string|WP_Error
      */
-    public static function get_log_file_path(): string {
+    public static function get_log_file_path() {
         if ( null !== self::$custom_log_file ) {
             return self::$custom_log_file;
         }
-
-        $upload_dir = wp_upload_dir();
-        $base_dir   = trailingslashit( $upload_dir['basedir'] ) . 'presshub-ai';
-        if ( ! is_dir( $base_dir ) ) {
-            wp_mkdir_p( $base_dir );
-        }
-        return $base_dir . '/presshub-debug.log';
+        return PressHub_AI_Log_Paths::get_file( 'app' );
     }
 
     /**
@@ -58,8 +58,8 @@ class PressHub_AI_Logger {
     public static function get_configured_level(): string {
         $level = strtoupper( (string) get_option( 'presshub_ai_log_level', '' ) );
         if ( ! isset( self::LEVELS[ $level ] ) ) {
-            // Default: if WP_DEBUG is on or debug prompts is on, use DEBUG, else INFO.
-            if ( ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || '1' === (string) get_option( 'presshub_ai_debug_prompts', '0' ) ) {
+            // Default: DEBUG when WP_DEBUG is on, else INFO. Prompt debugging does not affect the level.
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
                 return 'DEBUG';
             }
             return 'INFO';
@@ -107,6 +107,11 @@ class PressHub_AI_Logger {
             return;
         }
 
+        if ( class_exists( 'PressHub_AI_Secret_Masker' ) ) {
+            $context = PressHub_AI_Secret_Masker::mask_array( $context );
+            $message = PressHub_AI_Secret_Masker::mask_text( $message );
+        }
+
         $trace_id = class_exists( 'PressHub_AI_Trace' ) ? PressHub_AI_Trace::get_current_trace_id() : null;
         if ( ! empty( $trace_id ) ) {
             $message = sprintf( '[%s] %s', $trace_id, $message );
@@ -120,19 +125,23 @@ class PressHub_AI_Logger {
         $formatted = sprintf( "[%s UTC] [%s] %s%s\n", $time, $level, $message, $ctx_str );
 
         // Write to log file
+        // A WP_Error here means PRESSHUB_AI_LOG_DIR is unusable: skip the file
+        // write (the error mirror below still runs for WARNING and above).
         $file = self::get_log_file_path();
-        $dir  = dirname( $file );
-        if ( ! is_dir( $dir ) && function_exists( 'wp_mkdir_p' ) ) {
-            wp_mkdir_p( $dir );
-        }
+        if ( ! is_wp_error( $file ) ) {
+            $dir = dirname( $file );
+            if ( ! is_dir( $dir ) && function_exists( 'wp_mkdir_p' ) ) {
+                wp_mkdir_p( $dir );
+            }
 
-        // Auto-rotate if > 5MB
-        if ( file_exists( $file ) && filesize( $file ) > 5 * 1024 * 1024 ) {
-            $rotated = $file . '.' . gmdate( 'Ymd_His' ) . '.old';
-            @rename( $file, $rotated );
-        }
+            // Auto-rotate if > 5MB
+            if ( file_exists( $file ) && filesize( $file ) > 5 * 1024 * 1024 ) {
+                $rotated = $file . '.' . gmdate( 'Ymd_His' ) . '.old';
+                @rename( $file, $rotated );
+            }
 
-        @file_put_contents( $file, $formatted, FILE_APPEND | LOCK_EX );
+            @file_put_contents( $file, $formatted, FILE_APPEND | LOCK_EX );
+        }
 
         // Also output to PHP error_log if level is WARNING or ERROR
         if ( $level_int >= self::LEVEL_WARNING ) {
@@ -145,7 +154,7 @@ class PressHub_AI_Logger {
      */
     public static function get_recent_logs( int $max_lines = 100 ): string {
         $file = self::get_log_file_path();
-        if ( ! file_exists( $file ) || ! is_readable( $file ) ) {
+        if ( is_wp_error( $file ) || ! file_exists( $file ) || ! is_readable( $file ) ) {
             return '';
         }
 
@@ -159,10 +168,18 @@ class PressHub_AI_Logger {
     }
 
     /**
-     * Clear log file.
+     * Clear the app log: empties the current file and deletes its rotated copies.
+     *
+     * @return bool True when nothing is left to clear or everything was cleared.
      */
     public static function clear_log(): bool {
         $file = self::get_log_file_path();
+        if ( is_wp_error( $file ) ) {
+            return true;
+        }
+        if ( null === self::$custom_log_file ) {
+            PressHub_AI_Log_Paths::delete_rotated_files( 'app' );
+        }
         if ( file_exists( $file ) ) {
             return @file_put_contents( $file, '' ) !== false;
         }

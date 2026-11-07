@@ -1299,6 +1299,127 @@
             });
         });
 
+        // -------------------------------------------------------------------------
+        // Event: Retry Failed Memory Digest (Issue #134)
+        // -------------------------------------------------------------------------
+        $(document).on('click', '#btn-retry-memory-digest, .btn-retry-item-memory-digest', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var postId = $btn.data('post-id');
+            var date = $btn.data('date') || currentDate;
+            var edition = $btn.data('edition') || currentEdition;
+            setButtonLoading($btn, true, null, 'Retrying...');
+            $.ajax({
+                url: ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'presshub_ai_memory_build_digest',
+                    nonce: nonce,
+                    post_id: postId,
+                    date: date,
+                    edition: edition,
+                    force: 1
+                },
+                success: function(res) {
+                    setButtonLoading($btn, false);
+                    if (res.success) {
+                        showNotice('success', 'Memory digest generated successfully.');
+                        if ($btn.hasClass('btn-retry-item-memory-digest')) {
+                            $btn.closest('li').fadeOut(300, function() { $(this).remove(); });
+                        } else {
+                            $('#presshub-memory-digest-failed-alert').slideUp();
+                        }
+                    } else {
+                        var msg = (typeof res.data === 'object' && res.data !== null && res.data.message) ? res.data.message : (res.data || 'Failed to generate memory digest');
+                        showNotice('error', 'Retry failed: ' + msg);
+                    }
+                },
+                error: function() {
+                    setButtonLoading($btn, false);
+                    showNotice('error', 'Network error retrying memory digest.');
+                }
+            });
+        });
+
+        // -------------------------------------------------------------------------
+        // Backfill Progress Poller (Issue #134)
+        // -------------------------------------------------------------------------
+        var backfillPollTimer = null;
+        function pollBackfillProgress() {
+            $.ajax({
+                url: ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'presshub_ai_memory_backfill_status',
+                    nonce: nonce
+                },
+                success: function(res) {
+                    if (res.success && res.data && res.data.state) {
+                        var st = res.data.state;
+                        var msg = 'Backfill in progress: ' + (st.processed || 0) + ' / ' + (st.total || 0) + ' processed (' + (st.succeeded || 0) + ' succeeded, ' + (st.failed || 0) + ' failed, ' + (st.skipped || 0) + ' skipped)...';
+                        $('#presshub-memory-backfill-status').text(msg).show();
+                        if (st.status === 'completed') {
+                            var finMsg = 'Backfill completed! Total: ' + (st.total || 0) + ' editions (' + (st.succeeded || 0) + ' succeeded, ' + (st.failed || 0) + ' failed, ' + (st.skipped || 0) + ' skipped).';
+                            $('#presshub-memory-backfill-status').text(finMsg).show();
+                            setButtonLoading($('#btn-start-memory-backfill'), false);
+                            if (backfillPollTimer) {
+                                clearInterval(backfillPollTimer);
+                                backfillPollTimer = null;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // -------------------------------------------------------------------------
+        // Event: Start Memory Backfill (Issue #134)
+        // -------------------------------------------------------------------------
+        $('#btn-start-memory-backfill').on('click', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var from = $('#presshub-memory-backfill-from').val();
+            var to = $('#presshub-memory-backfill-to').val();
+            var force = $('#presshub-memory-backfill-force').is(':checked') ? 1 : 0;
+            setButtonLoading($btn, true, null, 'Starting backfill...');
+            $.ajax({
+                url: ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'presshub_ai_memory_start_backfill',
+                    nonce: nonce,
+                    from: from,
+                    to: to,
+                    force: force
+                },
+                success: function(res) {
+                    if (res.success) {
+                        var st = res.data;
+                        var msg = 'Backfill started: ' + st.total + ' editions queued from ' + st.from + ' to ' + st.to + '.';
+                        if (st.total === 0) {
+                            msg = 'No briefing editions in range needed backfill (already up to date).';
+                            setButtonLoading($btn, false);
+                        } else {
+                            if (backfillPollTimer) {
+                                clearInterval(backfillPollTimer);
+                            }
+                            backfillPollTimer = setInterval(pollBackfillProgress, 3000);
+                        }
+                        showNotice('info', msg);
+                        $('#presshub-memory-backfill-status').text(msg).show();
+                    } else {
+                        setButtonLoading($btn, false);
+                        var errMsg = (typeof res.data === 'object' && res.data !== null && res.data.message) ? res.data.message : (res.data || 'Failed to start backfill.');
+                        showNotice('error', errMsg);
+                    }
+                },
+                error: function() {
+                    setButtonLoading($btn, false);
+                    showNotice('error', 'Network error starting memory backfill.');
+                }
+            });
+        });
+
     // -------------------------------------------------------------------------
         // Initial Paint: recompute aggregate totals from server-rendered cards
         // -------------------------------------------------------------------------

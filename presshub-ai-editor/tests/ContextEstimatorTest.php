@@ -13,6 +13,8 @@
  *   - estimate_tokens() chars/3 heuristic
  *   - summarize() returns both words and tokens
  *   - clamp_max_context_tokens() boundary handling
+ *   - compute_memory_budget_for_context() shrinking under context caps
+ *   - estimate_prompt_with_memory() token and char breakdown
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
@@ -225,6 +227,50 @@ class ContextEstimatorTest {
 		// 2 codepoints / 3 = 1
 		if ( $tokens < 1 ) {
 			$failures[] = "Case 18 (emoji tokens): expected >=1, got {$tokens}";
+		}
+
+		// -------------------------------------------------------------
+		// Case 19: compute_memory_budget_for_context() shrinking
+		// -------------------------------------------------------------
+		// Within bounds: 12000 configured + 10000 articles <= 40000 * 3 (120000 chars) -> returns 12000
+		$b1 = PressHub_AI_Context_Estimator::compute_memory_budget_for_context( 12000, 10000 );
+		if ( 12000 !== $b1 ) {
+			$failures[] = "Case 19 (within budget): expected 12000, got {$b1}";
+		}
+
+		// Shrunk: max_tokens = 5000 (15000 chars max). articles = 10000. configured memory = 8000.
+		// Remaining = 15000 - 10000 = 5000 chars. Shrunk to 5000.
+		$b2 = PressHub_AI_Context_Estimator::compute_memory_budget_for_context( 8000, 10000, 5000 );
+		if ( 5000 !== $b2 ) {
+			$failures[] = "Case 19 (shrunk): expected 5000, got {$b2}";
+		}
+
+		// Zero configured budget returns 0
+		$b3 = PressHub_AI_Context_Estimator::compute_memory_budget_for_context( 0, 10000 );
+		if ( 0 !== $b3 ) {
+			$failures[] = "Case 19 (zero budget): expected 0, got {$b3}";
+		}
+
+		// Articles completely exceed total capacity -> memory shrinks to 0
+		$b4 = PressHub_AI_Context_Estimator::compute_memory_budget_for_context( 8000, 20000, 5000 );
+		if ( 0 !== $b4 ) {
+			$failures[] = "Case 19 (exhausted capacity): expected 0, got {$b4}";
+		}
+
+		// -------------------------------------------------------------
+		// Case 20: estimate_prompt_with_memory()
+		// -------------------------------------------------------------
+		$art = "Ειδήσεις της ημέρας.";
+		$mem = "Ιστορικό προηγούμενων ημερών.";
+		$est = PressHub_AI_Context_Estimator::estimate_prompt_with_memory( $art, $mem );
+		if ( $est['articles_chars'] !== mb_strlen( $art, 'UTF-8' ) || $est['memory_chars'] !== mb_strlen( $mem, 'UTF-8' ) ) {
+			$failures[] = "Case 20 (chars mismatch): " . json_encode( $est );
+		}
+		if ( $est['total_chars'] !== ( $est['articles_chars'] + $est['memory_chars'] ) ) {
+			$failures[] = "Case 20 (total chars): " . json_encode( $est );
+		}
+		if ( $est['total_tokens'] !== ( $est['articles_tokens'] + $est['memory_tokens'] ) ) {
+			$failures[] = "Case 20 (total tokens): " . json_encode( $est );
 		}
 
 		// Output Results

@@ -1306,7 +1306,9 @@ class PressHub_AI_Audio_Synthesizer {
         // Save corrected script to snapshot so disk cache matches
         if ( class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
             $producer = new PressHub_AI_Podcast_Producer();
-            $producer->save_script( $script, $date, $edition );
+            // save_script( date, script, context_mode, source_post_id, attempted_at, edition ).
+            // An empty context_mode leaves the existing sidecar (and its generation_record_id) intact.
+            $producer->save_script( $date, $script, '', 0, '', $edition );
         }
 
         return $this->synthesize_podcast( $date, $script, $edition, $api_client, $post_id );
@@ -1813,6 +1815,55 @@ class PressHub_AI_Audio_Synthesizer {
             $saved_p3 = $presenter_3_voice;
         }
 
+        // Issue #131 - link the podcast post to the script generation record and
+        // store the TTS synthesis configuration on that record. Must never break
+        // synthesis, so everything is guarded and exceptions are swallowed.
+        if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            try {
+                $script_meta      = $producer->get_script_meta( $date, $edition );
+                $script_record_id = (int) ( $script_meta['generation_record_id'] ?? 0 );
+                if ( $script_record_id > 0 && (int) $post_id > 0 ) {
+                    PressHub_AI_Generation_Recorder::attach_to_post( (int) $post_id, $script_record_id );
+
+                    // 'generated' when the synthesized script is exactly what the LLM
+                    // returned; 'edited' when an editor changed it (saved edit or a
+                    // custom script passed in) before synthesis.
+                    $script_record = PressHub_AI_Generation_Recorder::get( $script_record_id );
+                    $script_source = ( null !== $script_record && trim( (string) ( $script_record['response_text'] ?? '' ) ) === trim( (string) $script ) )
+                        ? 'generated'
+                        : 'edited';
+
+                    PressHub_AI_Generation_Recorder::update_record( $script_record_id, [
+                        'tts' => [
+                            'engine'        => (string) $engine,
+                            'model'         => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : '',
+                            'payload_mode'  => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : '',
+                            'voices'        => [
+                                'presenter_1' => (string) $saved_p1,
+                                'presenter_2' => (string) $saved_p2,
+                                'presenter_3' => (string) $saved_p3,
+                            ],
+                            'host_count'    => (int) $host_count,
+                            'style'         => (string) $used_style,
+                            'speed'         => $speed,
+                            'pitch'         => $pitch,
+                            'turn_pause_ms' => (int) $turn_pause_ms,
+                            'topic_pause_ms' => (int) $topic_pause_ms,
+                            'split_by_topic' => (bool) $split_by_topic,
+                            'topic_count'   => ! empty( $topics ) ? count( $topics ) : 0,
+                            'turns_count'   => count( $turns ),
+                            'script_source' => $script_source,
+                            'synthesized_at' => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
+                        ],
+                    ] );
+                }
+            } catch ( \Throwable $e ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Generation record TTS update failed: ' . $e->getMessage() );
+                }
+            }
+        }
+
         // Issue #79 — persist audio-stats meta on the podcast post so the
         // Briefing Hub stage card can later surface playback duration, file size,
         // sample rate, format, voice personas, engine, mode, and topic count.
@@ -1922,7 +1973,9 @@ class PressHub_AI_Audio_Synthesizer {
                 $sfx_wav = file_get_contents( $tmp_wav );
                 @unlink( $tmp_wav );
             } else {
-                error_log( 'PressHub AI: Failed to decode/resample SFX using ffmpeg.' );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'PressHub AI: Failed to decode/resample SFX using ffmpeg.', [ 'sfx_file' => basename( $sfx_file ) ] );
+                }
             }
         } else {
             $sfx_wav = file_get_contents( $sfx_file );

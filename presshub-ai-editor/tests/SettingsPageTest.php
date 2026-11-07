@@ -98,7 +98,7 @@ class SettingsPageTest
         }
 
         $logging = array_column( $fields['presshub_ai_logging'] ?? [], 'id' );
-        foreach ( [ 'presshub_ai_log_level', 'presshub_ai_debug_prompts', 'presshub_ai_log_tts_payloads' ] as $field ) {
+        foreach ( [ 'presshub_ai_log_level', 'presshub_ai_debug_prompts', 'presshub_ai_log_tts_payloads', 'presshub_ai_generation_record_retention_days', 'presshub_ai_log_file_retention_days', 'presshub_ai_token_log_retention_days', 'presshub_ai_audit_log_retention_days' ] as $field ) {
             if ( ! in_array( $field, $logging, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_logging; got: " . implode( ', ', $logging );
             }
@@ -181,6 +181,12 @@ class SettingsPageTest
             'presshub_ai_log_level',
             // Issue #80 — Settings-First: granular TTS payload debug toggle.
             'presshub_ai_log_tts_payloads',
+            // Issue #131 — Settings-First: generation record retention window (days).
+            'presshub_ai_generation_record_retention_days',
+            // Issue #138 — Settings-First: log retention windows (days).
+            'presshub_ai_log_file_retention_days',
+            'presshub_ai_token_log_retention_days',
+            'presshub_ai_audit_log_retention_days',
             'presshub_ai_social_meta_enabled',
             'presshub_ai_social_meta_all_posts',
             'presshub_ai_remove_api_key',
@@ -236,6 +242,15 @@ class SettingsPageTest
             'presshub_ai_briefing_featured_image_ids',
             'presshub_ai_briefing_featured_image_source',
             'presshub_ai_briefing_podcast_featured_image_source',
+            // Issue #132 — Editorial Memory
+            'presshub_ai_memory_enabled',
+            'presshub_ai_memory_daily_days',
+            'presshub_ai_memory_background_days',
+            'presshub_ai_memory_briefing_budget_chars',
+            'presshub_ai_memory_podcast_budget_chars',
+            'presshub_ai_memory_retention_days',
+            'presshub_ai_briefing_memory_provider',
+            'presshub_ai_briefing_memory_model',
             'presshub_ai_image_feature_enabled',
             'presshub_ai_image_prompt_provider',
             'presshub_ai_image_prompt_model',
@@ -284,6 +299,15 @@ class SettingsPageTest
             'presshub_ai_briefing_podcast_max_tokens',
             'presshub_ai_briefing_podcast_timeout',
             'presshub_ai_briefing_podcast_tts_provider',
+            // Issue #132 — Editorial Memory Options
+            'presshub_ai_memory_enabled',
+            'presshub_ai_memory_daily_days',
+            'presshub_ai_memory_background_days',
+            'presshub_ai_memory_briefing_budget_chars',
+            'presshub_ai_memory_podcast_budget_chars',
+            'presshub_ai_memory_retention_days',
+            'presshub_ai_briefing_memory_provider',
+            'presshub_ai_briefing_memory_model',
             'presshub_ai_briefing_tts_turn_pause_ms',
             'presshub_ai_briefing_tts_topic_pause_ms',
             'presshub_ai_briefing_tts_request_delay_ms',

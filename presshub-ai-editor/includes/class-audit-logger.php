@@ -14,6 +14,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-secret-masker.php';
+
 class PressHub_AI_Audit_Logger {
 
     /** DB table version for schema migration checks. */
@@ -71,109 +73,52 @@ class PressHub_AI_Audit_Logger {
     }
 
     /**
-     * Recursively mask sensitive fields and credentials in details array.
-     * Ensures API keys, tokens, and passwords never appear in plaintext in the log.
+     * Recursively mask sensitive fields (delegates to PressHub_AI_Secret_Masker).
      *
      * @param mixed $data Input array or scalar.
-     * @return mixed Sanitized data with masked secrets.
+     * @return mixed
      */
     public static function mask_details( $data ) {
-        if ( is_array( $data ) ) {
-            $masked = [];
-            foreach ( $data as $key => $val ) {
-                $k_str = (string) $key;
-                if ( is_array( $val ) ) {
-                    $masked[ $key ] = self::mask_details( $val );
-                } elseif ( is_string( $val ) ) {
-                    // Check if key implies sensitive credential
-                    if ( preg_match( '/(key|secret|token|password|pass|auth|pwd|authorization)/i', $k_str ) ) {
-                        $masked[ $key ] = self::mask_secret_value( $val );
-                    } else {
-                        // Check if the value itself looks like a secret API key or Bearer token
-                        $masked[ $key ] = self::mask_if_secret_value( $val );
-                    }
-                } else {
-                    $masked[ $key ] = $val;
-                }
-            }
-            return $masked;
-        } elseif ( is_string( $data ) ) {
-            return self::mask_if_secret_value( $data );
-        }
-
-        return $data;
+        return PressHub_AI_Secret_Masker::mask_array( $data );
     }
 
     /**
-     * Mask an explicit secret value.
-     *
-     * @param string $val Raw secret string.
-     * @return string Masked string.
+     * Mask an explicit secret value (delegates to PressHub_AI_Secret_Masker).
      */
     public static function mask_secret_value( string $val ): string {
-        $val = trim( $val );
-        if ( '' === $val ) {
-            return '';
-        }
-        if ( false !== strpos( $val, '••••' ) ) {
-            return $val;
-        }
-
-        if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
-            $masked = PressHub_AI_Provider_Store::mask_key( $val );
-            if ( '' !== $masked && 'No API Key set' !== $masked ) {
-                return $masked;
-            }
-        }
-
-        $len = strlen( $val );
-        if ( $len >= 10 ) {
-            return substr( $val, 0, 4 ) . '••••••••' . substr( $val, -4 );
-        } elseif ( $len >= 6 ) {
-            return substr( $val, 0, 2 ) . '••••' . substr( $val, -2 );
-        }
-        return '••••••••';
+        return PressHub_AI_Secret_Masker::mask_value( $val );
     }
 
     /**
-     * Mask value only if it matches known API key formats or Bearer tokens.
-     *
-     * @param string $val Input string.
-     * @return string Original or masked string.
+     * Mask value only if it looks like a key or Bearer token (delegates to PressHub_AI_Secret_Masker).
      */
     public static function mask_if_secret_value( string $val ): string {
-        $trimmed = trim( $val );
-        if ( '' === $trimmed ) {
-            return $val;
-        }
+        return PressHub_AI_Secret_Masker::mask_if_secret( $val );
+    }
 
-        $known_prefixes = [
-            'sk-proj-',
-            'sk-admin-',
-            'sk-ant-api03-',
-            'sk-ant-',
-            'github_pat_',
-            'ghp_',
-            'gsk_',
-            'AIzaSy',
-            'AIza',
-            'nvapi-',
-            'xai-',
-            'ms-',
-            'sk-',
-        ];
+    /**
+     * Resolve the client IP. REMOTE_ADDR by default; a trusted proxy header may be
+     * selected through the `presshub_ai_client_ip_header` filter.
+     */
+    private static function get_client_ip(): string {
+        $ip = '';
 
-        foreach ( $known_prefixes as $pfx ) {
-            if ( 0 === strpos( $trimmed, $pfx ) && strlen( $trimmed ) > strlen( $pfx ) + 4 ) {
-                return self::mask_secret_value( $trimmed );
+        $header = function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_client_ip_header', '' ) : '';
+        if ( is_string( $header ) && '' !== $header && ! empty( $_SERVER[ $header ] ) ) {
+            foreach ( explode( ',', (string) $_SERVER[ $header ] ) as $candidate ) {
+                $candidate = trim( $candidate );
+                if ( false !== filter_var( $candidate, FILTER_VALIDATE_IP ) ) {
+                    $ip = $candidate;
+                    break;
+                }
             }
         }
 
-        if ( 0 === stripos( $trimmed, 'Bearer ' ) && strlen( $trimmed ) > 12 ) {
-            return 'Bearer ' . self::mask_secret_value( substr( $trimmed, 7 ) );
+        if ( '' === $ip && ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+            $ip = trim( (string) $_SERVER['REMOTE_ADDR'] );
         }
 
-        return $val;
+        return false !== filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '127.0.0.1';
     }
 
     /**
@@ -218,16 +163,7 @@ class PressHub_AI_Audit_Logger {
             }
         }
 
-        $ip_address = '';
-        if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
-            $ips = explode( ',', (string) $_SERVER['HTTP_X_FORWARDED_FOR'] );
-            $ip_address = trim( $ips[0] );
-        } elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-            $ip_address = trim( (string) $_SERVER['REMOTE_ADDR'] );
-        }
-        if ( ! filter_var( $ip_address, FILTER_VALIDATE_IP ) ) {
-            $ip_address = '127.0.0.1';
-        }
+        $ip_address = self::get_client_ip();
 
         $masked_details = self::mask_details( $details );
 
@@ -475,8 +411,13 @@ class PressHub_AI_Audit_Logger {
             : gmdate( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * ( defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 ) ) );
         $sql = $wpdb->prepare( "DELETE FROM {$table_name} WHERE created_at < %s", $cutoff );
         $deleted = $wpdb->query( $sql );
+        $count   = is_numeric( $deleted ) ? (int) $deleted : 0;
 
-        return is_numeric( $deleted ) ? (int) $deleted : 0;
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Audit log pruned', [ 'rows_deleted' => $count, 'retention_days' => max( 1, $days ) ] );
+        }
+
+        return $count;
     }
 
     /**
@@ -501,9 +442,16 @@ class PressHub_AI_Audit_Logger {
         }
 
         $table_name = self::get_table_name();
+        $count  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" );
         $result = $wpdb->query( "DELETE FROM {$table_name}" );
+        if ( false === $result ) {
+            return false;
+        }
 
-        return false !== $result;
+        // First row of the new trail records who cleared the old one.
+        self::log( 'audit_log_cleared', 'audit_log', '', [ 'rows_deleted' => $count ] );
+
+        return true;
     }
 
     /**

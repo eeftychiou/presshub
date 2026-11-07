@@ -7,11 +7,11 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
 ## 🏗️ Repository Architecture
 
 - **`presshub-ai-editor/`**: The unified WordPress plugin source code (incorporating both PressHub AI Co-Pilot newsroom/editorial suite and the Social Auto-Post multi-platform queue/dispatcher subsystem).
-  - `includes/`: PHP classes (API client, token logger, structured logger, audit logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings, plus unified social subsystem: `PressHub_Social_Queue`, `PressHub_Social_Dispatcher`, `PressHub_Social_REST_Controller`, `PressHub_Social_Meta_API_Client`, `PressHub_Social_Worker_Client`, `PressHub_Social_AI_Copywriter`, `PressHub_Social_Settings_Storage`, `PressHub_Social_Metabox`, `PressHub_Social_Queue_Admin`, `PressHub_Social_Ajax_Handlers`, `PressHub_Social_Settings`).
+  - `includes/`: PHP classes (API client, token logger, structured logger, audit logger, generation recorder (`PressHub_AI_Generation_Recorder`), rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings, plus unified social subsystem: `PressHub_Social_Queue`, `PressHub_Social_Dispatcher`, `PressHub_Social_REST_Controller`, `PressHub_Social_TikTok_Narrator`, `PressHub_Social_Meta_API_Client`, `PressHub_Social_Worker_Client`, `PressHub_Social_AI_Copywriter`, `PressHub_Social_Settings_Storage`, `PressHub_Social_Metabox`, `PressHub_Social_Queue_Admin`, `PressHub_Social_Ajax_Handlers`, `PressHub_Social_Settings`).
   - `assets/`: Frontend/Admin JavaScript, CSS, and prompt templates (`assets/prompts/*.txt`, including `social_*.txt`).
   - `tests/`: Isolated PHP unit test suite (83 test files covering 233+ unit tests via `run-all-tests.php` + 20 social test suites covering 202 assertions via `run-social-tests.php`).
 - **`presshub-social-autopost/`**: Legacy standalone plugin shim maintained for backward compatibility (gracefully yields to `presshub-ai-editor` v2.7.2+ to prevent duplicate hooks or class conflicts).
-- **`presshub-social-worker/`**: Self-contained Node.js + TypeScript automation and media worker service (Express server on port `3456`, Sharp image card generator, `@ffmpeg-installer/ffmpeg` vertical MP4 video generator with audio duration probing for full long-form podcast playback up to 60 minutes supported on TikTok Studio web, Playwright real Chrome & CDP browser automation for X/Twitter & TikTok with 4-tier progressive Twitter architecture [pre-flight smart 275-weighted-char trimming preserving URLs/hashtags, `CreateTweet`/`CreateNoteTweet` network request/response interception, Tier 1 `ControlOrMeta+Enter` keyboard submission, Tier 2 exact ARIA Post button targeting isolated from navigation sidebar links, Tier 3 synthetic native DOM mouse event cycles, Tier 4 direct in-page authenticated `CreateTweet` GraphQL API fallback gated strictly to 0 prior network attempts, and session `storageState` persistence upon cookie dismissal and tweet verification], Draft.js rich text editor native keyboard typing (`page.keyboard.insertText`) to protect React Virtual DOM from desync errors, non-destructive React Joyride onboarding tour dialog dismissal, transient retry dialog handling, single-click submission gating to eliminate duplicate posts, full DOM event cycle (`pointerdown`, `mousedown`, `pointerup`, `mouseup`, `click`) dispatching, overlay and upload cancellation handling, live upload progress observation up to 300s via `upload_status_container`, secondary "Post now" confirmation handling, strict post confirmation verification, 3-mode session manager with DevTools cookie paste & CDP auto-extraction, dedicated dual-target `WorkerLogger` to `logs/worker.log`, `npm run chrome` launcher, and Jest test suite [76 tests passing across 5 suites]).
+- **`presshub-social-worker/`**: Self-contained Node.js + TypeScript automation and media worker service (Express server on port `3456`, Sharp image card generator, `@ffmpeg-installer/ffmpeg` vertical MP4 video generator with audio duration probing for full long-form podcast playback up to 60 minutes supported on TikTok Studio web, Playwright real Chrome & CDP browser automation for X/Twitter & TikTok with 4-tier progressive Twitter architecture [pre-flight smart 275-weighted-char trimming preserving URLs/hashtags, `CreateTweet`/`CreateNoteTweet` network request/response interception, Tier 1 `ControlOrMeta+Enter` keyboard submission, Tier 2 exact ARIA Post button targeting isolated from navigation sidebar links, Tier 3 synthetic native DOM mouse event cycles, Tier 4 direct in-page authenticated `CreateTweet` GraphQL API fallback gated strictly to 0 prior network attempts, modal-scoped textarea resolution preventing background backdrop pointer interception, and session `storageState` persistence upon cookie dismissal and tweet verification], Draft.js rich text editor native keyboard typing (`page.keyboard.insertText`) to protect React Virtual DOM from desync errors, non-destructive React Joyride onboarding tour dialog dismissal, transient retry dialog handling, single-click submission gating to eliminate duplicate posts, full DOM event cycle (`pointerdown`, `mousedown`, `pointerup`, `mouseup`, `click`) dispatching, overlay and upload cancellation handling, live upload progress observation up to 300s via `upload_status_container`, secondary "Post now" confirmation handling, strict post confirmation verification, 3-mode session manager with DevTools cookie paste & CDP auto-extraction, dedicated dual-target `WorkerLogger` to `logs/worker.log`, `npm run chrome` launcher, and Jest test suite [76 tests passing across 5 suites]).
 - **`presshub-workflow/`**: TypeScript workflow and MCP server components (Jest test suite).
 - **`dev-env/`**: Fully configured, self-contained local WordPress development and testing environment powered by the official WordPress Core SQLite database engine (zero external database services required).
 
@@ -53,6 +53,13 @@ php dev-env/scripts/setup.php
 > **Logs before code.** Reading the source to guess a root cause without first consulting the
 > four logging layers is a violation of this protocol. The empirical record always wins over
 > the developer's intuition.
+
+**Writing logs (rules for new code):**
+- Log through `PressHub_AI_Logger::debug/info/warning/error()` with structured context (for provider calls: `provider`, `model`, `action`, `http_code`, `duration_ms`). **Never call `error_log()` directly**: the logger already mirrors WARNING and above to the PHP error log, tags lines with the trace ID, and shows them in the plugin's log viewer. The only raw `error_log()` calls allowed are inside `PressHub_AI_Logger` and the `WP_DEBUG` fallback in `PressHub_Social_Logger`.
+- Secrets are masked centrally by `PressHub_AI_Secret_Masker`: the logger masks context arrays (`mask_array()`) and messages (`mask_text()`), and the audit logger masks details. Still never pass raw credentials to a logger on purpose. Prompt and response bodies in the prompt debug log are deliberately left verbatim.
+- Audit events go through `PressHub_AI_Audit_Logger::log( $event_type, $entity_type, $entity_id, array $details )`. Clearing the audit log records an `audit_log_cleared` event as the first row of the new trail.
+- The audit log stores `REMOTE_ADDR` by default. Behind a trusted proxy, set the `presshub_ai_client_ip_header` filter (e.g. to `HTTP_CF_CONNECTING_IP`); never trust `X-Forwarded-For` otherwise.
+- Resolve log file locations only through `PressHub_AI_Log_Paths::get_file( $channel )` / `get_dir()` (channels `app`, `prompts`, `tts`). Never hard-code a log path: file names carry a random suffix, the folder may be moved with `PRESSHUB_AI_LOG_DIR`, and `get_dir()` returns a `WP_Error` (skip the file write) when that folder is unusable. In dev-env, `php dev-env/scripts/tail-logs.php` finds the suffixed files for you.
 
 Every agent — whether triaging a bug, writing a test, implementing a feature, or reviewing a
 PR — **must** run the following phase-appropriate commands. The output of these commands
@@ -257,6 +264,45 @@ php dev-env/scripts/reset-db.php
 
 ---
 
+## 🧠 Editorial Memory Stream Protocol (Issue #132, #134)
+
+> **Edit-Protection & Stale Propagation**: Editorial memory entries (`wp_presshub_ai_memory_entries`) preserve human editor revisions across regenerations. Never overwrite `origin='edited'` entries during automated regeneration.
+
+1. **Edit-Protection Invariant**:
+   - When `origin='edited'`, `PressHub_AI_Memory_Store::upsert_generated()` updates `generated_json` and `updated_at`, but preserves `content_json`, `version_hash`, and `origin`, returning `preserved_edit => true`.
+   - Editors can revert to generated content explicitly via `PressHub_AI_Memory_Store::reset_to_generated()`.
+2. **Stale Rollup Propagation**:
+   - Editing a daily digest or changing its status (`excluded`/`active`) marks all linked weekly rollups as `stale` (`PressHub_AI_Memory_Store::mark_dependents_stale()`) and logs audit records.
+3. **Clean Slate Post Deletion Hook**:
+   - When a briefing post is deleted (`before_delete_post`), its associated daily digests and memory entry links must be cleanly deleted.
+4. **Settings-First Memory Knobs**:
+   - All memory thresholds (`presshub_ai_memory_daily_days`, `presshub_ai_memory_background_days`, `presshub_ai_memory_briefing_budget_chars`, `presshub_ai_memory_podcast_budget_chars`, `presshub_ai_memory_retention_days`) are registered with clamping sanitizers and accessed via `PressHub_AI_Settings_Storage` helpers.
+5. **Daily Memory Digest Builder (Issue #134)**:
+   - Built asynchronously via `PressHub_AI_Memory_Digest_Builder::schedule_for_post()` (`presshub_ai_memory_build_digest`, single-event cron with 30s delay) on briefing text post creation or update.
+   - Extracts structured JSON stories (`assets/prompts/memory/daily_digest.txt`), injecting the previous 7 days' story keys/titles (`{existing_story_keys}`) so running threads maintain stable slugs and transition to `"status": "developing"|"resolved"`.
+   - Retries once on invalid JSON / schema validation errors with the error message in Greek; records all attempts as `memory_digest` generation records in `PressHub_AI_Generation_Recorder`.
+   - If both attempts fail, records `status='failed'` in `wp_presshub_ai_memory_entries` with diagnostic error message; surfaces alert notice on the Briefing Hub page with retry action.
+6. **Deterministic Podcast Lines**:
+   - `PressHub_AI_Podcast_Producer::save_script()` extracts the first and last speaker turns and writes them to `podcast.opening_line` and `podcast.closing_line` in the daily digest deterministically without extra LLM calls.
+7. **Backfill Workflow**:
+   - Resumable, idempotent backfill across date ranges via `PressHub_AI_Memory_Digest_Builder::start_backfill()` and single-step cron (`presshub_ai_memory_backfill_step`).
+   - Exposed via Briefing Hub UI, AJAX endpoints (`presshub_ai_memory_start_backfill`, `presshub_ai_memory_backfill_status`), and WP-CLI command (`wp presshub memory backfill [--from=...] [--to=...] [--force]`).
+8. **Tiered Editorial Memory Prompt Injection (Issue #135)**:
+   - Assembled via `PressHub_AI_Memory_Context_Builder::build( $date, $edition, $target, $budget_override )`.
+   - Tier 1: Same-day morning digest (noon edition only). Replaces the legacy raw morning text dump delimiter when present.
+   - Tier 2: Recent daily digests for `daily_days` days (newest first).
+   - Tier 3: Background weekly rollups + gap-filling daily digests within `background_days` with no gap and no overlap.
+   - Podcast lines: Includes opening and closing lines when `target === 'podcast'`.
+   - Status: Only `active` and `stale` entries are included; excluded/failed/pending are skipped; stories with `include === false` are omitted.
+   - Trimming: When exceeding character budget, trims (1) oldest background, (2) oldest recent days, (3) within a day, resolved stories before developing.
+   - Greek instructions: Embedded from `assets/prompts/memory/context_instructions.txt` enforcing continuity over repetition, natural referencing, strict factual grounding, and no meta-commentary.
+   - Context Estimator: Shrinks memory budget dynamically when articles + prompt + memory exceed the model's max context limit.
+   - Hydration: Replaces `{memory_context}` in system or user prompt, falling back to prepending before articles in the user prompt when the placeholder is absent.
+   - Generation Records: Persists complete manifest in `wp_presshub_ai_generation_records.memory_json`.
+   - Strict Gating: Prompts remain byte-identical when memory is disabled (`enabled=0`) or lookback days are 0.
+
+---
+
 ## 🔒 Security & Hardening Standards
 
 All code contributions must strictly adhere to WordPress security best practices:
@@ -363,6 +409,11 @@ If a PR introduces a new operational knob without the full six-step registration
    - API client methods must **never** execute silent multi-model fallback retry loops that mask provider errors or run unconfigured models. Surface the exact error from the configured provider/model immediately.
 4. **End-to-End Resolution Provenance**:
    - Every API invocation must track and log `provider_source` and `model_source` across structured logs (`[API Client Resolution]`), pre-dispatch summaries, prompt debug headers, and token log metadata (`wp_presshub_ai_token_logs.metadata`).
+   - Prompt debug headers must use the client instance's `get_request_meta()`. Never use the static `PressHub_AI_API_Client::current_request_meta()` for a call made by an instance, because it reports the first enabled provider, not the one that made the call.
+5. **Generation Records for Editorial Transparency**:
+   - Every briefing-pipeline LLM generation (briefing text, podcast script, and later memory digests and rollups) must store a record through `PressHub_AI_Generation_Recorder::record()` at the call site, on success **and** on error: verbatim prompts and response, `build_client_config()` for the real provider and model, the per-article sent/dropped inputs, memory used, and usage. Link it to the resulting post with `attach_to_post()`. Never rebuild prompts after the fact to fill a record.
+   - Recording must never break generation: a failed insert logs an `ERROR` with the `trace_id` and generation continues.
+   - Inspect records in dev-env: `php dev-env/scripts/query-db.php "SELECT id, kind, status, post_id, length(user_prompt) FROM wp_presshub_ai_generation_records ORDER BY id DESC LIMIT 5"`.
 
 #### Anti-Pattern vs. Required Pattern
 
@@ -573,6 +624,15 @@ When UI changes are involved, perform visual inspection in the local testing env
 4. **Scoped Modal Event Listeners**:
    - Never attach global event handlers for general modal classes (e.g. `$(document).on('click', '.presshub-modal-close, .presshub-modal-cancel')`) with fallback `else` branches that close unrelated modals.
    - All cancel and close listeners must be explicitly scoped to their parent modal IDs.
+
+---
+
+## 🔎 Generation Inspector Rules (Issue #133)
+
+1. The inspector (`PressHub_AI_Generation_Inspector`) is **read-only**: never add write paths to generation records from it.
+2. Records contain scraped third-party text. Never render record content as HTML: escape every value in PHP, and insert prompts/response in JS with `textContent`/`.text()`.
+3. Every inspector endpoint checks `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` **and** `edit_others_posts`. New large fields must be added to `TEXT_FIELDS` (whitelist) and loaded on demand via the field loader, never embedded in the edit-screen HTML.
+4. Link to the memory editor only through the `presshub_ai_memory_editor_url` filter.
 
 ---
 
@@ -999,10 +1059,19 @@ gh pr merge <id> --squash         # Merge PR into main branch
 4. **Twitter/X Automation Reliability, Anti-Duplicate Gating & Session Invalidation**:
    - **Keyboard-First Fast-Path & Exact Button Targeting**: `postTwitter` executes a fast-path keyboard shortcut submission (`ControlOrMeta+Enter`) inside the composer `<textarea>`, which immediately triggers native client submission and detaches the modal without vulnerability to DOM button layout changes, backdrop overlays, or cookie banners. When falling back to button clicking, it queries the exact ARIA button (`getByRole('button', { name: /^Post$/i, exact: true })`) and explicitly filters out header menu triggers (`New Post`) and sidebar navigation buttons (`[data-testid="SideNav_NewTweet_Button"]`).
    - **Escape Key Avoidance & Accurate Modal Evaluation**: Never send `Escape` key events in `postTwitter()`. On Twitter/X's `/compose/post` modal (`div[data-slot="xds-modal-surface"]`), pressing `Escape` triggers X's "Save post? You can save this to send later from your drafts. [Discard] [Save]" modal dialog which unfocuses the composer and traps automated submission. Allow React Virtual DOM to settle with `await page.waitForTimeout(500)`. Wait for `textarea` to become visible before evaluating `isModal` and `modalSurface`, ensuring accurate modal scoping and detached-dialog verification.
-   - **Responsive Portal & Native Textarea Selectors**: Twitter/X migrated its web composer to Tailwind/Base UI portal dialogs (`div[data-slot="xds-modal-surface"]`) with native `<textarea placeholder="What's happening?">` and standard `<button>Post</button>`, deprecating `data-testid="tweetTextarea_0"` and `data-testid="tweetButton"`. Locators must query `div[data-slot="xds-modal-surface"] textarea, div[role="dialog"] textarea` and `button:has-text("Post")` with proper fallbacks, scoped inside the active modal surface to prevent backdrop pointer interception.
+   - **Responsive Portal & Native Textarea Selectors**: Twitter/X migrated its web composer to Tailwind/Base UI portal dialogs (`div[data-slot="xds-modal-surface"]`) with native `<textarea placeholder="What's happening?">` and standard `<button>Post</button>`, deprecating `data-testid="tweetTextarea_0"` and `data-testid="tweetButton"`. Locators filter specifically for dialogs containing the composer (`.filter({ has: page.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]') })`) to avoid targeting preceding dialogs (onboarding or cookie prompts), preventing backdrop pointer interception, and log warnings if initial focus or force-click fails.
    - **Cookie Overlay Neutralization**: Twitter/X renders a fixed bottom cookie overlay (`Did someone say … cookies?`, `div[style*="bottom: 0px"]`) that intercepts pointer events on the compose dialog's `tweetButton`. `dismissTwitterCookies()` neutralizes these overlays by applying `display: none` and `pointerEvents: none` without triggering page navigation or compose dialog dismissal.
    - **Single-Click Anti-Duplicate Submission Gating**: The worker strictly gates fallback native DOM mouse/click event dispatch behind `if (!clicked)`. When Playwright's click on `tweetButton` succeeds, no redundant event cycle or secondary click is triggered, completely eliminating duplicate/double tweet submissions.
    - **Login Redirect Detection & Dynamic Session Invalidation**: When Twitter's session cookies expire or are revoked, Twitter redirects to `/i/jf/onboarding/web?redirect_after_login=...&mode=login` or displays login modal prompts. `postTwitter` immediately detects these onboarding/login routes, calls `markSessionInvalid('twitter')`, reports `twitter: false` to WordPress to stop claiming jobs for unauthenticated sessions, and throws a clear actionable error prompting re-authentication via `npm run login -- twitter`.
    - **Zero-Silent-Fallback**: Never generate synthetic or dummy tweet IDs (`tw-${Date.now()}`) when a post fails or toast status URL is missed. If the toast link is missed, perform a profile timeline lookup (`https://x.com/${username}`) matching article text or permalink. If neither succeeds, throw a loud, descriptive error.
-   - **Mandatory Post-Confirmation Loading**: After obtaining the candidate `tweetUrl`, the worker must navigate directly to the tweet (`page.goto(tweetUrl)`), verify that `<article data-testid="tweet">` is rendered and visible, and confirm that the page contains no error notices ("This Post doesn’t exist", "unavailable", "Something went wrong"). Only upon successful post confirmation can the job be reported as published.
+   - **Timeline Match Freshness Gate**: A profile-timeline match is only accepted if the tweet was created by *this* submission. The creation time is decoded from the status ID (snowflake: `floor(id / 2^22) + 1288834974657` ms, via `getTwitterSnowflakeTimestampMs()`), and candidates older than `submitStartedAt - TWITTER_TIMELINE_MAX_CLOCK_SKEW_MS` (60s) are rejected with a `WARN` log. An empty text snippet (copy with no letters or digits in its first 30 characters) never counts as a match. This prevents an earlier attempt's tweet, a pinned tweet, or a previous post with the same opening words from being reported as published. Test fixtures must build timeline status IDs with `makeTwitterSnowflakeId(Date.now())`.
+   - **Mandatory Post-Confirmation Loading**: After obtaining the candidate `tweetUrl`, the worker must navigate directly to the tweet (`page.goto(tweetUrl)`), verify that `<article data-testid="tweet">` or a standard `<article>` containing an anchor linking to `/status/${tweetId}` is rendered and visible, and confirm that the page contains no error notices ("This Post doesn’t exist", "unavailable", "Something went wrong"). Only upon successful post confirmation can the job be reported as published.
+5. **TikTok Narration for Text-Only Articles (`PressHub_Social_TikTok_Narrator`)**:
+   - When the worker claims a TikTok job with no `audio_url` (no `_presshub_audio_url` meta and no inline `<audio>`), `handle_claim()` calls `attach_narration()`, which synthesizes a Gemini TTS voice-over and sets `audio_url`, so the worker's video generator produces a spoken video instead of a silent 10s card.
+   - Spoken text: the TikTok copy minus hashtags, emojis, URLs and any sentence mentioning `presshub.cy` (the copy's own CTA), then the outro from `presshub_social_tiktok_narration_outro` (default `Για το πλήρες άρθρο, επισκεφθείτε το presshub.cy`). Never read the site name twice.
+   - Settings-First: `presshub_social_tiktok_narration_enabled` (default on), `presshub_social_tiktok_narration_outro`, `presshub_social_tiktok_narration_voice` (empty = Daily Briefing Presenter 1 voice, logged at INFO) under **PressHub Social → Settings → Automation Worker → Media & Video Specifications**.
+   - Cache the result in job `metadata.tiktok_narration` (`hash`, `audio_url`, `attachment_id`, `voice`, `text`). `mark_published()` merges worker metadata into existing metadata so this record survives publishing.
+   - Zero-Silent-Fallback: a TTS failure or empty speakable text marks the job failed (`tiktok_narration_failed` / `tiktok_narration_empty`) and keeps it out of the claim batch. Never post a silent video when narration is enabled.
+   - Tests inject a fake synthesizer with `PressHub_Social_TikTok_Narrator::set_synthesizer()` and must reset it to `null` afterwards.
+   - TikTok Stories and clickable links cannot be posted from TikTok Studio web; do not attempt them in `postTikTok()` without first confirming the account and UI support them.
 

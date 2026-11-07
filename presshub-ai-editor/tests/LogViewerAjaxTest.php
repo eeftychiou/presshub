@@ -109,9 +109,9 @@ $upload_dir = sys_get_temp_dir() . '/presshub-ajax-log-' . uniqid();
 @mkdir( $upload_dir . '/presshub-ai', 0777, true );
 $GLOBALS['UPLOAD_DIR'] = $upload_dir;
 
-$app_file     = $upload_dir . '/presshub-ai/presshub-debug.log';
-$prompt_file  = $upload_dir . '/presshub-ai/presshub-ai-debug.log';
-$tts_file     = $upload_dir . '/presshub-ai/presshub-ai-tts-debug.log';
+$app_file     = PressHub_AI_Log_Paths::get_file( 'app' );
+$prompt_file  = PressHub_AI_Log_Paths::get_file( 'prompts' );
+$tts_file     = PressHub_AI_Log_Paths::get_file( 'tts' );
 
 PressHub_AI_Logger::set_log_file_path( $app_file );
 

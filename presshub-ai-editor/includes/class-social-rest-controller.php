@@ -311,6 +311,17 @@ class PressHub_Social_REST_Controller {
                 }
             }
 
+            // Text-only TikTok articles get a Gemini TTS voice-over (Zero-Silent-Fallback:
+            // if narration is enabled and fails, the job fails instead of posting a silent video).
+            if ( 'tiktok' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_TikTok_Narrator' ) ) {
+                $narrated = PressHub_Social_TikTok_Narrator::attach_narration( $job );
+                if ( is_wp_error( $narrated ) ) {
+                    PressHub_Social_Queue::mark_failed( $job_id, $narrated->get_error_message(), [ 'error_code' => $narrated->get_error_code() ] );
+                    continue;
+                }
+                $job = $narrated;
+            }
+
             $job['post_title'] = $post_title;
             $job['post_url']   = $post_url;
             $job['site_name']  = $site_name;

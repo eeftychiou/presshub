@@ -379,6 +379,17 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_tiktok_narration_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_tiktok_narration_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_tiktok_narration_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_tiktok_narration_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'For articles without podcast audio, read the TikTok copy aloud with Gemini TTS (hashtags, emojis, links and the presshub.cy sentence are skipped) and end with the outro below.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
     public function render_alert_email_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_alert_email_enabled();
         ?>

@@ -114,6 +114,33 @@ export async function captureAutomationFailure(
 export const TWITTER_URL_WEIGHT = 23;
 export const TWITTER_MAX_WEIGHTED_CHARS = 275;
 
+/** Twitter/X snowflake epoch (2010-11-04T01:42:54.657Z). */
+export const TWITTER_SNOWFLAKE_EPOCH_MS = 1288834974657;
+
+/**
+ * Tolerance for clock skew between this machine and X's servers when deciding whether a
+ * profile-timeline tweet was created by the current submission. Far shorter than the gap
+ * between job retries, so tweets from earlier attempts are still rejected.
+ */
+export const TWITTER_TIMELINE_MAX_CLOCK_SKEW_MS = 60_000;
+
+/**
+ * Decodes the creation time (ms since Unix epoch) embedded in a Twitter/X status ID.
+ * Status IDs are snowflakes: the bits above the low 22 hold milliseconds since the Twitter
+ * epoch. Plain float division is used (no BigInt): the precision lost converting a 64-bit ID
+ * to a double is far below 2^22, so the decoded millisecond is unaffected.
+ * Returns undefined for anything that is not a decimal ID.
+ */
+export function getTwitterSnowflakeTimestampMs(statusId: string): number | undefined {
+  if (!/^\d+$/.test(statusId)) return undefined;
+  return Math.floor(Number(statusId) / 4194304) + TWITTER_SNOWFLAKE_EPOCH_MS;
+}
+
+/** Builds a status ID whose embedded creation time is `timestampMs` (test fixtures). */
+export function makeTwitterSnowflakeId(timestampMs: number): string {
+  return String((timestampMs - TWITTER_SNOWFLAKE_EPOCH_MS) * 4194304);
+}
+
 /**
  * Calculates effective weighted character length for Twitter/X.
  * Every URL (http:// or https://) counts as exactly 23 characters (t.co shortener).
@@ -376,22 +403,35 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     await dismissTwitterCookies();
 
     WorkerLogger.debug('Twitter Automation', 'Finding tweet text area...');
-    const textarea = page.locator(
+    const anyTextarea = page.locator(
       'div[data-slot="xds-modal-surface"] textarea, div[role="dialog"] textarea, ' +
       'div[data-slot="xds-modal-surface"] [contenteditable="true"], div[role="dialog"] [contenteditable="true"], ' +
       'div[data-slot="xds-modal-surface"] [data-testid="tweetTextarea_0"], div[role="dialog"] [data-testid="tweetTextarea_0"], ' +
       'textarea[placeholder*="happening"], textarea[aria-label*="happening"], [data-testid="tweetTextarea_0"]'
     ).or(page.getByRole('textbox', { name: /what.*happening|post text/i })).first();
 
-    await textarea.waitFor({ state: 'visible', timeout: 15000 });
+    await anyTextarea.waitFor({ state: 'visible', timeout: 15000 });
 
-    const modalSurface = page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first();
+    const modalSurface = page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]')
+      .filter({ has: page.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]') })
+      .first();
     const isModal = (await modalSurface.count()) > 0 && await modalSurface.isVisible().catch(() => false);
     WorkerLogger.debug('Twitter Automation', `Composer mode resolved: isModal=${isModal}`);
 
+    const textarea = isModal
+      ? modalSurface.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]')
+          .or(modalSurface.getByRole('textbox', { name: /what.*happening|post text/i }))
+          .first()
+      : anyTextarea;
+
     const tweetCopy = sanitizeTwitterCopy(options.copy);
     WorkerLogger.info('Twitter Automation', `Typing tweet copy (${tweetCopy.length} chars, weighted length: ${getTwitterWeightedLength(tweetCopy)})...`);
-    await textarea.click();
+    await textarea.focus().catch((err: any) => {
+      WorkerLogger.warn('Twitter Automation', `Failed to focus composer textarea: ${err?.message || err}`);
+    });
+    await textarea.click({ force: true }).catch((err: any) => {
+      WorkerLogger.warn('Twitter Automation', `Failed to force-click composer textarea: ${err?.message || err}`);
+    });
     try {
       await textarea.fill(tweetCopy);
     } catch {
@@ -417,9 +457,15 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       }
     }
 
+    // Anchor for the profile-timeline fallback: only tweets created after this moment
+    // (minus clock-skew tolerance) can belong to this submission.
+    const submitStartedAt = Date.now();
+
     // Tier 1: Keyboard-First Submission (ControlOrMeta+Enter)
     WorkerLogger.info('Twitter Automation', 'Tier 1: Attempting keyboard shortcut submission (ControlOrMeta+Enter)...');
-    await textarea.focus().catch(() => {});
+    await textarea.focus().catch((err: any) => {
+      WorkerLogger.warn('Twitter Automation', `Failed to focus composer textarea: ${err?.message || err}`);
+    });
     await page.keyboard.press('ControlOrMeta+Enter').catch(() => {});
 
     // Wait up to 3500ms for interceptedTweetId, modalSurface detach, or toast visibility
@@ -612,8 +658,14 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
         await page.goto(`https://x.com/${username}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
         await page.waitForTimeout(3000);
 
-        const tweetArticles = await page.locator('article[data-testid="tweet"]').all();
-        for (const article of tweetArticles.slice(0, 3)) {
+        await page.locator('article[data-testid="tweet"], article').first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
+        const tweetArticles = await page.locator('article[data-testid="tweet"], article').all();
+        // An empty snippet would match every article (''.includes check), so text matching
+        // is only used when the copy yields at least one letter or digit.
+        const snippet = tweetCopy.slice(0, 30).replace(/[^a-zA-Z0-9\u0370-\u03FF\u1F00-\u1FFF]/g, '').slice(0, 20);
+        const copyUrl = (tweetCopy.match(/https?:\/\/[^\s]+/i) || [])[0];
+        const oldestAcceptableMs = submitStartedAt - TWITTER_TIMELINE_MAX_CLOCK_SKEW_MS;
+        for (const article of tweetArticles.slice(0, 6)) {
           const articleText = (await article.innerText().catch(() => '')) || '';
           const statusLink = article.locator('a[href*="/status/"]').first();
           if ((await statusLink.count()) > 0) {
@@ -621,15 +673,28 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
             if (href) {
               const match = href.match(/\/status\/(\d+)/);
               if (match) {
-                const snippet = tweetCopy.slice(0, 25).replace(/[^a-zA-Z0-9\u0370-\u03FF]/g, '');
-                const cleanArticleText = articleText.replace(/[^a-zA-Z0-9\u0370-\u03FF]/g, '');
-                const copyUrl = (tweetCopy.match(/https?:\/\/[^\s]+/i) || [])[0];
-                if (cleanArticleText.includes(snippet) || (copyUrl && articleText.includes(copyUrl))) {
-                  tweetId = match[1];
-                  tweetUrl = href.startsWith('http') ? href : `https://x.com${href}`;
-                  WorkerLogger.info('Twitter Automation', `Found published tweet on profile timeline: ${tweetUrl}`);
-                  break;
+                const cleanArticleText = articleText.replace(/[^a-zA-Z0-9\u0370-\u03FF\u1F00-\u1FFF]/g, '');
+                const textMatches = snippet.length > 0 && cleanArticleText.includes(snippet);
+                const urlMatches = !!copyUrl && articleText.includes(copyUrl);
+                if (!textMatches && !urlMatches) continue;
+
+                // Reject tweets that predate this submission (e.g. an earlier attempt or a
+                // previous day's post with the same opening words). Accepting one would report
+                // the job as published without confirming that this run actually posted.
+                const createdAtMs = getTwitterSnowflakeTimestampMs(match[1]);
+                if (createdAtMs === undefined || createdAtMs < oldestAcceptableMs) {
+                  WorkerLogger.warn('Twitter Automation', `Ignoring matching timeline tweet ${match[1]}: created before this submission.`, {
+                    tweetCreatedAt: createdAtMs !== undefined ? new Date(createdAtMs).toISOString() : 'unparseable',
+                    submitStartedAt: new Date(submitStartedAt).toISOString(),
+                    maxClockSkewMs: TWITTER_TIMELINE_MAX_CLOCK_SKEW_MS
+                  });
+                  continue;
                 }
+
+                tweetId = match[1];
+                tweetUrl = href.startsWith('http') ? href : `https://x.com${href}`;
+                WorkerLogger.info('Twitter Automation', `Found published tweet on profile timeline: ${tweetUrl}`);
+                break;
               }
             }
           }
@@ -782,8 +847,18 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     await page.goto(tweetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForTimeout(3000);
 
-    const tweetArticle = page.locator('article[data-testid="tweet"]').first();
-    const isArticleVisible = await tweetArticle.isVisible().catch(() => false);
+    const tweetSpecificArticle = page.locator('article[data-testid="tweet"]').first();
+    const isSpecificVisible = (await tweetSpecificArticle.count()) > 0 && (await tweetSpecificArticle.isVisible().catch(() => false));
+
+    // When falling back to a plain <article> (when data-testid="tweet" is absent), ensure the article anchors to this status URL
+    const plainArticleWithLink = page.locator('article').filter({
+      has: page.locator(`a[href*="/status/${tweetId}"]`)
+    }).first();
+    const isPlainWithLinkVisible = (await plainArticleWithLink.count()) > 0 && (await plainArticleWithLink.isVisible().catch(() => false));
+
+
+    const isArticleVisible = isSpecificVisible || isPlainWithLinkVisible;
+
     const pageBodyText = (await page.innerText('body').catch(() => '')) || '';
     const isErrorPage = /doesn’t exist|does not exist|unavailable|Something went wrong/i.test(pageBodyText);
 

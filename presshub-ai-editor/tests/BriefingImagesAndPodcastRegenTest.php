@@ -260,6 +260,20 @@ class BriefingImagesAndPodcastRegenTest {
             $failures[] = 'regenerate_podcast_for_post() must fail on empty script; got: ' . var_export( $empty_script_res, true );
         }
 
+        // Regenerating with a corrected script must save it as that date/edition's podcast script
+        // (regression: save_script() used to receive the script and date swapped).
+        $corrected_script = "[SPEAKER_1]: Διορθωμένη εισαγωγή.\n[SPEAKER_2]: Διορθωμένο κλείσιμο.";
+        $regen_script_file = trailingslashit( ( new PressHub_AI_News_Harvester() )->get_snapshot_dir( '2026-10-16' ) ) . 'podcast-script.txt';
+        if ( file_exists( $regen_script_file ) ) {
+            unlink( $regen_script_file ); // start clean so a file left by an earlier run cannot mask the bug
+        }
+        $synthesizer->regenerate_podcast_for_post( (int) $podcast_post_id, $corrected_script );
+        $regen_producer = new PressHub_AI_Podcast_Producer();
+        $saved_script   = $regen_producer->get_script( '2026-10-16', 'morning' );
+        if ( trim( (string) $saved_script ) !== trim( $corrected_script ) ) {
+            $failures[] = 'regenerate_podcast_for_post() must save the corrected script for the post date/edition; got: ' . var_export( $saved_script, true );
+        }
+
         // -------------------------------------------------------------
         // 6. Podcast Script Editor Metabox Render & Save
         // -------------------------------------------------------------

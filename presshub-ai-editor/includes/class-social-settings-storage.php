@@ -221,6 +221,25 @@ class PressHub_Social_Settings_Storage {
             'default'           => 10,
         ] );
 
+        // TikTok narration (Gemini TTS voice-over for articles without audio)
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_narration_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_narration_enabled' ],
+            'default'           => true,
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_narration_outro', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_narration_outro' ],
+            'default'           => PressHub_Social_TikTok_Narrator::DEFAULT_OUTRO,
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_narration_voice', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_narration_voice' ],
+            'default'           => '',
+        ] );
+
         // 6. Alerts
         register_setting( self::OPTION_GROUP, 'presshub_social_alert_email_enabled', [
             'type'              => 'boolean',
@@ -974,6 +993,39 @@ class PressHub_Social_Settings_Storage {
     public static function sanitize_tiktok_video_duration( $value ): int {
         $val = (int) $value;
         return max( 5, min( 600, $val ) );
+    }
+
+    /** Whether text-only TikTok posts get a Gemini TTS voice-over (default on). */
+    public static function get_tiktok_narration_enabled(): bool {
+        return in_array( get_option( 'presshub_social_tiktok_narration_enabled', true ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_tiktok_narration_enabled( $value ): bool {
+        // A save from another settings tab has no checkbox and no presence marker: keep the stored value.
+        if ( null === $value && empty( $_POST['presshub_social_tiktok_narration_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_tiktok_narration_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Closing sentence of every TikTok narration; empty storage resolves to the default outro. */
+    public static function get_tiktok_narration_outro(): string {
+        $val = self::sanitize_tiktok_narration_outro( get_option( 'presshub_social_tiktok_narration_outro', '' ) );
+        return '' !== $val ? $val : PressHub_Social_TikTok_Narrator::DEFAULT_OUTRO;
+    }
+
+    public static function sanitize_tiktok_narration_outro( $value ): string {
+        $val = function_exists( 'sanitize_text_field' ) ? sanitize_text_field( (string) $value ) : trim( strip_tags( (string) $value ) );
+        return trim( $val );
+    }
+
+    /** Gemini voice for TikTok narration; '' means "use Daily Briefing Presenter 1 voice". */
+    public static function get_tiktok_narration_voice(): string {
+        return self::sanitize_tiktok_narration_voice( get_option( 'presshub_social_tiktok_narration_voice', '' ) );
+    }
+
+    public static function sanitize_tiktok_narration_voice( $value ): string {
+        return (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) $value );
     }
 
     // ------------------------------------------------------------------

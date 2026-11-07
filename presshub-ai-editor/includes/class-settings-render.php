@@ -648,6 +648,62 @@ class PressHub_AI_Settings_Render {
                     </table>
 
                     <?php $this->render_briefing_prompt_studio(); ?>
+                    <hr style="margin: 25px 0;">
+                    <h3><?php echo esc_html__( '4. Editorial Memory Settings', 'presshub-ai-editor' ); ?></h3>
+                    <p class="description"><?php echo esc_html__( 'Configure tiered editorial memory stream to maintain long-term story continuity across briefings and podcast episodes.', 'presshub-ai-editor' ); ?></p>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_enabled"><?php echo esc_html__( 'Enable Editorial Memory', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_daily_days"><?php echo esc_html__( 'Recent Memory Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_daily_days_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_background_days"><?php echo esc_html__( 'Background Memory Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_background_days_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_briefing_budget_chars"><?php echo esc_html__( 'Briefing Memory Budget (chars)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_briefing_budget_chars_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_podcast_budget_chars"><?php echo esc_html__( 'Podcast Memory Budget (chars)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_podcast_budget_chars_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_retention_days"><?php echo esc_html__( 'Memory Retention Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_retention_days_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_memory_provider"><?php echo esc_html__( 'Memory Model Provider', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_memory_provider_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_memory_model"><?php echo esc_html__( 'Memory Model Override', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_memory_model_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="briefing"><?php echo esc_html__( 'Save Daily Briefing Settings', 'presshub-ai-editor' ); ?></button>
@@ -806,9 +862,9 @@ class PressHub_AI_Settings_Render {
                         <div>
                             <label for="presshub-ai-log-target" style="font-weight: 600; margin-right: 4px;"><?php esc_html_e( 'Target:', 'presshub-ai-editor' ); ?></label>
                             <select id="presshub-ai-log-target" class="presshub-no-dirty">
-                                <option value="app"><?php esc_html_e( 'Application Log (presshub-debug.log)', 'presshub-ai-editor' ); ?></option>
-                                <option value="prompts"><?php esc_html_e( 'LLM Prompts & Responses (presshub-ai-debug.log)', 'presshub-ai-editor' ); ?></option>
-                                <option value="tts"><?php esc_html_e( 'TTS Audio Payloads (presshub-ai-tts-debug.log)', 'presshub-ai-editor' ); ?></option>
+                                <option value="app"><?php esc_html_e( 'Application Log (app)', 'presshub-ai-editor' ); ?></option>
+                                <option value="prompts"><?php esc_html_e( 'LLM Prompts & Responses (prompts)', 'presshub-ai-editor' ); ?></option>
+                                <option value="tts"><?php esc_html_e( 'TTS Audio Payloads (tts)', 'presshub-ai-editor' ); ?></option>
                             </select>
                         </div>
 
@@ -1539,7 +1595,10 @@ class PressHub_AI_Settings_Render {
     }
 
     public function render_logging_section() {
-        echo '<p>' . __( 'Configure diagnostic logging verbosity, prompt/response exchange recording, and speech synthesis payload captures. All logs are stored under <code>wp-content/uploads/presshub-ai/</code> and can be reviewed or downloaded in the Diagnostic Inspector below.', 'presshub-ai-editor' ) . '</p>';
+        echo '<p>' . esc_html__( 'Configure diagnostic logging verbosity, prompt/response exchange recording, speech synthesis payload captures and how long logs are kept. Logs live in a protected folder (wp-content/uploads/presshub-ai/ by default) with random file names, and can be reviewed or downloaded in the Diagnostic Inspector below. To keep them outside the web root, define PRESSHUB_AI_LOG_DIR in wp-config.php.', 'presshub-ai-editor' ) . '</p>';
+        if ( class_exists( 'PressHub_AI_Log_Exposure_Check' ) ) {
+            PressHub_AI_Log_Exposure_Check::render_panel();
+        }
     }
 
     public function render_social_section() {
@@ -1578,7 +1637,7 @@ class PressHub_AI_Settings_Render {
 
     /**
      * 1.2.5: prompt inspection toggle. Writes the exact SYSTEM and USER
-     * prompts to wp-content/uploads/presshub-ai/presshub-ai-debug.log in JSONL format.
+     * prompts to the protected log folder (prompts channel) in JSONL format.
      */
     public function render_debug_prompts_field() {
         $option  = 'presshub_ai_debug_prompts';
@@ -1587,7 +1646,7 @@ class PressHub_AI_Settings_Render {
         <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
         <label for="presshub_ai_debug_prompts">
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_debug_prompts" value="1" <?php checked( true, $enabled ); ?> />
-            <?php echo esc_html__( 'Append every SYSTEM and USER prompt exchange to wp-content/uploads/presshub-ai/presshub-ai-debug.log as structured JSONL.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Append every SYSTEM and USER prompt exchange to the protected log folder (prompts channel) as structured JSONL.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
             <?php echo esc_html__( 'Captures complete system instructions, user inputs, model configuration, response completions, and trace IDs. Disable in production to conserve storage.', 'presshub-ai-editor' ); ?>
@@ -1767,6 +1826,42 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    public function render_generation_record_retention_days_field() {
+        $option = 'presshub_ai_generation_record_retention_days';
+        $value  = PressHub_AI_Settings_Storage::get_generation_record_retention_days();
+        ?>
+        <input type="number" min="7" max="365" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How long to keep generation records (prompts, settings, inputs and responses for each briefing and podcast generation). 7–365 days, default 90.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_log_file_retention_days_field() {
+        $option = 'presshub_ai_log_file_retention_days';
+        $value  = PressHub_AI_Settings_Storage::get_log_file_retention_days();
+        ?>
+        <input type="number" min="1" max="90" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How long rotated log files (application, prompt and TTS logs) are kept before the daily cleanup deletes them. 1-90 days, default 14.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_token_log_retention_days_field() {
+        $option = 'presshub_ai_token_log_retention_days';
+        $value  = PressHub_AI_Settings_Storage::get_token_log_retention_days();
+        ?>
+        <input type="number" min="7" max="365" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How long token usage rows are kept before the daily cleanup deletes them. 7-365 days, default 60.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_audit_log_retention_days_field() {
+        $option = 'presshub_ai_audit_log_retention_days';
+        $value  = PressHub_AI_Settings_Storage::get_audit_log_retention_days();
+        ?>
+        <input type="number" min="30" max="730" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How long audit trail rows are kept before the daily cleanup deletes them. 30-730 days, default 90.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
     public function render_log_level_field() {
         $option   = 'presshub_ai_log_level';
         $selected = class_exists( 'PressHub_AI_Logger' ) ? PressHub_AI_Logger::get_configured_level() : 'INFO';
@@ -1778,7 +1873,7 @@ class PressHub_AI_Settings_Render {
             <option value="ERROR" <?php echo 'ERROR' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'ERROR (Only critical failures)', 'presshub-ai-editor' ); ?></option>
             <option value="OFF" <?php echo 'OFF' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'OFF (Disable file logging)', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Control verbosity of the internal diagnostic log file (stored at wp-content/uploads/presshub-ai/presshub-debug.log).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Control verbosity of the internal diagnostic log file (stored at the protected log folder (app channel)). When not set explicitly, the default is DEBUG if WP_DEBUG is on and INFO otherwise. Prompt debugging no longer changes the log level.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2363,7 +2458,7 @@ class PressHub_AI_Settings_Render {
     /**
      * Issue #80 — Settings-First: granular TTS payload debug toggle.
      * When enabled, every Gemini TTS API call appends a JSON entry to
-     * wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
+     * the protected log folder (tts channel) via the
      * `presshub_ai_tts_payload_log` action, so operators can diagnose
      * voice drift and unexpected voice allocation without code changes.
      * Default off so production log size is preserved.
@@ -2375,7 +2470,7 @@ class PressHub_AI_Settings_Render {
         <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
         <label>
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
-            <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to the protected log folder (tts channel).', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
             <?php echo esc_html__( 'Use only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' ); ?>
@@ -3718,4 +3813,90 @@ class PressHub_AI_Settings_Render {
         }
         return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
     }
+    // ------------------------------------------------------------------
+    // Issue #132: Editorial Memory Render Fields
+    // ------------------------------------------------------------------
+
+    public function render_memory_section() {
+        echo '<p>' . esc_html__( 'Configure tiered editorial memory stream to maintain long-term story continuity across briefings and podcast episodes.', 'presshub-ai-editor' ) . '</p>';
+    }
+
+    public function render_memory_enabled_field() {
+        $option = 'presshub_ai_memory_enabled';
+        $value  = PressHub_AI_Settings_Storage::get_memory_enabled();
+        ?>
+        <label>
+            <input type="hidden" name="presshub_ai_memory_enabled_present" value="1" />
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <?php echo esc_html__( 'Enable editorial memory stream (recent daily digests and background weekly rollups).', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'When disabled, generations use only that day&#39;s harvested articles.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_daily_days_field() {
+        $option = 'presshub_ai_memory_daily_days';
+        $value  = PressHub_AI_Settings_Storage::get_memory_daily_days();
+        ?>
+        <input type="number" min="0" max="14" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Number of recent days covered as daily story digests (0 - 14 days, default: 7).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_background_days_field() {
+        $option = 'presshub_ai_memory_background_days';
+        $value  = PressHub_AI_Settings_Storage::get_memory_background_days();
+        ?>
+        <input type="number" min="0" max="90" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Background window covered as weekly rollups (0 - 90 days, >= recent days, default: 30).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_briefing_budget_chars_field() {
+        $option = 'presshub_ai_memory_briefing_budget_chars';
+        $value  = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
+        ?>
+        <input type="number" min="0" max="60000" step="100" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Maximum character budget for memory context injected into daily briefing prompt (0 - 60,000, default: 12,000).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_podcast_budget_chars_field() {
+        $option = 'presshub_ai_memory_podcast_budget_chars';
+        $value  = PressHub_AI_Settings_Storage::get_memory_podcast_budget_chars();
+        ?>
+        <input type="number" min="0" max="60000" step="100" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Maximum character budget for memory context injected into podcast prompt (0 - 60,000, default: 6,000).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_retention_days_field() {
+        $option = 'presshub_ai_memory_retention_days';
+        $value  = PressHub_AI_Settings_Storage::get_memory_retention_days();
+        ?>
+        <input type="number" min="30" max="730" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Retention period before old memory entries and links are pruned (30 - 730 days, default: 180).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_memory_provider_field() {
+        $option  = 'presshub_ai_briefing_memory_provider';
+        $current = (string) get_option( $option, '' );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <?php echo self::get_active_providers_options( $current, __( '-- Use Active Provider Default --', 'presshub-ai-editor' ) ); ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'AI Provider for memory digests and weekly rollups. Can point to a cheaper model.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_memory_model_field() {
+        $option = 'presshub_ai_briefing_memory_model';
+        $value  = (string) get_option( $option, '' );
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo esc_html__( 'Model override for memory digests and rollups (e.g. gpt-4o-mini, gemini-2.0-flash).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
 }

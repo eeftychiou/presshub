@@ -96,6 +96,53 @@ class PressHub_AI_News_Curator {
     private static $last_capped_tokens_estimate = 0;
 
     /**
+     * @internal Issue #131 - per-article breakdown of the articles rendered by
+     * the most recent format_articles_context() call.
+     *
+     * @var array<int,array<string,mixed>>
+     */
+    private static $last_breakdown_sent = [];
+
+    /**
+     * @internal Issue #131 - articles dropped by the max_articles slice in the
+     * most recent format_articles_context() call (reason 'cap_articles').
+     *
+     * @var array<int,array<string,mixed>>
+     */
+    private static $last_breakdown_dropped_cap = [];
+
+    /**
+     * @internal Issue #131 - articles dropped by the selected_article_ids
+     * filter in the most recent build_prompt() call (reason 'not_selected').
+     *
+     * @var array<int,array<string,mixed>>
+     */
+    private static $last_breakdown_not_selected = [];
+
+    /**
+     * @internal Issue #131 - where the articles context went in the most recent
+     * build_prompt() call: 'system' or 'user' ('' before any build).
+     */
+    private static $last_articles_placement = '';
+
+    /**
+     * @internal Issue #135 - editorial memory manifest for the most recent build_prompt() call.
+     *
+     * @var array<string,mixed>
+     */
+    private static array $last_memory_manifest = [];
+
+    /**
+     * @internal Issue #135 - character count of the rendered memory block in the most recent build_prompt() call.
+     */
+    private static int $last_memory_chars = 0;
+
+    /**
+     * @internal Issue #135 - estimated token cost of the rendered memory block in the most recent build_prompt() call.
+     */
+    private static int $last_memory_tokens_estimate = 0;
+
+    /**
      * Get the base curation prompt with template placeholders.
      *
      * @return string Base system prompt with placeholders.
@@ -131,6 +178,9 @@ class PressHub_AI_News_Curator {
      * @return string Formatted context string.
      */
     public function format_articles_context( array $articles ): string {
+        self::$last_breakdown_sent        = [];
+        self::$last_breakdown_dropped_cap = [];
+
         if ( empty( $articles ) ) {
             return __( 'Δεν υπάρχουν διαθέσιμα άρθρα.', 'presshub-ai-editor' );
         }
@@ -154,10 +204,17 @@ class PressHub_AI_News_Curator {
         $truncated      = false;
         $truncation_suffix = __( '…[περικομμένο]', 'presshub-ai-editor' );
         if ( $original_count > $max_articles ) {
+            // Issue #131 - record what the cap drops (no effect on rendering).
+            foreach ( array_slice( $articles, $max_articles, null, true ) as $drop_idx => $dropped ) {
+                $entry           = self::breakdown_identity( $dropped, (int) $drop_idx );
+                $entry['reason'] = 'cap_articles';
+                self::$last_breakdown_dropped_cap[] = $entry;
+            }
             $articles  = array_slice( $articles, 0, $max_articles );
             $truncated = true;
         }
 
+        $breakdown_sent = [];
         $blocks = [];
         foreach ( $articles as $index => $article ) {
             $num     = $index + 1;
@@ -165,6 +222,15 @@ class PressHub_AI_News_Curator {
             $source  = ! empty( $article['source'] ) ? trim( (string) $article['source'] ) : __( 'Άγνωστη πηγή', 'presshub-ai-editor' );
             $url     = ! empty( $article['url'] ) ? trim( (string) $article['url'] ) : '';
             $content = ! empty( $article['content'] ) ? trim( (string) $article['content'] ) : '';
+
+            // Issue #131 - per-article breakdown (observational only).
+            $chars_original = function_exists( 'mb_strlen' ) ? (int) mb_strlen( $content ) : (int) strlen( $content );
+            $art_truncated  = $chars_original > $max_chars;
+            $entry          = self::breakdown_identity( $article, (int) $index );
+            $entry['chars_sent']     = $art_truncated ? (int) $max_chars : $chars_original;
+            $entry['chars_original'] = $chars_original;
+            $entry['truncated']      = $art_truncated;
+            $breakdown_sent[]        = $entry;
 
             $block = "### {$num}. {$title}\n";
             $block .= "**Πηγή:** {$source}";
@@ -191,6 +257,7 @@ class PressHub_AI_News_Curator {
 
         $rendered = implode( "\n\n---\n\n", $blocks );
 
+        self::$last_breakdown_sent          = $breakdown_sent;
         self::$last_context_truncated       = $truncated;
         self::$last_original_articles_count = $original_count;
         self::$last_kept_articles_count     = count( $articles );
@@ -216,6 +283,80 @@ class PressHub_AI_News_Curator {
         }
 
         return $rendered;
+    }
+
+    /**
+     * Issue #131 - stable identity fields for the per-article breakdown.
+     *
+     * id = article['id'] when set, else sha1(url) when a url is set, else 'idx:N'.
+     *
+     * @param array $article Article item.
+     * @param int   $index   Position in the array being iterated.
+     * @return array{id:string,title:string,source:string,url:string}
+     */
+    private static function breakdown_identity( $article, int $index ): array {
+        $article = is_array( $article ) ? $article : [];
+        $url     = ! empty( $article['url'] ) ? trim( (string) $article['url'] ) : '';
+        if ( isset( $article['id'] ) && '' !== (string) $article['id'] ) {
+            $id = (string) $article['id'];
+        } elseif ( '' !== $url ) {
+            $id = sha1( $url );
+        } else {
+            $id = 'idx:' . $index;
+        }
+        return [
+            'id'     => $id,
+            'title'  => ! empty( $article['title'] ) ? trim( (string) $article['title'] ) : '',
+            'source' => ! empty( $article['source'] ) ? trim( (string) $article['source'] ) : '',
+            'url'    => $url,
+        ];
+    }
+
+    /**
+     * Issue #131 - per-article breakdown of the most recent build_prompt() /
+     * format_articles_context() run.
+     *
+     * 'sent'    - articles rendered into the context (id, title, source, url,
+     *             chars_sent, chars_original, truncated).
+     * 'dropped' - articles left out, each with a 'reason' of 'not_selected'
+     *             (selected_article_ids filter) or 'cap_articles' (max_articles).
+     *
+     * @return array{sent:array,dropped:array}
+     */
+    public function last_articles_breakdown(): array {
+        return [
+            'sent'    => array_values( self::$last_breakdown_sent ),
+            'dropped' => array_values( array_merge( self::$last_breakdown_not_selected, self::$last_breakdown_dropped_cap ) ),
+        ];
+    }
+
+    /**
+     * Issue #131 - 'system' or 'user': which prompt carried the articles context
+     * in the most recent build_prompt() call.
+     */
+    public function last_articles_placement(): string {
+        return (string) self::$last_articles_placement;
+    }
+
+    /**
+     * Issue #135 - editorial memory manifest from the most recent build_prompt() call.
+     */
+    public function last_memory_manifest(): array {
+        return self::$last_memory_manifest;
+    }
+
+    /**
+     * Issue #135 - character count of the rendered memory block from the most recent build_prompt() call.
+     */
+    public function last_memory_chars(): int {
+        return self::$last_memory_chars;
+    }
+
+    /**
+     * Issue #135 - estimated tokens of the rendered memory block from the most recent build_prompt() call.
+     */
+    public function last_memory_tokens_estimate(): int {
+        return self::$last_memory_tokens_estimate;
     }
 
     /**
@@ -412,6 +553,15 @@ class PressHub_AI_News_Curator {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
+        // Issue #131 & #135 - start each build with clean breakdown and memory stashes.
+        self::$last_breakdown_sent         = [];
+        self::$last_breakdown_dropped_cap  = [];
+        self::$last_breakdown_not_selected = [];
+        self::$last_articles_placement     = '';
+        self::$last_memory_manifest        = [];
+        self::$last_memory_chars           = 0;
+        self::$last_memory_tokens_estimate = 0;
+
         // Filter articles if selected_article_ids is provided and non-empty
         if ( ! empty( $selected_article_ids ) && is_array( $selected_article_ids ) ) {
             $filtered = [];
@@ -439,6 +589,10 @@ class PressHub_AI_News_Curator {
 
                 if ( $matched ) {
                     $filtered[] = $article;
+                } else {
+                    $entry           = self::breakdown_identity( $article, (int) $idx );
+                    $entry['reason'] = 'not_selected';
+                    self::$last_breakdown_not_selected[] = $entry;
                 }
             }
             $articles = array_values( $filtered );
@@ -450,79 +604,143 @@ class PressHub_AI_News_Curator {
             : $this->get_default_curation_prompt();
         $base_prompt = apply_filters( 'presshub_ai_curator_system_prompt', $base_prompt );
 
-        // 2. Hydrate placeholders
-        $system_prompt = $this->hydrate_prompt( $base_prompt, $date, $articles );
+        $has_memory_in_system  = ( false !== strpos( $base_prompt, '{memory_context}' ) );
+        $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
+        self::$last_articles_placement = $has_context_in_system ? 'system' : 'user';
+
+        // 2. Hydrate base prompt placeholders
+        $hydrated_prompt = $this->hydrate_prompt( $base_prompt, $date, $articles );
 
         // 3. Resolve author/org/plugin preset
         $user_id = get_current_user_id();
         if ( $user_id <= 0 ) {
             $user_id = 1;
         }
-        $preset = PressHub_AI_Preset_Resolver::resolve_for_user( $user_id, 'curation', $preset_id );
-        if ( null !== $preset && '' !== trim( $preset ) ) {
-            $system_prompt .= "\n\n" . trim( $preset );
+        $preset      = PressHub_AI_Preset_Resolver::resolve_for_user( $user_id, 'curation', $preset_id );
+        $preset_text = ( null !== $preset && '' !== trim( $preset ) ) ? "\n\n" . trim( $preset ) : '';
+
+        // 4. Context formatting to determine articles footprint
+        $sources = $this->get_sources_list( $articles );
+        $count   = count( $articles );
+        $context = $this->format_articles_context( $articles );
+
+        // Issue #135: Compute effective memory budget and build tiered memory context
+        $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
+        $configured_context_tokens = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_briefing_text_max_tokens()
+            : 0;
+        if ( $configured_context_tokens <= 0 ) {
+            $configured_context_tokens = PressHub_AI_Context_Estimator::DEFAULT_MAX_CONTEXT_TOKENS;
+        }
+
+        // Full prompt size: system prompt (template + preset) + primary articles context
+        $full_prompt_chars    = mb_strlen( $hydrated_prompt, 'UTF-8' ) + mb_strlen( $preset_text, 'UTF-8' ) + mb_strlen( $context, 'UTF-8' );
+        $effective_mem_budget = PressHub_AI_Context_Estimator::compute_memory_budget_for_context(
+            $configured_mem_budget,
+            $full_prompt_chars,
+            $configured_context_tokens
+        );
+
+        if ( $effective_mem_budget < $configured_mem_budget && class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::warning(
+                'Memory budget shrunk to fit model context limit alongside articles',
+                [
+                    'configured_budget' => $configured_mem_budget,
+                    'effective_budget'  => $effective_mem_budget,
+                    'input_chars'       => $full_prompt_chars,
+                ]
+            );
+        }
+
+        $mem = class_exists( 'PressHub_AI_Memory_Context_Builder' )
+            ? PressHub_AI_Memory_Context_Builder::build( $date, $edition, 'briefing', $effective_mem_budget )
+            : [ 'text' => '', 'used_morning_digest' => false, 'manifest' => [ 'enabled' => false ] ];
+
+        self::$last_memory_manifest        = $mem['manifest'] ?? [];
+        self::$last_memory_chars           = (int) ( $mem['manifest']['used_chars'] ?? 0 );
+        self::$last_memory_tokens_estimate = (int) ( $mem['manifest']['tokens_estimate'] ?? 0 );
+
+        if ( class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+            PressHub_AI_Context_Estimator::estimate_prompt_with_memory( $context, (string) ( $mem['text'] ?? '' ) );
+        }
+
+        // Hydrate or cleanly strip memory placeholder in system prompt
+        $system_prompt = $hydrated_prompt;
+        if ( $has_memory_in_system ) {
+            if ( '' !== ( $mem['text'] ?? '' ) ) {
+                $system_prompt = str_replace( '{memory_context}', $mem['text'], $system_prompt );
+            } else {
+                $system_prompt = PressHub_AI_Memory_Context_Builder::strip_placeholder( $system_prompt );
+            }
+        }
+        if ( '' !== $preset_text ) {
+            $system_prompt .= $preset_text;
         }
 
         // 4. Filter composed system prompt
         $system_prompt = apply_filters( 'presshub_ai_composed_curator_system_prompt', $system_prompt );
 
         // 5. Build user prompt
-        $sources = $this->get_sources_list( $articles );
-        $count   = count( $articles );
-        $context = $this->format_articles_context( $articles );
-
-        // Deduplication guard: if the system prompt already contains the formatted
-        // articles (e.g. from an operator custom template that used {articles_context}),
-        // do not duplicate the article text in the user prompt.
-        $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
-
         $morning_briefing_block = '';
         if ( 'noon' === $edition ) {
-            $morning_content = $this->get_briefing_content( $date, 'morning' );
-            if ( ! empty( $morning_content ) ) {
-                $morning_briefing_block = sprintf(
-                    "\n\n--- ΠΡΩΙΝΗ ΕΝΗΜΕΡΩΣΗ (%s) ---\n%s\n---------------------------------\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Λάβε υπόψη την πρωινή ενημέρωση και συνέταξε μια νέα επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις από το πρωί.\n",
-                    $date,
-                    trim( $morning_content )
-                );
+            if ( ! empty( $mem['used_morning_digest'] ) ) {
+                $morning_briefing_block = "\n\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Λάβε υπόψη την πρωινή ενημέρωση στη συντακτική μνήμη και συνέταξε μια νέα επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις από το πρωί.\n";
             } else {
-                $morning_briefing_block = "\n\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Συνέταξε μια επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις της ημέρας.\n";
+                $morning_content = $this->get_briefing_content( $date, 'morning' );
+                if ( ! empty( $morning_content ) ) {
+                    $morning_briefing_block = sprintf(
+                        "\n\n--- ΠΡΩΙΝΗ ΕΝΗΜΕΡΩΣΗ (%s) ---\n%s\n---------------------------------\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Λάβε υπόψη την πρωινή ενημέρωση και συνέταξε μια νέα επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις από το πρωί.\n",
+                        $date,
+                        trim( $morning_content )
+                    );
+                } else {
+                    $morning_briefing_block = "\n\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Συνέταξε μια επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις της ημέρας.\n";
+                }
             }
         }
+
+        // Fallback placement: if template lacks {memory_context}, insert memory in user prompt before articles
+        $memory_user_block = ( ! $has_memory_in_system && '' !== ( $mem['text'] ?? '' ) )
+            ? "\n\n" . trim( $mem['text'] ) . "\n"
+            : '';
 
         if ( 'noon' === $edition ) {
             if ( $has_context_in_system ) {
                 $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
-                    $date,
-                    $count,
-                    $sources,
-                    $morning_briefing_block
-                );
-            } else {
-                $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
                     $date,
                     $count,
                     $sources,
                     $morning_briefing_block,
+                    $memory_user_block
+                );
+            } else {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    $date,
+                    $count,
+                    $sources,
+                    $morning_briefing_block,
+                    $memory_user_block,
                     $context
                 );
             }
         } else {
             if ( $has_context_in_system ) {
                 $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
-                    $date,
-                    $count,
-                    $sources
-                );
-            } else {
-                $user_prompt = sprintf(
-                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown βασισμένος στο υλικό ειδήσεων που παρέχεται στις οδηγίες συστήματος.",
                     $date,
                     $count,
                     $sources,
+                    $memory_user_block
+                );
+            } else {
+                $user_prompt = sprintf(
+                    "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+                    $date,
+                    $count,
+                    $sources,
+                    $memory_user_block,
                     $context
                 );
             }
@@ -874,6 +1092,11 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_source_context_count', (int) $source_context['count'] );
         update_post_meta( $post_id, '_presshub_source_context_preset', (string) $source_context['preset'] );
 
+        // Issue #134: schedule daily memory digest construction
+        if ( class_exists( 'PressHub_AI_Memory_Digest_Builder' ) ) {
+            PressHub_AI_Memory_Digest_Builder::schedule_for_post( (int) $post_id, 30 );
+        }
+
         return $post_id;
     }
 
@@ -1039,6 +1262,8 @@ class PressHub_AI_News_Curator {
             'articles_truncated'     => (bool) $this->was_context_truncated(),
             'model_source'           => method_exists( $api_client, 'get_model_source' ) ? $api_client->get_model_source() : '',
             'provider_source'        => method_exists( $api_client, 'get_provider_source' ) ? $api_client->get_provider_source() : '',
+            'memory_chars'           => (int) $this->last_memory_chars(),
+            'memory_tokens_estimate' => (int) $this->last_memory_tokens_estimate(),
         ];
 
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -1058,9 +1283,50 @@ class PressHub_AI_News_Curator {
             );
         }
 
+        // Issue #131 - reset usage capture so the record reflects only this call.
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'reset_last_llm_request' ) ) {
+            PressHub_AI_Token_Logger::reset_last_llm_request();
+        }
+        $gen_t0 = microtime( true );
         $api_client->suppress_provider_prompt_log = true;
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $curation_metadata );
         $api_client->suppress_provider_prompt_log = false;
+        $gen_duration_ms = (int) round( ( microtime( true ) - $gen_t0 ) * 1000 );
+
+        // Issue #131 - persist the complete generation record (success and error).
+        $record_id = 0;
+        if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            $gen_usage = ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'get_last_llm_request' ) )
+                ? ( PressHub_AI_Token_Logger::get_last_llm_request() ?? [] )
+                : [];
+            $record_id = (int) PressHub_AI_Generation_Recorder::record( [
+                'kind'          => 'briefing_text',
+                'briefing_date' => $date,
+                'edition'       => $edition,
+                'status'        => is_wp_error( $response ) ? 'error' : 'success',
+                'error_message' => is_wp_error( $response ) ? $response->get_error_message() : '',
+                'memory'        => $this->last_memory_manifest(),
+                'config'        => PressHub_AI_Generation_Recorder::build_client_config(
+                    $api_client,
+                    [
+                        'preset_id'          => $preset_id,
+                        'edition'            => $edition,
+                        'articles_placement' => $this->last_articles_placement(),
+                    ]
+                ),
+                'inputs'        => [
+                    'articles'             => $this->last_articles_breakdown(),
+                    'totals'               => $curation_metadata,
+                    'token_estimate'       => $this->last_capped_tokens_estimate(),
+                    'selected_article_ids' => $selected_article_ids,
+                ],
+                'system_prompt' => $prompts['system_prompt'],
+                'user_prompt'   => $prompts['user_prompt'],
+                'response_text' => is_wp_error( $response ) ? '' : (string) $response,
+                'usage'         => $gen_usage,
+                'duration_ms'   => $gen_duration_ms,
+            ] );
+        }
 
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
             $req_meta = method_exists( $api_client, 'get_request_meta' )
@@ -1129,6 +1395,11 @@ class PressHub_AI_News_Curator {
             PressHub_AI_Logger::info( sprintf( 'Created daily briefing text post #%d for %s ("%s")', $post_id, $date, $headline ) );
         }
 
+        // Issue #131 - link the generation record to the created post.
+        if ( $record_id > 0 && class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            PressHub_AI_Generation_Recorder::attach_to_post( (int) $post_id, $record_id );
+        }
+
         // Issue #61 — the pool/cap totals were computed before the provider
         // call (see above) so they could ride on the briefing_curation
         // token-log row; the same values are mirrored in the payload below
@@ -1150,6 +1421,8 @@ class PressHub_AI_News_Curator {
             'capped_tokens_estimate'   => (int) $this->last_capped_tokens_estimate(),
             'cap_articles'             => (int) $cap_articles,
             'cap_chars_per_article'    => (int) $cap_chars_per_article,
+            // Issue #131 - persisted generation record (0 when not recorded).
+            'generation_record_id'     => (int) $record_id,
         ];
     }
 
