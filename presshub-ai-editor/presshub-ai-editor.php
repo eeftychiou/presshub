@@ -182,6 +182,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-generation-inspector.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-digest-builder.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-memory-rollup-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-context-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-editor.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
@@ -277,6 +278,7 @@ function presshub_ai_activate() {
     if ( ! wp_next_scheduled( 'presshub_ai_prune_log_files' ) ) {
         wp_schedule_event( time(), 'daily', 'presshub_ai_prune_log_files' );
     }
+    PressHub_AI_Memory_Rollup_Builder::ensure_cron_scheduled();
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::activate();
     }
@@ -300,6 +302,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_ai_prune_memory_entries' );
     wp_clear_scheduled_hook( PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     wp_clear_scheduled_hook( 'presshub_ai_prune_log_files' );
+    PressHub_AI_Memory_Rollup_Builder::clear_cron();
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::deactivate();
     }
@@ -382,6 +385,7 @@ function presshub_ai_init() {
     }
     PressHub_AI_Memory_Store::register_hooks();
     PressHub_AI_Memory_Digest_Builder::init();
+    PressHub_AI_Memory_Rollup_Builder::init();
 
     // Issue #138 (Clean Slate): once per upgrade, drop the old fixed-name log files.
     PressHub_AI_Log_Paths::run_upgrade();
@@ -405,6 +409,7 @@ function presshub_ai_init() {
         if ( ! wp_next_scheduled( 'presshub_ai_prune_memory_entries' ) ) {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_memory_entries' );
         }
+        PressHub_AI_Memory_Rollup_Builder::ensure_cron_scheduled();
     }
 
     if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {

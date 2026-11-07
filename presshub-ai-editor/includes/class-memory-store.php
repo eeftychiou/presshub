@@ -304,11 +304,30 @@ class PressHub_AI_Memory_Store {
 
         $narrative = isset( $content['narrative'] ) ? sanitize_textarea_field( (string) $content['narrative'] ) : '';
 
-        return [
+        $result = [
             'stories'   => $validated_stories,
             'podcast'   => $podcast,
             'narrative' => $narrative,
         ];
+
+        // Optional (weekly rollups, #136): dates of the period that had no digest. Kept only when
+        // it is a non-empty list of valid YYYY-MM-DD dates, so existing content stays byte-identical.
+        if ( isset( $content['missing_dates'] ) && is_array( $content['missing_dates'] ) ) {
+            $missing = [];
+            foreach ( $content['missing_dates'] as $md ) {
+                $md = trim( (string) $md );
+                if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $md, $m ) && checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
+                    $missing[] = $md;
+                }
+            }
+            $missing = array_values( array_unique( $missing ) );
+            sort( $missing );
+            if ( ! empty( $missing ) ) {
+                $result['missing_dates'] = $missing;
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -1067,6 +1086,134 @@ class PressHub_AI_Memory_Store {
             ARRAY_A
         );
         return $row ?: null;
+    }
+
+    /**
+     * Retrieve the weekly rollup entry whose ISO week starts on $week_start (a Monday).
+     *
+     * @param string $week_start 'YYYY-MM-DD'
+     * @return array|null
+     */
+    public static function get_weekly_entry( string $week_start ): ?array {
+        global $wpdb;
+        $table = self::get_entries_table();
+        $row   = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM {$table} WHERE scope = 'weekly' AND period_start = %s AND edition = '' LIMIT 1",
+                $week_start
+            ),
+            ARRAY_A
+        );
+        return $row ?: null;
+    }
+
+    /**
+     * Record a failed weekly rollup generation (#136). Same rules as record_failed_digest():
+     * an existing entry never loses content; an edited entry keeps its status, an excluded entry
+     * stays excluded, an entry with stories becomes stale, a storyless one becomes failed.
+     * Without an existing entry a skeleton failed row is created.
+     *
+     * @param string   $week_start
+     * @param string   $week_end
+     * @param string   $error_message
+     * @param int|null $generation_record_id
+     * @return array|WP_Error
+     */
+    public static function record_failed_rollup( string $week_start, string $week_end, string $error_message, ?int $generation_record_id = null ) {
+        global $wpdb;
+        $existing = self::get_weekly_entry( $week_start );
+        if ( $existing ) {
+            $table            = self::get_entries_table();
+            $now              = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+            $old_status       = (string) $existing['status'];
+            $existing_content = self::decode_content( (string) ( $existing['content_json'] ?? '' ) );
+            $has_stories      = ! empty( $existing_content['stories'] );
+            if ( 'edited' === (string) $existing['origin'] || 'excluded' === $old_status ) {
+                $new_status = $old_status;
+            } elseif ( $has_stories ) {
+                $new_status = 'stale';
+            } else {
+                $new_status = 'failed';
+            }
+            $data   = [
+                'status'        => $new_status,
+                'error_message' => sanitize_textarea_field( $error_message ),
+                'updated_at'    => $now,
+            ];
+            $format = [ '%s', '%s', '%s' ];
+            if ( null !== $generation_record_id && $generation_record_id > 0 ) {
+                $data['generation_record_id'] = (int) $generation_record_id;
+                $format[]                     = '%d';
+            }
+            $wpdb->update( $table, $data, [ 'id' => (int) $existing['id'] ], $format, [ '%d' ] );
+
+            return [
+                'id'             => (int) $existing['id'],
+                'scope'          => 'weekly',
+                'period_start'   => $week_start,
+                'edition'        => '',
+                'origin'         => (string) $existing['origin'],
+                'preserved_edit' => ( 'edited' === (string) $existing['origin'] ),
+                'status'         => $new_status,
+                'error_message'  => $error_message,
+            ];
+        }
+
+        return self::upsert_generated( [
+            'scope'                => 'weekly',
+            'period_start'         => $week_start,
+            'period_end'           => $week_end,
+            'edition'              => '',
+            'generation_record_id' => $generation_record_id,
+            'generated_content'    => [
+                'stories'   => [],
+                'podcast'   => [ 'opening_line' => '', 'closing_line' => '' ],
+                'narrative' => '',
+            ],
+            'status'               => 'failed',
+            'error_message'        => $error_message,
+        ] );
+    }
+
+    /**
+     * After a successful rollup rebuild (#136): clear the error message and, unless the editor
+     * excluded the entry, return it to 'active'. content_json is never touched here.
+     *
+     * @param int $entry_id
+     * @return bool
+     */
+    public static function mark_rollup_built( int $entry_id ): bool {
+        global $wpdb;
+        $entry = self::get_entry( $entry_id );
+        if ( ! $entry || 'weekly' !== (string) $entry['scope'] ) {
+            return false;
+        }
+        $data = [
+            'error_message' => '',
+            'updated_at'    => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
+        ];
+        $format = [ '%s', '%s' ];
+        // An editor-edited rollup keeps its status (normally 'stale'): its content_json was
+        // deliberately kept, so it may now lag the corrected digests and the editor must
+        // review the refreshed generated_json diff. Excluded rollups stay excluded.
+        if ( 'excluded' !== (string) $entry['status'] && 'edited' !== (string) $entry['origin'] ) {
+            $data['status'] = 'active';
+            $format[]       = '%s';
+        }
+        return false !== $wpdb->update( self::get_entries_table(), $data, [ 'id' => $entry_id ], $format, [ '%d' ] );
+    }
+
+    /**
+     * Replace a rollup's digest links with exactly $digest_ids (#136). link_rollup() only adds.
+     *
+     * @param int   $rollup_id
+     * @param array $digest_ids
+     * @return int Number of links now stored.
+     */
+    public static function replace_rollup_links( int $rollup_id, array $digest_ids ): int {
+        global $wpdb;
+        $wpdb->delete( self::get_links_table(), [ 'rollup_id' => $rollup_id ], [ '%d' ] );
+        return self::link_rollup( $rollup_id, $digest_ids );
     }
 
     /**

@@ -512,7 +512,19 @@ graph TD
 - **Strict Gating Invariant**:
   - When `presshub_ai_memory_enabled` is disabled or lookback days are 0, prompts remain 100% byte-identical to pre-#135 prompts (verified by strict `===` test assertions for morning, noon, and podcast prompts).
 
-### 4.24 Memory Editor (`PressHub_AI_Memory_Editor` - Issue #137)
+### 4.24 Weekly Background Memory Rollups (`PressHub_AI_Memory_Rollup_Builder` - Issue #136)
+- **Scheduling**: the daily cron `presshub_ai_memory_build_rollups` (registered on activation and in the init/upgrade block, cleared on deactivation) finds every completed ISO week (Mon-Sun, site-local dates, Sunday before today) that overlaps `presshub_ai_memory_background_days`, has at least one `active` daily digest and no rollup entry yet, and schedules one `wp_schedule_single_event` (`presshub_ai_memory_build_rollup_week`, arg = the Monday) per week, spaced 60s apart so each run stays within PHP time limits. Stale and failed rollups are never rebuilt automatically.
+- **Input**: the week's `active` daily digests read from `content_json` (editor corrections propagate; stories with `include=false` are dropped) plus the previous week's rollup narrative (`active`/`stale`) for continuity. No outside knowledge: the prompt (`assets/prompts/memory/weekly_rollup.txt`, Greek, loaded via `PressHub_AI_Prompt_Loader::get_weekly_rollup_prompt()`) restricts the model to the supplied digests and to the existing story `key`s.
+- **Output & validation**: JSON `{ narrative, stories[] }` validated with `PressHub_AI_Memory_Store::validate_content()` plus rollup rules (non-empty narrative of at most ~1,500 characters, hard limit 1,800; every story `key` must exist in the input digests). The `briefing_memory` provider module is used. One retry with the validation error appended; then `PressHub_AI_Memory_Store::record_failed_rollup()` (same rules as `record_failed_digest()`: edited keeps status, excluded stays excluded, existing stories make it `stale`, storyless makes it `failed`), `error_message` set and an ERROR log. Partial content is never stored.
+- **Partial weeks**: a rollup is built from the digests that exist; the missing dates are stored in `content_json.missing_dates` (optional field kept by `validate_content()` only when non-empty), passed to the prompt and logged as a warning.
+- **Links & staleness**: `PressHub_AI_Memory_Store::replace_rollup_links()` stores exactly the digests used. Editing or excluding/re-including a linked digest marks the rollup `stale` (store, #132).
+- **Rebuild**: `rebuild( $rollup_id )` / `build_week( $week_start, $force )` (public API for the memory editor #137 and WP-CLI). A rebuild never overwrites an edited rollup's `content_json` (only `generated_json`); `mark_rollup_built()` returns a generated rollup to `active`, but an edited rollup stays `stale` so the editor reviews the refreshed diff, and an excluded rollup stays excluded.
+- **Generation records**: every LLM call is recorded as kind `memory_rollup` (`briefing_date` = week start); the last one is linked from the entry's `generation_record_id`.
+- **Gating**: when `presshub_ai_memory_enabled` is off, the scanner, `build_week()`, `rebuild()` and the CLI do nothing and log one INFO line per skipped job.
+- **WP-CLI**: `wp presshub memory rollups --from=YYYY-MM-DD --to=YYYY-MM-DD [--force]` builds completed weeks overlapping the range synchronously (run it after `wp presshub memory backfill`); `--force` rebuilds existing weeks.
+- **Consumption**: the Background tier of the context builder (§4.23) reads each rollup's `narrative` and stories (`active`/`stale`).
+
+### 4.25 Memory Editor (`PressHub_AI_Memory_Editor` - Issue #137)
 - **Purpose**: lets editors review and correct editorial memory before it shapes future generations. It is a thin UI over `PressHub_AI_Memory_Store`; the class never writes to the memory tables itself, so every change is validated, stale-propagated and audit-logged by the store (§4.20).
 - **Screen**: **Daily Briefing Hub -> Memory** (submenu `presshub-ai-memory`, registered from `PressHub_AI_Briefing_Admin::add_admin_menu()`, capability `edit_others_posts`).
   - **Preview**: the exact text and manifest summary (characters vs budget, token estimate, entries used, trimmed, days without digest, stale flag) that `PressHub_AI_Memory_Context_Builder::build( today, 'morning', 'briefing' )` (§4.23) would hand to the next morning briefing. Hidden when the context builder class is absent.
@@ -540,6 +552,8 @@ graph TD
 | `presshub_ai_prune_generation_records` | Daily | `presshub_ai_generation_record_retention_days` (retention window) | `PressHub_AI_Generation_Recorder::prune()` |
 | `presshub_ai_memory_build_digest` | Post-save (+30s) | Single-event | `PressHub_AI_Memory_Digest_Builder::handle_cron_build_digest()` |
 | `presshub_ai_memory_backfill_step` | Dynamic (+5s) | Single-event | `PressHub_AI_Memory_Digest_Builder::handle_backfill_step()` |
+| `presshub_ai_memory_build_rollups` | Daily | `presshub_ai_memory_background_days` (window) | `PressHub_AI_Memory_Rollup_Builder::handle_cron_scan()` (schedules one single event per missing week) |
+| `presshub_ai_memory_build_rollup_week` | Dynamic (+30s, 60s apart) | Single-event, arg = week Monday | `PressHub_AI_Memory_Rollup_Builder::handle_cron_build_week()` |
 | `presshub_ai_prune_log_files` | Daily | `presshub_ai_log_file_retention_days` (default 14) | Deletes rotated log files older than the window |
 
 ### 5.1 Cron Execution & Error Resilience
