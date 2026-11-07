@@ -133,7 +133,7 @@ function seed_weekly_rollup( string $start, string $end, string $status = 'activ
 }
 
 // =========================================================================
-// 1. Gating & Byte-Identical Output
+// 1. Gating & Strict Byte-Identical Output
 // =========================================================================
 reset_test_db();
 $curator  = new PressHub_AI_News_Curator();
@@ -142,22 +142,103 @@ $articles = [
     [ 'id' => 'art-1', 'title' => 'Είδηση 1', 'source' => 'Πηγή 1', 'url' => 'https://example.com/1', 'content' => 'Περιεχόμενο είδησης 1.' ],
 ];
 
-// When memory is disabled
+// Pre-#135 baseline generators
+$baseline_morning = function( array $art, string $d = '2026-09-10' ) use ( $curator ): array {
+    $raw_template = PressHub_AI_Memory_Context_Builder::strip_placeholder( $curator->get_default_curation_prompt() );
+    $sys  = $curator->hydrate_prompt( $raw_template, $d, $art );
+    $user = sprintf(
+        "Ημερομηνία: %s\nΑριθμός Άρθρων: %d\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Πρωινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+        $d,
+        count( $art ),
+        $curator->get_sources_list( $art ),
+        $curator->format_articles_context( $art )
+    );
+    return [ 'system_prompt' => $sys, 'user_prompt' => $user ];
+};
+
+$baseline_noon = function( array $art, string $d = '2026-09-10', string $morning_content = '' ) use ( $curator ): array {
+    $raw_template = PressHub_AI_Memory_Context_Builder::strip_placeholder( $curator->get_default_curation_prompt() );
+    $sys  = $curator->hydrate_prompt( $raw_template, $d, $art );
+    if ( ! empty( $morning_content ) ) {
+        $morning_block = sprintf(
+            "\n\n--- ΠΡΩΙΝΗ ΕΝΗΜΕΡΩΣΗ (%s) ---\n%s\n---------------------------------\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Λάβε υπόψη την πρωινή ενημέρωση και συνέταξε μια νέα επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις από το πρωί.\n",
+            $d,
+            trim( $morning_content )
+        );
+    } else {
+        $morning_block = "\n\nΟδηγία για τη Μεσημβρινή Ενημέρωση: Συνέταξε μια επικαιροποιημένη μεσημβρινή ενημέρωση εστιάζοντας στις νεότερες εξελίξεις της ημέρας.\n";
+    }
+    $user = sprintf(
+        "Ημερομηνία: %s\nΈκδοση: Μεσημβρινή\nΑριθμός Άρθρων: %d\nΠηγές: %s%s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες άρθρο της Μεσημβρινής Ενημέρωσης στα Ελληνικά σε μορφή Markdown.",
+        $d,
+        count( $art ),
+        $curator->get_sources_list( $art ),
+        $morning_block,
+        $curator->format_articles_context( $art )
+    );
+    return [ 'system_prompt' => $sys, 'user_prompt' => $user ];
+};
+
+$baseline_podcast = function( array $art, string $d = '2026-09-10', string $dur = '5_min', string $style = 'default_greek_chat' ) use ( $producer ): array {
+    $raw_template      = PressHub_AI_Memory_Context_Builder::strip_placeholder( PressHub_AI_Settings_Storage::get_podcast_prompt_2( $style ) );
+    $sys               = $producer->hydrate_prompt( $raw_template, $d, $art, $dur );
+    $specs             = $producer->get_duration_specs( $dur );
+    $presenter_mention = sprintf( __( 'The script should be delivered by the two presenters labelled [SPEAKER_1] and [SPEAKER_2]. The presenters must never refer to each other or themselves by name. Any dates (e.g. 03/05/2026) must be converted and written out in natural spoken words (e.g. 3 Μαΐου 2026 / 3rd of May 2026) for optimal TTS performance.', 'presshub-ai-editor' ) );
+    $user              = sprintf(
+        "Ημερομηνία: %s\nΣτόχος Διάρκειας: %s\nΠροϋπολογισμός Λέξεων: περίπου %d λέξεις\nΠηγές: %s\n\nΠαρακάτω ακολουθεί το συλλεχθέν υλικό ειδήσεων:\n\n%s\n\nΠαρακαλώ συνέταξε το πλήρες κείμενο %s στα Ελληνικά με %s.",
+        $d,
+        $specs['description'],
+        $specs['target_words'],
+        $producer->get_sources_list( $art ),
+        $producer->format_articles_context( $art ),
+        __( 'podcast', 'presshub-ai-editor' ),
+        $presenter_mention
+    );
+    return [ 'system_prompt' => $sys, 'user_prompt' => $user ];
+};
+
+// --- Test A: When memory is disabled (presshub_ai_memory_enabled = 0) ---
 $GLOBALS['OPTIONS_STORE']['presshub_ai_memory_enabled'] = 0;
-$built = PressHub_AI_Memory_Context_Builder::build( '2026-09-10', 'morning', 'briefing' );
-mcb_check( 'gating: text is empty when disabled', '' === $built['text'] );
-mcb_check( 'gating: manifest enabled is false when disabled', false === $built['manifest']['enabled'] );
+$built_dis = PressHub_AI_Memory_Context_Builder::build( '2026-09-10', 'morning', 'briefing' );
+mcb_check( 'gating: text is empty when disabled', '' === $built_dis['text'] );
+mcb_check( 'gating: manifest enabled is false when disabled', false === $built_dis['manifest']['enabled'] );
+mcb_check( 'gating: manifest budgets present when disabled', isset( $built_dis['manifest']['budgets'] ) && 12000 === $built_dis['manifest']['budgets']['configured'] );
 
-$prompt_res = $curator->build_prompt( $articles, '', '2026-09-10', [], 'morning' );
-mcb_check( 'gating: curation system_prompt does not contain placeholder when disabled', false === strpos( $prompt_res['system_prompt'], '{memory_context}' ) );
+$prompt_dis_morn = $curator->build_prompt( $articles, '', '2026-09-10', [], 'morning' );
+$base_morn       = $baseline_morning( $articles, '2026-09-10' );
+mcb_check( 'byte-identical: disabled morning system prompt === pre-#135 baseline', $prompt_dis_morn['system_prompt'] === $base_morn['system_prompt'] );
+mcb_check( 'byte-identical: disabled morning user prompt === pre-#135 baseline', $prompt_dis_morn['user_prompt'] === $base_morn['user_prompt'] );
 
-// When days are 0
+$prompt_dis_noon = $curator->build_prompt( $articles, '', '2026-09-10', [], 'noon' );
+$base_noon       = $baseline_noon( $articles, '2026-09-10' );
+mcb_check( 'byte-identical: disabled noon system prompt === pre-#135 baseline', $prompt_dis_noon['system_prompt'] === $base_noon['system_prompt'] );
+mcb_check( 'byte-identical: disabled noon user prompt === pre-#135 baseline', $prompt_dis_noon['user_prompt'] === $base_noon['user_prompt'] );
+
+$prompt_dis_pod = $producer->build_dialogue_prompt( $articles, '', '5_min', '2026-09-10', 'harvested_articles', [], null, 'morning' );
+$base_pod       = $baseline_podcast( $articles, '2026-09-10', '5_min' );
+mcb_check( 'byte-identical: disabled podcast system prompt === pre-#135 baseline', $prompt_dis_pod['system_prompt'] === $base_pod['system_prompt'] );
+mcb_check( 'byte-identical: disabled podcast user prompt === pre-#135 baseline', $prompt_dis_pod['user_prompt'] === $base_pod['user_prompt'] );
+
+// --- Test B: When memory is enabled but both windows are set to 0 (daily_days = 0, background_days = 0) ---
 $GLOBALS['OPTIONS_STORE']['presshub_ai_memory_enabled']         = 1;
 $GLOBALS['OPTIONS_STORE']['presshub_ai_memory_daily_days']      = 0;
 $GLOBALS['OPTIONS_STORE']['presshub_ai_memory_background_days'] = 0;
 $built_0 = PressHub_AI_Memory_Context_Builder::build( '2026-09-10', 'morning', 'briefing' );
 mcb_check( 'gating: text empty when 0 days', '' === $built_0['text'] );
 mcb_check( 'gating: manifest disabled when 0 days', false === $built_0['manifest']['enabled'] );
+mcb_check( 'gating: manifest budgets present when 0 days', isset( $built_0['manifest']['budgets'] ) && false === $built_0['manifest']['budgets']['shrunk'] );
+
+$prompt_0_morn = $curator->build_prompt( $articles, '', '2026-09-10', [], 'morning' );
+mcb_check( 'byte-identical: 0-days morning system prompt === pre-#135 baseline', $prompt_0_morn['system_prompt'] === $base_morn['system_prompt'] );
+mcb_check( 'byte-identical: 0-days morning user prompt === pre-#135 baseline', $prompt_0_morn['user_prompt'] === $base_morn['user_prompt'] );
+
+$prompt_0_noon = $curator->build_prompt( $articles, '', '2026-09-10', [], 'noon' );
+mcb_check( 'byte-identical: 0-days noon system prompt === pre-#135 baseline', $prompt_0_noon['system_prompt'] === $base_noon['system_prompt'] );
+mcb_check( 'byte-identical: 0-days noon user prompt === pre-#135 baseline', $prompt_0_noon['user_prompt'] === $base_noon['user_prompt'] );
+
+$prompt_0_pod = $producer->build_dialogue_prompt( $articles, '', '5_min', '2026-09-10', 'harvested_articles', [], null, 'morning' );
+mcb_check( 'byte-identical: 0-days podcast system prompt === pre-#135 baseline', $prompt_0_pod['system_prompt'] === $base_pod['system_prompt'] );
+mcb_check( 'byte-identical: 0-days podcast user prompt === pre-#135 baseline', $prompt_0_pod['user_prompt'] === $base_pod['user_prompt'] );
 
 // =========================================================================
 // 2. Window Selection & Gap Filling (No Gap, No Overlap)
@@ -216,6 +297,28 @@ $rollup_covered_days = [ '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04',
 $gap_dates = array_column( $bg_gap_dailies, 'start' );
 $overlap = array_intersect( $rollup_covered_days, $gap_dates );
 mcb_check( 'window: zero overlap between rollups and gap dailies', empty( $overlap ) );
+
+// Blocking 3: Manifest budgets, missing_digests, per-entry chars, and prompt boundary markers
+mcb_check( 'manifest: budgets object is present', isset( $manifest['budgets'] ) && is_array( $manifest['budgets'] ) );
+mcb_check( 'manifest: budgets configured is 12000', 12000 === ( $manifest['budgets']['configured'] ?? 0 ) );
+mcb_check( 'manifest: budgets effective is 12000', 12000 === ( $manifest['budgets']['effective'] ?? 0 ) );
+mcb_check( 'manifest: budgets shrunk is false', false === ( $manifest['budgets']['shrunk'] ?? true ) );
+mcb_check( 'manifest: missing_digests is array', isset( $manifest['missing_digests'] ) && is_array( $manifest['missing_digests'] ) );
+mcb_check( 'manifest: missing_digests contains unseeded date', in_array( '2026-09-19', $manifest['missing_digests'], true ) );
+mcb_check( 'manifest: missing_digests does NOT contain seeded date', ! in_array( '2026-09-25', $manifest['missing_digests'], true ) );
+
+$all_entries_have_chars = true;
+foreach ( $manifest['entries'] as $ent ) {
+    if ( ! isset( $ent['chars'] ) || $ent['chars'] <= 0 ) {
+        $all_entries_have_chars = false;
+        break;
+    }
+}
+mcb_check( 'manifest: all entries have positive chars count', $all_entries_have_chars );
+
+// Boundary markers check
+mcb_check( 'prompt hygiene: rendered text starts with begin marker', 0 === strpos( $mem_result['text'], '=== ΑΡΧΗ ΣΥΝΤΑΚΤΙΚΗΣ ΜΝΗΜΗΣ ===' ) );
+mcb_check( 'prompt hygiene: rendered text ends with end marker', false !== strpos( $mem_result['text'], '=== ΤΕΛΟΣ ΣΥΝΤΑΚΤΙΚΗΣ ΜΝΗΜΗΣ ===' ) );
 
 // =========================================================================
 // 3. Status & Story Inclusion Filtering
@@ -501,6 +604,60 @@ mcb_check( 'genrec podcast: record exists', is_array( $pod_record ) );
 mcb_check( 'genrec podcast: memory manifest in podcast record', isset( $pod_record['memory'] ) && is_array( $pod_record['memory'] ) );
 mcb_check( 'genrec podcast: memory manifest enabled is true', true === ( $pod_record['memory']['enabled'] ?? false ) );
 mcb_check( 'genrec podcast: target is podcast', 'podcast' === ( $pod_record['memory']['target'] ?? '' ) );
+
+// =========================================================================
+// 10. Prompt Hygiene, Field Sanitization & Phantom Trim Prevention
+// =========================================================================
+reset_test_db();
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_enabled']    = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_daily_days'] = 3;
+
+// Seed story with # headings and multiline \r\n
+seed_daily_digest( '2026-09-29', 'morning', 'active', [
+    [
+        'key'         => 'dirty-story-1',
+        'title'       => "# Major Title with Heading\r\nAnd Newline",
+        'development' => "Line 1\n# Line 2\r\nLine 3",
+        'status'      => 'developing',
+        'entities'    => [ '#Gov', "Ministry\nFinance" ],
+        'source_urls' => [],
+        'include'     => true,
+    ],
+] );
+
+$dirty_mem = PressHub_AI_Memory_Context_Builder::build( '2026-09-30', 'morning', 'briefing' );
+mcb_check( 'hygiene: # heading stripped from title', false !== strpos( $dirty_mem['text'], 'Major Title with Heading And Newline' ) );
+mcb_check( 'hygiene: newlines collapsed in development', false !== strpos( $dirty_mem['text'], 'Line 1 Line 2 Line 3' ) );
+mcb_check( 'hygiene: no raw # remaining inside story lines', false === strpos( $dirty_mem['text'], '# Major Title' ) );
+
+// Phantom trims prevention: target podcast with an entry that has ONLY podcast lines and empty stories
+reset_test_db();
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_enabled']         = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_daily_days']      = 3;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_background_days'] = 0;
+
+seed_daily_digest( '2026-09-29', 'morning', 'active', [
+    [ 'key' => 's1', 'title' => 'Story 1', 'development' => 'Dev 1', 'status' => 'developing', 'include' => true ],
+] );
+seed_daily_digest( '2026-09-28', 'morning', 'active', [], [ 'opening_line' => 'Opening 28', 'closing_line' => 'Closing 28' ] );
+
+// Build with tight budget to force trimming
+$trim_res = PressHub_AI_Memory_Context_Builder::build( '2026-09-30', 'morning', 'podcast', 50 );
+$has_empty_story_key_trim = false;
+foreach ( $trim_res['manifest']['trimmed'] as $tr ) {
+    if ( isset( $tr['story_key'] ) && '' === trim( (string) $tr['story_key'] ) ) {
+        $has_empty_story_key_trim = true;
+        break;
+    }
+}
+mcb_check( 'phantom trim: storyless podcast entry produces NO empty story_key trim rows', false === $has_empty_story_key_trim );
+
+// Duplicate noon warning consolidation test
+reset_test_db();
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_enabled']    = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_daily_days'] = 2;
+$noon_build = PressHub_AI_Memory_Context_Builder::build( '2026-09-30', 'noon', 'briefing' );
+mcb_check( 'noon missing digest: used_morning_digest is false', false === $noon_build['used_morning_digest'] );
 
 // =========================================================================
 // Summary

@@ -598,18 +598,48 @@ class PressHub_AI_News_Curator {
             $articles = array_values( $filtered );
         }
 
-        // Context formatting to determine capped articles character footprint
+        // 1. Base curation prompt & filter
+        $base_prompt = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_curation_prompt()
+            : $this->get_default_curation_prompt();
+        $base_prompt = apply_filters( 'presshub_ai_curator_system_prompt', $base_prompt );
+
+        $has_memory_in_system  = ( false !== strpos( $base_prompt, '{memory_context}' ) );
+        $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
+        self::$last_articles_placement = $has_context_in_system ? 'system' : 'user';
+
+        // 2. Hydrate base prompt placeholders
+        $hydrated_prompt = $this->hydrate_prompt( $base_prompt, $date, $articles );
+
+        // 3. Resolve author/org/plugin preset
+        $user_id = get_current_user_id();
+        if ( $user_id <= 0 ) {
+            $user_id = 1;
+        }
+        $preset      = PressHub_AI_Preset_Resolver::resolve_for_user( $user_id, 'curation', $preset_id );
+        $preset_text = ( null !== $preset && '' !== trim( $preset ) ) ? "\n\n" . trim( $preset ) : '';
+
+        // 4. Context formatting to determine articles footprint
         $sources = $this->get_sources_list( $articles );
         $count   = count( $articles );
         $context = $this->format_articles_context( $articles );
 
         // Issue #135: Compute effective memory budget and build tiered memory context
-        $configured_mem_budget = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars()
-            : 12000;
-        $effective_mem_budget  = class_exists( 'PressHub_AI_Context_Estimator' )
-            ? PressHub_AI_Context_Estimator::compute_memory_budget_for_context( $configured_mem_budget, $this->last_capped_chars() )
-            : $configured_mem_budget;
+        $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
+        $configured_context_tokens = class_exists( 'PressHub_AI_Settings_Storage' )
+            ? PressHub_AI_Settings_Storage::get_briefing_text_max_tokens()
+            : 0;
+        if ( $configured_context_tokens <= 0 ) {
+            $configured_context_tokens = PressHub_AI_Context_Estimator::DEFAULT_MAX_CONTEXT_TOKENS;
+        }
+
+        // Full prompt size: system prompt (template + preset) + primary articles context
+        $full_prompt_chars    = mb_strlen( $hydrated_prompt, 'UTF-8' ) + mb_strlen( $preset_text, 'UTF-8' ) + mb_strlen( $context, 'UTF-8' );
+        $effective_mem_budget = PressHub_AI_Context_Estimator::compute_memory_budget_for_context(
+            $configured_mem_budget,
+            $full_prompt_chars,
+            $configured_context_tokens
+        );
 
         if ( $effective_mem_budget < $configured_mem_budget && class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::warning(
@@ -617,7 +647,7 @@ class PressHub_AI_News_Curator {
                 [
                     'configured_budget' => $configured_mem_budget,
                     'effective_budget'  => $effective_mem_budget,
-                    'articles_chars'    => $this->last_capped_chars(),
+                    'input_chars'       => $full_prompt_chars,
                 ]
             );
         }
@@ -630,38 +660,21 @@ class PressHub_AI_News_Curator {
         self::$last_memory_chars           = (int) ( $mem['manifest']['used_chars'] ?? 0 );
         self::$last_memory_tokens_estimate = (int) ( $mem['manifest']['tokens_estimate'] ?? 0 );
 
-        if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
-            PressHub_AI_Generation_Recorder::set_memory_context( self::$last_memory_manifest );
+        if ( class_exists( 'PressHub_AI_Context_Estimator' ) ) {
+            PressHub_AI_Context_Estimator::estimate_prompt_with_memory( $context, (string) ( $mem['text'] ?? '' ) );
         }
 
-        // 1. Base curation prompt & filter
-        $base_prompt = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_curation_prompt()
-            : $this->get_default_curation_prompt();
-        $base_prompt = apply_filters( 'presshub_ai_curator_system_prompt', $base_prompt );
-
-        $has_memory_in_system  = ( false !== strpos( $base_prompt, '{memory_context}' ) );
-        $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
-        self::$last_articles_placement = $has_context_in_system ? 'system' : 'user';
-
-        // 2. Hydrate placeholders
-        $system_prompt = $this->hydrate_prompt( $base_prompt, $date, $articles );
+        // Hydrate or cleanly strip memory placeholder in system prompt
+        $system_prompt = $hydrated_prompt;
         if ( $has_memory_in_system ) {
             if ( '' !== ( $mem['text'] ?? '' ) ) {
                 $system_prompt = str_replace( '{memory_context}', $mem['text'], $system_prompt );
             } else {
-                $system_prompt = str_replace( [ "\n\n{memory_context}\n", "\n\n{memory_context}", "{memory_context}\n", "{memory_context}" ], '', $system_prompt );
+                $system_prompt = PressHub_AI_Memory_Context_Builder::strip_placeholder( $system_prompt );
             }
         }
-
-        // 3. Resolve author/org/plugin preset
-        $user_id = get_current_user_id();
-        if ( $user_id <= 0 ) {
-            $user_id = 1;
-        }
-        $preset = PressHub_AI_Preset_Resolver::resolve_for_user( $user_id, 'curation', $preset_id );
-        if ( null !== $preset && '' !== trim( $preset ) ) {
-            $system_prompt .= "\n\n" . trim( $preset );
+        if ( '' !== $preset_text ) {
+            $system_prompt .= $preset_text;
         }
 
         // 4. Filter composed system prompt

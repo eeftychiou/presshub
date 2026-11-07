@@ -18,7 +18,7 @@
  *   - Clean gating: returns empty text and disabled manifest when memory is off or 0-day window.
  *
  * @package PressHub_AI_Editor
- * @since 2.11.0
+ * @since 2.12.0
  */
 
 if ( ! defined( 'ABSPATH' ) && ! defined( 'PRESSHUB_AI_TESTSUITE' ) ) {
@@ -31,6 +31,63 @@ require_once __DIR__ . '/class-prompt-loader.php';
 require_once __DIR__ . '/class-context-estimator.php';
 
 class PressHub_AI_Memory_Context_Builder {
+
+    /**
+     * Strip the {memory_context} placeholder cleanly from a prompt template,
+     * restoring the exact original trailing newline structure of stock templates.
+     *
+     * @param string $prompt Prompt string containing {memory_context}.
+     * @return string Stripped prompt.
+     */
+    public static function strip_placeholder( string $prompt ): string {
+        if ( false === strpos( $prompt, '{memory_context}' ) ) {
+            return $prompt;
+        }
+
+        // 1. Curation template on main ended with \r, so \n\r\n{memory_context} was appended.
+        if ( false !== strpos( $prompt, "\n\r\n{memory_context}" ) ) {
+            return str_replace( "\n\r\n{memory_context}", '', $prompt );
+        }
+
+        // 2. Podcast templates on main ended with \n, so \n{memory_context}\n was appended.
+        if ( false !== strpos( $prompt, "\n{memory_context}\n" ) ) {
+            return str_replace( "\n{memory_context}\n", '', $prompt );
+        }
+
+        // 3. Fallbacks for other variations
+        return str_replace(
+            [
+                "\r\n\r\n{memory_context}\r\n",
+                "\r\n\r\n{memory_context}",
+                "\r\n{memory_context}\r\n",
+                "\r\n{memory_context}",
+                "\n\n{memory_context}\n",
+                "\n\n{memory_context}",
+                "\n{memory_context}\n",
+                "\n{memory_context}",
+                "{memory_context}\n",
+                "{memory_context}\r\n",
+                "{memory_context}",
+            ],
+            '',
+            $prompt
+        );
+    }
+
+    /**
+     * Sanitize a text field (story title, development, narrative, podcast lines):
+     * Collapses CRLF/CR/LF newlines into single spaces, removes '#' headings,
+     * and trims redundant whitespace.
+     *
+     * @param string $text Raw text.
+     * @return string Sanitized single-line text.
+     */
+    public static function sanitize_field( string $text ): string {
+        $clean = preg_replace( '/\r\n|\r|\n/', ' ', $text );
+        $clean = str_replace( '#', '', (string) $clean );
+        $clean = preg_replace( '/\s+/u', ' ', (string) $clean );
+        return trim( (string) $clean );
+    }
 
     /**
      * Build the rendered memory context block and audit manifest for prompt injection.
@@ -49,13 +106,43 @@ class PressHub_AI_Memory_Context_Builder {
         $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
         $target  = ( 'podcast' === $target ) ? 'podcast' : 'briefing';
 
-        $enabled         = PressHub_AI_Settings_Storage::get_memory_enabled();
-        $daily_days      = PressHub_AI_Settings_Storage::get_memory_daily_days();
-        $background_days = PressHub_AI_Settings_Storage::get_memory_background_days();
-        $default_budget  = ( 'podcast' === $target )
+        $enabled           = PressHub_AI_Settings_Storage::get_memory_enabled();
+        $daily_days        = PressHub_AI_Settings_Storage::get_memory_daily_days();
+        $background_days   = PressHub_AI_Settings_Storage::get_memory_background_days();
+        $configured_budget = ( 'podcast' === $target )
             ? PressHub_AI_Settings_Storage::get_memory_podcast_budget_chars()
             : PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
-        $budget_chars    = ( null !== $budget_override ) ? max( 0, $budget_override ) : $default_budget;
+        $budget_chars      = ( null !== $budget_override ) ? max( 0, $budget_override ) : $configured_budget;
+
+        $budgets_summary = [
+            'configured' => $configured_budget,
+            'effective'  => $budget_chars,
+            'shrunk'     => ( $budget_chars < $configured_budget ),
+        ];
+
+        // Compute missing daily digests within lookback window (recent + background)
+        $missing_digests = [];
+        $lookback_days   = max( $daily_days, $background_days );
+        if ( $enabled && $lookback_days > 0 ) {
+            $yesterday      = gmdate( 'Y-m-d', strtotime( $date . ' -1 day' ) );
+            $window_start   = gmdate( 'Y-m-d', strtotime( $date . " -{$lookback_days} days" ) );
+            $window_dailies = PressHub_AI_Memory_Store::get_entries_for_range( $window_start, $yesterday, 'daily' );
+            $active_dates   = [];
+            foreach ( $window_dailies as $wd ) {
+                if ( in_array( (string) $wd['status'], [ 'active', 'stale' ], true ) ) {
+                    $active_dates[ (string) $wd['period_start'] ] = true;
+                }
+            }
+            $cur_ts = strtotime( $window_start );
+            $end_ts = strtotime( $yesterday );
+            while ( $cur_ts <= $end_ts ) {
+                $cur_ymd = gmdate( 'Y-m-d', $cur_ts );
+                if ( ! isset( $active_dates[ $cur_ymd ] ) ) {
+                    $missing_digests[] = $cur_ymd;
+                }
+                $cur_ts = strtotime( '+1 day', $cur_ts );
+            }
+        }
 
         // Clean gating: disabled or 0-day window yields empty block and disabled manifest
         if ( ! $enabled || ( 0 === $daily_days && 0 === $background_days ) ) {
@@ -69,10 +156,12 @@ class PressHub_AI_Memory_Context_Builder {
                     'edition'         => $edition,
                     'daily_days'      => $daily_days,
                     'background_days' => $background_days,
+                    'budgets'         => $budgets_summary,
                     'budget_chars'    => $budget_chars,
                     'used_chars'      => 0,
                     'tokens_estimate' => 0,
                     'entries'         => [],
+                    'missing_digests' => $missing_digests,
                     'trimmed'         => [],
                     'has_stale'       => false,
                 ],
@@ -86,44 +175,48 @@ class PressHub_AI_Memory_Context_Builder {
         $used_morning_digest = false;
 
         if ( 'noon' === $edition ) {
-            $same_day_entries = PressHub_AI_Memory_Store::get_entries_for_range( $date, $date, 'daily' );
+            $same_day_entries    = PressHub_AI_Memory_Store::get_entries_for_range( $date, $date, 'daily' );
+            $morning_entry_found = null;
             foreach ( $same_day_entries as $entry ) {
                 if ( 'morning' === (string) $entry['edition'] && $date === (string) $entry['period_start'] ) {
-                    if ( in_array( (string) $entry['status'], [ 'active', 'stale' ], true ) ) {
-                        $content     = PressHub_AI_Memory_Store::decode_content( (string) $entry['content_json'] );
-                        $inc_stories = [];
-                        foreach ( ( $content['stories'] ?? [] ) as $st ) {
-                            if ( ! empty( $st['include'] ) ) {
-                                $inc_stories[] = $st;
-                            }
-                        }
-                        if ( ! empty( $inc_stories ) ) {
-                            $same_day_entry      = [
-                                'entry'   => $entry,
-                                'stories' => $inc_stories,
-                                'content' => $content,
-                            ];
-                            $used_morning_digest = true;
-                        } else {
-                            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                                PressHub_AI_Logger::warning(
-                                    'Noon edition memory fallback: morning digest has no included stories, falling back to raw morning briefing text',
-                                    [ 'date' => $date, 'target' => $target ]
-                                );
-                            }
-                        }
-                    } else {
-                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                            PressHub_AI_Logger::warning(
-                                'Noon edition memory fallback: morning digest missing or not active, falling back to raw morning briefing text',
-                                [ 'date' => $date, 'target' => $target, 'status' => (string) $entry['status'] ]
-                            );
-                        }
-                    }
+                    $morning_entry_found = $entry;
                     break;
                 }
             }
-            if ( ! $used_morning_digest && null === $same_day_entry ) {
+
+            if ( null !== $morning_entry_found ) {
+                if ( in_array( (string) $morning_entry_found['status'], [ 'active', 'stale' ], true ) ) {
+                    $content     = PressHub_AI_Memory_Store::decode_content( (string) $morning_entry_found['content_json'] );
+                    $inc_stories = [];
+                    foreach ( ( $content['stories'] ?? [] ) as $st ) {
+                        if ( ! empty( $st['include'] ) ) {
+                            $inc_stories[] = $st;
+                        }
+                    }
+                    if ( ! empty( $inc_stories ) ) {
+                        $same_day_entry      = [
+                            'entry'   => $morning_entry_found,
+                            'stories' => $inc_stories,
+                            'content' => $content,
+                        ];
+                        $used_morning_digest = true;
+                    } else {
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::warning(
+                                'Noon edition memory fallback: morning digest has no included stories, falling back to raw morning briefing text',
+                                [ 'date' => $date, 'target' => $target ]
+                            );
+                        }
+                    }
+                } else {
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::warning(
+                            'Noon edition memory fallback: morning digest missing or not active, falling back to raw morning briefing text',
+                            [ 'date' => $date, 'target' => $target, 'status' => (string) $morning_entry_found['status'] ]
+                        );
+                    }
+                }
+            } else {
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::warning(
                         'Noon edition memory fallback: morning digest missing or not active, falling back to raw morning briefing text',
@@ -278,8 +371,8 @@ class PressHub_AI_Memory_Context_Builder {
             }
             foreach ( $candidate_dailies as $cd ) {
                 $p     = $cd['content']['podcast'] ?? [];
-                $open  = trim( (string) ( $p['opening_line'] ?? '' ) );
-                $close = trim( (string) ( $p['closing_line'] ?? '' ) );
+                $open  = self::sanitize_field( (string) ( $p['opening_line'] ?? '' ) );
+                $close = self::sanitize_field( (string) ( $p['closing_line'] ?? '' ) );
                 if ( '' !== $open || '' !== $close ) {
                     $podcast_lines[] = [
                         'entry_id'     => (int) $cd['entry']['id'],
@@ -334,6 +427,13 @@ class PressHub_AI_Memory_Context_Builder {
                 $last_idx     = count( $recent_entries ) - 1;
                 $target_entry = &$recent_entries[ $last_idx ];
 
+                // If entry has no stories (e.g. podcast lines only), pop it from recent entries without recording a phantom story trim
+                if ( empty( $target_entry['stories'] ) ) {
+                    array_pop( $recent_entries );
+                    $rendered = self::render_text( $same_day_entry, $recent_entries, $background_entries, $podcast_lines, $date, $daily_days, $target );
+                    continue;
+                }
+
                 // Find resolved story to drop first
                 $resolved_idx = null;
                 foreach ( $target_entry['stories'] as $s_idx => $s ) {
@@ -352,30 +452,32 @@ class PressHub_AI_Memory_Context_Builder {
                     $reason = 'budget_oldest_recent_story';
                 }
 
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::warning(
-                        'Memory context builder trimmed story from oldest recent entry to fit budget',
-                        [
-                            'reason'       => $reason,
-                            'entry_id'     => (int) $target_entry['entry']['id'],
-                            'period_start' => (string) $target_entry['entry']['period_start'],
-                            'story_key'    => (string) ( $dropped_story['key'] ?? '' ),
-                            'story_status' => (string) ( $dropped_story['status'] ?? '' ),
-                        ]
-                    );
-                }
+                if ( is_array( $dropped_story ) && ! empty( $dropped_story['key'] ) ) {
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::warning(
+                            'Memory context builder trimmed story from oldest recent entry to fit budget',
+                            [
+                                'reason'       => $reason,
+                                'entry_id'     => (int) $target_entry['entry']['id'],
+                                'period_start' => (string) $target_entry['entry']['period_start'],
+                                'story_key'    => (string) ( $dropped_story['key'] ?? '' ),
+                                'story_status' => (string) ( $dropped_story['status'] ?? '' ),
+                            ]
+                        );
+                    }
 
-                $trimmed[] = [
-                    'tier'         => 'recent',
-                    'reason'       => $reason,
-                    'entry_id'     => (int) $target_entry['entry']['id'],
-                    'scope'        => (string) $target_entry['entry']['scope'],
-                    'period_start' => (string) $target_entry['entry']['period_start'],
-                    'period_end'   => (string) $target_entry['entry']['period_end'],
-                    'edition'      => (string) ( $target_entry['entry']['edition'] ?? '' ),
-                    'story_key'    => (string) ( $dropped_story['key'] ?? '' ),
-                    'story_status' => (string) ( $dropped_story['status'] ?? '' ),
-                ];
+                    $trimmed[] = [
+                        'tier'         => 'recent',
+                        'reason'       => $reason,
+                        'entry_id'     => (int) $target_entry['entry']['id'],
+                        'scope'        => (string) $target_entry['entry']['scope'],
+                        'period_start' => (string) $target_entry['entry']['period_start'],
+                        'period_end'   => (string) $target_entry['entry']['period_end'],
+                        'edition'      => (string) ( $target_entry['entry']['edition'] ?? '' ),
+                        'story_key'    => (string) ( $dropped_story['key'] ?? '' ),
+                        'story_status' => (string) ( $dropped_story['status'] ?? '' ),
+                    ];
+                }
 
                 if ( empty( $target_entry['stories'] ) ) {
                     array_pop( $recent_entries );
@@ -402,27 +504,29 @@ class PressHub_AI_Memory_Context_Builder {
                         $dropped_story = array_shift( $same_day_entry['stories'] );
                         $reason = 'budget_story';
                     }
-                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                        PressHub_AI_Logger::warning(
-                            'Memory context builder trimmed story from same-day entry to fit budget',
-                            [
-                                'reason'    => $reason,
-                                'entry_id'  => (int) $same_day_entry['entry']['id'],
-                                'story_key' => (string) ( $dropped_story['key'] ?? '' ),
-                            ]
-                        );
+                    if ( is_array( $dropped_story ) && ! empty( $dropped_story['key'] ) ) {
+                        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                            PressHub_AI_Logger::warning(
+                                'Memory context builder trimmed story from same-day entry to fit budget',
+                                [
+                                    'reason'    => $reason,
+                                    'entry_id'  => (int) $same_day_entry['entry']['id'],
+                                    'story_key' => (string) ( $dropped_story['key'] ?? '' ),
+                                ]
+                            );
+                        }
+                        $trimmed[] = [
+                            'tier'         => 'same_day',
+                            'reason'       => $reason,
+                            'entry_id'     => (int) $same_day_entry['entry']['id'],
+                            'scope'        => (string) $same_day_entry['entry']['scope'],
+                            'period_start' => (string) $same_day_entry['entry']['period_start'],
+                            'period_end'   => (string) $same_day_entry['entry']['period_end'],
+                            'edition'      => (string) ( $same_day_entry['entry']['edition'] ?? '' ),
+                            'story_key'    => (string) ( $dropped_story['key'] ?? '' ),
+                            'story_status' => (string) ( $dropped_story['status'] ?? '' ),
+                        ];
                     }
-                    $trimmed[] = [
-                        'tier'         => 'same_day',
-                        'reason'       => $reason,
-                        'entry_id'     => (int) $same_day_entry['entry']['id'],
-                        'scope'        => (string) $same_day_entry['entry']['scope'],
-                        'period_start' => (string) $same_day_entry['entry']['period_start'],
-                        'period_end'   => (string) $same_day_entry['entry']['period_end'],
-                        'edition'      => (string) ( $same_day_entry['entry']['edition'] ?? '' ),
-                        'story_key'    => (string) ( $dropped_story['key'] ?? '' ),
-                        'story_status' => (string) ( $dropped_story['status'] ?? '' ),
-                    ];
                     $rendered = self::render_text( $same_day_entry, $recent_entries, $background_entries, $podcast_lines, $date, $daily_days, $target );
                 }
                 if ( empty( $same_day_entry['stories'] ) ) {
@@ -460,6 +564,7 @@ class PressHub_AI_Memory_Context_Builder {
             if ( $stale ) {
                 $has_stale = true;
             }
+            $entry_block = self::render_same_day_block( $same_day_entry, $date );
             $manifest_entries[] = [
                 'id'            => (int) $same_day_entry['entry']['id'],
                 'scope'         => (string) $same_day_entry['entry']['scope'],
@@ -470,6 +575,7 @@ class PressHub_AI_Memory_Context_Builder {
                 'origin'        => (string) $same_day_entry['entry']['origin'],
                 'status'        => (string) $same_day_entry['entry']['status'],
                 'stale'         => $stale,
+                'chars'         => mb_strlen( $entry_block, 'UTF-8' ),
                 'version_hash'  => (string) $same_day_entry['entry']['version_hash'],
                 'stories_count' => count( $same_day_entry['stories'] ),
                 'story_keys'    => array_values( array_column( $same_day_entry['stories'], 'key' ) ),
@@ -484,6 +590,7 @@ class PressHub_AI_Memory_Context_Builder {
             if ( $stale ) {
                 $has_stale = true;
             }
+            $entry_block = self::render_recent_entry_block( $re );
             $manifest_entries[] = [
                 'id'            => (int) $re['entry']['id'],
                 'scope'         => (string) $re['entry']['scope'],
@@ -494,6 +601,7 @@ class PressHub_AI_Memory_Context_Builder {
                 'origin'        => (string) $re['entry']['origin'],
                 'status'        => (string) $re['entry']['status'],
                 'stale'         => $stale,
+                'chars'         => mb_strlen( $entry_block, 'UTF-8' ),
                 'version_hash'  => (string) $re['entry']['version_hash'],
                 'stories_count' => count( $re['stories'] ),
                 'story_keys'    => array_values( array_column( $re['stories'], 'key' ) ),
@@ -505,6 +613,7 @@ class PressHub_AI_Memory_Context_Builder {
             if ( $stale ) {
                 $has_stale = true;
             }
+            $entry_block = self::render_background_entry_block( $be );
             $manifest_entries[] = [
                 'id'            => (int) $be['entry']['id'],
                 'scope'         => (string) $be['entry']['scope'],
@@ -515,6 +624,7 @@ class PressHub_AI_Memory_Context_Builder {
                 'origin'        => (string) $be['entry']['origin'],
                 'status'        => (string) $be['entry']['status'],
                 'stale'         => $stale,
+                'chars'         => mb_strlen( $entry_block, 'UTF-8' ),
                 'version_hash'  => (string) $be['entry']['version_hash'],
                 'stories_count' => count( $be['stories'] ),
                 'story_keys'    => array_values( array_column( $be['stories'], 'key' ) ),
@@ -533,12 +643,14 @@ class PressHub_AI_Memory_Context_Builder {
             'edition'             => $edition,
             'daily_days'          => $daily_days,
             'background_days'     => $background_days,
+            'budgets'             => $budgets_summary,
             'budget_chars'        => $budget_chars,
             'used_chars'          => $used_chars,
             'tokens_estimate'     => $tokens_est,
             'used_morning_digest' => $used_morning_digest && ( null !== $same_day_entry ),
             'has_stale'           => $has_stale,
             'entries'             => $manifest_entries,
+            'missing_digests'     => $missing_digests,
             'trimmed'             => $trimmed,
             'podcast_lines_count' => count( $podcast_lines ),
         ];
@@ -551,7 +663,80 @@ class PressHub_AI_Memory_Context_Builder {
     }
 
     /**
-     * Render memory sections into formatted markdown text.
+     * Render the block text for a same-day morning digest.
+     *
+     * @param array  $same_day_entry Same day entry array.
+     * @param string $date           Briefing date.
+     * @return string
+     */
+    private static function render_same_day_block( array $same_day_entry, string $date ): string {
+        $sec = "### Σημερινή Πρωινή Ενημέρωση ({$date})\n";
+        $story_lines = [];
+        foreach ( ( $same_day_entry['stories'] ?? [] ) as $story ) {
+            $story_lines[] = self::format_story_line( $story );
+        }
+        return $sec . implode( "\n", $story_lines );
+    }
+
+    /**
+     * Render the block text for a recent daily digest entry.
+     *
+     * @param array $re Recent entry array.
+     * @return string
+     */
+    private static function render_recent_entry_block( array $re ): string {
+        if ( empty( $re['stories'] ) ) {
+            return '';
+        }
+        $d      = (string) $re['entry']['period_start'];
+        $ed     = (string) ( $re['entry']['edition'] ?? '' );
+        $ed_str = ( 'noon' === $ed ) ? ' (Μεσημβρινή)' : ( ( 'morning' === $ed ) ? ' (Πρωινή)' : '' );
+        $block  = "#### {$d}{$ed_str}\n";
+        $story_lines = [];
+        foreach ( $re['stories'] as $story ) {
+            $story_lines[] = self::format_story_line( $story );
+        }
+        return $block . implode( "\n", $story_lines );
+    }
+
+    /**
+     * Render the block text for a background entry (weekly rollup or gap daily).
+     *
+     * @param array $be Background entry array.
+     * @return string
+     */
+    private static function render_background_entry_block( array $be ): string {
+        $scope = (string) ( $be['entry']['scope'] ?? 'daily' );
+        if ( 'weekly' === $scope ) {
+            $p_start = (string) $be['entry']['period_start'];
+            $p_end   = (string) $be['entry']['period_end'];
+            $block   = "#### Εβδομαδιαία Ανασκόπηση ({$p_start} έως {$p_end})\n";
+            if ( ! empty( $be['narrative'] ) ) {
+                $block .= self::sanitize_field( (string) $be['narrative'] ) . "\n";
+            }
+            if ( ! empty( $be['stories'] ) ) {
+                $story_lines = [];
+                foreach ( $be['stories'] as $story ) {
+                    $story_lines[] = self::format_story_line( $story );
+                }
+                $block .= implode( "\n", $story_lines );
+            }
+            return rtrim( $block );
+        }
+
+        $d      = (string) $be['entry']['period_start'];
+        $ed     = (string) ( $be['entry']['edition'] ?? '' );
+        $ed_str = ( 'noon' === $ed ) ? ' (Μεσημβρινή)' : ( ( 'morning' === $ed ) ? ' (Πρωινή)' : '' );
+        $block  = "#### {$d}{$ed_str}\n";
+        $story_lines = [];
+        foreach ( ( $be['stories'] ?? [] ) as $story ) {
+            $story_lines[] = self::format_story_line( $story );
+        }
+        return $block . implode( "\n", $story_lines );
+    }
+
+    /**
+     * Render memory sections into formatted markdown text with explicit boundary markers.
      */
     private static function render_text( ?array $same_day, array $recent, array $background, array $podcast_lines, string $date, int $daily_days, string $target ): string {
         $has_same_day   = ( null !== $same_day && ! empty( $same_day['stories'] ) );
@@ -582,13 +767,7 @@ class PressHub_AI_Memory_Context_Builder {
 
         // 1. Same-Day Morning Section
         if ( $has_same_day ) {
-            $sec = "### Σημερινή Πρωινή Ενημέρωση ({$date})\n";
-            $story_lines = [];
-            foreach ( $same_day['stories'] as $story ) {
-                $story_lines[] = self::format_story_line( $story );
-            }
-            $sec .= implode( "\n", $story_lines );
-            $sections[] = $sec;
+            $sections[] = self::render_same_day_block( $same_day, $date );
         }
 
         // 2. Recent Daily Digests Section
@@ -596,19 +775,10 @@ class PressHub_AI_Memory_Context_Builder {
             $sec = "### Πρόσφατη Επικαιρότητα (Τελευταίες {$daily_days} ημέρες)\n";
             $entry_blocks = [];
             foreach ( $recent as $re ) {
-                if ( empty( $re['stories'] ) ) {
-                    continue;
+                $b = self::render_recent_entry_block( $re );
+                if ( '' !== $b ) {
+                    $entry_blocks[] = $b;
                 }
-                $d = (string) $re['entry']['period_start'];
-                $ed = (string) ( $re['entry']['edition'] ?? '' );
-                $ed_str = ( 'noon' === $ed ) ? ' (Μεσημβρινή)' : ( ( 'morning' === $ed ) ? ' (Πρωινή)' : '' );
-                $block = "#### {$d}{$ed_str}\n";
-                $story_lines = [];
-                foreach ( $re['stories'] as $story ) {
-                    $story_lines[] = self::format_story_line( $story );
-                }
-                $block .= implode( "\n", $story_lines );
-                $entry_blocks[] = $block;
             }
             $sec .= implode( "\n\n", $entry_blocks );
             $sections[] = $sec;
@@ -619,33 +789,9 @@ class PressHub_AI_Memory_Context_Builder {
             $sec = "### Ιστορικό Πλαίσιο & Εβδομαδιαίες Ανασκοπήσεις\n";
             $bg_blocks = [];
             foreach ( $background as $be ) {
-                $scope = (string) ( $be['entry']['scope'] ?? 'daily' );
-                if ( 'weekly' === $scope ) {
-                    $p_start = (string) $be['entry']['period_start'];
-                    $p_end   = (string) $be['entry']['period_end'];
-                    $block   = "#### Εβδομαδιαία Ανασκόπηση ({$p_start} έως {$p_end})\n";
-                    if ( ! empty( $be['narrative'] ) ) {
-                        $block .= trim( (string) $be['narrative'] ) . "\n";
-                    }
-                    if ( ! empty( $be['stories'] ) ) {
-                        $story_lines = [];
-                        foreach ( $be['stories'] as $story ) {
-                            $story_lines[] = self::format_story_line( $story );
-                        }
-                        $block .= implode( "\n", $story_lines );
-                    }
-                    $bg_blocks[] = rtrim( $block );
-                } else {
-                    $d = (string) $be['entry']['period_start'];
-                    $ed = (string) ( $be['entry']['edition'] ?? '' );
-                    $ed_str = ( 'noon' === $ed ) ? ' (Μεσημβρινή)' : ( ( 'morning' === $ed ) ? ' (Πρωινή)' : '' );
-                    $block = "#### {$d}{$ed_str}\n";
-                    $story_lines = [];
-                    foreach ( $be['stories'] as $story ) {
-                        $story_lines[] = self::format_story_line( $story );
-                    }
-                    $block .= implode( "\n", $story_lines );
-                    $bg_blocks[] = $block;
+                $b = self::render_background_entry_block( $be );
+                if ( '' !== $b ) {
+                    $bg_blocks[] = $b;
                 }
             }
             $sec .= implode( "\n\n", $bg_blocks );
@@ -654,11 +800,11 @@ class PressHub_AI_Memory_Context_Builder {
 
         // 4. Podcast Lines Section
         if ( $has_podcast_lines ) {
-            $sec = "### Προηγούμενες Ατάκες Έναρξης & Κλεισίματος Podcast (ΜΗΝ τις επαναλάβετε)\n";
+            $sec  = "### Προηγούμενες Ατάκες Έναρξης & Κλεισίματος Podcast (ΜΗΝ τις επαναλάβετε)\n";
             $sec .= "Οδηγία για τους παρουσιαστές: Μην επαναλάβετε και μην μιμηθείτε τις παρακάτω ατάκες έναρξης και κλεισίματος προηγούμενων επεισοδίων. Δημιουργήστε εντελώς νέες, αυθόρμητες ατάκες για το σημερινό επεισόδιο:\n";
             $lines_out = [];
             foreach ( $podcast_lines as $pl ) {
-                $ed_str = ( 'noon' === $pl['edition'] ) ? ' [Μεσημέρι]' : ( ( 'morning' === $pl['edition'] ) ? ' [Πρωί]' : '' );
+                $ed_str   = ( 'noon' === $pl['edition'] ) ? ' [Μεσημέρι]' : ( ( 'morning' === $pl['edition'] ) ? ' [Πρωί]' : '' );
                 $pl_block = "- Επεισόδιο {$pl['date']}{$ed_str}:";
                 if ( '' !== $pl['opening_line'] ) {
                     $pl_block .= "\n  * Έναρξη: \"{$pl['opening_line']}\"";
@@ -672,17 +818,22 @@ class PressHub_AI_Memory_Context_Builder {
             $sections[] = $sec;
         }
 
-        return implode( "\n\n", $sections );
+        if ( empty( $sections ) ) {
+            return '';
+        }
+
+        $body = implode( "\n\n", $sections );
+        return "=== ΑΡΧΗ ΣΥΝΤΑΚΤΙΚΗΣ ΜΝΗΜΗΣ ===\n\n" . $body . "\n\n=== ΤΕΛΟΣ ΣΥΝΤΑΚΤΙΚΗΣ ΜΝΗΜΗΣ ===";
     }
 
     /**
      * Format a single story item into concise Greek line with status label.
      */
     private static function format_story_line( array $story ): string {
-        $key    = isset( $story['key'] ) ? trim( (string) $story['key'] ) : '';
-        $title  = isset( $story['title'] ) ? trim( (string) $story['title'] ) : '';
+        $key    = isset( $story['key'] ) ? self::sanitize_field( (string) $story['key'] ) : '';
+        $title  = isset( $story['title'] ) ? self::sanitize_field( (string) $story['title'] ) : '';
         $status = isset( $story['status'] ) ? trim( (string) $story['status'] ) : '';
-        $dev    = isset( $story['development'] ) ? trim( (string) $story['development'] ) : '';
+        $dev    = isset( $story['development'] ) ? self::sanitize_field( (string) $story['development'] ) : '';
 
         $status_labels = [
             'new'        => 'Νέο θέμα',
@@ -693,7 +844,8 @@ class PressHub_AI_Memory_Context_Builder {
 
         $line = "- [{$key}] {$title} ({$status_label}): {$dev}";
         if ( ! empty( $story['entities'] ) && is_array( $story['entities'] ) ) {
-            $line .= ' (Πρόσωπα/Φορείς: ' . implode( ', ', $story['entities'] ) . ')';
+            $sanitized_entities = array_map( [ __CLASS__, 'sanitize_field' ], $story['entities'] );
+            $line .= ' (Πρόσωπα/Φορείς: ' . implode( ', ', $sanitized_entities ) . ')';
         }
 
         return $line;

@@ -33,7 +33,6 @@ function test_generation_recorder() {
     $wpdb->queries          = [];
     $wpdb->auto_increments  = [];
     $GLOBALS['POST_META_STORE'] = [];
-    PressHub_AI_Generation_Recorder::clear_memory_context();
 
     // Redirect the structured log to a temp file so we can assert failure logging.
     $log_file = sys_get_temp_dir() . '/presshub-genrec-test-' . uniqid() . '.log';
@@ -90,20 +89,14 @@ function test_generation_recorder() {
     gen_rec_check( false !== strpos( $raw_row['config_json'], 'https://a.b/c' ), 'slashes not escaped in JSON' );
     echo '  [3] JSON fields: OK' . PHP_EOL;
 
-    // 4. Memory defaults and one-shot pending context
+    // 4. Memory defaults and direct record([ 'memory' => ... ]) context
     gen_rec_check( [ 'enabled' => false ] === $rec['memory'], 'memory defaults to enabled=false' );
-    PressHub_AI_Generation_Recorder::set_memory_context( [ 'enabled' => true, 'entries' => [ 7, 9 ] ] );
-    $id_mem1 = PressHub_AI_Generation_Recorder::record( [ 'kind' => 'briefing_text' ] );
+    $id_mem1 = PressHub_AI_Generation_Recorder::record( [ 'kind' => 'briefing_text', 'memory' => [ 'enabled' => true, 'entries' => [ 7, 9 ] ] ] );
     $id_mem2 = PressHub_AI_Generation_Recorder::record( [ 'kind' => 'briefing_text' ] );
     $m1 = PressHub_AI_Generation_Recorder::get( (int) $id_mem1 );
     $m2 = PressHub_AI_Generation_Recorder::get( (int) $id_mem2 );
-    gen_rec_check( true === ( $m1['memory']['enabled'] ?? null ) && [ 7, 9 ] === ( $m1['memory']['entries'] ?? [] ), 'pending memory context used' );
-    gen_rec_check( [ 'enabled' => false ] === $m2['memory'], 'pending memory context consumed once' );
-    PressHub_AI_Generation_Recorder::set_memory_context( [ 'enabled' => true ] );
-    PressHub_AI_Generation_Recorder::clear_memory_context();
-    $id_mem3 = PressHub_AI_Generation_Recorder::record( [ 'kind' => 'memory_digest' ] );
-    $m3 = PressHub_AI_Generation_Recorder::get( (int) $id_mem3 );
-    gen_rec_check( [ 'enabled' => false ] === $m3['memory'], 'clear_memory_context discards pending context' );
+    gen_rec_check( true === ( $m1['memory']['enabled'] ?? null ) && [ 7, 9 ] === ( $m1['memory']['entries'] ?? [] ), 'explicit memory context persisted' );
+    gen_rec_check( [ 'enabled' => false ] === $m2['memory'], 'omitted memory defaults to enabled=false' );
     $id_mem4 = PressHub_AI_Generation_Recorder::record( [ 'kind' => 'memory_rollup', 'memory' => [ 'enabled' => true, 'x' => 1 ] ] );
     $m4 = PressHub_AI_Generation_Recorder::get( (int) $id_mem4 );
     gen_rec_check( 1 === ( $m4['memory']['x'] ?? 0 ), 'explicit memory array used' );
