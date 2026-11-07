@@ -766,6 +766,17 @@ class PressHub_AI_Audio_Synthesizer {
                     if ( class_exists( 'PressHub_AI_Logger' ) ) {
                         PressHub_AI_Logger::info( sprintf( '[LogosAI Synthesizer] Turn cache hit for hash %s (voice: %s, date: %s)', substr( $cache_key, 0, 8 ), $voice_model, $date ) );
                     }
+                    // Issue #140 - cache hits are part of the per-call TTS details on the parent record.
+                    if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                        PressHub_AI_TTS_Call_Recorder::log_cache_hit( [
+                            'engine'      => $engine,
+                            'model'       => $model_id,
+                            'voice'       => $voice_model,
+                            'text'        => $text,
+                            'audio_bytes' => strlen( $cached_audio ),
+                            'settings'    => [ 'style' => $style, 'speed' => $speed, 'pitch' => $pitch, 'payload_mode' => $payload_mode ],
+                        ] );
+                    }
                     if ( class_exists( 'PressHub_AI_Settings_Storage' ) && class_exists( 'PressHub_AI_API_Client' ) && PressHub_AI_Settings_Storage::get_log_tts_payloads() ) {
                         PressHub_AI_API_Client::write_tts_payload_log( PressHub_AI_API_Client::build_tts_payload_log_entry( 'cache_hit', [
                             'cache_key'   => $cache_key,
@@ -1386,6 +1397,21 @@ class PressHub_AI_Audio_Synthesizer {
      * @return array|WP_Error Result payload array or WP_Error on failure.
      */
     public function synthesize_podcast( string $date = '', ?string $custom_script = '', $edition_or_client = 'morning', ?PressHub_AI_API_Client $api_client = null, int $existing_post_id = 0 ) {
+        // Issue #140: synthesize_podcast_run() opens the TTS call session (current parent
+        // generation record) once the script is resolved; it is always closed here.
+        try {
+            return $this->synthesize_podcast_run( $date, $custom_script, $edition_or_client, $api_client, $existing_post_id );
+        } finally {
+            if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                PressHub_AI_TTS_Call_Recorder::end_session();
+            }
+        }
+    }
+
+    /**
+     * Body of synthesize_podcast() (same arguments and return value).
+     */
+    private function synthesize_podcast_run( string $date, ?string $custom_script, $edition_or_client, ?PressHub_AI_API_Client $api_client, int $existing_post_id ) {
         // Smart parameter shift: if caller called synthesize_podcast($date, 'noon') or synthesize_podcast($date, 'morning')
         if ( in_array( $custom_script, [ 'morning', 'noon' ], true ) && ( 'morning' === $edition_or_client || $edition_or_client instanceof PressHub_AI_API_Client || null === $edition_or_client ) ) {
             if ( $edition_or_client instanceof PressHub_AI_API_Client ) {
@@ -1450,6 +1476,13 @@ class PressHub_AI_Audio_Synthesizer {
                 'invalid_script',
                 __( 'Could not parse any speaker turns from the podcast script.', 'presshub-ai-editor' )
             );
+        }
+
+        // Issue #140 - every TTS call below is appended to the podcast_script record that
+        // produced this script (tts_calls_json). Without one, the calls go to a tts_test record.
+        if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+            $tts_parent_id = (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
+            PressHub_AI_TTS_Call_Recorder::begin_session( $tts_parent_id, [ 'origin' => 'podcast_synthesis', 'date' => $date, 'edition' => $edition ] );
         }
 
         $engine         = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : (string) get_option( self::OPTION_ENGINE, 'gemini' );
@@ -1536,7 +1569,6 @@ class PressHub_AI_Audio_Synthesizer {
 
                     if ( class_exists( 'PressHub_AI_Settings_Storage' )
                         && class_exists( 'PressHub_AI_API_Client' )
-                        && PressHub_AI_Settings_Storage::get_log_tts_payloads()
                     ) {
                         $turn_assignments = [];
                         foreach ( $topic_turns as $turn_idx => $t ) {
@@ -1565,11 +1597,16 @@ class PressHub_AI_Audio_Synthesizer {
                         if ( $host_count >= 3 ) {
                             $topic_log_payload['tertiary_voice'] = $presenter_3_voice;
                         }
-                        $topic_log_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
-                            'topic',
-                            $topic_log_payload
-                        );
-                        PressHub_AI_API_Client::write_tts_payload_log( $topic_log_entry );
+                        if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                            PressHub_AI_TTS_Call_Recorder::log_summary( 'topic', $topic_log_payload );
+                        }
+                        if ( PressHub_AI_Settings_Storage::get_log_tts_payloads() ) {
+                            $topic_log_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
+                                'topic',
+                                $topic_log_payload
+                            );
+                            PressHub_AI_API_Client::write_tts_payload_log( $topic_log_entry );
+                        }
                     }
 
                     // Unified Turn-by-Turn Synthesis for ALL host counts (1, 2, and 3 hosts)
@@ -1646,7 +1683,6 @@ class PressHub_AI_Audio_Synthesizer {
                     // Structured "stitched" payload log entry
                     if ( class_exists( 'PressHub_AI_Settings_Storage' )
                         && class_exists( 'PressHub_AI_API_Client' )
-                        && PressHub_AI_Settings_Storage::get_log_tts_payloads()
                     ) {
                         $stitched_metrics_payload = [
                             'date'               => $date,
@@ -1669,11 +1705,16 @@ class PressHub_AI_Audio_Synthesizer {
                         if ( $host_count >= 3 ) {
                             $stitched_metrics_payload['tertiary_voice'] = $presenter_3_voice;
                         }
-                        $stitched_metrics_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
-                            'stitched',
-                            $stitched_metrics_payload
-                        );
-                        PressHub_AI_API_Client::write_tts_payload_log( $stitched_metrics_entry );
+                        if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                            PressHub_AI_TTS_Call_Recorder::log_summary( 'stitched', $stitched_metrics_payload );
+                        }
+                        if ( PressHub_AI_Settings_Storage::get_log_tts_payloads() ) {
+                            $stitched_metrics_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
+                                'stitched',
+                                $stitched_metrics_payload
+                            );
+                            PressHub_AI_API_Client::write_tts_payload_log( $stitched_metrics_entry );
+                        }
                     }
                 }
             }
@@ -1721,7 +1762,6 @@ class PressHub_AI_Audio_Synthesizer {
 
             if ( class_exists( 'PressHub_AI_Settings_Storage' )
                 && class_exists( 'PressHub_AI_API_Client' )
-                && PressHub_AI_Settings_Storage::get_log_tts_payloads()
             ) {
                 $stitched_metrics_payload = [
                     'date'               => $date,
@@ -1744,11 +1784,16 @@ class PressHub_AI_Audio_Synthesizer {
                 if ( $host_count >= 3 ) {
                     $stitched_metrics_payload['tertiary_voice'] = $presenter_3_voice;
                 }
-                $stitched_metrics_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
-                    'stitched',
-                    $stitched_metrics_payload
-                );
-                PressHub_AI_API_Client::write_tts_payload_log( $stitched_metrics_entry );
+                if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                    PressHub_AI_TTS_Call_Recorder::log_summary( 'stitched', $stitched_metrics_payload );
+                }
+                if ( PressHub_AI_Settings_Storage::get_log_tts_payloads() ) {
+                    $stitched_metrics_entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
+                        'stitched',
+                        $stitched_metrics_payload
+                    );
+                    PressHub_AI_API_Client::write_tts_payload_log( $stitched_metrics_entry );
+                }
             }
         }
 

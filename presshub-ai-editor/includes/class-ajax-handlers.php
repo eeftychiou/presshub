@@ -220,7 +220,7 @@ class PressHub_AI_Ajax_Handlers {
         // resolves the coauthor provider/model/keys deterministically
         // instead of relying on the no-args constructor's fallback chain.
         $api = new PressHub_AI_API_Client( 'coauthor' );
-        $draft = $api->generate_draft( $sources, $instructions, $uploaded_files, $preset_slug );
+        $draft = $api->generate_draft( $sources, $instructions, $uploaded_files, $preset_slug, ! empty( $post_id ) ? (int) $post_id : 0 );
 
         // Clean up temporary uploads so we don't clutter the server unnecessarily
         foreach ( $uploaded_files as $file_path ) {
@@ -259,7 +259,7 @@ class PressHub_AI_Ajax_Handlers {
         $this->enforce_rate_limit();
 
         require_once __DIR__ . '/class-qa-reviewer.php';
-        $eval_result = PressHub_AI_QA_Reviewer::evaluate_content( $content, 'post' );
+        $eval_result = PressHub_AI_QA_Reviewer::evaluate_content( $content, 'post', (int) $post_id );
 
         if ( ! empty( $eval_result['error'] ) ) {
             $error_msg = ! empty( $eval_result['feedback'] ) ? $eval_result['feedback'] : __( 'AI QA review evaluation failed.', 'presshub-ai-editor' );
@@ -406,9 +406,30 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             $sys = apply_filters( 'presshub_ai_composed_chat_system_prompt', $sys );
+            $gen_t0 = PressHub_AI_API_Client::begin_generation_record();
             $api->suppress_provider_prompt_log = true;
             $result = $api->call_provider( $sys, $prompt, false, [] );
             $api->suppress_provider_prompt_log = false;
+            // Issue #140 - copilot chat generation record. Linked to the post when there is one;
+            // otherwise the user is identified by config.user_id (and inputs.user_id).
+            PressHub_AI_API_Client::finish_generation_record(
+                $gen_t0,
+                'copilot_chat',
+                $api,
+                $sys,
+                $prompt,
+                $result,
+                [
+                    'post_id' => (int) $post_id,
+                    'user_id' => get_current_user_id(),
+                    'config'  => [ 'action' => 'copilot_chat', 'preset_id' => (string) $preset_slug ],
+                    'inputs'  => [
+                        'user_id'             => get_current_user_id(),
+                        'post_id'             => (int) $post_id,
+                        'has_article_context' => ( '' !== trim( $article_content ) || '' !== trim( $article_title ) ),
+                    ],
+                ]
+            );
             presshub_ai_log_prompts( 'chat', $sys, $prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, PressHub_AI_API_Client::current_request_meta() );
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );
