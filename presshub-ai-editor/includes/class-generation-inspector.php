@@ -58,7 +58,7 @@ class PressHub_AI_Generation_Inspector {
     const POST_TYPES = [ 'text', 'podcast' ];
 
     /** Record kinds that have a TTS tab (#140: tts_test holds only per-call details). */
-    const TTS_KINDS = [ 'podcast_script', 'tts_test' ];
+    const TTS_KINDS = [ 'podcast_script', 'tts_test', 'tiktok_narration' ];
 
     /** Maximum rows in the admin list. */
     const LIST_LIMIT = 200;
@@ -493,6 +493,7 @@ class PressHub_AI_Generation_Inspector {
             'image_generation' => __( 'Image generation', 'presshub-ai-editor' ),
             'generic'        => __( 'Other LLM call', 'presshub-ai-editor' ),
             'tts_test'       => __( 'TTS test', 'presshub-ai-editor' ),
+            'tiktok_narration' => __( 'TikTok narration', 'presshub-ai-editor' ),
         ];
         return $labels[ $kind ] ?? $kind;
     }
@@ -922,7 +923,7 @@ class PressHub_AI_Generation_Inspector {
 
     private static function render_tts( array $record ): string {
         if ( ! in_array( $record['kind'], self::TTS_KINDS, true ) ) {
-            return self::notice( __( 'TTS applies to podcast script and TTS test records only.', 'presshub-ai-editor' ) );
+            return self::notice( __( 'TTS applies to podcast script, TikTok narration and TTS test records only.', 'presshub-ai-editor' ) );
         }
         $calls_html = self::render_tts_calls( $record );
         $tts        = $record['tts'] ?? null;
@@ -930,7 +931,7 @@ class PressHub_AI_Generation_Inspector {
             if ( '' !== $calls_html ) {
                 return $calls_html;
             }
-            return self::notice( 'tts_test' === $record['kind']
+            return self::notice( in_array( $record['kind'], [ 'tts_test', 'tiktok_narration' ], true )
                 ? __( 'No TTS calls were recorded.', 'presshub-ai-editor' )
                 : __( 'No TTS configuration recorded: audio has not been synthesized from this script yet.', 'presshub-ai-editor' ) );
         }

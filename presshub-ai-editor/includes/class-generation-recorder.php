@@ -37,6 +37,8 @@ class PressHub_AI_Generation_Recorder {
      * #140: every other LLM, image and TTS call: coauthor_draft, scorecard,
      * copilot_chat, research, image_generation, generic (any other
      * call_provider() call) and tts_test (TTS calls without a parent record).
+     * tiktok_narration: Gemini TTS voice-over for a text-only TikTok job; its TTS
+     * calls are logged on the record and it is linked to the article post.
      */
     const KINDS = [
         'briefing_text',
@@ -50,6 +52,7 @@ class PressHub_AI_Generation_Recorder {
         'image_generation',
         'generic',
         'tts_test',
+        'tiktok_narration',
     ];
 
     /**

@@ -1818,6 +1818,57 @@ $claim_fail_job = PressHub_Social_Queue::get_job( $claim_fail );
 assert_true( str_contains( (string) $claim_fail_job['last_error'], 'Gemini TTS HTTP 500' ), 'Narration failure is recorded as the job error' );
 assert_true( 'processing' !== $claim_fail_job['status'], 'Failed narration does not leave the job stuck in processing' );
 
+
+// Generation record for the narration (#140 follow-up): kind tiktok_narration, linked to the
+// article post, with the TTS calls made during synthesis logged on it (not on a tts_test record).
+require_once $base_dir . '/includes/class-generation-recorder.php';
+require_once $base_dir . '/includes/class-tts-call-recorder.php';
+global $wpdb;
+$wpdb->tables[ PressHub_AI_Generation_Recorder::get_table_name() ] = [];
+PressHub_AI_Generation_Recorder::create_table();
+PressHub_Social_TikTok_Narrator::set_synthesizer( function ( string $text, array $job ) {
+    // Same call the real Gemini path makes for each TTS request.
+    PressHub_AI_TTS_Call_Recorder::log_call( [
+        'engine'      => 'gemini',
+        'model'       => 'gemini-2.5-flash-preview-tts',
+        'voice'       => 'Kore',
+        'text'        => $text,
+        'request'     => [ 'contents' => [ [ 'parts' => [ [ 'text' => $text ] ] ] ] ],
+        'http_status' => 200,
+        'error'       => '',
+        'duration_ms' => 1200,
+        'audio_bytes' => 48000,
+    ] );
+    return [ 'url' => 'https://example.com/uploads/narration-rec.wav', 'id' => 990, 'voice' => 'Kore' ];
+} );
+PressHub_Social_Queue::reset_memory_store();
+$rec_job_id = PressHub_Social_Queue::enqueue( [ 'post_id' => 777, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Νέα ενημέρωση για το TikTok.' ] );
+$rec_job    = PressHub_Social_TikTok_Narrator::attach_narration( PressHub_Social_Queue::get_job( $rec_job_id ) );
+$rec_rows   = array_values( $wpdb->tables[ PressHub_AI_Generation_Recorder::get_table_name() ] ?? [] );
+$rec_kinds  = array_column( $rec_rows, 'kind' );
+assert_true( ! is_wp_error( $rec_job ), 'Narration with recording succeeds' );
+assert_equals( [ 'tiktok_narration' ], $rec_kinds, 'Exactly one tiktok_narration record is created (no standalone tts_test record)' );
+$rec_meta = json_decode( (string) PressHub_Social_Queue::get_job( $rec_job_id )['metadata'], true );
+$rec_id   = (int) ( $rec_meta['tiktok_narration']['generation_record_id'] ?? 0 );
+assert_true( $rec_id > 0, 'Job metadata stores the narration generation_record_id' );
+$rec = PressHub_AI_Generation_Recorder::get( $rec_id );
+assert_equals( 777, (int) ( $rec['post_id'] ?? 0 ), 'Narration record is linked to the article post' );
+assert_true( in_array( $rec_id, (array) get_post_meta( 777, PressHub_AI_Generation_Recorder::POST_META_KEY, true ), true ), 'Narration record is attached to the post for the Generation Inspector' );
+assert_true( str_ends_with( (string) ( $rec['user_prompt'] ?? '' ), PressHub_Social_TikTok_Narrator::DEFAULT_OUTRO ), 'Narration record keeps the spoken text verbatim as its prompt' );
+$rec_calls = $rec['tts_calls'] ?? [];
+assert_equals( 1, count( $rec_calls['entries'] ?? [] ), 'The TTS call is logged on the narration record' );
+assert_equals( 'https://example.com/uploads/narration-rec.wav', $rec['tts']['audio_url'] ?? '', 'Narration record stores the audio URL' );
+assert_equals( 'Kore', $rec['tts']['voices']['narrator'] ?? '', 'Narration record stores the voice used' );
+assert_true( ! PressHub_AI_TTS_Call_Recorder::is_active(), 'The TTS session is closed after narration' );
+
+PressHub_Social_TikTok_Narrator::set_synthesizer( fn( string $text, array $job ) => new WP_Error( 'tts_http_500', 'Gemini TTS HTTP 500' ) );
+PressHub_Social_Queue::reset_memory_store();
+$rec_fail_job = PressHub_Social_Queue::enqueue( [ 'post_id' => 778, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Άλλη ενημέρωση για αποτυχία.' ] );
+PressHub_Social_TikTok_Narrator::attach_narration( PressHub_Social_Queue::get_job( $rec_fail_job ) );
+$rec_fail_rows = array_values( array_filter( $wpdb->tables[ PressHub_AI_Generation_Recorder::get_table_name() ] ?? [], fn( $r ) => 778 === (int) ( $r['post_id'] ?? 0 ) ) );
+assert_equals( 'error', $rec_fail_rows[0]['status'] ?? '', 'A failed narration is recorded with status error' );
+assert_true( str_contains( (string) ( $rec_fail_rows[0]['error_message'] ?? '' ), 'Gemini TTS HTTP 500' ), 'A failed narration record keeps the error message' );
+
 PressHub_Social_TikTok_Narrator::set_synthesizer( null );
 
 // ----------------------------------------------------------------------

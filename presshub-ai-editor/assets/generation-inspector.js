@@ -13,7 +13,7 @@
     var i18n = cfg.i18n || {};
     var TEXT_TABS = { system_prompt: true, user_prompt: true, response_text: true };
     // Record kinds that have a TTS tab (keep in sync with PressHub_AI_Generation_Inspector::TTS_KINDS).
-    var TTS_KINDS = ['podcast_script', 'tts_test'];
+    var TTS_KINDS = ['podcast_script', 'tts_test', 'tiktok_narration'];
 
     function format(template, value) {
         return String(template || '%s').replace('%s', value);
