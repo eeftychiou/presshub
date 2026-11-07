@@ -439,11 +439,16 @@ class PressHub_AI_Memory_Editor {
             ];
         }
 
-        $content = [
-            'stories'   => $stories,
-            'podcast'   => is_array( $existing['podcast'] ?? null ) ? $existing['podcast'] : [ 'opening_line' => '', 'closing_line' => '' ],
-            'narrative' => (string) ( $existing['narrative'] ?? '' ),
-        ];
+        // Start from the stored content so fields this editor does not expose (e.g. a weekly
+        // rollup's missing_dates from #136) survive a save; then overwrite what was edited.
+        $content = array_merge(
+            is_array( $existing ) ? $existing : [],
+            [
+                'stories'   => $stories,
+                'podcast'   => is_array( $existing['podcast'] ?? null ) ? $existing['podcast'] : [ 'opening_line' => '', 'closing_line' => '' ],
+                'narrative' => (string) ( $existing['narrative'] ?? '' ),
+            ]
+        );
         if ( 'weekly' === (string) $entry['scope'] && isset( $_POST['narrative'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification -- verified in guard_ajax().
             $content['narrative'] = (string) wp_unslash( $_POST['narrative'] ); // phpcs:ignore WordPress.Security.NonceVerification,WordPress.Security.ValidatedSanitizedInput -- sanitised by the store.
         }
