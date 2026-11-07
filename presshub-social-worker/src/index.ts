@@ -47,6 +47,14 @@ export function startServer() {
     WorkerLogger.info('Server', 'ℹ️  Pull Mode idle (PRESSHUB_WP_URL or PRESSHUB_WORKER_SECRET not set). Running in Push Mode.');
   }
 
+  // Uncaught exceptions and unhandled rejections handling
+  process.on('uncaughtException', (err) => {
+    WorkerLogger.error('Server', `Uncaught Exception: ${err.message}`, { stack: err.stack });
+  });
+  process.on('unhandledRejection', (reason: any) => {
+    WorkerLogger.error('Server', `Unhandled Rejection: ${reason?.message || reason}`, { stack: reason?.stack });
+  });
+
   // Graceful shutdown handlers
   const shutdown = () => {
     WorkerLogger.info('Server', 'Shutting down gracefully...');
