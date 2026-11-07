@@ -758,4 +758,170 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     expect(res.externalPostId).not.toBe(staleId);
     expect(res.externalPostId).toBe(freshId);
   });
+
+  test('modalSurface anchors to dialog containing the composer when preceded by another dialog', async () => {
+    const copy = 'Modal scoping anchor verification tweet';
+    const tweetId = makeTwitterSnowflakeId(Date.now());
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        cookies: async (urls?: any) => context.cookies(urls),
+        newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', url: 'https://x.com' }]);
+          const page = await context.newPage();
+
+          const composeHtml = `<html>
+            <head>
+              <base href="https://x.com/">
+              <script>document.cookie = "ct0=test_csrf_token_123; path=/";</script>
+            </head>
+            <body>
+              <!-- Preceding dialog without composer (e.g. cookie or onboarding dialog) -->
+              <div role="dialog" class="onboarding-dialog">
+                <h2>Welcome to Twitter</h2>
+                <button id="dismiss-onboarding">Dismiss</button>
+              </div>
+              <!-- Actual composer dialog -->
+              <div role="dialog" class="composer-dialog">
+                <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+                <button id="post-btn" data-testid="tweetButton">Post</button>
+              </div>
+              <script>
+                document.getElementById('post-btn').addEventListener('click', () => {
+                  const toast = document.createElement('div');
+                  toast.setAttribute('data-testid', 'toast');
+                  toast.innerHTML = '<a href="/user/status/${tweetId}">View</a>';
+                  document.body.appendChild(toast);
+                });
+              </script>
+            </body>
+          </html>`;
+
+          page.goto = async (url: string) => {
+            if (url && url.includes(`/status/${tweetId}`)) {
+              await page.setContent(`<html><body><article data-testid="tweet"><a href="/user/status/${tweetId}">time</a><div>${copy}</div></article></body></html>`);
+              return null as any;
+            }
+            await page.setContent(composeHtml);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    const res = await postTwitter({ platform: 'twitter', copy, browserSession: mockSession });
+    expect(res.success).toBe(true);
+    expect(res.externalPostId).toBe(tweetId);
+  });
+
+  test('Twitter posting succeeds with plain article fallback on timeline and post-confirmation when data-testid="tweet" is absent', async () => {
+    const copy = 'Plain article fallback timeline and verification';
+    const freshId = makeTwitterSnowflakeId(Date.now());
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        cookies: async (urls?: any) => context.cookies(urls),
+        newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', url: 'https://x.com' }]);
+          const page = await context.newPage();
+
+          const composeHtml = `<html>
+            <head>
+              <base href="https://x.com/">
+              <script>document.cookie = "ct0=test_csrf_token_123; path=/";</script>
+            </head>
+            <body>
+              <div role="dialog">
+                <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+                <button id="post-btn" data-testid="tweetButton">Post</button>
+              </div>
+            </body>
+          </html>`;
+
+          page.goto = async (url: string) => {
+            if (url && url.includes(`/status/${freshId}`)) {
+              // Post-confirmation with plain article lacking data-testid="tweet", but containing status link
+              await page.setContent(`<html><body><article><div>${copy}</div><a href="/presshubcy/status/${freshId}">Timestamp</a></article></body></html>`);
+              return null as any;
+            }
+            if (url && url.includes('/presshubcy')) {
+              // Timeline with plain article lacking data-testid="tweet"
+              await page.setContent(`<html><head><base href="https://x.com/"><script>document.cookie = "ct0=test_csrf_token_123; path=/";</script></head><body>
+                <article>
+                  <div>${copy}</div>
+                  <a href="/presshubcy/status/${freshId}">Just now</a>
+                </article>
+              </body></html>`);
+              return null as any;
+            }
+            await page.setContent(composeHtml);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    const res = await postTwitter({ platform: 'twitter', copy, browserSession: mockSession });
+    expect(res.success).toBe(true);
+    expect(res.externalPostId).toBe(freshId);
+  });
+
+  test('Twitter post-confirmation fails if plain article lacks a link to status/${tweetId}', async () => {
+    const copy = 'Unrelated article rejection test';
+    const fakeId = makeTwitterSnowflakeId(Date.now());
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        cookies: async (urls?: any) => context.cookies(urls),
+        newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', url: 'https://x.com' }]);
+          const page = await context.newPage();
+
+          const composeHtml = `<html>
+            <head>
+              <base href="https://x.com/">
+              <script>document.cookie = "ct0=test_csrf_token_123; path=/";</script>
+            </head>
+            <body>
+              <div role="dialog">
+                <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+                <button id="post-btn" data-testid="tweetButton">Post</button>
+              </div>
+              <script>
+                document.getElementById('post-btn').addEventListener('click', () => {
+                  const toast = document.createElement('div');
+                  toast.setAttribute('data-testid', 'toast');
+                  toast.innerHTML = '<a href="/user/status/${fakeId}">View</a>';
+                  document.body.appendChild(toast);
+                });
+              </script>
+            </body>
+          </html>`;
+
+          page.goto = async (url: string) => {
+            if (url && url.includes(`/status/${fakeId}`)) {
+              // Plain article with no status link and no data-testid="tweet" (e.g. promotional or unrelated article)
+              await page.setContent(`<html><body><article><div>Generic article content with no status link</div></article></body></html>`);
+              return null as any;
+            }
+            await page.setContent(composeHtml);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    await expect(postTwitter({ platform: 'twitter', copy, browserSession: mockSession })).rejects.toThrow(
+      /Twitter post verification failed/
+    );
+  });
 });

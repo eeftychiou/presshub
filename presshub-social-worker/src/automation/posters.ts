@@ -412,7 +412,9 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     await anyTextarea.waitFor({ state: 'visible', timeout: 15000 });
 
-    const modalSurface = page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first();
+    const modalSurface = page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]')
+      .filter({ has: page.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]') })
+      .first();
     const isModal = (await modalSurface.count()) > 0 && await modalSurface.isVisible().catch(() => false);
     WorkerLogger.debug('Twitter Automation', `Composer mode resolved: isModal=${isModal}`);
 
@@ -424,8 +426,12 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     const tweetCopy = sanitizeTwitterCopy(options.copy);
     WorkerLogger.info('Twitter Automation', `Typing tweet copy (${tweetCopy.length} chars, weighted length: ${getTwitterWeightedLength(tweetCopy)})...`);
-    await textarea.focus().catch(() => {});
-    await textarea.click({ force: true }).catch(() => {});
+    await textarea.focus().catch((err: any) => {
+      WorkerLogger.warn('Twitter Automation', `Failed to focus composer textarea: ${err?.message || err}`);
+    });
+    await textarea.click({ force: true }).catch((err: any) => {
+      WorkerLogger.warn('Twitter Automation', `Failed to force-click composer textarea: ${err?.message || err}`);
+    });
     try {
       await textarea.fill(tweetCopy);
     } catch {
@@ -457,7 +463,9 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     // Tier 1: Keyboard-First Submission (ControlOrMeta+Enter)
     WorkerLogger.info('Twitter Automation', 'Tier 1: Attempting keyboard shortcut submission (ControlOrMeta+Enter)...');
-    await textarea.focus().catch(() => {});
+    await textarea.focus().catch((err: any) => {
+      WorkerLogger.warn('Twitter Automation', `Failed to focus composer textarea: ${err?.message || err}`);
+    });
     await page.keyboard.press('ControlOrMeta+Enter').catch(() => {});
 
     // Wait up to 3500ms for interceptedTweetId, modalSurface detach, or toast visibility
@@ -839,8 +847,18 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     await page.goto(tweetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForTimeout(3000);
 
-    const tweetArticle = page.locator('article[data-testid="tweet"], article').first();
-    const isArticleVisible = await tweetArticle.isVisible().catch(() => false);
+    const tweetSpecificArticle = page.locator('article[data-testid="tweet"]').first();
+    const isSpecificVisible = (await tweetSpecificArticle.count()) > 0 && (await tweetSpecificArticle.isVisible().catch(() => false));
+
+    // When falling back to a plain <article> (when data-testid="tweet" is absent), ensure the article anchors to this status URL
+    const plainArticleWithLink = page.locator('article').filter({
+      has: page.locator(`a[href*="/status/${tweetId}"]`)
+    }).first();
+    const isPlainWithLinkVisible = (await plainArticleWithLink.count()) > 0 && (await plainArticleWithLink.isVisible().catch(() => false));
+
+
+    const isArticleVisible = isSpecificVisible || isPlainWithLinkVisible;
+
     const pageBodyText = (await page.innerText('body').catch(() => '')) || '';
     const isErrorPage = /doesn’t exist|does not exist|unavailable|Something went wrong/i.test(pageBodyText);
 
