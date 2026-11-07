@@ -7,7 +7,7 @@ Welcome to the **PressHub** repository. This document outlines the standard oper
 ## 🏗️ Repository Architecture
 
 - **`presshub-ai-editor/`**: The unified WordPress plugin source code (incorporating both PressHub AI Co-Pilot newsroom/editorial suite and the Social Auto-Post multi-platform queue/dispatcher subsystem).
-  - `includes/`: PHP classes (API client, token logger, structured logger, audit logger, rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings, plus unified social subsystem: `PressHub_Social_Queue`, `PressHub_Social_Dispatcher`, `PressHub_Social_REST_Controller`, `PressHub_Social_Meta_API_Client`, `PressHub_Social_Worker_Client`, `PressHub_Social_AI_Copywriter`, `PressHub_Social_Settings_Storage`, `PressHub_Social_Metabox`, `PressHub_Social_Queue_Admin`, `PressHub_Social_Ajax_Handlers`, `PressHub_Social_Settings`).
+  - `includes/`: PHP classes (API client, token logger, structured logger, audit logger, generation recorder (`PressHub_AI_Generation_Recorder`), rate limiter, admin presets, metaboxes, podcast producer, news curator/harvester, settings, plus unified social subsystem: `PressHub_Social_Queue`, `PressHub_Social_Dispatcher`, `PressHub_Social_REST_Controller`, `PressHub_Social_Meta_API_Client`, `PressHub_Social_Worker_Client`, `PressHub_Social_AI_Copywriter`, `PressHub_Social_Settings_Storage`, `PressHub_Social_Metabox`, `PressHub_Social_Queue_Admin`, `PressHub_Social_Ajax_Handlers`, `PressHub_Social_Settings`).
   - `assets/`: Frontend/Admin JavaScript, CSS, and prompt templates (`assets/prompts/*.txt`, including `social_*.txt`).
   - `tests/`: Isolated PHP unit test suite (83 test files covering 233+ unit tests via `run-all-tests.php` + 19 social test suites covering 171 assertions via `run-social-tests.php`).
 - **`presshub-social-autopost/`**: Legacy standalone plugin shim maintained for backward compatibility (gracefully yields to `presshub-ai-editor` v2.7.2+ to prevent duplicate hooks or class conflicts).
@@ -363,6 +363,11 @@ If a PR introduces a new operational knob without the full six-step registration
    - API client methods must **never** execute silent multi-model fallback retry loops that mask provider errors or run unconfigured models. Surface the exact error from the configured provider/model immediately.
 4. **End-to-End Resolution Provenance**:
    - Every API invocation must track and log `provider_source` and `model_source` across structured logs (`[API Client Resolution]`), pre-dispatch summaries, prompt debug headers, and token log metadata (`wp_presshub_ai_token_logs.metadata`).
+   - Prompt debug headers must use the client instance's `get_request_meta()`. Never use the static `PressHub_AI_API_Client::current_request_meta()` for a call made by an instance, because it reports the first enabled provider, not the one that made the call.
+5. **Generation Records for Editorial Transparency**:
+   - Every briefing-pipeline LLM generation (briefing text, podcast script, and later memory digests and rollups) must store a record through `PressHub_AI_Generation_Recorder::record()` at the call site, on success **and** on error: verbatim prompts and response, `build_client_config()` for the real provider and model, the per-article sent/dropped inputs, memory used, and usage. Link it to the resulting post with `attach_to_post()`. Never rebuild prompts after the fact to fill a record.
+   - Recording must never break generation: a failed insert logs an `ERROR` with the `trace_id` and generation continues.
+   - Inspect records in dev-env: `php dev-env/scripts/query-db.php "SELECT id, kind, status, post_id, length(user_prompt) FROM wp_presshub_ai_generation_records ORDER BY id DESC LIMIT 5"`.
 
 #### Anti-Pattern vs. Required Pattern
 

@@ -1182,6 +1182,34 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
             return 1;
         }
 
+        /**
+         * Minimal wpdb::update() mock: AND-equality where clause, null values stored as null.
+         * Returns the number of rows changed (rows matching the where), or false on bad input.
+         */
+        public function update( $table, $data, $where, $format = null, $where_format = null ) {
+            $this->queries[] = [ 'update', $table, $data, $where ];
+            if ( empty( $data ) || empty( $where ) ) {
+                return false;
+            }
+            $count = 0;
+            foreach ( $this->tables[ $table ] ?? [] as $i => $row ) {
+                $match = true;
+                foreach ( $where as $col => $val ) {
+                    if ( (string) ( $row[ $col ] ?? '' ) !== (string) $val ) {
+                        $match = false;
+                        break;
+                    }
+                }
+                if ( $match ) {
+                    foreach ( $data as $col => $val ) {
+                        $this->tables[ $table ][ $i ][ $col ] = $val;
+                    }
+                    $count++;
+                }
+            }
+            return $count;
+        }
+
         public function query( $sql ) {
             $this->queries[] = $sql;
             if ( preg_match( '/CREATE TABLE (?:IF NOT EXISTS )?`?([a-zA-Z0-9_]+)`?/i', $sql, $m ) ) {
@@ -1283,6 +1311,9 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
             }
 
             return array_values( array_filter( $rows, function( $row ) use ( $where ) {
+                if ( preg_match( '/(?<![A-Za-z0-9_])id = (\d+)/', $where, $m ) ) {
+                    if ( (int) ( $row['id'] ?? 0 ) !== (int) $m[1] ) return false;
+                }
                 if ( preg_match( "/action_trigger = '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['action_trigger'] ?? '' ) !== $m[1] ) return false;
                 }

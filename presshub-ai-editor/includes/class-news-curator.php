@@ -96,6 +96,36 @@ class PressHub_AI_News_Curator {
     private static $last_capped_tokens_estimate = 0;
 
     /**
+     * @internal Issue #131 - per-article breakdown of the articles rendered by
+     * the most recent format_articles_context() call.
+     *
+     * @var array<int,array<string,mixed>>
+     */
+    private static $last_breakdown_sent = [];
+
+    /**
+     * @internal Issue #131 - articles dropped by the max_articles slice in the
+     * most recent format_articles_context() call (reason 'cap_articles').
+     *
+     * @var array<int,array<string,mixed>>
+     */
+    private static $last_breakdown_dropped_cap = [];
+
+    /**
+     * @internal Issue #131 - articles dropped by the selected_article_ids
+     * filter in the most recent build_prompt() call (reason 'not_selected').
+     *
+     * @var array<int,array<string,mixed>>
+     */
+    private static $last_breakdown_not_selected = [];
+
+    /**
+     * @internal Issue #131 - where the articles context went in the most recent
+     * build_prompt() call: 'system' or 'user' ('' before any build).
+     */
+    private static $last_articles_placement = '';
+
+    /**
      * Get the base curation prompt with template placeholders.
      *
      * @return string Base system prompt with placeholders.
@@ -131,6 +161,9 @@ class PressHub_AI_News_Curator {
      * @return string Formatted context string.
      */
     public function format_articles_context( array $articles ): string {
+        self::$last_breakdown_sent        = [];
+        self::$last_breakdown_dropped_cap = [];
+
         if ( empty( $articles ) ) {
             return __( 'Δεν υπάρχουν διαθέσιμα άρθρα.', 'presshub-ai-editor' );
         }
@@ -154,10 +187,17 @@ class PressHub_AI_News_Curator {
         $truncated      = false;
         $truncation_suffix = __( '…[περικομμένο]', 'presshub-ai-editor' );
         if ( $original_count > $max_articles ) {
+            // Issue #131 - record what the cap drops (no effect on rendering).
+            foreach ( array_slice( $articles, $max_articles, null, true ) as $drop_idx => $dropped ) {
+                $entry           = self::breakdown_identity( $dropped, (int) $drop_idx );
+                $entry['reason'] = 'cap_articles';
+                self::$last_breakdown_dropped_cap[] = $entry;
+            }
             $articles  = array_slice( $articles, 0, $max_articles );
             $truncated = true;
         }
 
+        $breakdown_sent = [];
         $blocks = [];
         foreach ( $articles as $index => $article ) {
             $num     = $index + 1;
@@ -165,6 +205,15 @@ class PressHub_AI_News_Curator {
             $source  = ! empty( $article['source'] ) ? trim( (string) $article['source'] ) : __( 'Άγνωστη πηγή', 'presshub-ai-editor' );
             $url     = ! empty( $article['url'] ) ? trim( (string) $article['url'] ) : '';
             $content = ! empty( $article['content'] ) ? trim( (string) $article['content'] ) : '';
+
+            // Issue #131 - per-article breakdown (observational only).
+            $chars_original = function_exists( 'mb_strlen' ) ? (int) mb_strlen( $content ) : (int) strlen( $content );
+            $art_truncated  = $chars_original > $max_chars;
+            $entry          = self::breakdown_identity( $article, (int) $index );
+            $entry['chars_sent']     = $art_truncated ? (int) $max_chars : $chars_original;
+            $entry['chars_original'] = $chars_original;
+            $entry['truncated']      = $art_truncated;
+            $breakdown_sent[]        = $entry;
 
             $block = "### {$num}. {$title}\n";
             $block .= "**Πηγή:** {$source}";
@@ -191,6 +240,7 @@ class PressHub_AI_News_Curator {
 
         $rendered = implode( "\n\n---\n\n", $blocks );
 
+        self::$last_breakdown_sent          = $breakdown_sent;
         self::$last_context_truncated       = $truncated;
         self::$last_original_articles_count = $original_count;
         self::$last_kept_articles_count     = count( $articles );
@@ -216,6 +266,59 @@ class PressHub_AI_News_Curator {
         }
 
         return $rendered;
+    }
+
+    /**
+     * Issue #131 - stable identity fields for the per-article breakdown.
+     *
+     * id = article['id'] when set, else sha1(url) when a url is set, else 'idx:N'.
+     *
+     * @param array $article Article item.
+     * @param int   $index   Position in the array being iterated.
+     * @return array{id:string,title:string,source:string,url:string}
+     */
+    private static function breakdown_identity( $article, int $index ): array {
+        $article = is_array( $article ) ? $article : [];
+        $url     = ! empty( $article['url'] ) ? trim( (string) $article['url'] ) : '';
+        if ( isset( $article['id'] ) && '' !== (string) $article['id'] ) {
+            $id = (string) $article['id'];
+        } elseif ( '' !== $url ) {
+            $id = sha1( $url );
+        } else {
+            $id = 'idx:' . $index;
+        }
+        return [
+            'id'     => $id,
+            'title'  => ! empty( $article['title'] ) ? trim( (string) $article['title'] ) : '',
+            'source' => ! empty( $article['source'] ) ? trim( (string) $article['source'] ) : '',
+            'url'    => $url,
+        ];
+    }
+
+    /**
+     * Issue #131 - per-article breakdown of the most recent build_prompt() /
+     * format_articles_context() run.
+     *
+     * 'sent'    - articles rendered into the context (id, title, source, url,
+     *             chars_sent, chars_original, truncated).
+     * 'dropped' - articles left out, each with a 'reason' of 'not_selected'
+     *             (selected_article_ids filter) or 'cap_articles' (max_articles).
+     *
+     * @return array{sent:array,dropped:array}
+     */
+    public function last_articles_breakdown(): array {
+        return [
+            'sent'    => array_values( self::$last_breakdown_sent ),
+            'dropped' => array_values( array_merge( self::$last_breakdown_not_selected, self::$last_breakdown_dropped_cap ) ),
+        ];
+    }
+
+    /**
+     * Issue #131 - 'system' or 'user': which prompt carried the articles context
+     * in the most recent build_prompt() call.
+     */
+    public function last_articles_placement(): string {
+        return (string) self::$last_articles_placement;
     }
 
     /**
@@ -412,6 +515,12 @@ class PressHub_AI_News_Curator {
             $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
 
+        // Issue #131 - start each build with clean breakdown stashes.
+        self::$last_breakdown_sent         = [];
+        self::$last_breakdown_dropped_cap  = [];
+        self::$last_breakdown_not_selected = [];
+        self::$last_articles_placement     = '';
+
         // Filter articles if selected_article_ids is provided and non-empty
         if ( ! empty( $selected_article_ids ) && is_array( $selected_article_ids ) ) {
             $filtered = [];
@@ -439,6 +548,10 @@ class PressHub_AI_News_Curator {
 
                 if ( $matched ) {
                     $filtered[] = $article;
+                } else {
+                    $entry           = self::breakdown_identity( $article, (int) $idx );
+                    $entry['reason'] = 'not_selected';
+                    self::$last_breakdown_not_selected[] = $entry;
                 }
             }
             $articles = array_values( $filtered );
@@ -475,6 +588,7 @@ class PressHub_AI_News_Curator {
         // articles (e.g. from an operator custom template that used {articles_context}),
         // do not duplicate the article text in the user prompt.
         $has_context_in_system = ( false !== strpos( $base_prompt, '{articles_context}' ) );
+        self::$last_articles_placement = $has_context_in_system ? 'system' : 'user';
 
         $morning_briefing_block = '';
         if ( 'noon' === $edition ) {
@@ -1058,9 +1172,49 @@ class PressHub_AI_News_Curator {
             );
         }
 
+        // Issue #131 - reset usage capture so the record reflects only this call.
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'reset_last_llm_request' ) ) {
+            PressHub_AI_Token_Logger::reset_last_llm_request();
+        }
+        $gen_t0 = microtime( true );
         $api_client->suppress_provider_prompt_log = true;
         $response = $api_client->call_provider( $prompts['system_prompt'], $prompts['user_prompt'], false, [], null, $curation_metadata );
         $api_client->suppress_provider_prompt_log = false;
+        $gen_duration_ms = (int) round( ( microtime( true ) - $gen_t0 ) * 1000 );
+
+        // Issue #131 - persist the complete generation record (success and error).
+        $record_id = 0;
+        if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            $gen_usage = ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'get_last_llm_request' ) )
+                ? ( PressHub_AI_Token_Logger::get_last_llm_request() ?? [] )
+                : [];
+            $record_id = (int) PressHub_AI_Generation_Recorder::record( [
+                'kind'          => 'briefing_text',
+                'briefing_date' => $date,
+                'edition'       => $edition,
+                'status'        => is_wp_error( $response ) ? 'error' : 'success',
+                'error_message' => is_wp_error( $response ) ? $response->get_error_message() : '',
+                'config'        => PressHub_AI_Generation_Recorder::build_client_config(
+                    $api_client,
+                    [
+                        'preset_id'          => $preset_id,
+                        'edition'            => $edition,
+                        'articles_placement' => $this->last_articles_placement(),
+                    ]
+                ),
+                'inputs'        => [
+                    'articles'             => $this->last_articles_breakdown(),
+                    'totals'               => $curation_metadata,
+                    'token_estimate'       => $this->last_capped_tokens_estimate(),
+                    'selected_article_ids' => $selected_article_ids,
+                ],
+                'system_prompt' => $prompts['system_prompt'],
+                'user_prompt'   => $prompts['user_prompt'],
+                'response_text' => is_wp_error( $response ) ? '' : (string) $response,
+                'usage'         => $gen_usage,
+                'duration_ms'   => $gen_duration_ms,
+            ] );
+        }
 
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
             $req_meta = method_exists( $api_client, 'get_request_meta' )
@@ -1129,6 +1283,11 @@ class PressHub_AI_News_Curator {
             PressHub_AI_Logger::info( sprintf( 'Created daily briefing text post #%d for %s ("%s")', $post_id, $date, $headline ) );
         }
 
+        // Issue #131 - link the generation record to the created post.
+        if ( $record_id > 0 && class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            PressHub_AI_Generation_Recorder::attach_to_post( (int) $post_id, $record_id );
+        }
+
         // Issue #61 — the pool/cap totals were computed before the provider
         // call (see above) so they could ride on the briefing_curation
         // token-log row; the same values are mirrored in the payload below
@@ -1150,6 +1309,8 @@ class PressHub_AI_News_Curator {
             'capped_tokens_estimate'   => (int) $this->last_capped_tokens_estimate(),
             'cap_articles'             => (int) $cap_articles,
             'cap_chars_per_article'    => (int) $cap_chars_per_article,
+            // Issue #131 - persisted generation record (0 when not recorded).
+            'generation_record_id'     => (int) $record_id,
         ];
     }
 

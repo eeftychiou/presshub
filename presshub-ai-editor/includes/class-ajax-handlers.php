@@ -1646,6 +1646,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_rate_limit_window_seconds'   => [ 'PressHub_AI_Settings_Storage', 'sanitize_rate_limit_window_seconds' ],
                 'presshub_ai_research_retention_days'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_research_retention_days' ],
                 'presshub_ai_log_level'                   => [ 'PressHub_AI_Settings_Storage', 'sanitize_log_level' ],
+                'presshub_ai_generation_record_retention_days' => [ 'PressHub_AI_Settings_Storage', 'sanitize_generation_record_retention_days' ],
                 'presshub_ai_briefing_tts_api_key'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_api_key' ],
                 'presshub_ai_remove_briefing_tts_api_key' => [ 'PressHub_AI_Settings_Storage', 'sanitize_remove_briefing_tts_api_key' ],
                 'presshub_ai_briefing_sources'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_sources' ],
