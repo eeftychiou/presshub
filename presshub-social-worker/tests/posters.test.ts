@@ -522,6 +522,94 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     expect(res.externalPostUrl).toBe('https://x.com/presshubcy/status/887766554433');
   });
 
+  test('postTwitter does not press Escape and successfully submits via Tier 1 keyboard shortcut in modal dialog', async () => {
+    clearSessionInvalid('twitter');
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
+          const page = await context.newPage();
+          await page.route('**/i/api/graphql/*/CreateTweet', async (route) => {
+            await route.fulfill({
+              status: 200,
+              contentType: 'application/json',
+              body: JSON.stringify({
+                data: {
+                  create_tweet: {
+                    tweet_results: {
+                      result: {
+                        rest_id: '556677889900'
+                      }
+                    }
+                  }
+                }
+              })
+            });
+          });
+
+          const composeHtml = `<html>
+            <head>
+              <base href="https://x.com/">
+            </head>
+            <body>
+            <div data-slot="xds-modal-surface" role="dialog">
+              <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+              <button id="post-btn" data-slot="xds-button">Post</button>
+            </div>
+            <script>
+              window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                  // Simulate X opening "Save post?" modal and destroying composer focus
+                  const discardModal = document.createElement('div');
+                  discardModal.setAttribute('role', 'alertdialog');
+                  discardModal.textContent = 'Save post? Discard / Save';
+                  document.body.appendChild(discardModal);
+                  const area = document.querySelector('[data-testid="tweetTextarea_0"]');
+                  if (area) area.blur();
+                }
+              });
+              const area = document.querySelector('[data-testid="tweetTextarea_0"]');
+              area.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  fetch('https://x.com/i/api/graphql/VaenaVgh5q5ih7kvyVjgtg/CreateTweet', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({})
+                  });
+                  const d = document.querySelector('[data-slot="xds-modal-surface"]');
+                  if (d) d.remove();
+                }
+              });
+            </script>
+          </body></html>`;
+
+          page.goto = async (url: string) => {
+            if (url && url.includes('/status/556677889900')) {
+              await page.setContent('<html><body><article data-testid="tweet"><div>Escape prevention verified</div></article></body></html>');
+              return null as any;
+            }
+            await page.setContent(composeHtml);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    const res = await postTwitter({
+      platform: 'twitter',
+      copy: 'Escape prevention and Tier 1 test tweet',
+      browserSession: mockSession
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.externalPostId).toBe('556677889900');
+    expect(res.externalPostUrl).toBe('https://x.com/presshubcy/status/556677889900');
+  });
+
   test('postTwitter executes Tier 4 direct in-page CreateTweet GraphQL fallback when Tiers 1-3 do not fire network request', async () => {
     clearSessionInvalid('twitter');
     const mockSession: ChromeConnection = {

@@ -376,18 +376,18 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     await dismissTwitterCookies();
 
     WorkerLogger.debug('Twitter Automation', 'Finding tweet text area...');
-    const modalSurface = page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first();
-    const isModal = (await modalSurface.count()) > 0 && await modalSurface.isVisible().catch(() => false);
-
-    const textarea = isModal
-      ? modalSurface.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]')
-          .or(modalSurface.getByRole('textbox', { name: /what.*happening|post text/i }))
-          .first()
-      : page.locator('div[data-slot="xds-modal-surface"] textarea, div[role="dialog"] textarea, textarea[placeholder*="happening"], textarea[aria-label*="happening"], [data-testid="tweetTextarea_0"], div[role="dialog"] [data-testid="tweetTextarea_0"]')
-          .or(page.getByRole('textbox', { name: /what.*happening|post text/i }))
-          .first();
+    const textarea = page.locator(
+      'div[data-slot="xds-modal-surface"] textarea, div[role="dialog"] textarea, ' +
+      'div[data-slot="xds-modal-surface"] [contenteditable="true"], div[role="dialog"] [contenteditable="true"], ' +
+      'div[data-slot="xds-modal-surface"] [data-testid="tweetTextarea_0"], div[role="dialog"] [data-testid="tweetTextarea_0"], ' +
+      'textarea[placeholder*="happening"], textarea[aria-label*="happening"], [data-testid="tweetTextarea_0"]'
+    ).or(page.getByRole('textbox', { name: /what.*happening|post text/i })).first();
 
     await textarea.waitFor({ state: 'visible', timeout: 15000 });
+
+    const modalSurface = page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first();
+    const isModal = (await modalSurface.count()) > 0 && await modalSurface.isVisible().catch(() => false);
+    WorkerLogger.debug('Twitter Automation', `Composer mode resolved: isModal=${isModal}`);
 
     const tweetCopy = sanitizeTwitterCopy(options.copy);
     WorkerLogger.info('Twitter Automation', `Typing tweet copy (${tweetCopy.length} chars, weighted length: ${getTwitterWeightedLength(tweetCopy)})...`);
@@ -398,10 +398,10 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       await page.keyboard.type(tweetCopy, { delay: 10 });
     }
 
-    // Dismiss any hashtag or mention auto-suggest popups that intercept clicks
-    await page.waitForTimeout(300);
-    await page.keyboard.press('Escape').catch(() => {});
-    await page.waitForTimeout(300);
+    // Allow React Virtual DOM to settle after typing.
+    // NOTE: Never press Escape here or anywhere in postTwitter() as Escape triggers
+    // X's "Save post? / Discard" modal which traps and aborts composer submission!
+    await page.waitForTimeout(500);
 
     // If media attached, upload via file input
     if (options.mediaPath && fs.existsSync(options.mediaPath)) {
@@ -455,11 +455,11 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       const postButton = isModal
         ? modalSurface.getByRole('button', { name: /^Post$/i, exact: true })
             .or(modalSurface.locator('button[data-slot="xds-button"]:has-text("Post"), [data-testid="tweetButton"]').filter({ hasNotText: 'New Post' }))
-            .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"]') })
+            .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"], [data-testid="SideNav_NewTweet_Button"]') })
             .first()
-        : page.locator('div[data-slot="xds-modal-surface"] button[data-slot="xds-button"]:has-text("Post"), div[role="dialog"] [data-testid="tweetButton"], button.x-button:has-text("Post"), [data-testid="tweetButton"]')
-            .filter({ hasNotText: 'New Post' })
-            .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"]') })
+        : page.getByRole('button', { name: /^Post$/i, exact: true })
+            .or(page.locator('div[data-slot="xds-modal-surface"] button[data-slot="xds-button"]:has-text("Post"), div[role="dialog"] [data-testid="tweetButton"], button.x-button:has-text("Post"), [data-testid="tweetButton"]').filter({ hasNotText: 'New Post' }))
+            .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"], [data-testid="SideNav_NewTweet_Button"]') })
             .first();
 
       await postButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
@@ -478,7 +478,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       }
 
       await dismissTwitterCookies();
-      await page.keyboard.press('Escape').catch(() => {});
+      // NOTE: Do not press Escape here as it triggers X's "Save post? / Discard" modal!
 
       // Check button actionability before clicking
       const finalAriaDisabled = await postButton.getAttribute('aria-disabled').catch(() => null);
@@ -532,8 +532,7 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
     // Wait for the modal dialog to disappear, toast to appear, or interceptedTweetId to be captured
     if (!interceptedTweetId) {
-      await Promise.race([
-        page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first().waitFor({ state: 'detached', timeout: 15000 }),
+      const waitPromises: Promise<any>[] = [
         page.locator('[data-testid="toast"], [data-slot="xds-toast"]').first().waitFor({ state: 'visible', timeout: 15000 }),
         new Promise<void>((resolve) => {
           const pollStart = Date.now();
@@ -544,7 +543,14 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
             }
           }, 200);
         })
-      ]).catch(() => {});
+      ];
+
+      // Only wait for modal detachment if we actually confirmed a modal was active and attached
+      if (isModal && (await modalSurface.count().catch(() => 0)) > 0) {
+        waitPromises.push(modalSurface.waitFor({ state: 'detached', timeout: 15000 }));
+      }
+
+      await Promise.race(waitPromises).catch(() => {});
     }
 
     await page.waitForTimeout(1500);
