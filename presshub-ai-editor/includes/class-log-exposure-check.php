@@ -65,16 +65,16 @@ class PressHub_AI_Log_Exposure_Check {
      */
     private static function run_check(): array {
         if ( ! class_exists( 'PressHub_AI_Log_Paths' ) ) {
-            return [ 'unverified', 'Log path helper is not available.' ];
+            return [ 'unverified', __( 'Log path helper is not available.', 'presshub-ai-editor' ) ];
         }
 
         $dir = PressHub_AI_Log_Paths::get_dir();
         if ( is_wp_error( $dir ) ) {
-            return [ 'unverified', 'The log folder is not usable. Check the PRESSHUB_AI_LOG_DIR constant in wp-config.php: ' . $dir->get_error_message() ];
+            return [ 'unverified', sprintf( /* translators: %s: error message */ __( 'The log folder is not usable. Check the PRESSHUB_AI_LOG_DIR constant in wp-config.php: %s', 'presshub-ai-editor' ), $dir->get_error_message() ) ];
         }
 
         if ( ! PressHub_AI_Log_Paths::is_web_accessible_dir( $dir ) ) {
-            return [ 'not_applicable', 'The log folder is outside the web root.' ];
+            return [ 'not_applicable', __( 'The log folder is outside the web root.', 'presshub-ai-editor' ) ];
         }
 
         $random = bin2hex( random_bytes( 16 ) );
@@ -82,12 +82,12 @@ class PressHub_AI_Log_Exposure_Check {
         $url    = PressHub_AI_Log_Paths::get_url_for( $canary );
 
         if ( '' === $url ) {
-            return [ 'unverified', 'No public URL could be derived for the log folder.' ];
+            return [ 'unverified', __( 'No public URL could be derived for the log folder.', 'presshub-ai-editor' ) ];
         }
 
         try {
             if ( false === @file_put_contents( $canary, 'presshub-canary-' . $random ) ) {
-                return [ 'unverified', 'Could not write the canary file into the log folder.' ];
+                return [ 'unverified', __( 'Could not write the canary file into the log folder.', 'presshub-ai-editor' ) ];
             }
 
             $response = wp_remote_get( $url, [
@@ -97,19 +97,19 @@ class PressHub_AI_Log_Exposure_Check {
             ] );
 
             if ( is_wp_error( $response ) ) {
-                return [ 'unverified', 'The loopback request failed: ' . $response->get_error_message() ];
+                return [ 'unverified', sprintf( /* translators: %s: error message */ __( 'The loopback request failed: %s', 'presshub-ai-editor' ), $response->get_error_message() ) ];
             }
 
             $code = (int) wp_remote_retrieve_response_code( $response );
             $body = (string) wp_remote_retrieve_body( $response );
 
             if ( false !== strpos( $body, $random ) ) {
-                return [ 'exposed', 'The canary file was downloaded over HTTP (status ' . $code . ').' ];
+                return [ 'exposed', sprintf( /* translators: %d: HTTP status code */ __( 'The canary file was downloaded over HTTP (status %d).', 'presshub-ai-editor' ), $code ) ];
             }
             if ( in_array( $code, [ 401, 403, 404 ], true ) ) {
-                return [ 'protected', 'The canary file request was refused with HTTP ' . $code . '.' ];
+                return [ 'protected', sprintf( /* translators: %d: HTTP status code */ __( 'The canary file request was refused with HTTP %d.', 'presshub-ai-editor' ), $code ) ];
             }
-            return [ 'unverified', 'Unexpected HTTP status ' . $code . ' for the canary file.' ];
+            return [ 'unverified', sprintf( /* translators: %d: HTTP status code */ __( 'Unexpected HTTP status %d for the canary file.', 'presshub-ai-editor' ), $code ) ];
         } finally {
             if ( file_exists( $canary ) ) {
                 @unlink( $canary );
@@ -156,7 +156,7 @@ class PressHub_AI_Log_Exposure_Check {
             echo '<p class="description">' . esc_html( $detail ) . '</p>';
         }
         if ( ! empty( $status['checked_at'] ) ) {
-            echo '<p class="description">' . esc_html( sprintf( 'Last checked: %s', $status['checked_at'] ) ) . '</p>';
+            echo '<p class="description">' . esc_html( sprintf( /* translators: %s: date and time of the last exposure check */ __( 'Last checked: %s', 'presshub-ai-editor' ), $status['checked_at'] ) ) . '</p>';
         }
 
         echo '<p><button type="button" class="button" id="presshub-log-exposure-recheck"'
