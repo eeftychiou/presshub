@@ -79,10 +79,14 @@ class PressHub_Social_AI_Copywriter {
         }
 
         if ( empty( $platforms ) ) {
-            $platforms = PressHub_Social_Settings_Storage::get_enabled_platforms();
+            $platforms = method_exists( 'PressHub_Social_Settings_Storage', 'get_ready_platforms' )
+                ? PressHub_Social_Settings_Storage::get_ready_platforms()
+                : ( method_exists( 'PressHub_Social_Settings_Storage', 'get_enabled_platforms' )
+                    ? PressHub_Social_Settings_Storage::get_enabled_platforms()
+                    : [] );
         }
         if ( empty( $platforms ) ) {
-            $platforms = PressHub_Social_Settings_Storage::PLATFORMS;
+            return [];
         }
 
         $results = [];

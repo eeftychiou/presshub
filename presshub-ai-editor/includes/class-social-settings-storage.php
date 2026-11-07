@@ -71,6 +71,16 @@ class PressHub_Social_Settings_Storage {
             'default'           => self::PLATFORMS,
         ] );
 
+        foreach ( self::PLATFORMS as $platform ) {
+            register_setting( self::OPTION_GROUP, 'presshub_social_enabled_' . $platform, [
+                'type'              => 'boolean',
+                'sanitize_callback' => function( $val ) use ( $platform ) {
+                    return self::sanitize_platform_enabled( $val, $platform );
+                },
+                'default'           => true,
+            ] );
+        }
+
         register_setting( self::OPTION_GROUP, 'presshub_social_copy_mode', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_copy_mode' ],
@@ -436,6 +446,9 @@ class PressHub_Social_Settings_Storage {
         if ( ! is_array( $enabled_platforms ) || empty( $enabled_platforms ) ) {
             update_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
         }
+        foreach ( self::PLATFORMS as $platform ) {
+            delete_option( 'presshub_social_enabled_' . $platform );
+        }
 
         // Restore any empty prompts or templates from external asset files.
         $sys_prompt = get_option( 'presshub_social_prompt_system', '' );
@@ -503,15 +516,85 @@ class PressHub_Social_Settings_Storage {
 
     public static function get_enabled_platforms(): array {
         $platforms = get_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
-        if ( ! is_array( $platforms ) ) {
-            return self::PLATFORMS;
+        $valid     = array_values( array_intersect( is_array( $platforms ) ? $platforms : self::PLATFORMS, self::PLATFORMS ) );
+
+        foreach ( self::PLATFORMS as $p ) {
+            $per = get_option( 'presshub_social_enabled_' . $p, null );
+            if ( null !== $per ) {
+                $is_on = in_array( $per, [ 1, '1', true, 'on', 'yes', 'true' ], true );
+                if ( $is_on && ! in_array( $p, $valid, true ) ) {
+                    $valid[] = $p;
+                } elseif ( ! $is_on && in_array( $p, $valid, true ) ) {
+                    $valid = array_values( array_diff( $valid, [ $p ] ) );
+                }
+            }
         }
-        $valid = array_intersect( $platforms, self::PLATFORMS );
-        return array_values( $valid );
+
+        return array_values( array_intersect( self::PLATFORMS, $valid ) );
     }
 
     public static function is_platform_enabled( string $platform ): bool {
+        $platform = sanitize_key( $platform );
+        if ( ! in_array( $platform, self::PLATFORMS, true ) ) {
+            return false;
+        }
+        $per = get_option( 'presshub_social_enabled_' . $platform, null );
+        if ( null !== $per ) {
+            return in_array( $per, [ 1, '1', true, 'on', 'yes', 'true' ], true );
+        }
         return in_array( $platform, self::get_enabled_platforms(), true );
+    }
+
+    public static function set_platform_enabled( string $platform, bool $enabled ): void {
+        $platform = sanitize_key( $platform );
+        if ( ! in_array( $platform, self::PLATFORMS, true ) ) {
+            return;
+        }
+        update_option( 'presshub_social_enabled_' . $platform, $enabled );
+
+        $current = get_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
+        $valid   = array_values( array_intersect( is_array( $current ) ? $current : self::PLATFORMS, self::PLATFORMS ) );
+        if ( $enabled && ! in_array( $platform, $valid, true ) ) {
+            $valid[] = $platform;
+        } elseif ( ! $enabled && in_array( $platform, $valid, true ) ) {
+            $valid = array_values( array_diff( $valid, [ $platform ] ) );
+        }
+        update_option( 'presshub_social_enabled_platforms', array_values( array_intersect( self::PLATFORMS, $valid ) ) );
+    }
+
+    public static function sanitize_platform_enabled( $value, string $platform ): bool {
+        $platform = sanitize_key( $platform );
+        if ( ! in_array( $platform, self::PLATFORMS, true ) ) {
+            return false;
+        }
+
+        if ( null === $value ) {
+            if ( ! empty( $_POST[ 'presshub_social_enabled_' . $platform . '_present' ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+                $enabled = false;
+            } elseif ( ! empty( $_POST['presshub_social_enabled_platforms_present'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+                $platforms = (array) ( $_POST['presshub_social_enabled_platforms'] ?? [] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+                $enabled   = in_array( $platform, $platforms, true );
+            } elseif ( ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+                return self::is_platform_enabled( $platform );
+            } else {
+                $enabled = false;
+            }
+        } else {
+            $enabled = in_array( $value, [ 1, '1', true, 'on', 'yes', 'true' ], true );
+        }
+
+        if ( empty( $_POST['presshub_social_enabled_platforms_present'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            $current = get_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
+            $valid   = array_values( array_intersect( is_array( $current ) ? $current : self::PLATFORMS, self::PLATFORMS ) );
+            if ( $enabled && ! in_array( $platform, $valid, true ) ) {
+                $valid[] = $platform;
+            } elseif ( ! $enabled && in_array( $platform, $valid, true ) ) {
+                $valid = array_values( array_diff( $valid, [ $platform ] ) );
+            }
+            update_option( 'presshub_social_enabled_platforms', array_values( array_intersect( self::PLATFORMS, $valid ) ) );
+        }
+
+        return $enabled;
     }
 
     public static function sanitize_enabled_platforms( $value ): array {
@@ -519,16 +602,122 @@ class PressHub_Social_Settings_Storage {
             return self::get_enabled_platforms();
         }
         if ( ! is_array( $value ) ) {
-            return [];
-        }
-        $clean = [];
-        foreach ( $value as $item ) {
-            $slug = sanitize_key( $item );
-            if ( in_array( $slug, self::PLATFORMS, true ) && ! in_array( $slug, $clean, true ) ) {
-                $clean[] = $slug;
+            $clean = [];
+        } else {
+            $clean = [];
+            foreach ( $value as $item ) {
+                $slug = sanitize_key( $item );
+                if ( in_array( $slug, self::PLATFORMS, true ) && ! in_array( $slug, $clean, true ) ) {
+                    $clean[] = $slug;
+                }
             }
         }
+
+        // When updating enabled_platforms as a group, clear any stale per-platform overrides unless explicitly present in $_POST
+        foreach ( self::PLATFORMS as $p ) {
+            if ( empty( $_POST[ 'presshub_social_enabled_' . $p . '_present' ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+                delete_option( 'presshub_social_enabled_' . $p );
+            }
+        }
+
         return $clean;
+    }
+
+    /**
+     * Determine whether a platform has sufficient credentials/worker session
+     * configured for publishing under its currently selected dispatch engine.
+     *
+     * @param string $platform Platform slug.
+     * @return bool True if configured; false otherwise.
+     */
+    public static function is_platform_configured( string $platform ): bool {
+        $platform = sanitize_key( $platform );
+        if ( ! in_array( $platform, self::PLATFORMS, true ) ) {
+            return false;
+        }
+
+        $engine = self::get_platform_engine( $platform );
+
+        if ( 'api' === $engine ) {
+            switch ( $platform ) {
+                case 'facebook':
+                    return '' !== trim( self::get_meta_page_id() ) && '' !== trim( self::get_meta_access_token() );
+                case 'instagram':
+                    return '' !== trim( self::get_instagram_account_id() ) && '' !== trim( self::get_meta_access_token() );
+                case 'twitter':
+                    return '' !== trim( self::get_twitter_bearer_token() )
+                        || ( '' !== trim( self::get_twitter_api_key() )
+                            && '' !== trim( self::get_twitter_api_secret() )
+                            && '' !== trim( self::get_twitter_access_token() )
+                            && '' !== trim( self::get_twitter_access_secret() ) )
+                        || '' !== trim( self::get_twitter_access_token() );
+                case 'tiktok':
+                    return '' !== trim( self::get_tiktok_access_token() ) && '' !== trim( self::get_tiktok_open_id() );
+                default:
+                    return false;
+            }
+        }
+
+        if ( 'automation' === $engine ) {
+            $mode     = self::get_worker_mode();
+            $sessions = get_option( 'presshub_social_worker_sessions', [] );
+
+            if ( 'pull' === $mode ) {
+                return is_array( $sessions ) && ! empty( $sessions[ $platform ] );
+            }
+
+            if ( 'push' === $mode ) {
+                if ( '' === trim( self::get_worker_url() ) || '' === trim( self::get_worker_secret() ) ) {
+                    return false;
+                }
+                if ( is_array( $sessions ) && array_key_exists( $platform, $sessions ) ) {
+                    return (bool) $sessions[ $platform ];
+                }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get list of all platforms configured for publishing.
+     *
+     * @return array<string>
+     */
+    public static function get_configured_platforms(): array {
+        $configured = [];
+        foreach ( self::PLATFORMS as $platform ) {
+            if ( self::is_platform_configured( $platform ) ) {
+                $configured[] = $platform;
+            }
+        }
+        return $configured;
+    }
+
+    /**
+     * Get list of platforms that are both enabled AND configured.
+     *
+     * @return array<string>
+     */
+    public static function get_ready_platforms(): array {
+        $ready = [];
+        foreach ( self::get_enabled_platforms() as $platform ) {
+            if ( self::is_platform_configured( $platform ) ) {
+                $ready[] = $platform;
+            }
+        }
+        return $ready;
+    }
+
+    /**
+     * Check if a specific platform is both enabled and configured.
+     *
+     * @param string $platform Platform slug.
+     * @return bool
+     */
+    public static function is_platform_ready( string $platform ): bool {
+        return self::is_platform_enabled( $platform ) && self::is_platform_configured( $platform );
     }
 
     public static function get_platform_engine( string $platform ): string {
