@@ -595,6 +595,153 @@ try {
 }
 mdb_check( 'ajax: backfill_status reaches wp_send_json_success', $caught_status_success );
 
+// -------------------------------------------------------------------------
+// Issue #134 Review Feedback Tests
+// 1. Updating briefing post content triggers rebuild (rebuild on changed content)
+// 2. Edited entry + changed content refreshes only generated_json
+// 3. Failed rebuild of good digest preserves stories and marks stale (does not destroy)
+// 4. Backfill date validation & double start protection
+// 5. Podcast turns exclude stage directions/non-speaker lines
+// -------------------------------------------------------------------------
+
+// Test 1: Changed post content triggers rebuild for active entry
+$change_post_id = 901;
+$change_date    = '2026-11-20';
+$GLOBALS['POSTS_STORE'][$change_post_id] = (object) [
+    'ID'           => $change_post_id,
+    'post_content' => '<p>Initial briefing content for testing update.</p>',
+    'post_title'   => 'Initial Briefing Title',
+    'post_date'    => $change_date . ' 07:00:00',
+];
+$GLOBALS['POST_META_STORE'][$change_post_id] = [
+    '_presshub_briefing_type'    => 'text',
+    '_presshub_briefing_date'    => $change_date,
+    '_presshub_briefing_edition' => 'morning',
+];
+
+$valid_json_initial = wp_json_encode( [
+    'stories' => [
+        [
+            'key'         => 'initial-topic',
+            'title'       => 'Initial Headline',
+            'development' => 'Initial summary',
+            'status'      => 'new',
+            'entities'    => [ 'Topic' ],
+            'source_urls' => [ 'https://example.com/initial' ],
+            'include'     => true,
+        ],
+    ],
+    'podcast' => [ 'opening_line' => '', 'closing_line' => '' ],
+] );
+
+$mock_client_initial = new MockMemoryApiClient( [ $valid_json_initial ] );
+
+$res_initial = PressHub_AI_Memory_Digest_Builder::build_for_post( $change_post_id, $mock_client_initial, false );
+mdb_check( 'update_trigger: initial build succeeds', is_array( $res_initial ) && ! empty( $res_initial['id'] ) );
+
+// Second call with unchanged content should be skipped
+$res_skipped = PressHub_AI_Memory_Digest_Builder::build_for_post( $change_post_id, $mock_client_initial, false );
+mdb_check( 'update_trigger: unchanged content is skipped', is_array( $res_skipped ) && 'skipped' === $res_skipped['status'] );
+
+// Now change post content (e.g. editor corrected text)
+$GLOBALS['POSTS_STORE'][$change_post_id]->post_content = '<p>Updated briefing content with new developments.</p>';
+$valid_json_updated = wp_json_encode( [
+    'stories' => [
+        [
+            'key'         => 'initial-topic',
+            'title'       => 'Updated Headline from Post Edit',
+            'development' => 'Updated summary from post edit',
+            'status'      => 'developing',
+            'entities'    => [ 'Topic' ],
+            'source_urls' => [ 'https://example.com/updated' ],
+            'include'     => true,
+        ],
+    ],
+    'podcast' => [ 'opening_line' => '', 'closing_line' => '' ],
+] );
+
+$mock_client_updated = new MockMemoryApiClient( [ $valid_json_updated ] );
+
+$res_rebuilt = PressHub_AI_Memory_Digest_Builder::build_for_post( $change_post_id, $mock_client_updated, false );
+mdb_check( 'update_trigger: changed post content triggers rebuild', is_array( $res_rebuilt ) && ! empty( $res_rebuilt['id'] ) );
+$entry_after_rebuild = PressHub_AI_Memory_Store::get_daily_entry( $change_date, 'morning' );
+$c_after_rebuild = PressHub_AI_Memory_Store::decode_content( (string) $entry_after_rebuild['content_json'] );
+mdb_check( 'update_trigger: stories updated to new content', 'Updated Headline from Post Edit' === ( $c_after_rebuild['stories'][0]['title'] ?? '' ) );
+
+// Test 2: Edited entry + changed content refreshes only generated_json
+PressHub_AI_Memory_Store::update_content(
+    (int) $entry_after_rebuild['id'],
+    [
+        'stories' => [
+            [
+                'key'         => 'initial-topic',
+                'title'       => 'HUMAN EDITOR FIXED HEADLINE',
+                'development' => 'HUMAN EDITOR FIXED BODY',
+                'status'      => 'developing',
+                'entities'    => [ 'Topic' ],
+                'source_urls' => [ 'https://example.com/updated' ],
+                'include'     => true,
+            ],
+        ],
+        'podcast' => [ 'opening_line' => '', 'closing_line' => '' ],
+        'narrative' => '',
+    ],
+    1
+);
+
+// Edit post content again
+$GLOBALS['POSTS_STORE'][$change_post_id]->post_content = '<p>Third version of post content.</p>';
+$valid_json_third = wp_json_encode( [
+    'stories' => [
+        [
+            'key'         => 'initial-topic',
+            'title'       => 'Third Generation Title',
+            'development' => 'Third Generation Body',
+            'status'      => 'developing',
+            'entities'    => [ 'Topic' ],
+            'source_urls' => [ 'https://example.com/third' ],
+            'include'     => true,
+        ],
+    ],
+    'podcast' => [ 'opening_line' => '', 'closing_line' => '' ],
+] );
+
+$mock_client_third = new MockMemoryApiClient( [ $valid_json_third ] );
+
+$res_edited_rebuilt = PressHub_AI_Memory_Digest_Builder::build_for_post( $change_post_id, $mock_client_third, false );
+mdb_check( 'edited_update: preserved_edit returned true', ! empty( $res_edited_rebuilt['preserved_edit'] ) );
+$entry_after_third = PressHub_AI_Memory_Store::get_daily_entry( $change_date, 'morning' );
+$c_after_third = PressHub_AI_Memory_Store::decode_content( (string) $entry_after_third['content_json'] );
+$g_after_third = PressHub_AI_Memory_Store::decode_content( (string) $entry_after_third['generated_json'] );
+mdb_check( 'edited_update: human content_json strictly preserved', 'HUMAN EDITOR FIXED HEADLINE' === ( $c_after_third['stories'][0]['title'] ?? '' ) );
+mdb_check( 'edited_update: generated_json refreshed with new model output', 'Third Generation Title' === ( $g_after_third['stories'][0]['title'] ?? '' ) );
+
+// Test 3: Failed rebuild of good digest preserves stories and marks stale
+$fail_client = new MockMemoryApiClient( [ new WP_Error( 'http_500', 'LLM Service Unavailable' ) ] );
+
+// Force rebuild with failing client
+$res_failed_rebuild = PressHub_AI_Memory_Digest_Builder::build_for_post( $change_post_id, $fail_client, true );
+mdb_check( 'failed_rebuild: returns WP_Error', is_wp_error( $res_failed_rebuild ) );
+$entry_after_fail = PressHub_AI_Memory_Store::get_daily_entry( $change_date, 'morning' );
+$c_after_fail = PressHub_AI_Memory_Store::decode_content( (string) $entry_after_fail['content_json'] );
+mdb_check( 'failed_rebuild: stories NOT destroyed', count( $c_after_fail['stories'] ?? [] ) === 1 );
+mdb_check( 'failed_rebuild: error_message recorded', str_contains( (string) $entry_after_fail['error_message'], 'LLM Service Unavailable' ) );
+
+// Test 4: Backfill date validation & concurrency guard
+$bad_date_res = PressHub_AI_Memory_Digest_Builder::start_backfill( 'invalid-date', '2026-11-20', false );
+mdb_check( 'backfill: invalid from date rejected', is_wp_error( $bad_date_res ) && 'invalid_date_range' === $bad_date_res->get_error_code() );
+
+$reversed_range_res = PressHub_AI_Memory_Digest_Builder::start_backfill( '2026-11-25', '2026-11-20', false );
+mdb_check( 'backfill: reversed date range rejected', is_wp_error( $reversed_range_res ) && 'invalid_date_range' === $reversed_range_res->get_error_code() );
+
+// Test 5: Podcast turns exclude stage directions/headings
+$producer_test = new PressHub_AI_Podcast_Producer();
+$script_with_directions = "[SPEAKER_1]: Καλώς ήρθατε στο podcast.\n(μουσική εισαγωγής)\n[SPEAKER_2]: Έχουμε πολλές ειδήσεις σήμερα.\n---\n[SPEAKER_1]: Αυτά ήταν τα νέα. Καλό απόγευμα!";
+$parsed_turns = $producer_test->parse_script_turns( $script_with_directions );
+mdb_check( 'podcast_turns: parsed turns count is 3', count( $parsed_turns ) === 3 );
+mdb_check( 'podcast_turns: first turn text', 'Καλώς ήρθατε στο podcast.' === $parsed_turns[0]['text'] );
+mdb_check( 'podcast_turns: last turn text', 'Αυτά ήταν τα νέα. Καλό απόγευμα!' === $parsed_turns[2]['text'] );
+
 // Summary
 if ( $failures > 0 ) {
     fwrite( STDERR, "\nMemoryDigestBuilderTest: {$failures} failure(s) out of {$checks} checks\n" );

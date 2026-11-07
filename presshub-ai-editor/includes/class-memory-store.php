@@ -840,14 +840,20 @@ class PressHub_AI_Memory_Store {
     public static function record_failed_digest( string $date, string $edition, string $error_message, ?int $source_post_id = null, ?int $generation_record_id = null ) {
         global $wpdb;
         $existing = self::get_daily_entry( $date, $edition );
-        if ( $existing && 'edited' === (string) $existing['origin'] ) {
+        // Invariant: If an existing entry exists (whether edited, active, or stale with stories),
+        // a failed regeneration must NEVER wipe existing content or stories.
+        // We preserve content_json and mark status as stale so stories remain discoverable,
+        // updating only error_message, updated_at, source_post_id, and generation_record_id.
+        if ( $existing ) {
             $table = self::get_entries_table();
             $now   = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+            $new_status = ( 'edited' === (string) $existing['origin'] ) ? (string) $existing['status'] : 'stale';
             $data  = [
+                'status'        => $new_status,
                 'error_message' => sanitize_textarea_field( $error_message ),
                 'updated_at'    => $now,
             ];
-            $format = [ '%s', '%s' ];
+            $format = [ '%s', '%s', '%s' ];
             if ( null !== $source_post_id && $source_post_id > 0 ) {
                 $data['source_post_id'] = (int) $source_post_id;
                 $format[] = '%d';
@@ -863,13 +869,14 @@ class PressHub_AI_Memory_Store {
                 'scope'          => 'daily',
                 'period_start'   => $date,
                 'edition'        => $edition,
-                'origin'         => 'edited',
-                'preserved_edit' => true,
-                'status'         => (string) $existing['status'],
+                'origin'         => (string) $existing['origin'],
+                'preserved_edit' => ( 'edited' === (string) $existing['origin'] ),
+                'status'         => $new_status,
                 'error_message'  => $error_message,
             ];
         }
 
+        // When no prior entry exists, create a skeleton record with status='failed'.
         return self::upsert_generated( [
             'scope'                => 'daily',
             'period_start'         => $date,

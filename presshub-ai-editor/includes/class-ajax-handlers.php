@@ -34,7 +34,7 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_test_tts_synthesis', [ $this, 'test_tts_synthesis' ] );
         add_action( 'wp_ajax_presshub_ai_preview_tts_payload', [ $this, 'preview_tts_payload' ] );
         add_action( 'wp_ajax_presshub_ai_regenerate_podcast_audio', [ $this, 'regenerate_podcast_audio' ] );
-                add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
+        add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
         add_action( 'wp_ajax_presshub_ai_memory_build_digest', [ $this, 'memory_build_digest' ] );
         add_action( 'wp_ajax_presshub_ai_memory_start_backfill', [ $this, 'memory_start_backfill' ] );
         add_action( 'wp_ajax_presshub_ai_memory_backfill_status', [ $this, 'memory_backfill_status' ] );
@@ -1499,6 +1499,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-memory-digest-builder.php';
         $state = PressHub_AI_Memory_Digest_Builder::start_backfill( $from, $to, $force );
+
+        if ( is_wp_error( $state ) ) {
+            wp_send_json_error( [
+                'message' => $state->get_error_message(),
+                'code'    => $state->get_error_code(),
+            ] );
+        }
 
         wp_send_json_success( $state );
     }

@@ -995,15 +995,17 @@ class PressHub_AI_Briefing_Admin {
                 </a>
             </nav>
 
-                        <div id="presshub-briefing-notices" class="presshub-notices-container" aria-live="polite"></div>
+            <div id="presshub-briefing-notices" class="presshub-notices-container" aria-live="polite"></div>
 
             <!-- Daily Memory Digest Failed Alert Banner (Issue #134) -->
             <?php
+            $memory_enabled = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_memory_enabled() : true;
             $current_mem_digest = $status['memory_digest'] ?? null;
             $current_digest_failed = ( $current_mem_digest && 'failed' === ( $current_mem_digest['status'] ?? '' ) );
             $failed_digests_list = $status['failed_memory_digests'] ?? [];
             ?>
-            <div id="presshub-memory-digest-failed-alert" class="presshub-alert presshub-alert-error" style="<?php echo ( $current_digest_failed || ! empty( $failed_digests_list ) ) ? '' : 'display:none;'; ?> margin-top: 15px; margin-bottom: 20px;">
+            <?php if ( $memory_enabled && ( $current_digest_failed || ! empty( $failed_digests_list ) ) ) : ?>
+            <div id="presshub-memory-digest-failed-alert" class="presshub-alert presshub-alert-error" style="margin-top: 15px; margin-bottom: 20px;">
                 <div class="presshub-alert-icon">⚠️</div>
                 <div class="presshub-alert-content">
                     <strong><?php echo esc_html__( 'Daily Memory Digest Notice', 'presshub-ai-editor' ); ?></strong>
@@ -1011,18 +1013,30 @@ class PressHub_AI_Briefing_Admin {
                         <p>
                             <?php echo esc_html( sprintf( __( 'The daily memory digest for %s (%s) failed: %s', 'presshub-ai-editor' ), $date, $edition, $current_mem_digest['error_message'] ?? '' ) ); ?>
                         </p>
+                        <p class="presshub-alert-action-text">
+                            <button type="button" class="button button-primary button-small" id="btn-retry-memory-digest" data-post-id="<?php echo esc_attr( $status['text_post_id'] ?? 0 ); ?>" data-date="<?php echo esc_attr( $date ); ?>" data-edition="<?php echo esc_attr( $edition ); ?>">
+                                🔄 <?php echo esc_html__( 'Retry Memory Digest Generation', 'presshub-ai-editor' ); ?>
+                            </button>
+                        </p>
                     <?php elseif ( ! empty( $failed_digests_list ) ) : ?>
                         <p>
-                            <?php echo esc_html( sprintf( __( 'There are %d failed daily memory digest(s) requiring attention.', 'presshub-ai-editor' ), count( $failed_digests_list ) ) ); ?>
+                            <?php echo esc_html( sprintf( __( 'There are %d failed daily memory digest(s) requiring attention:', 'presshub-ai-editor' ), count( $failed_digests_list ) ) ); ?>
                         </p>
+                        <ul style="margin: 5px 0 10px 20px; list-style-type: disc;">
+                            <?php foreach ( array_slice( $failed_digests_list, 0, 5 ) as $fitem ) : ?>
+                                <li>
+                                    <strong><?php echo esc_html( $fitem['period_start'] . ' (' . $fitem['edition'] . ')' ); ?>:</strong>
+                                    <?php echo esc_html( $fitem['error_message'] ); ?>
+                                    <button type="button" class="button button-secondary button-small btn-retry-item-memory-digest" style="margin-left: 8px; vertical-align: middle;" data-date="<?php echo esc_attr( $fitem['period_start'] ); ?>" data-edition="<?php echo esc_attr( $fitem['edition'] ); ?>">
+                                        🔄 <?php echo esc_html__( 'Retry', 'presshub-ai-editor' ); ?>
+                                    </button>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
                     <?php endif; ?>
-                    <p class="presshub-alert-action-text">
-                        <button type="button" class="button button-primary button-small" id="btn-retry-memory-digest" data-post-id="<?php echo esc_attr( $status['text_post_id'] ?? 0 ); ?>" data-date="<?php echo esc_attr( $date ); ?>" data-edition="<?php echo esc_attr( $edition ); ?>">
-                            🔄 <?php echo esc_html__( 'Retry Memory Digest Generation', 'presshub-ai-editor' ); ?>
-                        </button>
-                    </p>
                 </div>
             </div>
+            <?php endif; ?>
 
             <!-- Blocked Sources Alert Banner -->
             <div id="presshub-blocked-sources-alert" class="presshub-alert presshub-alert-warning" style="<?php echo empty( $status['blocked_sources'] ) ? 'display:none;' : ''; ?>">

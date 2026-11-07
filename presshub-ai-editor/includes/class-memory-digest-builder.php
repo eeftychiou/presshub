@@ -129,7 +129,9 @@ class PressHub_AI_Memory_Digest_Builder {
      */
     public static function clean_json_response( string $raw ): string {
         $cleaned = trim( $raw );
-        if ( preg_match( '/^```(?:json)?\s*(.*?)\s*```$/is', $cleaned, $matches ) ) {
+        if ( preg_match( "/```(?:json)?\s*(.*?)\s*```/is", $cleaned, $matches ) ) {
+            $cleaned = trim( $matches[1] );
+        } elseif ( preg_match( "/(\{.*\})/s", $cleaned, $matches ) ) {
             $cleaned = trim( $matches[1] );
         }
         return $cleaned;
@@ -168,19 +170,18 @@ class PressHub_AI_Memory_Digest_Builder {
         $raw_edition = (string) get_post_meta( $post_id, '_presshub_briefing_edition', true );
         $edition     = ( 'noon' === $raw_edition ) ? 'noon' : 'morning';
 
-        // Check if existing active digest exists
-        $existing_entry = PressHub_AI_Memory_Store::get_daily_entry( $date, $edition );
-        if ( ! $force && $existing_entry && in_array( (string) $existing_entry['status'], [ 'active', 'excluded' ], true ) ) {
-            return [
-                'status' => 'skipped',
-                'reason' => 'already_built',
-                'id'     => (int) $existing_entry['id'],
-            ];
+        // Load briefing text from post content (stripped to text) as primary source, snapshot as fallback
+        $briefing_text = '';
+        $raw_post_content = trim( (string) ( $post->post_content ?? '' ) );
+        if ( '' !== $raw_post_content ) {
+            $briefing_text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $raw_post_content ) : strip_tags( $raw_post_content );
+            $briefing_text = trim( $briefing_text );
+            if ( ! empty( $post->post_title ) && ! str_contains( $briefing_text, (string) $post->post_title ) ) {
+                $briefing_text = '# ' . $post->post_title . "\n\n" . $briefing_text;
+            }
         }
 
-        // Load briefing text
-        $briefing_text = '';
-        if ( class_exists( 'PressHub_AI_News_Harvester' ) ) {
+        if ( '' === $briefing_text && class_exists( 'PressHub_AI_News_Harvester' ) ) {
             $harvester    = new PressHub_AI_News_Harvester();
             $snapshot_dir = $harvester->get_snapshot_dir( $date );
             $filename     = ( 'noon' === $edition ) ? 'briefing-text-noon.md' : 'briefing-text.md';
@@ -190,10 +191,18 @@ class PressHub_AI_Memory_Digest_Builder {
             }
         }
 
-        if ( '' === $briefing_text ) {
-            $briefing_text = trim( (string) ( $post->post_content ?? '' ) );
-            if ( ! empty( $post->post_title ) && ! str_contains( $briefing_text, (string) $post->post_title ) ) {
-                $briefing_text = '# ' . $post->post_title . "\n\n" . $briefing_text;
+        // Check if existing active digest exists
+        $existing_entry = PressHub_AI_Memory_Store::get_daily_entry( $date, $edition );
+        $source_hash    = hash( 'sha256', $briefing_text );
+        $last_built_hash = (string) get_post_meta( $post_id, '_presshub_memory_source_hash', true );
+
+        if ( ! $force && $existing_entry && in_array( (string) $existing_entry['status'], [ 'active', 'excluded' ], true ) ) {
+            if ( '' !== $last_built_hash && hash_equals( $last_built_hash, $source_hash ) ) {
+                return [
+                    'status' => 'skipped',
+                    'reason' => 'already_built',
+                    'id'     => (int) $existing_entry['id'],
+                ];
             }
         }
 
@@ -404,6 +413,10 @@ class PressHub_AI_Memory_Digest_Builder {
             }
         }
 
+        if ( $post_id > 0 && function_exists( 'update_post_meta' ) ) {
+            update_post_meta( $post_id, '_presshub_memory_source_hash', $source_hash );
+        }
+
         $upsert_res['generation_record_id'] = $last_rec_id;
         return $upsert_res;
     }
@@ -594,12 +607,31 @@ class PressHub_AI_Memory_Digest_Builder {
      * @param bool   $force
      * @return array State array
      */
-    public static function start_backfill( string $from = '', string $to = '', bool $force = false ): array {
+    public static function start_backfill( string $from = '', string $to = '', bool $force = false ) {
+        if ( ! class_exists( 'PressHub_AI_Settings_Storage' ) || ! PressHub_AI_Settings_Storage::get_memory_enabled() ) {
+            return new WP_Error( 'memory_disabled', __( 'Editorial memory is disabled in settings.', 'presshub-ai-editor' ) );
+        }
+
         if ( empty( $to ) ) {
             $to = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
         }
         if ( empty( $from ) ) {
             $from = gmdate( 'Y-m-d', strtotime( $to . ' -30 days' ) );
+        }
+
+        if ( ! self::is_valid_date( $from ) || ! self::is_valid_date( $to ) || $from > $to ) {
+            return new WP_Error( 'invalid_date_range', __( 'Invalid date range provided for backfill.', 'presshub-ai-editor' ) );
+        }
+
+        // Guard against duplicate start if a backfill is already running and actively scheduled/progressing
+        $existing_state = get_option( self::BACKFILL_STATE_OPTION, null );
+        if ( is_array( $existing_state ) && 'running' === ( $existing_state['status'] ?? '' ) ) {
+            $is_scheduled = function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( self::BACKFILL_CRON_HOOK );
+            $last_update  = ! empty( $existing_state['updated_at'] ) ? strtotime( $existing_state['updated_at'] ) : 0;
+            // If scheduled or updated within the last 120 seconds, reject concurrent start
+            if ( $is_scheduled || ( time() - $last_update ) < 120 ) {
+                return $existing_state;
+            }
         }
 
         $discovered = self::find_briefing_editions_in_range( $from, $to, $force );
@@ -623,7 +655,7 @@ class PressHub_AI_Memory_Digest_Builder {
             'updated_at' => $now,
         ];
 
-        update_option( self::BACKFILL_STATE_OPTION, $state );
+        update_option( self::BACKFILL_STATE_OPTION, $state, false );
 
         if ( ! empty( $post_ids ) && function_exists( 'wp_schedule_single_event' ) ) {
             wp_schedule_single_event( time() + 5, self::BACKFILL_CRON_HOOK );
@@ -633,11 +665,24 @@ class PressHub_AI_Memory_Digest_Builder {
     }
 
     /**
+     * Helper to validate YYYY-MM-DD date string.
+     */
+    public static function is_valid_date( string $date ): bool {
+        if ( ! preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $date, $matches ) ) {
+            return false;
+        }
+        return checkdate( (int) $matches[2], (int) $matches[3], (int) $matches[1] );
+    }
+
+    /**
      * Process one item from the backfill queue.
      *
      * @return array Updated state array
      */
     public static function handle_backfill_step(): array {
+        if ( ! class_exists( 'PressHub_AI_Settings_Storage' ) || ! PressHub_AI_Settings_Storage::get_memory_enabled() ) {
+            return [];
+        }
         $state = get_option( self::BACKFILL_STATE_OPTION, [] );
         if ( empty( $state ) || ! is_array( $state ) || 'running' !== ( $state['status'] ?? '' ) ) {
             return is_array( $state ) ? $state : [];
@@ -647,7 +692,7 @@ class PressHub_AI_Memory_Digest_Builder {
         if ( empty( $queue ) ) {
             $state['status']     = 'completed';
             $state['updated_at'] = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
-            update_option( self::BACKFILL_STATE_OPTION, $state );
+            update_option( self::BACKFILL_STATE_OPTION, $state, false );
             return $state;
         }
 
@@ -676,7 +721,7 @@ class PressHub_AI_Memory_Digest_Builder {
             }
         }
 
-        update_option( self::BACKFILL_STATE_OPTION, $state );
+        update_option( self::BACKFILL_STATE_OPTION, $state, false );
         return $state;
     }
 

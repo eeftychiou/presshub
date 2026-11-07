@@ -585,6 +585,14 @@ class PressHub_AI_Podcast_Producer {
                 if ( 0 === strpos( $trimmed_line, '#' ) && empty( $current_text_lines ) ) {
                     continue;
                 }
+                // Ignore horizontal divider lines like "---" or "___"
+                if ( preg_match( '/^[-=_*]{3,}$/', $trimmed_line ) ) {
+                    continue;
+                }
+                // Ignore stage directions enclosed entirely in parentheses, brackets, or braces, e.g. (μουσική), [intro music]
+                if ( preg_match( '/^\s*[\(\[\{].*?[\)\]\}]\s*$/u', $trimmed_line ) ) {
+                    continue;
+                }
                 $current_text_lines[] = $trimmed_line;
             }
         }
