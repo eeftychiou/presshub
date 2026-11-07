@@ -149,7 +149,7 @@ PressHub AI implements a 4-layer logging architecture to provide total transpare
 
 | Layer | Purpose | Target / Storage | Inspection Tool |
 |---|---|---|---|
-| **Layer 1: Structured Logs** | Subsystem operations, harvesting steps, TTS synthesis, HTTP events | `wp-content/presshub-debug.log` | `php dev-env/scripts/tail-logs.php --source=presshub` |
+| **Layer 1: Structured Logs** | Subsystem operations, harvesting steps, TTS synthesis, HTTP events | `wp-content/uploads/presshub-ai/presshub-debug-<suffix>.log` (protected folder, random file name; see **Log storage and privacy**) | `php dev-env/scripts/tail-logs.php --source=presshub` |
 | **Layer 2: Token Telemetry** | Model IDs, prompt/completion tokens, latency, cost, and JSON metadata | `wp_presshub_ai_token_logs` | `php dev-env/scripts/view-token-logs.php` |
 | **Layer 3: Security & Audit** | Settings updates, provider credential changes, and admin actions | `wp_presshub_ai_audit_log` | `php dev-env/scripts/query-db.php "SELECT * FROM wp_presshub_ai_audit_log"` |
 | **Layer 4: WordPress Core** | PHP runtime warnings, fatal tracebacks, cURL/environment issues | `wp-content/debug.log` | `php dev-env/scripts/tail-logs.php --source=wp` |
@@ -164,6 +164,26 @@ add_filter( 'presshub_ai_client_ip_header', fn() => 'HTTP_CF_CONNECTING_IP' );
 ```
 
 Only set this behind a proxy you control: otherwise clients can spoof the header.
+
+### Log storage and privacy
+
+The three diagnostic log files (application log, LLM prompts & responses, TTS payloads) are written by `PressHub_AI_Log_Paths` to `wp-content/uploads/presshub-ai/` under random file names (`presshub-debug-<suffix>.log`, `presshub-ai-prompts-<suffix>.jsonl`, `presshub-ai-tts-<suffix>.jsonl`). The plugin keeps `.htaccess` (Apache/LiteSpeed), `index.php` and `web.config` (IIS) deny files in that folder and never overwrites an existing one. **Settings → Logs** shows whether the folder can be opened from the web (re-checked every 12 hours, or on demand with **Re-check now**).
+
+- **nginx** ignores `.htaccess`. Add a deny rule to the server block:
+
+  ```nginx
+  location ~* /wp-content/uploads/presshub-ai/ { deny all; }
+  ```
+
+- **Keep logs outside the website** by defining a writable folder in `wp-config.php`:
+
+  ```php
+  define( 'PRESSHUB_AI_LOG_DIR', '/home/example/presshub-logs' );
+  ```
+
+  If the folder is missing or not writable, file logging stops and an admin notice names the constant; logs never fall back to uploads.
+- **Retention**: rotated log files are deleted after `presshub_ai_log_file_retention_days` (default 14), token logs after `presshub_ai_token_log_retention_days` (default 60) and audit logs after `presshub_ai_audit_log_retention_days` (default 90). **Clear logs** also removes rotated copies.
+- The social worker rotates `logs/worker.log` at `PRESSHUB_LOG_MAX_BYTES` (default 10 MB) and keeps `PRESSHUB_LOG_MAX_FILES` old copies (default 5).
 
 ### CLI Observability Cheat-Sheet
 

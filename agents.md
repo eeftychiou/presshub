@@ -59,6 +59,7 @@ php dev-env/scripts/setup.php
 - Secrets are masked centrally by `PressHub_AI_Secret_Masker`: the logger masks context arrays (`mask_array()`) and messages (`mask_text()`), and the audit logger masks details. Still never pass raw credentials to a logger on purpose. Prompt and response bodies in the prompt debug log are deliberately left verbatim.
 - Audit events go through `PressHub_AI_Audit_Logger::log( $event_type, $entity_type, $entity_id, array $details )`. Clearing the audit log records an `audit_log_cleared` event as the first row of the new trail.
 - The audit log stores `REMOTE_ADDR` by default. Behind a trusted proxy, set the `presshub_ai_client_ip_header` filter (e.g. to `HTTP_CF_CONNECTING_IP`); never trust `X-Forwarded-For` otherwise.
+- Resolve log file locations only through `PressHub_AI_Log_Paths::get_file( $channel )` / `get_dir()` (channels `app`, `prompts`, `tts`). Never hard-code a log path: file names carry a random suffix, the folder may be moved with `PRESSHUB_AI_LOG_DIR`, and `get_dir()` returns a `WP_Error` (skip the file write) when that folder is unusable. In dev-env, `php dev-env/scripts/tail-logs.php` finds the suffixed files for you.
 
 Every agent — whether triaging a bug, writing a test, implementing a feature, or reviewing a
 PR — **must** run the following phase-appropriate commands. The output of these commands

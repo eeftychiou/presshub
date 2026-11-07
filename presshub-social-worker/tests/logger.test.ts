@@ -95,4 +95,99 @@ describe('WorkerLogger & Structured File Logging', () => {
     WorkerLogger.clear();
     expect(WorkerLogger.readLogs().length).toBe(0);
   });
+
+  describe('size-based rotation', () => {
+    const ROT_DIR = path.join(TEST_LOGS_DIR, 'rotation');
+    const ROT_FILE = path.join(ROT_DIR, 'worker.log');
+    const savedBytes = process.env.PRESSHUB_LOG_MAX_BYTES;
+    const savedFiles = process.env.PRESSHUB_LOG_MAX_FILES;
+    let consoleSpy: jest.SpyInstance;
+
+    const writeLine = (marker: string) => WorkerLogger.info('Rot', marker + ' ' + 'x'.repeat(100));
+    const read = (f: string) => fs.readFileSync(f, 'utf-8');
+
+    beforeEach(() => {
+      fs.rmSync(ROT_DIR, { recursive: true, force: true });
+      consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleSpy.mockRestore();
+      if (savedBytes === undefined) delete process.env.PRESSHUB_LOG_MAX_BYTES;
+      else process.env.PRESSHUB_LOG_MAX_BYTES = savedBytes;
+      if (savedFiles === undefined) delete process.env.PRESSHUB_LOG_MAX_FILES;
+      else process.env.PRESSHUB_LOG_MAX_FILES = savedFiles;
+      WorkerLogger.init(TEST_LOG_FILE);
+    });
+
+    test('does not rotate while the file stays under the limit', () => {
+      process.env.PRESSHUB_LOG_MAX_BYTES = '100000';
+      process.env.PRESSHUB_LOG_MAX_FILES = '3';
+      WorkerLogger.init(ROT_FILE);
+      writeLine('a');
+      writeLine('b');
+      expect(fs.existsSync(ROT_FILE + '.1')).toBe(false);
+    });
+
+    test('shifts worker.log -> .1 -> .2 and starts a fresh file', () => {
+      process.env.PRESSHUB_LOG_MAX_BYTES = '100';
+      process.env.PRESSHUB_LOG_MAX_FILES = '3';
+      WorkerLogger.init(ROT_FILE);
+
+      writeLine('first');
+      writeLine('second');
+      expect(read(ROT_FILE + '.1')).toContain('first');
+      expect(read(ROT_FILE)).toContain('second');
+      expect(read(ROT_FILE)).not.toContain('first');
+
+      writeLine('third');
+      expect(read(ROT_FILE + '.1')).toContain('second');
+      expect(read(ROT_FILE + '.2')).toContain('first');
+      expect(read(ROT_FILE)).toContain('third');
+    });
+
+    test('deletes the oldest copy beyond PRESSHUB_LOG_MAX_FILES', () => {
+      process.env.PRESSHUB_LOG_MAX_BYTES = '100';
+      process.env.PRESSHUB_LOG_MAX_FILES = '2';
+      WorkerLogger.init(ROT_FILE);
+
+      for (const marker of ['m1', 'm2', 'm3', 'm4', 'm5']) {
+        writeLine(marker);
+      }
+
+      expect(fs.existsSync(ROT_FILE + '.3')).toBe(false);
+      expect(read(ROT_FILE + '.2')).toContain('m3');
+      expect(read(ROT_FILE + '.1')).toContain('m4');
+      expect(read(ROT_FILE)).toContain('m5');
+      const all = [ROT_FILE, ROT_FILE + '.1', ROT_FILE + '.2'].map(read).join('');
+      expect(all).not.toContain('m1');
+      expect(all).not.toContain('m2');
+    });
+
+    test('falls back to defaults for invalid env values', () => {
+      process.env.PRESSHUB_LOG_MAX_BYTES = 'not-a-number';
+      process.env.PRESSHUB_LOG_MAX_FILES = '-4';
+      WorkerLogger.init(ROT_FILE);
+      for (let i = 0; i < 20; i++) writeLine('n' + i);
+      expect(fs.existsSync(ROT_FILE + '.1')).toBe(false);
+    });
+
+    test('never throws when rotation fails', () => {
+      process.env.PRESSHUB_LOG_MAX_BYTES = '50';
+      process.env.PRESSHUB_LOG_MAX_FILES = '2';
+      WorkerLogger.init(ROT_FILE);
+      writeLine('seed');
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const renameSpy = jest.spyOn(fs, 'renameSync').mockImplementation(() => {
+        throw new Error('EPERM simulated');
+      });
+      try {
+        expect(() => writeLine('after-failure')).not.toThrow();
+        expect(warnSpy).toHaveBeenCalled();
+      } finally {
+        renameSpy.mockRestore();
+        warnSpy.mockRestore();
+      }
+    });
+  });
 });

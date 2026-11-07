@@ -146,7 +146,7 @@ $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] = '1';
 PressHub_AI_Trace::set_current_trace_id( 'tr_prompt_file_test' );
 presshub_ai_log_prompts( 'draft', 'SYS-PROMPT', 'USER-PROMPT', 'RESP-PROMPT' );
 
-$prompt_log_file = $upload_dir . '/presshub-ai/presshub-ai-debug.log';
+$prompt_log_file = PressHub_AI_Log_Paths::get_file( 'prompts' );
 if ( ! file_exists( $prompt_log_file ) ) {
     $failures[] = 'presshub_ai_log_prompts did not create ' . $prompt_log_file;
 } else {
@@ -166,7 +166,7 @@ if ( ( $tts_entry['trace_id'] ?? '' ) !== 'tr_prompt_file_test' ) {
 }
 
 PressHub_AI_API_Client::write_tts_payload_log( $tts_entry );
-$tts_log_file = $upload_dir . '/presshub-ai/presshub-ai-tts-debug.log';
+$tts_log_file = PressHub_AI_Log_Paths::get_file( 'tts' );
 if ( ! file_exists( $tts_log_file ) ) {
     $failures[] = 'write_tts_payload_log did not create ' . $tts_log_file;
 } else {
