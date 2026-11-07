@@ -244,7 +244,7 @@ function test_generation_inspector() {
     insp_check( false !== strpos( $disabled, 'Memory was disabled for this generation' ), 'memory disabled message' );
     insp_check( false !== strpos( $surfaces['tts'], 'gemini-3.1' ) && false !== strpos( $surfaces['tts'], 'multi' ) && false !== strpos( $surfaces['tts'], 'edited' ), 'TTS tab shows engine, payload mode, script_source' );
     $tts_na = PressHub_AI_Generation_Inspector::render_tab( PressHub_AI_Generation_Inspector::get_structured_record( (int) $id1 ), 'tts' );
-    insp_check( false !== strpos( $tts_na, 'podcast script records only' ), 'TTS tab n/a for briefing records' );
+    insp_check( false !== strpos( $tts_na, 'podcast script and TTS test records only' ), 'TTS tab n/a for briefing records' );
     $shell = $surfaces['shell'];
     insp_check( false === strpos( $shell, 'SYS' ) && false === strpos( $shell, 'RESP' ), 'inspector shell does not embed prompts/response' );
     insp_check( false !== strpos( $shell, 'data-tab="tts"' ), 'TTS tab button present in shell' );

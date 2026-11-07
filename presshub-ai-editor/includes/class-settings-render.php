@@ -1636,7 +1636,8 @@ class PressHub_AI_Settings_Render {
     }
 
     /**
-     * 1.2.5: prompt inspection toggle. Writes the exact SYSTEM and USER
+     * 1.2.5: prompt inspection toggle ("Raw debug dump (developer use)" since #140; generation
+     * records already keep this information for editors). Writes the exact SYSTEM and USER
      * prompts to the protected log folder (prompts channel) in JSONL format.
      */
     public function render_debug_prompts_field() {
@@ -1649,7 +1650,7 @@ class PressHub_AI_Settings_Render {
             <?php echo esc_html__( 'Append every SYSTEM and USER prompt exchange to the protected log folder (prompts channel) as structured JSONL.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
-            <?php echo esc_html__( 'Captures complete system instructions, user inputs, model configuration, response completions, and trace IDs. Disable in production to conserve storage.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Raw debug dump for developers. Generation records already keep every prompt, response, setting and usage figure for editors, so leave this off unless you need the raw file. Captures complete system instructions, user inputs, model configuration, response completions, and trace IDs. Disable in production to conserve storage.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }
@@ -2473,7 +2474,7 @@ class PressHub_AI_Settings_Render {
             <?php echo esc_html__( 'Log every Gemini TTS API call (endpoint, masked headers, speaker-voice mapping, prompt text, full JSON request body, response metadata) to the protected log folder (tts channel).', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description">
-            <?php echo esc_html__( 'Use only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Raw debug dump for developers. Generation records already keep every TTS call (model, voices, request body without audio, status, duration, audio length) for editors, so leave this off unless you need the raw file. Use it only when diagnosing voice drift or unexpected voice allocation during podcast synthesis. Disable in production to keep log file size bounded. Mirror events are also fired on the presshub_ai_tts_payload_log action for custom tooling.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }
