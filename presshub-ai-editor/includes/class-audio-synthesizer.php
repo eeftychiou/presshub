@@ -1306,7 +1306,9 @@ class PressHub_AI_Audio_Synthesizer {
         // Save corrected script to snapshot so disk cache matches
         if ( class_exists( 'PressHub_AI_Podcast_Producer' ) ) {
             $producer = new PressHub_AI_Podcast_Producer();
-            $producer->save_script( $script, $date, $edition );
+            // save_script( date, script, context_mode, source_post_id, attempted_at, edition ).
+            // An empty context_mode leaves the existing sidecar (and its generation_record_id) intact.
+            $producer->save_script( $date, $script, '', 0, '', $edition );
         }
 
         return $this->synthesize_podcast( $date, $script, $edition, $api_client, $post_id );
