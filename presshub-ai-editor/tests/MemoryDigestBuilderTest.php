@@ -727,6 +727,61 @@ $c_after_fail = PressHub_AI_Memory_Store::decode_content( (string) $entry_after_
 mdb_check( 'failed_rebuild: stories NOT destroyed', count( $c_after_fail['stories'] ?? [] ) === 1 );
 mdb_check( 'failed_rebuild: error_message recorded', str_contains( (string) $entry_after_fail['error_message'], 'LLM Service Unavailable' ) );
 
+mdb_check( 'failed_rebuild: edited entry keeps its status', 'edited' !== (string) $entry_after_fail['origin'] || 'active' === (string) $entry_after_fail['status'] );
+
+// Test 3a: a good UNEDITED entry becomes 'stale' (stories kept) after a failed rebuild
+$good_post_id = 903;
+$good_date    = '2026-11-22';
+$GLOBALS['POSTS_STORE'][ $good_post_id ] = (object) [
+    'ID'           => $good_post_id,
+    'post_content' => '<p>Briefing with a good digest.</p>',
+    'post_title'   => 'Good Briefing',
+    'post_date'    => $good_date . ' 07:00:00',
+];
+$GLOBALS['POST_META_STORE'][ $good_post_id ] = [
+    '_presshub_briefing_type'    => 'text',
+    '_presshub_briefing_date'    => $good_date,
+    '_presshub_briefing_edition' => 'morning',
+];
+PressHub_AI_Memory_Digest_Builder::build_for_post( $good_post_id, new MockMemoryApiClient( [ $valid_json_initial ] ), false );
+PressHub_AI_Memory_Digest_Builder::build_for_post( $good_post_id, new MockMemoryApiClient( [ new WP_Error( 'http_500', 'LLM Service Unavailable' ) ] ), true );
+$good_entry = PressHub_AI_Memory_Store::get_daily_entry( $good_date, 'morning' );
+$good_content = PressHub_AI_Memory_Store::decode_content( (string) ( $good_entry['content_json'] ?? '' ) );
+mdb_check( 'failed_rebuild: good unedited entry marked stale', 'stale' === (string) ( $good_entry['status'] ?? '' ) );
+mdb_check( 'failed_rebuild: good unedited entry keeps its stories', 1 === count( $good_content['stories'] ?? [] ) );
+PressHub_AI_Memory_Store::set_status( (int) $good_entry['id'], 'excluded' );
+PressHub_AI_Memory_Digest_Builder::build_for_post( $good_post_id, new MockMemoryApiClient( [ new WP_Error( 'http_500', 'LLM Service Unavailable' ) ] ), true );
+$good_after_excl = PressHub_AI_Memory_Store::get_daily_entry( $good_date, 'morning' );
+mdb_check( 'failed_rebuild: excluded unedited entry stays excluded', 'excluded' === (string) ( $good_after_excl['status'] ?? '' ) );
+
+// Test 3b: an editor-excluded entry stays excluded after a failed rebuild
+PressHub_AI_Memory_Store::set_status( (int) $entry_after_fail['id'], 'excluded' );
+$fail_client_b = new MockMemoryApiClient( [ new WP_Error( 'http_500', 'LLM Service Unavailable' ) ] );
+PressHub_AI_Memory_Digest_Builder::build_for_post( $change_post_id, $fail_client_b, true );
+$entry_after_excl_fail = PressHub_AI_Memory_Store::get_daily_entry( $change_date, 'morning' );
+mdb_check( 'failed_rebuild: excluded entry stays excluded', 'excluded' === (string) $entry_after_excl_fail['status'] );
+
+// Test 3c: a repeat failure with no prior stories stays 'failed' (visible), not 'stale'
+$skel_post_id = 902;
+$skel_date    = '2026-11-21';
+$GLOBALS['POSTS_STORE'][ $skel_post_id ] = (object) [
+    'ID'           => $skel_post_id,
+    'post_content' => '<p>Briefing whose digest keeps failing.</p>',
+    'post_title'   => 'Failing Briefing',
+    'post_date'    => $skel_date . ' 07:00:00',
+];
+$GLOBALS['POST_META_STORE'][ $skel_post_id ] = [
+    '_presshub_briefing_type'    => 'text',
+    '_presshub_briefing_date'    => $skel_date,
+    '_presshub_briefing_edition' => 'morning',
+];
+foreach ( [ 1, 2 ] as $attempt ) {
+    $fail_client_c = new MockMemoryApiClient( [ new WP_Error( 'http_500', 'LLM Service Unavailable' ) ] );
+    PressHub_AI_Memory_Digest_Builder::build_for_post( $skel_post_id, $fail_client_c, true );
+    $skel_entry = PressHub_AI_Memory_Store::get_daily_entry( $skel_date, 'morning' );
+    mdb_check( "failed_rebuild: storyless entry is 'failed' after attempt {$attempt}", 'failed' === (string) ( $skel_entry['status'] ?? '' ) );
+}
+
 // Test 4: Backfill date validation & concurrency guard
 $bad_date_res = PressHub_AI_Memory_Digest_Builder::start_backfill( 'invalid-date', '2026-11-20', false );
 mdb_check( 'backfill: invalid from date rejected', is_wp_error( $bad_date_res ) && 'invalid_date_range' === $bad_date_res->get_error_code() );

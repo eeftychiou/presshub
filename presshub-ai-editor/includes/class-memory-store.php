@@ -847,7 +847,19 @@ class PressHub_AI_Memory_Store {
         if ( $existing ) {
             $table = self::get_entries_table();
             $now   = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
-            $new_status = ( 'edited' === (string) $existing['origin'] ) ? (string) $existing['status'] : 'stale';
+            // Editor decisions win: an edited entry keeps its status and an excluded entry stays
+            // excluded. An entry with stories becomes stale (still usable, flagged). An entry with no
+            // stories (a previous failed skeleton or a podcast-lines-only pending row) stays/becomes
+            // failed so the failure remains visible in Briefing Admin.
+            $old_status      = (string) $existing['status'];
+            $existing_stories = self::decode_content( (string) ( $existing['content_json'] ?? '' ) )['stories'] ?? [];
+            if ( 'edited' === (string) $existing['origin'] || 'excluded' === $old_status ) {
+                $new_status = $old_status;
+            } elseif ( ! empty( $existing_stories ) ) {
+                $new_status = 'stale';
+            } else {
+                $new_status = 'failed';
+            }
             $data  = [
                 'status'        => $new_status,
                 'error_message' => sanitize_textarea_field( $error_message ),
