@@ -1193,7 +1193,10 @@ class PressHub_AI_Memory_Store {
             'updated_at'    => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
         ];
         $format = [ '%s', '%s' ];
-        if ( 'excluded' !== (string) $entry['status'] ) {
+        // An editor-edited rollup keeps its status (normally 'stale'): its content_json was
+        // deliberately kept, so it may now lag the corrected digests and the editor must
+        // review the refreshed generated_json diff. Excluded rollups stay excluded.
+        if ( 'excluded' !== (string) $entry['status'] && 'edited' !== (string) $entry['origin'] ) {
             $data['status'] = 'active';
             $format[]       = '%s';
         }

@@ -310,7 +310,8 @@ $e2e = PressHub_AI_Memory_Store::get_weekly_entry( '2026-11-02' );
 mrb_check( 'edited: rebuild reports preserved_edit', is_array( $re ) && ! empty( $re['preserved_edit'] ) && 'edited' === $re['origin'] );
 mrb_check( 'edited: content_json untouched by rebuild', $e2e['content_json'] === $e2_ed['content_json'] && $e2e['version_hash'] === $e2_ed['version_hash'] );
 mrb_check( 'edited: generated_json refreshed', false !== strpos( (string) $e2e['generated_json'], 'ΝΕΑ ΓΕΝΝΗΜΕΝΗ ΑΦΗΓΗΣΗ.' ) );
-mrb_check( 'edited: origin stays edited and stale flag cleared by the rebuild', 'edited' === $e2e['origin'] && 'active' === $e2e['status'] && '' === (string) $e2e['error_message'] );
+mrb_check( 'edited: rebuilt edited rollup stays stale so the editor reviews the diff', 'stale' === (string) $e2e['status'] );
+mrb_check( 'edited: origin stays edited and the error message is cleared by the rebuild', 'edited' === $e2e['origin'] && '' === (string) $e2e['error_message'] );
 
 // Failed rebuild on edited rollup keeps status and content.
 PressHub_AI_Memory_Store::update_content( $d_1106, mrb_content( [ mrb_story( 'ygeia', 'Υγεία', 'Αλλαγή.' ) ] ), 1 );
