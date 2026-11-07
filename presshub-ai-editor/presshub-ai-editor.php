@@ -174,6 +174,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 // Social Auto-Post Subsystem Classes
@@ -246,6 +247,7 @@ add_filter(
 function presshub_ai_activate() {
     PressHub_AI_Token_Logger::create_table();
     PressHub_AI_Audit_Logger::create_table();
+    PressHub_AI_Memory_Store::create_tables();
     PressHub_AI_Generation_Recorder::create_table();
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
@@ -255,6 +257,9 @@ function presshub_ai_activate() {
     }
     if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
         wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
+    }
+    if ( ! wp_next_scheduled( 'presshub_ai_prune_memory_entries' ) ) {
+        wp_schedule_event( time(), 'daily', 'presshub_ai_prune_memory_entries' );
     }
     if ( ! wp_next_scheduled( PressHub_AI_Generation_Recorder::PRUNE_HOOK ) ) {
         wp_schedule_event( time(), 'daily', PressHub_AI_Generation_Recorder::PRUNE_HOOK );
@@ -279,6 +284,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_token_logs' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_audit_logs' );
+    wp_clear_scheduled_hook( 'presshub_ai_prune_memory_entries' );
     wp_clear_scheduled_hook( PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::deactivate();
@@ -297,6 +303,13 @@ add_action( 'presshub_ai_prune_token_logs', function() {
 add_action( 'presshub_ai_prune_audit_logs', function() {
     if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
         PressHub_AI_Audit_Logger::prune_logs( 90 );
+    }
+} );
+
+// Prune memory entries cron action (Issue #132)
+add_action( 'presshub_ai_prune_memory_entries', function() {
+    if ( class_exists( 'PressHub_AI_Memory_Store' ) ) {
+        PressHub_AI_Memory_Store::prune_old_entries();
     }
 } );
 
@@ -339,6 +352,7 @@ function presshub_ai_init() {
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
     PressHub_AI_Research_Cleanup::register();
+    PressHub_AI_Memory_Store::register_hooks();
 
     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
         if ( get_option( PressHub_AI_Token_Logger::DB_VERSION_OPTION ) !== PressHub_AI_Token_Logger::DB_VERSION ) {
@@ -346,6 +360,15 @@ function presshub_ai_init() {
         }
         if ( ! wp_next_scheduled( 'presshub_ai_prune_token_logs' ) ) {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_token_logs' );
+        }
+    }
+
+    if ( class_exists( 'PressHub_AI_Memory_Store' ) ) {
+        if ( get_option( PressHub_AI_Memory_Store::DB_VERSION_OPTION ) !== PressHub_AI_Memory_Store::DB_VERSION ) {
+            PressHub_AI_Memory_Store::create_tables();
+        }
+        if ( ! wp_next_scheduled( 'presshub_ai_prune_memory_entries' ) ) {
+            wp_schedule_event( time(), 'daily', 'presshub_ai_prune_memory_entries' );
         }
     }
 

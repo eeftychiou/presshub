@@ -648,6 +648,62 @@ class PressHub_AI_Settings_Render {
                     </table>
 
                     <?php $this->render_briefing_prompt_studio(); ?>
+                    <hr style="margin: 25px 0;">
+                    <h3><?php echo esc_html__( '4. Editorial Memory Settings', 'presshub-ai-editor' ); ?></h3>
+                    <p class="description"><?php echo esc_html__( 'Configure tiered editorial memory stream to maintain long-term story continuity across briefings and podcast episodes.', 'presshub-ai-editor' ); ?></p>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_enabled"><?php echo esc_html__( 'Enable Editorial Memory', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_daily_days"><?php echo esc_html__( 'Recent Memory Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_daily_days_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_background_days"><?php echo esc_html__( 'Background Memory Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_background_days_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_briefing_budget_chars"><?php echo esc_html__( 'Briefing Memory Budget (chars)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_briefing_budget_chars_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_podcast_budget_chars"><?php echo esc_html__( 'Podcast Memory Budget (chars)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_podcast_budget_chars_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_memory_retention_days"><?php echo esc_html__( 'Memory Retention Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_memory_retention_days_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_memory_provider"><?php echo esc_html__( 'Memory Model Provider', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_memory_provider_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_memory_model"><?php echo esc_html__( 'Memory Model Override', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_memory_model_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="briefing"><?php echo esc_html__( 'Save Daily Briefing Settings', 'presshub-ai-editor' ); ?></button>
@@ -3727,4 +3783,90 @@ class PressHub_AI_Settings_Render {
         }
         return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
     }
+    // ------------------------------------------------------------------
+    // Issue #132: Editorial Memory Render Fields
+    // ------------------------------------------------------------------
+
+    public function render_memory_section() {
+        echo '<p>' . esc_html__( 'Configure tiered editorial memory stream to maintain long-term story continuity across briefings and podcast episodes.', 'presshub-ai-editor' ) . '</p>';
+    }
+
+    public function render_memory_enabled_field() {
+        $option = 'presshub_ai_memory_enabled';
+        $value  = PressHub_AI_Settings_Storage::get_memory_enabled();
+        ?>
+        <label>
+            <input type="hidden" name="presshub_ai_memory_enabled_present" value="1" />
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
+            <?php echo esc_html__( 'Enable editorial memory stream (recent daily digests and background weekly rollups).', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'When disabled, generations use only that day&#39;s harvested articles.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_daily_days_field() {
+        $option = 'presshub_ai_memory_daily_days';
+        $value  = PressHub_AI_Settings_Storage::get_memory_daily_days();
+        ?>
+        <input type="number" min="0" max="14" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Number of recent days covered as daily story digests (0 - 14 days, default: 7).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_background_days_field() {
+        $option = 'presshub_ai_memory_background_days';
+        $value  = PressHub_AI_Settings_Storage::get_memory_background_days();
+        ?>
+        <input type="number" min="0" max="90" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Background window covered as weekly rollups (0 - 90 days, >= recent days, default: 30).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_briefing_budget_chars_field() {
+        $option = 'presshub_ai_memory_briefing_budget_chars';
+        $value  = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
+        ?>
+        <input type="number" min="0" max="60000" step="100" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Maximum character budget for memory context injected into daily briefing prompt (0 - 60,000, default: 12,000).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_podcast_budget_chars_field() {
+        $option = 'presshub_ai_memory_podcast_budget_chars';
+        $value  = PressHub_AI_Settings_Storage::get_memory_podcast_budget_chars();
+        ?>
+        <input type="number" min="0" max="60000" step="100" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="regular-text" />
+        <p class="description"><?php echo esc_html__( 'Maximum character budget for memory context injected into podcast prompt (0 - 60,000, default: 6,000).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_memory_retention_days_field() {
+        $option = 'presshub_ai_memory_retention_days';
+        $value  = PressHub_AI_Settings_Storage::get_memory_retention_days();
+        ?>
+        <input type="number" min="30" max="730" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Retention period before old memory entries and links are pruned (30 - 730 days, default: 180).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_memory_provider_field() {
+        $option  = 'presshub_ai_briefing_memory_provider';
+        $current = (string) get_option( $option, '' );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text">
+            <?php echo self::get_active_providers_options( $current, __( '-- Use Active Provider Default --', 'presshub-ai-editor' ) ); ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'AI Provider for memory digests and weekly rollups. Can point to a cheaper model.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_memory_model_field() {
+        $option = 'presshub_ai_briefing_memory_model';
+        $value  = (string) get_option( $option, '' );
+        ?>
+        <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default', 'presshub-ai-editor' ); ?>" />
+        <p class="description"><?php echo esc_html__( 'Model override for memory digests and rollups (e.g. gpt-4o-mini, gemini-2.0-flash).', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
 }

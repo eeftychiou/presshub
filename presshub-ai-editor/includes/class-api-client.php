@@ -149,6 +149,7 @@ class PressHub_AI_API_Client {
      *   - 'coauthor'
      *   - 'briefing_text'
      *   - 'briefing_podcast'
+     *   - 'briefing_memory'
      *   - 'copilot'
      *   - 'tts'
      *
@@ -431,7 +432,7 @@ class PressHub_AI_API_Client {
             return;
         }
 
-        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'copilot', 'tts', 'podcast_tts', 'image_prompt', 'image_generation' ], true ) ) {
+        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'briefing_memory', 'copilot', 'tts', 'podcast_tts', 'image_prompt', 'image_generation' ], true ) ) {
             $this->set_module( $module_or_provider );
             return;
         }
@@ -613,6 +614,8 @@ class PressHub_AI_API_Client {
             $this->current_action = 'podcast_audio';
         } elseif ( 'briefing_podcast' === $module ) {
             $this->current_action = 'podcast_script';
+        } elseif ( 'briefing_memory' === $module ) {
+            $this->current_action = 'briefing_memory';
         } elseif ( 'briefing_text' === $module ) {
             $this->current_action = 'briefing_curation';
         } elseif ( 'coauthor' === $module ) {

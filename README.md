@@ -5,7 +5,7 @@ Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for 
 [![Version](https://img.shields.io/badge/version-2.9.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
-[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-83%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
+[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-84%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Social Autopost Tests](https://img.shields.io/badge/Social%20Tests-171%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Worker Tests](https://img.shields.io/badge/Worker%20Tests-76%20passed%20%7C%20100%25-brightgreen.svg)](presshub-social-worker/tests/)
 [![Jest Workflow Tests](https://img.shields.io/badge/Jest%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-workflow/tests/)
@@ -101,6 +101,21 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - Assign generated images as the article's official featured image with one click.
 
 ### 5. 🎛️ Instruction Presets & Prompt Studio
+### 6. 🧠 Editorial Memory Stream & Story Continuity (Issue #132)
+- **Editorial Continuity**: Multi-day storyline tracking across daily briefings and weekly digests.
+- **Edit-Protection Invariant**: Human editor revisions (`origin='edited'`) in `wp_presshub_ai_memory_entries` are preserved across regenerations; editors can deliberately reset to generated content via `reset_to_generated()`.
+- **Stale Propagation**: Revisions or exclusions to daily digests automatically mark dependent weekly rollups as `stale`.
+- **Clean Slate Post Deletion**: Deleting a daily briefing post automatically deletes associated daily memory entries and cleans links in `wp_presshub_ai_memory_entry_links`.
+- **Settings Reference**:
+  - `presshub_ai_memory_enabled`: Enable or disable the editorial memory stream (default: `true`).
+  - `presshub_ai_memory_daily_days`: Number of recent days covered as daily story digests (bounds: 0–14, default: 7).
+  - `presshub_ai_memory_background_days`: Background window covered as weekly rollups (bounds: 0–90, clamped >= daily days, default: 30).
+  - `presshub_ai_memory_briefing_budget_chars`: Maximum character budget for memory context injected into daily briefing prompt (bounds: 0–60,000, default: 12,000).
+  - `presshub_ai_memory_podcast_budget_chars`: Maximum character budget for memory context injected into podcast prompt (bounds: 0–60,000, default: 6,000).
+  - `presshub_ai_memory_retention_days`: Retention period before old memory entries and links are pruned (bounds: 30–730, default: 180).
+  - Module `briefing_memory`: Dedicated AI provider and model routing for memory digests and weekly rollups (`presshub_ai_briefing_memory_provider`, `presshub_ai_briefing_memory_model`).
+
+
 - **Multi-Tier Presets**: Admin-curated global defaults, author-specific profiles, author defaults, and per-request metabox dropdown selection. Presets append specialized instructions to base system prompts without overwriting foundational editorial safety constraints.
 - **Externalized Prompt Assets**: Prompts are stored as modular text files under `presshub-ai-editor/assets/prompts/` (e.g. `default_greek_briefing.txt`, `podcast_style_two_hosts_greek.txt`, `article_image_analysis_prompt.txt`) and dynamically managed via `PressHub_AI_Prompt_Loader`.
 - **Admin Prompt Studio**: Inspect, customize, and reset prompt templates directly within WordPress settings without editing source code.
@@ -229,7 +244,7 @@ cd ../presshub-social-worker
 npm test
 npm run build
 ```
-*Executes all **83 AI Editor test suites**, **19 Social Auto-Post test suites (171 tests)**, and **5 Social Worker suites (76 tests including 4-tier progressive Twitter architecture with CreateTweet network interception)** with 100% pass rate.*
+*Executes all **84 AI Editor test suites**, **19 Social Auto-Post test suites (171 tests)**, and **5 Social Worker suites (76 tests including 4-tier progressive Twitter architecture with CreateTweet network interception)** with 100% pass rate.*
 
 ### 3. Running TypeScript & MCP Workflow Tests
 The workflow package integrates Model Context Protocol (MCP) servers and editorial automation:
