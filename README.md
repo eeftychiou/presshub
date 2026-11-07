@@ -7,7 +7,7 @@ Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for 
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-83%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Social Autopost Tests](https://img.shields.io/badge/Social%20Tests-171%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
-[![Worker Tests](https://img.shields.io/badge/Worker%20Tests-72%20passed%20%7C%20100%25-brightgreen.svg)](presshub-social-worker/tests/)
+[![Worker Tests](https://img.shields.io/badge/Worker%20Tests-75%20passed%20%7C%20100%25-brightgreen.svg)](presshub-social-worker/tests/)
 [![Jest Workflow Tests](https://img.shields.io/badge/Jest%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-workflow/tests/)
 [![CI](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml/badge.svg)](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-GPL--2.0--or--later-orange.svg)](presshub-ai-editor/presshub-ai-editor.php)
@@ -213,12 +213,12 @@ php tests/run-all-tests.php
 # PressHub Social Auto-Post PHP unit tests (19 suites, 171 assertions):
 php tests/run-social-tests.php
 
-# PressHub Social Worker TypeScript build & Jest tests (5 suites, 72 tests):
+# PressHub Social Worker TypeScript build & Jest tests (5 suites, 75 tests):
 cd ../presshub-social-worker
 npm test
 npm run build
 ```
-*Executes all **83 AI Editor test suites**, **19 Social Auto-Post test suites (171 tests)**, and **5 Social Worker suites (69 tests)** with 100% pass rate.*
+*Executes all **83 AI Editor test suites**, **19 Social Auto-Post test suites (171 tests)**, and **5 Social Worker suites (75 tests including 4-tier progressive Twitter architecture with CreateTweet network interception)** with 100% pass rate.*
 
 ### 3. Running TypeScript & MCP Workflow Tests
 The workflow package integrates Model Context Protocol (MCP) servers and editorial automation:

@@ -111,14 +111,29 @@ export async function captureAutomationFailure(
   return { screenshotPath, currentUrl, domState };
 }
 
+export const TWITTER_URL_WEIGHT = 23;
+export const TWITTER_MAX_WEIGHTED_CHARS = 275;
+
+/**
+ * Calculates effective weighted character length for Twitter/X.
+ * Every URL (http:// or https://) counts as exactly 23 characters (t.co shortener).
+ * Uses Array.from to correctly count Unicode code points (Greek text, emojis, etc.).
+ */
+export function getTwitterWeightedLength(text: string): number {
+  if (!text || typeof text !== 'string') return 0;
+  const replaced = text.replace(/https?:\/\/[^\s]+/gi, 'x'.repeat(TWITTER_URL_WEIGHT));
+  return Array.from(replaced).length;
+}
+
 /**
  * Strictly enforce Single Link Rule and Brand Sanitization for Twitter:
  * 1. Guarantees only ONE URL (the article permalink) is present in the tweet.
  * 2. Strips any secondary URLs or homepage links (e.g. https://presshub.cy).
  * 3. Replaces standalone domain names like 'PressHub.Cy' or 'presshub.cy' with plain 'PressHub'
  *    so X/Twitter does not auto-link them as a second URL and suppress the featured image card.
+ * 4. Enforces the 275-weighted-character budget preserving article URL and trailing hashtags.
  */
-export function sanitizeTwitterCopy(copy: string): string {
+export function sanitizeTwitterCopy(copy: string, maxWeightedChars: number = TWITTER_MAX_WEIGHTED_CHARS): string {
   if (!copy || typeof copy !== 'string') return '';
   let text = copy.trim();
 
@@ -152,7 +167,75 @@ export function sanitizeTwitterCopy(copy: string): string {
   // Clean up whitespace and empty lines
   text = text.replace(/[ \t]+/g, ' ');
   text = text.replace(/\n{3,}/g, '\n\n');
-  return text.trim();
+  text = text.trim();
+
+  // Smart weighted length enforcement
+  if (getTwitterWeightedLength(text) > maxWeightedChars) {
+    let textWithoutUrl = text;
+    if (targetUrl) {
+      textWithoutUrl = text.replace(targetUrl, '').trim();
+    }
+
+    let trailingHashtags = '';
+    let bodyText = textWithoutUrl;
+
+    // Check if hashtags appeared after targetUrl in the text
+    if (targetUrl) {
+      const parts = text.split(targetUrl);
+      if (parts.length > 1) {
+        const afterUrl = parts.slice(1).join(targetUrl);
+        const hashtagMatches = afterUrl.match(/#[^\s#]+/g);
+        if (hashtagMatches && hashtagMatches.length > 0) {
+          trailingHashtags = hashtagMatches.join(' ');
+          bodyText = parts[0].trim();
+        }
+      }
+    }
+
+    if (!trailingHashtags) {
+      const hashtagMatch = textWithoutUrl.match(/(?:\s+#[^\s#]+)+\s*(?:PressHub)?\s*$/);
+      if (hashtagMatch && hashtagMatch.index !== undefined) {
+        const matched = hashtagMatch[0].match(/#[^\s#]+/g);
+        if (matched && matched.length > 0) {
+          trailingHashtags = matched.join(' ');
+          bodyText = textWithoutUrl.slice(0, hashtagMatch.index).trim();
+        }
+      }
+    }
+
+    let suffixWeight = 0;
+    if (targetUrl) {
+      suffixWeight += 2 + TWITTER_URL_WEIGHT; // '\n\n' + 23
+    }
+    if (trailingHashtags) {
+      suffixWeight += 2 + Array.from(trailingHashtags).length; // '\n\n' + code points
+    }
+
+    const availableBodyChars = maxWeightedChars - suffixWeight - 3; // reserving 3 chars for '...'
+
+    let trimmedBody = bodyText;
+    if (availableBodyChars > 10) {
+      const bodyPoints = Array.from(bodyText);
+      if (bodyPoints.length > availableBodyChars) {
+        let sliced = bodyPoints.slice(0, availableBodyChars).join('');
+        const minCut = Math.floor(availableBodyChars * 0.6);
+        const lastSpace = sliced.search(/\s+[^\s]*$/);
+        if (lastSpace >= minCut) {
+          sliced = sliced.slice(0, lastSpace);
+        }
+        sliced = sliced.replace(/[\s\.,;:!?'"«»\-_]+$/, '');
+        trimmedBody = sliced + '...';
+      }
+    } else {
+      const clampChars = Math.max(0, availableBodyChars);
+      trimmedBody = Array.from(bodyText).slice(0, clampChars).join('') + (clampChars > 0 ? '...' : '');
+    }
+
+    text = trimmedBody + (targetUrl ? '\n\n' + targetUrl : '') + (trailingHashtags ? '\n\n' + trailingHashtags : '');
+    text = text.trim();
+  }
+
+  return text;
 }
 
 /**
@@ -175,6 +258,58 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
   try {
     page.setDefaultTimeout(timeout);
     await page.bringToFront().catch(() => {});
+
+    // Network Interception Setup
+    let createTweetRequestCount = 0;
+    let interceptedTweetId: string | undefined;
+    let interceptedApiError: string | undefined;
+    let capturedBearerToken = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+    let capturedCreateTweetQueryId: string | undefined;
+
+    if (typeof page.on === 'function') {
+      page.on('request', (req: any) => {
+        try {
+          const url = req.url ? req.url() : '';
+          if (url.includes('/i/api/graphql/')) {
+            const auth = req.headers ? req.headers()['authorization'] : undefined;
+            if (auth) {
+              capturedBearerToken = auth;
+            }
+            const match = url.match(/\/i\/api\/graphql\/([^/]+)\/CreateTweet/i);
+            if (match) {
+              capturedCreateTweetQueryId = match[1];
+            }
+          }
+          if (/\/i\/api\/graphql\/[^/]+\/(CreateTweet|CreateNoteTweet)/i.test(url)) {
+            if (typeof req.method === 'function' && req.method() === 'POST') {
+              createTweetRequestCount++;
+              WorkerLogger.info('Twitter Automation', `[Twitter Automation] Intercepted outbound CreateTweet request (#${createTweetRequestCount})`);
+            }
+          }
+        } catch {}
+      });
+
+      page.on('response', async (res: any) => {
+        try {
+          const url = res.url ? res.url() : '';
+          if (/\/i\/api\/graphql\/[^/]+\/(CreateTweet|CreateNoteTweet)/i.test(url)) {
+            const data = await res.json().catch(() => null);
+            const restId =
+              data?.data?.create_tweet?.tweet_results?.result?.rest_id ||
+              data?.data?.create_tweet?.tweet_results?.result?.tweet?.rest_id ||
+              data?.data?.notetweet_create?.tweet_results?.result?.rest_id;
+            if (restId) {
+              interceptedTweetId = String(restId);
+              WorkerLogger.info('Twitter Automation', `[Twitter Automation] Intercepted CreateTweet response with rest_id: ${interceptedTweetId}`);
+            }
+            if (Array.isArray(data?.errors) && data.errors.length > 0) {
+              interceptedApiError = data.errors.map((e: any) => e.message).join('; ');
+              WorkerLogger.warn('Twitter Automation', `[Twitter Automation] Intercepted CreateTweet GraphQL error: ${interceptedApiError}`);
+            }
+          }
+        } catch {}
+      });
+    }
 
     WorkerLogger.info('Twitter Automation', 'Navigating to compose URL (https://x.com/compose/post)...');
     await page.goto('https://x.com/compose/post', { waitUntil: 'domcontentloaded' });
@@ -231,6 +366,10 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
         WorkerLogger.debug('Twitter Automation', 'Dismissing cookie banner button...');
         await cookieAccept.click({ force: true }).catch(() => {});
         await page.waitForTimeout(300);
+        if (fs.existsSync(sessionPath) && typeof session.context.storageState === 'function') {
+          await session.context.storageState({ path: sessionPath }).catch(() => {});
+          WorkerLogger.debug('Twitter Automation', 'Persisted updated storageState after cookie dismissal.');
+        }
       }
     };
 
@@ -241,13 +380,17 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     const isModal = (await modalSurface.count()) > 0 && await modalSurface.isVisible().catch(() => false);
 
     const textarea = isModal
-      ? modalSurface.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]').first()
-      : page.locator('div[data-slot="xds-modal-surface"] textarea, div[role="dialog"] textarea, textarea[placeholder*="happening"], textarea[aria-label*="happening"], [data-testid="tweetTextarea_0"], div[role="dialog"] [data-testid="tweetTextarea_0"]').first();
+      ? modalSurface.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]')
+          .or(modalSurface.getByRole('textbox', { name: /what.*happening|post text/i }))
+          .first()
+      : page.locator('div[data-slot="xds-modal-surface"] textarea, div[role="dialog"] textarea, textarea[placeholder*="happening"], textarea[aria-label*="happening"], [data-testid="tweetTextarea_0"], div[role="dialog"] [data-testid="tweetTextarea_0"]')
+          .or(page.getByRole('textbox', { name: /what.*happening|post text/i }))
+          .first();
 
     await textarea.waitFor({ state: 'visible', timeout: 15000 });
 
     const tweetCopy = sanitizeTwitterCopy(options.copy);
-    WorkerLogger.info('Twitter Automation', `Typing tweet copy (${tweetCopy.length} chars, sanitized for single-link)...`);
+    WorkerLogger.info('Twitter Automation', `Typing tweet copy (${tweetCopy.length} chars, weighted length: ${getTwitterWeightedLength(tweetCopy)})...`);
     await textarea.click();
     try {
       await textarea.fill(tweetCopy);
@@ -274,36 +417,59 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       }
     }
 
-    WorkerLogger.debug('Twitter Automation', 'Finding Post button...');
-    const postButton = isModal
-      ? modalSurface.getByRole('button', { name: /^Post$/i, exact: true })
-          .or(modalSurface.locator('button[data-slot="xds-button"]:has-text("Post"), [data-testid="tweetButton"]').filter({ hasNotText: 'New Post' }))
-          .first()
-      : page.locator('div[data-slot="xds-modal-surface"] button[data-slot="xds-button"]:has-text("Post"), div[role="dialog"] [data-testid="tweetButton"], button.x-button:has-text("Post"), [data-testid="tweetButton"]').filter({ hasNotText: 'New Post' }).first();
-
-    // Fast-path: Keyboard shortcut submission (ControlOrMeta+Enter) directly inside composer
-    WorkerLogger.info('Twitter Automation', 'Attempting keyboard shortcut submission (ControlOrMeta+Enter)...');
+    // Tier 1: Keyboard-First Submission (ControlOrMeta+Enter)
+    WorkerLogger.info('Twitter Automation', 'Tier 1: Attempting keyboard shortcut submission (ControlOrMeta+Enter)...');
     await textarea.focus().catch(() => {});
     await page.keyboard.press('ControlOrMeta+Enter').catch(() => {});
 
-    // Check if keyboard shortcut immediately detached the modal or triggered submission
-    const modalDetachedEarly = await Promise.race([
-      modalSurface.waitFor({ state: 'detached', timeout: 3000 }).then(() => true).catch(() => false),
-      page.locator('[data-testid="toast"], [data-slot="xds-toast"]').first().waitFor({ state: 'visible', timeout: 3000 }).then(() => true).catch(() => false)
-    ]);
+    // Wait up to 3500ms for interceptedTweetId, modalSurface detach, or toast visibility
+    let modalDetachedEarly = false;
+    const tier1Start = Date.now();
+    while (Date.now() - tier1Start < 3500) {
+      if (interceptedTweetId) {
+        modalDetachedEarly = true;
+        break;
+      }
+      const isDetached = isModal ? await modalSurface.count().then(c => c === 0).catch(() => false) : false;
+      if (isDetached) {
+        modalDetachedEarly = true;
+        break;
+      }
+      const toastVisible = await page.locator('[data-testid="toast"], [data-slot="xds-toast"]').first().isVisible().catch(() => false);
+      if (toastVisible) {
+        modalDetachedEarly = true;
+        break;
+      }
+      await page.waitForTimeout(200);
+    }
 
-    if (modalDetachedEarly) {
-      WorkerLogger.info('Twitter Automation', 'Tweet submitted successfully via keyboard shortcut (modal detached/toast appeared).');
-    } else {
-      WorkerLogger.debug('Twitter Automation', 'Keyboard shortcut did not detach modal immediately, proceeding with Post button click fallback...');
-      await postButton.waitFor({ state: 'visible', timeout: 15000 });
+    if (modalDetachedEarly || interceptedTweetId) {
+      WorkerLogger.info('Twitter Automation', 'Tier 1 submission succeeded (keyboard shortcut triggered modal detach, toast, or network response).');
+    }
+
+    let clicked = false;
+
+    // Tier 2: Exact ARIA Post Button Click (Gated)
+    if (!modalDetachedEarly && !interceptedTweetId && createTweetRequestCount === 0) {
+      WorkerLogger.debug('Twitter Automation', 'Tier 2: Finding exact Post button...');
+      const postButton = isModal
+        ? modalSurface.getByRole('button', { name: /^Post$/i, exact: true })
+            .or(modalSurface.locator('button[data-slot="xds-button"]:has-text("Post"), [data-testid="tweetButton"]').filter({ hasNotText: 'New Post' }))
+            .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"]') })
+            .first()
+        : page.locator('div[data-slot="xds-modal-surface"] button[data-slot="xds-button"]:has-text("Post"), div[role="dialog"] [data-testid="tweetButton"], button.x-button:has-text("Post"), [data-testid="tweetButton"]')
+            .filter({ hasNotText: 'New Post' })
+            .filter({ hasNot: page.locator('[data-slot="xds-menu-trigger"]') })
+            .first();
+
+      await postButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
 
       // Wait if button is disabled (e.g. video/image still processing)
       for (let i = 0; i < 15; i++) {
         await dismissTwitterCookies();
 
-        const ariaDisabled = await postButton.getAttribute('aria-disabled');
-        const disabled = await postButton.getAttribute('disabled');
+        const ariaDisabled = await postButton.getAttribute('aria-disabled').catch(() => null);
+        const disabled = await postButton.getAttribute('disabled').catch(() => null);
         if (ariaDisabled !== 'true' && disabled === null) {
           break;
         }
@@ -314,34 +480,33 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       await dismissTwitterCookies();
       await page.keyboard.press('Escape').catch(() => {});
 
-      // Validate button actionability before clicking
-      const finalAriaDisabled = await postButton.getAttribute('aria-disabled');
-      const finalDisabled = await postButton.getAttribute('disabled');
+      // Check button actionability before clicking
+      const finalAriaDisabled = await postButton.getAttribute('aria-disabled').catch(() => null);
+      const finalDisabled = await postButton.getAttribute('disabled').catch(() => null);
       if (finalAriaDisabled === 'true' || finalDisabled !== null) {
-        throw new Error(`Twitter Post button is disabled (aria-disabled="${finalAriaDisabled}", disabled="${finalDisabled}"). Content may exceed character limits or input was not registered.`);
-      }
-
-      WorkerLogger.info('Twitter Automation', 'Clicking Post button...');
-      await postButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
-      await postButton.focus().catch(() => {});
-      await postButton.hover().catch(() => {});
-      let clicked = false;
-      try {
-        await postButton.click({ timeout: 5000 });
-        clicked = true;
-      } catch {
-        WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted, clicking Post with force: true...');
+        WorkerLogger.warn('Twitter Automation', `Twitter Post button is disabled (aria-disabled="${finalAriaDisabled}", disabled="${finalDisabled}"). Content may exceed character limits.`);
+      } else {
+        WorkerLogger.info('Twitter Automation', 'Tier 2: Clicking Post button...');
+        await postButton.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+        await postButton.focus().catch(() => {});
+        await postButton.hover().catch(() => {});
         try {
-          await postButton.click({ force: true, timeout: 3000 });
+          await postButton.click({ timeout: 5000 });
           clicked = true;
-        } catch (err: any) {
-          WorkerLogger.warn('Twitter Automation', `Playwright click failed: ${err?.message || err}`);
+        } catch {
+          WorkerLogger.debug('Twitter Automation', 'Pointer event intercepted, clicking Post with force: true...');
+          try {
+            await postButton.click({ force: true, timeout: 3000 });
+            clicked = true;
+          } catch (err: any) {
+            WorkerLogger.warn('Twitter Automation', `Playwright click failed: ${err?.message || err}`);
+          }
         }
       }
 
-      // Full DOM event cycle dispatch to guarantee React synthetic click handlers fire ONLY if standard click was intercepted
-      if (!clicked) {
-        WorkerLogger.debug('Twitter Automation', 'Standard clicks failed or intercepted, attempting fallback native DOM event dispatch...');
+      // Tier 3: Synthetic native DOM MouseEvent cycle (Gated)
+      if (!clicked && !interceptedTweetId && createTweetRequestCount === 0) {
+        WorkerLogger.info('Twitter Automation', 'Tier 3: Attempting synthetic native DOM MouseEvent cycle...');
         await postButton.evaluate((el: any) => {
           if (el) {
             el.focus();
@@ -365,36 +530,64 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     }
 
     WorkerLogger.info('Twitter Automation', 'Waiting for tweet submission confirmation...');
-    // Wait for the modal dialog to disappear or notification toast to appear
-    await Promise.race([
-      page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first().waitFor({ state: 'detached', timeout: 15000 }),
-      page.locator('[data-testid="toast"]').first().waitFor({ state: 'visible', timeout: 15000 })
-    ]).catch(() => {});
+    // Wait for the modal dialog to disappear, toast to appear, or interceptedTweetId to be captured
+    if (!interceptedTweetId) {
+      await Promise.race([
+        page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first().waitFor({ state: 'detached', timeout: 15000 }),
+        page.locator('[data-testid="toast"], [data-slot="xds-toast"]').first().waitFor({ state: 'visible', timeout: 15000 }),
+        new Promise<void>((resolve) => {
+          const pollStart = Date.now();
+          const timer = setInterval(() => {
+            if (interceptedTweetId || Date.now() - pollStart > 15000) {
+              clearInterval(timer);
+              resolve();
+            }
+          }, 200);
+        })
+      ]).catch(() => {});
+    }
 
     await page.waitForTimeout(1500);
+
+    // Discover username
+    const profileLink = page.locator('[data-testid="AppTabBar_Profile_Link"]').first();
+    let username = 'presshubcy';
+    if ((await profileLink.count()) > 0) {
+      const href = await profileLink.getAttribute('href');
+      if (href && href.startsWith('/')) {
+        username = href.replace(/^\//, '').split('/')[0] || username;
+      }
+    }
 
     // Extract tweet URL and ID
     let tweetUrl: string | undefined;
     let tweetId: string | undefined;
 
-    try {
-      // Check if toast notification contains a direct link to the published tweet
-      const toastLink = page.locator('[data-testid="toast"] a[href*="/status/"]').first();
-      if ((await toastLink.count()) > 0) {
-        const href = await toastLink.getAttribute('href');
-        if (href) {
-          tweetUrl = href.startsWith('http') ? href : `https://x.com${href}`;
-          const match = tweetUrl.match(/\/status\/(\d+)/);
-          if (match) {
-            tweetId = match[1];
-          }
-        }
-      }
-    } catch {
-      // Toast link extraction is best-effort
+    // Fast path: if intercepted via network response
+    if (interceptedTweetId) {
+      tweetId = interceptedTweetId;
+      tweetUrl = `https://x.com/${username}/status/${tweetId}`;
+      WorkerLogger.info('Twitter Automation', `Resolved tweet from intercepted network response: ${tweetUrl} (ID: ${tweetId})`);
     }
 
-    // Check page URL if it redirected to the status
+    // Next path: toast link
+    if (!tweetUrl) {
+      try {
+        const toastLink = page.locator('[data-testid="toast"] a[href*="/status/"], [data-slot="xds-toast"] a[href*="/status/"]').first();
+        if ((await toastLink.count()) > 0) {
+          const href = await toastLink.getAttribute('href');
+          if (href) {
+            tweetUrl = href.startsWith('http') ? href : `https://x.com${href}`;
+            const match = tweetUrl.match(/\/status\/(\d+)/);
+            if (match) {
+              tweetId = match[1];
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Next path: redirected page URL
     if (!tweetUrl) {
       try {
         const pageUrl = page.url();
@@ -406,18 +599,10 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       } catch {}
     }
 
-    // Fallback: If toast link was not captured, look up user profile timeline to find newly published tweet
+    // Next path: profile timeline inspection
     if (!tweetUrl || !tweetId) {
       try {
-        WorkerLogger.info('Twitter Automation', 'Toast link not captured, inspecting user profile to locate newly published tweet...');
-        const profileLink = page.locator('[data-testid="AppTabBar_Profile_Link"]').first();
-        let username = 'presshubcy';
-        if ((await profileLink.count()) > 0) {
-          const href = await profileLink.getAttribute('href');
-          if (href && href.startsWith('/')) {
-            username = href.replace(/^\//, '').split('/')[0] || username;
-          }
-        }
+        WorkerLogger.info('Twitter Automation', 'Status link not captured, inspecting user profile to locate newly published tweet...');
         await page.goto(`https://x.com/${username}`, { waitUntil: 'domcontentloaded', timeout: 20000 });
         await page.waitForTimeout(3000);
 
@@ -448,6 +633,139 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       }
     }
 
+    // Tier 4: Direct In-Page CreateTweet GraphQL API Fallback (Strictly Gated)
+    if ((!tweetUrl || !tweetId) && createTweetRequestCount === 0 && !options.mediaPath) {
+      WorkerLogger.info('Twitter Automation', '[Twitter Automation] Tier 4: Executing direct in-page CreateTweet GraphQL fallback (0 prior CreateTweet requests)...');
+      try {
+        const queryIdToUse = capturedCreateTweetQueryId || 'VaenaVgh5q5ih7kvyVjgtg';
+        const bearerToUse = capturedBearerToken;
+
+        let contextCt0: string | undefined;
+        try {
+          const cookieCtx = (typeof page.context === 'function' && page.context()) ? page.context() : session.context;
+          if (cookieCtx && typeof cookieCtx.cookies === 'function') {
+            const cookies = await cookieCtx.cookies(['https://x.com', 'https://twitter.com']);
+            const found = cookies.find((c: any) => c.name === 'ct0');
+            if (found) {
+              contextCt0 = found.value;
+            }
+          }
+        } catch {}
+
+        const evalResult = await page.evaluate(
+          async ({ copy, queryId, bearer, fallbackCt0 }: { copy: string; queryId: string; bearer: string; fallbackCt0?: string }) => {
+            try {
+              const doc = (globalThis as any).document;
+              const win = (globalThis as any).window;
+              let ct0 = fallbackCt0 || '';
+
+              if (!ct0) {
+                try {
+                  const cookieStr = doc?.cookie || '';
+                  const ct0Match = cookieStr.match(/(?:^|;\s*)ct0=([^;]+)/);
+                  if (ct0Match) {
+                    ct0 = decodeURIComponent(ct0Match[1]);
+                  }
+                } catch {}
+              }
+
+              if (!ct0) {
+                return { success: false, error: 'No ct0 cookie found in session cookies or document.cookie' };
+              }
+
+              let resolvedQueryId = queryId;
+              try {
+                const scripts = Array.from(doc.querySelectorAll('script[src]')) as any[];
+                for (const script of scripts) {
+                  if (script.src && script.src.includes('endpoints.CreateTweet')) {
+                    const match = script.src.match(/\/([a-zA-Z0-9_\-]+)\.js/);
+                    if (match) {
+                      resolvedQueryId = match[1];
+                      break;
+                    }
+                  }
+                }
+              } catch {}
+
+              const base = (win?.location?.origin && win.location.origin.startsWith('http')) ? win.location.origin : 'https://x.com';
+              const response = await fetch(base + '/i/api/graphql/' + resolvedQueryId + '/CreateTweet', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                  'authorization': bearer,
+                  'x-csrf-token': ct0,
+                  'x-twitter-active-user': 'yes',
+                  'x-twitter-auth-type': 'OAuth2Session',
+                  'content-type': 'application/json'
+                },
+                body: JSON.stringify({
+                  variables: {
+                    tweet_text: copy,
+                    dark_request: false,
+                    media: { media_entities: [], possibly_sensitive: false },
+                    semantic_annotation_ids: []
+                  },
+                  features: {
+                    interactive_text_enabled: true,
+                    longform_notetweets_inline_media_enabled: true,
+                    responsive_web_text_conversations_enabled: false,
+                    tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
+                    voodoo_api_enabled: false,
+                    rweb_tipjar_consumption_enabled: true,
+                    responsive_web_twitter_article_tweet_consumption_enabled: true,
+                    Communities_web_enable_tweet_community_results_fetch: true,
+                    c9s_tweet_anatomy_moderator_badge_enabled: true,
+                    articles_preview_enabled: true,
+                    rweb_video_timestamps_enabled: true,
+                    longform_notetweets_rich_text_read_enabled: true,
+                    longform_notetweets_consumption_enabled: true,
+                    responsive_web_enhance_cards_enabled: false,
+                    standardized_nudges_misinfo: true,
+                    freedom_of_speech_not_reach_fetch_enabled: true,
+                    responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+                    responsive_web_edit_tweet_api_enabled: true,
+                    graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+                    view_counts_everywhere_api_enabled: true,
+                    Responsive_web_graphql_exclude_directive_enabled: true,
+                    verified_phone_label_enabled: false,
+                    responsive_web_graphql_timeline_navigation_enabled: true
+                  },
+                  queryId: resolvedQueryId
+                })
+              });
+
+              const data: any = await response.json().catch(() => null);
+              const restId =
+                data?.data?.create_tweet?.tweet_results?.result?.rest_id ||
+                data?.data?.create_tweet?.tweet_results?.result?.tweet?.rest_id;
+
+              if (restId) {
+                return { success: true, restId: String(restId) };
+              }
+
+              const errorMsg = Array.isArray(data?.errors) && data.errors.length > 0
+                ? data.errors.map((e: any) => e.message).join('; ')
+                : `HTTP ${response.status} ${response.statusText}`;
+              return { success: false, error: errorMsg };
+            } catch (err: any) {
+              return { success: false, error: err?.message || String(err) };
+            }
+          },
+          { copy: tweetCopy, queryId: queryIdToUse, bearer: bearerToUse, fallbackCt0: contextCt0 }
+        );
+
+        if (evalResult?.success && evalResult?.restId) {
+          tweetId = evalResult.restId;
+          tweetUrl = `https://x.com/${username}/status/${tweetId}`;
+          WorkerLogger.info('Twitter Automation', `Tier 4: In-page CreateTweet GraphQL fallback succeeded with rest_id: ${tweetId}`);
+        } else {
+          WorkerLogger.warn('Twitter Automation', `Tier 4: In-page CreateTweet GraphQL fallback failed: ${evalResult?.error || 'unknown error'}`);
+        }
+      } catch (err: any) {
+        WorkerLogger.warn('Twitter Automation', `Tier 4: In-page CreateTweet evaluation error: ${err?.message || err}`);
+      }
+    }
+
     // Strict Zero-Silent-Fallback: Never generate a fake tw-timestamp fallback ID
     if (!tweetUrl || !tweetId) {
       throw new Error('Twitter automation failed: Tweet submission could not be confirmed (no status link found in toast or profile timeline).');
@@ -465,6 +783,12 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
     if (!isArticleVisible || isErrorPage) {
       throw new Error(`Twitter post verification failed: Tweet URL ${tweetUrl} could not be confirmed on X (article visible: ${isArticleVisible}, error page: ${isErrorPage}).`);
+    }
+
+    // Persist storageState after successful verification
+    if (fs.existsSync(sessionPath) && typeof session.context.storageState === 'function') {
+      await session.context.storageState({ path: sessionPath }).catch(() => {});
+      WorkerLogger.debug('Twitter Automation', 'Persisted updated storageState after tweet verification.');
     }
 
     WorkerLogger.info('Twitter Automation', `Tweet publication verified successfully on X! URL: ${tweetUrl}, ID: ${tweetId}`);

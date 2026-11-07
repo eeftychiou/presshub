@@ -1,7 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 import { chromium, Browser, BrowserContext } from 'playwright';
-import { postTwitter, postTikTok, postFacebook, postInstagram } from '../src/automation/posters';
+import {
+  postTwitter,
+  postTikTok,
+  postFacebook,
+  postInstagram,
+  getTwitterWeightedLength,
+  sanitizeTwitterCopy,
+  TWITTER_URL_WEIGHT,
+  TWITTER_MAX_WEIGHTED_CHARS
+} from '../src/automation/posters';
 import { ChromeConnection } from '../src/automation/browser-helper';
 import { markSessionInvalid, clearSessionInvalid, verifySession } from '../src/automation/session-manager';
 
@@ -39,6 +48,7 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       isExternalCdp: false,
       context: {
         newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
           const page = await context.newPage();
           const composeHtml = `<html><body>
             <div class="timeline">
@@ -96,6 +106,7 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       isExternalCdp: false,
       context: {
         newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
           const page = await context.newPage();
           const composeHtml = `<html><body>
             <a data-testid="AppTabBar_Profile_Link" href="/presshubcy">Profile</a>
@@ -149,6 +160,7 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       isExternalCdp: false,
       context: {
         newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
           const page = await context.newPage();
           const composeHtml = `<html><body>
             <div role="dialog">
@@ -195,6 +207,7 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       isExternalCdp: false,
       context: {
         newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
           const page = await context.newPage();
           const html = `<html><body>
             <div role="button">What's on your mind</div>
@@ -233,6 +246,7 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       isExternalCdp: false,
       context: {
         newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
           const page = await context.newPage();
           const html = `<html><body>
             <input type="file" accept="video/mp4" />
@@ -277,6 +291,7 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       isExternalCdp: false,
       context: {
         newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
           const page = await context.newPage();
           const html = `<html><body>
             <a role="link">Create</a>
@@ -317,6 +332,7 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       isExternalCdp: false,
       context: {
         newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
           const page = await context.newPage();
           page.goto = async () => {
             await page.setContent('<html><body><div class="login-wrapper">See what’s happening<input autocomplete="username" /></div></body></html>');
@@ -349,6 +365,7 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       isExternalCdp: false,
       context: {
         newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
           const page = await context.newPage();
           const composeHtml = `<html><body>
             <div role="dialog">
@@ -391,5 +408,187 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
 
     expect(res.success).toBe(true);
     expect(res.externalPostId).toBe('3344556677');
+  });
+
+  test('getTwitterWeightedLength and sanitizeTwitterCopy accurately enforce 275-weighted-char budget preserving URL and hashtags', () => {
+    // 1. getTwitterWeightedLength verifies URLs count as 23 chars and emojis/Greek count as code points
+    const sampleUrl = 'https://presshub.cy/article-slug-very-long-test-url-12345';
+    expect(sampleUrl.length).toBeGreaterThan(23);
+    const weightedUrlLength = getTwitterWeightedLength(sampleUrl);
+    expect(weightedUrlLength).toBe(TWITTER_URL_WEIGHT); // exactly 23
+
+    const greekWithEmoji = '🇬🇷 Κύπρος: Σημαντικές ανακοινώσεις σήμερα';
+    const expectedGreekPoints = Array.from(greekWithEmoji).length;
+    expect(getTwitterWeightedLength(greekWithEmoji)).toBe(expectedGreekPoints);
+
+    // 2. sanitizeTwitterCopy smart trimming with Greek text, URL, and trailing hashtags exceeding 275 chars
+    const greekArticleUrl = 'https://presshub.cy/mesimvrino-podcast-enimerosis-07-11-2026/';
+    const trailingHashtags = '#Κυπρος #Ειδησεις #PressHub';
+    const longGreekBody = 'Η κυβέρνηση της Κυπριακής Δημοκρατίας ανακοίνωσε σήμερα ένα εκτενές πακέτο μεταρρυθμίσεων που στοχεύει στον εκσυγχρονισμό των δημόσιων υπηρεσιών, την ενίσχυση της ψηφιακής διακυβέρνησης και την επιτάχυνση των διαδικασιών για όλους τους πολίτες και τις επιχειρήσεις σε όλη την επικράτεια. Το νέο πλαίσιο περιλαμβάνει λεπτομερείς κατευθυντήριες γραμμές και στρατηγικές παρεμβάσεις για την οικονομία.';
+    const rawCopy = `${longGreekBody}\n\n${greekArticleUrl}\n\n${trailingHashtags}\n\npresshub.cy`;
+
+    const sanitized = sanitizeTwitterCopy(rawCopy);
+
+    // Verify budget enforcement
+    expect(getTwitterWeightedLength(sanitized)).toBeLessThanOrEqual(TWITTER_MAX_WEIGHTED_CHARS);
+    // Verify target URL is preserved
+    expect(sanitized).toContain(greekArticleUrl);
+    // Verify trailing hashtags are preserved
+    expect(sanitized).toContain(trailingHashtags);
+    // Verify ellipsis was added to trimmed body
+    expect(sanitized).toContain('...');
+    // Verify secondary domain reference outside target URL was normalized
+    expect(sanitized.replace(greekArticleUrl, '')).not.toContain('presshub.cy');
+  });
+
+  test('postTwitter captures rest_id directly from an intercepted /i/api/graphql/.../CreateTweet response', async () => {
+    clearSessionInvalid('twitter');
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', domain: 'x.com', path: '/' }]);
+          const page = await context.newPage();
+          await page.route('**/i/api/graphql/*/CreateTweet', async (route) => {
+            await route.fulfill({
+              status: 200,
+              contentType: 'application/json',
+              body: JSON.stringify({
+                data: {
+                  create_tweet: {
+                    tweet_results: {
+                      result: {
+                        rest_id: '887766554433'
+                      }
+                    }
+                  }
+                }
+              })
+            });
+          });
+
+          const composeHtml = `<html>
+            <head>
+              <base href="https://x.com/">
+            </head>
+            <body>
+            <div role="dialog">
+              <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+              <button id="post-btn" data-testid="tweetButton">Post</button>
+            </div>
+            <script>
+              const area = document.querySelector('[data-testid="tweetTextarea_0"]');
+              const triggerSend = () => {
+                fetch('https://x.com/i/api/graphql/VaenaVgh5q5ih7kvyVjgtg/CreateTweet', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({})
+                });
+                const d = document.querySelector('[role="dialog"]');
+                if (d) d.remove();
+              };
+              area.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                  triggerSend();
+                }
+              });
+              document.getElementById('post-btn').addEventListener('click', triggerSend);
+            </script>
+          </body></html>`;
+
+          page.goto = async (url: string) => {
+            if (url && url.includes('/status/887766554433')) {
+              await page.setContent('<html><body><article data-testid="tweet"><div>Intercepted rest_id tweet body</div></article></body></html>');
+              return null as any;
+            }
+            await page.setContent(composeHtml);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    const res = await postTwitter({
+      platform: 'twitter',
+      copy: 'Tweet with intercepted network response',
+      browserSession: mockSession
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.externalPostId).toBe('887766554433');
+    expect(res.externalPostUrl).toBe('https://x.com/presshubcy/status/887766554433');
+  });
+
+  test('postTwitter executes Tier 4 direct in-page CreateTweet GraphQL fallback when Tiers 1-3 do not fire network request', async () => {
+    clearSessionInvalid('twitter');
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        cookies: async (urls?: any) => context.cookies(urls),
+        newPage: async () => {
+          await context.addCookies([{ name: 'ct0', value: 'test_csrf_token_123', url: 'https://x.com' }]);
+          const page = await context.newPage();
+          await page.route('**/i/api/graphql/*/CreateTweet', async (route) => {
+            await route.fulfill({
+              status: 200,
+              contentType: 'application/json',
+              body: JSON.stringify({
+                data: {
+                  create_tweet: {
+                    tweet_results: {
+                      result: {
+                        rest_id: '998877665544'
+                      }
+                    }
+                  }
+                }
+              })
+            });
+          });
+
+          const composeHtml = `<html>
+            <head>
+              <base href="https://x.com/">
+              <script>document.cookie = "ct0=test_csrf_token_123; path=/";</script>
+            </head>
+            <body>
+              <div role="dialog">
+                <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+                <button id="post-btn" data-testid="tweetButton">Post</button>
+              </div>
+            </body>
+          </html>`;
+
+          page.goto = async (url: string) => {
+            if (url && url.includes('/status/998877665544')) {
+              await page.setContent('<html><body><article data-testid="tweet"><div>Tier 4 fallback tweet verified</div></article></body></html>');
+              return null as any;
+            }
+            if (url && url.includes('/presshubcy')) {
+              await page.setContent('<html><head><base href="https://x.com/"><script>document.cookie = "ct0=test_csrf_token_123; path=/";</script></head><body><div class="empty-timeline">No recent posts</div></body></html>');
+              return null as any;
+            }
+            await page.setContent(composeHtml);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    const res = await postTwitter({
+      platform: 'twitter',
+      copy: 'Tier 4 GraphQL fallback tweet',
+      browserSession: mockSession
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.externalPostId).toBe('998877665544');
+    expect(res.externalPostUrl).toBe('https://x.com/presshubcy/status/998877665544');
   });
 });

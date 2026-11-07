@@ -737,9 +737,10 @@ class PressHub_Social_AI_Copywriter {
      * @param string $text Raw tweet text.
      * @param string $url  Designated article URL.
      * @param bool   $append_if_missing Whether to append the article URL if not present. Default false.
+     * @param int    $max_chars Optional character limit budget. Defaults to PressHub_Social_Settings_Storage::get_twitter_max_chars().
      * @return string Cleaned tweet text with at most one link.
      */
-    public static function sanitize_twitter_copy( string $text, string $url = '', bool $append_if_missing = false ): string {
+    public static function sanitize_twitter_copy( string $text, string $url = '', bool $append_if_missing = false, int $max_chars = 0 ): string {
         $text = trim( $text );
         if ( '' === $text ) {
             return '';
@@ -795,7 +796,9 @@ class PressHub_Social_AI_Copywriter {
         $text = trim( $text );
 
         // 7. Enforce Twitter character cap
-        $max_chars = PressHub_Social_Settings_Storage::get_twitter_max_chars();
+        if ( $max_chars <= 0 ) {
+            $max_chars = PressHub_Social_Settings_Storage::get_twitter_max_chars();
+        }
         return self::truncate_twitter_text( $text, $max_chars, $has_url ? $target_url : '' );
     }
 
