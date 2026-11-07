@@ -577,6 +577,41 @@ class PressHub_Social_Settings {
             ]
         );
 
+        add_settings_field(
+            'presshub_social_tiktok_narration_enabled',
+            __( 'TikTok Narration (TTS)', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_narration_enabled_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_narration_outro',
+            __( 'TikTok Narration Outro', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'      => 'presshub_social_tiktok_narration_outro',
+                'default'     => PressHub_Social_TikTok_Narrator::DEFAULT_OUTRO,
+                'placeholder' => PressHub_Social_TikTok_Narrator::DEFAULT_OUTRO,
+                'desc'        => __( 'Spoken at the end of every TikTok narration. Leave empty to use the default.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_narration_voice',
+            __( 'TikTok Narration Voice', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'      => 'presshub_social_tiktok_narration_voice',
+                'placeholder' => 'Kore',
+                'desc'        => __( 'Gemini voice name (e.g. Kore, Puck). Leave empty to use the Daily Briefing Presenter 1 voice.', 'presshub-social-autopost' ),
+            ]
+        );
+
         // ------------------------------------------------------------------
         // Tab 5: Queue & Alerts
         // ------------------------------------------------------------------

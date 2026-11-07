@@ -496,6 +496,7 @@ if ( file_exists( $base_dir . '/includes/class-social-ai-copywriter.php' ) ) {
 }
 require_once $base_dir . '/includes/class-social-activator.php';
 require_once $base_dir . '/includes/class-social-queue.php';
+require_once $base_dir . '/includes/class-social-tiktok-narrator.php';
 require_once $base_dir . '/includes/class-social-meta-api-client.php';
 require_once $base_dir . '/includes/class-social-worker-client.php';
 require_once $base_dir . '/includes/class-social-dispatcher.php';
@@ -1554,6 +1555,104 @@ $regen_job_after = PressHub_Social_Queue::get_job( $regen_job_id );
 assert_equals( $new_ai_copy, $regen_job_after['post_copy'], 'Queue job copy updated with newly regenerated AI copy' );
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
 
+
+// ----------------------------------------------------------------------
+// Test Suite: TikTok Narration (Gemini TTS voice-over for text-only articles)
+// ----------------------------------------------------------------------
+echo "\n--- TikTok Narration ---\n";
+
+$narr_copy = "Τέλος στην «αποικιοκρατική κληρονομιά» των Βρετανικών Βάσεων; 🇬🇧🇨🇾\n\n"
+    . "Ο Πρόεδρος Χριστοδουλίδης ανοίγει ένα από τα πιο ακανθώδη θέματα της εξωτερικής πολιτικής. Οι εξελίξεις κορυφώνονται.\n\n"
+    . "Δείτε όλες τις λεπτομέρειες για τις διπλωματικές ανατροπές στο  Presshub.cy\n\n"
+    . "#Cyprus #News #Politics #BreakingNews #CyprusNews #Christodoulides";
+$narr_outro = PressHub_Social_TikTok_Narrator::DEFAULT_OUTRO;
+
+assert_equals(
+    "Τέλος στην «αποικιοκρατική κληρονομιά» των Βρετανικών Βάσεων;\n"
+    . "Ο Πρόεδρος Χριστοδουλίδης ανοίγει ένα από τα πιο ακανθώδη θέματα της εξωτερικής πολιτικής. Οι εξελίξεις κορυφώνονται.\n\n"
+    . 'Για το πλήρες άρθρο, επισκεφθείτε το presshub.cy',
+    PressHub_Social_TikTok_Narrator::build_narration_text( $narr_copy, $narr_outro ),
+    'Narration drops emojis, hashtags and the presshub.cy CTA line, then appends the outro'
+);
+assert_equals(
+    "Δείτε το βίντεο.\n\n" . $narr_outro,
+    PressHub_Social_TikTok_Narrator::build_narration_text( "Δείτε το βίντεο https://example.com/a?b=1 🔥", $narr_outro ),
+    'Narration strips URLs and adds a full stop before the outro'
+);
+assert_equals(
+    "Οι εξελίξεις κορυφώνονται.\n\n" . $narr_outro,
+    PressHub_Social_TikTok_Narrator::build_narration_text( 'Οι εξελίξεις κορυφώνονται. Δείτε περισσότερα στο Presshub.cy', $narr_outro ),
+    'Narration drops only the presshub.cy sentence when it shares a line with content'
+);
+assert_equals( '', PressHub_Social_TikTok_Narrator::build_narration_text( "🔥🔥\n#Cyprus #News\nhttps://x.com", $narr_outro ), 'Copy with nothing speakable yields empty narration text' );
+assert_equals( $narr_outro, PressHub_Social_Settings_Storage::get_tiktok_narration_outro(), 'Narration outro defaults to the Greek presshub.cy sentence' );
+assert_true( PressHub_Social_Settings_Storage::get_tiktok_narration_enabled(), 'TikTok narration is enabled by default' );
+
+PressHub_Social_Queue::reset_memory_store();
+$narr_calls = [];
+PressHub_Social_TikTok_Narrator::set_synthesizer( function ( string $text, array $job ) use ( &$narr_calls ) {
+    $narr_calls[] = $text;
+    return [ 'url' => 'https://example.com/uploads/narration-' . count( $narr_calls ) . '.wav', 'id' => 900 + count( $narr_calls ), 'voice' => 'Kore' ];
+} );
+
+$narr_job_id = PressHub_Social_Queue::enqueue( [ 'post_id' => 36, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => $narr_copy ] );
+$narr_job    = PressHub_Social_Queue::get_job( $narr_job_id );
+$narrated    = PressHub_Social_TikTok_Narrator::attach_narration( $narr_job );
+assert_true( ! is_wp_error( $narrated ) && 'https://example.com/uploads/narration-1.wav' === $narrated['audio_url'], 'Text-only TikTok job gets narration audio_url' );
+assert_true( ! empty( $narrated['narration'] ), 'Narrated job is flagged with narration=true' );
+assert_equals( 1, count( $narr_calls ), 'Synthesizer called once for a new narration' );
+assert_true( str_ends_with( $narr_calls[0], $narr_outro ), 'Synthesized text ends with the outro' );
+$narr_meta = json_decode( (string) PressHub_Social_Queue::get_job( $narr_job_id )['metadata'], true );
+assert_equals( 901, $narr_meta['tiktok_narration']['attachment_id'] ?? null, 'Narration attachment recorded in job metadata' );
+
+$narrated_again = PressHub_Social_TikTok_Narrator::attach_narration( PressHub_Social_Queue::get_job( $narr_job_id ) );
+assert_equals( 1, count( $narr_calls ), 'Retry with unchanged copy reuses cached narration (no new TTS call)' );
+assert_equals( 'https://example.com/uploads/narration-1.wav', $narrated_again['audio_url'], 'Reused narration keeps the original audio URL' );
+
+PressHub_Social_Queue::update_job_copy( $narr_job_id, 'Νέο κείμενο για το TikTok.' );
+$narrated_edit = PressHub_Social_TikTok_Narrator::attach_narration( PressHub_Social_Queue::get_job( $narr_job_id ) );
+assert_equals( 2, count( $narr_calls ), 'Edited copy triggers a fresh narration' );
+assert_equals( 'https://example.com/uploads/narration-2.wav', $narrated_edit['audio_url'], 'Fresh narration audio URL attached after copy edit' );
+
+PressHub_Social_Queue::mark_published( $narr_job_id, 'tt_1', 'https://www.tiktok.com/@presshub/video/1', [ 'worker' => 'local' ] );
+$narr_pub_meta = json_decode( (string) PressHub_Social_Queue::get_job( $narr_job_id )['metadata'], true );
+assert_true( isset( $narr_pub_meta['tiktok_narration'], $narr_pub_meta['worker'] ), 'mark_published merges worker metadata with the recorded narration' );
+
+$podcast_job = PressHub_Social_TikTok_Narrator::attach_narration( [ 'id' => 0, 'platform' => 'tiktok', 'post_copy' => 'Κείμενο', 'audio_url' => 'https://example.com/podcast.mp3' ] );
+assert_equals( 'https://example.com/podcast.mp3', $podcast_job['audio_url'], 'Podcast audio takes precedence over narration' );
+assert_equals( 2, count( $narr_calls ), 'No TTS call when the article already has audio' );
+
+$twitter_job = PressHub_Social_TikTok_Narrator::attach_narration( [ 'id' => 0, 'platform' => 'twitter', 'post_copy' => 'Κείμενο' ] );
+assert_true( empty( $twitter_job['audio_url'] ), 'Non-TikTok jobs are never narrated' );
+
+update_option( 'presshub_social_tiktok_narration_enabled', false );
+$disabled_job = PressHub_Social_TikTok_Narrator::attach_narration( [ 'id' => 0, 'platform' => 'tiktok', 'post_copy' => 'Κείμενο' ] );
+assert_true( empty( $disabled_job['audio_url'] ) && 2 === count( $narr_calls ), 'Disabled narration leaves the job silent and skips TTS' );
+update_option( 'presshub_social_tiktok_narration_enabled', true );
+
+$empty_err = PressHub_Social_TikTok_Narrator::attach_narration( [ 'id' => 0, 'platform' => 'tiktok', 'post_copy' => '#Cyprus #News' ] );
+assert_true( is_wp_error( $empty_err ) && 'tiktok_narration_empty' === $empty_err->get_error_code(), 'Copy with no speakable text fails loudly' );
+
+// Claim integration: success attaches audio; TTS failure keeps the job out of the batch and records the error.
+PressHub_Social_Queue::reset_memory_store();
+$claim_past = gmdate( 'Y-m-d H:i:s', time() - 60 );
+$claim_tt   = PressHub_Social_Queue::enqueue( [ 'post_id' => 501, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Καθημερινή ενημέρωση από την Κύπρο.', 'scheduled_at' => $claim_past ] );
+$req_tt     = new WP_REST_Request( 'POST', '/worker/claim' );
+$req_tt->set_param( 'sessions', [ 'tiktok' => true ] );
+$res_tt = PressHub_Social_REST_Controller::handle_claim( $req_tt );
+assert_equals( 1, count( $res_tt['jobs'] ), 'Narrated TikTok job is claimed' );
+assert_equals( 'https://example.com/uploads/narration-3.wav', $res_tt['jobs'][0]['audio_url'] ?? null, 'Claimed TikTok job carries the narration audio_url to the worker' );
+
+PressHub_Social_TikTok_Narrator::set_synthesizer( fn( string $text, array $job ) => new WP_Error( 'tts_http_500', 'Gemini TTS HTTP 500' ) );
+PressHub_Social_Queue::reset_memory_store();
+$claim_fail = PressHub_Social_Queue::enqueue( [ 'post_id' => 501, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Άλλη ενημέρωση.', 'scheduled_at' => $claim_past ] );
+$res_fail   = PressHub_Social_REST_Controller::handle_claim( $req_tt );
+assert_equals( 0, count( $res_fail['jobs'] ), 'TikTok job is not handed to the worker when narration fails' );
+$claim_fail_job = PressHub_Social_Queue::get_job( $claim_fail );
+assert_true( str_contains( (string) $claim_fail_job['last_error'], 'Gemini TTS HTTP 500' ), 'Narration failure is recorded as the job error' );
+assert_true( 'processing' !== $claim_fail_job['status'], 'Failed narration does not leave the job stuck in processing' );
+
+PressHub_Social_TikTok_Narrator::set_synthesizer( null );
 
 // ----------------------------------------------------------------------
 // Test Summary

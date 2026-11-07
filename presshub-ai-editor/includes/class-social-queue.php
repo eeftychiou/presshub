@@ -396,8 +396,19 @@ class PressHub_Social_Queue {
      * @return bool
      */
     public static function mark_published( int $job_id, string $external_post_id = '', string $external_post_url = '', array $meta = [] ): bool {
-        $now      = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
-        $metadata = function_exists( 'wp_json_encode' ) ? wp_json_encode( $meta ) : json_encode( $meta );
+        $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+
+        // Merge with metadata recorded before publishing (e.g. tiktok_narration) instead of discarding it.
+        $existing = self::get_job( $job_id );
+        $merged   = [];
+        if ( $existing && ! empty( $existing['metadata'] ) ) {
+            $decoded = is_array( $existing['metadata'] ) ? $existing['metadata'] : json_decode( (string) $existing['metadata'], true );
+            if ( is_array( $decoded ) ) {
+                $merged = $decoded;
+            }
+        }
+        $merged   = array_merge( $merged, $meta );
+        $metadata = function_exists( 'wp_json_encode' ) ? wp_json_encode( $merged ) : json_encode( $merged );
 
         if ( self::is_db_ready() ) {
             global $wpdb;
