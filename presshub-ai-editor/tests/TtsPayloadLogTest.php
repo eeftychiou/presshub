@@ -7,7 +7,7 @@
  *   2. get_log_tts_payloads() defaults to false (production log size).
  *   3. write_tts_payload_log() respects the action hook mirror (so
  *      developer scripts / CLI tools can intercept payloads) and
- *      writes a JSON entry to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log.
+ *      writes a JSON entry to the log folder resolved by PressHub_AI_Log_Paths (tts channel).
  *   4. The PressHub_AI_API_Client::mask_api_key_in_url() helper masks
  *      `key=` query parameters on Gemini TTS endpoint URLs.
  *   5. When the toggle is OFF, neither the helper nor the request/response
@@ -202,7 +202,7 @@ $entry = PressHub_AI_API_Client::build_tts_payload_log_entry(
 
 PressHub_AI_API_Client::write_tts_payload_log( $entry );
 
-$log_file = $log_root . '/presshub-ai/presshub-ai-tts-debug.log';
+$log_file = PressHub_AI_Log_Paths::get_file( 'tts' );
 tpl_check( 'write_log: file exists', file_exists( $log_file ) );
 
 if ( file_exists( $log_file ) ) {

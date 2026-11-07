@@ -260,7 +260,7 @@ echo "Username:       admin\n";
 echo "Password:       password123\n";
 echo "Database:       dev-env/wordpress/wp-content/database/.ht.sqlite\n";
 echo "Debug Log:      dev-env/wordpress/wp-content/debug.log\n";
-echo "PressHub Log:   dev-env/wordpress/wp-content/uploads/presshub-ai/presshub-debug.log\n";
+echo "PressHub Log:   dev-env/wordpress/wp-content/uploads/presshub-ai/presshub-debug-<suffix>.log (view with: php dev-env/scripts/tail-logs.php)\n";
 echo "=================================================================\n";
 echo "To start the web server, run:\n";
 echo "  php dev-env/scripts/server.php\n\n";
