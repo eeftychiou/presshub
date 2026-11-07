@@ -3,9 +3,10 @@
  * PressHub_AI_Generation_Recorder — durable per-generation records.
  *
  * Persists the exact prompts sent to and the response received from the LLM for
- * every briefing / podcast generation, together with the resolved client
- * configuration, per-article inputs, memory context and TTS configuration, in a
- * dedicated WordPress DB table. Prompts and responses are stored verbatim.
+ * every LLM, image and TTS call (briefing / podcast generations since #131, every
+ * other call since #140), together with the resolved client configuration,
+ * per-article inputs, memory context, TTS configuration and per-call TTS details,
+ * in a dedicated WordPress DB table. Prompts and responses are stored verbatim.
  * JSON is stored as TEXT (no JSON SQL functions, no FULLTEXT) so the table works
  * under the dev-env SQLite integration.
  *
@@ -13,7 +14,7 @@
  * on failure after logging an ERROR through PressHub_AI_Logger.
  *
  * @package PressHub_AI_Editor
- * @since 2.9.0
+ * @since 2.9.0 (#140: kinds for every call, tts_calls_json)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -23,14 +24,40 @@ if ( ! defined( 'ABSPATH' ) ) {
 class PressHub_AI_Generation_Recorder {
 
     /** DB table version for schema migration checks. */
-    const DB_VERSION        = '1.0.0';
+    const DB_VERSION        = '1.1.0';
     const DB_VERSION_OPTION = 'presshub_ai_generation_records_db_version';
 
     /** Post meta key holding the ordered array of record IDs attached to a post. */
     const POST_META_KEY = '_presshub_generation_record_ids';
 
-    /** Allowed record kinds. */
-    const KINDS = [ 'briefing_text', 'podcast_script', 'memory_digest', 'memory_rollup' ];
+    /**
+     * Allowed record kinds.
+     *
+     * #131: briefing_text, podcast_script, memory_digest, memory_rollup.
+     * #140: every other LLM, image and TTS call: coauthor_draft, scorecard,
+     * copilot_chat, research, image_generation, generic (any other
+     * call_provider() call) and tts_test (TTS calls without a parent record).
+     */
+    const KINDS = [
+        'briefing_text',
+        'podcast_script',
+        'memory_digest',
+        'memory_rollup',
+        'coauthor_draft',
+        'scorecard',
+        'copilot_chat',
+        'research',
+        'image_generation',
+        'generic',
+        'tts_test',
+    ];
+
+    /**
+     * Kinds created interactively by a logged-in user that may hold unpublished
+     * work. The record's own author (config.user_id) may open these in the
+     * Generation Inspector without edit_others_posts.
+     */
+    const AUTHOR_KINDS = [ 'coauthor_draft', 'scorecard', 'copilot_chat', 'research' ];
 
     /** Daily prune cron hook. */
     const PRUNE_HOOK = 'presshub_ai_prune_generation_records';
@@ -44,6 +71,7 @@ class PressHub_AI_Generation_Recorder {
         'inputs_json' => 'inputs',
         'memory_json' => 'memory',
         'tts_json'    => 'tts',
+        'tts_calls_json' => 'tts_calls',
         'usage_json'  => 'usage',
     ];
 
@@ -82,6 +110,7 @@ class PressHub_AI_Generation_Recorder {
             inputs_json longtext NULL,
             memory_json longtext NULL,
             tts_json longtext NULL,
+            tts_calls_json longtext NULL,
             system_prompt longtext NULL,
             user_prompt longtext NULL,
             response_text longtext NULL,
@@ -197,7 +226,8 @@ class PressHub_AI_Generation_Recorder {
     }
 
     /**
-     * Update allowed fields of an existing record: post_id, status, error_message, tts.
+     * Update allowed fields of an existing record: post_id, status, error_message, tts,
+     * tts_calls (#140: per-call TTS envelope, see PressHub_AI_TTS_Call_Recorder).
      *
      * @param int   $id     Record ID.
      * @param array $fields Fields to update (others are ignored).
@@ -229,6 +259,15 @@ class PressHub_AI_Generation_Recorder {
         if ( array_key_exists( 'tts', $fields ) ) {
             $set['tts_json'] = is_array( $fields['tts'] ) ? self::encode_json( $fields['tts'] ) : null;
             $format[]        = '%s';
+        }
+        if ( array_key_exists( 'tts_calls', $fields ) ) {
+            try {
+                $set['tts_calls_json'] = is_array( $fields['tts_calls'] ) ? self::encode_json( $fields['tts_calls'] ) : null;
+            } catch ( \Throwable $t ) {
+                self::log_failure( 'Generation record tts_calls encoding failed: ' . $t->getMessage(), '', '' );
+                return false;
+            }
+            $format[] = '%s';
         }
 
         if ( empty( $set ) ) {
@@ -271,6 +310,92 @@ class PressHub_AI_Generation_Recorder {
         }
 
         return $row;
+    }
+
+    /**
+     * Start capturing one LLM call: clears the Token_Logger's last-request
+     * capture so usage reflects only this call, and returns the start time.
+     * Pair with finish_call() (#140).
+     *
+     * @return float Start time (microtime).
+     */
+    public static function begin_call(): float {
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'reset_last_llm_request' ) ) {
+            PressHub_AI_Token_Logger::reset_last_llm_request();
+        }
+        return microtime( true );
+    }
+
+    /**
+     * Record one finished LLM call (success or error) with verbatim prompts and
+     * response. Never throws; returns 0 when nothing was stored.
+     *
+     * @param float                 $started_at  Value returned by begin_call().
+     * @param string                $kind        One of KINDS.
+     * @param object|null           $client      API client the call was made on (provider, model, settings).
+     * @param string                $sys_prompt  System prompt exactly as sent.
+     * @param string                $user_prompt User prompt exactly as sent.
+     * @param string|WP_Error|mixed $result      Raw provider result (text or WP_Error).
+     * @param array                 $extra       Optional: post_id, inputs, config (merged over the client config), user_id.
+     * @return int Record ID, or 0.
+     */
+    public static function finish_call( float $started_at, string $kind, $client, $sys_prompt, $user_prompt, $result, array $extra = [] ): int {
+        try {
+            $duration_ms = (int) round( ( microtime( true ) - $started_at ) * 1000 );
+            $usage       = ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'get_last_llm_request' ) )
+                ? ( PressHub_AI_Token_Logger::get_last_llm_request() ?? [] )
+                : [];
+            $is_error    = is_wp_error( $result );
+            $config      = self::build_client_config( $client, is_array( $extra['config'] ?? null ) ? $extra['config'] : [] );
+            $user_id     = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 );
+            if ( $user_id > 0 ) {
+                $config['user_id'] = $user_id;
+            }
+            $post_id = (int) ( $extra['post_id'] ?? 0 );
+
+            $record_id = (int) self::record( [
+                'kind'          => $kind,
+                'status'        => $is_error ? 'error' : 'success',
+                'error_message' => $is_error ? $result->get_error_message() : '',
+                'config'        => $config,
+                'inputs'        => is_array( $extra['inputs'] ?? null ) ? $extra['inputs'] : [],
+                'system_prompt' => (string) $sys_prompt,
+                'user_prompt'   => (string) $user_prompt,
+                'response_text' => $is_error ? '' : (string) $result,
+                'usage'         => is_array( $usage ) ? $usage : [],
+                'duration_ms'   => $duration_ms,
+                'post_id'       => $post_id,
+            ] );
+            if ( $record_id > 0 && $post_id > 0 ) {
+                self::attach_to_post( $post_id, $record_id );
+            }
+            return $record_id;
+        } catch ( \Throwable $t ) {
+            self::log_failure( 'Generation record threw: ' . $t->getMessage(), '', $kind );
+            return 0;
+        }
+    }
+
+    /**
+     * Whether a user may open a record in the Generation Inspector (#140).
+     *
+     * edit_others_posts always may. The record's own author may open the
+     * interactive kinds (AUTHOR_KINDS) that can hold unpublished work, using the
+     * user ID stored in config.user_id, provided the user can edit posts.
+     *
+     * @param string $kind      Record kind.
+     * @param int    $author_id config.user_id stored on the record (0 when none).
+     * @param int    $user_id   Current user ID.
+     * @return bool
+     */
+    public static function user_can_open( string $kind, int $author_id, int $user_id ): bool {
+        if ( current_user_can( 'edit_others_posts' ) ) {
+            return true;
+        }
+        return $user_id > 0
+            && $author_id === $user_id
+            && in_array( $kind, self::AUTHOR_KINDS, true )
+            && current_user_can( 'edit_posts' );
     }
 
     /**

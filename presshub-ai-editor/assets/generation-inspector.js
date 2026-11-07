@@ -12,6 +12,8 @@
     var cfg = window.presshubInspector || {};
     var i18n = cfg.i18n || {};
     var TEXT_TABS = { system_prompt: true, user_prompt: true, response_text: true };
+    // Record kinds that have a TTS tab (keep in sync with PressHub_AI_Generation_Inspector::TTS_KINDS).
+    var TTS_KINDS = ['podcast_script', 'tts_test'];
 
     function format(template, value) {
         return String(template || '%s').replace('%s', value);
@@ -69,8 +71,9 @@
         this.$select.on('change', function () {
             var kind = self.$select.find('option:selected').data('kind');
             var $tts = self.$tabs.filter('[data-tab="tts"]');
-            $tts.prop('hidden', kind !== 'podcast_script');
-            if (kind !== 'podcast_script' && self.tab === 'tts') {
+            var hasTts = TTS_KINDS.indexOf(kind) !== -1;
+            $tts.prop('hidden', !hasTts);
+            if (!hasTts && self.tab === 'tts') {
                 self.tab = 'overview';
             }
             self.open(self.tab);

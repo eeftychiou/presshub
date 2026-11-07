@@ -95,8 +95,10 @@ class PressHub_AI_API_Client {
     private $model_source = '';
 
     /**
-     * When true, call_provider() will not log to presshub_ai_log_prompts().
-     * Used by endpoints (like generate_draft, scorecard) that manage their own prompt logging.
+     * When true, call_provider() will not log to presshub_ai_log_prompts() and will not store
+     * a `generic` generation record (Issue #140). Used by endpoints (generate_draft, scorecard,
+     * chat, research, briefing, podcast script) that manage their own prompt logging and record
+     * their own generation kind, so a call is never recorded twice.
      *
      * @var bool
      */
@@ -969,7 +971,7 @@ class PressHub_AI_API_Client {
         return $this->call_provider( $sys, $user, false, [] );
     }
 
-    public function generate_draft( $sources, $instructions, $uploaded_files = [], $preset_slug = '' ) {
+    public function generate_draft( $sources, $instructions, $uploaded_files = [], $preset_slug = '', int $post_id = 0 ) {
         $this->current_action = 'coauthor_draft';
         if ( empty( $this->api_key ) ) {
             // Issue #44: log the missing-key state before returning so the
@@ -1015,9 +1017,32 @@ class PressHub_AI_API_Client {
             . "\n\nFormat the draft as clean HTML for a WordPress post: use <h2> for section headings, <p> for paragraphs and <strong> for emphasis. Do NOT use Markdown syntax (no **, ## or *), and do NOT wrap the output in code fences.";
         $user_prompt = apply_filters( 'presshub_ai_draft_user_prompt', $user_prompt, $sources, $instructions );
 
+        $gen_t0 = self::begin_generation_record();
         $this->suppress_provider_prompt_log = true;
         $result = $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
         $this->suppress_provider_prompt_log = false;
+
+        // Issue #140 - generation record with the raw provider response (before Markdown conversion).
+        self::finish_generation_record(
+            $gen_t0,
+            'coauthor_draft',
+            $this,
+            $sys_prompt,
+            $user_prompt,
+            $result,
+            [
+                'post_id' => $post_id,
+                'config'  => [ 'preset_id' => (string) $preset_slug ],
+                'inputs'  => [
+                    'uploaded_files' => array_map(
+                        static function ( $file ) {
+                            return is_string( $file ) ? basename( $file ) : '';
+                        },
+                        array_values( (array) $uploaded_files )
+                    ),
+                ],
+            ]
+        );
 
         // 1.2.9: models often return Markdown — convert to clean HTML so
         // the inserted draft renders properly in the WordPress editor.
@@ -1030,7 +1055,7 @@ class PressHub_AI_API_Client {
         return $result;
     }
 
-    public function generate_scorecard( $content, string $prompt_template = '' ) {
+    public function generate_scorecard( $content, string $prompt_template = '', int $post_id = 0 ) {
         $this->current_action = 'coauthor_scorecard';
         if ( empty( $this->api_key ) ) {
             // Issue #44: log the missing-key state before returning.
@@ -1067,9 +1092,12 @@ class PressHub_AI_API_Client {
         }
         $user_prompt = apply_filters( 'presshub_ai_scorecard_user_prompt', $user_prompt, $content );
 
+        $gen_t0 = self::begin_generation_record();
         $this->suppress_provider_prompt_log = true;
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [] );
         $this->suppress_provider_prompt_log = false;
+        // Issue #140 - generation record (raw provider response, before JSON parsing).
+        self::finish_generation_record( $gen_t0, 'scorecard', $this, $sys_prompt, $user_prompt, $result, [ 'post_id' => $post_id ] );
         presshub_ai_log_prompts( 'scorecard', $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, self::current_request_meta() );
         
         if ( is_wp_error( $result ) ) return $result;
@@ -1230,8 +1258,75 @@ class PressHub_AI_API_Client {
      * @return array|WP_Error Array with 'id', 'url', 'prompt' on success, WP_Error on failure.
      */
     public function generate_featured_image( string $prompt, string $aspect_ratio = '', int $post_id = 0 ) {
+        $t0     = self::begin_generation_record();
+        $trace  = [];
+        $result = $this->run_featured_image_generation( $prompt, $aspect_ratio, $post_id, $trace );
+        $this->record_image_generation( $t0, 'generate_featured_image', $prompt, $result, $post_id, $trace );
+        return $result;
+    }
+
+    /**
+     * Issue #140: store an `image_generation` generation record and link it to the
+     * created attachment and its parent post. The record's user prompt is the image
+     * prompt exactly as sent; there is no system prompt for image endpoints.
+     *
+     * @param float          $t0      begin_generation_record() value.
+     * @param string         $action  config.action.
+     * @param string         $prompt  Image prompt as sent.
+     * @param array|WP_Error $result  Result of the generation.
+     * @param int            $post_id Parent post (0 when none).
+     * @param array          $trace   Resolved request details collected by the generation method.
+     */
+    private function record_image_generation( float $t0, string $action, string $prompt, $result, int $post_id, array $trace ): void {
+        $attachment_id = ( is_array( $result ) && isset( $result['id'] ) ) ? (int) $result['id'] : 0;
+        $outcome       = $result;
+        if ( is_array( $result ) ) {
+            $outcome = sprintf( 'Image generated successfully (ID: %d, URL: %s)', $attachment_id, (string) ( $result['url'] ?? '' ) );
+            if ( ! empty( $trace['placeholder_reason'] ) ) {
+                $outcome = new WP_Error( 'image_placeholder', (string) $trace['placeholder_reason'] );
+            }
+        }
+        $client_for_config = isset( $trace['client'] ) && is_object( $trace['client'] ) ? $trace['client'] : $this;
+        $record_id = self::finish_generation_record(
+            $t0,
+            'image_generation',
+            $client_for_config,
+            '',
+            $prompt,
+            $outcome,
+            [
+                'post_id' => $post_id,
+                'config'  => array_filter(
+                    [
+                        'action'        => $action,
+                        'provider_type' => (string) ( $trace['type'] ?? '' ),
+                        'model'         => (string) ( $trace['model'] ?? '' ),
+                        'aspect_ratio'  => (string) ( $trace['aspect_ratio'] ?? '' ),
+                    ],
+                    static function ( $value ) {
+                        return '' !== $value;
+                    }
+                ),
+                'inputs'  => [
+                    'attachment_id'  => $attachment_id,
+                    'attachment_url' => is_array( $result ) ? (string) ( $result['url'] ?? '' ) : '',
+                    'parent_post_id' => $post_id,
+                ],
+            ]
+        );
+        if ( $record_id > 0 && $attachment_id > 0 && class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            PressHub_AI_Generation_Recorder::attach_to_post( $attachment_id, $record_id );
+        }
+    }
+
+    /**
+     * Generation body for generate_featured_image(). Fills $trace with the resolved
+     * request details (client, provider type, model, aspect ratio) for the record.
+     */
+    private function run_featured_image_generation( string $prompt, string $aspect_ratio, int $post_id, array &$trace ) {
         $this->current_action = 'generate_image';
         $client = new self( 'image_generation' );
+        $trace['client'] = $client;
 
         if ( empty( $client->api_key ) ) {
             $client->log_missing_api_key( 'generate_image' );
@@ -1247,6 +1342,9 @@ class PressHub_AI_API_Client {
 
         $type  = $client->provider_config['type'] ?? $client->provider;
         $model = $client->model;
+        $trace['type']         = (string) $type;
+        $trace['model']        = (string) $model;
+        $trace['aspect_ratio'] = (string) $aspect_ratio;
 
         $start_time = microtime( true );
         $action     = 'generate_featured_image';
@@ -1259,6 +1357,7 @@ class PressHub_AI_API_Client {
             if ( empty( $model_name ) ) {
                 $model_name = 'gemini-3.1-flash-image';
             }
+            $trace['model'] = (string) $model_name;
             $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . $model_name . ':generateContent';
 
             $body = [
@@ -1336,6 +1435,7 @@ class PressHub_AI_API_Client {
             }
         } elseif ( 'openai' === $type ) {
             $model_name = ! empty( $model ) ? $model : 'dall-e-3';
+            $trace['model'] = (string) $model_name;
             $url        = 'https://api.openai.com/v1/images/generations';
             $size       = ( '1:1' === $aspect_ratio ) ? '1024x1024' : '1792x1024';
 
@@ -1478,6 +1578,19 @@ class PressHub_AI_API_Client {
     }
 
     public function generate_image_via_imagen( $prompt ) {
+        $t0     = self::begin_generation_record();
+        $trace  = [ 'type' => 'google_cloud', 'model' => 'imagen-3.0-generate-002', 'aspect_ratio' => '1:1' ];
+        $result = $this->run_imagen_generation( $prompt, $trace );
+        $this->record_image_generation( $t0, 'generate_image_via_imagen', (string) $prompt, $result, 0, $trace );
+        return $result;
+    }
+
+    /**
+     * Imagen body for generate_image_via_imagen(). Sets $trace['placeholder_reason']
+     * when the placeholder image replaced a failed Imagen call, so the record shows an
+     * error instead of a success.
+     */
+    private function run_imagen_generation( $prompt, array &$trace ) {
         if ( empty( $this->google_cloud_api_key ) ) {
             return new WP_Error( 'no_gc_key', __( 'Google Cloud API key is missing.', 'presshub-ai-editor' ) );
         }
@@ -1508,6 +1621,7 @@ class PressHub_AI_API_Client {
 
         if ( is_wp_error( $response ) ) {
             $this->log_provider_error( 'imagen', 'imagen-3.0-generate-002', $response->get_error_message(), $response );
+            $trace['placeholder_reason'] = 'Imagen request failed, placeholder image used: ' . $response->get_error_message();
             return $this->mock_image_generation( $prompt );
         }
 
@@ -1538,6 +1652,9 @@ class PressHub_AI_API_Client {
         // Mock / fallback if endpoint is not accessible or setup failed:
         // Generate a default geometric placeholder image so the feature doesn't completely block
         $mock_res = $this->mock_image_generation($prompt);
+        $trace['placeholder_reason'] = isset( $res_body['error']['message'] )
+            ? 'Imagen error, placeholder image used: ' . $res_body['error']['message']
+            : 'Imagen returned no prediction, placeholder image used';
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
             presshub_ai_log_prompts( 'generate_image', 'Vertex AI Imagen 3.0 image generation', $prompt, 'Fallback placeholder image generated', 'provider=google_cloud model=imagen-3.0' );
         }
@@ -1648,6 +1765,7 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'no_gc_key', __( 'Google Cloud API key is missing.', 'presshub-ai-editor' ) );
         }
 
+        $requested_voice = (string) $voice_model;
         if ( empty( $voice_model ) || false !== strpos( $voice_model, 'Neural2' ) ) {
             $voice_model = 'el-GR-Wavenet-A';
         }
@@ -1677,6 +1795,7 @@ class PressHub_AI_API_Client {
         ];
 
         $referer = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';
+        $tts_started_at = microtime( true );
         $response = wp_remote_post( $url, [
             'headers' => [
                 'Content-Type'   => 'application/json',
@@ -1687,8 +1806,32 @@ class PressHub_AI_API_Client {
             'timeout' => 60,
         ] );
 
+        // Issue #140 - per-call TTS entry on the parent generation record. A voice swapped
+        // by the Neural2 guard above is reported as the fallback model.
+        $record_tts_call = function ( int $http_status, string $error, int $audio_bytes ) use ( $text, $voice_model, $requested_voice, $body, $url, $speed, $pitch, $tts_started_at ) {
+            if ( ! class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                return;
+            }
+            PressHub_AI_TTS_Call_Recorder::log_call( [
+                'phase'          => 'request',
+                'engine'         => 'google_cloud',
+                'model'          => '' !== $requested_voice ? $requested_voice : $voice_model,
+                'fallback_model' => ( '' !== $requested_voice && $requested_voice !== $voice_model ) ? $voice_model : '',
+                'voice'          => $voice_model,
+                'text'           => (string) $text,
+                'request'        => $body,
+                'endpoint'       => $url,
+                'settings'       => [ 'speed' => (float) $speed, 'pitch' => (float) $pitch ],
+                'http_status'    => $http_status,
+                'error'          => $error,
+                'duration_ms'    => (int) round( ( microtime( true ) - $tts_started_at ) * 1000 ),
+                'audio_bytes'    => $audio_bytes,
+            ] );
+        };
+
         if ( is_wp_error( $response ) ) {
             $this->log_provider_error( 'google_cloud_tts', $voice_model, $response->get_error_message(), $response );
+            $record_tts_call( 0, $response->get_error_message(), 0 );
             if ( function_exists( 'presshub_ai_log_prompts' ) ) {
                 $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
                 presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, 'ERROR: ' . $response->get_error_message(), $meta_line );
@@ -1699,6 +1842,7 @@ class PressHub_AI_API_Client {
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $res_body['error']['message'] ) ) {
             $this->log_provider_error( 'google_cloud_tts', $voice_model, $res_body['error']['message'], $response );
+            $record_tts_call( (int) wp_remote_retrieve_response_code( $response ), (string) $res_body['error']['message'], 0 );
             if ( function_exists( 'presshub_ai_log_prompts' ) ) {
                 $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
                 presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, 'ERROR: ' . $res_body['error']['message'], $meta_line );
@@ -1708,6 +1852,7 @@ class PressHub_AI_API_Client {
 
         if ( isset( $res_body['audioContent'] ) ) {
             $mp3_bytes = base64_decode( $res_body['audioContent'] );
+            $record_tts_call( (int) wp_remote_retrieve_response_code( $response ), '', strlen( (string) $mp3_bytes ) );
             if ( function_exists( 'presshub_ai_log_prompts' ) ) {
                 $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
                 $resp_desc = sprintf( 'Audio MP3 generated (%d bytes)', strlen( (string) $mp3_bytes ) );
@@ -1717,6 +1862,7 @@ class PressHub_AI_API_Client {
         }
 
         $empty_err = new WP_Error( 'tts_empty_response', __( 'Empty or invalid audio content returned from Google Cloud TTS.', 'presshub-ai-editor' ) );
+        $record_tts_call( (int) wp_remote_retrieve_response_code( $response ), $empty_err->get_error_message(), 0 );
         if ( function_exists( 'presshub_ai_log_prompts' ) ) {
             $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
             presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, 'ERROR: ' . $empty_err->get_error_message(), $meta_line );
@@ -2179,6 +2325,38 @@ class PressHub_AI_API_Client {
      * @return array|WP_Error Array with audio_data_url, request_payload, request_json, duration_ms, audio_bytes, etc., or WP_Error.
      */
     public function test_synthesize_speech( array $args = [] ): array|WP_Error {
+        $trace  = [];
+        $result = $this->run_test_synthesize_speech( $args, $trace );
+
+        // Issue #140 - the settings test button has no parent generation record, so the
+        // call lands in a `tts_test` record (only when a request was actually sent).
+        if ( ! empty( $trace['dispatched'] ) && class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+            $raw_bytes = is_array( $result ) ? (int) ( $result['raw_bytes'] ?? 0 ) : 0;
+            $rate      = is_array( $result ) ? (int) ( $result['sample_rate'] ?? 0 ) : 0;
+            PressHub_AI_TTS_Call_Recorder::log_call( [
+                'phase'         => 'request',
+                'engine'        => 'gemini',
+                'model'         => (string) ( $trace['model'] ?? '' ),
+                'voice'         => (string) ( $trace['voice'] ?? '' ),
+                'speakers'      => $trace['speakers'] ?? null,
+                'text'          => (string) ( $trace['text'] ?? '' ),
+                'request'       => is_array( $trace['request'] ?? null ) ? $trace['request'] : [],
+                'endpoint'      => (string) ( $trace['endpoint'] ?? '' ),
+                'settings'      => (array) ( $trace['settings'] ?? [] ),
+                'http_status'   => (int) ( $trace['http_status'] ?? 0 ),
+                'error'         => is_wp_error( $result ) ? $result->get_error_message() : '',
+                'duration_ms'   => (int) ( $trace['duration_ms'] ?? 0 ),
+                'audio_bytes'   => $raw_bytes,
+                'audio_seconds' => ( $rate > 0 && $raw_bytes > 0 ) ? $raw_bytes / ( $rate * 2 ) : null,
+            ] );
+        }
+        return $result;
+    }
+
+    /**
+     * Body of test_synthesize_speech(). Fills $trace with the request that was sent.
+     */
+    private function run_test_synthesize_speech( array $args, array &$trace ): array|WP_Error {
         $text             = ! empty( $args['text'] ) ? (string) $args['text'] : "[Presenter 1]: Καλημέρα σας από το PressHub AI. Αυτή είναι μια ζωντανή δοκιμή παραγωγής φωνής.\n\n[Presenter 2]: Επιβεβαιώνουμε τη φυσική ροή του διαλόγου, το ρυθμό εκφώνησης και τον επαγγελματικό τόνο.";
         $engine           = ! empty( $args['engine'] ) ? (string) $args['engine'] : 'gemini';
         $style            = ! empty( $args['style'] ) ? (string) $args['style'] : ( class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_style() : 'formal' );
@@ -2299,6 +2477,18 @@ class PressHub_AI_API_Client {
         }
 
         // Execute live request
+        $trace = [
+            'dispatched' => true,
+            'model'      => $configured_model,
+            'voice'      => $is_multi_speaker ? '' : $p1_voice,
+            'speakers'   => $is_multi_speaker
+                ? [ [ 'speaker' => 'Presenter 1', 'voice' => $p1_voice ], [ 'speaker' => 'Presenter 2', 'voice' => $p2_voice ] ]
+                : null,
+            'text'       => $text,
+            'request'    => $gen_body,
+            'endpoint'   => $gen_url,
+            'settings'   => [ 'style' => $used_style, 'speed' => $speed, 'pitch' => $pitch, 'payload_mode' => $payload_mode ],
+        ];
         $start_time = microtime( true );
         $response   = wp_remote_post( $gen_url, [
             'headers' => $headers,
@@ -2306,6 +2496,7 @@ class PressHub_AI_API_Client {
             'timeout' => 90,
         ] );
         $duration_ms = max( 1, (int) round( ( microtime( true ) - $start_time ) * 1000 ) );
+        $trace['duration_ms'] = $duration_ms;
 
         if ( is_wp_error( $response ) ) {
             return new WP_Error(
@@ -2324,6 +2515,7 @@ class PressHub_AI_API_Client {
         $code     = wp_remote_retrieve_response_code( $response );
         $body_raw = wp_remote_retrieve_body( $response );
         $res_json = json_decode( $body_raw, true );
+        $trace['http_status'] = (int) $code;
 
         if ( 200 !== $code ) {
             $err_detail = $res_json['error']['message'] ?? ( 'HTTP ' . $code . ': ' . substr( $body_raw, 0, 500 ) );
@@ -2396,6 +2588,31 @@ class PressHub_AI_API_Client {
             'json_payload'    => $gen_body,
             'request_json'    => $request_json,
         ];
+    }
+
+    /**
+     * Issue #140: decoded audio length (and seconds for PCM) in a Gemini TTS response,
+     * measured from the base64 length so the audio is not decoded a second time.
+     *
+     * @param array  $res_body     Decoded response JSON.
+     * @param string $default_mime Mime type to assume when the part carries none.
+     * @return array{bytes:int,seconds:float|null}
+     */
+    private static function summarize_gemini_audio( array $res_body, string $default_mime ): array {
+        $parts = $res_body['candidates'][0]['content']['parts'] ?? [];
+        foreach ( is_array( $parts ) ? $parts : [] as $part ) {
+            $b64  = $part['inlineData']['data'] ?? ( $part['inline_data']['data'] ?? '' );
+            $mime = $part['inlineData']['mimeType'] ?? ( $part['inline_data']['mime_type'] ?? $default_mime );
+            if ( is_string( $b64 ) && '' !== $b64 ) {
+                $bytes   = class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ? PressHub_AI_TTS_Call_Recorder::base64_decoded_length( $b64 ) : (int) floor( strlen( $b64 ) * 3 / 4 );
+                $seconds = null;
+                if ( preg_match( '/rate=(\d+)/i', (string) $mime, $m ) && (int) $m[1] > 0 ) {
+                    $seconds = $bytes / ( (int) $m[1] * 2 ); // 16-bit mono PCM.
+                }
+                return [ 'bytes' => $bytes, 'seconds' => $seconds ];
+            }
+        }
+        return [ 'bytes' => 0, 'seconds' => null ];
     }
 
     public function synthesize_speech_via_gemini(
@@ -2577,6 +2794,51 @@ class PressHub_AI_API_Client {
                 $error_status        = $res_body['error']['status'] ?? '';
                 $error_body_excerpt  = ( '' !== $raw_body && 200 !== $code ) ? substr( $raw_body, 0, 500 ) : '';
 
+                // Issue #140 - per-call TTS entry on the parent generation record. Always on:
+                // independent of the raw debug dump toggle (presshub_ai_log_tts_payloads).
+                if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                    $call_audio = $is_wp_err ? [ 'bytes' => 0, 'seconds' => null ] : self::summarize_gemini_audio( is_array( $res_body ) ? $res_body : [], $mime_type );
+                    if ( $is_wp_err ) {
+                        $call_error = $gen_res->get_error_message();
+                    } elseif ( '' !== $error_msg_from_body ) {
+                        $call_error = $error_msg_from_body;
+                    } elseif ( 200 !== $code ) {
+                        $call_error = 'HTTP ' . $code;
+                    } elseif ( 0 === $call_audio['bytes'] ) {
+                        $call_error = 'No audio payload in response';
+                    } else {
+                        $call_error = '';
+                    }
+                    $call_speakers = null;
+                    if ( $is_multi_speaker ) {
+                        $call_speakers = [];
+                        foreach ( $multi_speakers as $ms ) {
+                            $call_speakers[] = [
+                                'speaker' => (string) ( $ms['speaker'] ?? '' ),
+                                'voice'   => (string) ( $ms['voiceConfig']['prebuiltVoiceConfig']['voiceName'] ?? '' ),
+                            ];
+                        }
+                    }
+                    PressHub_AI_TTS_Call_Recorder::log_call( [
+                        'phase'          => 'request',
+                        'engine'         => 'gemini',
+                        'model'          => (string) $tts_models[0],
+                        'fallback_model' => ( $model !== $tts_models[0] ) ? (string) $model : '',
+                        'voice'          => $is_multi_speaker ? '' : (string) $voice_name,
+                        'speakers'       => $call_speakers,
+                        'text'           => $clean_text,
+                        'request'        => $gen_body,
+                        'endpoint'       => $gen_url,
+                        'settings'       => [ 'style' => $style, 'speed' => $speed, 'pitch' => $pitch, 'payload_mode' => $payload_mode ],
+                        'http_status'    => (int) $code,
+                        'error'          => $call_error,
+                        'duration_ms'    => $tts_latency_ms,
+                        'audio_bytes'    => $call_audio['bytes'],
+                        'audio_seconds'  => $call_audio['seconds'],
+                        'retry_attempt'  => $attempt,
+                    ] );
+                }
+
                 if ( $tts_payload_log_enabled ) {
                     $tts_log_meta = [
                         'model'      => $model,
@@ -2720,6 +2982,26 @@ class PressHub_AI_API_Client {
     }
 
     /**
+     * Issue #140: start capturing a generation record (usage reset + start time).
+     * Safe when the recorder class is not loaded (isolated unit tests).
+     */
+    public static function begin_generation_record(): float {
+        return class_exists( 'PressHub_AI_Generation_Recorder' ) ? PressHub_AI_Generation_Recorder::begin_call() : microtime( true );
+    }
+
+    /**
+     * Issue #140: store a generation record for a finished call. Never throws.
+     *
+     * @return int Record ID, or 0 when nothing was stored.
+     */
+    public static function finish_generation_record( float $started_at, string $kind, $client, $sys_prompt, $user_prompt, $result, array $extra = [] ): int {
+        if ( ! class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            return 0;
+        }
+        return PressHub_AI_Generation_Recorder::finish_call( $started_at, $kind, $client, $sys_prompt, $user_prompt, $result, $extra );
+    }
+
+    /**
      * @param float|null $temperature Explicit temperature override (used to
      *                                lock classify_intent / audio scripts to
      *                                0.0); null uses the provider's configured
@@ -2732,6 +3014,13 @@ class PressHub_AI_API_Client {
      *                                behaviour.
      */
     public function call_provider( $sys_prompt, $user_prompt, $json_mode, $files, $temperature = null, array $metadata = [] ) {
+        // Issue #140: callers that record themselves (briefing, podcast script,
+        // co-author draft/scorecard, copilot chat, research) set
+        // $suppress_provider_prompt_log; every other call gets a `generic`
+        // generation record below. begin_call() also resets usage capture.
+        $generic_record = empty( $this->suppress_provider_prompt_log ) && class_exists( 'PressHub_AI_Generation_Recorder' );
+        $generic_t0     = $generic_record ? self::begin_generation_record() : 0.0;
+
         if ( $this->provider === 'anthropic' ) {
             $result = $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature, $metadata );
         } elseif ( $this->provider === 'gemini' ) {
@@ -2768,6 +3057,20 @@ class PressHub_AI_API_Client {
             $endpoint   = $action_map[ $action_key ] ?? ( 0 === strpos( $action_key, 'social_copy' ) ? 'social_copy' : $action_key );
             $resp_str   = is_wp_error( $result ) ? ( 'ERROR: ' . $result->get_error_message() ) : (string) $result;
             presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt, $resp_str, $this->get_request_meta() );
+        }
+
+        if ( $generic_record ) {
+            // The action name is the record's `action` (config.action); no post link.
+            $generic_inputs = [];
+            if ( is_array( $files ) && ! empty( $files ) ) {
+                $generic_inputs['files'] = array_map(
+                    static function ( $file ) {
+                        return is_string( $file ) ? basename( $file ) : '';
+                    },
+                    array_values( $files )
+                );
+            }
+            self::finish_generation_record( $generic_t0, 'generic', $this, $sys_prompt, $user_prompt, $result, [ 'inputs' => $generic_inputs ] );
         }
 
         return $result;

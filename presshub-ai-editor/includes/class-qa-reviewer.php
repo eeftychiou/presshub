@@ -23,7 +23,7 @@ class PressHub_AI_QA_Reviewer {
      * @param string $context Evaluation context: 'post' (default) or 'briefing'.
      * @return array [ 'passed' => bool, 'score' => int, 'feedback' => string, 'libel_risk' => string, 'legal_concerns' => string, 'error' => string|null ]
      */
-    public static function evaluate_content( string $content, string $context = 'post' ): array {
+    public static function evaluate_content( string $content, string $context = 'post', int $post_id = 0 ): array {
         if ( '' === trim( $content ) ) {
             return [
                 'passed'         => false,
@@ -41,7 +41,7 @@ class PressHub_AI_QA_Reviewer {
             : PressHub_AI_Settings_Storage::get_qa_article_prompt();
 
         $api       = new PressHub_AI_API_Client( 'coauthor' );
-        $scorecard = $api->generate_scorecard( $content, $template );
+        $scorecard = $api->generate_scorecard( $content, $template, $post_id );
 
         if ( is_wp_error( $scorecard ) ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
