@@ -376,22 +376,29 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     await dismissTwitterCookies();
 
     WorkerLogger.debug('Twitter Automation', 'Finding tweet text area...');
-    const textarea = page.locator(
+    const anyTextarea = page.locator(
       'div[data-slot="xds-modal-surface"] textarea, div[role="dialog"] textarea, ' +
       'div[data-slot="xds-modal-surface"] [contenteditable="true"], div[role="dialog"] [contenteditable="true"], ' +
       'div[data-slot="xds-modal-surface"] [data-testid="tweetTextarea_0"], div[role="dialog"] [data-testid="tweetTextarea_0"], ' +
       'textarea[placeholder*="happening"], textarea[aria-label*="happening"], [data-testid="tweetTextarea_0"]'
     ).or(page.getByRole('textbox', { name: /what.*happening|post text/i })).first();
 
-    await textarea.waitFor({ state: 'visible', timeout: 15000 });
+    await anyTextarea.waitFor({ state: 'visible', timeout: 15000 });
 
     const modalSurface = page.locator('div[data-slot="xds-modal-surface"], div[role="dialog"]').first();
     const isModal = (await modalSurface.count()) > 0 && await modalSurface.isVisible().catch(() => false);
     WorkerLogger.debug('Twitter Automation', `Composer mode resolved: isModal=${isModal}`);
 
+    const textarea = isModal
+      ? modalSurface.locator('textarea, [contenteditable="true"], [data-testid="tweetTextarea_0"]')
+          .or(modalSurface.getByRole('textbox', { name: /what.*happening|post text/i }))
+          .first()
+      : anyTextarea;
+
     const tweetCopy = sanitizeTwitterCopy(options.copy);
     WorkerLogger.info('Twitter Automation', `Typing tweet copy (${tweetCopy.length} chars, weighted length: ${getTwitterWeightedLength(tweetCopy)})...`);
-    await textarea.click();
+    await textarea.focus().catch(() => {});
+    await textarea.click({ force: true }).catch(() => {});
     try {
       await textarea.fill(tweetCopy);
     } catch {
