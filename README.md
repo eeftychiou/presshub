@@ -120,6 +120,11 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - Module `briefing_memory`: Dedicated AI provider and model routing for memory digests and weekly rollups (`presshub_ai_briefing_memory_provider`, `presshub_ai_briefing_memory_model`).
 
 
+### 7. 🔎 Generation Inspector (Issue #133)
+- **Where to find it**: open any Daily Briefing or podcast post in the editor (block or classic) and scroll to the **Generation Inspector** box, or go to **Daily Briefing Hub → Generation records** to browse records by date range, kind and status and open any of them. Editors need the `edit_others_posts` capability.
+- **What it shows** for each generation step (briefing text, podcast script; regenerations keep the earlier records, pick one in the selector): the settings that were really used (provider, model and where each came from, temperature, max tokens, timeout, preset, token usage and estimate, truncation), the exact **system prompt** and **user prompt** (with a copy button and character count), the **articles** sent and dropped with the reason and the caps, the **memory** that was injected (or that memory was disabled), the raw **response**, and for podcasts the **TTS** settings. **Raw JSON** downloads the whole record.
+- **Read-only and safe**: nothing can be edited here; scraped text is always shown as plain text. Large fields load only when their tab is opened, so the editor stays fast. Posts created before records were introduced show "No generation record".
+
 - **Multi-Tier Presets**: Admin-curated global defaults, author-specific profiles, author defaults, and per-request metabox dropdown selection. Presets append specialized instructions to base system prompts without overwriting foundational editorial safety constraints.
 - **Externalized Prompt Assets**: Prompts are stored as modular text files under `presshub-ai-editor/assets/prompts/` (e.g. `default_greek_briefing.txt`, `podcast_style_two_hosts_greek.txt`, `article_image_analysis_prompt.txt`) and dynamically managed via `PressHub_AI_Prompt_Loader`.
 - **Admin Prompt Studio**: Inspect, customize, and reset prompt templates directly within WordPress settings without editing source code.
