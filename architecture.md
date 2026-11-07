@@ -18,7 +18,7 @@
 4. **Clean Slate Architecture**:
    - No deprecated multi-tier fallbacks or legacy option chains. `PressHub_AI_Provider_Store` is the sole source of truth for AI providers and models.
 5. **4-Layer Enterprise Observability**:
-   - **Layer 1**: Structured log (`wp-content/uploads/presshub-logs/`)
+   - **Layer 1**: Structured log (`wp-content/uploads/presshub-ai/presshub-debug-<suffix>.log`). All three file logs (app, prompts, TTS) resolve through `PressHub_AI_Log_Paths`: random suffix (`presshub_ai_log_file_suffix`), deny files (`.htaccess`, `index.php`, `web.config`) kept in the folder, optional `PRESSHUB_AI_LOG_DIR` outside the web root (no fallback to uploads when it is unusable), and a web-exposure self-check (`PressHub_AI_Log_Exposure_Check`) on the Logs tab
    - **Layer 2**: Token log database (`wp_presshub_ai_token_logs`)
    - **Layer 3**: Audit log (`wp_presshub_ai_audit_log`)
    - **Layer 4**: WordPress `debug.log`
@@ -446,9 +446,10 @@ graph TD
 | `presshub_daily_news_generate` | 07:15 | `presshub_ai_briefing_generation_time` | `presshub_ai_execute_generation_cron()` |
 | `presshub_noon_news_harvest` | 12:00 | `presshub_ai_briefing_noon_harvest_time` | `presshub_ai_execute_noon_harvest_cron()` |
 | `presshub_noon_news_generate` | 12:45 | `presshub_ai_briefing_noon_generation_time` | `presshub_ai_execute_noon_generation_cron()` |
-| `presshub_ai_prune_audit_logs` | Daily | Fixed 24h | `PressHub_AI_Audit_Logger::prune()` |
+| `presshub_ai_prune_audit_logs` | Daily | `presshub_ai_audit_log_retention_days` (default 90) | `PressHub_AI_Audit_Logger::prune_logs()` |
 | `presshub_ai_prune_memory_entries` | Daily | `presshub_ai_memory_retention_days` | `PressHub_AI_Memory_Store::prune_old_entries()` |
 | `presshub_ai_prune_generation_records` | Daily | `presshub_ai_generation_record_retention_days` (retention window) | `PressHub_AI_Generation_Recorder::prune()` |
+| `presshub_ai_prune_log_files` | Daily | `presshub_ai_log_file_retention_days` (default 14) | Deletes rotated log files older than the window |
 
 ### 5.1 Cron Execution & Error Resilience
 - Both generation cron callbacks (`presshub_ai_execute_generation_cron` and `presshub_ai_execute_noon_generation_cron`) encapsulate all pipeline stages (curation, script generation, and audio synthesis) in dedicated error-handling and `try / catch (\Throwable $t)` blocks.

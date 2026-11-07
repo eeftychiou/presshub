@@ -3,6 +3,20 @@ import path from 'path';
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
+const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_MAX_FILES = 5;
+
+function readNonNegativeInt(raw: string | undefined, fallback: number, allowZero: boolean): number {
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
+  }
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || (n === 0 && !allowZero)) {
+    return fallback;
+  }
+  return n;
+}
+
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   DEBUG: 0,
   INFO: 1,
@@ -20,6 +34,8 @@ export class WorkerLogger {
   private static minLevel: LogLevel = 'DEBUG';
   private static consoleEnabled: boolean = true;
   private static isInitialized: boolean = false;
+  private static maxBytes: number = DEFAULT_MAX_BYTES;
+  private static maxFiles: number = DEFAULT_MAX_FILES;
 
   /**
    * Initializes the logger, ensuring logs directory exists and paths are resolved.
@@ -53,7 +69,40 @@ export class WorkerLogger {
       this.consoleEnabled = process.env.PRESSHUB_LOG_CONSOLE.toLowerCase() !== 'false';
     }
 
+    // Size-based rotation: PRESSHUB_LOG_MAX_BYTES (default 10 MB), PRESSHUB_LOG_MAX_FILES (default 5).
+    this.maxBytes = readNonNegativeInt(process.env.PRESSHUB_LOG_MAX_BYTES, DEFAULT_MAX_BYTES, false);
+    this.maxFiles = readNonNegativeInt(process.env.PRESSHUB_LOG_MAX_FILES, DEFAULT_MAX_FILES, true);
+
     this.isInitialized = true;
+  }
+
+  /**
+   * Rotates the active log when it exceeds maxBytes: worker.log.(N-1) -> .N ... worker.log -> worker.log.1.
+   * The oldest copy beyond maxFiles is deleted. Never throws.
+   */
+  private static rotateIfNeeded(targetPath: string): void {
+    try {
+      if (!fs.existsSync(targetPath) || fs.statSync(targetPath).size <= this.maxBytes) {
+        return;
+      }
+      if (this.maxFiles <= 0) {
+        fs.unlinkSync(targetPath);
+        return;
+      }
+      const oldest = `${targetPath}.${this.maxFiles}`;
+      if (fs.existsSync(oldest)) {
+        fs.unlinkSync(oldest);
+      }
+      for (let i = this.maxFiles - 1; i >= 1; i--) {
+        const from = `${targetPath}.${i}`;
+        if (fs.existsSync(from)) {
+          fs.renameSync(from, `${targetPath}.${i + 1}`);
+        }
+      }
+      fs.renameSync(targetPath, `${targetPath}.1`);
+    } catch (err: any) {
+      console.warn(`[WorkerLogger] Log rotation failed:`, err && err.message ? err.message : err);
+    }
   }
 
   /**
@@ -161,6 +210,7 @@ export class WorkerLogger {
 
     // 2. File Output
     const targetPath = this.getLogPath();
+    this.rotateIfNeeded(targetPath);
     try {
       fs.appendFileSync(targetPath, logLine + '\n', 'utf-8');
     } catch {

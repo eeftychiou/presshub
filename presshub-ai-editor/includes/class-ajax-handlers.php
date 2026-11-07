@@ -1648,6 +1648,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_research_retention_days'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_research_retention_days' ],
                 'presshub_ai_log_level'                   => [ 'PressHub_AI_Settings_Storage', 'sanitize_log_level' ],
                 'presshub_ai_generation_record_retention_days' => [ 'PressHub_AI_Settings_Storage', 'sanitize_generation_record_retention_days' ],
+                'presshub_ai_log_file_retention_days' => [ 'PressHub_AI_Settings_Storage', 'sanitize_log_file_retention_days' ],
+                'presshub_ai_token_log_retention_days' => [ 'PressHub_AI_Settings_Storage', 'sanitize_token_log_retention_days' ],
+                'presshub_ai_audit_log_retention_days' => [ 'PressHub_AI_Settings_Storage', 'sanitize_audit_log_retention_days' ],
                 'presshub_ai_briefing_tts_api_key'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_tts_api_key' ],
                 'presshub_ai_remove_briefing_tts_api_key' => [ 'PressHub_AI_Settings_Storage', 'sanitize_remove_briefing_tts_api_key' ],
                 'presshub_ai_briefing_sources'            => [ 'PressHub_AI_Settings_Storage', 'sanitize_briefing_sources' ],
@@ -2439,11 +2442,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $search   = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
         $trace_id = isset( $_POST['trace_id'] ) ? sanitize_text_field( wp_unslash( $_POST['trace_id'] ) ) : '';
 
-        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
-        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
+        $file = $this->resolve_log_file( $target );
+        if ( is_wp_error( $file ) ) {
+            wp_send_json_error( [ 'message' => $this->log_dir_error_message( $file ) ] );
+            return;
+        }
 
         if ( 'prompts' === $target ) {
-            $file = $base_dir . '/presshub-ai-debug.log';
             $size = file_exists( $file ) ? filesize( $file ) : 0;
             $raw_lines = ( file_exists( $file ) && is_readable( $file ) )
                 ? file( $file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES )
@@ -2492,7 +2497,6 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         if ( 'tts' === $target ) {
-            $file = $base_dir . '/presshub-ai-tts-debug.log';
             $size = file_exists( $file ) ? filesize( $file ) : 0;
             $raw_lines = ( file_exists( $file ) && is_readable( $file ) )
                 ? file( $file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES )
@@ -2546,7 +2550,6 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
 
         // Default: 'app'
-        $file = PressHub_AI_Logger::get_log_file_path();
         $size = file_exists( $file ) ? filesize( $file ) : 0;
         $raw_lines = ( file_exists( $file ) && is_readable( $file ) )
             ? file( $file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES )
@@ -2592,40 +2595,70 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-logger.php';
 
-        $target   = isset( $_POST['target'] ) ? sanitize_key( wp_unslash( $_POST['target'] ) ) : 'app';
-        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
-        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
+        $target = isset( $_POST['target'] ) ? sanitize_key( wp_unslash( $_POST['target'] ) ) : 'app';
 
-        $cleared = [];
-
-        if ( in_array( $target, [ 'app', 'all' ], true ) ) {
-            PressHub_AI_Logger::clear_log();
-            $cleared[] = 'app';
+        $dir = PressHub_AI_Log_Paths::get_dir();
+        if ( is_wp_error( $dir ) ) {
+            wp_send_json_error( [ 'message' => $this->log_dir_error_message( $dir ) ] );
+            return;
         }
 
-        if ( in_array( $target, [ 'prompts', 'all' ], true ) ) {
-            $f = $base_dir . '/presshub-ai-debug.log';
-            if ( file_exists( $f ) ) {
-                @file_put_contents( $f, '' );
+        $cleared       = [];
+        $removed_files = 0;
+
+        foreach ( PressHub_AI_Log_Paths::CHANNELS as $channel ) {
+            if ( $target !== $channel && 'all' !== $target ) {
+                continue;
             }
-            $cleared[] = 'prompts';
-        }
-
-        if ( in_array( $target, [ 'tts', 'all' ], true ) ) {
-            $f = $base_dir . '/presshub-ai-tts-debug.log';
-            if ( file_exists( $f ) ) {
-                @file_put_contents( $f, '' );
+            // Delete the rotated copies first, then empty the current file.
+            $removed_files += PressHub_AI_Log_Paths::delete_rotated_files( $channel );
+            if ( 'app' === $channel ) {
+                PressHub_AI_Logger::clear_log();
+            } else {
+                $f = PressHub_AI_Log_Paths::get_file( $channel );
+                if ( ! is_wp_error( $f ) && file_exists( $f ) ) {
+                    @file_put_contents( $f, '' );
+                }
             }
-            $cleared[] = 'tts';
+            $cleared[] = $channel;
         }
 
-        PressHub_AI_Logger::info( sprintf( 'Diagnostic logs (%s) cleared by user %d', implode( ', ', $cleared ), get_current_user_id() ) );
+        PressHub_AI_Logger::info( sprintf( 'Diagnostic logs (%s) cleared by user %d', implode( ', ', $cleared ), get_current_user_id() ), [ 'rotated_files_deleted' => $removed_files ] );
 
         wp_send_json_success( [
-            'target'  => $target,
-            'cleared' => $cleared,
-            'message' => __( 'Logs cleared successfully.', 'presshub-ai-editor' ),
+            'target'        => $target,
+            'cleared'       => $cleared,
+            'removed_files' => $removed_files,
+            'message'       => sprintf(
+                /* translators: %d: number of rotated log files deleted */
+                _n( 'Logs cleared successfully. %d rotated file removed.', 'Logs cleared successfully. %d rotated files removed.', $removed_files, 'presshub-ai-editor' ),
+                $removed_files
+            ),
         ] );
+    }
+
+    /**
+     * Resolve a log channel to its current file via PressHub_AI_Log_Paths.
+     * The app channel honours PressHub_AI_Logger::set_log_file_path() (tests).
+     *
+     * @return string|WP_Error
+     */
+    private function resolve_log_file( string $channel ) {
+        if ( 'app' === $channel ) {
+            return PressHub_AI_Logger::get_log_file_path();
+        }
+        return PressHub_AI_Log_Paths::get_file( $channel );
+    }
+
+    /**
+     * Error text for an unusable log directory, always naming PRESSHUB_AI_LOG_DIR.
+     */
+    private function log_dir_error_message( WP_Error $error ): string {
+        $message = $error->get_error_message();
+        if ( false === strpos( $message, 'PRESSHUB_AI_LOG_DIR' ) ) {
+            $message = 'PRESSHUB_AI_LOG_DIR: ' . $message;
+        }
+        return $message;
     }
 
     /**
@@ -2648,15 +2681,19 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         require_once __DIR__ . '/class-logger.php';
 
         $target   = isset( $_REQUEST['target'] ) ? sanitize_key( wp_unslash( $_REQUEST['target'] ) ) : 'app';
-        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
-        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
         $date_str = gmdate( 'Y-m-d' );
 
+        $dir = PressHub_AI_Log_Paths::get_dir();
+        if ( is_wp_error( $dir ) ) {
+            wp_die( esc_html( $this->log_dir_error_message( $dir ) ), 500 );
+        }
+
         if ( 'all' === $target ) {
+            // Entry names offered to the browser are unchanged; only the source paths come from the helper.
             $files_to_zip = [
-                'presshub-debug.log'          => PressHub_AI_Logger::get_log_file_path(),
-                'presshub-ai-debug.jsonl'     => $base_dir . '/presshub-ai-debug.log',
-                'presshub-ai-tts-debug.jsonl' => $base_dir . '/presshub-ai-tts-debug.log',
+                'presshub-debug' . '.log' => $this->resolve_log_file( 'app' ),
+                'presshub-ai-debug.jsonl'     => $this->resolve_log_file( 'prompts' ),
+                'presshub-ai-tts-debug.jsonl' => $this->resolve_log_file( 'tts' ),
             ];
 
             if ( class_exists( 'ZipArchive' ) ) {
@@ -2717,24 +2754,24 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         // Individual target download
         switch ( $target ) {
             case 'prompts':
-                $file     = $base_dir . '/presshub-ai-debug.log';
+                $file     = $this->resolve_log_file( 'prompts' );
                 $filename = 'presshub-ai-debug-' . $date_str . '.jsonl';
                 $mime     = 'application/x-jsonlines; charset=utf-8';
                 break;
             case 'tts':
-                $file     = $base_dir . '/presshub-ai-tts-debug.log';
+                $file     = $this->resolve_log_file( 'tts' );
                 $filename = 'presshub-ai-tts-debug-' . $date_str . '.jsonl';
                 $mime     = 'application/x-jsonlines; charset=utf-8';
                 break;
             case 'app':
             default:
-                $file     = PressHub_AI_Logger::get_log_file_path();
+                $file     = $this->resolve_log_file( 'app' );
                 $filename = 'presshub-debug-' . $date_str . '.log';
                 $mime     = 'text/plain; charset=utf-8';
                 break;
         }
 
-        $content = ( file_exists( $file ) && is_readable( $file ) ) ? (string) file_get_contents( $file ) : '';
+        $content = ( is_string( $file ) && file_exists( $file ) && is_readable( $file ) ) ? (string) file_get_contents( $file ) : '';
 
         if ( function_exists( 'nocache_headers' ) ) {
             nocache_headers();
