@@ -184,6 +184,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-digest-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-rollup-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-context-builder.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-memory-editor.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 // Social Auto-Post Subsystem Classes
@@ -375,6 +376,7 @@ function presshub_ai_init() {
     new PressHub_AI_Workflow();
     new PressHub_AI_Briefing_Admin();
     new PressHub_AI_Generation_Inspector();
+    new PressHub_AI_Memory_Editor();
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
     PressHub_AI_Research_Cleanup::register();

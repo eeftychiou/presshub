@@ -133,6 +133,12 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 - **Externalized Prompt Assets**: Prompts are stored as modular text files under `presshub-ai-editor/assets/prompts/` (e.g. `default_greek_briefing.txt`, `podcast_style_two_hosts_greek.txt`, `article_image_analysis_prompt.txt`) and dynamically managed via `PressHub_AI_Prompt_Loader`.
 - **Admin Prompt Studio**: Inspect, customize, and reset prompt templates directly within WordPress settings without editing source code.
 
+
+### 8. 🧠 Memory Editor (Issue #137)
+- **Where to find it**: **Daily Briefing Hub → Memory** (editors need `edit_others_posts`). The Generation Inspector's Memory tab links straight to the entry it used.
+- **Workflow**: check the preview of what the next morning briefing will receive; spot red-highlighted days that have no digest; open a digest with **Review / edit**, correct a story's title, development, status or entities, add or delete stories, or untick *Include in memory*, then **Save changes**. The entry is marked **edited**, a diff shows what changed against the generated version, and automatic regeneration never overwrites your text. Use **Reset to generated** to undo, **Exclude entry** to keep a whole day out of memory, **Regenerate digest** to refresh the generated version from the briefing post, and **View generation record** to see the prompt behind it.
+- **Weekly rollups**: you can edit a rollup's narrative. Editing a daily digest marks its rollup **stale**; a notice offers **Rebuild rollup** once weekly rollups are available.
+
 ---
 
 ## 🏛️ Architectural Principles

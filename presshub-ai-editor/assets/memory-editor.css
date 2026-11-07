@@ -1,0 +1,49 @@
+/* PressHub AI - Memory editor (Issue #137) */
+.presshub-memory-preview { margin: 16px 0; padding: 12px; background: #fff; border: 1px solid #c3c4c7; }
+.presshub-memory-manifest th { width: 30%; text-align: left; font-weight: 600; }
+.presshub-memory-preview-text {
+    margin: 8px 0 0;
+    padding: 10px;
+    max-height: 420px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.presshub-memory-timeline td { vertical-align: top; }
+.presshub-memory-missing td { background: #fcf0f1; border-left: 4px solid #d63638; }
+.presshub-memory-editor-row[hidden] { display: none; }
+.presshub-memory-editor-row > td { background: #f6f7f7; }
+.presshub-memory-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    line-height: 18px;
+    background: #dcdcde;
+    color: #1d2327;
+}
+.presshub-memory-badge-active { background: #c6e1c6; }
+.presshub-memory-badge-edited { background: #bfe0f4; }
+.presshub-memory-badge-stale { background: #f5e6ab; }
+.presshub-memory-badge-failed { background: #f4a2a3; }
+.presshub-memory-badge-excluded { background: #c3c4c7; text-decoration: line-through; }
+.presshub-memory-badge-pending { background: #e5e5e5; font-style: italic; }
+.presshub-memory-error-detail { color: #b32d2e; margin-top: 4px; word-break: break-word; }
+.presshub-memory-story { margin: 0 0 8px; padding: 6px 10px; background: #fff; border: 1px solid #dcdcde; }
+.presshub-memory-story > summary { cursor: pointer; font-weight: 600; }
+.presshub-memory-story-status { margin-left: 6px; color: #50575e; font-weight: 400; }
+.presshub-memory-story-body label { font-weight: 600; }
+.presshub-memory-diff { margin: 8px 0 12px; }
+.presshub-memory-diff-item { margin: 6px 0; padding: 6px 10px; background: #fff; border-left: 4px solid #8c8f94; }
+.presshub-memory-diff-added { border-left-color: #00a32a; }
+.presshub-memory-diff-removed { border-left-color: #d63638; }
+.presshub-memory-diff-changed, .presshub-memory-diff-narrative { border-left-color: #dba617; }
+.presshub-memory-diff-before, .presshub-memory-diff-after { white-space: pre-wrap; word-break: break-word; }
+.presshub-memory-diff-before { color: #8a2424; }
+.presshub-memory-diff-after { color: #1a6a1a; }
+.presshub-memory-actions .button { margin-right: 4px; }
+.presshub-memory-empty { color: #50575e; font-style: italic; }
