@@ -108,6 +108,11 @@ class PressHub_Social_Ajax_Handlers {
             foreach ( $_POST['platforms'] as $p ) {
                 $sanitized = sanitize_key( wp_unslash( $p ) );
                 if ( in_array( $sanitized, PressHub_Social_Queue::VALID_PLATFORMS, true ) ) {
+                    if ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_ready' ) ) {
+                        if ( ! PressHub_Social_Settings_Storage::is_platform_ready( $sanitized ) ) {
+                            continue;
+                        }
+                    }
                     $platforms[] = $sanitized;
                 }
             }
@@ -135,7 +140,7 @@ class PressHub_Social_Ajax_Handlers {
         $job_ids = PressHub_Social_Dispatcher::enqueue_for_post( $post_id, $platforms );
         if ( empty( $job_ids ) ) {
             wp_send_json_error( [
-                'message' => __( 'No social jobs were enqueued. Please ensure at least one platform is selected.', 'presshub-social-autopost' ),
+                'message' => __( 'No social jobs were enqueued. Please ensure at least one enabled and configured platform is selected.', 'presshub-social-autopost' ),
             ], 400 );
         }
 

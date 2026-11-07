@@ -84,14 +84,40 @@ class PressHub_Social_Dispatcher {
             if ( is_array( $meta_platforms ) && ! empty( $meta_platforms ) ) {
                 $platforms = array_map( 'sanitize_key', $meta_platforms );
             } else {
-                $platforms = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_enabled_platforms' )
-                    ? PressHub_Social_Settings_Storage::get_enabled_platforms()
-                    : [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+                $platforms = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_ready_platforms' )
+                    ? PressHub_Social_Settings_Storage::get_ready_platforms()
+                    : ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_enabled_platforms' )
+                        ? PressHub_Social_Settings_Storage::get_enabled_platforms()
+                        : [ 'twitter', 'facebook', 'instagram', 'tiktok' ] );
             }
         }
 
         // Filter valid platforms only
         $platforms = array_values( array_intersect( $platforms, PressHub_Social_Queue::VALID_PLATFORMS ) );
+        if ( empty( $platforms ) ) {
+            return [];
+        }
+
+        if ( class_exists( 'PressHub_Social_Settings_Storage' ) ) {
+            $filtered_platforms = [];
+            foreach ( $platforms as $platform ) {
+                if ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_enabled' ) && ! PressHub_Social_Settings_Storage::is_platform_enabled( $platform ) ) {
+                    if ( class_exists( 'PressHub_Social_Logger' ) ) {
+                        PressHub_Social_Logger::info( sprintf( 'Skipping social queue for post #%d on %s: platform is disabled in settings.', $post_id, $platform ) );
+                    }
+                    continue;
+                }
+                if ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_configured' ) && ! PressHub_Social_Settings_Storage::is_platform_configured( $platform ) ) {
+                    if ( class_exists( 'PressHub_Social_Logger' ) ) {
+                        PressHub_Social_Logger::info( sprintf( 'Skipping social queue for post #%d on %s: platform is not configured.', $post_id, $platform ) );
+                    }
+                    continue;
+                }
+                $filtered_platforms[] = $platform;
+            }
+            $platforms = $filtered_platforms;
+        }
+
         if ( empty( $platforms ) ) {
             return [];
         }

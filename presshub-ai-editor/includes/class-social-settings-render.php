@@ -126,14 +126,30 @@ class PressHub_Social_Settings_Render {
     public function render_enabled_platforms_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_enabled_platforms();
         echo '<input type="hidden" name="presshub_social_enabled_platforms_present" value="1" />';
+        echo '<div style="display:flex; flex-direction:column; gap:8px; max-width:650px;">';
         foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $platform ) {
-            $is_checked = in_array( $platform, $enabled, true );
-            echo '<label style="display:inline-block; margin-right:18px;">';
+            $is_checked    = in_array( $platform, $enabled, true );
+            $is_configured = PressHub_Social_Settings_Storage::is_platform_configured( $platform );
+            $engine        = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
+            $engine_label  = ( 'automation' === $engine ) ? __( 'Automation Worker', 'presshub-social-autopost' ) : __( 'Official REST API', 'presshub-social-autopost' );
+
+            $badge = $is_configured
+                ? '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#d4edda; color:#155724;">' . esc_html__( '✓ Configured', 'presshub-social-autopost' ) . '</span>'
+                : '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#f8d7da; color:#721c24;">' . esc_html__( '⚠ Not Configured', 'presshub-social-autopost' ) . '</span>';
+
+            echo '<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#fff; border:1px solid #ccd0d4; border-radius:4px;">';
+            echo '<label style="font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">';
             echo '<input type="checkbox" name="presshub_social_enabled_platforms[]" value="' . esc_attr( $platform ) . '" ' . checked( $is_checked, true, false ) . ' /> ';
             echo esc_html( ucfirst( $platform ) );
             echo '</label>';
+            echo '<div style="display:flex; align-items:center; gap:10px;">';
+            echo '<span style="font-size:12px; color:#666;">' . esc_html( $engine_label ) . '</span>';
+            echo $badge;
+            echo '</div>';
+            echo '</div>';
         }
-        echo '<p class="description">' . esc_html__( 'Only checked platforms will be queued when an article is published.', 'presshub-social-autopost' ) . '</p>';
+        echo '</div>';
+        echo '<p class="description">' . esc_html__( 'Enable or disable social media platforms. Posts will only be queued for platforms that are both enabled and configured.', 'presshub-social-autopost' ) . '</p>';
     }
 
     public function render_copy_mode_field(): void {
@@ -155,14 +171,22 @@ class PressHub_Social_Settings_Render {
     }
 
     public function render_platform_engine_field( array $args ): void {
-        $platform = $args['platform'] ?? 'twitter';
-        $current  = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
-        $opt_name = 'presshub_social_engine_' . $platform;
+        $platform      = $args['platform'] ?? 'twitter';
+        $current       = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
+        $is_configured = PressHub_Social_Settings_Storage::is_platform_configured( $platform );
+        $opt_name      = 'presshub_social_engine_' . $platform;
+
+        $badge_html = $is_configured
+            ? '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#d4edda; color:#155724;">' . esc_html__( '✓ Configured', 'presshub-social-autopost' ) . '</span>'
+            : '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#f8d7da; color:#721c24;">' . esc_html__( '⚠ Not Configured — posts will not be queued', 'presshub-social-autopost' ) . '</span>';
         ?>
-        <select id="<?php echo esc_attr( $opt_name ); ?>" name="<?php echo esc_attr( $opt_name ); ?>">
-            <option value="api" <?php selected( $current, 'api' ); ?>><?php echo esc_html__( 'Official REST API', 'presshub-social-autopost' ); ?></option>
-            <option value="automation" <?php selected( $current, 'automation' ); ?>><?php echo esc_html__( 'Automation Worker (Playwright Headless)', 'presshub-social-autopost' ); ?></option>
-        </select>
+        <div style="display:flex; align-items:center;">
+            <select id="<?php echo esc_attr( $opt_name ); ?>" name="<?php echo esc_attr( $opt_name ); ?>">
+                <option value="api" <?php selected( $current, 'api' ); ?>><?php echo esc_html__( 'Official REST API', 'presshub-social-autopost' ); ?></option>
+                <option value="automation" <?php selected( $current, 'automation' ); ?>><?php echo esc_html__( 'Automation Worker (Playwright Headless)', 'presshub-social-autopost' ); ?></option>
+            </select>
+            <?php echo $badge_html; ?>
+        </div>
         <p class="description">
             <?php
             if ( in_array( $platform, [ 'twitter', 'tiktok' ], true ) ) {
