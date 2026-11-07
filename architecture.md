@@ -23,6 +23,9 @@
    - **Layer 3**: Audit log (`wp_presshub_ai_audit_log`)
    - **Layer 4**: WordPress `debug.log`
    - **Generation records**: `wp_presshub_ai_generation_records` (`PressHub_AI_Generation_Recorder`), a durable, always-on record of everything that went into each briefing and podcast-script generation (see §4.19)
+   - **Secret masking**: `PressHub_AI_Secret_Masker` is the single masking implementation for logs. `PressHub_AI_Logger` masks every context array and message before writing (so neither the file nor the `error_log` mirror sees a plain key), `PressHub_AI_Audit_Logger` masks audit details, and the prompt/TTS debug logs mask their config, meta and header fields while keeping prompt bodies verbatim. Provider API failures are logged through `PressHub_AI_Logger::error()` with `provider`, `model`, `action` and `http_code` context instead of raw `error_log()`.
+   - **Log level default**: `DEBUG` when `WP_DEBUG` is on, otherwise `INFO`, unless `presshub_ai_log_level` is set. Prompt debugging does not change the level.
+   - **Audit integrity**: clearing the audit log writes an `audit_log_cleared` event (rows deleted, actor) as the first row of the new trail; the client IP is `REMOTE_ADDR` unless the `presshub_ai_client_ip_header` filter names a trusted proxy header.
 
 ---
 

@@ -426,8 +426,8 @@ class PressHub_AI_Provider_Store {
         // notice so operators can verify the migration in debug logs.
         if ( null !== $legacy_gcloud_key && '' !== trim( (string) $legacy_gcloud_key ) ) {
             delete_option( 'presshub_ai_google_cloud_api_key' );
-            if ( function_exists( 'error_log' ) ) {
-                error_log( '[PressHub AI] Migrated deprecated presshub_ai_google_cloud_api_key (masked: ' . self::mask_key( $legacy_gcloud_key ) . ') into the configured Gemini provider.' );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( '[PressHub AI] Migrated deprecated presshub_ai_google_cloud_api_key (masked: ' . self::mask_key( $legacy_gcloud_key ) . ') into the configured Gemini provider.' );
             }
         }
     }

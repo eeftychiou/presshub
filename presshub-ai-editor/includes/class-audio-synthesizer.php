@@ -1971,7 +1971,9 @@ class PressHub_AI_Audio_Synthesizer {
                 $sfx_wav = file_get_contents( $tmp_wav );
                 @unlink( $tmp_wav );
             } else {
-                error_log( 'PressHub AI: Failed to decode/resample SFX using ffmpeg.' );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'PressHub AI: Failed to decode/resample SFX using ffmpeg.', [ 'sfx_file' => basename( $sfx_file ) ] );
+                }
             }
         } else {
             $sfx_wav = file_get_contents( $sfx_file );

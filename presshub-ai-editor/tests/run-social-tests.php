@@ -1556,6 +1556,30 @@ PressHub_Social_AI_Copywriter::set_ai_caller( null );
 
 
 // ----------------------------------------------------------------------
+// Social Logger audit(): regression for TypeError (issue #139)
+// ----------------------------------------------------------------------
+require_once $base_dir . '/includes/class-secret-masker.php';
+require_once $base_dir . '/includes/class-audit-logger.php';
+global $wpdb;
+$wpdb->tables['wp_presshub_ai_audit_logs'] = [];
+$audit_error = '';
+try {
+    PressHub_Social_Logger::audit( 'social_job_enqueued', 'social_job', 77, 'Job enqueued', [ 'platform' => 'twitter', 'api_key' => 'sk-proj-abcdefghijklmnop123456' ] );
+} catch ( \Throwable $e ) {
+    $audit_error = get_class( $e ) . ': ' . $e->getMessage();
+}
+assert_equals( '', $audit_error, 'PressHub_Social_Logger::audit() does not throw' );
+$audit_rows = $wpdb->tables['wp_presshub_ai_audit_logs'] ?? [];
+assert_equals( 1, count( $audit_rows ), 'audit() writes exactly one audit row' );
+if ( 1 === count( $audit_rows ) ) {
+    assert_equals( 'social_job_enqueued', $audit_rows[0]['event_type'], 'audit row event_type' );
+    assert_equals( '77', $audit_rows[0]['entity_id'], 'audit row entity_id cast to string' );
+    $audit_details = json_decode( (string) $audit_rows[0]['details'], true );
+    assert_equals( 'Job enqueued', $audit_details['summary'] ?? null, 'audit row carries summary' );
+    assert_true( false === strpos( (string) $audit_rows[0]['details'], 'abcdefghijklmnop123456' ), 'audit row masks secrets in changes' );
+}
+
+// ----------------------------------------------------------------------
 // Test Summary
 // ----------------------------------------------------------------------
 echo "\n=================================================================\n";

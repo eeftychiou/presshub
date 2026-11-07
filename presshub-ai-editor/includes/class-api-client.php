@@ -63,7 +63,7 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
             'trace_id'       => $trace_id,
             'timestamp'      => $stamp,
             'endpoint'       => (string) $endpoint,
-            'config'         => (string) $meta,
+            'config'         => class_exists( 'PressHub_AI_Secret_Masker' ) ? PressHub_AI_Secret_Masker::mask_text( (string) $meta ) : (string) $meta,
             'system_prompt'  => (string) $sys_prompt,
             'user_prompt'    => (string) $user_prompt,
             'response'       => null !== $response ? (string) $response : null,
@@ -1447,6 +1447,37 @@ class PressHub_AI_API_Client {
         ];
     }
 
+    /**
+     * Write a provider failure to the plugin log (not to the bare PHP log).
+     * PressHub_AI_Logger mirrors WARNING+ to the PHP error log itself and
+     * adds the trace ID and masks secrets.
+     *
+     * @param string               $provider    Provider slug.
+     * @param string               $model       Model or voice identifier.
+     * @param string               $message     Error message.
+     * @param array|WP_Error|mixed $response    HTTP response (for the status code).
+     * @param int|null             $duration_ms Request duration, when known.
+     */
+    private function log_provider_error( $provider, $model, $message, $response = null, $duration_ms = null ) {
+        if ( ! class_exists( 'PressHub_AI_Logger' ) ) {
+            return;
+        }
+        $message = (string) $message;
+        $context = [
+            'provider' => (string) $provider,
+            'model'    => (string) $model,
+            'action'   => $this->get_action(),
+        ];
+        if ( null !== $response && ! is_wp_error( $response ) ) {
+            $context['http_code'] = (int) wp_remote_retrieve_response_code( $response );
+        }
+        if ( null !== $duration_ms ) {
+            $context['duration_ms'] = (int) $duration_ms;
+        }
+        $context['error'] = $message;
+        PressHub_AI_Logger::error( sprintf( '[%s] API error: %s', $provider, $message ), $context );
+    }
+
     public function generate_image_via_imagen( $prompt ) {
         if ( empty( $this->google_cloud_api_key ) ) {
             return new WP_Error( 'no_gc_key', __( 'Google Cloud API key is missing.', 'presshub-ai-editor' ) );
@@ -1477,7 +1508,7 @@ class PressHub_AI_API_Client {
         ] );
 
         if ( is_wp_error( $response ) ) {
-            error_log( 'PressHub AI [imagen] API error: ' . $response->get_error_message() );
+            $this->log_provider_error( 'imagen', 'imagen-3.0-generate-002', $response->get_error_message(), $response );
             return $this->mock_image_generation( $prompt );
         }
 
@@ -1485,7 +1516,7 @@ class PressHub_AI_API_Client {
 
         if ( isset( $res_body['error']['message'] ) ) {
             // D-3: log the provider's error before falling back to mock.
-            error_log( 'PressHub AI [imagen] API error: ' . $res_body['error']['message'] );
+            $this->log_provider_error( 'imagen', 'imagen-3.0-generate-002', $res_body['error']['message'], $response );
         }
 
         if ( isset( $res_body['predictions'][0]['bytesBase64Encoded'] ) ) {
@@ -1566,14 +1597,14 @@ class PressHub_AI_API_Client {
         ] );
 
         if ( is_wp_error( $response ) ) {
-            error_log( 'PressHub AI [tts] API error: ' . $response->get_error_message() );
+            $this->log_provider_error( 'google_cloud_tts', 'en-US-Journey-F', $response->get_error_message(), $response );
             return $this->mock_audio_generation($script, $post_id);
         }
 
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $res_body['error']['message'] ) ) {
             // D-3: log the provider's error before falling back to mock.
-            error_log( 'PressHub AI [tts] API error: ' . $res_body['error']['message'] );
+            $this->log_provider_error( 'google_cloud_tts', 'en-US-Journey-F', $res_body['error']['message'], $response );
         }
         if ( isset( $res_body['audioContent'] ) ) {
             $audio_data = base64_decode( $res_body['audioContent'] );
@@ -1658,7 +1689,7 @@ class PressHub_AI_API_Client {
         ] );
 
         if ( is_wp_error( $response ) ) {
-            error_log( 'PressHub AI [tts] API error: ' . $response->get_error_message() );
+            $this->log_provider_error( 'google_cloud_tts', $voice_model, $response->get_error_message(), $response );
             if ( function_exists( 'presshub_ai_log_prompts' ) ) {
                 $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
                 presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, 'ERROR: ' . $response->get_error_message(), $meta_line );
@@ -1668,7 +1699,7 @@ class PressHub_AI_API_Client {
 
         $res_body = json_decode( wp_remote_retrieve_body( $response ), true );
         if ( isset( $res_body['error']['message'] ) ) {
-            error_log( 'PressHub AI [tts] API error: ' . $res_body['error']['message'] );
+            $this->log_provider_error( 'google_cloud_tts', $voice_model, $res_body['error']['message'], $response );
             if ( function_exists( 'presshub_ai_log_prompts' ) ) {
                 $meta_line = sprintf( 'engine=google_cloud voice=%s speed=%.2f pitch=%.1f chars=%d', $voice_model, $speed, $pitch, mb_strlen( $text ) );
                 presshub_ai_log_prompts( 'podcast_tts', 'Google Cloud Text-to-Speech API', $text, 'ERROR: ' . $res_body['error']['message'], $meta_line );
@@ -1760,6 +1791,18 @@ class PressHub_AI_API_Client {
     public static function write_tts_payload_log( array $entry ): void {
         if ( empty( $entry['trace_id'] ) && class_exists( 'PressHub_AI_Trace' ) ) {
             $entry['trace_id'] = PressHub_AI_Trace::get_or_create_trace_id();
+        }
+
+        // Mask header/config-like fields only; prompt text and request
+        // bodies stay verbatim for debugging.
+        if ( class_exists( 'PressHub_AI_Secret_Masker' ) && ! empty( $entry['data'] ) && is_array( $entry['data'] ) ) {
+            foreach ( [ 'headers', 'config', 'endpoint', 'endpoint_masked', 'url' ] as $masked_field ) {
+                if ( isset( $entry['data'][ $masked_field ] ) ) {
+                    $entry['data'][ $masked_field ] = is_array( $entry['data'][ $masked_field ] )
+                        ? PressHub_AI_Secret_Masker::mask_array( $entry['data'][ $masked_field ] )
+                        : PressHub_AI_Secret_Masker::mask_text( (string) $entry['data'][ $masked_field ] );
+                }
+            }
         }
 
         $json = wp_json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
@@ -2830,7 +2873,7 @@ class PressHub_AI_API_Client {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, 0, 0, $duration_ms, 'error', $response->get_error_message() );
             }
-            error_log( 'PressHub AI [custom_openai] API error: ' . $response->get_error_message() );
+            $this->log_provider_error( $provider_name, $model, $response->get_error_message(), $response, $duration_ms );
             return $response;
         }
 
@@ -2859,14 +2902,14 @@ class PressHub_AI_API_Client {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, 0, 0, $duration_ms, 'error', $res_body['error']['message'] );
             }
-            error_log( 'PressHub AI [custom_openai] API error: ' . $res_body['error']['message'] );
+            $this->log_provider_error( $provider_name, $model, $res_body['error']['message'], $response, $duration_ms );
             return new WP_Error( 'api_error', $res_body['error']['message'] );
         }
 
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
             PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, 0, 0, $duration_ms, 'error', 'Invalid response from custom endpoint.' );
         }
-        error_log( 'PressHub AI [custom_openai] API error: Invalid response from custom endpoint.' );
+        $this->log_provider_error( $provider_name, $model, 'Invalid response from custom endpoint.', $response, $duration_ms );
         return new WP_Error( 'api_error', __( 'Invalid response from custom endpoint.', 'presshub-ai-editor' ) );
     }
 
@@ -2911,7 +2954,7 @@ class PressHub_AI_API_Client {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, 0, 0, $duration_ms, 'error', $response->get_error_message() );
             }
-            error_log( 'PressHub AI [openai] API error: ' . $response->get_error_message() );
+            $this->log_provider_error( 'openai', $this->model, $response->get_error_message(), $response, $duration_ms );
             return $response;
         }
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
@@ -2939,13 +2982,13 @@ class PressHub_AI_API_Client {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, 0, 0, $duration_ms, 'error', $body['error']['message'] );
             }
-            error_log( 'PressHub AI [openai] API error: ' . $body['error']['message'] );
+            $this->log_provider_error( 'openai', $this->model, $body['error']['message'], $response, $duration_ms );
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
             PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, 0, 0, $duration_ms, 'error', 'Invalid response from OpenAI.' );
         }
-        error_log( 'PressHub AI [openai] API error: Invalid response from OpenAI.' );
+        $this->log_provider_error( 'openai', $this->model, 'Invalid response from OpenAI.', $response, $duration_ms );
         return new WP_Error( 'api_error', __( 'Invalid response from OpenAI.', 'presshub-ai-editor' ) );
     }
 
@@ -3003,7 +3046,7 @@ class PressHub_AI_API_Client {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, 0, 0, $duration_ms, 'error', $response->get_error_message() );
             }
-            error_log( 'PressHub AI [anthropic] API error: ' . $response->get_error_message() );
+            $this->log_provider_error( 'anthropic', $this->model, $response->get_error_message(), $response, $duration_ms );
             return $response;
         }
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
@@ -3031,13 +3074,13 @@ class PressHub_AI_API_Client {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, 0, 0, $duration_ms, 'error', $body['error']['message'] );
             }
-            error_log( 'PressHub AI [anthropic] API error: ' . $body['error']['message'] );
+            $this->log_provider_error( 'anthropic', $this->model, $body['error']['message'], $response, $duration_ms );
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
             PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, 0, 0, $duration_ms, 'error', 'Invalid response from Anthropic.' );
         }
-        error_log( 'PressHub AI [anthropic] API error: Invalid response from Anthropic.' );
+        $this->log_provider_error( 'anthropic', $this->model, 'Invalid response from Anthropic.', $response, $duration_ms );
         return new WP_Error( 'api_error', __( 'Invalid response from Anthropic.', 'presshub-ai-editor' ) );
     }
 
@@ -3110,7 +3153,7 @@ class PressHub_AI_API_Client {
             }
             // D-3: surface provider failures in the server log; the error
             // itself still propagates to the caller unchanged.
-            error_log( 'PressHub AI [gemini] API error: ' . $response->get_error_message() );
+            $this->log_provider_error( 'gemini', $this->model, $response->get_error_message(), $response, $duration_ms );
             return $response;
         }
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
@@ -3138,13 +3181,13 @@ class PressHub_AI_API_Client {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, 0, 0, $duration_ms, 'error', $body['error']['message'] );
             }
-            error_log( 'PressHub AI [gemini] API error: ' . $body['error']['message'] );
+            $this->log_provider_error( 'gemini', $this->model, $body['error']['message'], $response, $duration_ms );
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
             PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, 0, 0, $duration_ms, 'error', 'Invalid response from Gemini.' );
         }
-        error_log( 'PressHub AI [gemini] API error: Invalid response from Gemini.' );
+        $this->log_provider_error( 'gemini', $this->model, 'Invalid response from Gemini.', $response, $duration_ms );
         return new WP_Error( 'api_error', __( 'Invalid response from Gemini.', 'presshub-ai-editor' ) );
     }
     /**
