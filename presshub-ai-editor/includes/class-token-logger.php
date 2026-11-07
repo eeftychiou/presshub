@@ -20,6 +20,28 @@ class PressHub_AI_Token_Logger {
     const DB_VERSION = '1.0.0';
     const DB_VERSION_OPTION = 'presshub_ai_token_logs_db_version';
 
+    /** @var array|null Most recent LLM request captured by log_llm_request(). */
+    private static $last_llm_request = null;
+
+    /**
+     * Get the most recent LLM request captured by log_llm_request().
+     *
+     * @return array|null Keys: action, provider, model, prompt_tokens, completion_tokens,
+     *                    total_tokens, duration_ms, status, error. Null if none captured.
+     */
+    public static function get_last_llm_request(): ?array {
+        return self::$last_llm_request;
+    }
+
+    /**
+     * Reset the captured last LLM request.
+     *
+     * @return void
+     */
+    public static function reset_last_llm_request(): void {
+        self::$last_llm_request = null;
+    }
+
     /**
      * Get table name with WordPress prefix.
      *
@@ -114,6 +136,19 @@ class PressHub_AI_Token_Logger {
         }
 
         $total_tokens = max( 0, $prompt_tokens + $completion_tokens );
+
+        // Capture for the generation recorder before inserting (even if the insert fails).
+        self::$last_llm_request = [
+            'action'            => $action,
+            'provider'          => $provider,
+            'model'             => $model,
+            'prompt_tokens'     => max( 0, $prompt_tokens ),
+            'completion_tokens' => max( 0, $completion_tokens ),
+            'total_tokens'      => $total_tokens,
+            'duration_ms'       => max( 0, $duration_ms ),
+            'status'            => 'error' === strtolower( $status ) ? 'error' : 'success',
+            'error'             => $error,
+        ];
 
         return self::insert_row( [
             'action_trigger'    => sanitize_key( $action ) ?: sanitize_text_field( $action ),

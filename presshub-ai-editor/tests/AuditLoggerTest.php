@@ -243,8 +243,47 @@ function test_audit_logger() {
 
     $cleared = PressHub_AI_Audit_Logger::clear_all_logs();
     assert( true === $cleared, 'clear_all_logs returns true' );
-    assert( 0 === count( $wpdb->tables['wp_presshub_ai_audit_logs'] ), '0 rows remain after clear_all_logs' );
+    // Clearing now records itself: exactly one audit_log_cleared row remains.
+    $after_clear = $wpdb->tables['wp_presshub_ai_audit_logs'];
+    if ( 1 !== count( $after_clear ) || 'audit_log_cleared' !== $after_clear[0]['event_type'] ) {
+        fwrite( STDERR, "FAIL: clear should leave exactly one audit_log_cleared row\n" );
+        exit( 1 );
+    }
+    $cleared_details = json_decode( (string) $after_clear[0]['details'], true );
+    if ( 10 !== (int) ( $cleared_details['rows_deleted'] ?? -1 ) || 42 !== (int) $after_clear[0]['user_id'] ) {
+        fwrite( STDERR, "FAIL: audit_log_cleared row should record rows_deleted=10 and the acting user\n" );
+        exit( 1 );
+    }
     echo '  [8] Retention pruning & clear logs: OK' . PHP_EOL;
+
+    // -----------------------------------------------------------------
+    // 9. Client IP: REMOTE_ADDR by default, trusted header only via filter
+    // -----------------------------------------------------------------
+    $_SERVER['REMOTE_ADDR']          = '203.0.113.9';
+    $_SERVER['HTTP_X_FORWARDED_FOR'] = 'bogus, 198.51.100.7, 10.0.0.1';
+    PressHub_AI_Audit_Logger::log( 'ip_default', 'test', 'x', [] );
+    $row = end( $wpdb->tables['wp_presshub_ai_audit_logs'] );
+    if ( '203.0.113.9' !== $row['ip_address'] ) {
+        fwrite( STDERR, "FAIL: spoofed X-Forwarded-For must be ignored by default, got {$row['ip_address']}\n" );
+        exit( 1 );
+    }
+    add_filter( 'presshub_ai_client_ip_header', function () { return 'HTTP_X_FORWARDED_FOR'; } );
+    PressHub_AI_Audit_Logger::log( 'ip_filtered', 'test', 'x', [] );
+    $row = end( $wpdb->tables['wp_presshub_ai_audit_logs'] );
+    if ( '198.51.100.7' !== $row['ip_address'] ) {
+        fwrite( STDERR, "FAIL: filter should select first valid IP from header, got {$row['ip_address']}\n" );
+        exit( 1 );
+    }
+    $_SERVER['HTTP_X_FORWARDED_FOR'] = 'garbage';
+    PressHub_AI_Audit_Logger::log( 'ip_fallback', 'test', 'x', [] );
+    $row = end( $wpdb->tables['wp_presshub_ai_audit_logs'] );
+    if ( '203.0.113.9' !== $row['ip_address'] ) {
+        fwrite( STDERR, "FAIL: invalid header should fall back to REMOTE_ADDR, got {$row['ip_address']}\n" );
+        exit( 1 );
+    }
+    remove_all_filters( 'presshub_ai_client_ip_header' );
+    unset( $_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR'] );
+    echo '  [9] Client IP resolution: OK' . PHP_EOL;
 
     echo 'AuditLoggerTest: ALL TESTS PASSED! (100% OK)' . PHP_EOL;
 }

@@ -11,6 +11,7 @@
 
 require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/wp-action-wrapper.php';
+require_once __DIR__ . '/../includes/class-secret-masker.php';
 require_once __DIR__ . '/../includes/class-logger.php';
 
 class LoggerTest {
@@ -83,6 +84,33 @@ class LoggerTest {
         PressHub_AI_Logger::clear_log();
         if ( '' !== trim( PressHub_AI_Logger::get_recent_logs() ) ) {
             $failures[] = 'Case 4: Clear log should empty log contents.';
+        }
+
+        // --- Case 5: secrets never reach the log file in plain text ---
+        update_option( 'presshub_ai_log_level', 'DEBUG' );
+        PressHub_AI_Logger::clear_log();
+        $plain_ctx = 'plainctxsecretvalue123456';
+        $plain_msg = 'sk-proj-abcdefghijklmnop123456';
+        PressHub_AI_Logger::error( 'Call failed with key ' . $plain_msg, [ 'api_key' => $plain_ctx, 'provider' => 'openai' ] );
+        $content5 = PressHub_AI_Logger::get_recent_logs();
+        if ( false !== strpos( $content5, $plain_ctx ) ) {
+            $failures[] = 'Case 5: context api_key leaked in plain text: ' . $content5;
+        }
+        if ( false !== strpos( $content5, $plain_msg ) ) {
+            $failures[] = 'Case 5: key embedded in message leaked in plain text: ' . $content5;
+        }
+        if ( false === strpos( $content5, 'openai' ) || false === strpos( $content5, 'Call failed with key' ) ) {
+            $failures[] = 'Case 5: non-secret content should be preserved: ' . $content5;
+        }
+
+        // --- Case 6: prompt debugging no longer lowers the level (WP_DEBUG off) ---
+        if ( ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+            update_option( 'presshub_ai_log_level', '' );
+            update_option( 'presshub_ai_debug_prompts', '1' );
+            if ( 'INFO' !== PressHub_AI_Logger::get_configured_level() ) {
+                $failures[] = 'Case 6: prompt debugging with WP_DEBUG off must yield INFO, got ' . PressHub_AI_Logger::get_configured_level();
+            }
+            update_option( 'presshub_ai_debug_prompts', '0' );
         }
 
         // Cleanup

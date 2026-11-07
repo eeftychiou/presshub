@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.8.8
+ * Version: 2.9.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -120,7 +120,7 @@ if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 
-define( 'PRESSHUB_AI_VERSION', '2.8.8' );
+define( 'PRESSHUB_AI_VERSION', '2.9.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -142,6 +142,7 @@ if ( ! defined( 'PRESSHUB_SOCIAL_URL' ) ) {
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-defaults.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-trace.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-secret-masker.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-logger.php';
 // Concern #2 split: load settings modules in parallel with the
 // legacy facade. Cutover happens in T5; until then the
@@ -171,6 +172,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
@@ -245,6 +247,7 @@ add_filter(
 function presshub_ai_activate() {
     PressHub_AI_Token_Logger::create_table();
     PressHub_AI_Audit_Logger::create_table();
+    PressHub_AI_Generation_Recorder::create_table();
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
     }
@@ -253,6 +256,9 @@ function presshub_ai_activate() {
     }
     if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
         wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
+    }
+    if ( ! wp_next_scheduled( PressHub_AI_Generation_Recorder::PRUNE_HOOK ) ) {
+        wp_schedule_event( time(), 'daily', PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     }
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::activate();
@@ -274,6 +280,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_token_logs' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_audit_logs' );
+    wp_clear_scheduled_hook( PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::deactivate();
     }
@@ -291,6 +298,13 @@ add_action( 'presshub_ai_prune_token_logs', function() {
 add_action( 'presshub_ai_prune_audit_logs', function() {
     if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
         PressHub_AI_Audit_Logger::prune_logs( 90 );
+    }
+} );
+
+// Prune generation records cron action (retention is Settings-First)
+add_action( PressHub_AI_Generation_Recorder::PRUNE_HOOK, function() {
+    if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+        PressHub_AI_Generation_Recorder::prune( PressHub_AI_Settings_Storage::get_generation_record_retention_days() );
     }
 } );
 
@@ -342,6 +356,15 @@ function presshub_ai_init() {
         }
         if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
+        }
+    }
+
+    if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+        if ( get_option( PressHub_AI_Generation_Recorder::DB_VERSION_OPTION ) !== PressHub_AI_Generation_Recorder::DB_VERSION ) {
+            PressHub_AI_Generation_Recorder::create_table();
+        }
+        if ( ! wp_next_scheduled( PressHub_AI_Generation_Recorder::PRUNE_HOOK ) ) {
+            wp_schedule_event( time(), 'daily', PressHub_AI_Generation_Recorder::PRUNE_HOOK );
         }
     }
 
@@ -545,11 +568,12 @@ function presshub_ai_execute_research_job( $research_id ) {
     if ( is_wp_error( $report ) ) {
         update_post_meta( $research_id, '_research_status', 'failed' );
         update_post_meta( $research_id, '_error_message', $report->get_error_message() );
-        error_log( sprintf(
-            'PressHub AI: research job %d failed (provider error): %s',
-            $research_id,
-            $report->get_error_message()
-        ) );
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error(
+                sprintf( 'PressHub AI: research job %d failed (provider error): %s', $research_id, $report->get_error_message() ),
+                [ 'research_id' => (int) $research_id, 'stage' => 'provider', 'error' => $report->get_error_message() ]
+            );
+        }
         return;
     }
     
@@ -562,11 +586,12 @@ function presshub_ai_execute_research_job( $research_id ) {
         $update_error = is_wp_error( $updated ) ? $updated->get_error_message() : 'Failed to update research post content.';
         update_post_meta( $research_id, '_research_status', 'failed' );
         update_post_meta( $research_id, '_error_message', $update_error );
-        error_log( sprintf(
-            'PressHub AI: research job %d failed (post update): %s',
-            $research_id,
-            $update_error
-        ) );
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error(
+                sprintf( 'PressHub AI: research job %d failed (post update): %s', $research_id, $update_error ),
+                [ 'research_id' => (int) $research_id, 'stage' => 'post_update', 'error' => $update_error ]
+            );
+        }
         return;
     }
 
