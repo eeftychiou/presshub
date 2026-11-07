@@ -114,6 +114,33 @@ export async function captureAutomationFailure(
 export const TWITTER_URL_WEIGHT = 23;
 export const TWITTER_MAX_WEIGHTED_CHARS = 275;
 
+/** Twitter/X snowflake epoch (2010-11-04T01:42:54.657Z). */
+export const TWITTER_SNOWFLAKE_EPOCH_MS = 1288834974657;
+
+/**
+ * Tolerance for clock skew between this machine and X's servers when deciding whether a
+ * profile-timeline tweet was created by the current submission. Far shorter than the gap
+ * between job retries, so tweets from earlier attempts are still rejected.
+ */
+export const TWITTER_TIMELINE_MAX_CLOCK_SKEW_MS = 60_000;
+
+/**
+ * Decodes the creation time (ms since Unix epoch) embedded in a Twitter/X status ID.
+ * Status IDs are snowflakes: the bits above the low 22 hold milliseconds since the Twitter
+ * epoch. Plain float division is used (no BigInt): the precision lost converting a 64-bit ID
+ * to a double is far below 2^22, so the decoded millisecond is unaffected.
+ * Returns undefined for anything that is not a decimal ID.
+ */
+export function getTwitterSnowflakeTimestampMs(statusId: string): number | undefined {
+  if (!/^\d+$/.test(statusId)) return undefined;
+  return Math.floor(Number(statusId) / 4194304) + TWITTER_SNOWFLAKE_EPOCH_MS;
+}
+
+/** Builds a status ID whose embedded creation time is `timestampMs` (test fixtures). */
+export function makeTwitterSnowflakeId(timestampMs: number): string {
+  return String((timestampMs - TWITTER_SNOWFLAKE_EPOCH_MS) * 4194304);
+}
+
 /**
  * Calculates effective weighted character length for Twitter/X.
  * Every URL (http:// or https://) counts as exactly 23 characters (t.co shortener).
@@ -424,6 +451,10 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
       }
     }
 
+    // Anchor for the profile-timeline fallback: only tweets created after this moment
+    // (minus clock-skew tolerance) can belong to this submission.
+    const submitStartedAt = Date.now();
+
     // Tier 1: Keyboard-First Submission (ControlOrMeta+Enter)
     WorkerLogger.info('Twitter Automation', 'Tier 1: Attempting keyboard shortcut submission (ControlOrMeta+Enter)...');
     await textarea.focus().catch(() => {});
@@ -621,6 +652,11 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 
         await page.locator('article[data-testid="tweet"], article').first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
         const tweetArticles = await page.locator('article[data-testid="tweet"], article').all();
+        // An empty snippet would match every article (''.includes check), so text matching
+        // is only used when the copy yields at least one letter or digit.
+        const snippet = tweetCopy.slice(0, 30).replace(/[^a-zA-Z0-9\u0370-\u03FF\u1F00-\u1FFF]/g, '').slice(0, 20);
+        const copyUrl = (tweetCopy.match(/https?:\/\/[^\s]+/i) || [])[0];
+        const oldestAcceptableMs = submitStartedAt - TWITTER_TIMELINE_MAX_CLOCK_SKEW_MS;
         for (const article of tweetArticles.slice(0, 6)) {
           const articleText = (await article.innerText().catch(() => '')) || '';
           const statusLink = article.locator('a[href*="/status/"]').first();
@@ -629,15 +665,28 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
             if (href) {
               const match = href.match(/\/status\/(\d+)/);
               if (match) {
-                const snippet = tweetCopy.slice(0, 30).replace(/[^a-zA-Z0-9\u0370-\u03FF\u1F00-\u1FFF]/g, '').slice(0, 20);
                 const cleanArticleText = articleText.replace(/[^a-zA-Z0-9\u0370-\u03FF\u1F00-\u1FFF]/g, '');
-                const copyUrl = (tweetCopy.match(/https?:\/\/[^\s]+/i) || [])[0];
-                if (cleanArticleText.includes(snippet) || (copyUrl && articleText.includes(copyUrl))) {
-                  tweetId = match[1];
-                  tweetUrl = href.startsWith('http') ? href : `https://x.com${href}`;
-                  WorkerLogger.info('Twitter Automation', `Found published tweet on profile timeline: ${tweetUrl}`);
-                  break;
+                const textMatches = snippet.length > 0 && cleanArticleText.includes(snippet);
+                const urlMatches = !!copyUrl && articleText.includes(copyUrl);
+                if (!textMatches && !urlMatches) continue;
+
+                // Reject tweets that predate this submission (e.g. an earlier attempt or a
+                // previous day's post with the same opening words). Accepting one would report
+                // the job as published without confirming that this run actually posted.
+                const createdAtMs = getTwitterSnowflakeTimestampMs(match[1]);
+                if (createdAtMs === undefined || createdAtMs < oldestAcceptableMs) {
+                  WorkerLogger.warn('Twitter Automation', `Ignoring matching timeline tweet ${match[1]}: created before this submission.`, {
+                    tweetCreatedAt: createdAtMs !== undefined ? new Date(createdAtMs).toISOString() : 'unparseable',
+                    submitStartedAt: new Date(submitStartedAt).toISOString(),
+                    maxClockSkewMs: TWITTER_TIMELINE_MAX_CLOCK_SKEW_MS
+                  });
+                  continue;
                 }
+
+                tweetId = match[1];
+                tweetUrl = href.startsWith('http') ? href : `https://x.com${href}`;
+                WorkerLogger.info('Twitter Automation', `Found published tweet on profile timeline: ${tweetUrl}`);
+                break;
               }
             }
           }
