@@ -175,6 +175,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-memory-digest-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 // Social Auto-Post Subsystem Classes
@@ -353,6 +354,7 @@ function presshub_ai_init() {
     PressHub_AI_Audio_Synthesizer::register_hooks();
     PressHub_AI_Research_Cleanup::register();
     PressHub_AI_Memory_Store::register_hooks();
+    PressHub_AI_Memory_Digest_Builder::init();
 
     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
         if ( get_option( PressHub_AI_Token_Logger::DB_VERSION_OPTION ) !== PressHub_AI_Token_Logger::DB_VERSION ) {

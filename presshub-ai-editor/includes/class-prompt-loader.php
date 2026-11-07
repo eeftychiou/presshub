@@ -156,4 +156,13 @@ class PressHub_AI_Prompt_Loader {
     public static function get_briefing_qa_prompt(): string {
         return self::load( 'scorecard/briefing_qa_user_prompt.txt' );
     }
+
+    /**
+     * Get the built-in default daily memory digest prompt.
+     *
+     * @return string Loaded daily digest prompt template.
+     */
+    public static function get_daily_digest_prompt(): string {
+        return self::load( 'memory/daily_digest.txt' );
+    }
 }

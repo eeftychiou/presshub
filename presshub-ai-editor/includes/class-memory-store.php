@@ -804,6 +804,198 @@ class PressHub_AI_Memory_Store {
     }
 
     /**
+     * Retrieve a single daily memory digest entry for a given date and edition.
+     *
+     * @param string $date    'YYYY-MM-DD'
+     * @param string $edition 'morning'|'noon'
+     * @return array|null
+     */
+    public static function get_daily_entry( string $date, string $edition ): ?array {
+        global $wpdb;
+        $table = self::get_entries_table();
+        $row   = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM {$table} WHERE scope = 'daily' AND period_start = %s AND edition = %s LIMIT 1",
+                $date,
+                $edition
+            ),
+            ARRAY_A
+        );
+        return $row ?: null;
+    }
+
+    /**
+     * Record a failed digest generation.
+     *
+     * Invariant: If an existing entry has origin='edited', preserves content_json,
+     * origin, and active status; only updates error_message, updated_at, and metadata.
+     *
+     * @param string   $date
+     * @param string   $edition
+     * @param string   $error_message
+     * @param int|null $source_post_id
+     * @param int|null $generation_record_id
+     * @return array|WP_Error
+     */
+    public static function record_failed_digest( string $date, string $edition, string $error_message, ?int $source_post_id = null, ?int $generation_record_id = null ) {
+        global $wpdb;
+        $existing = self::get_daily_entry( $date, $edition );
+        if ( $existing && 'edited' === (string) $existing['origin'] ) {
+            $table = self::get_entries_table();
+            $now   = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+            $data  = [
+                'error_message' => sanitize_textarea_field( $error_message ),
+                'updated_at'    => $now,
+            ];
+            $format = [ '%s', '%s' ];
+            if ( null !== $source_post_id && $source_post_id > 0 ) {
+                $data['source_post_id'] = (int) $source_post_id;
+                $format[] = '%d';
+            }
+            if ( null !== $generation_record_id && $generation_record_id > 0 ) {
+                $data['generation_record_id'] = (int) $generation_record_id;
+                $format[] = '%d';
+            }
+            $wpdb->update( $table, $data, [ 'id' => (int) $existing['id'] ], $format, [ '%d' ] );
+
+            return [
+                'id'             => (int) $existing['id'],
+                'scope'          => 'daily',
+                'period_start'   => $date,
+                'edition'        => $edition,
+                'origin'         => 'edited',
+                'preserved_edit' => true,
+                'status'         => (string) $existing['status'],
+                'error_message'  => $error_message,
+            ];
+        }
+
+        return self::upsert_generated( [
+            'scope'                => 'daily',
+            'period_start'         => $date,
+            'period_end'           => $date,
+            'edition'              => $edition,
+            'source_post_id'       => $source_post_id,
+            'generation_record_id' => $generation_record_id,
+            'generated_content'    => [
+                'stories'   => [],
+                'podcast'   => [ 'opening_line' => '', 'closing_line' => '' ],
+                'narrative' => '',
+            ],
+            'status'               => 'failed',
+            'error_message'        => $error_message,
+        ] );
+    }
+
+    /**
+     * Deterministically update podcast opening and closing lines for an edition.
+     *
+     * @param string   $date
+     * @param string   $edition
+     * @param string   $opening_line
+     * @param string   $closing_line
+     * @param int|null $source_post_id
+     * @return array|null
+     */
+    public static function update_podcast_lines( string $date, string $edition, string $opening_line, string $closing_line, ?int $source_post_id = null ): ?array {
+        global $wpdb;
+
+        $opening_line = sanitize_text_field( $opening_line );
+        $closing_line = sanitize_text_field( $closing_line );
+        $table        = self::get_entries_table();
+        $now          = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+
+        $entry = self::get_daily_entry( $date, $edition );
+
+        if ( ! $entry ) {
+            $inserted = self::upsert_generated( [
+                'scope'             => 'daily',
+                'period_start'      => $date,
+                'period_end'        => $date,
+                'edition'           => $edition,
+                'source_post_id'    => $source_post_id,
+                'status'            => 'pending',
+                'generated_content' => [
+                    'stories'   => [],
+                    'podcast'   => [
+                        'opening_line' => $opening_line,
+                        'closing_line' => $closing_line,
+                    ],
+                    'narrative' => '',
+                ],
+            ] );
+
+            if ( is_wp_error( $inserted ) ) {
+                return null;
+            }
+
+            return self::get_daily_entry( $date, $edition );
+        }
+
+        $entry_id       = (int) $entry['id'];
+        $generated_data = self::decode_content( (string) $entry['generated_json'] );
+        $content_data   = self::decode_content( (string) $entry['content_json'] );
+
+        if ( ! isset( $generated_data['podcast'] ) || ! is_array( $generated_data['podcast'] ) ) {
+            $generated_data['podcast'] = [];
+        }
+        $generated_data['podcast']['opening_line'] = $opening_line;
+        $generated_data['podcast']['closing_line'] = $closing_line;
+        $new_generated_json = self::encode_content( $generated_data );
+
+        $update_data = [
+            'generated_json' => $new_generated_json,
+            'updated_at'     => $now,
+        ];
+        $update_format = [ '%s', '%s' ];
+
+        if ( null !== $source_post_id && $source_post_id > 0 ) {
+            $update_data['source_post_id'] = (int) $source_post_id;
+            $update_format[] = '%d';
+        }
+
+        $origin = (string) $entry['origin'];
+        if ( 'generated' === $origin ) {
+            if ( ! isset( $content_data['podcast'] ) || ! is_array( $content_data['podcast'] ) ) {
+                $content_data['podcast'] = [];
+            }
+            $content_data['podcast']['opening_line'] = $opening_line;
+            $content_data['podcast']['closing_line'] = $closing_line;
+
+            $new_content_json            = self::encode_content( $content_data );
+            $update_data['content_json'] = $new_content_json;
+            $update_data['version_hash'] = self::compute_hash( $new_content_json );
+            $update_format[]             = '%s';
+            $update_format[]             = '%s';
+        } elseif ( 'edited' === $origin ) {
+            // If editor's podcast lines were both empty, populate them too
+            $curr_open  = trim( (string) ( $content_data['podcast']['opening_line'] ?? '' ) );
+            $curr_close = trim( (string) ( $content_data['podcast']['closing_line'] ?? '' ) );
+            if ( '' === $curr_open && '' === $curr_close ) {
+                if ( ! isset( $content_data['podcast'] ) || ! is_array( $content_data['podcast'] ) ) {
+                    $content_data['podcast'] = [];
+                }
+                $content_data['podcast']['opening_line'] = $opening_line;
+                $content_data['podcast']['closing_line'] = $closing_line;
+                $new_content_json            = self::encode_content( $content_data );
+                $update_data['content_json'] = $new_content_json;
+                $update_data['version_hash'] = self::compute_hash( $new_content_json );
+                $update_format[]             = '%s';
+                $update_format[]             = '%s';
+            }
+        }
+
+        $wpdb->update(
+            $table,
+            $update_data,
+            [ 'id' => $entry_id ],
+            $update_format,
+            [ '%d' ]
+        );
+
+        return self::get_entry( $entry_id );
+    }
+    /**
      * Retrieve entries for a date range and scope.
      * Range condition:
      *   Entries overlapping or falling within [$from, $to].

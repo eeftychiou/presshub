@@ -34,7 +34,10 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_test_tts_synthesis', [ $this, 'test_tts_synthesis' ] );
         add_action( 'wp_ajax_presshub_ai_preview_tts_payload', [ $this, 'preview_tts_payload' ] );
         add_action( 'wp_ajax_presshub_ai_regenerate_podcast_audio', [ $this, 'regenerate_podcast_audio' ] );
-        add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
+                add_action( 'wp_ajax_presshub_ai_briefing_upload', [ $this, 'briefing_upload' ] );
+        add_action( 'wp_ajax_presshub_ai_memory_build_digest', [ $this, 'memory_build_digest' ] );
+        add_action( 'wp_ajax_presshub_ai_memory_start_backfill', [ $this, 'memory_start_backfill' ] );
+        add_action( 'wp_ajax_presshub_ai_memory_backfill_status', [ $this, 'memory_backfill_status' ] );
         // AI Featured Image Studio endpoints
         add_action( 'wp_ajax_presshub_ai_generate_image_prompt', [ $this, 'generate_image_prompt' ] );
         add_action( 'wp_ajax_presshub_ai_generate_featured_image', [ $this, 'generate_featured_image' ] );
@@ -1436,6 +1439,84 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $harvester = new PressHub_AI_News_Harvester();
         $result    = $harvester->handle_manual_upload( $articles_to_merge, $date, $edition );
         wp_send_json_success( $result );
+    }
+
+    /**
+     * AJAX: presshub_ai_memory_build_digest — build or retry daily memory digest for a post.
+     */
+    public function memory_build_digest() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
+        $force   = ! empty( $_POST['force'] );
+
+        if ( $post_id <= 0 ) {
+            $date    = isset( $_POST['date'] ) ? sanitize_text_field( wp_unslash( $_POST['date'] ) ) : '';
+            $edition = ( isset( $_POST['edition'] ) && 'noon' === sanitize_key( wp_unslash( $_POST['edition'] ) ) ) ? 'noon' : 'morning';
+            if ( ! empty( $date ) && class_exists( 'PressHub_AI_Briefing_Admin' ) ) {
+                $admin = new PressHub_AI_Briefing_Admin();
+                $post  = $admin->find_briefing_post( $date, 'text', $edition );
+                if ( $post && ! empty( $post->ID ) ) {
+                    $post_id = (int) $post->ID;
+                }
+            }
+        }
+
+        if ( $post_id <= 0 ) {
+            wp_send_json_error( __( 'Invalid or missing briefing post ID.', 'presshub-ai-editor' ) );
+        }
+
+        require_once __DIR__ . '/class-memory-digest-builder.php';
+        $res = PressHub_AI_Memory_Digest_Builder::build_for_post( $post_id, null, $force );
+
+        if ( is_wp_error( $res ) ) {
+            wp_send_json_error( [
+                'message' => $res->get_error_message(),
+                'code'    => $res->get_error_code(),
+            ] );
+        }
+
+        wp_send_json_success( $res );
+    }
+
+    /**
+     * AJAX: presshub_ai_memory_start_backfill — start backfilling daily memory digests.
+     */
+    public function memory_start_backfill() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        $from  = isset( $_POST['from'] ) ? sanitize_text_field( wp_unslash( $_POST['from'] ) ) : '';
+        $to    = isset( $_POST['to'] ) ? sanitize_text_field( wp_unslash( $_POST['to'] ) ) : '';
+        $force = ! empty( $_POST['force'] );
+
+        require_once __DIR__ . '/class-memory-digest-builder.php';
+        $state = PressHub_AI_Memory_Digest_Builder::start_backfill( $from, $to, $force );
+
+        wp_send_json_success( $state );
+    }
+
+    /**
+     * AJAX: presshub_ai_memory_backfill_status — get status of active or last backfill.
+     */
+    public function memory_backfill_status() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( $this->briefing_capability() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        }
+
+        require_once __DIR__ . '/class-memory-digest-builder.php';
+        $state = get_option( PressHub_AI_Memory_Digest_Builder::BACKFILL_STATE_OPTION, null );
+
+        wp_send_json_success( [ 'state' => $state ] );
     }
 
     /**
