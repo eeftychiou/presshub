@@ -146,9 +146,25 @@ class PressHub_Social_TikTok_Narrator {
 
         PressHub_Social_Logger::info( sprintf( 'Synthesizing TikTok narration for job #%d (%d chars).', $job_id, mb_strlen( $text ) ) );
 
-        $result = null !== self::$synthesizer
-            ? call_user_func( self::$synthesizer, $text, $job )
-            : self::synthesize_with_gemini( $text, $job, $hash );
+        // Generation record (#140 follow-up): the narration gets its own `tiktok_narration`
+        // record, linked to the article, and every TTS call made while synthesizing is
+        // logged on it instead of landing in a standalone `tts_test` record.
+        $record_id    = self::begin_narration_record( $job, $text, $hash );
+        $owns_session = false;
+        if ( $record_id > 0 && class_exists( 'PressHub_AI_TTS_Call_Recorder' ) && ! PressHub_AI_TTS_Call_Recorder::is_active() ) {
+            PressHub_AI_TTS_Call_Recorder::begin_session( $record_id );
+            $owns_session = true;
+        }
+        try {
+            $result = null !== self::$synthesizer
+                ? call_user_func( self::$synthesizer, $text, $job )
+                : self::synthesize_with_gemini( $text, $job, $hash );
+        } finally {
+            if ( $owns_session ) {
+                PressHub_AI_TTS_Call_Recorder::end_session();
+            }
+        }
+        self::finish_narration_record( $record_id, $result );
 
         if ( is_wp_error( $result ) ) {
             $err = new WP_Error(
@@ -172,6 +188,7 @@ class PressHub_Social_TikTok_Narrator {
             'voice'         => (string) ( $result['voice'] ?? '' ),
             'text'          => $text,
             'generated_at'  => gmdate( 'c' ),
+            'generation_record_id' => $record_id,
         ];
         if ( $job_id > 0 ) {
             PressHub_Social_Queue::update_job( $job_id, [
@@ -186,6 +203,72 @@ class PressHub_Social_TikTok_Narrator {
         return $job;
     }
 
+    /**
+     * Create the `tiktok_narration` generation record for a synthesis about to run.
+     * Returns 0 when the recorder is unavailable; recording never blocks narration.
+     */
+    private static function begin_narration_record( array $job, string $text, string $hash ): int {
+        if ( ! class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            return 0;
+        }
+        $post_id = (int) ( $job['post_id'] ?? 0 );
+        $id      = (int) PressHub_AI_Generation_Recorder::record( [
+            'kind'        => 'tiktok_narration',
+            'status'      => 'success',
+            'post_id'     => $post_id,
+            'config'      => [
+                'module'   => 'tts',
+                'action'   => 'tiktok_narration',
+                'platform' => 'tiktok',
+                'job_id'   => (int) ( $job['id'] ?? 0 ),
+                'voice'    => PressHub_Social_Settings_Storage::get_tiktok_narration_voice(),
+            ],
+            'inputs'      => [
+                'job_id'      => (int) ( $job['id'] ?? 0 ),
+                'post_id'     => $post_id,
+                'text_chars'  => function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text ),
+                'text_sha256' => hash( 'sha256', $text ),
+                'cache_hash'  => $hash,
+                'outro'       => PressHub_Social_Settings_Storage::get_tiktok_narration_outro(),
+            ],
+            // The spoken narration is the TTS input, kept verbatim like any prompt.
+            'user_prompt' => $text,
+        ] );
+        if ( $id > 0 && $post_id > 0 ) {
+            PressHub_AI_Generation_Recorder::attach_to_post( $post_id, $id );
+        }
+        return $id;
+    }
+
+    /**
+     * Store the narration outcome (status, error, voice, audio) on its record.
+     *
+     * @param int            $record_id Record from begin_narration_record() (0 = none).
+     * @param array|WP_Error $result    Synthesizer result.
+     */
+    private static function finish_narration_record( int $record_id, $result ): void {
+        if ( $record_id <= 0 || ! class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            return;
+        }
+        if ( is_wp_error( $result ) || empty( $result['url'] ) ) {
+            PressHub_AI_Generation_Recorder::update_record( $record_id, [
+                'status'        => 'error',
+                'error_message' => is_wp_error( $result ) ? $result->get_error_message() : 'Synthesized audio has no URL.',
+            ] );
+            return;
+        }
+        PressHub_AI_Generation_Recorder::update_record( $record_id, [
+            'tts' => [
+                'engine'         => 'gemini',
+                'voices'         => [ 'narrator' => (string) ( $result['voice'] ?? '' ) ],
+                'speed'          => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_speed() : null,
+                'pitch'          => class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_voice_pitch() : null,
+                'audio_url'      => (string) $result['url'],
+                'attachment_id'  => (int) ( $result['id'] ?? 0 ),
+                'synthesized_at' => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
+            ],
+        ] );
+    }
     /**
      * Synthesize with the plugin's Gemini TTS pipeline and sideload the WAV.
      *
