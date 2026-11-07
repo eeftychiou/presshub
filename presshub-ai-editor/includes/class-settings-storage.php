@@ -628,18 +628,6 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_model_string' ],
             'type'              => 'string',
         ] );
-        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_memory_temperature', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
-            'type'              => 'number',
-        ] );
-        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_memory_max_tokens', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_max_tokens' ],
-            'type'              => 'integer',
-        ] );
-        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_memory_timeout', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
-            'type'              => 'integer',
-        ] );
         // Issue #90 — Settings-First: podcast dialogue style selector.
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_style', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_podcast_style' ],
@@ -3400,9 +3388,6 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_memory_retention_days'        => [ __CLASS__, 'sanitize_memory_retention_days' ],
             'presshub_ai_briefing_memory_provider'     => [ __CLASS__, 'sanitize_provider_id' ],
             'presshub_ai_briefing_memory_model'        => [ __CLASS__, 'sanitize_model_string' ],
-            'presshub_ai_briefing_memory_temperature'  => [ __CLASS__, 'sanitize_temperature' ],
-            'presshub_ai_briefing_memory_max_tokens'   => [ __CLASS__, 'sanitize_max_tokens' ],
-            'presshub_ai_briefing_memory_timeout'      => [ __CLASS__, 'sanitize_timeout' ],
         ];
 
         $copilot_map = [
@@ -3582,11 +3567,15 @@ class PressHub_AI_Settings_Storage {
         return ( $val >= 0 && $val <= 90 ) ? $val : max( 30, $daily );
     }
 
-    public static function sanitize_memory_background_days( $value ): int {
+    public static function sanitize_memory_background_days( $value, ?int $context_daily = null ): int {
         $value = wp_unslash( $value );
-        $daily = self::get_memory_daily_days();
-        if ( isset( $_POST['presshub_ai_memory_daily_days'] ) ) {
-            $daily = self::sanitize_memory_daily_days( $_POST['presshub_ai_memory_daily_days'] );
+        $daily = null !== $context_daily ? $context_daily : self::get_memory_daily_days();
+        if ( null === $context_daily ) {
+            if ( isset( $GLOBALS['presshub_ai_save_post_data']['presshub_ai_memory_daily_days'] ) ) {
+                $daily = self::sanitize_memory_daily_days( $GLOBALS['presshub_ai_save_post_data']['presshub_ai_memory_daily_days'] );
+            } elseif ( isset( $_POST['presshub_ai_memory_daily_days'] ) ) {
+                $daily = self::sanitize_memory_daily_days( $_POST['presshub_ai_memory_daily_days'] );
+            }
         }
         if ( ! is_numeric( $value ) ) {
             return max( 30, $daily );

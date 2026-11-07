@@ -228,7 +228,13 @@ class PressHub_AI_Memory_Store {
                 );
             }
 
-            $status = isset( $story['status'] ) ? sanitize_key( (string) $story['status'] ) : 'developing';
+            if ( ! isset( $story['status'] ) ) {
+                return new WP_Error(
+                    'missing_story_status',
+                    sprintf( __( 'Story item "%s" requires a status (%s).', 'presshub-ai-editor' ), $key, implode( ', ', self::STORY_STATUSES ) )
+                );
+            }
+            $status = sanitize_key( (string) $story['status'] );
             if ( ! in_array( $status, self::STORY_STATUSES, true ) ) {
                 return new WP_Error(
                     'invalid_story_status',
@@ -236,27 +242,41 @@ class PressHub_AI_Memory_Store {
                 );
             }
 
+            if ( ! isset( $story['entities'] ) || ! is_array( $story['entities'] ) ) {
+                return new WP_Error(
+                    'invalid_story_entities',
+                    sprintf( __( 'Story item "%s" requires an entities array.', 'presshub-ai-editor' ), $key )
+                );
+            }
             $entities = [];
-            if ( isset( $story['entities'] ) && is_array( $story['entities'] ) ) {
-                foreach ( $story['entities'] as $entity ) {
-                    $clean_entity = trim( sanitize_text_field( (string) $entity ) );
-                    if ( '' !== $clean_entity ) {
-                        $entities[] = $clean_entity;
-                    }
+            foreach ( $story['entities'] as $entity ) {
+                $clean_entity = trim( sanitize_text_field( (string) $entity ) );
+                if ( '' !== $clean_entity ) {
+                    $entities[] = $clean_entity;
                 }
             }
 
+            if ( ! isset( $story['source_urls'] ) || ! is_array( $story['source_urls'] ) ) {
+                return new WP_Error(
+                    'invalid_story_source_urls',
+                    sprintf( __( 'Story item "%s" requires a source_urls array.', 'presshub-ai-editor' ), $key )
+                );
+            }
             $source_urls = [];
-            if ( isset( $story['source_urls'] ) && is_array( $story['source_urls'] ) ) {
-                foreach ( $story['source_urls'] as $url ) {
-                    $clean_url = esc_url_raw( trim( (string) $url ) );
-                    if ( '' !== $clean_url ) {
-                        $source_urls[] = $clean_url;
-                    }
+            foreach ( $story['source_urls'] as $url ) {
+                $clean_url = esc_url_raw( trim( (string) $url ) );
+                if ( '' !== $clean_url ) {
+                    $source_urls[] = $clean_url;
                 }
             }
 
-            $include = ! array_key_exists( 'include', $story ) || (bool) $story['include'];
+            if ( ! array_key_exists( 'include', $story ) ) {
+                return new WP_Error(
+                    'missing_story_include',
+                    sprintf( __( 'Story item "%s" requires an include boolean.', 'presshub-ai-editor' ), $key )
+                );
+            }
+            $include = (bool) $story['include'];
 
             $validated_stories[] = [
                 'key'         => $key,
@@ -362,12 +382,26 @@ class PressHub_AI_Memory_Store {
         if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $period_start ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $period_end ) ) {
             return new WP_Error( 'invalid_dates', __( 'period_start and period_end must be YYYY-MM-DD format.', 'presshub-ai-editor' ) );
         }
+        // Real calendar date validation
+        $ps_parts = explode( '-', $period_start );
+        $pe_parts = explode( '-', $period_end );
+        if ( ! checkdate( (int) $ps_parts[1], (int) $ps_parts[2], (int) $ps_parts[0] ) || ! checkdate( (int) $pe_parts[1], (int) $pe_parts[2], (int) $pe_parts[0] ) ) {
+            return new WP_Error( 'invalid_calendar_date', __( 'period_start and period_end must be valid calendar dates.', 'presshub-ai-editor' ) );
+        }
+        if ( $period_end < $period_start ) {
+            return new WP_Error( 'invalid_date_range', __( 'period_end cannot be earlier than period_start.', 'presshub-ai-editor' ) );
+        }
 
-        $edition = sanitize_key( $args['edition'] ?? '' );
         if ( 'weekly' === $scope ) {
             $edition = '';
-        } elseif ( ! in_array( $edition, [ 'morning', 'noon' ], true ) ) {
-            $edition = 'morning';
+        } else {
+            if ( ! isset( $args['edition'] ) ) {
+                return new WP_Error( 'missing_edition', __( 'Daily memory entries require an edition (morning or noon).', 'presshub-ai-editor' ) );
+            }
+            $edition = sanitize_key( $args['edition'] );
+            if ( ! in_array( $edition, [ 'morning', 'noon' ], true ) ) {
+                return new WP_Error( 'invalid_edition', sprintf( __( 'Invalid edition "%s". Allowed: morning, noon.', 'presshub-ai-editor' ), $edition ) );
+            }
         }
 
         $val_res = self::validate_content( $args['generated_content'] ?? [] );
@@ -379,8 +413,12 @@ class PressHub_AI_Memory_Store {
         $now         = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
         $source_pid  = ! empty( $args['source_post_id'] ) ? (int) $args['source_post_id'] : null;
         $gen_rec_id  = ! empty( $args['generation_record_id'] ) ? (int) $args['generation_record_id'] : null;
-        $status      = sanitize_key( $args['status'] ?? 'active' );
-        if ( ! in_array( $status, self::STATUSES, true ) ) {
+        if ( isset( $args['status'] ) ) {
+            $status = sanitize_key( $args['status'] );
+            if ( ! in_array( $status, self::STATUSES, true ) ) {
+                return new WP_Error( 'invalid_status', sprintf( __( 'Invalid status "%s".', 'presshub-ai-editor' ), $status ) );
+            }
+        } else {
             $status = 'active';
         }
         $error_msg   = sanitize_textarea_field( (string) ( $args['error_message'] ?? '' ) );
@@ -447,6 +485,8 @@ class PressHub_AI_Memory_Store {
                 ];
             } else {
                 // Not edited: overwrite generated_json AND content_json
+                // Preserve editor exclusion if existing status was 'excluded'
+                $effective_status = ('excluded' === (string) ($existing['status'] ?? '')) ? 'excluded' : $status;
                 $version_hash = self::compute_hash( $encoded_gen );
                 $update_data = [
                     'period_end'           => $period_end,
@@ -454,7 +494,7 @@ class PressHub_AI_Memory_Store {
                     'generated_json'       => $encoded_gen,
                     'content_json'         => $encoded_gen,
                     'origin'               => 'generated',
-                    'status'               => $status,
+                    'status'               => $effective_status,
                     'error_message'        => $error_msg,
                     'generation_record_id' => $gen_rec_id,
                     'version_hash'         => $version_hash,
@@ -655,6 +695,10 @@ class PressHub_AI_Memory_Store {
             $stale_count = self::mark_dependents_stale( $entry_id );
         }
 
+        if ( null === $user_id ) {
+            $user_id = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+        }
+
         PressHub_AI_Audit_Logger::log(
             'memory_reset_to_generated',
             'memory_entry',
@@ -663,6 +707,7 @@ class PressHub_AI_Memory_Store {
                 'scope'               => $entry['scope'],
                 'period_start'        => $entry['period_start'],
                 'edition'             => $entry['edition'],
+                'reset_by'            => $user_id > 0 ? $user_id : null,
                 'before_version_hash' => $old_hash,
                 'after_version_hash'  => $new_hash,
                 'dependents_stale'    => $stale_count,
@@ -701,7 +746,7 @@ class PressHub_AI_Memory_Store {
         $now           = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
         $entries_table = self::get_entries_table();
 
-        $wpdb->update(
+        $updated = $wpdb->update(
             $entries_table,
             [
                 'status'     => $status,
@@ -711,6 +756,10 @@ class PressHub_AI_Memory_Store {
             [ '%s', '%s' ],
             [ '%d' ]
         );
+
+        if ( false === $updated ) {
+            return new WP_Error( 'db_update_failed', __( 'Failed to update memory status in database.', 'presshub-ai-editor' ) );
+        }
 
         $stale_count = 0;
         if ( 'daily' === $entry['scope'] && ( 'excluded' === $status || 'active' === $status ) ) {
@@ -856,7 +905,7 @@ class PressHub_AI_Memory_Store {
         // Find linked rollup IDs that are currently active
         $sql = "SELECT r.id FROM {$entries_table} r
                 INNER JOIN {$links_table} l ON r.id = l.rollup_id
-                WHERE l.digest_id = %d AND r.scope = 'weekly' AND r.status != 'stale'";
+                WHERE l.digest_id = %d AND r.scope = 'weekly' AND r.status = 'active'";
 
         $rows = $wpdb->get_results( $wpdb->prepare( $sql, $digest_id ), ARRAY_A );
         if ( empty( $rows ) ) {
@@ -911,7 +960,7 @@ class PressHub_AI_Memory_Store {
         // Check if there are daily digest entries pointing to this post
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT id FROM {$entries_table} WHERE source_post_id = %d",
+                "SELECT id FROM {$entries_table} WHERE source_post_id = %d AND scope = 'daily'",
                 $post_id
             ),
             ARRAY_A
@@ -957,7 +1006,7 @@ class PressHub_AI_Memory_Store {
             $retention_days = PressHub_AI_Settings_Storage::get_memory_retention_days();
         }
 
-        $cutoff_date = gmdate( 'Y-m-d', strtotime( "-{$retention_days} days" ) );
+        $cutoff_date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d', strtotime( "-{$retention_days} days" ) ) : gmdate( 'Y-m-d', strtotime( "-{$retention_days} days" ) );
 
         $entries_table = self::get_entries_table();
         $links_table   = self::get_links_table();

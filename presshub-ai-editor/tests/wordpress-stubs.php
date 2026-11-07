@@ -1306,7 +1306,7 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
 
         public function get_results( $sql, $output = OBJECT ) {
             $this->queries[] = $sql;
-            if ( preg_match( '/SELECT r\.id FROM `?([a-zA-Z0-9_]+)`? r\s+INNER JOIN `?([a-zA-Z0-9_]+)`? l ON r\.id = l\.rollup_id\s+WHERE l\.digest_id = (\d+) AND r\.scope = \'weekly\' AND r\.status != \'stale\'/is', $sql, $m ) ) {
+            if ( preg_match( '/SELECT r\.id FROM `?([a-zA-Z0-9_]+)`? r\s+INNER JOIN `?([a-zA-Z0-9_]+)`? l ON r\.id = l\.rollup_id\s+WHERE l\.digest_id = (\d+) AND r\.scope = \'weekly\' AND r\.status = \'active\'/is', $sql, $m ) ) {
                 $rtbl = $m[1];
                 $ltbl = $m[2];
                 $did  = (int) $m[3];
@@ -1318,7 +1318,7 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 }
                 $matching = [];
                 foreach ( $this->tables[ $rtbl ] ?? [] as $r ) {
-                    if ( in_array( (int) ( $r['id'] ?? 0 ), $linked_rollups, true ) && ( $r['scope'] ?? '' ) === 'weekly' && ( $r['status'] ?? '' ) !== 'stale' ) {
+                    if ( in_array( (int) ( $r['id'] ?? 0 ), $linked_rollups, true ) && ( $r['scope'] ?? '' ) === 'weekly' && ( $r['status'] ?? '' ) === 'active' ) {
                         $matching[] = [ 'id' => (int) $r['id'] ];
                     }
                 }

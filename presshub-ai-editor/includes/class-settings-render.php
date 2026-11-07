@@ -3791,7 +3791,7 @@ class PressHub_AI_Settings_Render {
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $value ); ?> />
             <?php echo esc_html__( 'Enable editorial memory stream (recent daily digests and background weekly rollups).', 'presshub-ai-editor' ); ?>
         </label>
-        <p class="description"><?php echo esc_html__( 'When disabled, generations use only that day\x27s harvested articles.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'When disabled, generations use only that day&#39;s harvested articles.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

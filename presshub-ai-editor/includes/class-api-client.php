@@ -149,6 +149,7 @@ class PressHub_AI_API_Client {
      *   - 'coauthor'
      *   - 'briefing_text'
      *   - 'briefing_podcast'
+     *   - 'briefing_memory'
      *   - 'copilot'
      *   - 'tts'
      *

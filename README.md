@@ -101,6 +101,21 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - Assign generated images as the article's official featured image with one click.
 
 ### 5. 🎛️ Instruction Presets & Prompt Studio
+### 6. 🧠 Editorial Memory Stream & Story Continuity (Issue #132)
+- **Editorial Continuity**: Multi-day storyline tracking across daily briefings and weekly digests.
+- **Edit-Protection Invariant**: Human editor revisions (`origin='edited'`) in `wp_presshub_ai_memory_entries` are preserved across regenerations; editors can deliberately reset to generated content via `reset_to_generated()`.
+- **Stale Propagation**: Revisions or exclusions to daily digests automatically mark dependent weekly rollups as `stale`.
+- **Clean Slate Post Deletion**: Deleting a daily briefing post automatically deletes associated daily memory entries and cleans links in `wp_presshub_ai_memory_entry_links`.
+- **Settings Reference**:
+  - `presshub_ai_memory_enabled`: Enable or disable the editorial memory stream (default: `true`).
+  - `presshub_ai_memory_daily_days`: Number of recent days covered as daily story digests (bounds: 0–14, default: 7).
+  - `presshub_ai_memory_background_days`: Background window covered as weekly rollups (bounds: 0–90, clamped >= daily days, default: 30).
+  - `presshub_ai_memory_briefing_budget_chars`: Maximum character budget for memory context injected into daily briefing prompt (bounds: 0–60,000, default: 12,000).
+  - `presshub_ai_memory_podcast_budget_chars`: Maximum character budget for memory context injected into podcast prompt (bounds: 0–60,000, default: 6,000).
+  - `presshub_ai_memory_retention_days`: Retention period before old memory entries and links are pruned (bounds: 30–730, default: 180).
+  - Module `briefing_memory`: Dedicated AI provider and model routing for memory digests and weekly rollups (`presshub_ai_briefing_memory_provider`, `presshub_ai_briefing_memory_model`).
+
+
 - **Multi-Tier Presets**: Admin-curated global defaults, author-specific profiles, author defaults, and per-request metabox dropdown selection. Presets append specialized instructions to base system prompts without overwriting foundational editorial safety constraints.
 - **Externalized Prompt Assets**: Prompts are stored as modular text files under `presshub-ai-editor/assets/prompts/` (e.g. `default_greek_briefing.txt`, `podcast_style_two_hosts_greek.txt`, `article_image_analysis_prompt.txt`) and dynamically managed via `PressHub_AI_Prompt_Loader`.
 - **Admin Prompt Studio**: Inspect, customize, and reset prompt templates directly within WordPress settings without editing source code.
