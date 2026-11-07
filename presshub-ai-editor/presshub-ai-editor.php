@@ -171,6 +171,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
@@ -244,6 +245,7 @@ add_filter(
 function presshub_ai_activate() {
     PressHub_AI_Token_Logger::create_table();
     PressHub_AI_Audit_Logger::create_table();
+    PressHub_AI_Generation_Recorder::create_table();
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
     }
@@ -252,6 +254,9 @@ function presshub_ai_activate() {
     }
     if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
         wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
+    }
+    if ( ! wp_next_scheduled( PressHub_AI_Generation_Recorder::PRUNE_HOOK ) ) {
+        wp_schedule_event( time(), 'daily', PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     }
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::activate();
@@ -273,6 +278,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_token_logs' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_audit_logs' );
+    wp_clear_scheduled_hook( PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::deactivate();
     }
@@ -290,6 +296,13 @@ add_action( 'presshub_ai_prune_token_logs', function() {
 add_action( 'presshub_ai_prune_audit_logs', function() {
     if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
         PressHub_AI_Audit_Logger::prune_logs( 90 );
+    }
+} );
+
+// Prune generation records cron action (retention is Settings-First)
+add_action( PressHub_AI_Generation_Recorder::PRUNE_HOOK, function() {
+    if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+        PressHub_AI_Generation_Recorder::prune( PressHub_AI_Settings_Storage::get_generation_record_retention_days() );
     }
 } );
 
@@ -341,6 +354,15 @@ function presshub_ai_init() {
         }
         if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
+        }
+    }
+
+    if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+        if ( get_option( PressHub_AI_Generation_Recorder::DB_VERSION_OPTION ) !== PressHub_AI_Generation_Recorder::DB_VERSION ) {
+            PressHub_AI_Generation_Recorder::create_table();
+        }
+        if ( ! wp_next_scheduled( PressHub_AI_Generation_Recorder::PRUNE_HOOK ) ) {
+            wp_schedule_event( time(), 'daily', PressHub_AI_Generation_Recorder::PRUNE_HOOK );
         }
     }
 

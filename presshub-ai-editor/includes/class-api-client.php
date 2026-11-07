@@ -803,6 +803,33 @@ class PressHub_AI_API_Client {
     }
 
     /**
+     * Resolved sampling temperature of this client instance.
+     *
+     * @return float
+     */
+    public function get_temperature(): float {
+        return (float) ( $this->temperature ?? 0.0 );
+    }
+
+    /**
+     * Resolved max output tokens of this client instance.
+     *
+     * @return int
+     */
+    public function get_max_tokens(): int {
+        return (int) ( $this->max_tokens ?? PressHub_AI_Provider_Defaults::default_max_tokens() );
+    }
+
+    /**
+     * Resolved request timeout (seconds) of this client instance.
+     *
+     * @return int
+     */
+    public function get_timeout(): int {
+        return (int) ( $this->timeout ?? 0 );
+    }
+
+    /**
      * Find an unmasked API key from the Provider Store by `type` field.
      *
      * Issue #43 cross-cutting hydration needs the Gemini record's
@@ -2703,7 +2730,7 @@ class PressHub_AI_API_Client {
             $action_key = $this->get_action();
             $endpoint   = $action_map[ $action_key ] ?? ( 0 === strpos( $action_key, 'social_copy' ) ? 'social_copy' : $action_key );
             $resp_str   = is_wp_error( $result ) ? ( 'ERROR: ' . $result->get_error_message() ) : (string) $result;
-            presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt, $resp_str, self::current_request_meta() );
+            presshub_ai_log_prompts( $endpoint, $sys_prompt, $user_prompt, $resp_str, $this->get_request_meta() );
         }
 
         return $result;
