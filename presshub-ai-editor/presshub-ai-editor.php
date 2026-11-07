@@ -179,6 +179,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-memory-digest-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 // Social Auto-Post Subsystem Classes
@@ -374,6 +375,7 @@ function presshub_ai_init() {
         PressHub_AI_Log_Exposure_Check::register();
     }
     PressHub_AI_Memory_Store::register_hooks();
+    PressHub_AI_Memory_Digest_Builder::init();
 
     // Issue #138 (Clean Slate): once per upgrade, drop the old fixed-name log files.
     PressHub_AI_Log_Paths::run_upgrade();

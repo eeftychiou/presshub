@@ -102,8 +102,11 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - Assign generated images as the article's official featured image with one click.
 
 ### 5. 🎛️ Instruction Presets & Prompt Studio
-### 6. 🧠 Editorial Memory Stream & Story Continuity (Issue #132)
+### 6. 🧠 Editorial Memory Stream & Story Continuity (Issue #132, #134)
 - **Editorial Continuity**: Multi-day storyline tracking across daily briefings and weekly digests.
+- **Daily Memory Digest Builder**: Automatically scheduled in the background (`wp_schedule_single_event`, 30s delay) after briefing text post creation or update (`PressHub_AI_Memory_Digest_Builder`). Extracts structured JSON stories (`assets/prompts/memory/daily_digest.txt`), enforces story continuity by feeding the previous 7 days' story keys/titles, and retries once on schema/validation errors with the error message in Greek.
+- **Deterministic Podcast Lines**: `PressHub_AI_Podcast_Producer::save_script()` automatically parses speaker turns and updates `podcast.opening_line` and `podcast.closing_line` in the daily digest deterministically without any extra LLM call.
+- **Backfill Workflow**: Batch extracts daily memory digests across existing briefing posts over a configurable date range (via Briefing Hub UI, background single-step cron, or `wp presshub memory backfill [--from=...] [--to=...] [--force]`). Idempotent and resumable, strictly preserving human editor edits.
 - **Edit-Protection Invariant**: Human editor revisions (`origin='edited'`) in `wp_presshub_ai_memory_entries` are preserved across regenerations; editors can deliberately reset to generated content via `reset_to_generated()`.
 - **Stale Propagation**: Revisions or exclusions to daily digests automatically mark dependent weekly rollups as `stale`.
 - **Clean Slate Post Deletion**: Deleting a daily briefing post automatically deletes associated daily memory entries and cleans links in `wp_presshub_ai_memory_entry_links`.

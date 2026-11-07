@@ -423,6 +423,26 @@ graph TD
 - **Daily Prune Cron Job**:
   - Scheduled event `presshub_ai_prune_memory_entries` runs daily via WP-Cron and purges entries older than `presshub_ai_memory_retention_days` and their links, recording audit logs.
 
+### 4.21 Daily Memory Digest Builder & Backfill Workflow (Issue #134)
+- **Automatic Scheduling**:
+  - `PressHub_AI_Memory_Digest_Builder` registers single-event background cron scheduling (`presshub_ai_memory_build_digest`, 30s delay) triggered upon briefing post creation (`create_wordpress_post`) or post update (`save_post_post`).
+  - Gated by `PressHub_AI_Settings_Storage::get_memory_enabled()`; skips revisions, autosaves, trashed posts, and non-text briefings with duplicate prevention.
+- **Story Continuity & Schema Extraction**:
+  - Dedicated Greek archivist prompt (`assets/prompts/memory/daily_digest.txt`) loaded via `PressHub_AI_Prompt_Loader::get_daily_digest_prompt()`.
+  - Continuously extracts structured daily memory digests (`stories`, `entities`, `key` slugs, `source_urls`).
+  - Queries `PressHub_AI_Memory_Store::get_entries_for_range()` for the previous 7 days' story keys/titles, forcing the LLM to reuse existing slugs and tag continuing stories with `"status": "developing"|"resolved"`.
+- **Validation, Retry & Observability**:
+  - Validates output strictly against the `#132` memory schema, strips markdown code fences, and forces `narrative: ""` on daily digests.
+  - Automatically retries once on schema validation errors with the error message appended in Greek.
+  - Records all attempts as `memory_digest` generation records in `PressHub_AI_Generation_Recorder` attached to the briefing post.
+  - On persistent failure, records `status='failed'` in `PressHub_AI_Memory_Store` with diagnostic error message without storing partial or guessed stories.
+- **Deterministic Podcast Line Capture**:
+  - `PressHub_AI_Podcast_Producer::save_script()` deterministically extracts first and last speaker turns and writes them to `podcast.opening_line` and `podcast.closing_line` in the daily digest without extra LLM calls.
+- **Backfill Workflow**:
+  - Discoverable and resumable queue processor via `find_briefing_editions_in_range()`, `start_backfill()`, and single-step cron `handle_backfill_step()` (`presshub_ai_memory_backfill_step`).
+  - Available via Admin Briefing Hub UI, AJAX endpoints (`presshub_ai_memory_start_backfill`, `presshub_ai_memory_backfill_status`), and WP-CLI command (`wp presshub memory backfill [--from=...] [--to=...] [--force]`).
+  - Strictly preserves `origin='edited'` content (`preserved_edit=true`) across all rebuilds and backfill operations.
+
 ## 5. Cron Schedules & Timers
 
 | Event Hook | Default Time | Configurable Option | Subsystem Callback |
@@ -434,6 +454,8 @@ graph TD
 | `presshub_ai_prune_audit_logs` | Daily | `presshub_ai_audit_log_retention_days` (default 90) | `PressHub_AI_Audit_Logger::prune_logs()` |
 | `presshub_ai_prune_memory_entries` | Daily | `presshub_ai_memory_retention_days` | `PressHub_AI_Memory_Store::prune_old_entries()` |
 | `presshub_ai_prune_generation_records` | Daily | `presshub_ai_generation_record_retention_days` (retention window) | `PressHub_AI_Generation_Recorder::prune()` |
+| `presshub_ai_memory_build_digest` | Post-save (+30s) | Single-event | `PressHub_AI_Memory_Digest_Builder::handle_cron_build_digest()` |
+| `presshub_ai_memory_backfill_step` | Dynamic (+5s) | Single-event | `PressHub_AI_Memory_Digest_Builder::handle_backfill_step()` |
 | `presshub_ai_prune_log_files` | Daily | `presshub_ai_log_file_retention_days` (default 14) | Deletes rotated log files older than the window |
 
 ### 5.1 Cron Execution & Error Resilience

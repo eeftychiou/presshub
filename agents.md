@@ -264,7 +264,7 @@ php dev-env/scripts/reset-db.php
 
 ---
 
-## 🧠 Editorial Memory Stream Protocol (Issue #132)
+## 🧠 Editorial Memory Stream Protocol (Issue #132, #134)
 
 > **Edit-Protection & Stale Propagation**: Editorial memory entries (`wp_presshub_ai_memory_entries`) preserve human editor revisions across regenerations. Never overwrite `origin='edited'` entries during automated regeneration.
 
@@ -277,6 +277,17 @@ php dev-env/scripts/reset-db.php
    - When a briefing post is deleted (`before_delete_post`), its associated daily digests and memory entry links must be cleanly deleted.
 4. **Settings-First Memory Knobs**:
    - All memory thresholds (`presshub_ai_memory_daily_days`, `presshub_ai_memory_background_days`, `presshub_ai_memory_briefing_budget_chars`, `presshub_ai_memory_podcast_budget_chars`, `presshub_ai_memory_retention_days`) are registered with clamping sanitizers and accessed via `PressHub_AI_Settings_Storage` helpers.
+5. **Daily Memory Digest Builder (Issue #134)**:
+   - Built asynchronously via `PressHub_AI_Memory_Digest_Builder::schedule_for_post()` (`presshub_ai_memory_build_digest`, single-event cron with 30s delay) on briefing text post creation or update.
+   - Extracts structured JSON stories (`assets/prompts/memory/daily_digest.txt`), injecting the previous 7 days' story keys/titles (`{existing_story_keys}`) so running threads maintain stable slugs and transition to `"status": "developing"|"resolved"`.
+   - Retries once on invalid JSON / schema validation errors with the error message in Greek; records all attempts as `memory_digest` generation records in `PressHub_AI_Generation_Recorder`.
+   - If both attempts fail, records `status='failed'` in `wp_presshub_ai_memory_entries` with diagnostic error message; surfaces alert notice on the Briefing Hub page with retry action.
+6. **Deterministic Podcast Lines**:
+   - `PressHub_AI_Podcast_Producer::save_script()` extracts the first and last speaker turns and writes them to `podcast.opening_line` and `podcast.closing_line` in the daily digest deterministically without extra LLM calls.
+7. **Backfill Workflow**:
+   - Resumable, idempotent backfill across date ranges via `PressHub_AI_Memory_Digest_Builder::start_backfill()` and single-step cron (`presshub_ai_memory_backfill_step`).
+   - Exposed via Briefing Hub UI, AJAX endpoints (`presshub_ai_memory_start_backfill`, `presshub_ai_memory_backfill_status`), and WP-CLI command (`wp presshub memory backfill [--from=...] [--to=...] [--force]`).
+
 
 ---
 
