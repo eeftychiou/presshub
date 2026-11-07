@@ -98,7 +98,7 @@ class SettingsPageTest
         }
 
         $logging = array_column( $fields['presshub_ai_logging'] ?? [], 'id' );
-        foreach ( [ 'presshub_ai_log_level', 'presshub_ai_debug_prompts', 'presshub_ai_log_tts_payloads' ] as $field ) {
+        foreach ( [ 'presshub_ai_log_level', 'presshub_ai_debug_prompts', 'presshub_ai_log_tts_payloads', 'presshub_ai_generation_record_retention_days' ] as $field ) {
             if ( ! in_array( $field, $logging, true ) ) {
                 $failures[] = "{$field} should be registered in presshub_ai_logging; got: " . implode( ', ', $logging );
             }
@@ -181,6 +181,8 @@ class SettingsPageTest
             'presshub_ai_log_level',
             // Issue #80 — Settings-First: granular TTS payload debug toggle.
             'presshub_ai_log_tts_payloads',
+            // Issue #131 — Settings-First: generation record retention window (days).
+            'presshub_ai_generation_record_retention_days',
             'presshub_ai_social_meta_enabled',
             'presshub_ai_social_meta_all_posts',
             'presshub_ai_remove_api_key',

@@ -1823,6 +1823,15 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    public function render_generation_record_retention_days_field() {
+        $option = 'presshub_ai_generation_record_retention_days';
+        $value  = PressHub_AI_Settings_Storage::get_generation_record_retention_days();
+        ?>
+        <input type="number" min="7" max="365" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How long to keep generation records (prompts, settings, inputs and responses for each briefing and podcast generation). 7–365 days, default 90.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
     public function render_log_level_field() {
         $option   = 'presshub_ai_log_level';
         $selected = class_exists( 'PressHub_AI_Logger' ) ? PressHub_AI_Logger::get_configured_level() : 'INFO';
@@ -1834,7 +1843,7 @@ class PressHub_AI_Settings_Render {
             <option value="ERROR" <?php echo 'ERROR' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'ERROR (Only critical failures)', 'presshub-ai-editor' ); ?></option>
             <option value="OFF" <?php echo 'OFF' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( 'OFF (Disable file logging)', 'presshub-ai-editor' ); ?></option>
         </select>
-        <p class="description"><?php echo __( 'Control verbosity of the internal diagnostic log file (stored at wp-content/uploads/presshub-ai/presshub-debug.log).', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Control verbosity of the internal diagnostic log file (stored at wp-content/uploads/presshub-ai/presshub-debug.log). When not set explicitly, the default is DEBUG if WP_DEBUG is on and INFO otherwise. Prompt debugging no longer changes the log level.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

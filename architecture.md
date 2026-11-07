@@ -22,6 +22,10 @@
    - **Layer 2**: Token log database (`wp_presshub_ai_token_logs`)
    - **Layer 3**: Audit log (`wp_presshub_ai_audit_log`)
    - **Layer 4**: WordPress `debug.log`
+   - **Generation records**: `wp_presshub_ai_generation_records` (`PressHub_AI_Generation_Recorder`), a durable, always-on record of everything that went into each briefing and podcast-script generation (see §4.19)
+   - **Secret masking**: `PressHub_AI_Secret_Masker` is the single masking implementation for logs. `PressHub_AI_Logger` masks every context array and message before writing (so neither the file nor the `error_log` mirror sees a plain key), `PressHub_AI_Audit_Logger` masks audit details, and the prompt/TTS debug logs mask their config, meta and header fields while keeping prompt bodies verbatim. Provider API failures are logged through `PressHub_AI_Logger::error()` with `provider`, `model`, `action` and `http_code` context instead of raw `error_log()`.
+   - **Log level default**: `DEBUG` when `WP_DEBUG` is on, otherwise `INFO`, unless `presshub_ai_log_level` is set. Prompt debugging does not change the level.
+   - **Audit integrity**: clearing the audit log writes an `audit_log_cleared` event (rows deleted, actor) as the first row of the new trail; the client IP is `REMOTE_ADDR` unless the `presshub_ai_client_ip_header` filter names a trusted proxy header.
 
 ---
 
@@ -61,6 +65,9 @@ graph TD
         Producer --> TokenLogger[PressHub_AI_Token_Logger]
         Synthesizer --> TokenLogger
         Storage --> AuditLogger[PressHub_AI_Audit_Logger]
+        Curator --> Recorder[PressHub_AI_Generation_Recorder]
+        Producer --> Recorder
+        Synthesizer --> Recorder
     end
 ```
 
@@ -372,10 +379,23 @@ graph TD
   - Missing TTS models fail loudly with `WP_Error('missing_tts_model')` with zero silent fallbacks.
   - Unknown speaker labels and rogue presenter tags in solo-host briefings log structured `ERROR` events to `PressHub_AI_Logger`.
 
+### 4.19 Generation Records (`PressHub_AI_Generation_Recorder`)
+- **Purpose**: editorial transparency. Every briefing-pipeline LLM generation stores a durable record of exactly what went into it, so editors (and the Generation Inspector, #133) can review it later. Recording is always on and independent of the prompt/TTS debug-log toggles.
+- **Storage**: table `wp_presshub_ai_generation_records` (created via `dbDelta`, versioned by `presshub_ai_generation_records_db_version`, SQLite-safe: JSON kept as TEXT, no FULLTEXT or JSON SQL functions). Columns: `trace_id`, `kind` (`briefing_text`, `podcast_script`, `memory_digest`, `memory_rollup`), `briefing_date`, `edition`, `post_id`, `status`, `error_message`, `config_json`, `inputs_json`, `memory_json`, `tts_json`, `system_prompt`, `user_prompt`, `response_text`, `usage_json`, `duration_ms`, `created_at`.
+- **Capture**: at the call site, around `call_provider()`, in `PressHub_AI_News_Curator::generate_briefing()` and `PressHub_AI_Podcast_Producer::generate_dialogue_script()`. Prompts and response are stored verbatim (never rebuilt afterwards). Failed generations are recorded too (`status = error`, with the prompts that were sent).
+  - `config_json` comes from the client instance via `build_client_config()`: module, action, provider type/ID/source, model and model source, temperature, max tokens, timeout, plus preset, edition, context mode and where the articles were placed (system or user prompt).
+  - `inputs_json`: per-article `sent` list (ID, title, source, URL, characters sent, truncated by `max_chars_per_article`) and `dropped` list with the reason (`cap_articles`, `not_selected`), plus the pool/cap totals and token estimate. The curator exposes this via `last_articles_breakdown()`; the rendered prompt is unchanged.
+  - `usage_json`: the token counts from the matching `log_llm_request()` call (`PressHub_AI_Token_Logger::get_last_llm_request()`).
+  - `memory_json`: `{"enabled": false}` until editorial memory lands; `set_memory_context()` lets the memory injection step attach what it used.
+  - `tts_json` (podcast): added by `PressHub_AI_Audio_Synthesizer::synthesize_podcast()` when the audio is synthesized: engine, model, payload mode, voices per presenter, style, speed, pitch, pauses, topic split, turn count, and whether the stored or an edited script was used.
+- **Linking**: record IDs are appended to the post meta `_presshub_generation_record_ids` (ordered by pipeline step; regenerations add records and keep the old ones). The podcast-script record ID travels through the script sidecar (`podcast-script[-noon].meta.json` → `generation_record_id`) until the podcast post exists.
+- **Retention**: `presshub_ai_generation_record_retention_days` (default 90, 7–365), pruned daily by `presshub_ai_prune_generation_records`.
+- **Zero-Silent-Fallback**: an insert failure logs an `ERROR` with the `trace_id` and never fails the generation.
+
 ---
 
 
-### 4.19 Editorial Memory Stream (Store, Settings & Retention - Issue #132)
+### 4.20 Editorial Memory Stream (Store, Settings & Retention - Issue #132)
 - **Overview**: Editorial memory maintains multi-day storyline continuity across daily briefings and weekly digests.
 - **Database Tables** (dbDelta-managed, SQLite & MySQL compatible):
   - `wp_presshub_ai_memory_entries`: Stores structured memory entries with `scope` (`daily` | `weekly`), `period_start`, `period_end`, `edition`, `generated_json`, `content_json`, `origin` (`generated` | `edited`), `status` (`active` | `excluded` | `stale` | `failed` | `pending`), `version_hash` (sha256), `source_post_id`, `generation_record_id`, and editor audit fields.
@@ -412,6 +432,7 @@ graph TD
 | `presshub_noon_news_generate` | 12:45 | `presshub_ai_briefing_noon_generation_time` | `presshub_ai_execute_noon_generation_cron()` |
 | `presshub_ai_prune_audit_logs` | Daily | Fixed 24h | `PressHub_AI_Audit_Logger::prune()` |
 | `presshub_ai_prune_memory_entries` | Daily | `presshub_ai_memory_retention_days` | `PressHub_AI_Memory_Store::prune_old_entries()` |
+| `presshub_ai_prune_generation_records` | Daily | `presshub_ai_generation_record_retention_days` (retention window) | `PressHub_AI_Generation_Recorder::prune()` |
 
 ### 5.1 Cron Execution & Error Resilience
 - Both generation cron callbacks (`presshub_ai_execute_generation_cron` and `presshub_ai_execute_noon_generation_cron`) encapsulate all pipeline stages (curation, script generation, and audio synthesis) in dedicated error-handling and `try / catch (\Throwable $t)` blocks.

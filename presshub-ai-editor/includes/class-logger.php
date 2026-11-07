@@ -58,8 +58,8 @@ class PressHub_AI_Logger {
     public static function get_configured_level(): string {
         $level = strtoupper( (string) get_option( 'presshub_ai_log_level', '' ) );
         if ( ! isset( self::LEVELS[ $level ] ) ) {
-            // Default: if WP_DEBUG is on or debug prompts is on, use DEBUG, else INFO.
-            if ( ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || '1' === (string) get_option( 'presshub_ai_debug_prompts', '0' ) ) {
+            // Default: DEBUG when WP_DEBUG is on, else INFO. Prompt debugging does not affect the level.
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
                 return 'DEBUG';
             }
             return 'INFO';
@@ -105,6 +105,11 @@ class PressHub_AI_Logger {
 
         if ( $level_int < $configured_int ) {
             return;
+        }
+
+        if ( class_exists( 'PressHub_AI_Secret_Masker' ) ) {
+            $context = PressHub_AI_Secret_Masker::mask_array( $context );
+            $message = PressHub_AI_Secret_Masker::mask_text( $message );
         }
 
         $trace_id = class_exists( 'PressHub_AI_Trace' ) ? PressHub_AI_Trace::get_current_trace_id() : null;

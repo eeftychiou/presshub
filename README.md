@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.8.8-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.9.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-84%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -153,6 +153,17 @@ PressHub AI implements a 4-layer logging architecture to provide total transpare
 | **Layer 2: Token Telemetry** | Model IDs, prompt/completion tokens, latency, cost, and JSON metadata | `wp_presshub_ai_token_logs` | `php dev-env/scripts/view-token-logs.php` |
 | **Layer 3: Security & Audit** | Settings updates, provider credential changes, and admin actions | `wp_presshub_ai_audit_log` | `php dev-env/scripts/query-db.php "SELECT * FROM wp_presshub_ai_audit_log"` |
 | **Layer 4: WordPress Core** | PHP runtime warnings, fatal tracebacks, cURL/environment issues | `wp-content/debug.log` | `php dev-env/scripts/tail-logs.php --source=wp` |
+| **Generation Records** | Everything that went into each briefing and podcast-script generation: exact system and user prompts, the real provider/model/temperature/max tokens/timeout, the articles sent and dropped (with the reason), memory used, the response, token usage, and the TTS settings used for the podcast audio. Linked to the post via `_presshub_generation_record_ids`; kept for `presshub_ai_generation_record_retention_days` (default 90). Recorded always, independent of the debug-log toggles. | `wp_presshub_ai_generation_records` | `php dev-env/scripts/query-db.php "SELECT id, kind, briefing_date, edition, status, post_id FROM wp_presshub_ai_generation_records ORDER BY id DESC LIMIT 5"` |
+
+**Secrets and provider errors:** API keys and Bearer tokens are masked automatically in every log layer (`PressHub_AI_Secret_Masker`). Provider API failures (OpenAI, Anthropic, Gemini, custom endpoints, Imagen, TTS) appear in the plugin log viewer as `ERROR` lines with the provider, model, action, HTTP code and trace ID.
+
+**Audit log behind a proxy:** the audit log records the visitor IP from `REMOTE_ADDR`. If the site sits behind a trusted reverse proxy or CDN, add a filter so the real client IP is used, for example:
+
+```php
+add_filter( 'presshub_ai_client_ip_header', fn() => 'HTTP_CF_CONNECTING_IP' );
+```
+
+Only set this behind a proxy you control: otherwise clients can spoof the header.
 
 ### CLI Observability Cheat-Sheet
 
@@ -185,7 +196,7 @@ Navigate to **PressHub AI → Settings** to configure the platform across respon
 - **Podcast & Audio Studio**: Configure default podcast presenter personas, audio synthesis voices (male/female, accents), speaking rate, pitch modulation, and audio segment stitching.
 - **Prompt Studio**: Customize system prompts and editorial guidelines for drafts, research, daily briefings, and podcast scripts.
 - **Rate Limits & Security**: Enforce per-user request rate limiting windows, IP safeguards, and automated research-log retention sweeps.
-- **Logs & Maintenance**: Configure log retention days, log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`), prompt debug logging, and token usage analytics.
+- **Logs & Maintenance**: Configure log retention days, log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`), prompt debug logging, token usage analytics, and **Generation Record Retention** (7–365 days, default 90; pruned daily by `presshub_ai_prune_generation_records`).
 
 ---
 

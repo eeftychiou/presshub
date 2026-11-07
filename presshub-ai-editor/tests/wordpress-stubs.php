@@ -1381,6 +1381,9 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
             }
 
             return array_values( array_filter( $rows, function( $row ) use ( $where ) {
+                if ( preg_match( '/(?<![A-Za-z0-9_])id = (\d+)/', $where, $m ) ) {
+                    if ( (int) ( $row['id'] ?? 0 ) !== (int) $m[1] ) return false;
+                }
                 if ( preg_match( "/action_trigger = '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['action_trigger'] ?? '' ) !== $m[1] ) return false;
                 }

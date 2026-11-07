@@ -207,6 +207,14 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'boolean',
         ] );
 
+        // Issue #131 - Settings-First: generation record retention (days). Daily cron
+        // prunes presshub_ai_generation_records rows older than this window.
+        register_setting( 'presshub_ai_options', 'presshub_ai_generation_record_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_generation_record_retention_days' ],
+            'type'              => 'integer',
+            'default'           => 90,
+        ] );
+
         // Settings-First: Social & OpenGraph metadata master toggle and scope.
         register_setting( 'presshub_ai_options', 'presshub_ai_social_meta_enabled', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_boolean' ],
@@ -683,6 +691,7 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $render, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_debug_prompts', __( 'Log AI Prompts & Responses', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Log TTS Payload Details', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_generation_record_retention_days', __( 'Generation Record Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_generation_record_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
 
         add_settings_section( 'presshub_ai_social', __( 'Social & OpenGraph Metadata', 'presshub-ai-editor' ), [ $render, 'render_social_section' ], 'presshub-ai' );
         add_settings_field( 'presshub_ai_social_meta_enabled', __( 'Enable Social Metadata (OpenGraph & Twitter Cards)', 'presshub-ai-editor' ), [ $render, 'render_social_meta_enabled_field' ], 'presshub-ai', 'presshub_ai_social' );
@@ -920,6 +929,32 @@ class PressHub_AI_Settings_Storage {
     public static function sanitize_research_retention_days( $value ) {
         $n = (int) wp_unslash( $value );
         return max( 1, min( 3650, $n ) );
+    }
+
+    /**
+     * Sanitize the generation record retention window (days).
+     * Non-numeric input falls back to the documented default of 90; numeric input is clamped to 7-365.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_generation_record_retention_days( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 90;
+        }
+        return max( 7, min( 365, (int) $value ) );
+    }
+
+    /**
+     * Generation record retention window in days (default 90, clamped 7-365).
+     *
+     * @return int
+     */
+    public static function get_generation_record_retention_days(): int {
+        return self::sanitize_generation_record_retention_days( get_option( 'presshub_ai_generation_record_retention_days', 90 ) );
     }
 
     public static function sanitize_model( $value, $provider = 'openai' ) {
@@ -3412,6 +3447,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_log_level'                   => [ __CLASS__, 'sanitize_log_level' ],
             'presshub_ai_debug_prompts'               => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_log_tts_payloads'             => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_generation_record_retention_days' => [ __CLASS__, 'sanitize_generation_record_retention_days' ],
             'presshub_ai_social_meta_enabled'          => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_social_meta_all_posts'        => [ __CLASS__, 'sanitize_boolean' ],
         ];
