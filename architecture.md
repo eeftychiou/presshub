@@ -422,6 +422,22 @@ graph TD
 - **Daily Prune Cron Job**:
   - Scheduled event `presshub_ai_prune_memory_entries` runs daily via WP-Cron and purges entries older than `presshub_ai_memory_retention_days` and their links, recording audit logs.
 
+### 4.21 Generation Inspector (`PressHub_AI_Generation_Inspector` - Issue #133)
+- **Purpose**: read-only editorial transparency over the records of §4.19. Editors see everything that went into a generation without database access. The inspector never writes to a record.
+- **Surfaces**:
+  - Metabox **Generation Inspector** on posts whose `_presshub_briefing_type` is `text` (Daily Briefing) or `podcast`. It is a normal `add_meta_box()` box, so it appears in the block editor's meta-box area and in the classic editor. It reads `_presshub_generation_record_ids`, lists the records newest first (timestamp, kind, status) and shows "No generation record (generated before records were introduced)" when a post has none.
+  - **Daily Briefing Hub -> Generation records** (submenu `presshub-ai-generation-records`, registered from `PressHub_AI_Briefing_Admin::add_admin_menu()`): per-date list (date, kind, edition, status, linked post, model) filterable by date range (`briefing_date`), kind and status, newest 200 rows. "Open" shows the same inspector for that record (`&record_id=`).
+- **Tabs**: Overview (kind, date, edition, status/error, duration, `trace_id`, provider/model with their sources, temperature, max tokens, timeout, preset, token usage, input token estimate, truncation flags), System prompt, User prompt, Articles (cap values, sent table with title linked to the source URL, source, characters sent, truncated; dropped table with reason), Memory (entries with tier, period, edition, characters, origin, status; trimmed entries; budgets; explicit "Memory was disabled for this generation" when `memory.enabled` is false), Response, TTS (podcast script records: engine, model, voices, style, speed, pitch, payload mode, turns, `script_source`), Raw JSON (download of the complete record). Both article shapes are handled: briefing `inputs.articles = {sent, dropped}` and podcast `inputs.articles = [...]` plus `inputs.not_selected`.
+- **Memory editor link**: memory entries link to the memory editor (#137) only when a URL is supplied through the `presshub_ai_memory_editor_url` filter (`$url, $entry_id`); otherwise they are plain text.
+- **Endpoints** (all `wp_ajax_*`, all call `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` and require `edit_others_posts`):
+  - `presshub_ai_inspector_tab` (`record_id`, `tab` in `overview|articles|memory|tts`): server-escaped HTML fragment.
+  - `presshub_ai_inspector_field` (`record_id`, `field` in `system_prompt|user_prompt|response_text`): JSON `{field, value, chars}`; any other field name is rejected with HTTP 400, so the endpoint cannot read other columns.
+  - `presshub_ai_inspector_raw` (GET `record_id`, `nonce`): JSON attachment of `PressHub_AI_Generation_Recorder::get()`.
+- **Performance**: the edit-screen HTML contains only the record selector and empty tab shells. Every tab is fetched when opened (and cached client-side per record); the selector and the list use light queries that never select the prompt/response columns. Assets (`generation-inspector.js/.css`) load only on briefing/podcast post screens and the records page.
+- **Escaping**: prompts, responses and article text are scraped third-party content. Structured tabs escape every value with `esc_html`/`esc_attr`/`esc_url`; article links are emitted only for `http(s)` URLs (with `rel="noopener noreferrer nofollow"`). Prompts and response travel as JSON and are inserted with `textContent` by the client, never as HTML. No HTML from a record is ever rendered.
+- **Query helper**: `PressHub_AI_Generation_Inspector::query_records( $filters )` (filters sanitized and bound through `$wpdb->prepare()`; invalid values dropped). The recorder class is unchanged.
+- **Tests**: `tests/GenerationInspectorTest.php` (capability and nonce gates, field loader, inert `<script>` content, no-record behaviour, list filters).
+
 ## 5. Cron Schedules & Timers
 
 | Event Hook | Default Time | Configurable Option | Subsystem Callback |

@@ -304,6 +304,19 @@ class PressHub_AI_Briefing_Admin {
             'presshub-ai-briefing-hub',
             [ $this, 'render_hub_page' ]
         );
+
+        // 3) Generation records (Issue #133): read-only, filterable list of
+        //    generation records with the same inspector as the post metabox.
+        if ( class_exists( 'PressHub_AI_Generation_Inspector' ) ) {
+            add_submenu_page(
+                'presshub-ai-briefing-hub',
+                __( 'PressHub AI — Generation records', 'presshub-ai-editor' ),
+                __( 'Generation records', 'presshub-ai-editor' ),
+                PressHub_AI_Generation_Inspector::CAPABILITY,
+                PressHub_AI_Generation_Inspector::PAGE_SLUG,
+                [ 'PressHub_AI_Generation_Inspector', 'render_records_page' ]
+            );
+        }
     }
 
     /**

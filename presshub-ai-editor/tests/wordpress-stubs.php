@@ -1328,7 +1328,7 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 return $matching;
             }
 
-            if ( preg_match( '/SELECT (\*|id) FROM `?([a-zA-Z0-9_]+)`?(?: WHERE (.*?))?(?: ORDER BY ((?:[a-zA-Z0-9_]+ (?:ASC|DESC)(?:,\s*)?)+))?(?: LIMIT (\d+)(?: OFFSET (\d+))?)?$/i', $sql, $m ) ) {
+            if ( preg_match( '/SELECT (\*|id|[a-z_]+(?:,\s*[a-z_]+)+|[a-z_]+) FROM `?([a-zA-Z0-9_]+)`?(?: WHERE (.*?))?(?: ORDER BY ((?:[a-zA-Z0-9_]+ (?:ASC|DESC)(?:,\s*)?)+))?(?: LIMIT (\d+)(?: OFFSET (\d+))?)?$/i', $sql, $m ) ) {
                 $cols    = $m[1];
                 $tbl     = $m[2];
                 $where   = $m[3] ?? '';
@@ -1362,6 +1362,13 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 if ( 'id' === $cols ) {
                     $rows = array_map( function( $r ) {
                         return [ 'id' => (int) ( $r['id'] ?? 0 ) ];
+                    }, $rows );
+                }
+                // Additive: explicit column projection (e.g. "SELECT id, kind FROM ...").
+                if ( '*' !== $cols && 'id' !== $cols ) {
+                    $wanted = array_map( 'trim', explode( ',', $cols ) );
+                    $rows   = array_map( function( $r ) use ( $wanted ) {
+                        return array_intersect_key( $r, array_flip( $wanted ) );
                     }, $rows );
                 }
 
@@ -1429,6 +1436,15 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 }
                 if ( preg_match( "/\bid = (\d+)/", $where, $m ) ) {
                     if ( (int) ( $row['id'] ?? 0 ) !== (int) $m[1] ) return false;
+                }
+                if ( preg_match( "/(?<![A-Za-z0-9_])kind = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['kind'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/briefing_date >= '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['briefing_date'] ?? '' ) < $m[1] ) return false;
+                }
+                if ( preg_match( "/briefing_date <= '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['briefing_date'] ?? '' ) > $m[1] ) return false;
                 }
                 if ( preg_match( "/source_post_id = (\d+)/", $where, $m ) ) {
                     if ( (int) ( $row['source_post_id'] ?? 0 ) !== (int) $m[1] ) return false;
@@ -1573,4 +1589,4 @@ if ( ! function_exists( 'wp_nonce_field' ) ) {
         }
         return $html;
     }
-}
+}

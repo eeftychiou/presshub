@@ -173,6 +173,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-generation-inspector.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
@@ -349,6 +350,7 @@ function presshub_ai_init() {
     new PressHub_AI_Ajax_Handlers();
     new PressHub_AI_Workflow();
     new PressHub_AI_Briefing_Admin();
+    new PressHub_AI_Generation_Inspector();
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
     PressHub_AI_Research_Cleanup::register();

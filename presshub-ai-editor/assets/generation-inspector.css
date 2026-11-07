@@ -1,0 +1,27 @@
+/* PressHub AI - Generation Inspector (Issue #133) */
+.presshub-inspector-bar { margin: 0 0 8px; }
+.presshub-inspector-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.presshub-inspector-tab[hidden] { display: none; }
+.presshub-inspector-panel { min-height: 40px; }
+.presshub-inspector-panel h4 { margin: 14px 0 6px; }
+.presshub-inspector-kv th { width: 30%; text-align: left; font-weight: 600; }
+.presshub-inspector-notice,
+.presshub-inspector-empty { padding: 8px 12px; background: #f6f7f7; border-left: 4px solid #8c8f94; }
+.presshub-inspector-error { color: #b32d2e; }
+.presshub-inspector-textbar { margin-bottom: 6px; }
+.presshub-inspector-count { margin-right: 8px; color: #50575e; }
+.presshub-inspector-text {
+    margin: 0;
+    padding: 10px;
+    max-height: 480px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+}
+.presshub-records-filters { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.presshub-records-detail { margin: 16px 0; padding: 12px; background: #fff; border: 1px solid #c3c4c7; }

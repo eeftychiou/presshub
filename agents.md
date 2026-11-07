@@ -603,6 +603,15 @@ When UI changes are involved, perform visual inspection in the local testing env
 
 ---
 
+## 🔎 Generation Inspector Rules (Issue #133)
+
+1. The inspector (`PressHub_AI_Generation_Inspector`) is **read-only**: never add write paths to generation records from it.
+2. Records contain scraped third-party text. Never render record content as HTML: escape every value in PHP, and insert prompts/response in JS with `textContent`/`.text()`.
+3. Every inspector endpoint checks `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` **and** `edit_others_posts`. New large fields must be added to `TEXT_FIELDS` (whitelist) and loaded on demand via the field loader, never embedded in the edit-screen HTML.
+4. Link to the memory editor only through the `presshub_ai_memory_editor_url` filter.
+
+---
+
 ## 🛡️ Daily Briefing Hub Role & Capability Gating
 
 > **The Daily Briefing Hub orchestrates pipeline operations across news harvesting, editorial curation, podcast script generation, and audio synthesis. It must remain accessible only to Editors and Administrators (`edit_others_posts`), never simple authors (`edit_posts`).**
