@@ -317,6 +317,18 @@ class PressHub_AI_Briefing_Admin {
                 [ 'PressHub_AI_Generation_Inspector', 'render_records_page' ]
             );
         }
+
+        // 4) Memory editor (Issue #137): review and correct editorial memory.
+        if ( class_exists( 'PressHub_AI_Memory_Editor' ) ) {
+            add_submenu_page(
+                'presshub-ai-briefing-hub',
+                __( 'PressHub AI — Editorial memory', 'presshub-ai-editor' ),
+                __( 'Memory', 'presshub-ai-editor' ),
+                PressHub_AI_Memory_Editor::CAPABILITY,
+                PressHub_AI_Memory_Editor::PAGE_SLUG,
+                [ 'PressHub_AI_Memory_Editor', 'render_page' ]
+            );
+        }
     }
 
     /**

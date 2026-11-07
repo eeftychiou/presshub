@@ -634,6 +634,16 @@ When UI changes are involved, perform visual inspection in the local testing env
 3. Every inspector endpoint checks `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` **and** `edit_others_posts`. New large fields must be added to `TEXT_FIELDS` (whitelist) and loaded on demand via the field loader, never embedded in the edit-screen HTML.
 4. Link to the memory editor only through the `presshub_ai_memory_editor_url` filter.
 
+
+---
+
+## 🧠 Memory Editor Rules (Issue #137)
+
+1. Every memory mutation from the editor UI goes through `PressHub_AI_Memory_Store` (`update_content`, `reset_to_generated`, `set_status`). Never write to the memory tables from `PressHub_AI_Memory_Editor`, otherwise validation, stale propagation and audit logging are bypassed.
+2. Story text is model/editor content: escape it in PHP and insert it in JS with `.text()`/`.val()`, never as HTML.
+3. Every endpoint checks `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` **and** `edit_others_posts`. Do not pre-validate values in the controller (e.g. story status); let the store return the `WP_Error`.
+4. Rollup actions (#136) stay hidden unless `PressHub_AI_Memory_Editor::rollup_actions_available()` is true.
+
 ---
 
 ## 🛡️ Daily Briefing Hub Role & Capability Gating
