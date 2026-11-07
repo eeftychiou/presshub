@@ -2,17 +2,21 @@
 /**
  * PressHub_AI_Generation_Inspector - read-only review of generation records.
  *
- * Lets editors review everything that went into a briefing / podcast generation:
- * settings, system and user prompt, input articles (sent and dropped), memory,
- * response and TTS configuration. Records come from PressHub_AI_Generation_Recorder
- * (Issue #131); this class never writes to them.
+ * Lets editors review everything that went into a generation: settings, system and
+ * user prompt, input articles (sent and dropped), memory, response, TTS configuration
+ * and (Issue #140) the per-call TTS details. Records come from
+ * PressHub_AI_Generation_Recorder (Issue #131, extended to every LLM, image and TTS
+ * call in #140); this class never writes to them.
  *
  * Surfaces:
  *   - "Generation Inspector" metabox on Daily Briefing (text) and podcast posts.
  *   - "Generation records" submenu under Daily Briefing Hub (filterable list).
  *
  * Security: every endpoint checks the nonce and the `edit_others_posts`
- * capability. Records contain scraped third-party text, so every value is
+ * capability. Exception (#140): copilot chat, co-author draft, scorecard and research
+ * records can hold unpublished editorial work, so their own author (user ID stored in
+ * config.user_id) may open them too (PressHub_AI_Generation_Recorder::user_can_open()).
+ * Records contain scraped third-party text, so every value is
  * escaped on output, and the large text fields (prompts, response) are sent as
  * JSON data that the client inserts with textContent, never as HTML.
  *
@@ -53,6 +57,9 @@ class PressHub_AI_Generation_Inspector {
     /** Post meta `_presshub_briefing_type` values that get the metabox. */
     const POST_TYPES = [ 'text', 'podcast' ];
 
+    /** Record kinds that have a TTS tab (#140: tts_test holds only per-call details). */
+    const TTS_KINDS = [ 'podcast_script', 'tts_test' ];
+
     /** Maximum rows in the admin list. */
     const LIST_LIMIT = 200;
 
@@ -60,7 +67,7 @@ class PressHub_AI_Generation_Inspector {
     const LIGHT_COLUMNS = 'id, created_at, trace_id, kind, briefing_date, edition, post_id, status, error_message, duration_ms';
 
     /** JSON columns decoded for the structured tabs. */
-    const JSON_COLUMNS = 'config_json, inputs_json, memory_json, tts_json, usage_json';
+    const JSON_COLUMNS = 'config_json, inputs_json, memory_json, tts_json, tts_calls_json, usage_json';
 
     public function __construct() {
         add_action( 'add_meta_boxes', [ $this, 'add_metabox' ], 10, 2 );
@@ -74,17 +81,58 @@ class PressHub_AI_Generation_Inspector {
     // Access control
     // ---------------------------------------------------------------------
 
+    /** Editors: may open every record and the "Generation records" page. */
     public static function can_view(): bool {
         return current_user_can( self::CAPABILITY );
     }
 
     /**
-     * Verify nonce then capability for an AJAX request. A bad nonce dies
-     * inside check_ajax_referer(); a missing capability returns a JSON 403.
+     * Whether the user may reach any inspector surface (metabox, endpoints). Authors
+     * pass here so they can open their own interactive records; every record is still
+     * checked with can_view_record().
      */
-    private function guard_ajax(): void {
+    public static function can_view_any(): bool {
+        return self::can_view() || current_user_can( 'edit_posts' );
+    }
+
+    /**
+     * User ID stored on a record (config.user_id), 0 when none.
+     */
+    public static function get_record_author_id( int $id ): int {
+        global $wpdb;
+        if ( $id <= 0 || ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
+            return 0;
+        }
+        $table  = PressHub_AI_Generation_Recorder::get_table_name();
+        $json   = $wpdb->get_var( $wpdb->prepare( "SELECT config_json FROM {$table} WHERE id = %d", $id ) );
+        $config = ( null !== $json && '' !== (string) $json ) ? json_decode( (string) $json, true ) : [];
+        return is_array( $config ) ? max( 0, (int) ( $config['user_id'] ?? 0 ) ) : 0;
+    }
+
+    /**
+     * Whether the current user may open this record: edit_others_posts, or the
+     * record's own author for the interactive kinds that can hold unpublished work.
+     */
+    public static function can_view_record( int $id ): bool {
+        if ( self::can_view() ) {
+            return true;
+        }
+        $row = self::get_light_row( $id );
+        if ( null === $row ) {
+            return false;
+        }
+        return PressHub_AI_Generation_Recorder::user_can_open( $row['kind'], self::get_record_author_id( $id ), (int) get_current_user_id() );
+    }
+
+    /**
+     * Verify nonce, then the capability, then the record for an AJAX request. A bad
+     * nonce dies inside check_ajax_referer(); a missing capability, or a record the
+     * user may not open (including a missing one, to avoid an existence oracle for
+     * non-editors), returns a JSON 403.
+     */
+    private function guard_ajax( int $record_id = 0 ): void {
         check_ajax_referer( self::NONCE_ACTION, 'nonce' );
-        if ( ! self::can_view() ) {
+        if ( ! self::can_view_any() || ( $record_id > 0 && ! self::can_view_record( $record_id ) ) || ( $record_id <= 0 && ! self::can_view() ) ) {
             wp_send_json_error( [ 'message' => __( 'You do not have permission to view generation records.', 'presshub-ai-editor' ) ], 403 );
         }
     }
@@ -93,18 +141,44 @@ class PressHub_AI_Generation_Inspector {
     // Metabox registration and assets
     // ---------------------------------------------------------------------
 
+    /**
+     * Posts with a generation inspector: briefing / podcast posts, and (#140) any post
+     * a record was attached to (co-author draft, scorecard, copilot chat, image).
+     */
     public static function is_inspectable_post( int $post_id ): bool {
         if ( $post_id <= 0 ) {
             return false;
         }
-        return in_array( (string) get_post_meta( $post_id, '_presshub_briefing_type', true ), self::POST_TYPES, true );
+        if ( in_array( (string) get_post_meta( $post_id, '_presshub_briefing_type', true ), self::POST_TYPES, true ) ) {
+            return true;
+        }
+        return ! empty( self::get_post_record_ids( $post_id ) );
+    }
+
+    /**
+     * Whether the user may open at least one record attached to the post. Editors
+     * always can; authors only for their own interactive records.
+     */
+    public static function user_can_see_post_records( int $post_id ): bool {
+        if ( self::can_view() ) {
+            return true;
+        }
+        if ( ! self::can_view_any() ) {
+            return false;
+        }
+        foreach ( self::get_post_record_ids( $post_id ) as $record_id ) {
+            if ( self::can_view_record( $record_id ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public function add_metabox( $post_type, $post = null ): void {
-        if ( 'post' !== $post_type || ! is_object( $post ) || ! self::can_view() ) {
+        if ( 'post' !== $post_type || ! is_object( $post ) || ! self::can_view_any() ) {
             return;
         }
-        if ( ! self::is_inspectable_post( (int) $post->ID ) ) {
+        if ( ! self::is_inspectable_post( (int) $post->ID ) || ! self::user_can_see_post_records( (int) $post->ID ) ) {
             return;
         }
         add_meta_box(
@@ -122,11 +196,15 @@ class PressHub_AI_Generation_Inspector {
         $load = false;
         if ( 'post.php' === $hook ) {
             $post_id = isset( $_GET['post'] ) ? (int) $_GET['post'] : 0; // phpcs:ignore WordPress.Security.NonceVerification
-            $load    = self::is_inspectable_post( $post_id );
+            $load    = self::is_inspectable_post( $post_id ) && self::user_can_see_post_records( $post_id );
         } elseif ( false !== strpos( $hook, self::PAGE_SLUG ) ) {
             $load = true;
         }
-        if ( ! $load || ! self::can_view() ) {
+        if ( ! $load || ! self::can_view_any() ) {
+            return;
+        }
+        // The records page stays editor-only; authors only reach the post-screen metabox.
+        if ( ! self::can_view() && 'post.php' !== $hook ) {
             return;
         }
 
@@ -330,7 +408,7 @@ class PressHub_AI_Generation_Inspector {
 
     /** Structured tab (escaped HTML fragment). */
     public function ajax_tab(): void {
-        $this->guard_ajax();
+        $this->guard_ajax( $this->requested_record_id() );
         $tab = isset( $_POST['tab'] ) ? sanitize_key( wp_unslash( $_POST['tab'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
         if ( ! in_array( $tab, self::HTML_TABS, true ) ) {
             wp_send_json_error( [ 'message' => __( 'Unknown tab.', 'presshub-ai-editor' ) ], 400 );
@@ -344,7 +422,7 @@ class PressHub_AI_Generation_Inspector {
 
     /** One large text field as JSON data (client inserts with textContent). */
     public function ajax_field(): void {
-        $this->guard_ajax();
+        $this->guard_ajax( $this->requested_record_id() );
         $field = isset( $_POST['field'] ) ? sanitize_key( wp_unslash( $_POST['field'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
         if ( ! in_array( $field, self::TEXT_FIELDS, true ) ) {
             wp_send_json_error( [ 'message' => __( 'Unknown field.', 'presshub-ai-editor' ) ], 400 );
@@ -364,10 +442,11 @@ class PressHub_AI_Generation_Inspector {
     /** Raw JSON download of the complete record. */
     public function ajax_raw(): void {
         check_ajax_referer( self::NONCE_ACTION, 'nonce' );
-        if ( ! self::can_view() ) {
+        $requested_id = $this->requested_record_id( $_GET );
+        if ( ! self::can_view_any() || ! self::can_view_record( $requested_id ) ) {
             wp_die( esc_html__( 'Insufficient permissions.', 'presshub-ai-editor' ), 403 );
         }
-        $json = self::build_raw_json( $this->requested_record_id( $_GET ) );
+        $json = self::build_raw_json( $requested_id );
         if ( null === $json ) {
             wp_die( esc_html__( 'Generation record not found.', 'presshub-ai-editor' ), 404 );
         }
@@ -407,6 +486,13 @@ class PressHub_AI_Generation_Inspector {
             'podcast_script' => __( 'Podcast script', 'presshub-ai-editor' ),
             'memory_digest'  => __( 'Memory digest', 'presshub-ai-editor' ),
             'memory_rollup'  => __( 'Memory rollup', 'presshub-ai-editor' ),
+            'coauthor_draft' => __( 'Co-author draft', 'presshub-ai-editor' ),
+            'scorecard'      => __( 'Editorial scorecard', 'presshub-ai-editor' ),
+            'copilot_chat'   => __( 'Copilot chat', 'presshub-ai-editor' ),
+            'research'       => __( 'Research', 'presshub-ai-editor' ),
+            'image_generation' => __( 'Image generation', 'presshub-ai-editor' ),
+            'generic'        => __( 'Other LLM call', 'presshub-ai-editor' ),
+            'tts_test'       => __( 'TTS test', 'presshub-ai-editor' ),
         ];
         return $labels[ $kind ] ?? $kind;
     }
@@ -467,6 +553,18 @@ class PressHub_AI_Generation_Inspector {
         return '<a href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a>';
     }
 
+    /** Plain-text label for a user ID: display name (#id) when the user exists. */
+    private static function user_label( int $user_id ): string {
+        $label = '#' . $user_id;
+        if ( function_exists( 'get_userdata' ) ) {
+            $user = get_userdata( $user_id );
+            if ( is_object( $user ) && ! empty( $user->display_name ) ) {
+                $label = (string) $user->display_name . ' (#' . $user_id . ')';
+            }
+        }
+        return $label;
+    }
+
     /** Link to an external article URL only when it is http(s); otherwise plain text. */
     private static function article_title_html( string $title, string $url ): string {
         $title = '' !== trim( $title ) ? $title : "\u{2014}";
@@ -515,6 +613,14 @@ class PressHub_AI_Generation_Inspector {
             __( 'Trace ID', 'presshub-ai-editor' )   => $record['trace_id'],
             __( 'Post', 'presshub-ai-editor' )       => [ 'html' => self::post_link_html( (int) $record['post_id'] ) ],
         ];
+        // #140: who ran it (copilot chat without a post is identified by the user).
+        if ( (int) ( $config['user_id'] ?? 0 ) > 0 ) {
+            $general[ __( 'User', 'presshub-ai-editor' ) ] = self::user_label( (int) $config['user_id'] );
+        }
+        // #140: image generation links to the attachment it created.
+        if ( (int) ( $inputs['attachment_id'] ?? 0 ) > 0 ) {
+            $general[ __( 'Attachment', 'presshub-ai-editor' ) ] = [ 'html' => self::post_link_html( (int) $inputs['attachment_id'] ) ];
+        }
 
         $settings = [
             __( 'Provider', 'presshub-ai-editor' )        => $provider,
@@ -526,7 +632,7 @@ class PressHub_AI_Generation_Inspector {
             __( 'Timeout (s)', 'presshub-ai-editor' )     => $config['timeout'] ?? '',
             __( 'Preset', 'presshub-ai-editor' )          => $config['preset_id'] ?? '',
         ];
-        foreach ( [ 'module', 'action', 'context_mode', 'articles_placement', 'duration', 'style' ] as $extra ) {
+        foreach ( [ 'module', 'action', 'context_mode', 'articles_placement', 'duration', 'style', 'aspect_ratio' ] as $extra ) {
             if ( isset( $config[ $extra ] ) && '' !== (string) self::fmt( $config[ $extra ] ) ) {
                 $settings[ ucfirst( str_replace( '_', ' ', $extra ) ) ] = $config[ $extra ];
             }
@@ -719,13 +825,114 @@ class PressHub_AI_Generation_Inspector {
         return $html;
     }
 
-    private static function render_tts( array $record ): string {
-        if ( 'podcast_script' !== $record['kind'] ) {
-            return self::notice( __( 'TTS applies to podcast script records only.', 'presshub-ai-editor' ) );
+    /**
+     * Per-call TTS details (#140): one row per TTS API call, then the topic and
+     * stitched summaries. Everything is escaped; the request body is shown as
+     * escaped, pre-formatted JSON.
+     */
+    private static function render_tts_calls( array $record ): string {
+        $calls   = is_array( $record['tts_calls'] ?? null ) ? $record['tts_calls'] : [];
+        $entries = is_array( $calls['entries'] ?? null ) ? $calls['entries'] : [];
+        if ( empty( $entries ) ) {
+            return '';
         }
-        $tts = $record['tts'] ?? null;
+
+        $call_rows    = [];
+        $summary_rows = [];
+        foreach ( $entries as $entry ) {
+            if ( ! is_array( $entry ) ) {
+                continue;
+            }
+            if ( is_array( $entry['summary'] ?? null ) ) {
+                $summary_rows[] = $entry;
+            } else {
+                $call_rows[] = $entry;
+            }
+        }
+
+        $html = self::section_heading( sprintf( /* translators: %d: number of TTS calls */ __( 'TTS calls (%d)', 'presshub-ai-editor' ), count( $call_rows ) ) );
+        if ( ! empty( $calls['truncated'] ) ) {
+            $html .= self::notice( sprintf(
+                /* translators: 1: stored entries, 2: dropped entries */
+                __( 'This list was truncated: %1$d entries are stored and %2$d later entries were dropped.', 'presshub-ai-editor' ),
+                count( $entries ),
+                (int) ( $calls['dropped'] ?? 0 )
+            ) );
+        }
+
+        $html .= '<table class="widefat striped presshub-inspector-tts-calls"><thead><tr>';
+        foreach ( [
+            __( '#', 'presshub-ai-editor' ),
+            __( 'Phase', 'presshub-ai-editor' ),
+            __( 'Model', 'presshub-ai-editor' ),
+            __( 'Fallback model', 'presshub-ai-editor' ),
+            __( 'Voice / speakers', 'presshub-ai-editor' ),
+            __( 'Text (chars, SHA-256)', 'presshub-ai-editor' ),
+            __( 'HTTP', 'presshub-ai-editor' ),
+            __( 'Error', 'presshub-ai-editor' ),
+            __( 'Duration (ms)', 'presshub-ai-editor' ),
+            __( 'Audio', 'presshub-ai-editor' ),
+            __( 'Retry', 'presshub-ai-editor' ),
+            __( 'Request', 'presshub-ai-editor' ),
+        ] as $heading ) {
+            $html .= '<th>' . esc_html( $heading ) . '</th>';
+        }
+        $html .= '</tr></thead><tbody>';
+        foreach ( $call_rows as $entry ) {
+            $voice = self::fmt_plain( $entry['voice'] ?? '' );
+            if ( is_array( $entry['speakers'] ?? null ) ) {
+                $parts = [];
+                foreach ( $entry['speakers'] as $speaker ) {
+                    if ( is_array( $speaker ) ) {
+                        $parts[] = self::fmt_plain( $speaker['speaker'] ?? '' ) . ': ' . self::fmt_plain( $speaker['voice'] ?? '' );
+                    }
+                }
+                $voice = implode( ', ', $parts );
+            }
+            $sha     = self::fmt_plain( $entry['text_sha256'] ?? '' );
+            $text    = self::fmt_plain( $entry['text_chars'] ?? '' ) . ( '' !== $sha ? ' / ' . substr( $sha, 0, 12 ) : '' );
+            $audio   = self::fmt_plain( $entry['audio_bytes'] ?? '' ) . ' B';
+            if ( isset( $entry['audio_seconds'] ) && is_numeric( $entry['audio_seconds'] ) ) {
+                $audio .= ' / ' . $entry['audio_seconds'] . ' s';
+            }
+            $request = '';
+            if ( is_array( $entry['request'] ?? null ) ) {
+                $json    = wp_json_encode( $entry['request'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR );
+                $request = '<details><summary>' . esc_html__( 'Show', 'presshub-ai-editor' ) . '</summary><pre>' . esc_html( false === $json ? '' : $json ) . '</pre></details>';
+            }
+            $html .= '<tr><td>' . self::cell( $entry['seq'] ?? '' ) . '</td><td>' . self::cell( $entry['phase'] ?? '' ) . '</td><td>'
+                . self::cell( $entry['model'] ?? '' ) . '</td><td>' . self::cell( $entry['fallback_model'] ?? '' ) . '</td><td>'
+                . self::cell( $voice ) . '</td><td>' . self::cell( $text ) . '</td><td>' . self::cell( $entry['http_status'] ?? '' ) . '</td><td>'
+                . self::cell( $entry['error'] ?? '' ) . '</td><td>' . self::cell( $entry['duration_ms'] ?? '' ) . '</td><td>'
+                . self::cell( $audio ) . '</td><td>' . self::cell( $entry['retry_attempt'] ?? '' ) . '</td><td>' . $request . '</td></tr>';
+        }
+        $html .= '</tbody></table>';
+
+        if ( ! empty( $summary_rows ) ) {
+            $html .= self::section_heading( __( 'Topic and stitched summaries', 'presshub-ai-editor' ) );
+            $html .= '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Phase', 'presshub-ai-editor' ) . '</th><th>'
+                . esc_html__( 'Metrics', 'presshub-ai-editor' ) . '</th></tr></thead><tbody>';
+            foreach ( $summary_rows as $entry ) {
+                $html .= '<tr><td>' . self::cell( $entry['phase'] ?? '' ) . '</td><td>' . self::cell( $entry['summary'] ) . '</td></tr>';
+            }
+            $html .= '</tbody></table>';
+        }
+        return $html;
+    }
+
+    private static function render_tts( array $record ): string {
+        if ( ! in_array( $record['kind'], self::TTS_KINDS, true ) ) {
+            return self::notice( __( 'TTS applies to podcast script and TTS test records only.', 'presshub-ai-editor' ) );
+        }
+        $calls_html = self::render_tts_calls( $record );
+        $tts        = $record['tts'] ?? null;
         if ( ! is_array( $tts ) || empty( $tts ) ) {
-            return self::notice( __( 'No TTS configuration recorded: audio has not been synthesized from this script yet.', 'presshub-ai-editor' ) );
+            if ( '' !== $calls_html ) {
+                return $calls_html;
+            }
+            return self::notice( 'tts_test' === $record['kind']
+                ? __( 'No TTS calls were recorded.', 'presshub-ai-editor' )
+                : __( 'No TTS configuration recorded: audio has not been synthesized from this script yet.', 'presshub-ai-editor' ) );
         }
         $voices = '';
         if ( is_array( $tts['voices'] ?? null ) ) {
@@ -753,7 +960,7 @@ class PressHub_AI_Generation_Inspector {
             __( 'Turns', 'presshub-ai-editor' )         => $tts['turns_count'] ?? '',
             __( 'Script source', 'presshub-ai-editor' ) => $tts['script_source'] ?? '',
             __( 'Synthesized at', 'presshub-ai-editor' ) => $tts['synthesized_at'] ?? '',
-        ] );
+        ] ) . $calls_html;
     }
 
     // ---------------------------------------------------------------------
@@ -809,7 +1016,7 @@ class PressHub_AI_Generation_Inspector {
         ];
         $html .= '<div class="presshub-inspector-tabs" role="tablist">';
         foreach ( $tabs as $key => $label ) {
-            $hidden = ( 'tts' === $key && 'podcast_script' !== $selected['kind'] ) ? ' hidden="hidden"' : '';
+            $hidden = ( 'tts' === $key && ! in_array( $selected['kind'], self::TTS_KINDS, true ) ) ? ' hidden="hidden"' : '';
             $html  .= '<button type="button" class="button presshub-inspector-tab" role="tab" data-tab="' . esc_attr( $key ) . '"' . $hidden . '>' . esc_html( $label ) . '</button>';
         }
         $html .= '</div><div class="presshub-inspector-panel" role="tabpanel" aria-live="polite"></div></div>';
@@ -817,10 +1024,17 @@ class PressHub_AI_Generation_Inspector {
     }
 
     public function render_metabox( $post ): void {
-        if ( ! self::can_view() ) {
+        if ( ! self::can_view_any() ) {
             return;
         }
-        echo self::render_inspector( self::get_post_records( (int) $post->ID ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in render_inspector().
+        // Authors only see the records they may open (their own interactive ones).
+        $rows = array_values( array_filter(
+            self::get_post_records( (int) $post->ID ),
+            static function ( $row ) {
+                return self::can_view_record( (int) $row['id'] );
+            }
+        ) );
+        echo self::render_inspector( $rows ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in render_inspector().
     }
 
     // ---------------------------------------------------------------------

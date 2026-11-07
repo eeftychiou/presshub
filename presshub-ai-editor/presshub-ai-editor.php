@@ -177,6 +177,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-tts-call-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-inspector.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
@@ -607,9 +608,30 @@ function presshub_ai_execute_research_job( $research_id ) {
 
     $user_prompt = "User prompt / request: " . $prompt . "\n\nAssociated Post Content Context:\n" . $post_content;
 
+    $gen_t0 = PressHub_AI_API_Client::begin_generation_record();
     $api->suppress_provider_prompt_log = true;
     $report = $api->call_provider( $sys_prompt, $user_prompt, false, [] );
     $api->suppress_provider_prompt_log = false;
+
+    // Issue #140 - research generation record (raw provider response, before the HTML conversion).
+    // Linked to the research post; the associated post is listed in the inputs.
+    PressHub_AI_API_Client::finish_generation_record(
+        $gen_t0,
+        'research',
+        $api,
+        $sys_prompt,
+        $user_prompt,
+        $report,
+        [
+            'post_id' => (int) $research_id,
+            'user_id' => $research_user_id,
+            'config'  => [ 'action' => 'research' ],
+            'inputs'  => [
+                'associated_post_id' => (int) $associated_post_id,
+                'user_id'            => $research_user_id,
+            ],
+        ]
+    );
 
     // 1.2.9: research syntheses are inserted as HTML blocks — convert
     // Markdown output so the editor renders them properly.
