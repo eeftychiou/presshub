@@ -606,6 +606,23 @@ if ( ! function_exists( '__' ) ) {
     }
 }
 
+if ( ! function_exists( '_n' ) ) {
+    function _n( $single, $plural, $number, $domain = null ) {
+        return 1 === (int) $number ? $single : $plural;
+    }
+}
+
+if ( ! function_exists( 'wp_generate_password' ) ) {
+    function wp_generate_password( $length = 12, $special_chars = true, $extra_special_chars = false ) {
+        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        $out   = '';
+        for ( $i = 0; $i < $length; $i++ ) {
+            $out .= $chars[ random_int( 0, strlen( $chars ) - 1 ) ];
+        }
+        return $out;
+    }
+}
+
 if ( ! function_exists( 'date_i18n' ) ) {
     function date_i18n( $format, $timestamp_with_offset = false, $gmt = false ) {
         $timestamp = ( false === $timestamp_with_offset ) ? time() : $timestamp_with_offset;
@@ -1573,4 +1590,4 @@ if ( ! function_exists( 'wp_nonce_field' ) ) {
         }
         return $html;
     }
-}
+}

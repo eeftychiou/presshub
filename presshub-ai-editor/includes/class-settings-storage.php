@@ -81,7 +81,7 @@ class PressHub_AI_Settings_Storage {
         ] );
 
         // Prompt inspection toggle (1.2.5): appends the exact SYSTEM/USER
-        // prompts to wp-content/uploads/presshub-ai/presshub-ai-debug.log.
+        // prompts to the protected log folder (prompts channel).
         register_setting( 'presshub_ai_options', 'presshub_ai_debug_prompts', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_fetch_urls' ],
             'type'              => 'boolean',
@@ -199,7 +199,7 @@ class PressHub_AI_Settings_Storage {
         ] );
         // Issue #80 — Settings-First: TTS payload debug log toggle. When enabled
         // every Gemini TTS API call appends detailed request/response JSON
-        // entries to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
+        // entries to the protected log folder (tts channel) via the
         // `presshub_ai_tts_payload_log` action, so operators can diagnose
         // voice drift or unexpected voice allocation without touching code.
         register_setting( 'presshub_ai_options', 'presshub_ai_log_tts_payloads', [
@@ -211,6 +211,23 @@ class PressHub_AI_Settings_Storage {
         // prunes presshub_ai_generation_records rows older than this window.
         register_setting( 'presshub_ai_options', 'presshub_ai_generation_record_retention_days', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_generation_record_retention_days' ],
+            'type'              => 'integer',
+            'default'           => 90,
+        ] );
+
+        // Issue #138 - Settings-First: log retention windows (days).
+        register_setting( 'presshub_ai_options', 'presshub_ai_log_file_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_log_file_retention_days' ],
+            'type'              => 'integer',
+            'default'           => 14,
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_token_log_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_token_log_retention_days' ],
+            'type'              => 'integer',
+            'default'           => 60,
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_audit_log_retention_days', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_audit_log_retention_days' ],
             'type'              => 'integer',
             'default'           => 90,
         ] );
@@ -692,6 +709,9 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_debug_prompts', __( 'Log AI Prompts & Responses', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Log TTS Payload Details', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_generation_record_retention_days', __( 'Generation Record Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_generation_record_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_log_file_retention_days', __( 'Log File Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_log_file_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_token_log_retention_days', __( 'Token Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_token_log_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_audit_log_retention_days', __( 'Audit Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_audit_log_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
 
         add_settings_section( 'presshub_ai_social', __( 'Social & OpenGraph Metadata', 'presshub-ai-editor' ), [ $render, 'render_social_section' ], 'presshub-ai' );
         add_settings_field( 'presshub_ai_social_meta_enabled', __( 'Enable Social Metadata (OpenGraph & Twitter Cards)', 'presshub-ai-editor' ), [ $render, 'render_social_meta_enabled_field' ], 'presshub-ai', 'presshub_ai_social' );
@@ -955,6 +975,84 @@ class PressHub_AI_Settings_Storage {
      */
     public static function get_generation_record_retention_days(): int {
         return self::sanitize_generation_record_retention_days( get_option( 'presshub_ai_generation_record_retention_days', 90 ) );
+    }
+
+    /**
+     * Sanitize the log_file_retention_days window (days).
+     * Non-numeric input falls back to the default of 14; numeric input is clamped to 1-90.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_log_file_retention_days( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 14;
+        }
+        return max( 1, min( 90, (int) $value ) );
+    }
+
+    /**
+     * log_file_retention_days in days (default 14, clamped 1-90).
+     *
+     * @return int
+     */
+    public static function get_log_file_retention_days(): int {
+        return self::sanitize_log_file_retention_days( get_option( 'presshub_ai_log_file_retention_days', 14 ) );
+    }
+
+    /**
+     * Sanitize the token_log_retention_days window (days).
+     * Non-numeric input falls back to the default of 60; numeric input is clamped to 7-365.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_token_log_retention_days( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 60;
+        }
+        return max( 7, min( 365, (int) $value ) );
+    }
+
+    /**
+     * token_log_retention_days in days (default 60, clamped 7-365).
+     *
+     * @return int
+     */
+    public static function get_token_log_retention_days(): int {
+        return self::sanitize_token_log_retention_days( get_option( 'presshub_ai_token_log_retention_days', 60 ) );
+    }
+
+    /**
+     * Sanitize the audit_log_retention_days window (days).
+     * Non-numeric input falls back to the default of 90; numeric input is clamped to 30-730.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_audit_log_retention_days( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 90;
+        }
+        return max( 30, min( 730, (int) $value ) );
+    }
+
+    /**
+     * audit_log_retention_days in days (default 90, clamped 30-730).
+     *
+     * @return int
+     */
+    public static function get_audit_log_retention_days(): int {
+        return self::sanitize_audit_log_retention_days( get_option( 'presshub_ai_audit_log_retention_days', 90 ) );
     }
 
     public static function sanitize_model( $value, $provider = 'openai' ) {
@@ -2136,7 +2234,7 @@ class PressHub_AI_Settings_Storage {
      * toggle. Issue #80 — Settings-First: when enabled, every Gemini TTS API
      * call appends a detailed JSON entry (endpoint URL, masked headers,
      * speaker-voice mapping, prompt text, full request body, response
-     * metadata) to wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log via the
+     * metadata) to the protected log folder (tts channel) via the
      * `presshub_ai_tts_payload_log` action. Defaults to false so production
      * log size is preserved.
      *
@@ -3448,6 +3546,9 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_debug_prompts'               => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_log_tts_payloads'             => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_generation_record_retention_days' => [ __CLASS__, 'sanitize_generation_record_retention_days' ],
+            'presshub_ai_log_file_retention_days' => [ __CLASS__, 'sanitize_log_file_retention_days' ],
+            'presshub_ai_token_log_retention_days' => [ __CLASS__, 'sanitize_token_log_retention_days' ],
+            'presshub_ai_audit_log_retention_days' => [ __CLASS__, 'sanitize_audit_log_retention_days' ],
             'presshub_ai_social_meta_enabled'          => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_social_meta_all_posts'        => [ __CLASS__, 'sanitize_boolean' ],
         ];

@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.10.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.12.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-84%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -68,6 +68,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - **Spoken Date Formatting**: All dates are converted to natural spoken-language phrasing (e.g. *"3rd of May 2026"* or *"3 Μαΐου 2026"*).
 - **Configurable Title Prefixes**: Separate editorial title prefix options for Morning Podcast (`presshub_ai_briefing_podcast_title_prefix`, default *"Πρωινό Podcast Ενημέρωσης - "*) and Noon Podcast (`presshub_ai_briefing_noon_podcast_title_prefix`, default *"Μεσημβρινό Podcast Ενημέρωσης - "*), configurable from Settings.
 - **Clean Audio Post Content & Front-Page Excerpt Suppression**: By default, podcast post content displays exclusively the audio player block (`wp:audio`), and raw dialogue text is suppressed from `post_excerpt` and filtered out of front-page post previews, loop cards, and public RSS feeds (configurable via `presshub_ai_briefing_podcast_include_text`). Social meta tags emit a clean editorial audio description instead of leaking dialogue turns.
+- **TikTok Narration for Text-Only Articles (`PressHub_Social_TikTok_Narrator`)**: Articles without podcast audio (e.g. the Daily Brief) are posted to TikTok as a spoken video. The TikTok copy is read aloud with Gemini TTS (hashtags, emojis, links and the copy's own presshub.cy sentence are skipped) and ends with *"Για το πλήρες άρθρο, επισκεφθείτε το presshub.cy"*. Configurable under **PressHub Social → Settings → Automation Worker → Media & Video Specifications** (`presshub_social_tiktok_narration_enabled`, `_outro`, `_voice`); a TTS failure fails the job instead of posting silently.
 - **Podcast Dialogue Editor Metabox & One-Click Audio Regeneration**: Editors can review and refine spoken scripts in the **"Podcast Audio & Dialogue Editor"** metabox on podcast edit screens, and click **"Regenerate Audio from Script"** to re-synthesize and stitch the episode in real time.
 - **Resilient Audio Synthesis & Cron Error Isolation**: Synthesizer accepts nullable custom scripts and automatically shifts parameters (e.g. `synthesize_podcast($date, 'noon')`), while briefing crons encapsulate generation and synthesis in try/catch blocks with structured logging to eliminate unhandled runtime fatal errors.
 - **Broadcast Audio Synthesizer & Gemini 3.8 TTS REST Architecture (`PressHub_AI_Audio_Synthesizer` & `PressHub_AI_API_Client`)**:
@@ -152,7 +153,7 @@ PressHub AI implements a 4-layer logging architecture to provide total transpare
 
 | Layer | Purpose | Target / Storage | Inspection Tool |
 |---|---|---|---|
-| **Layer 1: Structured Logs** | Subsystem operations, harvesting steps, TTS synthesis, HTTP events | `wp-content/presshub-debug.log` | `php dev-env/scripts/tail-logs.php --source=presshub` |
+| **Layer 1: Structured Logs** | Subsystem operations, harvesting steps, TTS synthesis, HTTP events | `wp-content/uploads/presshub-ai/presshub-debug-<suffix>.log` (protected folder, random file name; see **Log storage and privacy**) | `php dev-env/scripts/tail-logs.php --source=presshub` |
 | **Layer 2: Token Telemetry** | Model IDs, prompt/completion tokens, latency, cost, and JSON metadata | `wp_presshub_ai_token_logs` | `php dev-env/scripts/view-token-logs.php` |
 | **Layer 3: Security & Audit** | Settings updates, provider credential changes, and admin actions | `wp_presshub_ai_audit_log` | `php dev-env/scripts/query-db.php "SELECT * FROM wp_presshub_ai_audit_log"` |
 | **Layer 4: WordPress Core** | PHP runtime warnings, fatal tracebacks, cURL/environment issues | `wp-content/debug.log` | `php dev-env/scripts/tail-logs.php --source=wp` |
@@ -167,6 +168,26 @@ add_filter( 'presshub_ai_client_ip_header', fn() => 'HTTP_CF_CONNECTING_IP' );
 ```
 
 Only set this behind a proxy you control: otherwise clients can spoof the header.
+
+### Log storage and privacy
+
+The three diagnostic log files (application log, LLM prompts & responses, TTS payloads) are written by `PressHub_AI_Log_Paths` to `wp-content/uploads/presshub-ai/` under random file names (`presshub-debug-<suffix>.log`, `presshub-ai-prompts-<suffix>.jsonl`, `presshub-ai-tts-<suffix>.jsonl`). The plugin keeps `.htaccess` (Apache/LiteSpeed), `index.php` and `web.config` (IIS) deny files in that folder and never overwrites an existing one. **Settings → Logs** shows whether the folder can be opened from the web (re-checked every 12 hours, or on demand with **Re-check now**).
+
+- **nginx** ignores `.htaccess`. Add a deny rule to the server block:
+
+  ```nginx
+  location ~* /wp-content/uploads/presshub-ai/ { deny all; }
+  ```
+
+- **Keep logs outside the website** by defining a writable folder in `wp-config.php`:
+
+  ```php
+  define( 'PRESSHUB_AI_LOG_DIR', '/home/example/presshub-logs' );
+  ```
+
+  If the folder is missing or not writable, file logging stops and an admin notice names the constant; logs never fall back to uploads.
+- **Retention**: rotated log files are deleted after `presshub_ai_log_file_retention_days` (default 14), token logs after `presshub_ai_token_log_retention_days` (default 60) and audit logs after `presshub_ai_audit_log_retention_days` (default 90). **Clear logs** also removes rotated copies.
+- The social worker rotates `logs/worker.log` at `PRESSHUB_LOG_MAX_BYTES` (default 10 MB) and keeps `PRESSHUB_LOG_MAX_FILES` old copies (default 5).
 
 ### CLI Observability Cheat-Sheet
 
@@ -197,6 +218,7 @@ Navigate to **PressHub AI → Settings** to configure the platform across respon
 - **News Harvester**: Configure RSS source URLs, fetch timeout budgets, domain polite delays, concurrency limits, and lead article filtering.
 - **News Curation**: Set curation LLM models, curation temperature, maximum article candidate pools, character caps, and language presets.
 - **Podcast & Audio Studio**: Configure default podcast presenter personas, audio synthesis voices (male/female, accents), speaking rate, pitch modulation, and audio segment stitching.
+- **Social Settings → Automation Worker**: Card and video dimensions, plus TikTok narration (enable, outro sentence, Gemini voice) for articles without audio.
 - **Prompt Studio**: Customize system prompts and editorial guidelines for drafts, research, daily briefings, and podcast scripts.
 - **Rate Limits & Security**: Enforce per-user request rate limiting windows, IP safeguards, and automated research-log retention sweeps.
 - **Logs & Maintenance**: Configure log retention days, log verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`), prompt debug logging, token usage analytics, and **Generation Record Retention** (7–365 days, default 90; pruned daily by `presshub_ai_prune_generation_records`).

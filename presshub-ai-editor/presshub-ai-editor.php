@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.10.0
+ * Version: 2.12.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -120,7 +120,7 @@ if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 
-define( 'PRESSHUB_AI_VERSION', '2.10.0' );
+define( 'PRESSHUB_AI_VERSION', '2.12.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -143,6 +143,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-provider-defaults.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-provider-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-trace.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-secret-masker.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-log-paths.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-logger.php';
 // Concern #2 split: load settings modules in parallel with the
 // legacy facade. Cutover happens in T5; until then the
@@ -159,6 +160,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviewer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';
+if ( file_exists( PRESSHUB_AI_DIR . 'includes/class-log-exposure-check.php' ) ) {
+    require_once PRESSHUB_AI_DIR . 'includes/class-log-exposure-check.php';
+}
 require_once PRESSHUB_AI_DIR . 'includes/class-preset-sanitizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-preset-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-preset-resolver.php';
@@ -184,6 +188,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-prompt-loader.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-settings-storage.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-activator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-queue.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-narrator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-worker-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-ai-copywriter.php';
@@ -265,6 +270,9 @@ function presshub_ai_activate() {
     if ( ! wp_next_scheduled( PressHub_AI_Generation_Recorder::PRUNE_HOOK ) ) {
         wp_schedule_event( time(), 'daily', PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     }
+    if ( ! wp_next_scheduled( 'presshub_ai_prune_log_files' ) ) {
+        wp_schedule_event( time(), 'daily', 'presshub_ai_prune_log_files' );
+    }
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::activate();
     }
@@ -287,6 +295,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_ai_prune_audit_logs' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_memory_entries' );
     wp_clear_scheduled_hook( PressHub_AI_Generation_Recorder::PRUNE_HOOK );
+    wp_clear_scheduled_hook( 'presshub_ai_prune_log_files' );
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::deactivate();
     }
@@ -296,15 +305,24 @@ register_deactivation_hook( __FILE__, 'presshub_ai_deactivate' );
 // Prune token logs cron action
 add_action( 'presshub_ai_prune_token_logs', function() {
     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-        PressHub_AI_Token_Logger::prune_old_logs( 60 );
+        $days    = PressHub_AI_Settings_Storage::get_token_log_retention_days();
+        $deleted = PressHub_AI_Token_Logger::prune_old_logs( $days );
+        PressHub_AI_Logger::info( 'Token log pruned', [ 'rows_deleted' => $deleted, 'retention_days' => $days ] );
     }
 } );
 
 // Prune audit logs cron action
 add_action( 'presshub_ai_prune_audit_logs', function() {
     if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
-        PressHub_AI_Audit_Logger::prune_logs( 90 );
+        PressHub_AI_Audit_Logger::prune_logs( PressHub_AI_Settings_Storage::get_audit_log_retention_days() );
     }
+} );
+
+// Prune rotated log files cron action (Issue #138; retention is Settings-First)
+add_action( 'presshub_ai_prune_log_files', function() {
+    $days    = PressHub_AI_Settings_Storage::get_log_file_retention_days();
+    $deleted = PressHub_AI_Log_Paths::prune_rotated_files( $days );
+    PressHub_AI_Logger::info( 'Rotated log files pruned', [ 'files_deleted' => $deleted, 'retention_days' => $days ] );
 } );
 
 // Prune memory entries cron action (Issue #132)
@@ -353,8 +371,17 @@ function presshub_ai_init() {
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
     PressHub_AI_Research_Cleanup::register();
+    if ( class_exists( 'PressHub_AI_Log_Exposure_Check' ) ) {
+        PressHub_AI_Log_Exposure_Check::register();
+    }
     PressHub_AI_Memory_Store::register_hooks();
     PressHub_AI_Memory_Digest_Builder::init();
+
+    // Issue #138 (Clean Slate): once per upgrade, drop the old fixed-name log files.
+    PressHub_AI_Log_Paths::run_upgrade();
+    if ( ! wp_next_scheduled( 'presshub_ai_prune_log_files' ) ) {
+        wp_schedule_event( time(), 'daily', 'presshub_ai_prune_log_files' );
+    }
 
     if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
         if ( get_option( PressHub_AI_Token_Logger::DB_VERSION_OPTION ) !== PressHub_AI_Token_Logger::DB_VERSION ) {

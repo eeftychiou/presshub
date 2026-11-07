@@ -50,6 +50,11 @@ PRESSHUB_LOG_FILE=logs/worker.log
 
 # Log level (DEBUG, INFO, WARN, ERROR; default: DEBUG)
 PRESSHUB_LOG_LEVEL=DEBUG
+
+# Log rotation: rotate when the active log exceeds this many bytes (default: 10485760 = 10 MB)
+PRESSHUB_LOG_MAX_BYTES=10485760
+# Rotated copies to keep as worker.log.1 ... worker.log.N (default: 5; the oldest is deleted)
+PRESSHUB_LOG_MAX_FILES=5
 ```
 
 ### Build & Run
@@ -91,6 +96,7 @@ The worker incorporates a dedicated logging module (`src/logger.ts`) that writes
 - **Media Generation**: Logs Sharp SVG layouts, layer compositing, and output file sizes.
 - **FFmpeg & Audio Probing**: Logs exact FFmpeg spawn commands, audio duration probe results, video filters, and completion status.
 - **Playwright Automation**: Tracks browser launch mode, navigation URLs, selector evaluations, and text input lengths.
+- **Size-based Rotation**: Before each write, if the log file exceeds `PRESSHUB_LOG_MAX_BYTES` (default `10485760`, 10 MB), `worker.log` becomes `worker.log.1`, `worker.log.1` becomes `worker.log.2`, and so on. At most `PRESSHUB_LOG_MAX_FILES` (default `5`) rotated copies are kept and the oldest is deleted. Invalid values fall back to the defaults, and a rotation failure only prints a console warning.
 - **Failure Diagnostics**: Captures full-page screenshots to `output/debug-error-<platform>-<timestamp>.png` and logs current page URL and DOM state snippet upon failure.
 
 ---

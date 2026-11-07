@@ -16,7 +16,7 @@ require_once __DIR__ . '/class-prompt-loader.php';
  * Optional prompt inspection: when the presshub_ai_debug_prompts option
  * (Settings → General → "Log AI prompts") or the presshub_ai_debug_prompts
  * filter (returns true) is active, the exact composed SYSTEM and USER
- * prompts are appended to wp-content/uploads/presshub-ai-debug.log before
+ * prompts are appended to the protected log folder (prompts log) before
  * every provider call, and mirrored via the presshub_ai_prompt_log action
  * so code can hook it (e.g. audit storage).
  *
@@ -28,7 +28,7 @@ require_once __DIR__ . '/class-prompt-loader.php';
 if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
     /**
      * Append the composed prompts (and, when $response is passed, the
-     * provider's response) to wp-content/uploads/presshub-ai-debug.log.
+     * provider's response) to the protected log folder (prompts log).
      *
      * @param string       $endpoint   draft|scorecard|chat|research
      * @param string       $sys_prompt Composed SYSTEM prompt.
@@ -44,17 +44,13 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
         if ( ! $debug_enabled ) {
             return;
         }
-        $uploads  = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
-        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
-        if ( ! is_dir( $base_dir ) && function_exists( 'wp_mkdir_p' ) ) {
-            wp_mkdir_p( $base_dir );
-        }
-        $log_file = $base_dir . '/presshub-ai-debug.log';
+        // #138: path comes from the helper; a WP_Error (bad PRESSHUB_AI_LOG_DIR) skips the write.
+        $log_file = PressHub_AI_Log_Paths::get_file( 'prompts' );
         $stamp    = gmdate( 'Y-m-d H:i:s' );
         $trace_id = class_exists( 'PressHub_AI_Trace' ) ? PressHub_AI_Trace::get_or_create_trace_id() : '';
 
         // Auto-rotate if > 8MB
-        if ( file_exists( $log_file ) && filesize( $log_file ) > 8 * 1024 * 1024 ) {
+        if ( ! is_wp_error( $log_file ) && file_exists( $log_file ) && filesize( $log_file ) > 8 * 1024 * 1024 ) {
             $rotated = $log_file . '.' . gmdate( 'Ymd_His' ) . '.old';
             @rename( $log_file, $rotated );
         }
@@ -71,7 +67,7 @@ if ( ! function_exists( 'presshub_ai_log_prompts' ) ) {
         ];
 
         $json = wp_json_encode( $entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-        if ( false !== $json ) {
+        if ( false !== $json && ! is_wp_error( $log_file ) ) {
             @file_put_contents( $log_file, $json . "\n", FILE_APPEND | LOCK_EX );
         }
 
@@ -1782,7 +1778,7 @@ class PressHub_AI_API_Client {
 
     /**
      * Issue #80 — Persist a single TTS payload log entry to
-     * wp-content/uploads/presshub-ai-tts-debug.log and mirror it on the
+     * the protected log folder (TTS log) and mirror it on the
      * presshub_ai_tts_payload_log action so developer scripts / CLI tools
      * can intercept the same payload without parsing the file.
      *
@@ -1819,17 +1815,12 @@ class PressHub_AI_API_Client {
             do_action( 'presshub_ai_tts_payload_log', $entry, $json );
         }
 
-        $uploads = function_exists( 'wp_upload_dir' ) ? wp_upload_dir() : [ 'basedir' => sys_get_temp_dir() ];
-        if ( empty( $uploads['basedir'] ) ) {
+        // #138: path comes from the helper; a WP_Error (bad PRESSHUB_AI_LOG_DIR) skips the write.
+        $log_file = PressHub_AI_Log_Paths::get_file( 'tts' );
+        if ( is_wp_error( $log_file ) ) {
             return;
         }
 
-        $base_dir = trailingslashit( $uploads['basedir'] ) . 'presshub-ai';
-        if ( ! is_dir( $base_dir ) && function_exists( 'wp_mkdir_p' ) ) {
-            wp_mkdir_p( $base_dir );
-        }
-
-        $log_file = $base_dir . '/presshub-ai-tts-debug.log';
         $line     = sprintf( "[%s] %s\n", $entry['timestamp'] ?? gmdate( 'Y-m-d H:i:s' ), $json );
 
         // Auto-rotate if the file grows past 8 MB to avoid filling uploads.

@@ -4,7 +4,7 @@
  *
  * Inspects and streams:
  * 1. WordPress Core debug log (wp-content/debug.log)
- * 2. PressHub AI structured log (wp-content/uploads/presshub-ai/presshub-debug.log)
+ * 2. PressHub AI structured, prompt and TTS logs (wp-content/uploads/presshub-ai/presshub-debug-<suffix>.log, presshub-ai-prompts-<suffix>.jsonl, presshub-ai-tts-<suffix>.jsonl)
  *
  * Usage:
  *   php dev-env/scripts/tail-logs.php                 # Show recent 50 lines
@@ -20,10 +20,30 @@
 declare(strict_types=1);
 
 $dev_env_dir = dirname(__DIR__);
-$wp_log_file      = $dev_env_dir . '/wordpress/wp-content/debug.log';
-$app_log_file     = $dev_env_dir . '/wordpress/wp-content/uploads/presshub-ai/presshub-debug.log';
-$prompts_log_file = $dev_env_dir . '/wordpress/wp-content/uploads/presshub-ai/presshub-ai-debug.log';
-$tts_log_file     = $dev_env_dir . '/wordpress/wp-content/uploads/presshub-ai/presshub-ai-tts-debug.log';
+$wp_log_file = $dev_env_dir . '/wordpress/wp-content/debug.log';
+
+// Issue #138: PressHub log files carry a random suffix (PressHub_AI_Log_Paths), e.g.
+// presshub-debug-<suffix>.log. Set PRESSHUB_AI_LOG_DIR in the environment when the dev
+// site keeps logs outside uploads; otherwise the default uploads/presshub-ai folder is used.
+$presshub_log_dir = getenv( 'PRESSHUB_AI_LOG_DIR' ) ?: $dev_env_dir . '/wordpress/wp-content/uploads/presshub-ai';
+
+/**
+ * Resolve the current (non-rotated) log file for a channel by its filename pattern.
+ * Returns the expected-but-missing path when no file exists yet, so the
+ * "No log file yet" messages below still read naturally.
+ */
+function presshub_dev_resolve_log( string $dir, string $prefix, string $ext ): string {
+    $matches = glob( rtrim( $dir, '/\\' ) . '/' . $prefix . '-*.' . $ext ) ?: [];
+    if ( empty( $matches ) ) {
+        return rtrim( $dir, '/\\' ) . '/' . $prefix . '-<suffix>.' . $ext;
+    }
+    usort( $matches, static fn( $a, $b ) => filemtime( $b ) <=> filemtime( $a ) );
+    return $matches[0];
+}
+
+$app_log_file     = presshub_dev_resolve_log( $presshub_log_dir, 'presshub-debug', 'log' );
+$prompts_log_file = presshub_dev_resolve_log( $presshub_log_dir, 'presshub-ai-prompts', 'jsonl' );
+$tts_log_file     = presshub_dev_resolve_log( $presshub_log_dir, 'presshub-ai-tts', 'jsonl' );
 
 $options = getopt( 'f', [ 'lines::', 'source::', 'level::', 'search::', 'trace::', 'follow', 'clear', 'help' ] );
 

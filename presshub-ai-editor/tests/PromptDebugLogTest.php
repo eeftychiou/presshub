@@ -41,6 +41,10 @@ function pdl_check( $label, $condition ) {
     }
 }
 
+// Resolve the log path once so the one-off suffix option write (which fires
+// update_option actions in the stubs) does not pollute the action log below.
+PressHub_AI_Log_Paths::get_file( 'prompts' );
+
 // --- Case 1: default (filter off, option off) → nothing is logged --------
 $GLOBALS['DO_ACTION_LOG'] = [];
 presshub_ai_log_prompts( 'draft', 'SYS', 'USER' );
@@ -122,7 +126,7 @@ if ( $failures > 0 ) {
 $log_dir = sys_get_temp_dir() . '/presshub-pdl-' . getmypid();
 @mkdir( $log_dir . '/presshub-ai', 0777, true );
 $GLOBALS['UPLOAD_DIR'] = $log_dir;
-$log_file = trailingslashit( $log_dir ) . 'presshub-ai/presshub-ai-debug.log';
+$log_file = PressHub_AI_Log_Paths::get_file( 'prompts' );
 @unlink( $log_file );
 
 $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prompts'] = '1';
