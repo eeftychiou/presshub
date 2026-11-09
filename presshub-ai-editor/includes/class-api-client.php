@@ -2476,6 +2476,10 @@ class PressHub_AI_API_Client {
             );
         }
 
+        // Issue #153 — the test button shares the per-model requests-per-minute budget.
+        require_once __DIR__ . '/class-tts-rate-limiter.php';
+        PressHub_AI_TTS_Rate_Limiter::acquire( (string) $configured_model );
+
         // Execute live request
         $trace = [
             'dispatched' => true,
@@ -2731,10 +2735,16 @@ class PressHub_AI_API_Client {
             PressHub_AI_Settings_Storage::get_briefing_tts_timeout()
         );
 
+        require_once __DIR__ . '/class-tts-rate-limiter.php';
         $max_retries = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_max_retries() : 2;
         $backoff_ms  = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_retry_backoff_ms() : 2000;
+        $max_wait_ms = PressHub_AI_Settings_Storage::get_briefing_tts_max_retry_wait_ms();
+        $error_code  = 'gemini_audio_error';
 
         foreach ( $tts_models as $model ) {
+            // Issue #153 — wait applied before the next attempt (server retry hint or backoff).
+            $retry_wait_ms     = 0;
+            $retry_wait_source = '';
             $gen_url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode( $model ) . ':generateContent?key=' . urlencode( $tts_api_key );
 
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -2745,6 +2755,8 @@ class PressHub_AI_API_Client {
                 && PressHub_AI_Settings_Storage::get_log_tts_payloads();
 
             for ( $attempt = 0; $attempt <= $max_retries; $attempt++ ) {
+                // Issue #153 — stay under the per-model requests-per-minute budget.
+                $paced_ms            = PressHub_AI_TTS_Rate_Limiter::acquire( (string) $model );
                 $tts_call_started_at = microtime( true );
 
                 if ( $tts_payload_log_enabled ) {
@@ -2836,6 +2848,8 @@ class PressHub_AI_API_Client {
                         'audio_bytes'    => $call_audio['bytes'],
                         'audio_seconds'  => $call_audio['seconds'],
                         'retry_attempt'  => $attempt,
+                        'wait_ms'        => $paced_ms + $retry_wait_ms,
+                        'wait_source'    => $retry_wait_source,
                     ] );
                 }
 
@@ -2905,24 +2919,62 @@ class PressHub_AI_API_Client {
                     }
                 }
 
+                // Issue #153 — a per-day quota will not reset within any retry window: fail now.
+                if ( 429 === $code && is_array( $res_body ) && PressHub_AI_TTS_Rate_Limiter::is_daily_quota( $res_body ) ) {
+                    $error_code = 'tts_daily_quota_exceeded';
+                    $last_error = sprintf(
+                        /* translators: 1: model, 2: provider error message */
+                        __( 'Gemini daily speech quota exceeded for model "%1$s"; synthesis stopped without retrying. %2$s', 'presshub-ai-editor' ),
+                        $model,
+                        $error_msg_from_body
+                    );
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::error( '[LogosAI Speech] Daily quota exceeded; not retrying.', [
+                            'provider'  => 'gemini',
+                            'model'     => $model,
+                            'http_code' => $code,
+                            'attempt'   => $attempt,
+                        ] );
+                    }
+                    break;
+                }
+
                 // Check if retryable (HTTP 429, 500, 502, 503, 504 or WP_Error)
                 $is_retryable = $is_wp_err || in_array( $code, [ 429, 500, 502, 503, 504 ], true );
                 if ( $is_retryable && $attempt < $max_retries ) {
-                    $current_backoff = (int) ( $backoff_ms * ( 2 ** $attempt ) );
+                    // Issue #153 — on 429 wait as long as the server asks (capped);
+                    // otherwise use the exponential backoff.
+                    $hint = null;
+                    if ( 429 === $code && is_array( $res_body ) ) {
+                        $retry_after = function_exists( 'wp_remote_retrieve_header' ) ? (string) wp_remote_retrieve_header( $gen_res, 'retry-after' ) : '';
+                        $hint        = PressHub_AI_TTS_Rate_Limiter::parse_retry_delay( $res_body, $retry_after );
+                    }
+                    if ( null !== $hint ) {
+                        $retry_wait_ms     = min( $max_wait_ms, $hint['ms'] + random_int( 250, 1000 ) );
+                        $retry_wait_source = $hint['source'];
+                    } else {
+                        $retry_wait_ms     = (int) ( $backoff_ms * ( 2 ** $attempt ) );
+                        $retry_wait_source = 'backoff';
+                    }
                     if ( class_exists( 'PressHub_AI_Logger' ) ) {
                         PressHub_AI_Logger::warning( sprintf(
-                            '[LogosAI Speech] Retryable %s on model "%s" (attempt %d/%d). Backing off %d ms...',
+                            '[LogosAI Speech] Retryable %s on model "%s" (attempt %d/%d). Waiting %d ms (%s)...',
                             $is_wp_err ? 'connection error' : "HTTP {$code}",
                             $model,
                             $attempt + 1,
                             $max_retries,
-                            $current_backoff
-                        ) );
+                            $retry_wait_ms,
+                            $retry_wait_source
+                        ), [
+                            'provider'           => 'gemini',
+                            'model'              => $model,
+                            'http_code'          => $code,
+                            'wait_ms'            => $retry_wait_ms,
+                            'retry_delay_source' => $retry_wait_source,
+                            'server_hint_ms'     => null !== $hint ? $hint['ms'] : null,
+                        ] );
                     }
-                    $is_mocked = ! empty( $GLOBALS['HTTP_MOCK'] ) || ! empty( $GLOBALS['WP_REMOTE_POST_CALLBACK'] ) || ! empty( $GLOBALS['MOCK_HTTP_RESPONSES'] ) || ! empty( $GLOBALS['CAPTURE_FILTER'] ) || defined( 'PRESSHUB_AI_UNIT_TEST' );
-                    if ( ! $is_mocked && $current_backoff > 0 ) {
-                        usleep( $current_backoff * 1000 );
-                    }
+                    PressHub_AI_TTS_Rate_Limiter::sleep_ms( $retry_wait_ms );
                     continue;
                 }
 
@@ -2947,7 +2999,7 @@ class PressHub_AI_API_Client {
                 $meta_line = sprintf( 'engine=gemini model=%s voice=%s style=%s speed=%.2f pitch=%.1f chars=%d', $configured_model, $voice_name, $style, $speed, $pitch, mb_strlen( $clean_text ) );
                 presshub_ai_log_prompts( 'podcast_tts', $sys_desc, $clean_text, 'ERROR: ' . $err_msg, $meta_line );
             }
-            return new WP_Error( 'gemini_audio_error', $err_msg );
+            return new WP_Error( $error_code, $err_msg );
         }
 
         $raw_audio = base64_decode( $audio_base64 );

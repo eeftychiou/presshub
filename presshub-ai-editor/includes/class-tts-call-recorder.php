@@ -121,6 +121,8 @@ class PressHub_AI_TTS_Call_Recorder {
      *     @type int         $audio_bytes    Decoded audio length in bytes.
      *     @type int         $audio_seconds  Audio length in seconds when known.
      *     @type int         $retry_attempt  0 for the first try, 1+ for retries.
+     *     @type int         $wait_ms        Milliseconds waited before this request (pacing + retry delay).
+     *     @type string      $wait_source    Retry delay source: retry_info | retry_after | message | backoff | ''.
      *     @type string      $endpoint       Endpoint URL (key masked here).
      *     @type array       $settings       Style, speed, pitch, payload mode.
      * }
@@ -192,6 +194,9 @@ class PressHub_AI_TTS_Call_Recorder {
             'duration_ms'    => max( 0, (int) ( $call['duration_ms'] ?? 0 ) ),
             'audio_bytes'    => max( 0, (int) ( $call['audio_bytes'] ?? 0 ) ),
             'audio_seconds'  => isset( $call['audio_seconds'] ) ? round( (float) $call['audio_seconds'], 2 ) : null,
+            // Issue #153 — time waited before this request (pacing + retry delay) and why.
+            'wait_ms'        => max( 0, (int) ( $call['wait_ms'] ?? 0 ) ),
+            'wait_source'    => (string) ( $call['wait_source'] ?? '' ),
         ];
         if ( isset( $call['endpoint'] ) && '' !== (string) $call['endpoint'] ) {
             $entry['endpoint'] = self::mask_text( PressHub_AI_API_Client::mask_api_key_in_url( (string) $call['endpoint'] ) );

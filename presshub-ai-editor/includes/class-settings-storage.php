@@ -385,6 +385,19 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_retry_backoff_ms' ],
             'type'              => 'integer',
         ] );
+        // Issue #153 — Gemini TTS rate limiting.
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_requests_per_minute', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_requests_per_minute' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_max_retry_wait_ms', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_max_retry_wait_ms' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_tts_cron_retry_delay_min', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_cron_retry_delay_min' ],
+            'type'              => 'integer',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_text_category', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_category_id' ],
             'type'              => 'integer',
@@ -753,6 +766,9 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_briefing_tts_request_delay_ms', __( 'Inter-Turn Throttle Delay (ms)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_request_delay_ms_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_max_retries', __( 'Speech API Max Retries (429/5xx)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_max_retries_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_retry_backoff_ms', __( 'Speech API Retry Backoff (ms)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_retry_backoff_ms_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_requests_per_minute', __( 'Speech API Requests per Minute', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_requests_per_minute_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_max_retry_wait_ms', __( 'Speech API Max Retry Wait (ms)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_max_retry_wait_ms_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_cron_retry_delay_min', __( 'Scheduled Synthesis Retry Delay (min)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_cron_retry_delay_min_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_audio_split_by_topic', __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ), [ $render, 'render_briefing_audio_split_by_topic_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_style', __( 'Speaking Delivery Style', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_custom_style', __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_custom_style_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1834,6 +1850,21 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_briefing_tts_retry_backoff_ms( get_option( 'presshub_ai_briefing_tts_retry_backoff_ms', self::default_briefing_tts_retry_backoff_ms() ) );
     }
 
+    /** Issue #153 — max Gemini TTS requests per model per minute (0 = no pacing). */
+    public static function get_briefing_tts_requests_per_minute(): int {
+        return self::sanitize_briefing_tts_requests_per_minute( get_option( 'presshub_ai_briefing_tts_requests_per_minute', self::default_briefing_tts_requests_per_minute() ) );
+    }
+
+    /** Issue #153 — cap on a 429 wait taken from the server's retry hint. */
+    public static function get_briefing_tts_max_retry_wait_ms(): int {
+        return self::sanitize_briefing_tts_max_retry_wait_ms( get_option( 'presshub_ai_briefing_tts_max_retry_wait_ms', self::default_briefing_tts_max_retry_wait_ms() ) );
+    }
+
+    /** Issue #153 — minutes before one automatic retry of a failed scheduled synthesis (0 = off). */
+    public static function get_briefing_tts_cron_retry_delay_min(): int {
+        return self::sanitize_briefing_tts_cron_retry_delay_min( get_option( 'presshub_ai_briefing_tts_cron_retry_delay_min', self::default_briefing_tts_cron_retry_delay_min() ) );
+    }
+
     /**
      * Helper to retrieve the configured TTS engine key.
      *
@@ -2777,6 +2808,21 @@ class PressHub_AI_Settings_Storage {
         return max( 500, min( 15000, $val ) );
     }
 
+    public static function sanitize_briefing_tts_requests_per_minute( $value ): int {
+        $val = is_numeric( $value ) ? (int) $value : self::default_briefing_tts_requests_per_minute();
+        return max( 0, min( 600, $val ) );
+    }
+
+    public static function sanitize_briefing_tts_max_retry_wait_ms( $value ): int {
+        $val = is_numeric( $value ) ? (int) $value : self::default_briefing_tts_max_retry_wait_ms();
+        return max( 1000, min( 120000, $val ) );
+    }
+
+    public static function sanitize_briefing_tts_cron_retry_delay_min( $value ): int {
+        $val = is_numeric( $value ) ? (int) $value : self::default_briefing_tts_cron_retry_delay_min();
+        return max( 0, min( 120, $val ) );
+    }
+
     public static function sanitize_provider_id( $value ): string {
         return sanitize_text_field( trim( (string) wp_unslash( $value ) ) );
     }
@@ -3310,6 +3356,19 @@ class PressHub_AI_Settings_Storage {
         return 2000;
     }
 
+    /** Gemini Tier 1 allows 10 TTS requests per model per minute; stay one below. */
+    public static function default_briefing_tts_requests_per_minute(): int {
+        return 9;
+    }
+
+    public static function default_briefing_tts_max_retry_wait_ms(): int {
+        return 60000;
+    }
+
+    public static function default_briefing_tts_cron_retry_delay_min(): int {
+        return 5;
+    }
+
     public static function default_briefing_tts_payload_mode(): string {
         return 'structured';
     }
@@ -3512,6 +3571,9 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_briefing_tts_request_delay_ms' => [ __CLASS__, 'sanitize_briefing_tts_request_delay_ms' ],
             'presshub_ai_briefing_tts_max_retries'      => [ __CLASS__, 'sanitize_briefing_tts_max_retries' ],
             'presshub_ai_briefing_tts_retry_backoff_ms' => [ __CLASS__, 'sanitize_briefing_tts_retry_backoff_ms' ],
+            'presshub_ai_briefing_tts_requests_per_minute'  => [ __CLASS__, 'sanitize_briefing_tts_requests_per_minute' ],
+            'presshub_ai_briefing_tts_max_retry_wait_ms'    => [ __CLASS__, 'sanitize_briefing_tts_max_retry_wait_ms' ],
+            'presshub_ai_briefing_tts_cron_retry_delay_min' => [ __CLASS__, 'sanitize_briefing_tts_cron_retry_delay_min' ],
             // Issue #132 — Editorial Memory
             'presshub_ai_memory_enabled'               => [ __CLASS__, 'sanitize_memory_enabled' ],
             'presshub_ai_memory_daily_days'            => [ __CLASS__, 'sanitize_memory_daily_days' ],
