@@ -313,6 +313,10 @@ class SettingsPageTest
             'presshub_ai_briefing_tts_request_delay_ms',
             'presshub_ai_briefing_tts_max_retries',
             'presshub_ai_briefing_tts_retry_backoff_ms',
+            // Issue #153 — Gemini TTS rate limiting
+            'presshub_ai_briefing_tts_requests_per_minute',
+            'presshub_ai_briefing_tts_max_retry_wait_ms',
+            'presshub_ai_briefing_tts_cron_retry_delay_min',
             'presshub_ai_qa_enabled',
             'presshub_ai_qa_include_briefings',
             'presshub_ai_qa_min_score',

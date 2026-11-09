@@ -135,8 +135,12 @@ graph TD
 - **Speaker Parsing & Greek Dialogue Colon Protection**:
   - Tightened regex ensures sentences with mid-sentence colons (`Ο υπουργός δήλωσε: τα μέτρα...`) are never falsely parsed as speaker turns.
   - Canonical speaker tags (`[SPEAKER_1]`, `[SPEAKER_2]`, `[SPEAKER_3]`, `[Presenter 1]`, etc.) are mapped to configured host names in transcript output.
-- **Exponential Backoff & Structured Error Logging**:
-  - Transient HTTP `429`, `500`, `502`, `503`, `504` or connection errors retry automatically up to `presshub_ai_briefing_tts_max_retries` (default 2) with exponential backoff (`presshub_ai_briefing_tts_retry_backoff_ms * 2^attempt`, default 2000ms base).
+- **Rate Limiting, Retries & Structured Error Logging (Issue #153)**:
+  - `PressHub_AI_TTS_Rate_Limiter` paces Gemini TTS requests per model with a sliding 60 s window stored in a transient (`presshub_ai_tts_rpm_<md5(model)>`), so podcast synthesis, TikTok narration and the Settings test button share one budget (`presshub_ai_briefing_tts_requests_per_minute`, default 9, 0 = off). Before this, a 45-turn podcast ran at ~10–11 requests per minute against a Tier 1 limit of 10.
+  - HTTP `429` waits the server's retry hint (`RetryInfo.retryDelay` → `Retry-After` → "retry in Ns") plus jitter, capped by `presshub_ai_briefing_tts_max_retry_wait_ms` (default 60000). A per-day quota 429 is not retried (`tts_daily_quota_exceeded`, ERROR).
+  - `500`, `502`, `503`, `504`, connection errors and a 429 with no hint retry up to `presshub_ai_briefing_tts_max_retries` (default 2) with exponential backoff (`presshub_ai_briefing_tts_retry_backoff_ms * 2^attempt`, default 2000ms base).
+  - The waits are stored on each TTS call entry (`wait_ms`, `wait_source`) and shown in the inspector's TTS calls table.
+  - A failed scheduled synthesis (morning or noon cron) is retried once after `presshub_ai_briefing_tts_cron_retry_delay_min` minutes (default 5) via the single event `presshub_ai_retry_podcast_synthesis` (`[ $date, $edition ]`). The retry resumes from the turn cache, skips when the podcast post already exists, and never reschedules.
   - Response error messages, statuses, and truncated bodies are captured in structured payload logs.
 - **Centralized Diagnostic Prompt Logging**:
   - `call_provider()` centralizes prompt/response debugging via `presshub_ai_log_prompts()` with caller suppression flags (`$suppress_provider_prompt_log`) to eliminate duplicate logs. Image generation (`generate_image`) and TTS dispatches (`podcast_tts`) emit dedicated trace entries.
@@ -144,7 +148,7 @@ graph TD
   - Uses canonical voice catalog (`assets/data/tts-voice-catalog.json`).
   - Supports 30+ voice personas with speed and pitch controls, grouped in WP Admin by gender `<optgroup>`s (Female Voices first for Presenter 1, Male Voices first for Presenter 2 & 3).
   - Configurable Presenter Names (`presshub_ai_briefing_host_female` / `Presenter 1 Name`, `presshub_ai_briefing_host_male` / `Presenter 2 Name`, `presshub_ai_briefing_host_tertiary` / `Presenter 3 Name`) with single source of truth getters in `PressHub_AI_Settings_Storage`.
-  - Settings-First TTS timing & retry controls: `presshub_ai_briefing_tts_turn_pause_ms` (0-2000 ms, default 250), `presshub_ai_briefing_tts_topic_pause_ms` (0-5000 ms, default 600), `presshub_ai_briefing_tts_request_delay_ms` (0-5000 ms, default 250), `presshub_ai_briefing_tts_max_retries` (0-5, default 2), and `presshub_ai_briefing_tts_retry_backoff_ms` (500-15000 ms, default 2000).
+  - Settings-First TTS timing & retry controls: `presshub_ai_briefing_tts_turn_pause_ms` (0-2000 ms, default 250), `presshub_ai_briefing_tts_topic_pause_ms` (0-5000 ms, default 600), `presshub_ai_briefing_tts_request_delay_ms` (0-5000 ms, default 250), `presshub_ai_briefing_tts_max_retries` (0-5, default 2), `presshub_ai_briefing_tts_retry_backoff_ms` (500-15000 ms, default 2000), `presshub_ai_briefing_tts_requests_per_minute` (0-600, default 9), `presshub_ai_briefing_tts_max_retry_wait_ms` (1000-120000 ms, default 60000) and `presshub_ai_briefing_tts_cron_retry_delay_min` (0-120, default 5).
 - **Multi-Edition Audio & Title Prefixes**:
   - Morning: `podcast.mp3` / `podcast.wav` attached to morning podcast post. Configurable title prefix (`presshub_ai_briefing_podcast_title_prefix`, default `"Πρωινό Podcast Ενημέρωσης - "`).
   - Noon: `podcast-noon.mp3` / `podcast-noon.wav` attached to noon podcast post. Configurable title prefix (`presshub_ai_briefing_noon_podcast_title_prefix`, default `"Μεσημβρινό Podcast Ενημέρωσης - "`).
@@ -375,6 +379,9 @@ graph TD
   - `presshub_ai_briefing_tts_request_delay_ms`: Inter-request throttling delay (default: 250ms) to prevent hitting provider rate limits.
   - `presshub_ai_briefing_tts_max_retries`: Maximum retry attempts on HTTP 429/503 (default: 2).
   - `presshub_ai_briefing_tts_retry_backoff_ms`: Base exponential backoff delay (default: 2000ms).
+  - `presshub_ai_briefing_tts_requests_per_minute`: Gemini TTS requests per model per minute (default: 9, 0 = no pacing).
+  - `presshub_ai_briefing_tts_max_retry_wait_ms`: Cap on a 429 wait taken from the server's retry hint (default: 60000ms).
+  - `presshub_ai_briefing_tts_cron_retry_delay_min`: Minutes before the one automatic retry of a failed scheduled synthesis (default: 5, 0 = off).
 - **Zero-Silent-Fallback & Strict Logging**:
   - `synthesize_speech_via_gemini()` and `build_gemini_tts_request_body()` default `$voice_name = ''`, strictly requiring callers to provide a voice persona or failing loudly with `WP_Error('missing_tts_voice')` and logging `ERROR`.
   - Missing TTS models fail loudly with `WP_Error('missing_tts_model')` with zero silent fallbacks.

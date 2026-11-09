@@ -874,6 +874,7 @@ class PressHub_AI_Generation_Inspector {
             __( 'Duration (ms)', 'presshub-ai-editor' ),
             __( 'Audio', 'presshub-ai-editor' ),
             __( 'Retry', 'presshub-ai-editor' ),
+            __( 'Wait (ms)', 'presshub-ai-editor' ),
             __( 'Request', 'presshub-ai-editor' ),
         ] as $heading ) {
             $html .= '<th>' . esc_html( $heading ) . '</th>';
@@ -896,6 +897,14 @@ class PressHub_AI_Generation_Inspector {
             if ( isset( $entry['audio_seconds'] ) && is_numeric( $entry['audio_seconds'] ) ) {
                 $audio .= ' / ' . $entry['audio_seconds'] . ' s';
             }
+            // Issue #153 — pacing/retry wait before the call, with the delay source.
+            $wait = '';
+            if ( ! empty( $entry['wait_ms'] ) ) {
+                $wait = self::fmt_plain( $entry['wait_ms'] );
+                if ( ! empty( $entry['wait_source'] ) ) {
+                    $wait .= ' (' . self::fmt_plain( $entry['wait_source'] ) . ')';
+                }
+            }
             $request = '';
             if ( is_array( $entry['request'] ?? null ) ) {
                 $json    = wp_json_encode( $entry['request'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR );
@@ -905,7 +914,7 @@ class PressHub_AI_Generation_Inspector {
                 . self::cell( $entry['model'] ?? '' ) . '</td><td>' . self::cell( $entry['fallback_model'] ?? '' ) . '</td><td>'
                 . self::cell( $voice ) . '</td><td>' . self::cell( $text ) . '</td><td>' . self::cell( $entry['http_status'] ?? '' ) . '</td><td>'
                 . self::cell( $entry['error'] ?? '' ) . '</td><td>' . self::cell( $entry['duration_ms'] ?? '' ) . '</td><td>'
-                . self::cell( $audio ) . '</td><td>' . self::cell( $entry['retry_attempt'] ?? '' ) . '</td><td>' . $request . '</td></tr>';
+                . self::cell( $audio ) . '</td><td>' . self::cell( $entry['retry_attempt'] ?? '' ) . '</td><td>' . self::cell( $wait ) . '</td><td>' . $request . '</td></tr>';
         }
         $html .= '</tbody></table>';
 

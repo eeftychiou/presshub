@@ -575,6 +575,24 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_requests_per_minute"><?php echo __( 'Speech API Requests per Minute', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_requests_per_minute_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_max_retry_wait_ms"><?php echo __( 'Speech API Max Retry Wait (ms)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_max_retry_wait_ms_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_cron_retry_delay_min"><?php echo __( 'Scheduled Synthesis Retry Delay (min)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_cron_retry_delay_min_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_category"><?php echo __( 'Podcast Category', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_category_field(); ?>
@@ -2793,7 +2811,40 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="number" min="500" max="15000" step="500" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
         <p class="description">
-            <?php echo esc_html__( 'Initial exponential backoff duration in milliseconds before retrying a failed speech request (500 to 15000 ms). Default 2000 ms.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Initial exponential backoff duration in milliseconds before retrying a failed speech request (500 to 15000 ms). Default 2000 ms. Used for 5xx and connection errors, and for a 429 that carries no retry delay.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_briefing_tts_requests_per_minute_field() {
+        $option = 'presshub_ai_briefing_tts_requests_per_minute';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_tts_requests_per_minute();
+        ?>
+        <input type="number" min="0" max="600" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description">
+            <?php echo esc_html__( 'Maximum Gemini speech requests per model per minute, shared by podcast synthesis, TikTok narration and the test button. Synthesis waits instead of exceeding it. Set it just below your Google AI Studio limit (Tier 1: 10). 0 disables pacing. Default 9.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_briefing_tts_max_retry_wait_ms_field() {
+        $option = 'presshub_ai_briefing_tts_max_retry_wait_ms';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_tts_max_retry_wait_ms();
+        ?>
+        <input type="number" min="1000" max="120000" step="1000" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description">
+            <?php echo esc_html__( 'When Gemini answers 429 with a retry delay ("Please retry in 43s"), synthesis waits that long before retrying, up to this cap (1000 to 120000 ms). Default 60000 ms. Per-day quota errors are never retried.', 'presshub-ai-editor' ); ?>
+        </p>
+        <?php
+    }
+
+    public function render_briefing_tts_cron_retry_delay_min_field() {
+        $option = 'presshub_ai_briefing_tts_cron_retry_delay_min';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_tts_cron_retry_delay_min();
+        ?>
+        <input type="number" min="0" max="120" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( (string) $value ); ?>" class="small-text" />
+        <p class="description">
+            <?php echo esc_html__( 'If scheduled audio synthesis fails, retry it once after this many minutes. Turns already synthesized are reused from the cache. Not retried for configuration errors or a per-day quota. 0 disables. Default 5.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

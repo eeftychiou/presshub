@@ -178,6 +178,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-tts-call-recorder.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-tts-rate-limiter.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-inspector.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audit-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-store.php';
@@ -297,6 +298,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_daily_news_generate' );
     wp_clear_scheduled_hook( 'presshub_noon_news_harvest' );
     wp_clear_scheduled_hook( 'presshub_noon_news_generate' );
+    wp_clear_scheduled_hook( 'presshub_ai_retry_podcast_synthesis' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_token_logs' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_audit_logs' );
     wp_clear_scheduled_hook( 'presshub_ai_prune_memory_entries' );
@@ -691,6 +693,7 @@ add_action( 'presshub_daily_news_harvest', 'presshub_ai_execute_harvest_cron' );
 add_action( 'presshub_daily_news_generate', 'presshub_ai_execute_generation_cron' );
 add_action( 'presshub_noon_news_harvest', 'presshub_ai_execute_noon_harvest_cron' );
 add_action( 'presshub_noon_news_generate', 'presshub_ai_execute_noon_generation_cron' );
+add_action( 'presshub_ai_retry_podcast_synthesis', 'presshub_ai_execute_synthesis_retry', 10, 2 );
 add_action( 'update_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
@@ -937,9 +940,156 @@ function presshub_ai_execute_generation_cron() {
             }
             $results['synthesis'] = new WP_Error( 'synthesis_exception', $t->getMessage() );
         }
+        if ( is_wp_error( $results['synthesis'] ) ) {
+            presshub_ai_maybe_schedule_synthesis_retry( $date, 'morning', $results['synthesis'] );
+        }
     }
 
     return $results;
+}
+
+/**
+ * Error codes for which an automatic synthesis retry cannot help (Issue #153):
+ * missing configuration, an empty script, or an exhausted per-day quota.
+ *
+ * @return string[]
+ */
+function presshub_ai_synthesis_retry_excluded_codes() {
+    return [
+        'tts_daily_quota_exceeded',
+        'missing_tts_model',
+        'missing_tts_voice',
+        'no_gemini_key',
+        'no_api_key',
+        'empty_script',
+    ];
+}
+
+/**
+ * Issue #153 — after a scheduled synthesis fails, schedule one retry.
+ *
+ * The retry resumes from the turn cache, so only the missing turns are
+ * requested again. Not scheduled when disabled (delay 0), for errors a retry
+ * cannot fix, or when a retry for the same date and edition is already queued.
+ *
+ * @param string   $date    Briefing date (Y-m-d).
+ * @param string   $edition morning | noon.
+ * @param WP_Error $error   The synthesis error.
+ * @return bool True when a retry was scheduled.
+ */
+function presshub_ai_maybe_schedule_synthesis_retry( $date, $edition, $error ) {
+    $delay_min = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_cron_retry_delay_min() : 0;
+    $code      = is_wp_error( $error ) ? (string) $error->get_error_code() : '';
+    $args      = [ (string) $date, (string) $edition ];
+
+    if ( $delay_min <= 0 ) {
+        return false;
+    }
+    if ( in_array( $code, presshub_ai_synthesis_retry_excluded_codes(), true ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Podcast synthesis failed with a non-retryable error; no automatic retry scheduled.', [
+                'date'       => $date,
+                'edition'    => $edition,
+                'error_code' => $code,
+            ] );
+        }
+        return false;
+    }
+    if ( function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( 'presshub_ai_retry_podcast_synthesis', $args ) ) {
+        return false;
+    }
+
+    $when = time() + $delay_min * 60;
+    wp_schedule_single_event( $when, 'presshub_ai_retry_podcast_synthesis', $args );
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::warning( sprintf( 'Podcast synthesis failed; one automatic retry scheduled in %d minutes.', $delay_min ), [
+            'date'          => $date,
+            'edition'       => $edition,
+            'error_code'    => $code,
+            'error_message' => is_wp_error( $error ) ? $error->get_error_message() : '',
+            'retry_at'      => gmdate( 'c', $when ),
+        ] );
+    }
+    return true;
+}
+
+/**
+ * Find the podcast post already published or drafted for a date and edition.
+ *
+ * @return int Post ID, 0 when none.
+ */
+function presshub_ai_find_podcast_post_id( $date, $edition ) {
+    if ( ! function_exists( 'get_posts' ) ) {
+        return 0;
+    }
+    $meta_query = [
+        [ 'key' => '_presshub_briefing_date', 'value' => (string) $date ],
+        [ 'key' => '_presshub_briefing_type', 'value' => 'podcast' ],
+        [ 'key' => '_presshub_briefing_edition', 'value' => (string) $edition ],
+    ];
+    $posts = get_posts( [
+        'post_type'      => 'post',
+        'post_status'    => [ 'publish', 'pending', 'draft', 'future', 'private' ],
+        'posts_per_page' => 1,
+        'fields'         => 'ids',
+        'meta_query'     => $meta_query,
+    ] );
+    $first = is_array( $posts ) && ! empty( $posts ) ? reset( $posts ) : 0;
+    return is_object( $first ) ? (int) ( $first->ID ?? 0 ) : (int) $first;
+}
+
+/**
+ * Issue #153 — run the one scheduled synthesis retry. Never reschedules.
+ *
+ * @param string $date    Briefing date (Y-m-d).
+ * @param string $edition morning | noon.
+ * @return array|WP_Error|null Synthesis result; null when skipped.
+ */
+function presshub_ai_execute_synthesis_retry( $date = '', $edition = 'morning' ) {
+    if ( function_exists( 'set_time_limit' ) ) {
+        @set_time_limit( 0 );
+    }
+    if ( function_exists( 'ignore_user_abort' ) ) {
+        @ignore_user_abort( true );
+    }
+    $date    = (string) $date;
+    $edition = 'noon' === $edition ? 'noon' : 'morning';
+
+    $existing = presshub_ai_find_podcast_post_id( $date, $edition );
+    if ( $existing > 0 ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Scheduled podcast synthesis retry skipped: a podcast post already exists.', [
+                'date'    => $date,
+                'edition' => $edition,
+                'post_id' => $existing,
+            ] );
+        }
+        return null;
+    }
+
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( 'Scheduled podcast synthesis retry started.', [ 'date' => $date, 'edition' => $edition ] );
+    }
+    try {
+        $synthesizer = new PressHub_AI_Audio_Synthesizer();
+        $result      = $synthesizer->synthesize_podcast( $date, '', $edition );
+    } catch ( \Throwable $t ) {
+        $result = new WP_Error( 'synthesis_exception', $t->getMessage() );
+    }
+
+    if ( is_wp_error( $result ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( 'Scheduled podcast synthesis retry failed; giving up. Re-run audio synthesis from the Daily Briefing Hub.', [
+                'date'          => $date,
+                'edition'       => $edition,
+                'error_code'    => $result->get_error_code(),
+                'error_message' => $result->get_error_message(),
+            ] );
+        }
+    } elseif ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( 'Scheduled podcast synthesis retry succeeded.', [ 'date' => $date, 'edition' => $edition ] );
+    }
+    return $result;
 }
 
 /**
@@ -1055,6 +1205,9 @@ function presshub_ai_execute_noon_generation_cron() {
                 ] );
             }
             $results['synthesis'] = new WP_Error( 'synthesis_exception', $t->getMessage() );
+        }
+        if ( is_wp_error( $results['synthesis'] ) ) {
+            presshub_ai_maybe_schedule_synthesis_retry( $date, 'noon', $results['synthesis'] );
         }
     }
 
