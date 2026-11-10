@@ -547,6 +547,23 @@ graph TD
 - **Logging**: each save/action logs ids and outcome through `PressHub_AI_Logger` (no story text); mutations are additionally audit-logged by the store.
 - **Tests**: `tests/MemoryEditorTest.php` (capability and nonce gates, invalid story status rejected with the store message, edit/reset/exclude/include create audit entries, XSS payloads inert, inspector filter URL, rollup actions hidden without #136).
 
+### 4.26 Press Release Inbox (`PressHub_AI_Press_Release_Inbox`)
+- **Role**: Reads a dedicated mailbox (e.g. `press@presshub.cy`) over IMAP during every morning and noon harvest and adds each email to the news pool as a press-release article.
+- **Classes**:
+  - `PressHub_AI_Imap_Client` (`class-imap-client.php`): pure-PHP IMAP4rev1 subset over `stream_socket_client` (PHP 8.4 dropped the `imap` extension). SSL/TLS (993), STARTTLS (143) or plain; LOGIN credentials always sent as literals; `UID MOVE`, or `UID COPY` + `\Deleted` + `EXPUNGE` when the server lacks MOVE. The socket sits behind a transport object so tests drive it with a fake server.
+  - `PressHub_AI_Mime_Parser` (`class-mime-parser.php`): headers (RFC 2047 encoded words), multipart nesting, base64/quoted-printable, RFC 2231 file names, forwarded `message/rfc822` parts, HTML-to-text, and Greek legacy charsets (ISO-8859-7, Windows-1253; mislabelled UTF-8 falls back to Windows-1253).
+  - `PressHub_AI_Press_Release_Inbox` (`class-press-release-inbox.php`): the flow below, plus the Settings "Test connection" check (read-only).
+- **Flow** (`PressHub_AI_News_Harvester::merge_press_releases()`, called at the end of `harvest_all()` so it never uses the web sources' time budget):
+  1. Read up to `presshub_ai_press_inbox_max_messages` messages from the inbox folder, oldest first, excluding ones with the `$PressHubSkipped` keyword.
+  2. Skip (flag `\Seen $PressHubSkipped`, leave in the inbox) emails from senders outside `presshub_ai_press_inbox_allowed_senders` (empty = everyone; a domain covers its subdomains), older than `presshub_ai_press_inbox_max_age_hours`, too large, or with no text.
+  3. Build the article: subject (reply/forward prefixes removed) as title, sender name as source, body plus attachment text as content. DOCX is read locally (ZipArchive); PDF and non-inline images over 30 KB are read by Gemini (`call_provider` with the file inline, action `press_release_extract`) using the Curator provider when it is Gemini, otherwise the first enabled Gemini provider. Inline images, signatures and calendar files are ignored.
+  4. Move the email to the processed folder (`presshub_ai_press_inbox_processed_folder`, created with the server's personal namespace prefix, e.g. `INBOX.Processed`). Nothing is deleted.
+- **Article shape**: `id` = `pr_` + sha1(Message-ID), `url` = `''`, `source_type`/`tier` = `press_release`, `is_press_release` = true, `sender_email`, `attachments` (names), `published_at` (email date).
+- **Placement**: inserted right after manual uploads so the curation article cap does not drop them. A re-harvest of the same date and edition keeps press releases already read (they are no longer in the mailbox).
+- **Curator**: `format_articles_context()` labels press releases as the sender's own announcement (attribute with «σύμφωνα με ανακοίνωση του/της …») and fences the body between `<<<ΔΕΛΤΙΟ ΤΥΠΟΥ>>>` / `<<<ΤΕΛΟΣ ΔΕΛΤΙΟΥ>>>`, telling the model to ignore instructions inside. Marker strings are stripped from the body first.
+- **Settings** (Daily Briefing tab, one shared map `PressHub_AI_Settings_Storage::get_press_inbox_options_map()` used by `register_setting()`, the section save and the global save): enabled, host, port, encryption, verify certificate, username, password (stored verbatim, masked in the UI, kept on empty/masked submission, "Remove stored password" checkbox), folder, processed folder, allowed senders, max messages (1–100, default 15), max age (1–720 h, default 48), max attachment size (1–25 MB, default 10), timeout (5–120 s, default 30), read attachments.
+- **Observability**: a `source_health` / `diagnostics` row (`discovery_method` = `IMAP`) and `press_releases_added` / `press_releases_skipped` on the harvest payload; log lines through `PressHub_AI_Logger`.
+
 ## 5. Cron Schedules & Timers
 
 | Event Hook | Default Time | Configurable Option | Subsystem Callback |

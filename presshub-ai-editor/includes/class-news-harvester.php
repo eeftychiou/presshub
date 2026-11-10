@@ -1454,11 +1454,13 @@ class PressHub_AI_News_Harvester {
             'harvested_count'    => 0,
         ];
 
-        // Preserve any existing manual uploads in snapshot
+        // Preserve any existing manual uploads in snapshot, and press releases
+        // read by an earlier run of this edition (they have already been moved
+        // out of the mailbox, so a re-harvest must not lose them).
         $existing_snapshot = $this->load_snapshot( $date, $edition );
         if ( is_array( $existing_snapshot ) && ! empty( $existing_snapshot['articles'] ) ) {
             foreach ( $existing_snapshot['articles'] as $art ) {
-                if ( ! empty( $art['is_manual'] ) ) {
+                if ( ! empty( $art['is_manual'] ) || ! empty( $art['is_press_release'] ) ) {
                     $payload['articles'][] = $art;
                 }
             }
@@ -1643,6 +1645,11 @@ class PressHub_AI_News_Harvester {
             $payload['diagnostics'][]   = $diag_item;
         }
 
+        // Press release inbox (IMAP). Runs after the web sources so it never
+        // eats into their time budget; its articles are placed right after the
+        // manual uploads so the curation article cap does not drop them.
+        $this->merge_press_releases( $payload );
+
         $duration_ms                 = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         $payload['budget_exceeded']  = $budget_exceeded;
         $payload['harvested_count']  = count( $payload['articles'] );
@@ -1692,6 +1699,66 @@ class PressHub_AI_News_Harvester {
     }
 
 
+
+    /**
+     * Read the press release inbox (when configured) into the harvest payload.
+     *
+     * @param array $payload Harvest payload (modified in place).
+     */
+    protected function merge_press_releases( array &$payload ): void {
+        if ( ! class_exists( 'PressHub_AI_Press_Release_Inbox' ) ) {
+            return;
+        }
+        $inbox = $this->make_press_release_inbox();
+        if ( ! $inbox->is_configured() ) {
+            return;
+        }
+        try {
+            $result = $inbox->collect();
+        } catch ( \Throwable $e ) {
+            PressHub_AI_Logger::error( 'Press release inbox failed: ' . $e->getMessage(), [ 'exception' => $e ] );
+            return;
+        }
+
+        $known_ids = [];
+        foreach ( $payload['articles'] as $art ) {
+            if ( ! empty( $art['id'] ) ) {
+                $known_ids[ (string) $art['id'] ] = true;
+            }
+        }
+        $new = [];
+        foreach ( (array) ( $result['articles'] ?? [] ) as $art ) {
+            if ( empty( $known_ids[ (string) ( $art['id'] ?? '' ) ] ) ) {
+                $new[] = $art;
+            }
+        }
+
+        // Insert after the leading manual uploads / earlier press releases.
+        $insert_at = 0;
+        foreach ( $payload['articles'] as $i => $art ) {
+            if ( empty( $art['is_manual'] ) && empty( $art['is_press_release'] ) ) {
+                break;
+            }
+            $insert_at = $i + 1;
+        }
+        if ( ! empty( $new ) ) {
+            array_splice( $payload['articles'], $insert_at, 0, $new );
+        }
+
+        if ( ! empty( $result['health'] ) ) {
+            $payload['source_health'][] = $result['health'];
+            $payload['diagnostics'][]   = $result['health'];
+        }
+        $payload['press_releases_added']   = count( $new );
+        $payload['press_releases_skipped'] = (array) ( $result['skipped'] ?? [] );
+    }
+
+    /**
+     * Factory seam for tests.
+     */
+    protected function make_press_release_inbox(): PressHub_AI_Press_Release_Inbox {
+        return new PressHub_AI_Press_Release_Inbox();
+    }
 
     /**
      * Fetch a single article URL and extract its title and body text using Multi-Fallback Extractor.

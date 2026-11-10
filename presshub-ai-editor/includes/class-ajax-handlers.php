@@ -48,6 +48,7 @@ class PressHub_AI_Ajax_Handlers {
         // Dynamic AI Providers Manager AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_save_provider', [ $this, 'save_provider' ] );
         add_action( 'wp_ajax_presshub_ai_test_source', [ $this, 'test_source' ] );
+        add_action( 'wp_ajax_presshub_ai_test_press_inbox', [ $this, 'test_press_inbox' ] );
         add_action( 'wp_ajax_presshub_ai_delete_provider', [ $this, 'delete_provider' ] );
         add_action( 'wp_ajax_presshub_ai_test_provider', [ $this, 'test_provider' ] );
         add_action( 'wp_ajax_presshub_ai_fetch_provider_models', [ $this, 'fetch_provider_models' ] );
@@ -1854,13 +1855,15 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_memory_provider'     => [ 'PressHub_AI_Settings_Storage', 'sanitize_provider_id' ],
                 'presshub_ai_briefing_memory_model'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_model_string' ],
             ];
+            // Press release inbox knobs (one shared map, see Settings Storage).
+            $options_map = array_merge( $options_map, PressHub_AI_Settings_Storage::get_press_inbox_options_map() );
 
             $saved_count = 0;
             $processed = [];
             foreach ( $options_map as $option => $sanitizer ) {
                 try {
                     // Handle removal flags
-                    if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token', 'presshub_ai_remove_briefing_tts_api_key' ], true ) ) {
+                    if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token', 'presshub_ai_remove_briefing_tts_api_key', 'presshub_ai_remove_press_inbox_password' ], true ) ) {
                         if ( isset( $post_data[ $option ] ) && ! empty( $post_data[ $option ] ) ) {
                             call_user_func( $sanitizer, $post_data[ $option ] );
                             $saved_count++;
@@ -1870,9 +1873,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                     }
 
                     // Handle secret keys (skip if empty or masked placeholder)
-                    if ( in_array( $option, [ 'presshub_ai_api_key', 'presshub_ai_google_cloud_api_key', 'presshub_ai_github_token', 'presshub_ai_briefing_tts_api_key' ], true ) ) {
+                    if ( in_array( $option, [ 'presshub_ai_api_key', 'presshub_ai_google_cloud_api_key', 'presshub_ai_github_token', 'presshub_ai_briefing_tts_api_key', 'presshub_ai_press_inbox_password' ], true ) ) {
                         if ( isset( $post_data[ $option ] ) ) {
-                            $raw_secret = trim( (string) wp_unslash( $post_data[ $option ] ) );
+                            // The settings payload is JSON (not slashed); the mailbox
+                            // password must keep any backslashes it contains.
+                            $raw_secret = 'presshub_ai_press_inbox_password' === $option
+                                ? (string) $post_data[ $option ]
+                                : trim( (string) wp_unslash( $post_data[ $option ] ) );
                             if ( '' !== $raw_secret && false === strpos( $raw_secret, '••••' ) ) {
                                 $clean = call_user_func( $sanitizer, $raw_secret );
                                 $saved_count++;
@@ -1897,7 +1904,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                                 PressHub_AI_Logger::info( 'Saved briefing sources: ' . var_export( $clean, true ) );
                             }
                         }
-                    } elseif ( in_array( $option, [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled', 'presshub_ai_briefing_schedule_enabled', 'presshub_ai_briefing_noon_schedule_enabled', 'presshub_ai_memory_enabled' ], true ) ) {
+                    } elseif ( in_array( $option, array_merge( [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled', 'presshub_ai_briefing_schedule_enabled', 'presshub_ai_briefing_noon_schedule_enabled', 'presshub_ai_memory_enabled' ], PressHub_AI_Settings_Storage::get_press_inbox_boolean_options() ), true ) ) {
                         update_option( $option, 0 );
                         $saved_count++;
                         $processed[] = $option . '=0';
@@ -2026,11 +2033,12 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_social_meta_all_posts',
                 'presshub_ai_memory_enabled',
             ];
+            $boolean_options = array_merge( $boolean_options, PressHub_AI_Settings_Storage::get_press_inbox_boolean_options() );
 
             foreach ( $options_map as $option => $sanitizer ) {
                 try {
                     // Handle removal flags
-                    if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token', 'presshub_ai_remove_briefing_tts_api_key' ], true ) ) {
+                    if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token', 'presshub_ai_remove_briefing_tts_api_key', 'presshub_ai_remove_press_inbox_password' ], true ) ) {
                         if ( isset( $post_data[ $option ] ) && ! empty( $post_data[ $option ] ) ) {
                             call_user_func( $sanitizer, $post_data[ $option ] );
                             $saved_count++;
@@ -2040,9 +2048,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                     }
 
                     // Handle secret keys (skip if empty or masked placeholder)
-                    if ( in_array( $option, [ 'presshub_ai_api_key', 'presshub_ai_google_cloud_api_key', 'presshub_ai_github_token', 'presshub_ai_briefing_tts_api_key' ], true ) ) {
+                    if ( in_array( $option, [ 'presshub_ai_api_key', 'presshub_ai_google_cloud_api_key', 'presshub_ai_github_token', 'presshub_ai_briefing_tts_api_key', 'presshub_ai_press_inbox_password' ], true ) ) {
                         if ( isset( $post_data[ $option ] ) ) {
-                            $raw_secret = trim( (string) wp_unslash( $post_data[ $option ] ) );
+                            // The settings payload is JSON (not slashed); the mailbox
+                            // password must keep any backslashes it contains.
+                            $raw_secret = 'presshub_ai_press_inbox_password' === $option
+                                ? (string) $post_data[ $option ]
+                                : trim( (string) wp_unslash( $post_data[ $option ] ) );
                             if ( '' !== $raw_secret && false === strpos( $raw_secret, '••••' ) ) {
                                 $clean = call_user_func( $sanitizer, $raw_secret );
                                 $saved_count++;
@@ -2955,6 +2967,27 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
     /**
      * AJAX endpoint to test connectivity and link discovery of a news source.
      */
+    /**
+     * Settings: test the saved press release inbox (IMAP) settings.
+     * Read-only: nothing is moved or flagged.
+     */
+    public function test_press_inbox(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        if ( ! current_user_can( $cap ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ] );
+        }
+        $inbox  = new PressHub_AI_Press_Release_Inbox();
+        $result = $inbox->test_connection();
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Press release inbox connection test: ' . ( $result['success'] ? 'ok' : 'failed' ), [ 'message' => $result['message'] ] );
+        }
+        if ( $result['success'] ) {
+            wp_send_json_success( $result );
+        }
+        wp_send_json_error( $result );
+    }
+
     public function test_source(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
         $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );

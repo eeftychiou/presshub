@@ -2260,6 +2260,32 @@ jQuery(document).ready(function($) {
         $('#presshub-source-modal').fadeOut(150);
     });
 
+    // Press Release Inbox: test the saved IMAP settings.
+    $(document).on('click', '#presshub-ai-test-press-inbox', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var $spinner = $('#presshub-ai-test-press-inbox-spinner');
+        var $result = $('#presshub-ai-test-press-inbox-result');
+        $btn.prop('disabled', true);
+        $spinner.addClass('is-active');
+        $result.html('<span style="color: #646970;">Connecting...</span>');
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            dataType: 'json',
+            data: { action: 'presshub_ai_test_press_inbox', nonce: presshubAI.nonce }
+        }).done(function(res) {
+            var ok = !!(res && res.success);
+            var msg = (res && res.data && res.data.message) ? res.data.message : (ok ? 'Connected.' : 'Connection test failed.');
+            $result.html('<span style="color: ' + (ok ? '#00a32a' : '#d63638') + ';">' + (ok ? '✓ ' : '✗ ') + presshubEsc(msg) + '</span>');
+        }).fail(function(xhr, status, error) {
+            $result.html('<span style="color: #d63638;">✗ ' + presshubEsc(error || status || 'Connection error') + '</span>');
+        }).always(function() {
+            $btn.prop('disabled', false);
+            $spinner.removeClass('is-active');
+        });
+    });
+
     $(document).on('click', '#presshub-source-form-test, .presshub-source-test-btn', function(e) {
         e.preventDefault();
         var $btn = $(this);
