@@ -451,7 +451,8 @@ class PressHub_AI_SEO {
         if ( preg_match_all( '/<img\b[^>]*>/i', $html, $imgs ) && ! empty( $imgs[0] ) ) {
             $missing = 0;
             foreach ( $imgs[0] as $img ) {
-                if ( ! preg_match( '/\balt\s*=\s*(["\'])\s*(?:(?!\1)\S)(?:(?!\1).)*\1/is', $img ) ) {
+                // Quoted alt with visible text, or an unquoted HTML5 value (alt=logo).
+                if ( ! preg_match( '/\balt\s*=\s*(?:(["\'])\s*(?:(?!\1)\S)(?:(?!\1).)*\1|[^\s"\'=<>`]+)/is', $img ) ) {
                     $missing++;
                 }
             }

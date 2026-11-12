@@ -304,10 +304,10 @@ class SeoTest {
         // Alt text containing the other quote character counts as present.
         $res = PressHub_AI_SEO::run_checks( [
             'title'   => 'T',
-            'content' => '<img src="a.jpg" alt="EU\'s flag"><img src="b.jpg" alt=\'He said "yes"\'><img src="c.jpg" alt=" ">',
+            'content' => '<img src="a.jpg" alt="EU\'s flag"><img src="b.jpg" alt=\'He said "yes"\'><img src="c.jpg" alt=" "><img src=d.jpg alt=logo><img src="e.jpg" alt>',
         ] );
         $inline = array_values( array_filter( $res['checks'], function ( $c ) { return 'inline_alt' === $c['key']; } ) )[0] ?? [];
-        $this->assert( false !== strpos( (string) ( $inline['detail'] ?? '' ), '1 of 3' ), 'Only the blank alt is flagged: ' . ( $inline['detail'] ?? '' ) );
+        $this->assert( false !== strpos( (string) ( $inline['detail'] ?? '' ), '2 of 5' ), 'Only the blank and empty alt are flagged (unquoted alt=logo counts): ' . ( $inline['detail'] ?? '' ) );
 
         // Fragment / mailto / tel links are not internal article links.
         $res = PressHub_AI_SEO::run_checks( [

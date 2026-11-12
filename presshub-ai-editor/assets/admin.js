@@ -108,6 +108,8 @@ jQuery(document).ready(function($) {
             cssClass = 'notice-error';
         } else if (type === 'success') {
             cssClass = 'notice-success';
+        } else if (type === 'warning') {
+            cssClass = 'notice-warning';
         }
 
         var $notice = $(
@@ -507,13 +509,14 @@ jQuery(document).ready(function($) {
                         added++;
                     }
                 });
+                var skipped = tags.length - ids.length;
                 if (added > 0) {
                     dispatcher.editPost({ tags: merged });
-                    showNotice(
-                        __('Added %s suggested tags. Save the post to keep them.', 'presshub-ai-editor').replace('%s', added),
-                        'success',
-                        $anchor
-                    );
+                    var msg = __('Added %s suggested tags. Save the post to keep them.', 'presshub-ai-editor').replace('%s', added);
+                    if (skipped > 0) {
+                        msg += ' ' + __('%s could not be added.', 'presshub-ai-editor').replace('%s', skipped);
+                    }
+                    showNotice(msg, skipped > 0 ? 'warning' : 'success', $anchor);
                 } else if (ids.length) {
                     showNotice(__('The suggested tags are already on this post.', 'presshub-ai-editor'), 'info', $anchor);
                 } else {
