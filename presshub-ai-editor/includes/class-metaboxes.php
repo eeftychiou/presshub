@@ -17,7 +17,7 @@ class PressHub_AI_Metaboxes {
             return;
         }
         wp_enqueue_style( 'presshub-ai-admin-css', PRESSHUB_AI_URL . 'assets/admin.css', [], PRESSHUB_AI_VERSION );
-        wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
+        wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n', 'wp-api-fetch' ], PRESSHUB_AI_VERSION, true );
 
         wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
             'ajax_url'     => admin_url( 'admin-ajax.php' ),
@@ -105,6 +105,12 @@ class PressHub_AI_Metaboxes {
                     </div>
                 <?php endif; ?>
             </div>
+
+            <?php
+            // Separate SEO score; rendered by admin.js from the saved review.
+            $seo_review = get_post_meta( $post->ID, '_presshub_ai_seo_review', true );
+            ?>
+            <div id="presshub-ai-seo-results" style="margin-top: 10px;"<?php if ( is_array( $seo_review ) && isset( $seo_review['seo_score'] ) ) : ?> data-seo="<?php echo esc_attr( wp_json_encode( $seo_review ) ); ?>"<?php endif; ?>></div>
 
             <hr />
             <h3><?php echo esc_html__( 'AI Featured Image Studio', 'presshub-ai-editor' ); ?></h3>

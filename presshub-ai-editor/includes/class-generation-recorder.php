@@ -53,6 +53,7 @@ class PressHub_AI_Generation_Recorder {
         'generic',
         'tts_test',
         'tiktok_narration',
+        'seo',
     ];
 
     /**

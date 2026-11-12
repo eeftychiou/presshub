@@ -777,6 +777,37 @@ class PressHub_AI_Settings_Render {
                         </tbody>
                     </table>
 
+                    <h3><?php echo esc_html__( 'SEO, Tags & Media Metadata', 'presshub-ai-editor' ); ?></h3>
+                    <p><?php echo esc_html__( 'Help search engines and readers find your content: describe generated images properly in the Media Library, tag automated posts, and score SEO during the AI editorial review.', 'presshub-ai-editor' ); ?></p>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'AI Image Metadata', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_image_metadata_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'Automatic Tags & SEO', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_seo_auto_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_seo_max_tags"><?php echo esc_html__( 'Maximum Tags per Post', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_seo_max_tags_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'SEO Score in Editorial Review', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_seo_review_enabled_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="images"><?php echo esc_html__( 'Save Image Settings', 'presshub-ai-editor' ); ?></button>
                         <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
@@ -3540,6 +3571,54 @@ class PressHub_AI_Settings_Render {
         ?>
         <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="14" class="large-text code" style="font-family: monospace; font-size: 13px; line-height: 1.5;"><?php echo esc_textarea( $value ); ?></textarea>
         <p class="description"><?php echo __( 'Prompt instructions used to analyze article text and compose the visual image description. Available placeholders: {title}, {content}. Leave empty to restore plugin default template.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_image_metadata_enabled_field() {
+        $option  = 'presshub_ai_image_metadata_enabled';
+        $enabled = PressHub_AI_Settings_Storage::get_image_metadata_enabled();
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_image_metadata_enabled">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_image_metadata_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <?php echo esc_html__( 'Write descriptive Title, Alternative Text, Caption and Description for every AI-generated image.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. Uses the Article Analysis AI Provider to describe the image in the article\'s language and gives the file a descriptive name, so images are easy to find and reuse in the Media Library.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_seo_auto_enabled_field() {
+        $option  = 'presshub_ai_seo_auto_enabled';
+        $enabled = PressHub_AI_Settings_Storage::get_seo_auto_enabled();
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_seo_auto_enabled">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_seo_auto_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <?php echo esc_html__( 'Automatically fill tags, meta description and focus keyphrase for Daily Briefing posts, podcasts and AI Co-Author drafts.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. Briefing and podcast posts get tags and an SEO excerpt when they are created. For co-author drafts the tags and excerpt are added to the editor when you insert the draft, so you can still review them before saving.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_seo_max_tags_field() {
+        $option = 'presshub_ai_seo_max_tags';
+        $value  = PressHub_AI_Settings_Storage::get_seo_max_tags();
+        ?>
+        <input type="number" min="1" max="15" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_seo_max_tags" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'Upper limit of tags assigned to a post automatically (1 - 15). Default 8. Existing site tags are reused where they fit.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_seo_review_enabled_field() {
+        $option  = 'presshub_ai_seo_review_enabled';
+        $enabled = PressHub_AI_Settings_Storage::get_seo_review_enabled();
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_seo_review_enabled">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_seo_review_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <?php echo esc_html__( 'Report a separate SEO Score with improvement suggestions when running the AI Editorial Review.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. Checks headline, excerpt, tags, category, images and alt text, structure and links. The SEO score is advisory and never blocks publishing.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
