@@ -350,6 +350,8 @@ as_check( 'e2e: script without turns returns WP_Error', is_wp_error( $err_invali
 // =========================================================================
 
 $GLOBALS['OPTIONS_STORE'] = [
+    // These cases count TTS HTTP requests; keep the post-creation SEO call out of them.
+    'presshub_ai_seo_auto_enabled'   => 0,
     'presshub_ai_provider'           => 'gemini',
     'presshub_ai_gemini_api_key'     => 'test-gemini-key',
     'presshub_ai_model_gemini'       => 'gemini-3.7-flash',

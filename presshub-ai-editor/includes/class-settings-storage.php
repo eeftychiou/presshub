@@ -485,6 +485,22 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_image_analysis_prompt' ],
             'type'              => 'string',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_image_metadata_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_image_metadata_enabled' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_seo_auto_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_seo_auto_enabled' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_seo_max_tags', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_seo_max_tags' ],
+            'type'              => 'integer',
+        ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_seo_review_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_seo_review_enabled' ],
+            'type'              => 'integer',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_briefing_podcast_include_text', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_include_text' ],
             'type'              => 'integer',
@@ -840,6 +856,10 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_image_generation_provider', __( 'Image Generation AI Provider', 'presshub-ai-editor' ), [ $render, 'render_image_generation_provider_field' ], 'presshub-ai', 'presshub_ai_images' );
         add_settings_field( 'presshub_ai_image_aspect_ratio', __( 'Default Aspect Ratio', 'presshub-ai-editor' ), [ $render, 'render_image_aspect_ratio_field' ], 'presshub-ai', 'presshub_ai_images' );
         add_settings_field( 'presshub_ai_image_analysis_prompt', __( 'Article Analysis Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_image_analysis_prompt_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_image_metadata_enabled', __( 'AI Image Metadata', 'presshub-ai-editor' ), [ $render, 'render_image_metadata_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_seo_auto_enabled', __( 'Automatic Tags & SEO', 'presshub-ai-editor' ), [ $render, 'render_seo_auto_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_seo_max_tags', __( 'Maximum Tags per Post', 'presshub-ai-editor' ), [ $render, 'render_seo_max_tags_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_seo_review_enabled', __( 'SEO Score in Editorial Review', 'presshub-ai-editor' ), [ $render, 'render_seo_review_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
     }
 
 
@@ -3292,6 +3312,56 @@ class PressHub_AI_Settings_Storage {
         return $prompt;
     }
 
+    /**
+     * SEO & media metadata knobs (Settings-First).
+     *
+     * presshub_ai_image_metadata_enabled: write AI alt text, title, caption and
+     *   description onto generated featured images. Default: on.
+     * presshub_ai_seo_auto_enabled: fill tags, meta description and focus
+     *   keyphrase on automated briefing / podcast posts and co-author drafts. Default: on.
+     * presshub_ai_seo_max_tags: maximum number of tags assigned per post (1-15). Default: 8.
+     * presshub_ai_seo_review_enabled: add a separate SEO score to the AI editorial review. Default: on.
+     */
+    public static function sanitize_image_metadata_enabled( $value ): int {
+        return self::sanitize_checkbox( $value );
+    }
+
+    public static function get_image_metadata_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_image_metadata_enabled', 1 );
+    }
+
+    public static function sanitize_seo_auto_enabled( $value ): int {
+        return self::sanitize_checkbox( $value );
+    }
+
+    public static function get_seo_auto_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_seo_auto_enabled', 1 );
+    }
+
+    public static function default_seo_max_tags(): int {
+        return 8;
+    }
+
+    public static function sanitize_seo_max_tags( $value ): int {
+        $val = (int) $value;
+        if ( $val <= 0 ) {
+            return self::default_seo_max_tags();
+        }
+        return max( 1, min( 15, $val ) );
+    }
+
+    public static function get_seo_max_tags(): int {
+        return self::sanitize_seo_max_tags( get_option( 'presshub_ai_seo_max_tags', self::default_seo_max_tags() ) );
+    }
+
+    public static function sanitize_seo_review_enabled( $value ): int {
+        return self::sanitize_checkbox( $value );
+    }
+
+    public static function get_seo_review_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_seo_review_enabled', 1 );
+    }
+
     public static function sanitize_briefing_podcast_include_text( $value ): int {
         return ( ! empty( $value ) && '0' !== $value && false !== $value ) ? 1 : 0;
     }
@@ -3657,6 +3727,10 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_image_generation_provider' => [ __CLASS__, 'sanitize_image_generation_provider' ],
             'presshub_ai_image_aspect_ratio'        => [ __CLASS__, 'sanitize_image_aspect_ratio' ],
             'presshub_ai_image_analysis_prompt'     => [ __CLASS__, 'sanitize_image_analysis_prompt' ],
+            'presshub_ai_image_metadata_enabled'    => [ __CLASS__, 'sanitize_image_metadata_enabled' ],
+            'presshub_ai_seo_auto_enabled'          => [ __CLASS__, 'sanitize_seo_auto_enabled' ],
+            'presshub_ai_seo_max_tags'              => [ __CLASS__, 'sanitize_seo_max_tags' ],
+            'presshub_ai_seo_review_enabled'        => [ __CLASS__, 'sanitize_seo_review_enabled' ],
         ];
 
         switch ( $section ) {

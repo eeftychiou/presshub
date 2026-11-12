@@ -1069,6 +1069,11 @@ class PressHub_AI_News_Curator {
             ] );
         }
 
+        // Tags, SEO meta description (excerpt) and focus keyphrase.
+        if ( class_exists( 'PressHub_AI_SEO' ) ) {
+            PressHub_AI_SEO::auto_optimize_post( $post_id, $post_title, $story_content, 'briefing_text' );
+        }
+
         // Issue #79 — surface the source-context the LLM was actually fed so
         // the Briefing Hub stage card can show "All Harvested Articles (N)"
         // vs "Selected Articles Filter" vs "Manual Notes / Uploads" plus the

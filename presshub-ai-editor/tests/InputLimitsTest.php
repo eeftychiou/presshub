@@ -268,6 +268,10 @@ class InputLimitsTest
         $GLOBALS['OPTIONS_STORE'] = [
             'presshub_ai_api_key'  => 'k',
             'presshub_ai_provider' => 'openai',
+            // These cases inspect the draft / review request itself; keep the
+            // follow-up SEO calls out of the captured traffic.
+            'presshub_ai_seo_auto_enabled'   => 0,
+            'presshub_ai_seo_review_enabled' => 0,
         ]; // rate limiter disabled by default
         $GLOBALS['NONCE_VALID'] = true;
         $_POST = [];

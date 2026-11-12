@@ -235,8 +235,31 @@ class PressHub_AI_Ajax_Handlers {
             update_post_meta( $post_id, '_presshub_ai_coauthored', 1 );
         }
 
+        // Suggested tags + meta description for the draft. They are applied in
+        // the editor when the journalist inserts the draft (the block editor
+        // would overwrite tags written server-side on its next save).
+        $seo = null;
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_seo_auto_enabled() ) {
+            require_once __DIR__ . '/class-seo.php';
+            $draft_title = '';
+            if ( preg_match( '/<h1[^>]*>(.*?)<\/h1>/is', (string) $draft, $hm ) ) {
+                $draft_title = trim( wp_strip_all_tags( $hm[1] ) );
+            }
+            $seo_res = PressHub_AI_SEO::generate_post_seo( $draft_title, (string) $draft, ! empty( $post_id ) ? (int) $post_id : 0 );
+            if ( ! is_wp_error( $seo_res ) ) {
+                $seo = $seo_res;
+                if ( ! empty( $post_id ) && $post_id > 0 ) {
+                    // Keyphrase / description meta only; tags and excerpt go through the editor.
+                    PressHub_AI_SEO::apply_post_seo( (int) $post_id, $seo_res, false, false );
+                }
+            }
+        }
+
         $this->record_rate_limit();
-        wp_send_json_success( [ 'draft' => wp_kses_post( $draft ) ] );
+        wp_send_json_success( [
+            'draft' => wp_kses_post( $draft ),
+            'seo'   => $seo,
+        ] );
     }
 
     public function run_review() {
@@ -295,11 +318,80 @@ class PressHub_AI_Ajax_Handlers {
             }
         }
 
+        // Separate, advisory SEO score (never affects the QA gate above).
+        $seo_review = null;
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_seo_review_enabled() ) {
+            require_once __DIR__ . '/class-seo.php';
+            $seo_review = PressHub_AI_SEO::review( $this->collect_seo_review_input( (int) $post_id, $content ) );
+            if ( $post_id ) {
+                update_post_meta( $post_id, PressHub_AI_SEO::META_SEO_REVIEW, $seo_review );
+            }
+        }
+
         $this->record_rate_limit();
         // ME-8 / F-29: report the post status after the review so the UI
         // can tell the journalist what happened ('pending' = moved to
         // editorial review, 'publish' = left alone, null = no post).
-        wp_send_json_success( array_merge( $scorecard, [ 'status_after' => $status_after ] ) );
+        wp_send_json_success( array_merge( $scorecard, [ 'status_after' => $status_after, 'seo' => $seo_review ] ) );
+    }
+
+    /**
+     * Build the SEO review input from the editor state sent with the review
+     * request, falling back to the saved post.
+     */
+    private function collect_seo_review_input( int $post_id, string $content ): array {
+        $post = $post_id > 0 ? get_post( $post_id ) : null;
+
+        $title = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
+        if ( '' === $title && $post && isset( $post->post_title ) ) {
+            $title = (string) $post->post_title;
+        }
+        $excerpt = isset( $_POST['excerpt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['excerpt'] ) ) : '';
+        if ( '' === $excerpt && ! isset( $_POST['excerpt'] ) && $post && isset( $post->post_excerpt ) ) {
+            $excerpt = (string) $post->post_excerpt;
+        }
+
+        $tags = [];
+        foreach ( (array) ( $_POST['tag_ids'] ?? [] ) as $tid ) {
+            $term = function_exists( 'get_term' ) ? get_term( (int) $tid, 'post_tag' ) : null;
+            if ( $term && ! is_wp_error( $term ) && isset( $term->name ) ) {
+                $tags[] = (string) $term->name;
+            }
+        }
+        foreach ( (array) ( $_POST['tag_names'] ?? [] ) as $tname ) {
+            $tname = sanitize_text_field( wp_unslash( (string) $tname ) );
+            if ( '' !== $tname ) {
+                $tags[] = $tname;
+            }
+        }
+        if ( ! isset( $_POST['tag_ids'] ) && ! isset( $_POST['tag_names'] ) && $post_id > 0 && function_exists( 'wp_get_post_tags' ) ) {
+            foreach ( (array) wp_get_post_tags( $post_id ) as $t ) {
+                if ( is_object( $t ) && isset( $t->name ) ) {
+                    $tags[] = (string) $t->name;
+                }
+            }
+        }
+
+        $categories = [];
+        $cat_ids    = isset( $_POST['category_ids'] ) ? (array) $_POST['category_ids'] : ( ( $post_id > 0 && function_exists( 'wp_get_post_categories' ) ) ? (array) wp_get_post_categories( $post_id ) : [] );
+        foreach ( $cat_ids as $cid ) {
+            $name = function_exists( 'get_cat_name' ) ? (string) get_cat_name( (int) $cid ) : '';
+            if ( '' !== $name ) {
+                $categories[] = $name;
+            }
+        }
+
+        $featured = isset( $_POST['featured_media'] ) ? (int) $_POST['featured_media'] : ( ( $post_id > 0 && function_exists( 'get_post_thumbnail_id' ) ) ? (int) get_post_thumbnail_id( $post_id ) : 0 );
+
+        return [
+            'post_id'           => $post_id,
+            'title'             => $title,
+            'content'           => $content,
+            'excerpt'           => $excerpt,
+            'tags'              => array_values( array_unique( $tags ) ),
+            'categories'        => $categories,
+            'featured_image_id' => $featured,
+        ];
     }
 
     public function handle_chat_routing() {
@@ -2025,6 +2117,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_social_meta_enabled',
                 'presshub_ai_social_meta_all_posts',
                 'presshub_ai_memory_enabled',
+                'presshub_ai_image_metadata_enabled',
+                'presshub_ai_seo_auto_enabled',
+                'presshub_ai_seo_review_enabled',
             ];
 
             foreach ( $options_map as $option => $sanitizer ) {
@@ -3097,15 +3192,12 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $content = isset( $_POST['content'] ) ? (string) wp_unslash( $_POST['content'] ) : '';
         $title   = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
 
-        if ( empty( trim( $content ) ) && $post_id > 0 ) {
-            $post = get_post( $post_id );
-            if ( $post ) {
-                $content = $post->post_content;
-                if ( empty( $title ) ) {
-                    $title = $post->post_title;
-                }
-            }
-        }
+        // Draft from the article text, or from the dialogue script for podcast
+        // posts (whose body is usually just the audio player).
+        require_once __DIR__ . '/class-seo.php';
+        $source  = PressHub_AI_SEO::resolve_image_source( $post_id, $content, $title );
+        $content = $source['content'];
+        $title   = $source['title'];
 
         if ( empty( trim( $content ) ) ) {
             wp_send_json_error( __( 'Please provide article content to analyze.', 'presshub-ai-editor' ) );
@@ -3146,9 +3238,18 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Please draft or enter an image prompt first.', 'presshub-ai-editor' ) );
         }
 
+        // Article context for the image's Media Library metadata (title, alt,
+        // caption, description). Unsaved editor text wins over the saved post.
+        $ctx_content = isset( $_POST['content'] ) ? (string) wp_unslash( $_POST['content'] ) : '';
+        $ctx_title   = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
+
         require_once __DIR__ . '/class-api-client.php';
-        $client = new PressHub_AI_API_Client();
-        $result = $client->generate_featured_image( $prompt, '', $post_id );
+        $context = PressHub_AI_SEO::resolve_image_source( $post_id, $ctx_content, $ctx_title );
+        $client  = new PressHub_AI_API_Client();
+        $result  = $client->generate_featured_image( $prompt, '', $post_id, [
+            'title'   => $context['title'],
+            'content' => $context['content'],
+        ] );
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );

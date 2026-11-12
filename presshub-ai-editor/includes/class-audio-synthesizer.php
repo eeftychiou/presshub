@@ -1182,6 +1182,11 @@ class PressHub_AI_Audio_Synthesizer {
             }
         }
 
+        // Tags, SEO meta description (excerpt) and focus keyphrase from the dialogue script.
+        if ( class_exists( 'PressHub_AI_SEO' ) ) {
+            PressHub_AI_SEO::auto_optimize_post( $post_id, $title, $transcript, 'podcast' );
+        }
+
         return $post_id;
     }
 

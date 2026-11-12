@@ -113,6 +113,7 @@ class PressHub_AI_Social_Meta {
         $title       = $this->get_social_title( $post );
         $description = $this->get_social_description( $post );
         $image_url   = $this->get_social_image_url( $post );
+        $image_alt   = $this->get_social_image_alt( $post );
         $url         = function_exists( 'get_permalink' ) ? get_permalink( $post->ID ) : '';
         $site_name   = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'PressHub';
 
@@ -136,6 +137,19 @@ class PressHub_AI_Social_Meta {
         if ( ! empty( $image_url ) ) {
             echo '<meta property="og:image" content="' . esc_url( $image_url ) . '" />' . "\n";
             echo '<meta property="og:image:secure_url" content="' . esc_url( $image_url ) . '" />' . "\n";
+            if ( '' !== $image_alt ) {
+                echo '<meta property="og:image:alt" content="' . esc_attr( $image_alt ) . '" />' . "\n";
+            }
+        }
+        if ( function_exists( 'get_the_tags' ) ) {
+            $post_tags = get_the_tags( $post->ID );
+            if ( is_array( $post_tags ) ) {
+                foreach ( $post_tags as $post_tag ) {
+                    if ( is_object( $post_tag ) && ! empty( $post_tag->name ) ) {
+                        echo '<meta property="article:tag" content="' . esc_attr( $post_tag->name ) . '" />' . "\n";
+                    }
+                }
+            }
         }
 
         // Twitter Cards (X) tags
@@ -146,6 +160,9 @@ class PressHub_AI_Social_Meta {
         }
         if ( ! empty( $image_url ) ) {
             echo '<meta name="twitter:image" content="' . esc_url( $image_url ) . '" />' . "\n";
+            if ( '' !== $image_alt ) {
+                echo '<meta name="twitter:image:alt" content="' . esc_attr( $image_alt ) . '" />' . "\n";
+            }
         }
         echo "<!-- /PressHub AI Social Meta Tags -->\n\n";
     }
@@ -222,6 +239,22 @@ class PressHub_AI_Social_Meta {
         $clean = preg_replace( '/\s+/', ' ', $clean );
 
         return trim( wp_trim_words( $clean, 28, '...' ) );
+    }
+
+    /**
+     * Alt text of the featured image (for og:image:alt / twitter:image:alt).
+     *
+     * @param \WP_Post $post Post object.
+     * @return string
+     */
+    public function get_social_image_alt( $post ): string {
+        if ( function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post->ID ) && function_exists( 'get_post_meta' ) ) {
+            $thumb_id = (int) get_post_thumbnail_id( $post->ID );
+            if ( $thumb_id > 0 ) {
+                return trim( (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true ) );
+            }
+        }
+        return '';
     }
 
     /**

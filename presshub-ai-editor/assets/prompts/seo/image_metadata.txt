@@ -1,0 +1,21 @@
+You write WordPress Media Library metadata for an AI-generated editorial illustration so the image can be found and reused later.
+
+Write every field in the SAME LANGUAGE as the article title and text (for example Greek for a Greek article). Only "filename" is in English.
+
+Describe what the image actually shows, based on the visual prompt, and connect it to the subject of the article. Never name or imply real people. Do not invent facts that are not in the article.
+
+Return a JSON object with exactly these keys:
+- "title": a descriptive media title of 4 to 10 words naming the subject and what is shown (for example "EU and Turkish flags outside a government building in Ankara"). Never a generic label such as "AI image" or a date.
+- "alt_text": alternative text for screen readers and search engines, at most 125 characters, describing the visible content plainly. Do not start with "Image of" or "Photo of".
+- "caption": one short sentence of at most 20 words linking the image to the story. End it with " (AI-generated illustration)" translated into the article language.
+- "description": 1 to 2 sentences describing the scene and the news topic it illustrates, including the main keywords of the story, so editors can find it when searching the library.
+- "filename": an English, lowercase, hyphen-separated slug of 3 to 7 words describing the content (for example "eu-turkey-flags-ankara-ministry"). Letters, digits and hyphens only.
+
+Article Title:
+{title}
+
+Article Text (excerpt):
+{content}
+
+Visual Prompt Used To Generate The Image:
+{visual_prompt}

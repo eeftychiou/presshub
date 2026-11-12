@@ -1677,3 +1677,34 @@ tr.presshub-setting-inactive button {
     align-items: center;
     flex-wrap: wrap;
 }
+
+/* SEO review panel */
+.presshub-ai-container .presshub-seo-box ul {
+    margin: 6px 0 10px 18px;
+    list-style: disc;
+}
+.presshub-ai-container .presshub-seo-box li {
+    margin-bottom: 4px;
+}
+.presshub-ai-container .presshub-seo-checks summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin: 6px 0;
+}
+.presshub-ai-container .presshub-seo-checks .presshub-seo-fail strong {
+    color: #b32d2e;
+}
+.presshub-ai-container .presshub-seo-checks .presshub-seo-warn strong {
+    color: #996800;
+}
+.presshub-ai-container .presshub-seo-tag {
+    display: inline-block;
+    background: #f0f0f1;
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin: 2px 2px 2px 0;
+    font-size: 12px;
+}
+.presshub-ai-container .presshub-seo-actions .button {
+    margin-top: 4px;
+}
