@@ -1720,17 +1720,28 @@ class PressHub_AI_News_Harvester {
             return;
         }
 
-        $known_ids = [];
+        // Skip emails already in the pool, by id and by content: agencies
+        // often send the same release twice with different Message-IDs.
+        $known_ids  = [];
+        $known_keys = [];
         foreach ( $payload['articles'] as $art ) {
             if ( ! empty( $art['id'] ) ) {
                 $known_ids[ (string) $art['id'] ] = true;
             }
-        }
-        $new = [];
-        foreach ( (array) ( $result['articles'] ?? [] ) as $art ) {
-            if ( empty( $known_ids[ (string) ( $art['id'] ?? '' ) ] ) ) {
-                $new[] = $art;
+            if ( ! empty( $art['is_press_release'] ) ) {
+                $known_keys[ self::press_release_key( $art ) ] = true;
             }
+        }
+        $new        = [];
+        $duplicates = 0;
+        foreach ( (array) ( $result['articles'] ?? [] ) as $art ) {
+            $key = self::press_release_key( $art );
+            if ( ! empty( $known_ids[ (string) ( $art['id'] ?? '' ) ] ) || isset( $known_keys[ $key ] ) ) {
+                $duplicates++;
+                continue;
+            }
+            $known_keys[ $key ] = true;
+            $new[]              = $art;
         }
 
         // Insert after the leading manual uploads / earlier press releases.
@@ -1749,8 +1760,23 @@ class PressHub_AI_News_Harvester {
             $payload['source_health'][] = $result['health'];
             $payload['diagnostics'][]   = $result['health'];
         }
-        $payload['press_releases_added']   = count( $new );
-        $payload['press_releases_skipped'] = (array) ( $result['skipped'] ?? [] );
+        $payload['press_releases_added']      = count( $new );
+        $payload['press_releases_duplicates'] = $duplicates;
+        $payload['press_releases_total']      = count( array_filter( $payload['articles'], static function ( $a ) {
+            return ! empty( $a['is_press_release'] );
+        } ) );
+        $payload['press_releases_skipped']    = (array) ( $result['skipped'] ?? [] );
+    }
+
+    /**
+     * Same title and same body (ignoring case and spacing) = same press release.
+     */
+    private static function press_release_key( array $art ): string {
+        $norm = static function ( $v ): string {
+            $v = (string) preg_replace( '/\s+/u', ' ', (string) $v );
+            return trim( function_exists( 'mb_strtolower' ) ? mb_strtolower( $v, 'UTF-8' ) : strtolower( $v ) );
+        };
+        return md5( $norm( $art['title'] ?? '' ) . '|' . $norm( $art['content'] ?? '' ) );
     }
 
     /**

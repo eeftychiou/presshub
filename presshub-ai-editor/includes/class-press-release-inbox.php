@@ -68,8 +68,8 @@ class PressHub_AI_Press_Release_Inbox {
             'verify_ssl'          => $s::get_press_inbox_verify_ssl(),
             'username'            => $s::get_press_inbox_username(),
             'password'            => $s::get_press_inbox_password(),
-            'folder'              => $s::get_press_inbox_folder(),
-            'processed_folder'    => $s::get_press_inbox_processed_folder(),
+            'folder'              => self::imap_folder_name( $s::get_press_inbox_folder() ),
+            'processed_folder'    => self::imap_folder_name( $s::get_press_inbox_processed_folder() ),
             'allowed_senders'     => $s::get_press_inbox_allowed_senders(),
             'max_messages'        => $s::get_press_inbox_max_messages(),
             'max_age_hours'       => $s::get_press_inbox_max_age_hours(),
@@ -125,9 +125,12 @@ class PressHub_AI_Press_Release_Inbox {
         if ( is_wp_error( $sel ) ) {
             return [ 'success' => false, 'message' => $sel->get_error_message() ];
         }
-        $pending = $this->client->search_uids( 'UNDELETED NOT KEYWORD ' . self::SKIP_KEYWORD );
-        $pending = is_wp_error( $pending ) ? 0 : count( $pending );
-        $this->client->disconnect();
+        try {
+            $pending = $this->client->search_uids( 'UNDELETED NOT KEYWORD ' . self::SKIP_KEYWORD );
+            $pending = is_wp_error( $pending ) ? 0 : count( $pending );
+        } finally {
+            $this->client->disconnect();
+        }
         return [
             'success' => true,
             'total'   => (int) $sel['exists'],
@@ -174,65 +177,69 @@ class PressHub_AI_Press_Release_Inbox {
             return $out;
         }
 
-        $processed_folder = $this->resolve_processed_folder();
+        // Always log out, even if parsing or an attachment reader throws.
+        try {
+            $processed_folder = $this->resolve_processed_folder();
 
-        $uids = $this->client->search_uids( 'UNDELETED NOT KEYWORD ' . self::SKIP_KEYWORD );
-        if ( is_wp_error( $uids ) ) {
+            $uids = $this->client->search_uids( 'UNDELETED NOT KEYWORD ' . self::SKIP_KEYWORD );
+            if ( is_wp_error( $uids ) ) {
+                $health['status']         = 'error';
+                $health['failure_reason'] = $uids->get_error_message();
+                $out['health']            = $health;
+                return $out;
+            }
+            $health['raw_links_count'] = count( $uids );
+            $uids                      = array_slice( $uids, 0, (int) $c['max_messages'] );
+            $meta                      = $this->client->fetch_meta( $uids );
+            $meta                      = is_wp_error( $meta ) ? [] : $meta;
+            $max_bytes                 = (int) $c['max_attachment_mb'] * 1048576;
+
+            foreach ( $uids as $uid ) {
+                $size = (int) ( $meta[ $uid ]['size'] ?? 0 );
+                // Base64 inflates attachments by ~37%. Allow room for several
+                // attachments; each one is still capped at max_attachment_mb.
+                if ( $size > max( (int) ( $max_bytes * 2.5 ), 25 * 1048576 ) ) {
+                    self::log( 'warning', sprintf( 'Press release inbox: UID %d is %.1f MB, too large to read. It stays in the inbox, flagged as skipped.', $uid, $size / 1048576 ) );
+                    $this->skip( $uid, 'too_large', [ 'size' => $size ], $out );
+                    continue;
+                }
+
+                $raw = $this->client->fetch_raw( $uid );
+                if ( is_wp_error( $raw ) ) {
+                    self::log( 'warning', sprintf( 'Press release inbox: could not fetch UID %d: %s', $uid, $raw->get_error_message() ) );
+                    continue;
+                }
+
+                $msg = PressHub_AI_Mime_Parser::parse( $raw );
+
+                if ( ! $this->sender_allowed( $msg['from_email'] ) ) {
+                    $this->skip( $uid, 'sender_not_allowed', [ 'from' => $msg['from_email'], 'subject' => $msg['subject'] ], $out );
+                    continue;
+                }
+
+                $sent_ts = $this->message_timestamp( $msg['date'], (string) ( $meta[ $uid ]['internal_date'] ?? '' ) );
+                if ( $sent_ts > 0 && ( time() - $sent_ts ) > (int) $c['max_age_hours'] * 3600 ) {
+                    $this->skip( $uid, 'too_old', [ 'from' => $msg['from_email'], 'subject' => $msg['subject'] ], $out );
+                    continue;
+                }
+
+                $article = $this->build_article( $msg, $uid, $sent_ts );
+                if ( null === $article ) {
+                    $this->skip( $uid, 'no_text', [ 'from' => $msg['from_email'], 'subject' => $msg['subject'] ], $out );
+                    continue;
+                }
+
+                $moved = $this->client->move( $uid, $processed_folder );
+                if ( is_wp_error( $moved ) ) {
+                    // Keep the article but make sure the next run does not read it again.
+                    self::log( 'warning', sprintf( 'Press release inbox: could not move UID %d to "%s": %s', $uid, $processed_folder, $moved->get_error_message() ) );
+                    $this->client->add_flags( $uid, '\\Seen ' . self::SKIP_KEYWORD );
+                }
+                $out['articles'][] = $article;
+            }
+        } finally {
             $this->client->disconnect();
-            $health['status']         = 'error';
-            $health['failure_reason'] = $uids->get_error_message();
-            $out['health']            = $health;
-            return $out;
         }
-        $health['raw_links_count'] = count( $uids );
-        $uids                      = array_slice( $uids, 0, (int) $c['max_messages'] );
-        $meta                      = $this->client->fetch_meta( $uids );
-        $meta                      = is_wp_error( $meta ) ? [] : $meta;
-        $max_bytes                 = (int) $c['max_attachment_mb'] * 1048576;
-
-        foreach ( $uids as $uid ) {
-            $size = (int) ( $meta[ $uid ]['size'] ?? 0 );
-            // Base64 inflates attachments by ~37%; allow that plus headers and body.
-            if ( $size > (int) ( $max_bytes * 1.4 ) + 1048576 ) {
-                $this->skip( $uid, 'too_large', [ 'size' => $size ], $out );
-                continue;
-            }
-
-            $raw = $this->client->fetch_raw( $uid );
-            if ( is_wp_error( $raw ) ) {
-                self::log( 'warning', sprintf( 'Press release inbox: could not fetch UID %d: %s', $uid, $raw->get_error_message() ) );
-                continue;
-            }
-
-            $msg = PressHub_AI_Mime_Parser::parse( $raw );
-
-            if ( ! $this->sender_allowed( $msg['from_email'] ) ) {
-                $this->skip( $uid, 'sender_not_allowed', [ 'from' => $msg['from_email'], 'subject' => $msg['subject'] ], $out );
-                continue;
-            }
-
-            $sent_ts = $this->message_timestamp( $msg['date'], (string) ( $meta[ $uid ]['internal_date'] ?? '' ) );
-            if ( $sent_ts > 0 && ( time() - $sent_ts ) > (int) $c['max_age_hours'] * 3600 ) {
-                $this->skip( $uid, 'too_old', [ 'from' => $msg['from_email'], 'subject' => $msg['subject'] ], $out );
-                continue;
-            }
-
-            $article = $this->build_article( $msg, $uid, $sent_ts );
-            if ( null === $article ) {
-                $this->skip( $uid, 'no_text', [ 'from' => $msg['from_email'], 'subject' => $msg['subject'] ], $out );
-                continue;
-            }
-
-            $moved = $this->client->move( $uid, $processed_folder );
-            if ( is_wp_error( $moved ) ) {
-                // Keep the article but make sure the next run does not read it again.
-                self::log( 'warning', sprintf( 'Press release inbox: could not move UID %d to "%s": %s', $uid, $processed_folder, $moved->get_error_message() ) );
-                $this->client->add_flags( $uid, '\\Seen ' . self::SKIP_KEYWORD );
-            }
-            $out['articles'][] = $article;
-        }
-
-        $this->client->disconnect();
 
         $health['articles_yielded'] = count( $out['articles'] );
         $health['latency_ms']       = (int) round( ( microtime( true ) - $start ) * 1000 );
@@ -459,11 +466,26 @@ class PressHub_AI_Press_Release_Inbox {
         if ( 'gemini' !== $client->get_provider() ) {
             $client = null;
             if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+                // Prefer a Gemini provider whose default model reads text and
+                // files; a TTS or image record gets the default text model.
+                $fallback = null;
                 foreach ( PressHub_AI_Provider_Store::get_all( true ) as $record ) {
-                    if ( 'gemini' === ( $record['type'] ?? '' ) && ! empty( $record['api_key'] ) ) {
-                        $client = new PressHub_AI_API_Client( $record );
+                    if ( 'gemini' !== ( $record['type'] ?? '' ) || empty( $record['api_key'] ) ) {
+                        continue;
+                    }
+                    if ( self::is_text_model( (string) ( $record['default_model'] ?? '' ) ) ) {
+                        $fallback = $record;
                         break;
                     }
+                    if ( null === $fallback ) {
+                        $fallback = $record;
+                    }
+                }
+                if ( null !== $fallback ) {
+                    if ( ! self::is_text_model( (string) ( $fallback['default_model'] ?? '' ) ) ) {
+                        $fallback['model'] = PressHub_AI_Provider_Defaults::default_model( 'gemini' );
+                    }
+                    $client = new PressHub_AI_API_Client( $fallback );
                 }
             }
         }
@@ -487,6 +509,32 @@ class PressHub_AI_Press_Release_Inbox {
         }
         @unlink( $tmp );
         return $result;
+    }
+
+    /**
+     * Folder name as IMAP sends it: non-ASCII names (e.g. Greek) are encoded
+     * as modified UTF-7 (RFC 3501 §5.1.3). ASCII names are unchanged.
+     */
+    public static function imap_folder_name( string $name ): string {
+        if ( ! preg_match( '/[^\x20-\x7e]/', $name ) ) {
+            return $name;
+        }
+        if ( function_exists( 'mb_convert_encoding' ) ) {
+            $enc = @mb_convert_encoding( $name, 'UTF7-IMAP', 'UTF-8' );
+            if ( is_string( $enc ) && '' !== $enc ) {
+                return $enc;
+            }
+        }
+        return (string) preg_replace( '/[^\x20-\x7e]/', '', $name );
+    }
+
+    /**
+     * True for a Gemini model that reads text and files (not TTS, image or
+     * embedding models, and not empty).
+     */
+    public static function is_text_model( string $model ): bool {
+        $model = strtolower( trim( $model ) );
+        return '' !== $model && ! preg_match( '/tts|imagen|image-generation|embedding|veo|live/', $model );
     }
 
     /**
