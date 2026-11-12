@@ -174,6 +174,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-news-harvester.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-imap-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-mime-parser.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-press-release-inbox.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-monitor.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
@@ -211,6 +212,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-rest-controller.php';
 
 // Register Social REST API routes
 add_action( 'rest_api_init', [ 'PressHub_Social_REST_Controller', 'register_routes' ] );
+add_action( 'rest_api_init', [ 'PressHub_AI_Social_Monitor', 'register_routes' ] );
 
 // Register Social custom cron schedule interval
 add_filter( 'cron_schedules', function( array $schedules ): array {

@@ -3,6 +3,7 @@ import { dispatchBrowserPost, PosterHandler, PostResult } from './automation/pos
 import { generateCard, CardResult } from './media/card-generator';
 import { generateVideo, VideoResult } from './media/video-generator';
 import { WorkerLogger } from './logger';
+import { SocialMonitor } from './monitor/monitor-client';
 
 export interface ClaimedJob {
   id: number | string;
@@ -32,6 +33,8 @@ export interface PollerOptions {
   posterHandler?: PosterHandler;
   generateCardFn?: (params: any) => Promise<CardResult>;
   generateVideoFn?: (params: any) => Promise<VideoResult>;
+  /** Social Monitor run alongside job polling (WordPress decides when a scan is due). */
+  monitor?: SocialMonitor;
 }
 
 export interface PollStats {
@@ -61,6 +64,7 @@ export class PressHubPoller {
   private readonly posterHandler: PosterHandler;
   private readonly generateCardFn: (params: any) => Promise<CardResult>;
   private readonly generateVideoFn: (params: any) => Promise<VideoResult>;
+  private readonly monitor?: SocialMonitor;
 
   private pollTimer?: NodeJS.Timeout;
   private isRunning: boolean = false;
@@ -85,6 +89,7 @@ export class PressHubPoller {
     this.posterHandler = options.posterHandler || dispatchBrowserPost;
     this.generateCardFn = options.generateCardFn || generateCard;
     this.generateVideoFn = options.generateVideoFn || generateVideo;
+    this.monitor = options.monitor;
   }
 
   /**
@@ -371,6 +376,18 @@ export class PressHubPoller {
   }
 
   /**
+   * Kicks off a Social Monitor cycle in the background. A scan can take several
+   * minutes, so it never holds up posting jobs; the monitor skips a cycle while
+   * the previous one is still running.
+   */
+  private runMonitor(): void {
+    if (!this.monitor) return;
+    this.monitor.runOnce().catch((err: any) => {
+      WorkerLogger.warn('Poller', `Social monitor cycle failed: ${err.message}`);
+    });
+  }
+
+  /**
    * Starts periodic polling in background mode.
    */
   public start(): void {
@@ -384,9 +401,11 @@ export class PressHubPoller {
     this.pollOnce().catch(err => {
       WorkerLogger.error('Poller', `Immediate poll failed: ${err.message}`, err);
     });
+    this.runMonitor();
 
     this.pollTimer = setInterval(async () => {
       if (!this.isRunning) return;
+      this.runMonitor();
       try {
         await this.pollOnce();
       } catch (err: any) {

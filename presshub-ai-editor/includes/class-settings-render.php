@@ -261,6 +261,7 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <?php $this->render_press_inbox_rows(); ?>
+                            <?php $this->render_social_monitor_rows(); ?>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
@@ -2544,6 +2545,85 @@ class PressHub_AI_Settings_Render {
                 <span class="spinner" id="presshub-ai-test-press-inbox-spinner" style="float:none;"></span>
                 <span id="presshub-ai-test-press-inbox-result" role="status" aria-live="polite"></span>
                 <p class="description"><?php echo esc_html__( 'Uses the saved settings: save first if you changed anything. Nothing is moved or marked during the test.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <?php
+    }
+
+    /**
+     * Social media monitoring (X / TikTok) rows for the Daily Briefing tab.
+     */
+    public function render_social_monitor_rows() {
+        $S          = 'PressHub_AI_Settings_Storage';
+        $enabled    = $S::get_social_monitor_enabled();
+        $interval   = $S::get_social_monitor_interval_min();
+        $max_age    = $S::get_social_monitor_max_age_hours();
+        $per_acct   = $S::get_social_monitor_max_posts_per_account();
+        $per_run    = $S::get_social_monitor_max_posts_per_harvest();
+        $list_url   = $S::get_social_monitor_x_list_url();
+        $transcribe = $S::get_social_monitor_transcribe_videos();
+        $max_secs   = $S::get_social_monitor_max_video_seconds();
+        $max_mb     = $S::get_social_monitor_max_video_mb();
+
+        $targets  = class_exists( 'PressHub_AI_Social_Monitor' ) ? PressHub_AI_Social_Monitor::get_targets() : [];
+        $store    = class_exists( 'PressHub_AI_Social_Monitor' ) ? PressHub_AI_Social_Monitor::load() : [];
+        $waiting  = 0;
+        foreach ( $store as $p ) {
+            if ( '' === (string) ( $p['used_in'] ?? '' ) ) {
+                $waiting++;
+            }
+        }
+        $last_scan = (int) get_option( 'presshub_ai_social_monitor_last_scan', 0 );
+        $last_txt  = $last_scan > 0
+            ? ( function_exists( 'wp_date' ) ? wp_date( 'j/n/Y H:i', $last_scan ) : gmdate( 'j/n/Y H:i', $last_scan ) )
+            : __( 'never', 'presshub-ai-editor' );
+        ?>
+        <tr class="presshub-social-monitor-heading">
+            <th scope="row" colspan="2"><h3 style="margin:1em 0 0;"><?php echo esc_html__( 'Social Media Monitoring (X and TikTok)', 'presshub-ai-editor' ); ?></h3>
+                <p class="description" style="font-weight:normal;"><?php echo esc_html__( 'Add accounts as News Sources of type "X (Twitter) Account" or "TikTok Account". The social worker (Pull Mode) reads them with its browser and sends new posts here; videos are transcribed by Gemini. Each post is used in one edition.', 'presshub-ai-editor' ); ?></p>
+                <p class="description" style="font-weight:normal;"><?php echo esc_html( sprintf(
+                    /* translators: 1: number of accounts, 2: posts waiting, 3: last scan time */
+                    __( 'Monitored accounts: %1$d. Posts waiting for the next harvest: %2$d. Last scan handed to the worker: %3$s.', 'presshub-ai-editor' ),
+                    count( $targets ),
+                    $waiting,
+                    $last_txt
+                ) ); ?></p>
+            </th>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_monitor_enabled"><?php echo esc_html__( 'Monitor Social Accounts', 'presshub-ai-editor' ); ?></label></th>
+            <td><label><input type="checkbox" name="presshub_ai_social_monitor_enabled" id="presshub_ai_social_monitor_enabled" value="1" <?php checked( $enabled ); ?> /> <?php echo esc_html__( 'Let the worker scan the X and TikTok sources and add their posts to the harvest', 'presshub-ai-editor' ); ?></label></td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Scan Schedule', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><?php echo esc_html__( 'Scan every (minutes)', 'presshub-ai-editor' ); ?> <input type="number" min="30" max="1440" name="presshub_ai_social_monitor_interval_min" id="presshub_ai_social_monitor_interval_min" value="<?php echo self::esc_attr_safe( (string) $interval ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Ignore posts older than (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="168" name="presshub_ai_social_monitor_max_age_hours" id="presshub_ai_social_monitor_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
+                <p class="description"><?php echo esc_html__( 'An extra scan is also requested in the 30 minutes before each scheduled harvest. Fewer scans mean fewer page visits and less risk for the reader accounts.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Post Limits', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><?php echo esc_html__( 'Max new posts per account per scan', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="50" name="presshub_ai_social_monitor_max_posts_per_account" id="presshub_ai_social_monitor_max_posts_per_account" value="<?php echo self::esc_attr_safe( (string) $per_acct ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Max posts per harvest', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="100" name="presshub_ai_social_monitor_max_posts_per_harvest" id="presshub_ai_social_monitor_max_posts_per_harvest" value="<?php echo self::esc_attr_safe( (string) $per_run ); ?>" class="small-text" /></label>
+                <p class="description"><?php echo esc_html__( 'Newest posts are used first. They are placed before the web articles, so keep this below the "Maximum Articles Sent to Curation LLM" setting.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_monitor_x_list_url"><?php echo esc_html__( 'X List (optional)', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <input type="url" name="presshub_ai_social_monitor_x_list_url" id="presshub_ai_social_monitor_x_list_url" value="<?php echo self::esc_attr_safe( $list_url ); ?>" class="regular-text code" placeholder="https://x.com/i/lists/1234567890" />
+                <p class="description"><?php echo esc_html__( 'A private List on the reader account that contains the monitored X accounts. The worker then reads one page instead of one per account. When this is set, profiles are not visited, so every monitored X source must be in the List. Accounts in the List that are not News Sources are ignored.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Videos', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><input type="checkbox" name="presshub_ai_social_monitor_transcribe_videos" id="presshub_ai_social_monitor_transcribe_videos" value="1" <?php checked( $transcribe ); ?> /> <?php echo esc_html__( 'Transcribe and describe videos with Gemini', 'presshub-ai-editor' ); ?></label>
+                <br /><label><?php echo esc_html__( 'Skip videos longer than (seconds)', 'presshub-ai-editor' ); ?> <input type="number" min="10" max="600" name="presshub_ai_social_monitor_max_video_seconds" id="presshub_ai_social_monitor_max_video_seconds" value="<?php echo self::esc_attr_safe( (string) $max_secs ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Max video file size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_monitor_max_video_mb" id="presshub_ai_social_monitor_max_video_mb" value="<?php echo self::esc_attr_safe( (string) $max_mb ); ?>" class="small-text" /></label>
+                <p class="description"><?php echo esc_html__( 'Needs a Gemini provider. Gemini accepts inline files up to about 20 MB; the worker picks the smallest X video quality that fits.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <?php
