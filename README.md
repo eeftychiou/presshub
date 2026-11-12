@@ -2,11 +2,11 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.17.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.18.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
-[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-89%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
-[![Social Autopost Tests](https://img.shields.io/badge/Social%20Tests-177%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
+[![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-101%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
+[![Social Autopost Tests](https://img.shields.io/badge/Social%20Tests-314%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
 [![Worker Tests](https://img.shields.io/badge/Worker%20Tests-76%20passed%20%7C%20100%25-brightgreen.svg)](presshub-social-worker/tests/)
 [![Jest Workflow Tests](https://img.shields.io/badge/Jest%20Tests-81%20passed%20%7C%20100%25-brightgreen.svg)](presshub-workflow/tests/)
 [![CI](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml/badge.svg)](https://github.com/eeftychiou/presshub/actions/workflows/ci.yml)
@@ -72,6 +72,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 - **Configurable Title Prefixes**: Separate editorial title prefix options for Morning Podcast (`presshub_ai_briefing_podcast_title_prefix`, default *"Πρωινό Podcast Ενημέρωσης - "*) and Noon Podcast (`presshub_ai_briefing_noon_podcast_title_prefix`, default *"Μεσημβρινό Podcast Ενημέρωσης - "*), configurable from Settings.
 - **Clean Audio Post Content & Front-Page Excerpt Suppression**: By default, podcast post content displays exclusively the audio player block (`wp:audio`), and raw dialogue text is suppressed from `post_excerpt` and filtered out of front-page post previews, loop cards, and public RSS feeds (configurable via `presshub_ai_briefing_podcast_include_text`). Social meta tags emit a clean editorial audio description instead of leaking dialogue turns.
 - **TikTok Narration for Text-Only Articles (`PressHub_Social_TikTok_Narrator`)**: Articles without podcast audio (e.g. the Daily Brief) are posted to TikTok as a spoken video. The TikTok copy is read aloud with Gemini TTS (hashtags, emojis, links and the copy's own presshub.cy sentence are skipped) and ends with *"Για το πλήρες άρθρο, επισκεφθείτε το presshub.cy"*. Configurable under **PressHub Social → Settings → Automation Worker → Media & Video Specifications** (`presshub_social_tiktok_narration_enabled`, `_outro`, `_voice`); a TTS failure fails the job instead of posting silently.
+- **TikTok Shorts for Podcasts (`PressHub_Social_TikTok_Shorts`)**: Optionally splits Daily Briefing podcast posts into multiple 30–60s hook-first TikTok videos (1–5 shorts, spaced by `presshub_social_tiktok_shorts_spacing_minutes`, off by default via `presshub_social_tiktok_shorts_enabled`). Each short is planned in the background via WP-Cron, synthesized turn-by-turn with Daily Briefing voices, and delivered in Pull Mode with its hook title and numbered story badge.
 - **Podcast Dialogue Editor Metabox & One-Click Audio Regeneration**: Editors can review and refine spoken scripts in the **"Podcast Audio & Dialogue Editor"** metabox on podcast edit screens, and click **"Regenerate Audio from Script"** to re-synthesize and stitch the episode in real time.
 - **Resilient Audio Synthesis & Cron Error Isolation**: Synthesizer accepts nullable custom scripts and automatically shifts parameters (e.g. `synthesize_podcast($date, 'noon')`), while briefing crons encapsulate generation and synthesis in try/catch blocks with structured logging to eliminate unhandled runtime fatal errors.
 - **Broadcast Audio Synthesizer & Gemini 3.8 TTS REST Architecture (`PressHub_AI_Audio_Synthesizer` & `PressHub_AI_API_Client`)**:
@@ -103,6 +104,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - Review and edit the prompt in an editable textarea (persisted in post meta `_presshub_ai_image_prompt`).
   - Synthesize and regenerate images directly into the WordPress Media Library with live preview.
   - Assign generated images as the article's official featured image with one click.
+- **SEO, Auto-Tagging & Media Metadata (`PressHub_AI_SEO`)**: Generates relevant no-people editorial image prompts (using podcast dialogue scripts when needed), populates descriptive Media Library titles/alt text/captions/descriptions/filenames, assigns tags/excerpts/focus keyphrases automatically on briefings/podcasts and co-author drafts, and adds an advisory SEO score & checklist to the AI Editorial Review.
 
 ### 5. 🎛️ Instruction Presets & Prompt Studio
 ### 6. 🧠 Editorial Memory Stream & Story Continuity (Issue #132, #134)
