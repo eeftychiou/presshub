@@ -295,6 +295,17 @@ class PressHub_Social_REST_Controller {
                 }
             }
 
+            // A TikTok short gets its own script, audio, caption and on-screen hook instead of
+            // the full podcast (Zero-Silent-Fallback: a failed short fails the job).
+            if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job ) ) {
+                $short = PressHub_Social_TikTok_Shorts::attach_short( $job );
+                if ( is_wp_error( $short ) ) {
+                    PressHub_Social_Queue::mark_failed( $job_id, $short->get_error_message(), [ 'error_code' => $short->get_error_code() ] );
+                    continue;
+                }
+                $job = $short;
+            }
+
             // Resolve audio URL if post has podcast audio attached
             if ( empty( $job['audio_url'] ) && $post_id > 0 ) {
                 if ( function_exists( 'get_post_meta' ) ) {

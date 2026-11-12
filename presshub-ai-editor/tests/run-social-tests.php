@@ -497,6 +497,7 @@ if ( file_exists( $base_dir . '/includes/class-social-ai-copywriter.php' ) ) {
 require_once $base_dir . '/includes/class-social-activator.php';
 require_once $base_dir . '/includes/class-social-queue.php';
 require_once $base_dir . '/includes/class-social-tiktok-narrator.php';
+require_once $base_dir . '/includes/class-social-tiktok-shorts.php';
 require_once $base_dir . '/includes/class-social-meta-api-client.php';
 require_once $base_dir . '/includes/class-social-worker-client.php';
 require_once $base_dir . '/includes/class-social-dispatcher.php';
@@ -1870,6 +1871,160 @@ assert_equals( 'error', $rec_fail_rows[0]['status'] ?? '', 'A failed narration i
 assert_true( str_contains( (string) ( $rec_fail_rows[0]['error_message'] ?? '' ), 'Gemini TTS HTTP 500' ), 'A failed narration record keeps the error message' );
 
 PressHub_Social_TikTok_Narrator::set_synthesizer( null );
+
+// ----------------------------------------------------------------------
+// Test Suite: TikTok Shorts (one short video per top story of a podcast post)
+// ----------------------------------------------------------------------
+echo "\n--- TikTok Shorts ---\n";
+
+assert_false( PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled(), 'TikTok shorts are off by default' );
+assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_shorts_count(), 'Shorts per podcast defaults to 3' );
+assert_equals( 180, PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes(), 'Shorts spacing defaults to 180 minutes' );
+assert_equals( 130, PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words(), 'Short script word cap defaults to 130' );
+assert_equals( 5, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_count( 12 ), 'Shorts count clamps to 5' );
+assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_count( 0 ), 'Shorts count clamps to 1' );
+assert_equals( 720, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_spacing_minutes( 5000 ), 'Shorts spacing clamps to 720 minutes' );
+assert_equals( 60, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_max_words( 10 ), 'Short word cap clamps to 60' );
+$shorts_prompt = PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt();
+assert_true( str_contains( $shorts_prompt, '{script}' ) && str_contains( $shorts_prompt, '"shorts"' ), 'Shorts prompt is seeded from social_tiktok_shorts.txt' );
+
+$short_json = function ( int $n ): string {
+    $shorts = [];
+    for ( $i = 1; $i <= $n; $i++ ) {
+        $shorts[] = [
+            'topic'   => "Θέμα {$i}",
+            'hook'    => "Hook {$i} σε λίγες λέξεις",
+            'script'  => "[SPEAKER_1]: Γεγονός {$i}, γιατί μας αφορά;\n[SPEAKER_2]: Γιατί αλλάζει το πορτοφόλι μας.\n[SPEAKER_1]: Ακολούθησε το PressHub.",
+            'caption' => "Λεζάντα {$i}\nΟλόκληρη η ενημέρωση: λινκ στο bio #κύπρος #cyprus #ειδήσεις",
+        ];
+    }
+    return wp_json_encode( [ 'shorts' => $shorts ] );
+};
+
+$parsed = PressHub_Social_TikTok_Shorts::parse_plan( "```json\n" . $short_json( 4 ) . "\n```", 3 );
+assert_true( is_array( $parsed ) && 3 === count( $parsed ), 'parse_plan strips code fences and keeps at most the configured count' );
+assert_equals( 'Hook 1 σε λίγες λέξεις', $parsed[0]['hook'] ?? '', 'parse_plan keeps the hook' );
+$bad_speakers = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"Χωρίς ετικέτες","caption":"c"}]}', 3 );
+assert_true( is_wp_error( $bad_speakers ), 'parse_plan rejects a script without [SPEAKER_N]: lines' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( 'Δεν είναι JSON', 3 ) ), 'parse_plan rejects a non-JSON response' );
+
+// A podcast post and the settings shorts need.
+$GLOBALS['POSTS_STORE'][880] = [
+    'ID'           => 880,
+    'post_title'   => 'Πρωινό Podcast Ενημέρωσης - 12/11/2026',
+    'post_content' => '<audio controls src="https://example.com/uploads/podcast-880.mp3"></audio>',
+    'post_excerpt' => '',
+    'post_status'  => 'publish',
+];
+$GLOBALS['test_posts'][880] = new WP_Post( $GLOBALS['POSTS_STORE'][880] );
+update_post_meta( 880, '_presshub_briefing_type', 'podcast' );
+update_post_meta( 880, '_presshub_briefing_date', '2026-11-12' );
+update_post_meta( 880, '_presshub_audio_url', 'https://example.com/uploads/podcast-880.mp3' );
+update_post_meta( 880, '_presshub_podcast_script', "[TOPIC_START: Οικονομία]\n[SPEAKER_1]: Ο κατώτατος μισθός αυξάνεται.\n[SPEAKER_2]: Από τον Ιανουάριο.\n[TOPIC_END]" );
+update_option( 'presshub_social_engine_tiktok', 'automation' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+
+$shorts_ai_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$shorts_ai_calls, $short_json ) {
+    $shorts_ai_calls[] = $user;
+    return $short_json( 3 );
+} );
+$shorts_tts = [];
+PressHub_Social_TikTok_Shorts::set_synthesizer( function ( array $short, array $job ) use ( &$shorts_tts ) {
+    $shorts_tts[] = $short['script'];
+    return [ 'url' => 'https://example.com/uploads/short-' . count( $shorts_tts ) . '.wav', 'id' => 950 + count( $shorts_tts ) ];
+} );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Γενική λεζάντα TikTok #news' );
+
+// Shorts off: the podcast still goes to TikTok as one job.
+PressHub_Social_Queue::reset_memory_store();
+PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+assert_equals( 1, count( PressHub_Social_Queue::get_jobs_for_post( 880 ) ), 'With shorts off a podcast post gets one TikTok job' );
+
+// Shorts on: three spaced jobs with placeholder copy and their index in metadata.
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+PressHub_Social_Queue::reset_memory_store();
+$short_job_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+assert_equals( 3, count( $short_job_ids ), 'With shorts on a podcast post gets one TikTok job per short' );
+$short_jobs = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), $short_job_ids );
+assert_true( str_starts_with( (string) $short_jobs[0]['post_copy'], PressHub_Social_TikTok_Shorts::PLACEHOLDER_PREFIX ), 'Short jobs start with placeholder copy' );
+assert_equals( 180 * 60, strtotime( $short_jobs[1]['scheduled_at'] ) - strtotime( $short_jobs[0]['scheduled_at'] ), 'Shorts are scheduled 180 minutes apart' );
+assert_equals( 2, json_decode( (string) $short_jobs[2]['metadata'], true )['tiktok_short']['index'] ?? null, 'Third short job carries index 2' );
+assert_equals( 0, count( $shorts_ai_calls ), 'No shorts LLM call at enqueue time' );
+
+// An article that is not a podcast is never split.
+PressHub_Social_Queue::reset_memory_store();
+PressHub_Social_Dispatcher::enqueue_for_post( 501, [ 'tiktok' ] );
+assert_equals( 1, count( PressHub_Social_Queue::get_jobs_for_post( 501 ) ), 'A text article still gets one TikTok job with shorts on' );
+
+// Shorts need Pull Mode: in push mode the full podcast is posted.
+update_option( 'presshub_social_worker_mode', 'push' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( 880, 'automation' ), 'Shorts are not made outside Pull Mode' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( 880, 'api' ), 'Shorts are not made for the TikTok API engine' );
+
+// Claim: each short job gets its own audio, caption and hook; the plan is generated once.
+PressHub_Social_Queue::reset_memory_store();
+$claim_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+foreach ( $claim_ids as $cid ) {
+    PressHub_Social_Queue::update_job( $cid, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+}
+$req_short = new WP_REST_Request( 'POST', '/worker/claim' );
+$req_short->set_param( 'sessions', [ 'tiktok' => true ] );
+$req_short->set_param( 'limit', 5 );
+$res_short = PressHub_Social_REST_Controller::handle_claim( $req_short );
+assert_equals( 3, count( $res_short['jobs'] ), 'All three short jobs are claimed' );
+assert_equals( 1, count( $shorts_ai_calls ), 'The plan of shorts is generated with one LLM call' );
+assert_true( str_contains( $shorts_ai_calls[0], 'Ο κατώτατος μισθός αυξάνεται.' ), 'The shorts prompt carries the podcast script' );
+assert_true( ! str_contains( $shorts_ai_calls[0], '{max_words}' ) && str_contains( $shorts_ai_calls[0], '130' ), 'The shorts prompt placeholders are filled' );
+$claimed_by_index = [];
+foreach ( $res_short['jobs'] as $cj ) {
+    $claimed_by_index[ (int) $cj['tiktok_short']['index'] ] = $cj;
+}
+assert_true( str_starts_with( (string) ( $claimed_by_index[1]['audio_url'] ?? '' ), 'https://example.com/uploads/short-' ), 'A short job carries its own audio, not the full podcast' );
+assert_equals( 'Hook 2 σε λίγες λέξεις', $claimed_by_index[1]['video_title'] ?? '', 'The second short job shows the second hook' );
+assert_true( str_starts_with( (string) $claimed_by_index[1]['post_copy'], 'Λεζάντα 2' ), 'The placeholder copy is replaced by the short caption' );
+assert_true( str_starts_with( (string) PressHub_Social_Queue::get_job( $claimed_by_index[1]['id'] )['post_copy'], 'Λεζάντα 2' ), 'The short caption is saved on the job' );
+assert_equals( 3, count( $shorts_tts ), 'Each short is synthesized once' );
+assert_true( is_array( get_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, true ) ), 'The plan is stored on the podcast post' );
+
+// Retry of a claimed short reuses the plan and the audio.
+$retry_job = PressHub_Social_TikTok_Shorts::attach_short( PressHub_Social_Queue::get_job( $claimed_by_index[0]['id'] ) );
+assert_true( ! is_wp_error( $retry_job ) && 1 === count( $shorts_ai_calls ) && 3 === count( $shorts_tts ), 'A retried short reuses the stored plan and audio' );
+
+// An editor's copy is kept.
+PressHub_Social_Queue::update_job_copy( $claimed_by_index[2]['id'], 'Δική μου λεζάντα' );
+$edited_short = PressHub_Social_TikTok_Shorts::attach_short( PressHub_Social_Queue::get_job( $claimed_by_index[2]['id'] ) );
+assert_equals( 'Δική μου λεζάντα', $edited_short['post_copy'] ?? '', 'An edited short copy is not overwritten by the generated caption' );
+
+// The plan has fewer shorts than jobs: the extra job fails loudly.
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META );
+update_option( 'presshub_social_tiktok_shorts_count', 2 );
+PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => $short_json( 1 ) );
+$missing = PressHub_Social_TikTok_Shorts::attach_short( [ 'id' => 0, 'platform' => 'tiktok', 'post_id' => 880, 'post_copy' => '', 'metadata' => [ 'tiktok_short' => [ 'index' => 1, 'count' => 2 ] ] ] );
+assert_true( is_wp_error( $missing ) && str_contains( $missing->get_error_message(), 'short 2 does not exist' ), 'A short missing from the plan fails the job' );
+update_option( 'presshub_social_tiktok_shorts_count', 3 );
+
+// An invalid plan keeps the job away from the worker and records the error.
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META );
+PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => 'Συγγνώμη, δεν μπορώ.' );
+PressHub_Social_Queue::reset_memory_store();
+$fail_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_Queue::update_job( $fail_ids[0], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+$res_fail_short = PressHub_Social_REST_Controller::handle_claim( $req_short );
+assert_equals( 0, count( $res_fail_short['jobs'] ), 'A short with an invalid plan is not handed to the worker' );
+assert_true( str_contains( (string) PressHub_Social_Queue::get_job( $fail_ids[0] )['last_error'], 'TikTok short failed' ), 'The invalid plan is recorded as the job error' );
+
+// An empty prompt fails loudly instead of using hidden text.
+update_option( 'presshub_social_prompt_tiktok_shorts', '' );
+$no_prompt = PressHub_Social_TikTok_Shorts::get_plan( 880 );
+assert_true( is_wp_error( $no_prompt ) && 'missing_tiktok_shorts_prompt' === $no_prompt->get_error_code(), 'An empty shorts prompt fails loudly' );
+delete_option( 'presshub_social_prompt_tiktok_shorts' );
+
+update_option( 'presshub_social_tiktok_shorts_enabled', false );
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+PressHub_Social_TikTok_Shorts::set_synthesizer( null );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
 
 // ----------------------------------------------------------------------
 // Social Logger audit(): regression for TypeError (issue #139)

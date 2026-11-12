@@ -406,6 +406,58 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(capturedReports[0].status).toBe('failed');
       expect(capturedReports[0].error).toMatch(/FFmpeg binary missing/);
     });
+
+    test('renders a TikTok short with its hook as title and its number as the badge', async () => {
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                {
+                  id: 401,
+                  platform: 'tiktok',
+                  post_id: 77,
+                  post_title: 'Πρωινό Podcast Ενημέρωσης - 12/11/2026',
+                  post_copy: 'Λεζάντα του short #κύπρος',
+                  audio_url: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-77-2-abcd1234.wav',
+                  video_title: 'Νέος μισθός από τον Ιανουάριο',
+                  tiktok_short: { index: 1, count: 3, topic: 'Κατώτατος μισθός', hook: 'Νέος μισθός από τον Ιανουάριο' }
+                }
+              ]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+
+      const mockGenerateVideo = jest.fn().mockResolvedValue({ filePath: '/tmp/short.mp4', width: 1080, height: 1920, duration: 48 });
+      const mockPoster = jest.fn().mockResolvedValue({ success: true, platform: 'tiktok', externalPostUrl: 'https://www.tiktok.com/@presshub/video/1' });
+
+      const poller = new PressHubPoller({
+        wpUrl: 'https://presshub.cy',
+        workerSecret: 'test-secret',
+        fetchFn: mockFetch,
+        posterHandler: mockPoster,
+        generateVideoFn: mockGenerateVideo
+      });
+
+      const stats = await poller.pollOnce();
+      expect(stats.succeeded).toBe(1);
+      expect(mockGenerateVideo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Νέος μισθός από τον Ιανουάριο',
+          subtitle: 'Κατώτατος μισθός',
+          category: 'ΕΙΔΗΣΗ 2/3',
+          isPodcast: false,
+          audioUrl: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-77-2-abcd1234.wav'
+        })
+      );
+      expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ copy: 'Λεζάντα του short #κύπρος' }));
+    });
   });
 
   describe('5. Poller Lifecycle (start & stop)', () => {

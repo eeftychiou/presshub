@@ -612,6 +612,61 @@ class PressHub_Social_Settings {
             ]
         );
 
+        add_settings_field(
+            'presshub_social_tiktok_shorts_enabled',
+            __( 'TikTok Shorts', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_shorts_enabled_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_count',
+            __( 'Shorts per Podcast', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_count',
+                'default' => 3,
+                'min'     => 1,
+                'max'     => 5,
+                'desc'    => __( 'How many top stories of each podcast become their own TikTok video.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_spacing_minutes',
+            __( 'Time Between Shorts', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_spacing_minutes',
+                'default' => 180,
+                'min'     => 0,
+                'max'     => 720,
+                'unit'    => __( 'minutes', 'presshub-social-autopost' ),
+                'desc'    => __( 'The first short is posted when the podcast is published, the next ones this many minutes apart.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_max_words',
+            __( 'Short Script Length', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_max_words',
+                'default' => 130,
+                'min'     => 60,
+                'max'     => 250,
+                'unit'    => __( 'words', 'presshub-social-autopost' ),
+                'desc'    => __( 'Word cap for one short. 130 words is about 50 seconds of speech.', 'presshub-social-autopost' ),
+            ]
+        );
+
         // ------------------------------------------------------------------
         // Tab 5: Queue & Alerts
         // ------------------------------------------------------------------
@@ -728,6 +783,19 @@ class PressHub_Social_Settings {
                 'option' => 'presshub_social_prompt_system',
                 'rows'   => 6,
                 'desc'   => __( 'Core journalistic persona and instructions delivered to the LLM.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_tiktok_shorts',
+            __( 'TikTok Shorts AI Prompt', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_prompts',
+            'presshub_social_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_shorts',
+                'rows'   => 10,
+                'desc'   => __( 'Writes the TikTok shorts of a podcast post as JSON {"shorts":[{"topic","hook","script","caption"}]}. Placeholders: {count}, {max_words}, {speakers}, {title}, {site_name}, {date}, {script}.', 'presshub-social-autopost' ),
             ]
         );
 

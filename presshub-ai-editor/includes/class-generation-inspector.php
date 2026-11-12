@@ -58,7 +58,7 @@ class PressHub_AI_Generation_Inspector {
     const POST_TYPES = [ 'text', 'podcast' ];
 
     /** Record kinds that have a TTS tab (#140: tts_test holds only per-call details). */
-    const TTS_KINDS = [ 'podcast_script', 'tts_test', 'tiktok_narration' ];
+    const TTS_KINDS = [ 'podcast_script', 'tts_test', 'tiktok_narration', 'tiktok_short' ];
 
     /** Maximum rows in the admin list. */
     const LIST_LIMIT = 200;
@@ -494,6 +494,7 @@ class PressHub_AI_Generation_Inspector {
             'generic'        => __( 'Other LLM call', 'presshub-ai-editor' ),
             'tts_test'       => __( 'TTS test', 'presshub-ai-editor' ),
             'tiktok_narration' => __( 'TikTok narration', 'presshub-ai-editor' ),
+            'tiktok_short'     => __( 'TikTok short', 'presshub-ai-editor' ),
         ];
         return $labels[ $kind ] ?? $kind;
     }
@@ -940,7 +941,7 @@ class PressHub_AI_Generation_Inspector {
             if ( '' !== $calls_html ) {
                 return $calls_html;
             }
-            return self::notice( in_array( $record['kind'], [ 'tts_test', 'tiktok_narration' ], true )
+            return self::notice( in_array( $record['kind'], [ 'tts_test', 'tiktok_narration', 'tiktok_short' ], true )
                 ? __( 'No TTS calls were recorded.', 'presshub-ai-editor' )
                 : __( 'No TTS configuration recorded: audio has not been synthesized from this script yet.', 'presshub-ai-editor' ) );
         }

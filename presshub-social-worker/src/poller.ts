@@ -12,6 +12,15 @@ export interface ClaimedJob {
   post_title?: string;
   post_copy: string;
   site_name?: string;
+  /** On-screen title for the TikTok video (a short's hook); falls back to post_title. */
+  video_title?: string;
+  /** Set on TikTok short jobs: which story of the podcast this video covers. */
+  tiktok_short?: {
+    index: number;
+    count: number;
+    topic?: string;
+    hook?: string;
+  };
   specs?: {
     tiktok_video_duration?: number;
     tiktok_video_width?: number;
@@ -282,20 +291,26 @@ export class PressHubPoller {
 
           if (platform === 'tiktok') {
             const hasAudio = Boolean(audioUrl);
+            // A short shows its hook as the title and its topic underneath, numbered
+            // within the day's shorts, instead of the podcast title and caption.
+            const short = job.tiktok_short;
+            const videoTitle = job.video_title ? String(job.video_title) : title;
+            const videoSubtitle = short ? String(short.topic || '') : copy.slice(0, 120);
             WorkerLogger.info(
               'Poller',
               `${jobTag} Generating vertical video (${job.specs?.tiktok_video_width || 1080}x${job.specs?.tiktok_video_height || 1920}${hasAudio ? ', with audio track' : `, ${job.specs?.tiktok_video_duration || 10}s`})...`
             );
             const video = await this.generateVideoFn({
               postId: Number(job.post_id) || 1,
-              title,
-              subtitle: copy.slice(0, 120),
+              title: videoTitle,
+              subtitle: videoSubtitle,
+              category: short ? `ΕΙΔΗΣΗ ${short.index + 1}/${short.count}` : undefined,
               durationSec: job.specs?.tiktok_video_duration || 10,
               width: job.specs?.tiktok_video_width || 1080,
               height: job.specs?.tiktok_video_height || 1920,
               mediaUrl: imageUrl,
               audioUrl: audioUrl,
-              isPodcast,
+              isPodcast: short ? false : isPodcast,
               siteName: job.site_name || 'PressHub.Cy',
               outputDir: this.outputDir
             });

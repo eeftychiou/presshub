@@ -396,6 +396,17 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_tiktok_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_tiktok_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_tiktok_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post one 30-60 second video per top story: a hook-first script read by the briefing presenters, the hook on screen and its own caption. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
     public function render_alert_email_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_alert_email_enabled();
         ?>
