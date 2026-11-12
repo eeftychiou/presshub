@@ -47,6 +47,9 @@ class PressHub_Social_TikTok_Shorts {
     /** WP-Cron hook that prepares the shorts of a post. */
     public const PREPARE_HOOK = 'presshub_social_prepare_tiktok_shorts';
 
+    /** Post meta counting failed preparation runs since the last clean one. */
+    public const PREP_ATTEMPTS_META = '_presshub_tiktok_shorts_prep_attempts';
+
     /**
      * Optional LLM override for tests.
      * Signature: fn( string $sys_prompt, string $user_prompt ): string|WP_Error
@@ -152,7 +155,7 @@ class PressHub_Social_TikTok_Shorts {
     /**
      * Schedule the background preparation of a post's shorts (once at a time).
      */
-    public static function schedule_prepare( int $post_id ): void {
+    public static function schedule_prepare( int $post_id, int $delay = 0 ): void {
         if ( $post_id <= 0 || ! function_exists( 'wp_schedule_single_event' ) ) {
             return;
         }
@@ -160,7 +163,7 @@ class PressHub_Social_TikTok_Shorts {
         if ( function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( self::PREPARE_HOOK, $args ) ) {
             return;
         }
-        wp_schedule_single_event( time(), self::PREPARE_HOOK, $args );
+        wp_schedule_single_event( time() + max( 0, $delay ), self::PREPARE_HOOK, $args );
     }
 
     public static function is_short_job( array $job ): bool {
@@ -221,7 +224,8 @@ class PressHub_Social_TikTok_Shorts {
         $job['video_title']  = (string) $short['hook'];
         $job['tiktok_short'] = [
             'index' => (int) $short['index'],
-            'count' => (int) ( $short['count'] ?? 0 ),
+            // Stories the plan actually has (surplus jobs are cancelled), for the n/N badge.
+            'count' => (int) ( $short['total'] ?? $short['count'] ?? 0 ),
             'topic' => (string) ( $short['topic'] ?? '' ),
             'hook'  => (string) $short['hook'],
         ];
@@ -272,9 +276,7 @@ class PressHub_Social_TikTok_Shorts {
 
         $plan = self::get_plan( $post_id, $count );
         if ( is_wp_error( $plan ) ) {
-            foreach ( $pending as $job ) {
-                self::fail_attempt( $job, $plan );
-            }
+            self::handle_failures( $post_id, array_map( fn( $j ) => [ $j, $plan ], $pending ) );
             return;
         }
 
@@ -283,6 +285,7 @@ class PressHub_Social_TikTok_Shorts {
             $date = gmdate( 'Y-m-d' );
         }
 
+        $failures = [];
         foreach ( $pending as $job ) {
             $job_id   = (int) $job['id'];
             $metadata = self::decode_metadata( $job['metadata'] ?? null );
@@ -297,11 +300,12 @@ class PressHub_Social_TikTok_Shorts {
 
             $audio = self::get_audio( $job, $short, $date );
             if ( is_wp_error( $audio ) ) {
-                self::fail_attempt( $job, $audio );
+                $failures[] = [ $job, $audio ];
                 continue;
             }
 
             $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], [
+                'total'   => count( $plan['shorts'] ),
                 'topic'   => $short['topic'],
                 'hook'    => $short['hook'],
                 'caption' => $short['caption'],
@@ -310,8 +314,55 @@ class PressHub_Social_TikTok_Shorts {
             PressHub_Social_Queue::update_job( $job_id, [
                 'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
             ] );
-            PressHub_Social_Logger::info( sprintf( 'TikTok short %d/%d prepared for job #%d (post #%d): "%s"', $index + 1, $count, $job_id, $post_id, $short['hook'] ) );
+            PressHub_Social_Logger::info( sprintf( 'TikTok short %d/%d prepared for job #%d (post #%d): "%s"', $index + 1, count( $plan['shorts'] ), $job_id, $post_id, $short['hook'] ) );
         }
+
+        self::handle_failures( $post_id, $failures );
+    }
+
+    /**
+     * Retry a failed preparation without touching the jobs' posting times.
+     *
+     * Preparation runs ahead of each short's slot, so a failure only records the error on
+     * the job and reschedules the preparation with the queue's backoff
+     * (presshub_social_retry_base_delay x 2^(n-1)). After presshub_social_max_attempts
+     * failed runs the jobs still unprepared fail permanently (with the usual alert).
+     *
+     * @param array<int, array{0: array, 1: WP_Error}> $failures Job and its error.
+     */
+    private static function handle_failures( int $post_id, array $failures ): void {
+        if ( empty( $failures ) ) {
+            delete_post_meta( $post_id, self::PREP_ATTEMPTS_META );
+            return;
+        }
+
+        $attempts     = (int) get_post_meta( $post_id, self::PREP_ATTEMPTS_META, true ) + 1;
+        $max_attempts = PressHub_Social_Settings_Storage::get_max_attempts();
+
+        if ( $attempts >= $max_attempts ) {
+            delete_post_meta( $post_id, self::PREP_ATTEMPTS_META );
+            foreach ( $failures as [ $job, $error ] ) {
+                $job_id = (int) ( $job['id'] ?? 0 );
+                $err    = self::fail( $job_id, $error );
+                if ( $job_id > 0 && PressHub_Social_Queue::claim_for_processing( $job_id ) ) {
+                    PressHub_Social_Queue::update_job( $job_id, [ 'attempts' => max( $max_attempts, (int) ( $job['max_attempts'] ?? $max_attempts ) ) ] );
+                    PressHub_Social_Queue::mark_failed( $job_id, sprintf( '%s (preparation failed %d times)', $err->get_error_message(), $attempts ), [ 'error_code' => $error->get_error_code() ] );
+                }
+            }
+            return;
+        }
+
+        update_post_meta( $post_id, self::PREP_ATTEMPTS_META, $attempts );
+        $delay = PressHub_Social_Settings_Storage::get_retry_base_delay() * ( 2 ** ( $attempts - 1 ) );
+        foreach ( $failures as [ $job, $error ] ) {
+            $job_id = (int) ( $job['id'] ?? 0 );
+            $err    = self::fail( $job_id, $error );
+            if ( $job_id > 0 ) {
+                PressHub_Social_Queue::update_job( $job_id, [ 'last_error' => $err->get_error_message() ] );
+            }
+        }
+        PressHub_Social_Logger::warning( sprintf( 'TikTok shorts preparation for post #%d failed (run %d/%d); retrying in %ds. Posting times are unchanged.', $post_id, $attempts, $max_attempts, $delay ) );
+        self::schedule_prepare( $post_id, $delay );
     }
 
     /**
@@ -626,18 +677,6 @@ class PressHub_Social_TikTok_Shorts {
             return new WP_Error( 'empty_ai_response', 'the AI provider returned an empty response for the TikTok shorts.' );
         }
         return $result;
-    }
-
-    /**
-     * Count a failed preparation against the job's retry budget: the job goes back to
-     * pending with backoff, or fails permanently once its attempts are used up.
-     */
-    private static function fail_attempt( array $job, WP_Error $error ): void {
-        $job_id = (int) ( $job['id'] ?? 0 );
-        $err    = self::fail( $job_id, $error );
-        if ( $job_id > 0 && PressHub_Social_Queue::claim_for_processing( $job_id ) ) {
-            PressHub_Social_Queue::mark_failed( $job_id, $err->get_error_message(), [ 'error_code' => $error->get_error_code() ] );
-        }
     }
 
     private static function fail( int $job_id, WP_Error $error ): WP_Error {

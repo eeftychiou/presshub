@@ -365,6 +365,7 @@ if ( ! function_exists( 'update_post_meta' ) ) {
 if ( ! function_exists( 'delete_post_meta' ) ) {
     function delete_post_meta( $post_id, $key, $value = '' ): bool {
         unset( $GLOBALS['test_postmeta'][ $post_id ][ $key ] );
+        unset( $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] );
         return true;
     }
 }
@@ -2030,17 +2031,44 @@ $surplus_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] )
 PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 assert_equals( 'cancelled', PressHub_Social_Queue::get_job( $surplus_ids[2] )['status'], 'A short missing from the plan is cancelled' );
 assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $surplus_ids[1] ) ), 'The shorts the plan covers are prepared' );
+PressHub_Social_Queue::update_job( $surplus_ids[1], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+$surplus_claim = PressHub_Social_REST_Controller::handle_claim( $req_short );
+assert_equals( 2, (int) ( $surplus_claim['jobs'][0]['tiktok_short']['count'] ?? 0 ), 'The badge total is the number of stories the plan has, not the jobs queued' );
 
-// An invalid plan goes through the retry budget and never leaves a job in processing.
+// A failed preparation is retried in the background without moving any posting time.
 update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
 PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => 'Συγγνώμη, δεν μπορώ.' );
 PressHub_Social_Queue::reset_memory_store();
-$fail_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+$fail_ids       = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+$fail_slot      = PressHub_Social_Queue::get_job( $fail_ids[2] )['scheduled_at'];
+$GLOBALS['SCHEDULED_EVENTS'] = [];
 PressHub_Social_TikTok_Shorts::prepare_post( 880 );
-$fail_job = PressHub_Social_Queue::get_job( $fail_ids[0] );
+$fail_job = PressHub_Social_Queue::get_job( $fail_ids[2] );
 assert_true( str_contains( (string) $fail_job['last_error'], 'TikTok short failed' ), 'The invalid plan is recorded as the job error' );
-assert_equals( 'pending', $fail_job['status'], 'A failed preparation is retried with backoff' );
-assert_equals( 1, (int) $fail_job['attempts'], 'A failed preparation uses one attempt of the retry budget' );
+assert_equals( 'pending', $fail_job['status'], 'A job whose preparation failed stays pending' );
+assert_equals( $fail_slot, $fail_job['scheduled_at'], 'A failed preparation does not move the posting time of a later short' );
+assert_equals( 0, (int) $fail_job['attempts'], 'A failed preparation does not use the posting retry budget' );
+$retry_events = array_values( array_filter( $GLOBALS['SCHEDULED_EVENTS'], fn( $e ) => PressHub_Social_TikTok_Shorts::PREPARE_HOOK === $e['hook'] ) );
+assert_true( ! empty( $retry_events ) && $retry_events[0]['time'] >= time() + PressHub_Social_Settings_Storage::get_retry_base_delay() - 5, 'The preparation is rescheduled with the queue backoff' );
+for ( $run = 2; $run <= PressHub_Social_Settings_Storage::get_max_attempts(); $run++ ) {
+    PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+}
+assert_equals( 'failed', PressHub_Social_Queue::get_job( $fail_ids[0] )['status'], 'After the max attempts the unprepared shorts fail permanently' );
+
+// Unprepared shorts never starve ready jobs queued behind them in the claim.
+update_option( 'presshub_social_tiktok_shorts_count', 5 );
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+PressHub_Social_Queue::reset_memory_store();
+foreach ( PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] ) as $sid ) {
+    PressHub_Social_Queue::update_job( $sid, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 120 ) ] );
+}
+$ready_tw = PressHub_Social_Queue::enqueue( [ 'post_id' => 501, 'platform' => 'twitter', 'engine' => 'automation', 'post_copy' => 'Έτοιμο tweet.', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 10 ) ] );
+$req_mixed = new WP_REST_Request( 'POST', '/worker/claim' );
+$req_mixed->set_param( 'sessions', [ 'tiktok' => true, 'twitter' => true ] );
+$req_mixed->set_param( 'limit', 5 );
+$res_mixed = PressHub_Social_REST_Controller::handle_claim( $req_mixed );
+assert_equals( [ $ready_tw ], array_map( fn( $j ) => (int) $j['id'], $res_mixed['jobs'] ), 'A ready job behind five unprepared shorts is still claimed' );
+update_option( 'presshub_social_tiktok_shorts_count', 3 );
 
 // Validation of the plan.
 assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"[SPEAKER_1]: Α\n[SPEAKER_3]: Β","caption":"c"}]}', 3 ) ), 'parse_plan rejects a [SPEAKER_3] line' );

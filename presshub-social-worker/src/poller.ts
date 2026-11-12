@@ -304,7 +304,9 @@ export class PressHubPoller {
               postId: Number(job.post_id) || 1,
               title: videoTitle,
               subtitle: videoSubtitle,
-              category: short ? `ΕΙΔΗΣΗ ${short.index + 1}/${short.count}` : undefined,
+              category: short
+                ? (Number(short.count) > 0 ? `ΕΙΔΗΣΗ ${short.index + 1}/${short.count}` : `ΕΙΔΗΣΗ ${short.index + 1}`)
+                : undefined,
               durationSec: job.specs?.tiktok_video_duration || 10,
               width: job.specs?.tiktok_video_width || 1080,
               height: job.specs?.tiktok_video_height || 1920,

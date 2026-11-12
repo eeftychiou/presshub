@@ -252,8 +252,32 @@ class PressHub_Social_REST_Controller {
             }
         }
 
-        $due_jobs = PressHub_Social_Queue::get_due_pending_jobs( max( 1, $limit ), 'automation', $active_platforms );
-        $to_claim = $due_jobs;
+        // A TikTok short is claimed only once its script and audio are prepared in the
+        // background, so this request never waits on an LLM or TTS call. Unprepared shorts
+        // are passed over (their preparation is rescheduled) and the query looks past them,
+        // so they never fill the batch and starve ready jobs queued behind them.
+        $limit    = max( 1, $limit );
+        $to_claim = [];
+        $skipped  = [];
+        for ( $round = 0; $round < 10 && count( $to_claim ) < $limit; $round++ ) {
+            $batch = PressHub_Social_Queue::get_due_pending_jobs(
+                $limit - count( $to_claim ),
+                'automation',
+                $active_platforms,
+                array_merge( $skipped, array_map( fn( $j ) => (int) $j['id'], $to_claim ) )
+            );
+            if ( empty( $batch ) ) {
+                break;
+            }
+            foreach ( $batch as $candidate ) {
+                if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) && ! PressHub_Social_TikTok_Shorts::is_ready( $candidate ) ) {
+                    PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $candidate['post_id'] ?? 0 ) );
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
+                $to_claim[] = $candidate;
+            }
+        }
         $claimed_jobs = [];
 
         $site_name = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'PressHub';
@@ -272,13 +296,7 @@ class PressHub_Social_REST_Controller {
         foreach ( $to_claim as $job ) {
             $job_id = (int) $job['id'];
 
-            // A TikTok short is claimed only once its script and audio are prepared in the
-            // background, so this request never waits on an LLM or TTS call.
             $is_short = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
-            if ( $is_short && ! PressHub_Social_TikTok_Shorts::is_ready( $job ) ) {
-                PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $job['post_id'] ?? 0 ) );
-                continue;
-            }
 
             // Atomic: an overlapping claim that already took this job skips it.
             if ( ! PressHub_Social_Queue::claim_for_processing( $job_id ) ) {

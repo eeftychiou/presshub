@@ -234,7 +234,8 @@ class PressHub_Social_Queue {
      * @param array       $platforms Optional list of platforms to filter by.
      * @return array<int, array>
      */
-    public static function get_due_pending_jobs( int $limit = 0, ?string $engine = null, array $platforms = [] ): array {
+    public static function get_due_pending_jobs( int $limit = 0, ?string $engine = null, array $platforms = [], array $exclude_ids = [] ): array {
+        $exclude_ids = array_values( array_filter( array_map( 'intval', $exclude_ids ), fn( $id ) => $id > 0 ) );
         if ( $limit <= 0 ) {
             $limit = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_batch_size' )
                 ? PressHub_Social_Settings_Storage::get_batch_size()
@@ -270,6 +271,13 @@ class PressHub_Social_Queue {
                 }
             }
 
+            if ( ! empty( $exclude_ids ) ) {
+                $where .= ' AND id NOT IN (' . implode( ', ', array_fill( 0, count( $exclude_ids ), '%d' ) ) . ')';
+                foreach ( $exclude_ids as $xid ) {
+                    $params[] = $xid;
+                }
+            }
+
             $params[] = $limit;
             $sql      = $wpdb->prepare(
                 "SELECT * FROM {$table} WHERE {$where} ORDER BY scheduled_at ASC, id ASC LIMIT %d",
@@ -288,6 +296,9 @@ class PressHub_Social_Queue {
                 continue;
             }
             if ( ! empty( $clean_platforms ) && ! in_array( $job['platform'] ?? '', $clean_platforms, true ) ) {
+                continue;
+            }
+            if ( in_array( (int) $job['id'], $exclude_ids, true ) ) {
                 continue;
             }
             $due[] = $job;
