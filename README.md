@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.16.2-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.17.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-89%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -56,6 +56,8 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 
 ### 1. 📰 Automated Daily Briefing Pipeline (Morning Edition & Noon News Update)
 - **Autonomous News Harvester (`PressHub_AI_News_Harvester`)**: Concurrently scrapes and processes articles from configured RSS feeds and direct web URLs. Features domain politeness delays, per-domain concurrency limits, total execution time budgets, lead-article extraction, and HTML sanitization. Manages edition-partitioned raw snapshots (`raw-articles.json` vs `raw-articles-noon.json`).
+- **Press Release Inbox (`PressHub_AI_Press_Release_Inbox`, `PressHub_AI_Imap_Client`, `PressHub_AI_Mime_Parser`)**: Before each harvest, reads a dedicated mailbox (e.g. `press@presshub.cy`) over IMAP with a pure-PHP client, turns each email into a press-release article (Word attachments read locally, PDF and scanned images read by Gemini), and moves it to a processed folder. The curator attributes press releases to their sender and fences them against prompt injection. Configured under Settings → Daily Briefing → Press Release Inbox (server, credentials, folders, allowed senders, limits, Test connection). See `architecture.md` §4.26.
+- **Social Monitor (`PressHub_AI_Social_Monitor`)**: Reads the latest posts of X and TikTok accounts added as News Sources (types *X (Twitter) Account* and *TikTok Account*) through the local social worker, which browses them with a separate reader account (no paid API). Videos are transcribed by Gemini. Posts join the news pool attributed to the account holder and fenced against prompt injection. Configured under Settings → Daily Briefing → Social media monitoring. See `architecture.md` §4.27.
 - **Intelligent News Curator (`PressHub_AI_News_Curator`)**: Evaluates harvested candidate stories using LLM analysis. Employs semantic article deduplication to prevent repetitive coverage, enforces strict token context limits, and produces comprehensive bilingual (Greek and English) daily briefings.
   - **Noon News Update**: Re-scrapes sources at noon, automatically ingests the morning briefing post as reference context, and generates an updated noon briefing focusing on developments since morning.
   - **Tiered Editorial Memory Prompt Injection (`PressHub_AI_Memory_Context_Builder`)**: Ingests multi-day editorial memory into daily briefing and podcast prompts across 3 tiers (Same-day morning digest for noon updates, recent daily digests within lookback window, and background weekly rollups + gap-filling dailies). Enforces Greek journalistic continuity principles, dynamic context estimator budget shrinking, deterministic story-level trimming, and durable generation record manifest linking.

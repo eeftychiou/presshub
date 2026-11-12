@@ -119,6 +119,17 @@ npm run login -- instagram
 ```
 This launches a visible browser window, waits for you to sign in and complete 2FA, and saves session cookies to `sessions/<platform>-session.json`.
 
+
+### Social Monitor (X and TikTok)
+WordPress can feed the latest posts of selected X and TikTok accounts into the Daily Briefing. Add each account as a News Source with the media type **X (Twitter) Account** or **TikTok Account**, then turn on **Social media monitoring** under Settings → Daily Briefing. The Pull Mode poller asks WordPress whether a scan is due; when it is, the worker opens each profile in its own browser, reads the posts, and sends them back. Videos are sent to WordPress for a Gemini transcript.
+
+Use separate **reader accounts** for this, not the accounts PressHub posts from, so a block or a captcha never affects posting:
+```bash
+npm run login -- twitter --reader
+npm run login -- tiktok --reader
+```
+Sessions are saved in `sessions-reader/` (or `PRESSHUB_MONITOR_SESSIONS_DIR`). For many X accounts, create a private List on the reader account with all of them and paste its URL into the **X List** setting: the worker then reads one page instead of one per account. `PRESSHUB_MONITOR_DISABLED=true` turns the monitor off on this worker.
+
 ---
 
 ## 📡 API Endpoints

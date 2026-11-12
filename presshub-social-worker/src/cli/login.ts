@@ -7,6 +7,7 @@ import {
   sanitizePlatform,
   getSessionPath,
   getSessionsDir,
+  getReaderSessionsDir,
   verifySession,
   saveSession,
   SUPPORTED_PLATFORMS,
@@ -222,6 +223,26 @@ export async function runLogin(platformArg?: string): Promise<void> {
   const args = process.argv.slice(2);
   const target = platformArg || args.find((a) => !a.startsWith('-'));
 
+  // --reader: save the session of the Social Monitor's reader account instead
+  // of the posting account (separate folder and separate Chrome profile).
+  if (args.includes('--reader')) {
+    const readerDir = getReaderSessionsDir();
+    fs.mkdirSync(readerDir, { recursive: true });
+    const previous = process.env.PRESSHUB_SESSIONS_DIR;
+    process.env.PRESSHUB_SESSIONS_DIR = readerDir;
+    console.log(`\n👀 Reader account mode: the session is saved for the Social Monitor in ${readerDir}`);
+    try {
+      return await runLoginFlow(target, args);
+    } finally {
+      if (previous === undefined) delete process.env.PRESSHUB_SESSIONS_DIR;
+      else process.env.PRESSHUB_SESSIONS_DIR = previous;
+    }
+  }
+  return runLoginFlow(target, args);
+}
+
+async function runLoginFlow(target: string | undefined, args: string[]): Promise<void> {
+
   if (!target) {
     console.error(`\n❌ Error: No platform specified.`);
     console.log(`Usage: npm run login -- <platform> [options]`);
@@ -229,7 +250,8 @@ export async function runLogin(platformArg?: string): Promise<void> {
     console.log(`\nOptions:`);
     console.log(`  --cookies, -c    Direct cookie paste mode (paste auth_token or JSON export)`);
     console.log(`  --cdp            Auto-extract session from running Chrome (port 9222)`);
-    console.log(`  --browser, -b    Open Real Google Chrome window with persistent profile\n`);
+    console.log(`  --browser, -b    Open Real Google Chrome window with persistent profile`);
+    console.log(`  --reader         Save the Social Monitor reader account (not the posting account)\n`);
     process.exit(1);
   }
 

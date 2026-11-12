@@ -269,6 +269,18 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_generation_time' ],
             'type'              => 'string',
         ] );
+        // Social media monitoring (X / TikTok via the social worker).
+        foreach ( self::get_social_monitor_options_map() as $sm_option => $sm_sanitizer ) {
+            register_setting( 'presshub_ai_options', $sm_option, [
+                'sanitize_callback' => $sm_sanitizer,
+            ] );
+        }
+        // Press release inbox (IMAP): every knob registered through one map.
+        foreach ( self::get_press_inbox_options_map() as $press_option => $press_sanitizer ) {
+            register_setting( 'presshub_ai_options', $press_option, [
+                'sanitize_callback' => $press_sanitizer,
+            ] );
+        }
         register_setting( 'presshub_ai_options', 'presshub_ai_harvest_time_budget', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_harvest_time_budget' ],
             'type'              => 'integer',
@@ -1195,6 +1207,22 @@ class PressHub_AI_Settings_Storage {
                 'badge_label' => __( 'Active Harvester', 'presshub-ai-editor' ),
                 'badge_class' => 'badge-active',
                 'icon'        => 'dashicons-rss',
+            ],
+            'social_x'      => [
+                'label'       => __( 'X (Twitter) Account', 'presshub-ai-editor' ),
+                'description' => __( 'Posts from one X account (e.g. https://x.com/handle), read by the social worker. Videos are transcribed by Gemini.', 'presshub-ai-editor' ),
+                'active'      => true,
+                'badge_label' => __( 'Social Monitor', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-active',
+                'icon'        => 'dashicons-twitter',
+            ],
+            'social_tiktok' => [
+                'label'       => __( 'TikTok Account', 'presshub-ai-editor' ),
+                'description' => __( 'Videos from one TikTok account (e.g. https://www.tiktok.com/@handle), read by the social worker and transcribed by Gemini.', 'presshub-ai-editor' ),
+                'active'      => true,
+                'badge_label' => __( 'Social Monitor', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-active',
+                'icon'        => 'dashicons-video-alt2',
             ],
             'youtube'       => [
                 'label'       => __( 'YouTube Channel / Playlist', 'presshub-ai-editor' ),
@@ -2278,6 +2306,331 @@ class PressHub_AI_Settings_Storage {
     public static function get_harvest_time_budget(): int {
         $budget = (int) get_option( 'presshub_ai_harvest_time_budget', 60 );
         return ( $budget >= 10 && $budget <= 900 ) ? $budget : 60;
+    }
+
+    /* ---------------------------------------------------------------------
+     * Press release inbox (IMAP)
+     *
+     * A dedicated mailbox (e.g. press@presshub.cy) is read before every
+     * harvest; each email becomes a press-release article in the news pool.
+     * ------------------------------------------------------------------- */
+
+    /**
+     * Option => sanitizer map for the press release inbox. Used by
+     * register_setting(), the Daily Briefing section save and the global
+     * settings save, so the three never drift apart.
+     *
+     * @return array<string, callable>
+     */
+    public static function get_press_inbox_options_map(): array {
+        return [
+            'presshub_ai_press_inbox_enabled'             => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_press_inbox_host'                => [ __CLASS__, 'sanitize_press_inbox_host' ],
+            'presshub_ai_press_inbox_port'                => [ __CLASS__, 'sanitize_press_inbox_port' ],
+            'presshub_ai_press_inbox_encryption'          => [ __CLASS__, 'sanitize_press_inbox_encryption' ],
+            'presshub_ai_press_inbox_verify_ssl'          => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_press_inbox_username'            => [ __CLASS__, 'sanitize_press_inbox_username' ],
+            'presshub_ai_press_inbox_password'            => [ __CLASS__, 'sanitize_press_inbox_password' ],
+            'presshub_ai_remove_press_inbox_password'     => [ __CLASS__, 'sanitize_remove_press_inbox_password' ],
+            'presshub_ai_press_inbox_folder'              => [ __CLASS__, 'sanitize_press_inbox_folder' ],
+            'presshub_ai_press_inbox_processed_folder'    => [ __CLASS__, 'sanitize_press_inbox_processed_folder' ],
+            'presshub_ai_press_inbox_allowed_senders'     => [ __CLASS__, 'sanitize_press_inbox_allowed_senders' ],
+            'presshub_ai_press_inbox_max_messages'        => [ __CLASS__, 'sanitize_press_inbox_max_messages' ],
+            'presshub_ai_press_inbox_max_age_hours'       => [ __CLASS__, 'sanitize_press_inbox_max_age_hours' ],
+            'presshub_ai_press_inbox_max_attachment_mb'   => [ __CLASS__, 'sanitize_press_inbox_max_attachment_mb' ],
+            'presshub_ai_press_inbox_timeout'             => [ __CLASS__, 'sanitize_press_inbox_timeout' ],
+            'presshub_ai_press_inbox_extract_attachments' => [ __CLASS__, 'sanitize_boolean' ],
+        ];
+    }
+
+    /** Checkbox options of the press inbox (unchecked => 0 on save). */
+    public static function get_press_inbox_boolean_options(): array {
+        return [ 'presshub_ai_press_inbox_enabled', 'presshub_ai_press_inbox_verify_ssl', 'presshub_ai_press_inbox_extract_attachments' ];
+    }
+
+    private static function clamp_int_option( $value, int $min, int $max, int $default ): int {
+        $value = wp_unslash( $value );
+        if ( ! is_numeric( $value ) ) {
+            return $default;
+        }
+        return max( $min, min( $max, (int) $value ) );
+    }
+
+    public static function sanitize_press_inbox_host( $value ): string {
+        $value = strtolower( trim( (string) wp_unslash( $value ) ) );
+        $value = preg_replace( '#^[a-z]+://#', '', $value );
+        $value = preg_replace( '/[^a-z0-9.\-]/', '', (string) $value );
+        return substr( (string) $value, 0, 253 );
+    }
+
+    public static function sanitize_press_inbox_port( $value ): int {
+        return self::clamp_int_option( $value, 1, 65535, 993 );
+    }
+
+    public static function sanitize_press_inbox_encryption( $value ): string {
+        $value = strtolower( trim( (string) wp_unslash( $value ) ) );
+        return in_array( $value, [ 'ssl', 'tls', 'none' ], true ) ? $value : 'ssl';
+    }
+
+    public static function sanitize_press_inbox_username( $value ): string {
+        $value = trim( wp_strip_all_tags( (string) wp_unslash( $value ) ) );
+        $value = preg_replace( '/[\r\n\t]+/', '', $value );
+        return substr( (string) $value, 0, 254 );
+    }
+
+    /**
+     * Mailbox password. Stored exactly as typed (passwords may contain
+     * "<", quotes or spaces). An empty or masked submission keeps the
+     * stored value, like the API key fields.
+     */
+    public static function sanitize_press_inbox_password( $value ): string {
+        // Not unslashed: options.php and the settings AJAX handlers both pass
+        // an already-unslashed value, and a password may contain backslashes.
+        $option = 'presshub_ai_press_inbox_password';
+        // update_option() below re-enters this callback through the
+        // sanitize_option filter that register_setting() installs.
+        if ( ! empty( self::$sanitizing_secrets[ $option ] ) ) {
+            return is_string( $value ) ? $value : '';
+        }
+        self::$sanitizing_secrets[ $option ] = true;
+        try {
+            $value    = is_string( $value ) ? str_replace( [ "\r", "\n" ], '', $value ) : '';
+            $existing = (string) get_option( $option, '' );
+            if ( '' === $value || false !== strpos( $value, '••••' ) ) {
+                $final = $existing;
+            } else {
+                $final = substr( $value, 0, 512 );
+            }
+            update_option( $option, $final, false );
+            return $final;
+        } finally {
+            unset( self::$sanitizing_secrets[ $option ] );
+        }
+    }
+
+    public static function sanitize_remove_press_inbox_password( $value ) {
+        return self::sanitize_remove_key( $value, 'presshub_ai_press_inbox_password' );
+    }
+
+    private static function sanitize_imap_folder_name( $value, string $default ): string {
+        $value = trim( (string) wp_unslash( $value ) );
+        if ( function_exists( 'mb_check_encoding' ) && ! mb_check_encoding( $value, 'UTF-8' ) ) {
+            $value = (string) preg_replace( '/[^\x20-\x7e]/', '', $value );
+        }
+        // Printable text (Greek is fine: it is sent as modified UTF-7); no
+        // control characters, quotes, backslashes or wildcards.
+        $value = preg_replace( '/[\x00-\x1f\x7f]|["\\\\*%]/u', '', $value );
+        $value = function_exists( 'mb_substr' ) ? mb_substr( (string) $value, 0, 100, 'UTF-8' ) : substr( (string) $value, 0, 200 );
+        $value = trim( (string) $value );
+        return '' === $value ? $default : $value;
+    }
+
+    public static function sanitize_press_inbox_folder( $value ): string {
+        return self::sanitize_imap_folder_name( $value, 'INBOX' );
+    }
+
+    public static function sanitize_press_inbox_processed_folder( $value ): string {
+        return self::sanitize_imap_folder_name( $value, 'Processed' );
+    }
+
+    /**
+     * One sender per line: a full address (pio@pio.moi.gov.cy) or a domain
+     * (moi.gov.cy or @moi.gov.cy, which also matches its subdomains).
+     */
+    public static function sanitize_press_inbox_allowed_senders( $value ): string {
+        $value = (string) wp_unslash( $value );
+        $clean = [];
+        foreach ( preg_split( '/[\r\n,;]+/', $value ) as $line ) {
+            $line = strtolower( trim( $line ) );
+            $line = ltrim( $line, '@' );
+            if ( '' === $line ) {
+                continue;
+            }
+            if ( preg_match( '/^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/', $line ) || preg_match( '/^[a-z0-9.\-]+\.[a-z]{2,}$/', $line ) ) {
+                $clean[ $line ] = true;
+            }
+            if ( count( $clean ) >= 500 ) {
+                break;
+            }
+        }
+        return implode( "\n", array_keys( $clean ) );
+    }
+
+    public static function sanitize_press_inbox_max_messages( $value ): int {
+        return self::clamp_int_option( $value, 1, 100, 15 );
+    }
+
+    public static function sanitize_press_inbox_max_age_hours( $value ): int {
+        return self::clamp_int_option( $value, 1, 720, 48 );
+    }
+
+    public static function sanitize_press_inbox_max_attachment_mb( $value ): int {
+        return self::clamp_int_option( $value, 1, 25, 10 );
+    }
+
+    public static function sanitize_press_inbox_timeout( $value ): int {
+        return self::clamp_int_option( $value, 5, 120, 30 );
+    }
+
+    public static function get_press_inbox_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_press_inbox_enabled', 0 );
+    }
+
+    public static function get_press_inbox_host(): string {
+        return self::sanitize_press_inbox_host( get_option( 'presshub_ai_press_inbox_host', '' ) );
+    }
+
+    public static function get_press_inbox_port(): int {
+        return self::sanitize_press_inbox_port( get_option( 'presshub_ai_press_inbox_port', 993 ) );
+    }
+
+    public static function get_press_inbox_encryption(): string {
+        return self::sanitize_press_inbox_encryption( get_option( 'presshub_ai_press_inbox_encryption', 'ssl' ) );
+    }
+
+    public static function get_press_inbox_verify_ssl(): bool {
+        return 1 === (int) get_option( 'presshub_ai_press_inbox_verify_ssl', 1 );
+    }
+
+    public static function get_press_inbox_username(): string {
+        return (string) get_option( 'presshub_ai_press_inbox_username', '' );
+    }
+
+    public static function get_press_inbox_password(): string {
+        return (string) get_option( 'presshub_ai_press_inbox_password', '' );
+    }
+
+    public static function get_press_inbox_folder(): string {
+        return self::sanitize_press_inbox_folder( get_option( 'presshub_ai_press_inbox_folder', 'INBOX' ) );
+    }
+
+    public static function get_press_inbox_processed_folder(): string {
+        return self::sanitize_press_inbox_processed_folder( get_option( 'presshub_ai_press_inbox_processed_folder', 'Processed' ) );
+    }
+
+    /** @return string[] */
+    public static function get_press_inbox_allowed_senders(): array {
+        $raw = self::sanitize_press_inbox_allowed_senders( get_option( 'presshub_ai_press_inbox_allowed_senders', '' ) );
+        return '' === $raw ? [] : explode( "\n", $raw );
+    }
+
+    public static function get_press_inbox_max_messages(): int {
+        return self::sanitize_press_inbox_max_messages( get_option( 'presshub_ai_press_inbox_max_messages', 15 ) );
+    }
+
+    public static function get_press_inbox_max_age_hours(): int {
+        return self::sanitize_press_inbox_max_age_hours( get_option( 'presshub_ai_press_inbox_max_age_hours', 48 ) );
+    }
+
+    public static function get_press_inbox_max_attachment_mb(): int {
+        return self::sanitize_press_inbox_max_attachment_mb( get_option( 'presshub_ai_press_inbox_max_attachment_mb', 10 ) );
+    }
+
+    public static function get_press_inbox_timeout(): int {
+        return self::sanitize_press_inbox_timeout( get_option( 'presshub_ai_press_inbox_timeout', 30 ) );
+    }
+
+    public static function get_press_inbox_extract_attachments(): bool {
+        return 1 === (int) get_option( 'presshub_ai_press_inbox_extract_attachments', 1 );
+    }
+
+    /* ---------------------------------------------------------------------
+     * Social media monitoring (X / TikTok)
+     *
+     * Accounts are News Sources of type social_x / social_tiktok; the
+     * social worker scans them and posts what it finds to WordPress.
+     * ------------------------------------------------------------------- */
+
+    /**
+     * @return array<string, callable>
+     */
+    public static function get_social_monitor_options_map(): array {
+        return [
+            'presshub_ai_social_monitor_enabled'                => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_monitor_interval_min'           => [ __CLASS__, 'sanitize_social_monitor_interval_min' ],
+            'presshub_ai_social_monitor_max_age_hours'          => [ __CLASS__, 'sanitize_social_monitor_max_age_hours' ],
+            'presshub_ai_social_monitor_max_posts_per_account'  => [ __CLASS__, 'sanitize_social_monitor_max_posts_per_account' ],
+            'presshub_ai_social_monitor_max_posts_per_harvest'  => [ __CLASS__, 'sanitize_social_monitor_max_posts_per_harvest' ],
+            'presshub_ai_social_monitor_x_list_url'             => [ __CLASS__, 'sanitize_social_monitor_x_list_url' ],
+            'presshub_ai_social_monitor_transcribe_videos'      => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_monitor_max_video_seconds'      => [ __CLASS__, 'sanitize_social_monitor_max_video_seconds' ],
+            'presshub_ai_social_monitor_max_video_mb'           => [ __CLASS__, 'sanitize_social_monitor_max_video_mb' ],
+        ];
+    }
+
+    public static function get_social_monitor_boolean_options(): array {
+        return [ 'presshub_ai_social_monitor_enabled', 'presshub_ai_social_monitor_transcribe_videos' ];
+    }
+
+    public static function sanitize_social_monitor_interval_min( $value ): int {
+        return self::clamp_int_option( $value, 30, 1440, 120 );
+    }
+
+    public static function sanitize_social_monitor_max_age_hours( $value ): int {
+        return self::clamp_int_option( $value, 1, 168, 24 );
+    }
+
+    public static function sanitize_social_monitor_max_posts_per_account( $value ): int {
+        return self::clamp_int_option( $value, 1, 50, 10 );
+    }
+
+    public static function sanitize_social_monitor_max_posts_per_harvest( $value ): int {
+        return self::clamp_int_option( $value, 1, 100, 15 );
+    }
+
+    /**
+     * Optional private X List (https://x.com/i/lists/123): one page for all X accounts.
+     */
+    public static function sanitize_social_monitor_x_list_url( $value ): string {
+        $value = trim( (string) wp_unslash( $value ) );
+        if ( preg_match( '#^https://(?:www\.)?(?:x|twitter)\.com/i/lists/(\d+)#i', $value, $m ) ) {
+            return 'https://x.com/i/lists/' . $m[1];
+        }
+        return '';
+    }
+
+    public static function sanitize_social_monitor_max_video_seconds( $value ): int {
+        return self::clamp_int_option( $value, 10, 600, 180 );
+    }
+
+    public static function sanitize_social_monitor_max_video_mb( $value ): int {
+        return self::clamp_int_option( $value, 1, 20, 15 );
+    }
+
+    public static function get_social_monitor_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_social_monitor_enabled', 0 );
+    }
+
+    public static function get_social_monitor_interval_min(): int {
+        return self::sanitize_social_monitor_interval_min( get_option( 'presshub_ai_social_monitor_interval_min', 120 ) );
+    }
+
+    public static function get_social_monitor_max_age_hours(): int {
+        return self::sanitize_social_monitor_max_age_hours( get_option( 'presshub_ai_social_monitor_max_age_hours', 24 ) );
+    }
+
+    public static function get_social_monitor_max_posts_per_account(): int {
+        return self::sanitize_social_monitor_max_posts_per_account( get_option( 'presshub_ai_social_monitor_max_posts_per_account', 10 ) );
+    }
+
+    public static function get_social_monitor_max_posts_per_harvest(): int {
+        return self::sanitize_social_monitor_max_posts_per_harvest( get_option( 'presshub_ai_social_monitor_max_posts_per_harvest', 15 ) );
+    }
+
+    public static function get_social_monitor_x_list_url(): string {
+        return self::sanitize_social_monitor_x_list_url( get_option( 'presshub_ai_social_monitor_x_list_url', '' ) );
+    }
+
+    public static function get_social_monitor_transcribe_videos(): bool {
+        return 1 === (int) get_option( 'presshub_ai_social_monitor_transcribe_videos', 1 );
+    }
+
+    public static function get_social_monitor_max_video_seconds(): int {
+        return self::sanitize_social_monitor_max_video_seconds( get_option( 'presshub_ai_social_monitor_max_video_seconds', 180 ) );
+    }
+
+    public static function get_social_monitor_max_video_mb(): int {
+        return self::sanitize_social_monitor_max_video_mb( get_option( 'presshub_ai_social_monitor_max_video_mb', 15 ) );
     }
 
     /**
@@ -3732,6 +4085,9 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_seo_max_tags'              => [ __CLASS__, 'sanitize_seo_max_tags' ],
             'presshub_ai_seo_review_enabled'        => [ __CLASS__, 'sanitize_seo_review_enabled' ],
         ];
+
+        // Press release inbox knobs live on the Daily Briefing tab.
+        $briefing_map = array_merge( $briefing_map, self::get_press_inbox_options_map(), self::get_social_monitor_options_map() );
 
         switch ( $section ) {
             case 'coauthor':

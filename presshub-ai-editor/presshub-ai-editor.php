@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.16.2
+ * Version: 2.17.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -120,7 +120,7 @@ if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 
-define( 'PRESSHUB_AI_VERSION', '2.16.2' );
+define( 'PRESSHUB_AI_VERSION', '2.17.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -172,6 +172,10 @@ require_once PRESSHUB_AI_DIR . 'includes/class-author-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-context-estimator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-prompt-loader.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-harvester.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-imap-client.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-mime-parser.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-press-release-inbox.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-monitor.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
@@ -209,6 +213,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-rest-controller.php';
 
 // Register Social REST API routes
 add_action( 'rest_api_init', [ 'PressHub_Social_REST_Controller', 'register_routes' ] );
+add_action( 'rest_api_init', [ 'PressHub_AI_Social_Monitor', 'register_routes' ] );
 
 // Register Social custom cron schedule interval
 add_filter( 'cron_schedules', function( array $schedules ): array {

@@ -2,6 +2,7 @@ import { loadEnv, getWorkerConfig } from './config';
 import { createApp } from './app';
 import { PressHubPoller } from './poller';
 import { WorkerLogger } from './logger';
+import { SocialMonitor } from './monitor/monitor-client';
 
 export { WorkerLogger } from './logger';
 
@@ -40,7 +41,10 @@ export function startServer() {
     activePoller = new PressHubPoller({
       wpUrl: WP_URL,
       workerSecret: SECRET,
-      pollIntervalMs: config.pollIntervalMs
+      pollIntervalMs: config.pollIntervalMs,
+      monitor: process.env.PRESSHUB_MONITOR_DISABLED === 'true'
+        ? undefined
+        : new SocialMonitor({ wpUrl: WP_URL, workerSecret: SECRET })
     });
     activePoller.start();
   } else {

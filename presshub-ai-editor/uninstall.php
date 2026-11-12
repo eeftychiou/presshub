@@ -59,6 +59,35 @@ $presshub_ai_options = [
     // Presets + migration flag.
     'presshub_ai_default_presets',
     'presshub_ai_migrated_models',
+    // Press release inbox (IMAP), including the stored mailbox password.
+    'presshub_ai_press_inbox_enabled',
+    'presshub_ai_press_inbox_host',
+    'presshub_ai_press_inbox_port',
+    'presshub_ai_press_inbox_encryption',
+    'presshub_ai_press_inbox_verify_ssl',
+    'presshub_ai_press_inbox_username',
+    'presshub_ai_press_inbox_password',
+    'presshub_ai_press_inbox_folder',
+    'presshub_ai_press_inbox_processed_folder',
+    'presshub_ai_press_inbox_allowed_senders',
+    'presshub_ai_press_inbox_max_messages',
+    'presshub_ai_press_inbox_max_age_hours',
+    'presshub_ai_press_inbox_max_attachment_mb',
+    'presshub_ai_press_inbox_timeout',
+    'presshub_ai_press_inbox_extract_attachments',
+    // Social media monitoring (X / TikTok) settings and post store.
+    'presshub_ai_social_monitor_enabled',
+    'presshub_ai_social_monitor_interval_min',
+    'presshub_ai_social_monitor_max_age_hours',
+    'presshub_ai_social_monitor_max_posts_per_account',
+    'presshub_ai_social_monitor_max_posts_per_harvest',
+    'presshub_ai_social_monitor_x_list_url',
+    'presshub_ai_social_monitor_transcribe_videos',
+    'presshub_ai_social_monitor_max_video_seconds',
+    'presshub_ai_social_monitor_max_video_mb',
+    'presshub_ai_social_monitor_posts',
+    'presshub_ai_social_monitor_last_scan',
+    'presshub_ai_social_monitor_scan_started',
 ];
 
 foreach ( $presshub_ai_options as $presshub_ai_option ) {

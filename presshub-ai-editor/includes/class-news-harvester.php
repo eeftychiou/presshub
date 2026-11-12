@@ -1454,11 +1454,13 @@ class PressHub_AI_News_Harvester {
             'harvested_count'    => 0,
         ];
 
-        // Preserve any existing manual uploads in snapshot
+        // Preserve any existing manual uploads in snapshot, and press releases
+        // read by an earlier run of this edition (they have already been moved
+        // out of the mailbox, so a re-harvest must not lose them).
         $existing_snapshot = $this->load_snapshot( $date, $edition );
         if ( is_array( $existing_snapshot ) && ! empty( $existing_snapshot['articles'] ) ) {
             foreach ( $existing_snapshot['articles'] as $art ) {
-                if ( ! empty( $art['is_manual'] ) ) {
+                if ( ! empty( $art['is_manual'] ) || ! empty( $art['is_press_release'] ) || ! empty( $art['is_social_post'] ) ) {
                     $payload['articles'][] = $art;
                 }
             }
@@ -1643,6 +1645,13 @@ class PressHub_AI_News_Harvester {
             $payload['diagnostics'][]   = $diag_item;
         }
 
+        // Press release inbox (IMAP). Runs after the web sources so it never
+        // eats into their time budget; its articles are placed right after the
+        // manual uploads so the curation article cap does not drop them.
+        $this->merge_press_releases( $payload );
+        // Posts from monitored X / TikTok accounts, sent in by the social worker.
+        $this->merge_social_posts( $payload, $date, $edition );
+
         $duration_ms                 = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         $payload['budget_exceeded']  = $budget_exceeded;
         $payload['harvested_count']  = count( $payload['articles'] );
@@ -1692,6 +1701,143 @@ class PressHub_AI_News_Harvester {
     }
 
 
+
+    /**
+     * Read the press release inbox (when configured) into the harvest payload.
+     *
+     * @param array $payload Harvest payload (modified in place).
+     */
+    protected function merge_press_releases( array &$payload ): void {
+        if ( ! class_exists( 'PressHub_AI_Press_Release_Inbox' ) ) {
+            return;
+        }
+        $inbox = $this->make_press_release_inbox();
+        if ( ! $inbox->is_configured() ) {
+            return;
+        }
+        try {
+            $result = $inbox->collect();
+        } catch ( \Throwable $e ) {
+            PressHub_AI_Logger::error( 'Press release inbox failed: ' . $e->getMessage(), [ 'exception' => $e ] );
+            return;
+        }
+
+        // Skip emails already in the pool, by id and by content: agencies
+        // often send the same release twice with different Message-IDs.
+        $known_ids  = [];
+        $known_keys = [];
+        foreach ( $payload['articles'] as $art ) {
+            if ( ! empty( $art['id'] ) ) {
+                $known_ids[ (string) $art['id'] ] = true;
+            }
+            if ( ! empty( $art['is_press_release'] ) ) {
+                $known_keys[ self::press_release_key( $art ) ] = true;
+            }
+        }
+        $new        = [];
+        $duplicates = 0;
+        foreach ( (array) ( $result['articles'] ?? [] ) as $art ) {
+            $key = self::press_release_key( $art );
+            if ( ! empty( $known_ids[ (string) ( $art['id'] ?? '' ) ] ) || isset( $known_keys[ $key ] ) ) {
+                $duplicates++;
+                continue;
+            }
+            $known_keys[ $key ] = true;
+            $new[]              = $art;
+        }
+
+        // Insert after the leading manual uploads / earlier press releases.
+        $insert_at = 0;
+        foreach ( $payload['articles'] as $i => $art ) {
+            if ( empty( $art['is_manual'] ) && empty( $art['is_press_release'] ) ) {
+                break;
+            }
+            $insert_at = $i + 1;
+        }
+        if ( ! empty( $new ) ) {
+            array_splice( $payload['articles'], $insert_at, 0, $new );
+        }
+
+        if ( ! empty( $result['health'] ) ) {
+            $payload['source_health'][] = $result['health'];
+            $payload['diagnostics'][]   = $result['health'];
+        }
+        $payload['press_releases_added']      = count( $new );
+        $payload['press_releases_duplicates'] = $duplicates;
+        $payload['press_releases_total']      = count( array_filter( $payload['articles'], static function ( $a ) {
+            return ! empty( $a['is_press_release'] );
+        } ) );
+        $payload['press_releases_skipped']    = (array) ( $result['skipped'] ?? [] );
+    }
+
+    /**
+     * Same title and same body (ignoring case and spacing) = same press release.
+     */
+    private static function press_release_key( array $art ): string {
+        $norm = static function ( $v ): string {
+            $v = (string) preg_replace( '/\s+/u', ' ', (string) $v );
+            return trim( function_exists( 'mb_strtolower' ) ? mb_strtolower( $v, 'UTF-8' ) : strtolower( $v ) );
+        };
+        return md5( $norm( $art['title'] ?? '' ) . '|' . $norm( $art['content'] ?? '' ) );
+    }
+
+    /**
+     * Add unused posts from monitored social accounts to the harvest payload,
+     * right after the manual uploads and press releases.
+     *
+     * @param array  $payload Harvest payload (modified in place).
+     * @param string $date    Briefing date.
+     * @param string $edition morning|noon.
+     */
+    protected function merge_social_posts( array &$payload, string $date, string $edition ): void {
+        if ( ! class_exists( 'PressHub_AI_Social_Monitor' ) ) {
+            return;
+        }
+        try {
+            $posts = $this->take_social_posts( $date, $edition );
+        } catch ( \Throwable $e ) {
+            PressHub_AI_Logger::error( 'Social monitor merge failed: ' . $e->getMessage(), [ 'exception' => $e ] );
+            return;
+        }
+        $known = [];
+        foreach ( $payload['articles'] as $art ) {
+            if ( ! empty( $art['id'] ) ) {
+                $known[ (string) $art['id'] ] = true;
+            }
+        }
+        $new = array_values( array_filter( $posts, static function ( $a ) use ( $known ) {
+            return empty( $known[ (string) ( $a['id'] ?? '' ) ] );
+        } ) );
+
+        $insert_at = 0;
+        foreach ( $payload['articles'] as $i => $art ) {
+            if ( empty( $art['is_manual'] ) && empty( $art['is_press_release'] ) && empty( $art['is_social_post'] ) ) {
+                break;
+            }
+            $insert_at = $i + 1;
+        }
+        if ( ! empty( $new ) ) {
+            array_splice( $payload['articles'], $insert_at, 0, $new );
+        }
+        $payload['social_posts_added'] = count( $new );
+        $payload['social_posts_total'] = count( array_filter( $payload['articles'], static function ( $a ) {
+            return ! empty( $a['is_social_post'] );
+        } ) );
+    }
+
+    /**
+     * Seam for tests.
+     */
+    protected function take_social_posts( string $date, string $edition ): array {
+        return PressHub_AI_Social_Monitor::take_for_harvest( $date, $edition );
+    }
+
+    /**
+     * Factory seam for tests.
+     */
+    protected function make_press_release_inbox(): PressHub_AI_Press_Release_Inbox {
+        return new PressHub_AI_Press_Release_Inbox();
+    }
 
     /**
      * Fetch a single article URL and extract its title and body text using Multi-Fallback Extractor.

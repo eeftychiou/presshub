@@ -260,6 +260,8 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_sources_field(); ?>
                                 </td>
                             </tr>
+                            <?php $this->render_press_inbox_rows(); ?>
+                            <?php $this->render_social_monitor_rows(); ?>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
@@ -2480,6 +2482,181 @@ class PressHub_AI_Settings_Render {
                 <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
             </label>
         <?php endif; ?>
+        <?php
+    }
+
+    /**
+     * Press release inbox (IMAP) rows for the Daily Briefing tab.
+     */
+    public function render_press_inbox_rows() {
+        $enabled    = PressHub_AI_Settings_Storage::get_press_inbox_enabled();
+        $host       = PressHub_AI_Settings_Storage::get_press_inbox_host();
+        $port       = PressHub_AI_Settings_Storage::get_press_inbox_port();
+        $encryption = PressHub_AI_Settings_Storage::get_press_inbox_encryption();
+        $verify     = PressHub_AI_Settings_Storage::get_press_inbox_verify_ssl();
+        $username   = PressHub_AI_Settings_Storage::get_press_inbox_username();
+        $has_pass   = '' !== PressHub_AI_Settings_Storage::get_press_inbox_password();
+        $folder     = PressHub_AI_Settings_Storage::get_press_inbox_folder();
+        $processed  = PressHub_AI_Settings_Storage::get_press_inbox_processed_folder();
+        $senders    = implode( "\n", PressHub_AI_Settings_Storage::get_press_inbox_allowed_senders() );
+        $max_msgs   = PressHub_AI_Settings_Storage::get_press_inbox_max_messages();
+        $max_age    = PressHub_AI_Settings_Storage::get_press_inbox_max_age_hours();
+        $max_mb     = PressHub_AI_Settings_Storage::get_press_inbox_max_attachment_mb();
+        $timeout    = PressHub_AI_Settings_Storage::get_press_inbox_timeout();
+        $extract    = PressHub_AI_Settings_Storage::get_press_inbox_extract_attachments();
+        ?>
+        <tr class="presshub-press-inbox-heading">
+            <th scope="row" colspan="2"><h3 style="margin:1em 0 0;"><?php echo esc_html__( 'Press Release Inbox (email)', 'presshub-ai-editor' ); ?></h3>
+                <p class="description" style="font-weight:normal;"><?php echo esc_html__( 'Before each harvest, emails in this mailbox become press releases in the news pool. Each email is used once and then moved to the processed folder (never deleted). PDF and scanned attachments are read by Gemini; Word files are read directly.', 'presshub-ai-editor' ); ?></p>
+            </th>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_enabled"><?php echo esc_html__( 'Read Press Release Inbox', 'presshub-ai-editor' ); ?></label></th>
+            <td><label><input type="checkbox" name="presshub_ai_press_inbox_enabled" id="presshub_ai_press_inbox_enabled" value="1" <?php checked( $enabled ); ?> /> <?php echo esc_html__( 'Add emails from this mailbox to every morning and noon harvest', 'presshub-ai-editor' ); ?></label></td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_host"><?php echo esc_html__( 'Incoming Mail Server (IMAP)', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <input type="text" name="presshub_ai_press_inbox_host" id="presshub_ai_press_inbox_host" value="<?php echo self::esc_attr_safe( $host ); ?>" class="regular-text code" placeholder="presshub.cy" />
+                <label for="presshub_ai_press_inbox_port" style="margin-left:8px;"><?php echo esc_html__( 'Port', 'presshub-ai-editor' ); ?></label>
+                <input type="number" min="1" max="65535" name="presshub_ai_press_inbox_port" id="presshub_ai_press_inbox_port" value="<?php echo self::esc_attr_safe( (string) $port ); ?>" class="small-text" />
+                <select name="presshub_ai_press_inbox_encryption" id="presshub_ai_press_inbox_encryption">
+                    <option value="ssl" <?php selected( $encryption, 'ssl' ); ?>><?php echo esc_html__( 'SSL/TLS (port 993)', 'presshub-ai-editor' ); ?></option>
+                    <option value="tls" <?php selected( $encryption, 'tls' ); ?>><?php echo esc_html__( 'STARTTLS (port 143)', 'presshub-ai-editor' ); ?></option>
+                    <option value="none" <?php selected( $encryption, 'none' ); ?>><?php echo esc_html__( 'None (not recommended)', 'presshub-ai-editor' ); ?></option>
+                </select>
+                <p><label><input type="checkbox" name="presshub_ai_press_inbox_verify_ssl" id="presshub_ai_press_inbox_verify_ssl" value="1" <?php checked( $verify ); ?> /> <?php echo esc_html__( 'Verify the server certificate (turn off only if the mail server uses a self-signed certificate)', 'presshub-ai-editor' ); ?></label></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_username"><?php echo esc_html__( 'Mailbox Username', 'presshub-ai-editor' ); ?></label></th>
+            <td><input type="text" name="presshub_ai_press_inbox_username" id="presshub_ai_press_inbox_username" value="<?php echo self::esc_attr_safe( $username ); ?>" class="regular-text" autocomplete="off" placeholder="press@presshub.cy" /></td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_password"><?php echo esc_html__( 'Mailbox Password', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <input type="password" name="presshub_ai_press_inbox_password" id="presshub_ai_press_inbox_password" value="<?php echo $has_pass ? '••••••••' : ''; ?>" class="regular-text" autocomplete="new-password" />
+                <p class="description"><?php echo esc_html__( 'Stored in the WordPress database and never shown again. Leave as is to keep the saved password.', 'presshub-ai-editor' ); ?></p>
+                <?php if ( $has_pass ) : ?>
+                    <label><input type="checkbox" name="presshub_ai_remove_press_inbox_password" id="presshub_ai_remove_press_inbox_password" value="1" /> <?php echo esc_html__( 'Remove stored password', 'presshub-ai-editor' ); ?></label>
+                <?php endif; ?>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_folder"><?php echo esc_html__( 'Folders', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <label for="presshub_ai_press_inbox_folder"><?php echo esc_html__( 'Read from', 'presshub-ai-editor' ); ?></label>
+                <input type="text" name="presshub_ai_press_inbox_folder" id="presshub_ai_press_inbox_folder" value="<?php echo self::esc_attr_safe( $folder ); ?>" class="regular-text code" style="width:12em;" />
+                <label for="presshub_ai_press_inbox_processed_folder" style="margin-left:8px;"><?php echo esc_html__( 'Move used emails to', 'presshub-ai-editor' ); ?></label>
+                <input type="text" name="presshub_ai_press_inbox_processed_folder" id="presshub_ai_press_inbox_processed_folder" value="<?php echo self::esc_attr_safe( $processed ); ?>" class="regular-text code" style="width:12em;" />
+                <p class="description"><?php echo esc_html__( 'The processed folder is created if it does not exist. Emails that are skipped (sender not allowed, too old, too large) stay in the inbox, marked as read.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_allowed_senders"><?php echo esc_html__( 'Allowed Senders', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <textarea name="presshub_ai_press_inbox_allowed_senders" id="presshub_ai_press_inbox_allowed_senders" rows="4" class="large-text code" placeholder="pio.gov.cy&#10;police.gov.cy&#10;someone@example.com"><?php echo self::esc_html_safe( $senders ); ?></textarea>
+                <p class="description"><?php echo esc_html__( 'One address or domain per line (a domain also covers its subdomains). Leave empty to accept every sender.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Inbox Limits', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><?php echo esc_html__( 'Max emails per harvest', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="100" name="presshub_ai_press_inbox_max_messages" id="presshub_ai_press_inbox_max_messages" value="<?php echo self::esc_attr_safe( (string) $max_msgs ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Ignore emails older than (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="720" name="presshub_ai_press_inbox_max_age_hours" id="presshub_ai_press_inbox_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
+                <br /><label><?php echo esc_html__( 'Max attachment size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="25" name="presshub_ai_press_inbox_max_attachment_mb" id="presshub_ai_press_inbox_max_attachment_mb" value="<?php echo self::esc_attr_safe( (string) $max_mb ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Connection timeout (seconds)', 'presshub-ai-editor' ); ?> <input type="number" min="5" max="120" name="presshub_ai_press_inbox_timeout" id="presshub_ai_press_inbox_timeout" value="<?php echo self::esc_attr_safe( (string) $timeout ); ?>" class="small-text" /></label>
+                <p><label><input type="checkbox" name="presshub_ai_press_inbox_extract_attachments" id="presshub_ai_press_inbox_extract_attachments" value="1" <?php checked( $extract ); ?> /> <?php echo esc_html__( 'Read attachments (PDF and images through Gemini, Word directly)', 'presshub-ai-editor' ); ?></label></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Test Mailbox', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <button type="button" class="button" id="presshub-ai-test-press-inbox"><?php echo esc_html__( 'Test connection', 'presshub-ai-editor' ); ?></button>
+                <span class="spinner" id="presshub-ai-test-press-inbox-spinner" style="float:none;"></span>
+                <span id="presshub-ai-test-press-inbox-result" role="status" aria-live="polite"></span>
+                <p class="description"><?php echo esc_html__( 'Uses the saved settings: save first if you changed anything. Nothing is moved or marked during the test.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <?php
+    }
+
+    /**
+     * Social media monitoring (X / TikTok) rows for the Daily Briefing tab.
+     */
+    public function render_social_monitor_rows() {
+        $S          = 'PressHub_AI_Settings_Storage';
+        $enabled    = $S::get_social_monitor_enabled();
+        $interval   = $S::get_social_monitor_interval_min();
+        $max_age    = $S::get_social_monitor_max_age_hours();
+        $per_acct   = $S::get_social_monitor_max_posts_per_account();
+        $per_run    = $S::get_social_monitor_max_posts_per_harvest();
+        $list_url   = $S::get_social_monitor_x_list_url();
+        $transcribe = $S::get_social_monitor_transcribe_videos();
+        $max_secs   = $S::get_social_monitor_max_video_seconds();
+        $max_mb     = $S::get_social_monitor_max_video_mb();
+
+        $targets  = class_exists( 'PressHub_AI_Social_Monitor' ) ? PressHub_AI_Social_Monitor::get_targets() : [];
+        $store    = class_exists( 'PressHub_AI_Social_Monitor' ) ? PressHub_AI_Social_Monitor::load() : [];
+        $waiting  = 0;
+        foreach ( $store as $p ) {
+            if ( '' === (string) ( $p['used_in'] ?? '' ) ) {
+                $waiting++;
+            }
+        }
+        $last_scan = (int) get_option( 'presshub_ai_social_monitor_last_scan', 0 );
+        $last_txt  = $last_scan > 0
+            ? ( function_exists( 'wp_date' ) ? wp_date( 'j/n/Y H:i', $last_scan ) : gmdate( 'j/n/Y H:i', $last_scan ) )
+            : __( 'never', 'presshub-ai-editor' );
+        ?>
+        <tr class="presshub-social-monitor-heading">
+            <th scope="row" colspan="2"><h3 style="margin:1em 0 0;"><?php echo esc_html__( 'Social Media Monitoring (X and TikTok)', 'presshub-ai-editor' ); ?></h3>
+                <p class="description" style="font-weight:normal;"><?php echo esc_html__( 'Add accounts as News Sources of type "X (Twitter) Account" or "TikTok Account". The social worker (Pull Mode) reads them with its browser and sends new posts here; videos are transcribed by Gemini. Each post is used in one edition.', 'presshub-ai-editor' ); ?></p>
+                <p class="description" style="font-weight:normal;"><?php echo esc_html( sprintf(
+                    /* translators: 1: number of accounts, 2: posts waiting, 3: last scan time */
+                    __( 'Monitored accounts: %1$d. Posts waiting for the next harvest: %2$d. Last scan handed to the worker: %3$s.', 'presshub-ai-editor' ),
+                    count( $targets ),
+                    $waiting,
+                    $last_txt
+                ) ); ?></p>
+            </th>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_monitor_enabled"><?php echo esc_html__( 'Monitor Social Accounts', 'presshub-ai-editor' ); ?></label></th>
+            <td><label><input type="checkbox" name="presshub_ai_social_monitor_enabled" id="presshub_ai_social_monitor_enabled" value="1" <?php checked( $enabled ); ?> /> <?php echo esc_html__( 'Let the worker scan the X and TikTok sources and add their posts to the harvest', 'presshub-ai-editor' ); ?></label></td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Scan Schedule', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><?php echo esc_html__( 'Scan every (minutes)', 'presshub-ai-editor' ); ?> <input type="number" min="30" max="1440" name="presshub_ai_social_monitor_interval_min" id="presshub_ai_social_monitor_interval_min" value="<?php echo self::esc_attr_safe( (string) $interval ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Ignore posts older than (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="168" name="presshub_ai_social_monitor_max_age_hours" id="presshub_ai_social_monitor_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
+                <p class="description"><?php echo esc_html__( 'An extra scan is also requested in the 30 minutes before each scheduled harvest. Fewer scans mean fewer page visits and less risk for the reader accounts.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Post Limits', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><?php echo esc_html__( 'Max new posts per account per scan', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="50" name="presshub_ai_social_monitor_max_posts_per_account" id="presshub_ai_social_monitor_max_posts_per_account" value="<?php echo self::esc_attr_safe( (string) $per_acct ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Max posts per harvest', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="100" name="presshub_ai_social_monitor_max_posts_per_harvest" id="presshub_ai_social_monitor_max_posts_per_harvest" value="<?php echo self::esc_attr_safe( (string) $per_run ); ?>" class="small-text" /></label>
+                <p class="description"><?php echo esc_html__( 'Newest posts are used first. They are placed before the web articles, so keep this below the "Maximum Articles Sent to Curation LLM" setting.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_monitor_x_list_url"><?php echo esc_html__( 'X List (optional)', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <input type="url" name="presshub_ai_social_monitor_x_list_url" id="presshub_ai_social_monitor_x_list_url" value="<?php echo self::esc_attr_safe( $list_url ); ?>" class="regular-text code" placeholder="https://x.com/i/lists/1234567890" />
+                <p class="description"><?php echo esc_html__( 'A private List on the reader account that contains the monitored X accounts. The worker then reads one page instead of one per account. When this is set, profiles are not visited, so every monitored X source must be in the List. Accounts in the List that are not News Sources are ignored.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Videos', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><input type="checkbox" name="presshub_ai_social_monitor_transcribe_videos" id="presshub_ai_social_monitor_transcribe_videos" value="1" <?php checked( $transcribe ); ?> /> <?php echo esc_html__( 'Transcribe and describe videos with Gemini', 'presshub-ai-editor' ); ?></label>
+                <br /><label><?php echo esc_html__( 'Skip videos longer than (seconds)', 'presshub-ai-editor' ); ?> <input type="number" min="10" max="600" name="presshub_ai_social_monitor_max_video_seconds" id="presshub_ai_social_monitor_max_video_seconds" value="<?php echo self::esc_attr_safe( (string) $max_secs ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Max video file size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_monitor_max_video_mb" id="presshub_ai_social_monitor_max_video_mb" value="<?php echo self::esc_attr_safe( (string) $max_mb ); ?>" class="small-text" /></label>
+                <p class="description"><?php echo esc_html__( 'Needs a Gemini provider. Gemini accepts inline files up to about 20 MB; the worker picks the smallest X video quality that fits.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
         <?php
     }
 
