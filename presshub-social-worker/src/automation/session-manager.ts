@@ -32,6 +32,9 @@ export function sanitizePlatform(platform: string): Platform {
 }
 
 export function getSessionsDir(customDir?: string): string {
+  if (!customDir && process.env.PRESSHUB_SESSIONS_DIR?.trim()) {
+    customDir = path.resolve(process.env.PRESSHUB_SESSIONS_DIR.trim());
+  }
   if (customDir) {
     if (!fs.existsSync(customDir)) {
       fs.mkdirSync(customDir, { recursive: true });
@@ -47,6 +50,18 @@ export function getSessionsDir(customDir?: string): string {
     fs.mkdirSync(defaultDir, { recursive: true });
   }
   return defaultDir;
+}
+
+/**
+ * Sessions of the *reader* accounts the Social Monitor browses with. Kept apart
+ * from the posting sessions so a block on a reader never touches the posting
+ * account. PRESSHUB_MONITOR_SESSIONS_DIR, else `sessions-reader` next to the
+ * posting sessions dir.
+ */
+export function getReaderSessionsDir(postingSessionsDir?: string): string {
+  const configured = process.env.PRESSHUB_MONITOR_SESSIONS_DIR?.trim();
+  if (configured) return path.resolve(configured);
+  return path.join(path.dirname(getSessionsDir(postingSessionsDir)), 'sessions-reader');
 }
 
 export function getSessionPath(platform: string, sessionsDir?: string): string {

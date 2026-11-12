@@ -269,6 +269,12 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_noon_generation_time' ],
             'type'              => 'string',
         ] );
+        // Social media monitoring (X / TikTok via the social worker).
+        foreach ( self::get_social_monitor_options_map() as $sm_option => $sm_sanitizer ) {
+            register_setting( 'presshub_ai_options', $sm_option, [
+                'sanitize_callback' => $sm_sanitizer,
+            ] );
+        }
         // Press release inbox (IMAP): every knob registered through one map.
         foreach ( self::get_press_inbox_options_map() as $press_option => $press_sanitizer ) {
             register_setting( 'presshub_ai_options', $press_option, [
@@ -1181,6 +1187,22 @@ class PressHub_AI_Settings_Storage {
                 'badge_label' => __( 'Active Harvester', 'presshub-ai-editor' ),
                 'badge_class' => 'badge-active',
                 'icon'        => 'dashicons-rss',
+            ],
+            'social_x'      => [
+                'label'       => __( 'X (Twitter) Account', 'presshub-ai-editor' ),
+                'description' => __( 'Posts from one X account (e.g. https://x.com/handle), read by the social worker. Videos are transcribed by Gemini.', 'presshub-ai-editor' ),
+                'active'      => true,
+                'badge_label' => __( 'Social Monitor', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-active',
+                'icon'        => 'dashicons-twitter',
+            ],
+            'social_tiktok' => [
+                'label'       => __( 'TikTok Account', 'presshub-ai-editor' ),
+                'description' => __( 'Videos from one TikTok account (e.g. https://www.tiktok.com/@handle), read by the social worker and transcribed by Gemini.', 'presshub-ai-editor' ),
+                'active'      => true,
+                'badge_label' => __( 'Social Monitor', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-active',
+                'icon'        => 'dashicons-video-alt2',
             ],
             'youtube'       => [
                 'label'       => __( 'YouTube Channel / Playlist', 'presshub-ai-editor' ),
@@ -2490,6 +2512,105 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_press_inbox_extract_attachments(): bool {
         return 1 === (int) get_option( 'presshub_ai_press_inbox_extract_attachments', 1 );
+    }
+
+    /* ---------------------------------------------------------------------
+     * Social media monitoring (X / TikTok)
+     *
+     * Accounts are News Sources of type social_x / social_tiktok; the
+     * social worker scans them and posts what it finds to WordPress.
+     * ------------------------------------------------------------------- */
+
+    /**
+     * @return array<string, callable>
+     */
+    public static function get_social_monitor_options_map(): array {
+        return [
+            'presshub_ai_social_monitor_enabled'                => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_monitor_interval_min'           => [ __CLASS__, 'sanitize_social_monitor_interval_min' ],
+            'presshub_ai_social_monitor_max_age_hours'          => [ __CLASS__, 'sanitize_social_monitor_max_age_hours' ],
+            'presshub_ai_social_monitor_max_posts_per_account'  => [ __CLASS__, 'sanitize_social_monitor_max_posts_per_account' ],
+            'presshub_ai_social_monitor_max_posts_per_harvest'  => [ __CLASS__, 'sanitize_social_monitor_max_posts_per_harvest' ],
+            'presshub_ai_social_monitor_x_list_url'             => [ __CLASS__, 'sanitize_social_monitor_x_list_url' ],
+            'presshub_ai_social_monitor_transcribe_videos'      => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_monitor_max_video_seconds'      => [ __CLASS__, 'sanitize_social_monitor_max_video_seconds' ],
+            'presshub_ai_social_monitor_max_video_mb'           => [ __CLASS__, 'sanitize_social_monitor_max_video_mb' ],
+        ];
+    }
+
+    public static function get_social_monitor_boolean_options(): array {
+        return [ 'presshub_ai_social_monitor_enabled', 'presshub_ai_social_monitor_transcribe_videos' ];
+    }
+
+    public static function sanitize_social_monitor_interval_min( $value ): int {
+        return self::clamp_int_option( $value, 30, 1440, 120 );
+    }
+
+    public static function sanitize_social_monitor_max_age_hours( $value ): int {
+        return self::clamp_int_option( $value, 1, 168, 24 );
+    }
+
+    public static function sanitize_social_monitor_max_posts_per_account( $value ): int {
+        return self::clamp_int_option( $value, 1, 50, 10 );
+    }
+
+    public static function sanitize_social_monitor_max_posts_per_harvest( $value ): int {
+        return self::clamp_int_option( $value, 1, 100, 15 );
+    }
+
+    /**
+     * Optional private X List (https://x.com/i/lists/123): one page for all X accounts.
+     */
+    public static function sanitize_social_monitor_x_list_url( $value ): string {
+        $value = trim( (string) wp_unslash( $value ) );
+        if ( preg_match( '#^https://(?:www\.)?(?:x|twitter)\.com/i/lists/(\d+)#i', $value, $m ) ) {
+            return 'https://x.com/i/lists/' . $m[1];
+        }
+        return '';
+    }
+
+    public static function sanitize_social_monitor_max_video_seconds( $value ): int {
+        return self::clamp_int_option( $value, 10, 600, 180 );
+    }
+
+    public static function sanitize_social_monitor_max_video_mb( $value ): int {
+        return self::clamp_int_option( $value, 1, 20, 15 );
+    }
+
+    public static function get_social_monitor_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_social_monitor_enabled', 0 );
+    }
+
+    public static function get_social_monitor_interval_min(): int {
+        return self::sanitize_social_monitor_interval_min( get_option( 'presshub_ai_social_monitor_interval_min', 120 ) );
+    }
+
+    public static function get_social_monitor_max_age_hours(): int {
+        return self::sanitize_social_monitor_max_age_hours( get_option( 'presshub_ai_social_monitor_max_age_hours', 24 ) );
+    }
+
+    public static function get_social_monitor_max_posts_per_account(): int {
+        return self::sanitize_social_monitor_max_posts_per_account( get_option( 'presshub_ai_social_monitor_max_posts_per_account', 10 ) );
+    }
+
+    public static function get_social_monitor_max_posts_per_harvest(): int {
+        return self::sanitize_social_monitor_max_posts_per_harvest( get_option( 'presshub_ai_social_monitor_max_posts_per_harvest', 15 ) );
+    }
+
+    public static function get_social_monitor_x_list_url(): string {
+        return self::sanitize_social_monitor_x_list_url( get_option( 'presshub_ai_social_monitor_x_list_url', '' ) );
+    }
+
+    public static function get_social_monitor_transcribe_videos(): bool {
+        return 1 === (int) get_option( 'presshub_ai_social_monitor_transcribe_videos', 1 );
+    }
+
+    public static function get_social_monitor_max_video_seconds(): int {
+        return self::sanitize_social_monitor_max_video_seconds( get_option( 'presshub_ai_social_monitor_max_video_seconds', 180 ) );
+    }
+
+    public static function get_social_monitor_max_video_mb(): int {
+        return self::sanitize_social_monitor_max_video_mb( get_option( 'presshub_ai_social_monitor_max_video_mb', 15 ) );
     }
 
     /**
@@ -3892,7 +4013,7 @@ class PressHub_AI_Settings_Storage {
         ];
 
         // Press release inbox knobs live on the Daily Briefing tab.
-        $briefing_map = array_merge( $briefing_map, self::get_press_inbox_options_map() );
+        $briefing_map = array_merge( $briefing_map, self::get_press_inbox_options_map(), self::get_social_monitor_options_map() );
 
         switch ( $section ) {
             case 'coauthor':

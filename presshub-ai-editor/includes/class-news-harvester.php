@@ -1460,7 +1460,7 @@ class PressHub_AI_News_Harvester {
         $existing_snapshot = $this->load_snapshot( $date, $edition );
         if ( is_array( $existing_snapshot ) && ! empty( $existing_snapshot['articles'] ) ) {
             foreach ( $existing_snapshot['articles'] as $art ) {
-                if ( ! empty( $art['is_manual'] ) || ! empty( $art['is_press_release'] ) ) {
+                if ( ! empty( $art['is_manual'] ) || ! empty( $art['is_press_release'] ) || ! empty( $art['is_social_post'] ) ) {
                     $payload['articles'][] = $art;
                 }
             }
@@ -1649,6 +1649,8 @@ class PressHub_AI_News_Harvester {
         // eats into their time budget; its articles are placed right after the
         // manual uploads so the curation article cap does not drop them.
         $this->merge_press_releases( $payload );
+        // Posts from monitored X / TikTok accounts, sent in by the social worker.
+        $this->merge_social_posts( $payload, $date, $edition );
 
         $duration_ms                 = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         $payload['budget_exceeded']  = $budget_exceeded;
@@ -1777,6 +1779,57 @@ class PressHub_AI_News_Harvester {
             return trim( function_exists( 'mb_strtolower' ) ? mb_strtolower( $v, 'UTF-8' ) : strtolower( $v ) );
         };
         return md5( $norm( $art['title'] ?? '' ) . '|' . $norm( $art['content'] ?? '' ) );
+    }
+
+    /**
+     * Add unused posts from monitored social accounts to the harvest payload,
+     * right after the manual uploads and press releases.
+     *
+     * @param array  $payload Harvest payload (modified in place).
+     * @param string $date    Briefing date.
+     * @param string $edition morning|noon.
+     */
+    protected function merge_social_posts( array &$payload, string $date, string $edition ): void {
+        if ( ! class_exists( 'PressHub_AI_Social_Monitor' ) ) {
+            return;
+        }
+        try {
+            $posts = $this->take_social_posts( $date, $edition );
+        } catch ( \Throwable $e ) {
+            PressHub_AI_Logger::error( 'Social monitor merge failed: ' . $e->getMessage(), [ 'exception' => $e ] );
+            return;
+        }
+        $known = [];
+        foreach ( $payload['articles'] as $art ) {
+            if ( ! empty( $art['id'] ) ) {
+                $known[ (string) $art['id'] ] = true;
+            }
+        }
+        $new = array_values( array_filter( $posts, static function ( $a ) use ( $known ) {
+            return empty( $known[ (string) ( $a['id'] ?? '' ) ] );
+        } ) );
+
+        $insert_at = 0;
+        foreach ( $payload['articles'] as $i => $art ) {
+            if ( empty( $art['is_manual'] ) && empty( $art['is_press_release'] ) && empty( $art['is_social_post'] ) ) {
+                break;
+            }
+            $insert_at = $i + 1;
+        }
+        if ( ! empty( $new ) ) {
+            array_splice( $payload['articles'], $insert_at, 0, $new );
+        }
+        $payload['social_posts_added'] = count( $new );
+        $payload['social_posts_total'] = count( array_filter( $payload['articles'], static function ( $a ) {
+            return ! empty( $a['is_social_post'] );
+        } ) );
+    }
+
+    /**
+     * Seam for tests.
+     */
+    protected function take_social_posts( string $date, string $edition ): array {
+        return PressHub_AI_Social_Monitor::take_for_harvest( $date, $edition );
     }
 
     /**

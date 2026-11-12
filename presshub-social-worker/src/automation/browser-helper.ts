@@ -38,6 +38,12 @@ export interface ChromeConnectionOptions {
   cdpUrl?: string;
   userDataDir?: string;
   storageState?: string;
+  /**
+   * Never attach to a running Chrome over CDP; always launch an isolated
+   * browser. The social monitor uses this so reader-account cookies never
+   * end up in the user's own Chrome profile.
+   */
+  skipCdp?: boolean;
 }
 
 /**
@@ -168,7 +174,7 @@ export async function connectOrLaunchChrome(
     options.cdpUrl || process.env.PRESSHUB_CHROME_CDP_URL || 'http://127.0.0.1:9222';
 
   // 1. First probe if Chrome CDP endpoint is running
-  const hasCdp = await isCdpAvailable(cdpTarget, 500);
+  const hasCdp = options.skipCdp ? false : await isCdpAvailable(cdpTarget, 500);
   if (hasCdp) {
     try {
       WorkerLogger.info('Browser', `Connected to existing Chrome instance over CDP: ${cdpTarget}`);

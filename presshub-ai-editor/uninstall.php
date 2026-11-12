@@ -75,6 +75,19 @@ $presshub_ai_options = [
     'presshub_ai_press_inbox_max_attachment_mb',
     'presshub_ai_press_inbox_timeout',
     'presshub_ai_press_inbox_extract_attachments',
+    // Social media monitoring (X / TikTok) settings and post store.
+    'presshub_ai_social_monitor_enabled',
+    'presshub_ai_social_monitor_interval_min',
+    'presshub_ai_social_monitor_max_age_hours',
+    'presshub_ai_social_monitor_max_posts_per_account',
+    'presshub_ai_social_monitor_max_posts_per_harvest',
+    'presshub_ai_social_monitor_x_list_url',
+    'presshub_ai_social_monitor_transcribe_videos',
+    'presshub_ai_social_monitor_max_video_seconds',
+    'presshub_ai_social_monitor_max_video_mb',
+    'presshub_ai_social_monitor_posts',
+    'presshub_ai_social_monitor_last_scan',
+    'presshub_ai_social_monitor_scan_started',
 ];
 
 foreach ( $presshub_ai_options as $presshub_ai_option ) {

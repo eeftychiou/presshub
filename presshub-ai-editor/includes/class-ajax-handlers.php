@@ -1856,7 +1856,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_briefing_memory_model'        => [ 'PressHub_AI_Settings_Storage', 'sanitize_model_string' ],
             ];
             // Press release inbox knobs (one shared map, see Settings Storage).
-            $options_map = array_merge( $options_map, PressHub_AI_Settings_Storage::get_press_inbox_options_map() );
+            $options_map = array_merge( $options_map, PressHub_AI_Settings_Storage::get_press_inbox_options_map(), PressHub_AI_Settings_Storage::get_social_monitor_options_map() );
 
             $saved_count = 0;
             $processed = [];
@@ -1911,7 +1911,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                                 PressHub_AI_Logger::info( 'Saved briefing sources: ' . var_export( $clean, true ) );
                             }
                         }
-                    } elseif ( in_array( $option, array_merge( [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled', 'presshub_ai_briefing_schedule_enabled', 'presshub_ai_briefing_noon_schedule_enabled', 'presshub_ai_memory_enabled' ], PressHub_AI_Settings_Storage::get_press_inbox_boolean_options() ), true ) ) {
+                    } elseif ( in_array( $option, array_merge( [ 'presshub_ai_fetch_urls', 'presshub_ai_debug_prompts', 'presshub_ai_rate_limit_enabled', 'presshub_ai_briefing_schedule_enabled', 'presshub_ai_briefing_noon_schedule_enabled', 'presshub_ai_memory_enabled' ], PressHub_AI_Settings_Storage::get_press_inbox_boolean_options(), PressHub_AI_Settings_Storage::get_social_monitor_boolean_options() ), true ) ) {
                         update_option( $option, 0 );
                         $saved_count++;
                         $processed[] = $option . '=0';
@@ -2040,7 +2040,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_social_meta_all_posts',
                 'presshub_ai_memory_enabled',
             ];
-            $boolean_options = array_merge( $boolean_options, PressHub_AI_Settings_Storage::get_press_inbox_boolean_options() );
+            $boolean_options = array_merge( $boolean_options, PressHub_AI_Settings_Storage::get_press_inbox_boolean_options(), PressHub_AI_Settings_Storage::get_social_monitor_boolean_options() );
 
             foreach ( $options_map as $option => $sanitizer ) {
                 try {
