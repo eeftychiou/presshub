@@ -95,7 +95,7 @@ class PressHub_AI_SEO {
      *
      * @return array{title:string,alt_text:string,caption:string,description:string,filename:string,source:string}
      */
-    public static function generate_image_metadata( string $visual_prompt, string $title, string $content ): array {
+    public static function generate_image_metadata( string $visual_prompt, string $title, string $content, int $post_id = 0 ): array {
         $fallback = self::fallback_image_metadata( $visual_prompt, $title );
 
         if ( class_exists( 'PressHub_AI_Settings_Storage' ) && ! PressHub_AI_Settings_Storage::get_image_metadata_enabled() ) {
@@ -107,13 +107,13 @@ class PressHub_AI_SEO {
             return $fallback;
         }
 
-        $user_prompt = str_replace(
-            [ '{title}', '{content}', '{visual_prompt}' ],
-            [ trim( $title ), self::excerpt( $content, 2000 ), trim( $visual_prompt ) ],
-            $template
-        );
+        $user_prompt = strtr( $template, [
+            '{title}'         => trim( $title ),
+            '{content}'       => self::excerpt( $content, 2000 ),
+            '{visual_prompt}' => trim( $visual_prompt ),
+        ] );
 
-        $data = self::call_json( 'image_prompt', 'generate_image_metadata', $user_prompt );
+        $data = self::call_json( 'image_prompt', 'generate_image_metadata', $user_prompt, $post_id );
         if ( ! is_array( $data ) ) {
             return $fallback;
         }
@@ -140,16 +140,17 @@ class PressHub_AI_SEO {
     public static function fallback_image_metadata( string $visual_prompt, string $title ): array {
         $first_sentence = preg_split( '/(?<=[.!?])\s+/u', trim( $visual_prompt ) );
         $first_sentence = is_array( $first_sentence ) && isset( $first_sentence[0] ) ? $first_sentence[0] : $visual_prompt;
+        $prompt_words   = self::words( $visual_prompt );
         $clean_title    = self::clean_line( $title, 120 );
         if ( '' === $clean_title ) {
-            $clean_title = self::clean_line( implode( ' ', array_slice( preg_split( '/\s+/u', trim( $visual_prompt ) ), 0, 10 ) ), 120 );
+            $clean_title = self::clean_line( implode( ' ', array_slice( $prompt_words, 0, 10 ) ), 120 );
         }
         return [
             'title'       => $clean_title,
             'alt_text'    => self::clean_line( $first_sentence, 125 ),
             'caption'     => $clean_title,
             'description' => self::clean_line( $visual_prompt, 600 ),
-            'filename'    => self::slugify( implode( ' ', array_slice( preg_split( '/\s+/u', trim( $visual_prompt ) ), 0, 8 ) ) ),
+            'filename'    => self::slugify( implode( ' ', array_slice( $prompt_words, 0, 8 ) ) ),
             'source'      => 'fallback',
         ];
     }
@@ -201,20 +202,21 @@ class PressHub_AI_SEO {
      *
      * @return array{tags:string[],meta_description:string,focus_keyphrase:string}|WP_Error
      */
-    public static function generate_post_seo( string $title, string $content, int $post_id = 0 ) {
+    public static function generate_post_seo( string $title, string $content, int $post_id = 0, string $module = 'coauthor' ) {
         $template = self::load_prompt( 'seo/post_seo_metadata.txt' );
         if ( '' === $template ) {
             return new WP_Error( 'missing_template', __( 'SEO metadata prompt template is missing.', 'presshub-ai-editor' ) );
         }
 
         $max_tags    = self::max_tags();
-        $user_prompt = str_replace(
-            [ '{title}', '{content}', '{max_tags}', '{existing_tags}' ],
-            [ trim( $title ), self::excerpt( self::clean_text( $content ), self::CONTENT_EXCERPT_CHARS ), (string) $max_tags, self::existing_tags_list() ],
-            $template
-        );
+        $user_prompt = strtr( $template, [
+            '{title}'         => trim( $title ),
+            '{content}'       => self::excerpt( self::clean_text( $content ), self::CONTENT_EXCERPT_CHARS ),
+            '{max_tags}'      => (string) $max_tags,
+            '{existing_tags}' => self::existing_tags_list(),
+        ] );
 
-        $data = self::call_json( 'coauthor', 'generate_post_seo', $user_prompt, $post_id );
+        $data = self::call_json( $module, 'generate_post_seo', $user_prompt, $post_id );
         if ( is_wp_error( $data ) ) {
             return $data;
         }
@@ -294,7 +296,11 @@ class PressHub_AI_SEO {
             return false;
         }
         try {
-            $seo = self::generate_post_seo( $title, $content, $post_id );
+            $modules = [
+                'briefing_text' => 'briefing_text',
+                'podcast'       => 'briefing_podcast',
+            ];
+            $seo = self::generate_post_seo( $title, $content, $post_id, $modules[ $context ] ?? 'coauthor' );
             if ( is_wp_error( $seo ) ) {
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::warning( 'Automatic SEO metadata generation failed', [
@@ -343,7 +349,7 @@ class PressHub_AI_SEO {
         $thumb_id   = (int) ( $input['featured_image_id'] ?? 0 );
 
         $text       = self::clean_text( $html );
-        $word_count = '' === $text ? 0 : count( preg_split( '/\s+/u', $text ) );
+        $word_count = count( self::words( $text ) );
         $checks     = [];
 
         // Headline length.
@@ -445,7 +451,7 @@ class PressHub_AI_SEO {
         if ( preg_match_all( '/<img\b[^>]*>/i', $html, $imgs ) && ! empty( $imgs[0] ) ) {
             $missing = 0;
             foreach ( $imgs[0] as $img ) {
-                if ( ! preg_match( '/\balt\s*=\s*(["\'])\s*[^"\']+\1/i', $img ) ) {
+                if ( ! preg_match( '/\balt\s*=\s*(["\'])\s*(?:(?!\1)\S)(?:(?!\1).)*\1/is', $img ) ) {
                     $missing++;
                 }
             }
@@ -466,7 +472,11 @@ class PressHub_AI_SEO {
         $external  = 0;
         if ( preg_match_all( '/<a\b[^>]*href\s*=\s*(["\'])([^"\']+)\1/i', $html, $links ) ) {
             foreach ( $links[2] as $href ) {
-                $host = self::url_host( (string) $href );
+                $href = trim( (string) $href );
+                if ( '' === $href || '#' === $href[0] || preg_match( '/^(?:mailto|tel|javascript|sms|data):/i', $href ) ) {
+                    continue;
+                }
+                $host = self::url_host( $href );
                 if ( '' === $host || ( '' !== $home_host && $host === $home_host ) ) {
                     $internal++;
                 } else {
@@ -542,16 +552,12 @@ class PressHub_AI_SEO {
             $facts[] = '- Current excerpt: ' . trim( (string) $input['excerpt'] );
         }
 
-        $user_prompt = str_replace(
-            [ '{title}', '{content}', '{seo_facts}', '{existing_tags}' ],
-            [
-                trim( (string) ( $input['title'] ?? '' ) ),
-                self::excerpt( self::clean_text( (string) ( $input['content'] ?? '' ) ), self::CONTENT_EXCERPT_CHARS ),
-                implode( "\n", $facts ),
-                self::existing_tags_list(),
-            ],
-            $template
-        );
+        $user_prompt = strtr( $template, [
+            '{title}'         => trim( (string) ( $input['title'] ?? '' ) ),
+            '{content}'       => self::excerpt( self::clean_text( (string) ( $input['content'] ?? '' ) ), self::CONTENT_EXCERPT_CHARS ),
+            '{seo_facts}'     => implode( "\n", $facts ),
+            '{existing_tags}' => self::existing_tags_list(),
+        ] );
 
         $data = self::call_json( 'coauthor', 'seo_review', $user_prompt, (int) ( $input['post_id'] ?? 0 ) );
         if ( ! is_array( $data ) ) {
@@ -627,14 +633,15 @@ class PressHub_AI_SEO {
             return '' !== $p && ! in_array( $p, [ 'a', 'an', 'the', 'of', 'and', 'with', 'in', 'on', 'at', 'to' ], true );
         } );
         $slug = implode( '-', array_slice( array_values( $parts ), 0, 7 ) );
-        return substr( $slug, 0, 60 );
+        return rtrim( substr( $slug, 0, 60 ), '-' );
     }
 
     /**
      * Attachment filename from the metadata slug.
      */
     public static function image_filename( array $meta, string $ext ): string {
-        $slug = '' !== ( $meta['filename'] ?? '' ) ? $meta['filename'] : 'featured-image';
+        $slug = self::slugify( (string) ( $meta['filename'] ?? '' ) );
+        $slug = '' !== $slug ? $slug : 'featured-image';
         $rand = function_exists( 'wp_generate_password' ) ? strtolower( wp_generate_password( 4, false, false ) ) : substr( md5( uniqid( '', true ) ), 0, 4 );
         return $slug . '-' . gmdate( 'Ymd' ) . '-' . $rand . '.' . $ext;
     }
@@ -647,6 +654,19 @@ class PressHub_AI_SEO {
             'detail' => $detail,
             'weight' => $weight,
         ];
+    }
+
+    /**
+     * Whitespace-separated words; [] for empty or invalid UTF-8 input.
+     *
+     * @return string[]
+     */
+    private static function words( string $text ): array {
+        $parts = preg_split( '/\s+/u', trim( $text ), -1, PREG_SPLIT_NO_EMPTY );
+        if ( false === $parts ) {
+            $parts = preg_split( '/\s+/', trim( $text ), -1, PREG_SPLIT_NO_EMPTY );
+        }
+        return is_array( $parts ) ? $parts : [];
     }
 
     /**

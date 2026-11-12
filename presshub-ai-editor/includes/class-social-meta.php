@@ -248,13 +248,21 @@ class PressHub_AI_Social_Meta {
      * @return string
      */
     public function get_social_image_alt( $post ): string {
-        if ( function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post->ID ) && function_exists( 'get_post_meta' ) ) {
-            $thumb_id = (int) get_post_thumbnail_id( $post->ID );
-            if ( $thumb_id > 0 ) {
-                return trim( (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true ) );
+        if ( ! function_exists( 'get_post_meta' ) ) {
+            return '';
+        }
+        $image_id = 0;
+        if ( function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post->ID ) ) {
+            $image_id = (int) get_post_thumbnail_id( $post->ID );
+        } elseif ( empty( $post->post_content ) || ! preg_match( '/<img[^>]+src=/i', (string) $post->post_content ) ) {
+            // Same pool fallback as get_social_image_url().
+            if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+                $edition   = get_post_meta( $post->ID, '_presshub_briefing_edition', true ) ?: 'morning';
+                $image_ids = PressHub_AI_Settings_Storage::get_briefing_featured_image_ids( $edition );
+                $image_id  = ! empty( $image_ids ) ? (int) reset( $image_ids ) : 0;
             }
         }
-        return '';
+        return $image_id > 0 ? trim( (string) get_post_meta( $image_id, '_wp_attachment_image_alt', true ) ) : '';
     }
 
     /**

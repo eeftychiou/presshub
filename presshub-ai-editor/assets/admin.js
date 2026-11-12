@@ -479,13 +479,20 @@ jQuery(document).ready(function($) {
     }
 
     // Add tags and (optionally) the meta description to the post being edited.
+    // Each outcome shows its own notice: tags added, already present, failed,
+    // excerpt updated, or no excerpt field to update.
     function applySeoSuggestions(tags, metaDescription, overwriteExcerpt, $anchor) {
         tags = (tags || []).filter(function(t) { return !!t; });
         var select = wp.data && wp.data.select && wp.data.select('core/editor');
         if (select && wp.data.dispatch && wp.apiFetch) {
             var dispatcher = wp.data.dispatch('core/editor');
-            if (metaDescription && (overwriteExcerpt || !select.getEditedPostAttribute('excerpt'))) {
-                dispatcher.editPost({ excerpt: metaDescription });
+            if (metaDescription) {
+                if (overwriteExcerpt || !select.getEditedPostAttribute('excerpt')) {
+                    dispatcher.editPost({ excerpt: metaDescription });
+                    if (overwriteExcerpt) {
+                        showNotice(__('Excerpt updated. Save the post to keep it.', 'presshub-ai-editor'), 'success', $anchor);
+                    }
+                }
             }
             if (!tags.length) {
                 return;
@@ -493,17 +500,25 @@ jQuery(document).ready(function($) {
             resolveTagIds(tags).then(function(ids) {
                 var current = select.getEditedPostAttribute('tags') || [];
                 var merged = current.slice();
+                var added = 0;
                 ids.forEach(function(id) {
                     if (merged.indexOf(id) === -1) {
                         merged.push(id);
+                        added++;
                     }
                 });
-                dispatcher.editPost({ tags: merged });
-                showNotice(
-                    __('Added %s suggested tags. Save the post to keep them.', 'presshub-ai-editor').replace('%s', ids.length),
-                    'success',
-                    $anchor
-                );
+                if (added > 0) {
+                    dispatcher.editPost({ tags: merged });
+                    showNotice(
+                        __('Added %s suggested tags. Save the post to keep them.', 'presshub-ai-editor').replace('%s', added),
+                        'success',
+                        $anchor
+                    );
+                } else if (ids.length) {
+                    showNotice(__('The suggested tags are already on this post.', 'presshub-ai-editor'), 'info', $anchor);
+                } else {
+                    showNotice(__('Could not add the suggested tags. Check that you can create tags, then try again.', 'presshub-ai-editor'), 'error', $anchor);
+                }
             });
             return;
         }
@@ -512,6 +527,11 @@ jQuery(document).ready(function($) {
             var $excerpt = $('#excerpt');
             if ($excerpt.length && (overwriteExcerpt || !$excerpt.val())) {
                 $excerpt.val(metaDescription);
+                if (overwriteExcerpt) {
+                    showNotice(__('Excerpt updated. Save the post to keep it.', 'presshub-ai-editor'), 'success', $anchor);
+                }
+            } else if (!$excerpt.length && overwriteExcerpt) {
+                showNotice(__('No excerpt field found. Enable "Excerpt" in Screen Options and try again.', 'presshub-ai-editor'), 'error', $anchor);
             }
         }
         if (tags.length) {
@@ -519,6 +539,9 @@ jQuery(document).ready(function($) {
             if ($newTag.length) {
                 $newTag.val(tags.join(', '));
                 $newTag.closest('.tagsdiv, .ajaxtag').find('.tagadd').trigger('click');
+                showNotice(__('Suggested tags added. Save the post to keep them.', 'presshub-ai-editor'), 'success', $anchor);
+            } else {
+                showNotice(__('No tags box found on this screen.', 'presshub-ai-editor'), 'error', $anchor);
             }
         }
     }
@@ -607,8 +630,11 @@ jQuery(document).ready(function($) {
     $(document).on('click', '#presshub-ai-seo-results .presshub-seo-apply-desc', function(e) {
         e.preventDefault();
         var seo = $('#presshub-ai-seo-results').data('seo') || {};
-        applySeoSuggestions([], seo.suggested_meta_description || '', true, $(this));
-        showNotice(__('Excerpt updated. Save the post to keep it.', 'presshub-ai-editor'), 'success', $(this));
+        if (!seo.suggested_meta_description) {
+            showNotice(__('There is no suggested meta description to use.', 'presshub-ai-editor'), 'info', $(this));
+            return;
+        }
+        applySeoSuggestions([], seo.suggested_meta_description, true, $(this));
     });
 
     // Render a previously saved SEO review on page load.
@@ -744,6 +770,7 @@ jQuery(document).ready(function($) {
         formData.append('action', 'presshub_ai_generate_draft');
         formData.append('nonce', presshubAI.nonce);
         formData.append('post_id', postId);
+        formData.append('title', collectSeoContext().title);
         formData.append('sources', sources);
         formData.append('instructions', instructions);
         formData.append('instruction_preset_id', $('#presshub-ai-preset').val() || '');
@@ -824,6 +851,7 @@ jQuery(document).ready(function($) {
             nonce: presshubAI.nonce,
             post_id: postId,
             content: content,
+            has_seo_context: 1,
             title: seoCtx.title,
             excerpt: seoCtx.excerpt,
             tag_ids: seoCtx.tag_ids,

@@ -239,20 +239,21 @@ class PressHub_AI_Ajax_Handlers {
         // Suggested tags + meta description for the draft. They are applied in
         // the editor when the journalist inserts the draft (the block editor
         // would overwrite tags written server-side on its next save).
+        // Nothing is written to the post here: the journalist may still discard the draft.
         $seo = null;
         if ( class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_seo_auto_enabled() ) {
             require_once __DIR__ . '/class-seo.php';
-            $draft_title = '';
-            if ( preg_match( '/<h1[^>]*>(.*?)<\/h1>/is', (string) $draft, $hm ) ) {
+            $draft_title = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
+            if ( '' === $draft_title && preg_match( '/<h[1-3][^>]*>(.*?)<\/h[1-3]>/is', (string) $draft, $hm ) ) {
                 $draft_title = trim( wp_strip_all_tags( $hm[1] ) );
+            }
+            if ( '' === $draft_title && ! empty( $post_id ) ) {
+                $draft_post  = get_post( (int) $post_id );
+                $draft_title = ( $draft_post && isset( $draft_post->post_title ) ) ? (string) $draft_post->post_title : '';
             }
             $seo_res = PressHub_AI_SEO::generate_post_seo( $draft_title, (string) $draft, ! empty( $post_id ) ? (int) $post_id : 0 );
             if ( ! is_wp_error( $seo_res ) ) {
                 $seo = $seo_res;
-                if ( ! empty( $post_id ) && $post_id > 0 ) {
-                    // Keyphrase / description meta only; tags and excerpt go through the editor.
-                    PressHub_AI_SEO::apply_post_seo( (int) $post_id, $seo_res, false, false );
-                }
             }
         }
 
@@ -343,12 +344,17 @@ class PressHub_AI_Ajax_Handlers {
     private function collect_seo_review_input( int $post_id, string $content ): array {
         $post = $post_id > 0 ? get_post( $post_id ) : null;
 
+        // When the editor sent its state (has_seo_context), empty values mean
+        // "cleared in the editor" and must not fall back to the saved post.
+        // jQuery drops empty arrays from the request, so the flag is the signal.
+        $from_editor = ! empty( $_POST['has_seo_context'] );
+
         $title = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
-        if ( '' === $title && $post && isset( $post->post_title ) ) {
+        if ( ! $from_editor && ! isset( $_POST['title'] ) && $post && isset( $post->post_title ) ) {
             $title = (string) $post->post_title;
         }
         $excerpt = isset( $_POST['excerpt'] ) ? sanitize_textarea_field( wp_unslash( $_POST['excerpt'] ) ) : '';
-        if ( '' === $excerpt && ! isset( $_POST['excerpt'] ) && $post && isset( $post->post_excerpt ) ) {
+        if ( ! $from_editor && ! isset( $_POST['excerpt'] ) && $post && isset( $post->post_excerpt ) ) {
             $excerpt = (string) $post->post_excerpt;
         }
 
@@ -365,7 +371,7 @@ class PressHub_AI_Ajax_Handlers {
                 $tags[] = $tname;
             }
         }
-        if ( ! isset( $_POST['tag_ids'] ) && ! isset( $_POST['tag_names'] ) && $post_id > 0 && function_exists( 'wp_get_post_tags' ) ) {
+        if ( ! $from_editor && ! isset( $_POST['tag_ids'] ) && ! isset( $_POST['tag_names'] ) && $post_id > 0 && function_exists( 'wp_get_post_tags' ) ) {
             foreach ( (array) wp_get_post_tags( $post_id ) as $t ) {
                 if ( is_object( $t ) && isset( $t->name ) ) {
                     $tags[] = (string) $t->name;
@@ -374,7 +380,13 @@ class PressHub_AI_Ajax_Handlers {
         }
 
         $categories = [];
-        $cat_ids    = isset( $_POST['category_ids'] ) ? (array) $_POST['category_ids'] : ( ( $post_id > 0 && function_exists( 'wp_get_post_categories' ) ) ? (array) wp_get_post_categories( $post_id ) : [] );
+        if ( isset( $_POST['category_ids'] ) ) {
+            $cat_ids = (array) $_POST['category_ids'];
+        } elseif ( ! $from_editor && $post_id > 0 && function_exists( 'wp_get_post_categories' ) ) {
+            $cat_ids = (array) wp_get_post_categories( $post_id );
+        } else {
+            $cat_ids = [];
+        }
         foreach ( $cat_ids as $cid ) {
             $name = function_exists( 'get_cat_name' ) ? (string) get_cat_name( (int) $cid ) : '';
             if ( '' !== $name ) {
@@ -382,7 +394,7 @@ class PressHub_AI_Ajax_Handlers {
             }
         }
 
-        $featured = isset( $_POST['featured_media'] ) ? (int) $_POST['featured_media'] : ( ( $post_id > 0 && function_exists( 'get_post_thumbnail_id' ) ) ? (int) get_post_thumbnail_id( $post_id ) : 0 );
+        $featured = isset( $_POST['featured_media'] ) ? (int) $_POST['featured_media'] : ( ( ! $from_editor && $post_id > 0 && function_exists( 'get_post_thumbnail_id' ) ) ? (int) get_post_thumbnail_id( $post_id ) : 0 );
 
         return [
             'post_id'           => $post_id,

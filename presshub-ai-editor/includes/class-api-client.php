@@ -1131,7 +1131,7 @@ class PressHub_AI_API_Client {
         $result = $this->call_provider( $sys_prompt, $user_prompt, true, [], 0.2 );
         $this->suppress_provider_prompt_log = false;
         self::finish_generation_record( $gen_t0, 'seo', $this, $sys_prompt, $user_prompt, $result, [ 'post_id' => $post_id ] );
-        presshub_ai_log_prompts( $action, $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, self::current_request_meta() );
+        presshub_ai_log_prompts( $action, $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, $this->get_request_meta() );
         return $result;
     }
 
@@ -1545,7 +1545,7 @@ class PressHub_AI_API_Client {
             $article_title   = '' !== trim( $article_title ) ? $article_title : $post_ctx['title'];
             $article_content = '' !== trim( $article_content ) ? $article_content : $post_ctx['content'];
         }
-        $media_meta = PressHub_AI_SEO::generate_image_metadata( $prompt, $article_title, PressHub_AI_SEO::clean_text( $article_content ) );
+        $media_meta = PressHub_AI_SEO::generate_image_metadata( $prompt, $article_title, PressHub_AI_SEO::clean_text( $article_content ), $post_id );
         $trace['media_meta_source'] = (string) ( $media_meta['source'] ?? '' );
 
         // Sideload into WordPress Media Library

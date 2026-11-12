@@ -30,6 +30,7 @@ require_once __DIR__ . '/../includes/class-markdown.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 require_once __DIR__ . '/../includes/class-audio-synthesizer.php';
 require_once __DIR__ . '/../includes/class-seo.php';
+require_once __DIR__ . '/../includes/class-ajax-handlers.php';
 
 class SeoTest {
     private $failures = [];
@@ -43,6 +44,8 @@ class SeoTest {
         $this->test_auto_optimize_post();
         $this->test_run_checks();
         $this->test_review_combines_scores();
+        $this->test_review_edge_cases();
+        $this->test_review_input_respects_cleared_editor_state();
 
         if ( ! empty( $this->failures ) ) {
             echo "FAILED:\n" . implode( "\n", $this->failures ) . "\n";
@@ -287,6 +290,55 @@ class SeoTest {
         $this->assert( $bad['score'] < 30, 'Bare post scores low, got ' . $bad['score'] );
         $this->assert( 'fail' === ( $by_key['tags'] ?? '' ) && 'fail' === ( $by_key['excerpt'] ?? '' ) && 'fail' === ( $by_key['featured_image'] ?? '' ) && 'fail' === ( $by_key['category'] ?? '' ) && 'fail' === ( $by_key['inline_alt'] ?? '' ), 'Missing tags/excerpt/image/category/alt flagged: ' . json_encode( $by_key ) );
         $this->assert( 'warn' === ( $by_key['title'] ?? '' ), 'Short headline warns' );
+    }
+
+    public function test_review_edge_cases(): void {
+        $this->reset_env();
+        // Invalid UTF-8 must not fatal (preg_split returns false with /u).
+        $bad = "Caf\xC3\x28 \xFF text";
+        $res = PressHub_AI_SEO::run_checks( [ 'title' => 'T', 'content' => $bad ] );
+        $this->assert( is_int( $res['score'] ), 'run_checks survives invalid UTF-8' );
+        $meta = PressHub_AI_SEO::fallback_image_metadata( $bad, '' );
+        $this->assert( is_string( $meta['title'] ), 'fallback metadata survives invalid UTF-8' );
+
+        // Alt text containing the other quote character counts as present.
+        $res = PressHub_AI_SEO::run_checks( [
+            'title'   => 'T',
+            'content' => '<img src="a.jpg" alt="EU\'s flag"><img src="b.jpg" alt=\'He said "yes"\'><img src="c.jpg" alt=" ">',
+        ] );
+        $inline = array_values( array_filter( $res['checks'], function ( $c ) { return 'inline_alt' === $c['key']; } ) )[0] ?? [];
+        $this->assert( false !== strpos( (string) ( $inline['detail'] ?? '' ), '1 of 3' ), 'Only the blank alt is flagged: ' . ( $inline['detail'] ?? '' ) );
+
+        // Fragment / mailto / tel links are not internal article links.
+        $res = PressHub_AI_SEO::run_checks( [
+            'title'   => 'T',
+            'content' => '<a href="#top">top</a> <a href="mailto:a@b.cy">mail</a> <a href="tel:123">call</a> <a href="javascript:void(0)">x</a>',
+        ] );
+        $internal = array_values( array_filter( $res['checks'], function ( $c ) { return 'internal_links' === $c['key']; } ) )[0] ?? [];
+        $this->assert( 'warn' === ( $internal['status'] ?? '' ), 'Non-article links do not count as internal links' );
+
+        $this->assert( str_repeat( 'a', 59 ) === PressHub_AI_SEO::slugify( str_repeat( 'a', 59 ) . ' bcd' ), 'slugify never ends with a hyphen' );
+        $name = PressHub_AI_SEO::image_filename( [ 'filename' => '../Evil Name!!' ], 'png' );
+        $this->assert( 0 === strpos( $name, 'evil-name-' ), "image_filename re-slugifies raw input: {$name}" );
+    }
+
+    public function test_review_input_respects_cleared_editor_state(): void {
+        $this->reset_env();
+        $GLOBALS['POSTS_STORE'][ 300 ] = [ 'ID' => 300, 'post_title' => 'Saved title', 'post_excerpt' => 'Saved excerpt', 'post_content' => '' ];
+        $handlers = new PressHub_AI_Ajax_Handlers();
+        $method   = new ReflectionMethod( $handlers, 'collect_seo_review_input' );
+        $method->setAccessible( true );
+
+        // Editor cleared title and excerpt and removed every tag/category (jQuery drops empty arrays).
+        $_POST = [ 'has_seo_context' => '1', 'title' => '', 'excerpt' => '' ];
+        $in    = $method->invoke( $handlers, 300, '<p>x</p>' );
+        $this->assert( '' === $in['title'] && '' === $in['excerpt'] && [] === $in['tags'] && [] === $in['categories'] && 0 === $in['featured_image_id'], 'Cleared editor state is respected: ' . json_encode( $in ) );
+
+        // Without editor state the saved post is used.
+        $_POST = [];
+        $in    = $method->invoke( $handlers, 300, '<p>x</p>' );
+        $this->assert( 'Saved title' === $in['title'] && 'Saved excerpt' === $in['excerpt'], 'Saved post used when no editor state was sent' );
+        $_POST = [];
     }
 
     public function test_review_combines_scores(): void {
