@@ -147,6 +147,23 @@ class PressHub_Social_Dispatcher {
                 ? PressHub_Social_Settings_Storage::get_platform_engine( $platform )
                 : 'api';
 
+            // Podcast posts can go to TikTok as several short videos, one per top story.
+            // Their copy is written with the short when the worker claims the job.
+            if ( 'tiktok' === $platform && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine ) ) {
+                $short_jobs = PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ) );
+                foreach ( $short_jobs as $short_job ) {
+                    $job_id = PressHub_Social_Queue::enqueue( $short_job );
+                    if ( is_wp_error( $job_id ) ) {
+                        PressHub_Social_Logger::error( sprintf( 'Failed to enqueue TikTok short for post #%d: %s', $post_id, $job_id->get_error_message() ) );
+                    } elseif ( $job_id > 0 ) {
+                        $job_ids[] = $job_id;
+                        PressHub_Social_Logger::info( sprintf( 'Enqueued TikTok short job #%d for post #%d (scheduled: %s)', $job_id, $post_id, $short_job['scheduled_at'] ) );
+                    }
+                }
+                PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );
+                continue;
+            }
+
             // Check for per-post custom copy override
             $copy_meta = get_post_meta( $post_id, '_presshub_social_copy_' . $platform, true );
             $copy      = is_string( $copy_meta ) ? trim( $copy_meta ) : '';
@@ -244,6 +261,16 @@ class PressHub_Social_Dispatcher {
                 'pull_mode_queued',
                 __( 'Job is queued in Pull Mode and will be picked up automatically by your local worker on its next poll.', 'presshub-social-autopost' )
             );
+        }
+
+        // A TikTok short is only posted by the local worker in Pull Mode; anywhere else it
+        // would go out with its placeholder copy and the full podcast.
+        if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job ) ) {
+            $error = new WP_Error( 'tiktok_short_needs_pull', sprintf( 'TikTok short job #%d can only be posted by the local worker in Pull Mode (engine: %s, worker mode: %s).', $job_id, $engine, $worker_mode ) );
+            PressHub_Social_Logger::error( $error->get_error_message(), [ 'job_id' => $job_id ] );
+            PressHub_Social_Queue::mark_processing( $job_id );
+            PressHub_Social_Queue::mark_failed( $job_id, $error->get_error_message(), [ 'error_code' => 'tiktok_short_needs_pull' ] );
+            return $error;
         }
 
         // Transition job to processing
