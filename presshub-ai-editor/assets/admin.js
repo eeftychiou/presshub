@@ -969,6 +969,29 @@ jQuery(document).ready(function($) {
      * @param {string} tabKey
      * @return {string}
      */
+    /**
+     * After a successful save, show the mailbox password the way a page load
+     * would: masked when one is stored, empty (and "Remove" unchecked) after
+     * removing it. Keeps the plain password out of the page.
+     */
+    function resetPressInboxPasswordField() {
+        var $pass = $('#presshub_ai_press_inbox_password');
+        var $remove = $('#presshub_ai_remove_press_inbox_password');
+        if (!$pass.length) {
+            return;
+        }
+        var typed = String($pass.val() || '');
+        var hasNew = typed !== '' && typed.indexOf('••••') === -1;
+        if (hasNew) {
+            $pass.val('••••••••');
+            $remove.prop('checked', false);
+        } else if ($remove.length && $remove.is(':checked')) {
+            $pass.val('');
+            $remove.prop('checked', false);
+            $remove.closest('label').hide();
+        }
+    }
+
     function getTabFormSnapshot(tabKey) {
         var $tabPane = $('#presshub-tab-pane-' + tabKey);
         if (!$tabPane.length) {
@@ -3105,6 +3128,7 @@ jQuery(document).ready(function($) {
             }
 
             if (res && res.success) {
+                resetPressInboxPasswordField();
                 tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
                 updateTabDirtyState(tabKey);
 
@@ -3290,6 +3314,7 @@ jQuery(document).ready(function($) {
             $spinner.removeClass('is-active');
 
             if (res && res.success) {
+                resetPressInboxPasswordField();
                 initTabBaselines();
                 Object.keys(tabBaselines).forEach(function(k) {
                     updateTabDirtyState(k);

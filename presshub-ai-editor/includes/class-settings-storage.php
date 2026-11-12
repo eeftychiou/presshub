@@ -2394,9 +2394,14 @@ class PressHub_AI_Settings_Storage {
 
     private static function sanitize_imap_folder_name( $value, string $default ): string {
         $value = trim( (string) wp_unslash( $value ) );
-        // Printable ASCII only; no quotes, backslashes or wildcards.
-        $value = preg_replace( '/[^\x20-\x7e]|["\\\\*%]/', '', $value );
-        $value = trim( substr( (string) $value, 0, 200 ) );
+        if ( function_exists( 'mb_check_encoding' ) && ! mb_check_encoding( $value, 'UTF-8' ) ) {
+            $value = (string) preg_replace( '/[^\x20-\x7e]/', '', $value );
+        }
+        // Printable text (Greek is fine: it is sent as modified UTF-7); no
+        // control characters, quotes, backslashes or wildcards.
+        $value = preg_replace( '/[\x00-\x1f\x7f]|["\\\\*%]/u', '', $value );
+        $value = function_exists( 'mb_substr' ) ? mb_substr( (string) $value, 0, 100, 'UTF-8' ) : substr( (string) $value, 0, 200 );
+        $value = trim( (string) $value );
         return '' === $value ? $default : $value;
     }
 

@@ -1864,6 +1864,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 try {
                     // Handle removal flags
                     if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token', 'presshub_ai_remove_briefing_tts_api_key', 'presshub_ai_remove_press_inbox_password' ], true ) ) {
+                        // A new mailbox password typed in the same save wins over "Remove".
+                        if ( 'presshub_ai_remove_press_inbox_password' === $option ) {
+                            $new_pass = (string) ( $post_data['presshub_ai_press_inbox_password'] ?? '' );
+                            if ( '' !== $new_pass && false === strpos( $new_pass, '••••' ) ) {
+                                continue;
+                            }
+                        }
                         if ( isset( $post_data[ $option ] ) && ! empty( $post_data[ $option ] ) ) {
                             call_user_func( $sanitizer, $post_data[ $option ] );
                             $saved_count++;
@@ -2039,6 +2046,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 try {
                     // Handle removal flags
                     if ( in_array( $option, [ 'presshub_ai_remove_api_key', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_github_token', 'presshub_ai_remove_briefing_tts_api_key', 'presshub_ai_remove_press_inbox_password' ], true ) ) {
+                        // A new mailbox password typed in the same save wins over "Remove".
+                        if ( 'presshub_ai_remove_press_inbox_password' === $option ) {
+                            $new_pass = (string) ( $post_data['presshub_ai_press_inbox_password'] ?? '' );
+                            if ( '' !== $new_pass && false === strpos( $new_pass, '••••' ) ) {
+                                continue;
+                            }
+                        }
                         if ( isset( $post_data[ $option ] ) && ! empty( $post_data[ $option ] ) ) {
                             call_user_func( $sanitizer, $post_data[ $option ] );
                             $saved_count++;

@@ -308,6 +308,12 @@ $m2 = PressHub_AI_Mime_Parser::parse( $raw_1253 );
 pr_check( 'mime: windows-1253 Q subject decoded', 'Δελτίο Τύπου Αστυνομίας' === $m2['subject'] );
 pr_check( 'mime: html-only body converted to text', false !== strpos( $m2['text'], 'Δελτίο Τύπου Αστυνομίας' ) && false !== strpos( $m2['text'], 'Second line & more' ) && false === strpos( $m2['text'], '<p>' ) );
 pr_check( 'mime: iso-8859-7 body converted', 'Καλημέρα' === PressHub_AI_Mime_Parser::to_utf8( iconv( 'UTF-8', 'ISO-8859-7', 'Καλημέρα' ), 'iso-8859-7' ) );
+$split_bytes = 'Ανακοίνωση';
+$split_a     = substr( $split_bytes, 0, 5 ); // Cuts "α" (2 bytes) in half.
+$split_b     = substr( $split_bytes, 5 );
+pr_check( 'mime: multi-byte char split across encoded words', 'Ανακοίνωση Τύπου' === PressHub_AI_Mime_Parser::decode_header_value( '=?UTF-8?B?' . base64_encode( $split_a ) . '?= =?UTF-8?B?' . base64_encode( $split_b ) . '?= Τύπου' ) );
+pr_check( 'mime: mixed charsets in one header', 'Γεια σου' === PressHub_AI_Mime_Parser::decode_header_value( '=?windows-1253?B?' . base64_encode( iconv( 'UTF-8', 'CP1253', 'Γεια' ) ) . '?= =?UTF-8?B?' . base64_encode( ' σου' ) . '?=' ) );
+pr_check( 'mime: utf-8 body with one stray byte keeps its Greek', 'Ανακοίνωση για τον προϋπολογισμό' === PressHub_AI_Mime_Parser::to_utf8( "Ανακοίνωση για τον \xA0προϋπολογισμό", 'utf-8' ) );
 pr_check( 'mime: mislabelled utf-8 falls back to windows-1253', 'Γεια' === PressHub_AI_Mime_Parser::to_utf8( iconv( 'UTF-8', 'CP1253', 'Γεια' ), 'utf-8' ) );
 
 // =========================================================================
@@ -419,6 +425,9 @@ pr_check( 'settings: folder strips quotes', 'INBOX' === PressHub_AI_Settings_Sto
 pr_check( 'settings: defaults', 993 === PressHub_AI_Settings_Storage::get_press_inbox_port() && 15 === PressHub_AI_Settings_Storage::get_press_inbox_max_messages() && PressHub_AI_Settings_Storage::get_press_inbox_verify_ssl() && ! PressHub_AI_Settings_Storage::get_press_inbox_enabled() );
 $bmap = PressHub_AI_Settings_Storage::get_section_options_map( 'briefing' );
 pr_check( 'settings: briefing section saves inbox options', isset( $bmap['presshub_ai_press_inbox_host'], $bmap['presshub_ai_press_inbox_password'], $bmap['presshub_ai_remove_press_inbox_password'] ) );
+pr_check( 'settings: Greek folder name kept', 'Δελτία Τύπου' === PressHub_AI_Settings_Storage::sanitize_press_inbox_folder( 'Δελτία "Τύπου*' ) );
+pr_check( 'inbox: Greek folder sent as modified UTF-7', '&A5QDtQO7A8QDrwOx-' === PressHub_AI_Press_Release_Inbox::imap_folder_name( 'Δελτία' ) && 'INBOX.Processed' === PressHub_AI_Press_Release_Inbox::imap_folder_name( 'INBOX.Processed' ) );
+pr_check( 'inbox: text model check', PressHub_AI_Press_Release_Inbox::is_text_model( 'gemini-2.5-flash' ) && ! PressHub_AI_Press_Release_Inbox::is_text_model( 'gemini-2.5-flash-preview-tts' ) && ! PressHub_AI_Press_Release_Inbox::is_text_model( '' ) );
 pr_check( 'settings: unconfigured inbox is off', ! ( new PressHub_AI_Press_Release_Inbox() )->is_configured() );
 
 // =========================================================================
@@ -450,6 +459,13 @@ pr_check( 'harvest: inbox health recorded', 'imap://x/INBOX' === ( end( $p1['sou
 pr_check( 'harvest: count reported', 1 === ( $p1['press_releases_added'] ?? 0 ) );
 $p2 = $h->harvest_all( [], '2026-11-11', 30, 'morning' );
 pr_check( 'harvest: re-harvest keeps already-read press release', 1 === count( $p2['articles'] ) && $p2['articles'][0]['id'] === $result['articles'][0]['id'] );
+pr_check( 'harvest: re-harvest reports the total kept', 0 === ( $p2['press_releases_added'] ?? -1 ) && 1 === ( $p2['press_releases_total'] ?? 0 ) );
+$resend       = $result['articles'][0];
+$resend['id'] = 'pr_resent0000000';
+$resend['title'] = '  ' . mb_strtoupper( $resend['title'], 'UTF-8' ) . ' ';
+$h->stub->articles = [ $resend ];
+$p2b = $h->harvest_all( [], '2026-11-11', 30, 'morning' );
+pr_check( 'harvest: same release resent with another Message-ID is dropped', 1 === count( $p2b['articles'] ) && 1 === ( $p2b['press_releases_duplicates'] ?? 0 ) );
 $p3 = $h->harvest_all( [], '2026-11-11', 30, 'noon' );
 pr_check( 'harvest: other edition does not inherit it', 0 === count( $p3['articles'] ) );
 
@@ -484,4 +500,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "PressReleaseInboxTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "PressReleaseInboxTest: all checks passed\n";
+echo "OK - PressReleaseInboxTest: all checks passed\n";

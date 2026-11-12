@@ -185,16 +185,32 @@ class PressHub_AI_Mime_Parser {
         }
         // Whitespace between adjacent encoded words is not significant.
         $value = preg_replace( '/(\?=)\s+(=\?)/', '$1$2', $value );
-        $out   = preg_replace_callback(
-            '/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/',
-            static function ( $m ) {
-                $charset = preg_replace( '/\*.*$/', '', $m[1] );
-                if ( 'B' === strtoupper( $m[2] ) ) {
-                    $bytes = (string) base64_decode( $m[3] );
-                } else {
-                    $bytes = quoted_printable_decode( str_replace( '_', ' ', $m[3] ) );
+        // Decode each run of adjacent encoded words together: some mailers
+        // split one multi-byte character across two words, so the bytes of
+        // words in the same charset are joined before conversion.
+        $out = preg_replace_callback(
+            '/(?:=\?[^?]+\?[BbQq]\?[^?]*\?=)+/',
+            static function ( $run ) {
+                preg_match_all( '/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/', $run[0], $words, PREG_SET_ORDER );
+                $text    = '';
+                $charset = null;
+                $bytes   = '';
+                foreach ( $words as $m ) {
+                    $cs = strtoupper( (string) preg_replace( '/\*.*$/', '', $m[1] ) );
+                    $decoded = 'B' === strtoupper( $m[2] )
+                        ? (string) base64_decode( $m[3] )
+                        : quoted_printable_decode( str_replace( '_', ' ', $m[3] ) );
+                    if ( null !== $charset && $cs !== $charset ) {
+                        $text .= self::to_utf8( $bytes, $charset );
+                        $bytes = '';
+                    }
+                    $charset = $cs;
+                    $bytes  .= $decoded;
                 }
-                return self::to_utf8( $bytes, $charset );
+                if ( null !== $charset ) {
+                    $text .= self::to_utf8( $bytes, $charset );
+                }
+                return $text;
             },
             $value
         );
@@ -222,10 +238,37 @@ class PressHub_AI_Mime_Parser {
     /**
      * Convert bytes in $charset to UTF-8.
      */
+    /**
+     * True when most bytes above 0x7F form valid UTF-8 sequences, i.e. the
+     * text is UTF-8 with some damage rather than a single-byte charset.
+     */
+    private static function mostly_utf8( string $bytes ): bool {
+        $high = preg_match_all( '/[\x80-\xFF]/', $bytes );
+        if ( ! $high ) {
+            return true;
+        }
+        $valid = 0;
+        if ( preg_match_all( '/[\xC2-\xDF][\x80-\xBF]|[\xE0-\xEF][\x80-\xBF]{2}|[\xF0-\xF4][\x80-\xBF]{3}/', $bytes, $m ) ) {
+            foreach ( $m[0] as $seq ) {
+                $valid += strlen( $seq );
+            }
+        }
+        return $valid * 2 > $high;
+    }
+
     public static function to_utf8( string $bytes, string $charset ): string {
         $charset = strtoupper( trim( $charset, " \t\"'" ) );
         if ( '' === $charset || 'UTF-8' === $charset || 'UTF8' === $charset || 'US-ASCII' === $charset ) {
             if ( function_exists( 'mb_check_encoding' ) && ! mb_check_encoding( $bytes, 'UTF-8' ) ) {
+                if ( self::mostly_utf8( $bytes ) ) {
+                    // Real UTF-8 with a few stray bytes: drop those bytes only.
+                    $clean = function_exists( 'iconv' ) ? @iconv( 'UTF-8', 'UTF-8//IGNORE', $bytes ) : false;
+                    if ( ! is_string( $clean ) || ! mb_check_encoding( $clean, 'UTF-8' ) ) {
+                        $clean = function_exists( 'mb_scrub' ) ? str_replace( '?', '', mb_scrub( str_replace( '?', "\x1A", $bytes ), 'UTF-8' ) ) : '';
+                        $clean = str_replace( "\x1A", '?', $clean );
+                    }
+                    return $clean;
+                }
                 // Mislabelled legacy text: Greek mail is most often Windows-1253.
                 return self::to_utf8( $bytes, 'WINDOWS-1253' );
             }

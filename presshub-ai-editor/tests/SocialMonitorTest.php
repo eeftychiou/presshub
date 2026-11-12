@@ -248,4 +248,4 @@ if ( $failures > 0 ) {
     fwrite( STDERR, "SocialMonitorTest: {$failures} failure(s)\n" );
     exit( 1 );
 }
-echo "SocialMonitorTest: all checks passed\n";
+echo "OK - SocialMonitorTest: all checks passed\n";
