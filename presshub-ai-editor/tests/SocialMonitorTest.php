@@ -72,9 +72,12 @@ sm_check( 'plan: first scan due', true === $plan['due'] );
 sm_check( 'plan: two enabled targets', 2 === count( $plan['targets'] ) );
 sm_check( 'plan: canonical target urls', 'https://x.com/christodulides' === $plan['targets'][0]['url'] && 'https://www.tiktok.com/@cypruspolice' === $plan['targets'][1]['url'] );
 sm_check( 'plan: since defaults to max age', abs( strtotime( $plan['targets'][0]['since'] ) - ( $now - 24 * 3600 ) ) < 5 );
-sm_check( 'plan: last scan recorded', $now === (int) get_option( 'presshub_ai_social_monitor_last_scan' ) );
+sm_check( 'plan: scan start recorded, last scan only after the report', $now === (int) get_option( 'presshub_ai_social_monitor_scan_started' ) && 0 === (int) get_option( 'presshub_ai_social_monitor_last_scan', 0 ) );
 $plan2 = PressHub_AI_Social_Monitor::get_scan_plan( false, $now + 60 );
-sm_check( 'plan: not due again within interval', false === $plan2['due'] && [] === $plan2['targets'] );
+sm_check( 'plan: not handed out twice while a scan runs', false === $plan2['due'] && [] === $plan2['targets'] );
+sm_check( 'plan: lost scan retried after the lock expires', true === PressHub_AI_Social_Monitor::get_scan_plan( false, $now + 31 * 60 )['due'] );
+PressHub_AI_Social_Monitor::mark_scan_done( $now + 31 * 60 + 300 );
+sm_check( 'plan: not due again within interval', false === PressHub_AI_Social_Monitor::get_scan_plan( false, $now + 31 * 60 + 360 )['due'] );
 $plan3 = PressHub_AI_Social_Monitor::get_scan_plan( true, $now + 60 );
 sm_check( 'plan: force makes it due', true === $plan3['due'] );
 sm_check( 'plan: due after interval', PressHub_AI_Social_Monitor::is_scan_due( $now + 121 * 60, $now ) );
@@ -85,6 +88,14 @@ $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_harvest_time']     = wp_date( 'H
 if ( wp_date( 'H:i', $now ) < wp_date( 'H:i', $now + 600 ) ) {
     sm_check( 'plan: pre-harvest scan due', PressHub_AI_Social_Monitor::is_scan_due( $now, $now - 40 * 60 ) );
     sm_check( 'plan: no second pre-harvest scan', ! PressHub_AI_Social_Monitor::is_scan_due( $now, $now - 5 * 60 ) );
+}
+// Harvest just after midnight: the window starts the evening before.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_harvest_time'] = '00:15';
+$late = strtotime( wp_date( 'Y-m-d', $now ) . ' 23:50:00' );
+sm_check( 'plan: midnight test runs', '23:50' === wp_date( 'H:i', $late ) );
+if ( '23:50' === wp_date( 'H:i', $late ) ) {
+    sm_check( 'plan: pre-harvest window crosses midnight', PressHub_AI_Social_Monitor::is_scan_due( $late, $late - 40 * 60 ) );
+    sm_check( 'plan: no window long before a midnight harvest', ! PressHub_AI_Social_Monitor::is_scan_due( $late - 3600, $late - 40 * 60 - 3600 ) );
 }
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_schedule_enabled'] = 0;
 
@@ -127,10 +138,13 @@ sm_check( 'plan: since moves to newest stored post', abs( strtotime( $x_target['
 $GLOBALS['OPTIONS_STORE']['presshub_ai_social_monitor_max_posts_per_account'] = 2;
 $many = [];
 for ( $i = 0; $i < 5; $i++ ) {
-    $many[] = [ 'platform' => 'x', 'id' => (string) ( 5000 + $i ), 'handle' => 'christodulides', 'text' => "Post $i", 'created_at' => $now - 60 ];
+    // Oldest first, as a timeline walk could deliver them.
+    $many[] = [ 'platform' => 'x', 'id' => (string) ( 5000 + $i ), 'handle' => 'christodulides', 'text' => "Post $i", 'created_at' => $now - 300 + $i * 60 ];
 }
 $res3 = PressHub_AI_Social_Monitor::ingest_posts( $many, $now );
 sm_check( 'ingest: per-account cap', 2 === $res3['accepted'] && 3 === count( $res3['rejected'] ) );
+$kept = PressHub_AI_Social_Monitor::load();
+sm_check( 'ingest: cap keeps the newest posts', isset( $kept['x_5004'], $kept['x_5003'] ) && ! isset( $kept['x_5000'] ) );
 unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_monitor_max_posts_per_account'] );
 
 // =========================================================================
@@ -160,7 +174,7 @@ unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_monitor_max_video_mb'] );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_social_monitor_max_posts_per_harvest'] = 3;
 $arts = PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-12', 'morning', $now );
 sm_check( 'harvest: capped at 3', 3 === count( $arts ) );
-sm_check( 'harvest: newest first', 'sm_x_5000' === $arts[0]['id'] || 'sm_x_5001' === $arts[0]['id'] );
+sm_check( 'harvest: newest first', 'sm_x_5004' === $arts[0]['id'] );
 $all_ids = array_column( $arts, 'id' );
 $arts2   = PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-12', 'noon', $now );
 sm_check( 'harvest: used posts not repeated', [] === array_intersect( $all_ids, array_column( $arts2, 'id' ) ) && 3 === count( $arts2 ) );
@@ -184,6 +198,13 @@ $tiktok_article = PressHub_AI_Social_Monitor::to_article( PressHub_AI_Social_Mon
 sm_check( 'article: untranscribed video noted', false !== strpos( $tiktok_article['content'], 'δεν απομαγνητοφωνήθηκε' ) );
 sm_check( 'article: title has author and platform', 0 === strpos( $tiktok_article['title'], 'Αστυνομία Κύπρου (TikTok): Συμβουλές' ) );
 
+// A video whose transcript was just requested waits a little; a failed download does not.
+$fresh = PressHub_AI_Social_Monitor::ingest_posts( [ [ 'platform' => 'x', 'id' => '6001', 'handle' => 'christodulides', 'text' => 'Νέο βίντεο', 'created_at' => $now - 60, 'media' => [ 'type' => 'video', 'duration_sec' => 20 ] ] ], $now );
+sm_check( 'harvest: fresh video requested', [ 'x_6001' ] === $fresh['wants_media'] );
+sm_check( 'harvest: waits for an expected transcript', ! in_array( 'sm_x_6001', array_column( PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-14', 'morning', $now + 60 ), 'id' ), true ) );
+sm_check( 'media: worker can report a failed download', true === PressHub_AI_Social_Monitor::mark_media_failed( 'x_6001', 'worker: download' ) );
+sm_check( 'harvest: failed download is used with its caption', in_array( 'sm_x_6001', array_column( PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-14', 'noon', $now + 60 ), 'id' ), true ) );
+
 $GLOBALS['OPTIONS_STORE']['presshub_ai_social_monitor_enabled'] = 0;
 sm_check( 'harvest: disabled monitor adds nothing', [] === PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-13', 'morning', $now ) );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_social_monitor_enabled'] = 1;
@@ -203,7 +224,7 @@ $h->queue = [ $tiktok_article ];
 $p1       = $h->harvest_all( [], '2026-11-14', 30, 'morning' );
 sm_check( 'harvester: social post in pool', 1 === count( $p1['articles'] ) && 'sm_tiktok_7400000000000000001' === $p1['articles'][0]['id'] && 1 === $p1['social_posts_added'] );
 $p2 = $h->harvest_all( [], '2026-11-14', 30, 'morning' );
-sm_check( 'harvester: re-harvest keeps it', 1 === count( $p2['articles'] ) );
+sm_check( 'harvester: re-harvest keeps it', 1 === count( $p2['articles'] ) && 0 === $p2['social_posts_added'] && 1 === ( $p2['social_posts_total'] ?? 0 ) );
 
 // =========================================================================
 // 6. Curator

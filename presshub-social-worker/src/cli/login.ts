@@ -228,9 +228,20 @@ export async function runLogin(platformArg?: string): Promise<void> {
   if (args.includes('--reader')) {
     const readerDir = getReaderSessionsDir();
     fs.mkdirSync(readerDir, { recursive: true });
+    const previous = process.env.PRESSHUB_SESSIONS_DIR;
     process.env.PRESSHUB_SESSIONS_DIR = readerDir;
     console.log(`\n👀 Reader account mode: the session is saved for the Social Monitor in ${readerDir}`);
+    try {
+      return await runLoginFlow(target, args);
+    } finally {
+      if (previous === undefined) delete process.env.PRESSHUB_SESSIONS_DIR;
+      else process.env.PRESSHUB_SESSIONS_DIR = previous;
+    }
   }
+  return runLoginFlow(target, args);
+}
+
+async function runLoginFlow(target: string | undefined, args: string[]): Promise<void> {
 
   if (!target) {
     console.error(`\n❌ Error: No platform specified.`);

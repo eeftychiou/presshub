@@ -29,6 +29,8 @@ export interface ScannedPost {
   media: { type: 'video' | 'image' | 'none'; duration_sec: number };
   /** Not sent to WordPress; used for the download step. */
   video?: VideoSource[];
+  /** Pinned to the top of the profile (often old). Not sent to WordPress. */
+  pinned?: boolean;
 }
 
 export interface XVideoVariant {
@@ -137,33 +139,43 @@ export function parseXTweet(node: any, maxVideoBytes: number): ScannedPost | nul
 }
 
 /**
- * Walk any X GraphQL response and collect the tweets in it.
- * Quoted and retweeted tweets are not descended into.
+ * Walk any X GraphQL response and collect the tweets in it, in the order the
+ * timeline lists them (newest first). Quoted and retweeted tweets are not
+ * descended into. Tweets under a pinned entry are flagged `pinned`.
  */
 export function parseXGraphql(json: any, maxVideoBytes: number): ScannedPost[] {
   const out = new Map<string, ScannedPost>();
-  const stack: any[] = [json];
+  // Depth-first, children pushed in reverse so they pop in document order.
+  const stack: { node: any; pinned: boolean }[] = [{ node: json, pinned: false }];
   let guard = 0;
   while (stack.length && guard++ < 200000) {
-    const node = stack.pop();
+    const { node, pinned: parentPinned } = stack.pop() as { node: any; pinned: boolean };
     if (!node || typeof node !== 'object') {
       continue;
     }
     if (Array.isArray(node)) {
-      for (const item of node) stack.push(item);
+      for (let i = node.length - 1; i >= 0; i--) stack.push({ node: node[i], pinned: parentPinned });
       continue;
     }
+    const pinned =
+      parentPinned ||
+      node.type === 'TimelinePinEntry' ||
+      /^pinned/i.test(String(node.entryId || '')) ||
+      node.socialContext?.contextType === 'Pin';
     const typename = node.__typename;
     if ((typename === 'Tweet' || typename === 'TweetWithVisibilityResults') && (node.legacy || node.tweet)) {
       const post = parseXTweet(node, maxVideoBytes);
       if (post && !out.has(post.id)) {
+        if (pinned) post.pinned = true;
         out.set(post.id, post);
       }
       continue;
     }
-    for (const [key, value] of Object.entries(node)) {
+    const entries = Object.entries(node);
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const [key, value] = entries[i];
       if (key === 'quoted_status_result' || key === 'retweeted_status_result') continue;
-      if (value && typeof value === 'object') stack.push(value);
+      if (value && typeof value === 'object') stack.push({ node: value, pinned });
     }
   }
   return Array.from(out.values());
@@ -211,14 +223,15 @@ export function parseTikTokItemList(json: any, maxVideoBytes: number): ScannedPo
       text: String(item?.desc || '').trim(),
       created_at: new Date(createdSec * 1000).toISOString(),
       media: isPhoto ? { type: 'image', duration_sec: 0 } : { type: 'video', duration_sec: Math.round(durationSec) },
-      video: isPhoto ? undefined : sources
+      video: isPhoto ? undefined : sources,
+      ...(item?.isPinnedItem ? { pinned: true } : {})
     });
   }
   return out;
 }
 
 /** Strip worker-only fields before sending a post to WordPress. */
-export function toWirePost(p: ScannedPost): Omit<ScannedPost, 'video'> {
-  const { video, ...rest } = p;
+export function toWirePost(p: ScannedPost): Omit<ScannedPost, 'video' | 'pinned'> {
+  const { video, pinned, ...rest } = p;
   return rest;
 }

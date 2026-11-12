@@ -87,6 +87,7 @@ $presshub_ai_options = [
     'presshub_ai_social_monitor_max_video_mb',
     'presshub_ai_social_monitor_posts',
     'presshub_ai_social_monitor_last_scan',
+    'presshub_ai_social_monitor_scan_started',
 ];
 
 foreach ( $presshub_ai_options as $presshub_ai_option ) {

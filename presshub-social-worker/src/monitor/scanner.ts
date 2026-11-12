@@ -138,7 +138,27 @@ async function scanPage(
   } finally {
     await page.close().catch(() => {});
   }
-  return Array.from(found.values());
+  return Array.from(found.values()).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}
+
+/**
+ * Stop scrolling once the page shows a post older than what we still need:
+ * the account's own `since` on a profile, or the oldest `since` of all X
+ * accounts on a List (one busy account must not stop the List early).
+ * Pinned posts are often old and sit at the top, so they never count.
+ */
+export function buildScrollStop(targets: ScanTarget[]): (list: ScannedPost[], handle?: string) => boolean {
+  const sinceOf = new Map<string, number>();
+  for (const t of targets) sinceOf.set(`${t.platform}:${t.handle}`, Date.parse(t.since) || 0);
+  const xFloor = Math.min(Infinity, ...targets.filter((t) => t.platform === 'x').map((t) => Date.parse(t.since) || 0));
+  return (list, handle) =>
+    list.some((p) => {
+      if (p.pinned) return false;
+      const created = Date.parse(p.created_at);
+      if (!handle) return p.platform === 'x' && created <= xFloor;
+      const since = sinceOf.get(`${p.platform}:${p.handle}`);
+      return p.handle === handle && since !== undefined && created <= since;
+    });
 }
 
 /**
@@ -166,8 +186,7 @@ export const browserScan: ScanFn = async (plan: ScanPlan) => {
     const since = sinceOf.get(`${p.platform}:${p.handle}`);
     return since !== undefined && Date.parse(p.created_at) > since;
   };
-  const oldestReached = (list: ScannedPost[], handle?: string) =>
-    list.some((p) => (!handle || p.handle === handle) && !keep(p) && sinceOf.has(`${p.platform}:${p.handle}`));
+  const oldestReached = buildScrollStop(plan.targets);
 
   const xTargets = plan.targets.filter((t) => t.platform === 'x');
   const tiktokTargets = plan.targets.filter((t) => t.platform === 'tiktok');

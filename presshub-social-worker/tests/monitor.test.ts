@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { parseXGraphql, parseXTweet, parseTikTokItemList, rankXVideoVariants, toWirePost, ScannedPost } from '../src/monitor/parsers';
 import { SocialMonitor } from '../src/monitor/monitor-client';
-import { resolveReaderSession, ScanPlan, ScanSession } from '../src/monitor/scanner';
+import { buildScrollStop, resolveReaderSession, ScanPlan, ScanSession, ScanTarget } from '../src/monitor/scanner';
 
 const MB = 1024 * 1024;
 
@@ -112,6 +112,60 @@ describe('X parsers', () => {
     expect(v.media).toEqual({ type: 'video', duration_sec: 30 });
     expect(v.video?.[0].url).toBe('https://v/a.mp4');
     expect(toWirePost(v)).not.toHaveProperty('video');
+  });
+});
+
+describe('Timeline order, pinned posts and scroll stop', () => {
+  const tw = (id: string, created: string, handle = 'MinistryCY') =>
+    xTweet({ legacy: { id_str: id, created_at: created }, handle });
+
+  it('keeps the timeline order (newest first) and flags pinned tweets', () => {
+    const json = {
+      instructions: [
+        { type: 'TimelinePinEntry', entry: { entryId: 'tweet-1', content: { itemContent: { tweet_results: { result: tw('1', 'Mon Jan 01 10:00:00 +0000 2024') } } } } },
+        {
+          type: 'TimelineAddEntries',
+          entries: [
+            { entryId: 'tweet-3', content: { itemContent: { tweet_results: { result: tw('3', 'Wed Nov 11 10:00:00 +0000 2026') } } } },
+            { entryId: 'tweet-2', content: { itemContent: { tweet_results: { result: tw('2', 'Wed Nov 11 09:00:00 +0000 2026') } } } }
+          ]
+        }
+      ]
+    };
+    const posts = parseXGraphql(json, MB);
+    expect(posts.map((p) => p.id)).toEqual(['1', '3', '2']);
+    expect(posts[0].pinned).toBe(true);
+    expect(posts[1].pinned).toBeUndefined();
+    expect(toWirePost(posts[0])).not.toHaveProperty('pinned');
+  });
+
+  it('flags pinned TikTok videos', () => {
+    const [p] = parseTikTokItemList(
+      { itemList: [{ id: '7', createTime: 1700000000, isPinnedItem: true, author: { uniqueId: 'a' }, video: { duration: 5 } }] },
+      MB
+    );
+    expect(p.pinned).toBe(true);
+  });
+
+  const targets: ScanTarget[] = [
+    { platform: 'x', handle: 'busy', url: 'https://x.com/busy', since: '2026-11-11T09:50:00Z' },
+    { platform: 'x', handle: 'quiet', url: 'https://x.com/quiet', since: '2026-11-10T16:00:00Z' }
+  ];
+  const post = (handle: string, created: string, pinned = false): ScannedPost => ({
+    platform: 'x', id: handle + created, handle, author_name: handle, url: '', text: '', created_at: created,
+    media: { type: 'none', duration_sec: 0 }, ...(pinned ? { pinned: true } : {})
+  });
+
+  it('does not stop a List when only one busy account is caught up', () => {
+    const stop = buildScrollStop(targets);
+    expect(stop([post('busy', '2026-11-11T09:40:00Z'), post('quiet', '2026-11-11T09:30:00Z')])).toBe(false);
+    expect(stop([post('quiet', '2026-11-10T15:00:00Z')])).toBe(true);
+  });
+
+  it('ignores pinned posts on a profile', () => {
+    const stop = buildScrollStop(targets);
+    expect(stop([post('quiet', '2024-01-01T00:00:00Z', true), post('quiet', '2026-11-11T08:00:00Z')], 'quiet')).toBe(false);
+    expect(stop([post('quiet', '2026-11-10T12:00:00Z')], 'quiet')).toBe(true);
   });
 });
 
@@ -248,6 +302,19 @@ describe('SocialMonitor client', () => {
     expect(closed).toHaveBeenCalled();
   });
 
+  it('tells WordPress when a requested video cannot be downloaded', async () => {
+    const { fn, calls } = makeFetch(plan, { accepted: 1, wants_media: ['tiktok_7300000000000000001'] });
+    const monitor = new SocialMonitor({
+      wpUrl: 'https://site.test',
+      workerSecret: 's',
+      fetchFn: fn as any,
+      scanFn: async () => ({ posts: [post], errors: [], download: async () => null, close: async () => {} })
+    });
+    const result = await monitor.runOnce();
+    expect(result.media_uploaded).toBe(0);
+    expect(calls[2].url).toBe('https://site.test/wp-json/presshub-social/v1/monitor/media?id=tiktok_7300000000000000001&failed=download');
+  });
+
   it('does not open a browser when no scan is due', async () => {
     const { fn, calls } = makeFetch({ ...plan, due: false }, {});
     const scanFn = jest.fn();
@@ -278,6 +345,7 @@ describe('SocialMonitor client', () => {
     const result = await monitor.runOnce();
     expect(result.media_uploaded).toBe(0);
     expect(download).not.toHaveBeenCalled();
+    expect(calls.some((c) => c.url.includes('failed='))).toBe(false);
     expect(calls.some((c) => c.url.includes('/monitor/media'))).toBe(false);
     expect(closed).toHaveBeenCalled();
   });

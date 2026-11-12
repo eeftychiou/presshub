@@ -99,10 +99,21 @@ export class SocialMonitor {
         if (plan.transcribe_videos) {
           for (const storeId of wants) {
             const post = this.findPost(session.posts, storeId);
-            if (!post) continue;
+            if (!post) {
+              await this.fetchFn(this.endpoint('media') + `?id=${encodeURIComponent(storeId)}&failed=not_in_scan`, {
+                method: 'POST',
+                headers: this.headers()
+              }).catch(() => undefined);
+              continue;
+            }
             const media = await session.download(post);
             if (!media) {
               WorkerLogger.info('Social Monitor', `Could not download the video for ${storeId}; it stays text-only.`);
+              // Tell WordPress so the harvest does not wait for this transcript.
+              await this.fetchFn(this.endpoint('media') + `?id=${encodeURIComponent(storeId)}&failed=download`, {
+                method: 'POST',
+                headers: this.headers()
+              }).catch(() => undefined);
               continue;
             }
             const q = `?id=${encodeURIComponent(storeId)}&mime=${encodeURIComponent(media.mime)}`;

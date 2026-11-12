@@ -1820,6 +1820,9 @@ class PressHub_AI_News_Harvester {
             array_splice( $payload['articles'], $insert_at, 0, $new );
         }
         $payload['social_posts_added'] = count( $new );
+        $payload['social_posts_total'] = count( array_filter( $payload['articles'], static function ( $a ) {
+            return ! empty( $a['is_social_post'] );
+        } ) );
     }
 
     /**

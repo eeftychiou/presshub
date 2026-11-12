@@ -25,6 +25,14 @@ class PressHub_AI_Social_Monitor {
 
     const OPTION_POSTS     = 'presshub_ai_social_monitor_posts';
     const OPTION_LAST_SCAN = 'presshub_ai_social_monitor_last_scan';
+    /** When the worker was last handed a due plan (scan in progress until it reports). */
+    const OPTION_SCAN_STARTED = 'presshub_ai_social_monitor_scan_started';
+
+    /** A scan that has not reported back after this long is assumed lost and may be retried. */
+    const SCAN_LOCK_SEC = 1800;
+
+    /** A harvest waits this long for a requested video transcript before using the caption only. */
+    const MEDIA_WAIT_SEC = 900;
 
     /** Days a post is kept in the store (used or not). Protocol constant, not a user knob. */
     const RETENTION_DAYS = 7;
@@ -133,10 +141,11 @@ class PressHub_AI_Social_Monitor {
             if ( ! preg_match( '/^(\d{1,2}):(\d{2})$/', (string) $hhmm, $m ) ) {
                 continue;
             }
-            $harvest_min  = (int) $m[1] * 60 + (int) $m[2];
-            $window_start = $harvest_min - self::PRE_HARVEST_WINDOW_MIN;
-            if ( $local_now >= $window_start && $local_now < $harvest_min ) {
-                $window_start_ts = $now - ( $local_now - $window_start ) * 60;
+            $harvest_min = (int) $m[1] * 60 + (int) $m[2];
+            // Minutes until the harvest, across midnight (a 00:15 harvest has its window from 23:45).
+            $until = ( $harvest_min - $local_now + 1440 ) % 1440;
+            if ( $until > 0 && $until <= self::PRE_HARVEST_WINDOW_MIN ) {
+                $window_start_ts = $now - ( self::PRE_HARVEST_WINDOW_MIN - $until ) * 60;
                 if ( $last_scan < $window_start_ts ) {
                     return true;
                 }
@@ -159,7 +168,9 @@ class PressHub_AI_Social_Monitor {
         $enabled = PressHub_AI_Settings_Storage::get_social_monitor_enabled();
         $targets = $enabled ? self::get_targets() : [];
         $last    = (int) get_option( self::OPTION_LAST_SCAN, 0 );
-        $due     = $enabled && ! empty( $targets ) && ( $force || self::is_scan_due( $now, $last ) );
+        $started = (int) get_option( self::OPTION_SCAN_STARTED, 0 );
+        $running = $started > $last && ( $now - $started ) < self::SCAN_LOCK_SEC;
+        $due     = $enabled && ! empty( $targets ) && ( $force || ( ! $running && self::is_scan_due( $now, $last ) ) );
 
         $plan = [
             'enabled'               => $enabled,
@@ -185,7 +196,9 @@ class PressHub_AI_Social_Monitor {
             $t['since'] = gmdate( 'c', $since );
             $plan['targets'][] = $t;
         }
-        update_option( self::OPTION_LAST_SCAN, $now, false );
+        // last_scan is stamped when the worker reports back (rest_posts), so a
+        // scan that never reports is retried once the lock expires.
+        update_option( self::OPTION_SCAN_STARTED, $now, false );
         return $plan;
     }
 
@@ -248,7 +261,17 @@ class PressHub_AI_Social_Monitor {
         $result     = [ 'accepted' => 0, 'duplicates' => 0, 'rejected' => [], 'wants_media' => [] ];
         $counts     = [];
 
-        foreach ( array_slice( $posts, 0, 500 ) as $raw ) {
+        // Newest first, so the per-account cap keeps the latest posts whatever order the worker sent.
+        $posts = array_values( array_filter( array_slice( $posts, 0, 500 ), 'is_array' ) );
+        $ts    = static function ( array $p ): int {
+            $c = $p['created_at'] ?? '';
+            return is_numeric( $c ) ? (int) $c : (int) strtotime( (string) $c );
+        };
+        usort( $posts, static function ( $a, $b ) use ( $ts ) {
+            return $ts( $b ) <=> $ts( $a );
+        } );
+
+        foreach ( $posts as $raw ) {
             if ( ! is_array( $raw ) ) {
                 continue;
             }
@@ -326,6 +349,21 @@ class PressHub_AI_Social_Monitor {
     }
 
     /**
+     * Record that a requested video will not arrive, so the harvest stops waiting for it.
+     *
+     * @return true|WP_Error
+     */
+    public static function mark_media_failed( string $store_id, string $reason ) {
+        $store = self::load();
+        if ( ! isset( $store[ $store_id ] ) ) {
+            return new WP_Error( 'unknown_post', 'Unknown post.', [ 'status' => 404 ] );
+        }
+        $store[ $store_id ]['media_failed'] = self::clean_text( $reason, 200 );
+        self::save( $store );
+        return true;
+    }
+
+    /**
      * Transcribe and describe one uploaded video.
      *
      * @param callable|null $reader fn( string $bytes, string $mime, string $sys, string $user ): string|WP_Error (tests).
@@ -390,6 +428,8 @@ class PressHub_AI_Social_Monitor {
         $store   = self::load();
         $floor   = $now - PressHub_AI_Settings_Storage::get_social_monitor_max_age_hours() * 3600;
         $limit   = PressHub_AI_Settings_Storage::get_social_monitor_max_posts_per_harvest();
+        $transcribe = PressHub_AI_Settings_Storage::get_social_monitor_transcribe_videos();
+        $max_secs   = PressHub_AI_Settings_Storage::get_social_monitor_max_video_seconds();
 
         $candidates = [];
         foreach ( $store as $id => $p ) {
@@ -397,6 +437,12 @@ class PressHub_AI_Social_Monitor {
                 continue;
             }
             if ( '' === trim( (string) $p['text'] ) && '' === trim( (string) $p['transcript'] ) ) {
+                continue;
+            }
+            // A transcript was requested and may still be on its way: wait for it a little.
+            $awaiting = $transcribe && 'video' === ( $p['media_type'] ?? '' ) && (int) ( $p['duration_sec'] ?? 0 ) <= $max_secs
+                && '' === (string) ( $p['transcript'] ?? '' ) && '' === (string) ( $p['media_failed'] ?? '' );
+            if ( $awaiting && ( $now - (int) ( $p['received_ts'] ?? 0 ) ) < self::MEDIA_WAIT_SEC ) {
                 continue;
             }
             $candidates[ $id ] = $p;
@@ -512,11 +558,24 @@ class PressHub_AI_Social_Monitor {
         if ( is_array( $errors ) && ! empty( $errors ) ) {
             self::log( 'warning', 'Social monitor: worker reported scan problems.', [ 'errors' => array_slice( $errors, 0, 20 ) ] );
         }
+        self::mark_scan_done();
         return self::response( self::ingest_posts( $posts ) );
     }
 
+    /**
+     * The worker finished a scan (even one with errors): start the interval.
+     */
+    public static function mark_scan_done( ?int $now = null ): void {
+        update_option( self::OPTION_LAST_SCAN, $now ?? time(), false );
+    }
+
     public static function rest_media( $request ) {
-        $id    = sanitize_key( (string) self::param( $request, 'id' ) );
+        $id     = sanitize_key( (string) self::param( $request, 'id' ) );
+        $failed = sanitize_key( (string) self::param( $request, 'failed' ) );
+        if ( '' !== $failed ) {
+            $res = self::mark_media_failed( $id, 'worker: ' . $failed );
+            return is_wp_error( $res ) ? $res : self::response( [ 'id' => $id, 'media_failed' => true ] );
+        }
         $mime  = strtolower( (string) self::param( $request, 'mime' ) );
         $bytes = ( is_object( $request ) && method_exists( $request, 'get_body' ) ) ? (string) $request->get_body() : (string) self::param( $request, 'body' );
         if ( function_exists( 'set_time_limit' ) ) {
