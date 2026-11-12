@@ -352,8 +352,9 @@ export async function generateSocialCard(options: GenerateCardOptions): Promise<
 
   const hasCustomBackground = Boolean(backgroundBuffer && backgroundBuffer.length > 0);
   const isVertical = height > width * 1.2;
-  const isPodcast = Boolean(
-    options.isPodcast ||
+  // An explicit isPodcast wins (a TikTok short whose hook mentions "podcast" passes
+  // false); only when it is not given is it guessed from the title or category.
+  const isPodcast = options.isPodcast ?? Boolean(
     options.title?.toLowerCase().includes('podcast') ||
     options.category?.toLowerCase().includes('podcast')
   );

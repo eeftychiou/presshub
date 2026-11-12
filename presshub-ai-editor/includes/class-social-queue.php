@@ -362,6 +362,34 @@ class PressHub_Social_Queue {
      * @param int $job_id
      * @return bool
      */
+    /**
+     * Atomically move a pending job to processing (attempts + 1). Returns false when the
+     * job is no longer pending, e.g. another worker claim took it first.
+     */
+    public static function claim_for_processing( int $job_id ): bool {
+        $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+
+        if ( self::is_db_ready() ) {
+            global $wpdb;
+            $table  = PressHub_Social_Activator::get_table_name();
+            $result = $wpdb->query( $wpdb->prepare(
+                "UPDATE {$table} SET status = 'processing', attempts = attempts + 1, updated_at = %s WHERE id = %d AND status = 'pending'",
+                $now,
+                $job_id
+            ) );
+            return 1 === (int) $result;
+        }
+
+        if ( isset( self::$memory_store[ $job_id ] ) && 'pending' === ( self::$memory_store[ $job_id ]['status'] ?? '' ) ) {
+            self::$memory_store[ $job_id ]['status']     = 'processing';
+            self::$memory_store[ $job_id ]['attempts']   = (int) ( self::$memory_store[ $job_id ]['attempts'] ?? 0 ) + 1;
+            self::$memory_store[ $job_id ]['updated_at'] = $now;
+            return true;
+        }
+
+        return false;
+    }
+
     public static function mark_processing( int $job_id ): bool {
         $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
 
@@ -669,6 +697,12 @@ class PressHub_Social_Queue {
         $post_copy = trim( $custom_copy );
         if ( '' === $post_copy ) {
             $post_copy = (string) ( $source['post_copy'] ?? '' );
+        }
+        // A TikTok short still showing its placeholder is reposted with its generated
+        // caption when it has one; otherwise the new job is prepared like the original.
+        if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $source )
+            && PressHub_Social_TikTok_Shorts::is_placeholder_copy( $post_copy ) && '' !== PressHub_Social_TikTok_Shorts::generated_caption( $source ) ) {
+            $post_copy = PressHub_Social_TikTok_Shorts::generated_caption( $source );
         }
 
         if ( '' === $post_copy ) {

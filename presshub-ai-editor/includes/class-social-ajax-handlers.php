@@ -340,6 +340,24 @@ class PressHub_Social_Ajax_Handlers {
             wp_send_json_error( [ 'message' => __( 'Job is missing post ID or platform.', 'presshub-social-autopost' ) ], 400 );
         }
 
+        // A TikTok short's copy belongs to its story: regenerating it means going back to
+        // the short's generated caption, never the copywriter's full-post copy.
+        if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job ) ) {
+            $caption = PressHub_Social_TikTok_Shorts::generated_caption( $job );
+            if ( '' === $caption ) {
+                wp_send_json_error( [ 'message' => __( 'This TikTok short is still being prepared; its caption is written with its script.', 'presshub-social-autopost' ) ], 400 );
+            }
+            PressHub_Social_Queue::update_job_copy( $job_id, $caption );
+            wp_send_json_success( [
+                'message'  => __( 'TikTok short caption restored.', 'presshub-social-autopost' ),
+                'job_id'   => $job_id,
+                'post_id'  => $post_id,
+                'platform' => $platform,
+                'new_copy' => $caption,
+                'preview'  => wp_trim_words( $caption, 15 ),
+            ] );
+        }
+
         if ( ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
             wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-social-autopost' ) ], 500 );
         }
@@ -404,7 +422,9 @@ class PressHub_Social_Ajax_Handlers {
             wp_send_json_error( [ 'message' => __( 'Could not update post copy.', 'presshub-social-autopost' ) ], 400 );
         }
 
-        if ( ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
+        // A TikTok short's caption is its own; it is not the post's TikTok copy.
+        $is_short = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
+        if ( ! $is_short && ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
             update_post_meta( (int) $job['post_id'], '_presshub_social_copy_' . sanitize_key( $job['platform'] ), $post_copy );
         }
 

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { createApp } from '../src/app';
+import { WorkerLogger } from '../src/logger';
 import { safeCompare, createAuthMiddleware } from '../src/auth';
 import {
   verifySession,
@@ -254,6 +255,22 @@ describe('PressHub Social Media Worker Suite', () => {
       expect(result.width).toBe(600);
       expect(result.height).toBe(960);
       expect(result.sizeBytes).toBeGreaterThan(1000);
+    });
+
+    test('an explicit isPodcast: false wins over "podcast" in the title (TikTok short hooks)', async () => {
+      const spy = jest.spyOn(WorkerLogger, 'debug');
+      await generateSocialCard({
+        title: 'Τι είπε το podcast για τον μισθό',
+        category: 'ΕΙΔΗΣΗ 1/3',
+        width: 600,
+        height: 960,
+        isPodcast: false,
+        outputDir: TEST_OUTPUT_DIR
+      });
+      const layout = spy.mock.calls.find((c) => String(c[1]).includes('Building SVG layout'));
+      spy.mockRestore();
+      expect(layout).toBeDefined();
+      expect((layout![2] as any).isPodcast).toBe(false);
     });
   });
 

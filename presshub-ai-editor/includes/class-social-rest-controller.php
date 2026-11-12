@@ -271,7 +271,19 @@ class PressHub_Social_REST_Controller {
 
         foreach ( $to_claim as $job ) {
             $job_id = (int) $job['id'];
-            PressHub_Social_Queue::mark_processing( $job_id );
+
+            // A TikTok short is claimed only once its script and audio are prepared in the
+            // background, so this request never waits on an LLM or TTS call.
+            $is_short = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
+            if ( $is_short && ! PressHub_Social_TikTok_Shorts::is_ready( $job ) ) {
+                PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $job['post_id'] ?? 0 ) );
+                continue;
+            }
+
+            // Atomic: an overlapping claim that already took this job skips it.
+            if ( ! PressHub_Social_Queue::claim_for_processing( $job_id ) ) {
+                continue;
+            }
 
             $post_id    = (int) ( $job['post_id'] ?? 0 );
             $post       = $post_id > 0 && function_exists( 'get_post' ) ? get_post( $post_id ) : null;
@@ -295,9 +307,9 @@ class PressHub_Social_REST_Controller {
                 }
             }
 
-            // A TikTok short gets its own script, audio, caption and on-screen hook instead of
-            // the full podcast (Zero-Silent-Fallback: a failed short fails the job).
-            if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job ) ) {
+            // A TikTok short gets its own audio, caption and on-screen hook instead of the
+            // full podcast.
+            if ( $is_short ) {
                 $short = PressHub_Social_TikTok_Shorts::attach_short( $job );
                 if ( is_wp_error( $short ) ) {
                     PressHub_Social_Queue::mark_failed( $job_id, $short->get_error_message(), [ 'error_code' => $short->get_error_code() ] );

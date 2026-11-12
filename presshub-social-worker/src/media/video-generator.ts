@@ -142,8 +142,9 @@ export async function generateSocialVideo(options: GenerateVideoOptions): Promis
   let generatedTempImage = false;
 
   if (!resolvedImagePath || !fs.existsSync(resolvedImagePath)) {
-    const isPodcast = Boolean(
-      options.isPodcast ||
+    // An explicit isPodcast wins (a TikTok short whose hook mentions "podcast" passes
+    // false); only when it is not given is it guessed from the title or category.
+    const isPodcast = options.isPodcast ?? Boolean(
       options.title?.toLowerCase().includes('podcast') ||
       options.category?.toLowerCase().includes('podcast')
     );
