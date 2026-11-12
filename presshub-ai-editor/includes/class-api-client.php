@@ -11,6 +11,7 @@ require_once __DIR__ . '/class-markdown.php';
 require_once __DIR__ . '/class-logger.php';
 require_once __DIR__ . '/class-token-logger.php';
 require_once __DIR__ . '/class-prompt-loader.php';
+require_once __DIR__ . '/class-seo.php';
 
 /**
  * Optional prompt inspection: when the presshub_ai_debug_prompts option
@@ -1113,6 +1114,27 @@ class PressHub_AI_API_Client {
         return new WP_Error( 'json_error', __( 'Failed to parse scorecard JSON.', 'presshub-ai-editor' ) );
     }
 
+    /**
+     * JSON call for the SEO / media-metadata helpers (PressHub_AI_SEO), stored as
+     * an `seo` generation record linked to the post instead of a generic one.
+     *
+     * @return string|WP_Error Raw provider reply.
+     */
+    public function call_seo_json( string $sys_prompt, string $user_prompt, string $action, int $post_id = 0 ) {
+        $this->current_action = $action;
+        if ( empty( $this->api_key ) ) {
+            $this->log_missing_api_key( $action );
+            return new WP_Error( 'no_api_key', __( 'API key is missing.', 'presshub-ai-editor' ) );
+        }
+        $gen_t0 = self::begin_generation_record();
+        $this->suppress_provider_prompt_log = true;
+        $result = $this->call_provider( $sys_prompt, $user_prompt, true, [], 0.2 );
+        $this->suppress_provider_prompt_log = false;
+        self::finish_generation_record( $gen_t0, 'seo', $this, $sys_prompt, $user_prompt, $result, [ 'post_id' => $post_id ] );
+        presshub_ai_log_prompts( $action, $sys_prompt, $user_prompt, is_wp_error( $result ) ? 'ERROR: ' . $result->get_error_message() : $result, $this->get_request_meta() );
+        return $result;
+    }
+
     public function classify_intent( $prompt ) {
         $this->current_action = 'classify_intent';
         $sys_prompt = __( "You are an orchestrator routing user prompts to specialized tools. Classify the user prompt into exactly one of these lowercase strings: 'chat', 'research', 'image', or 'report'.\n- 'chat': Normal Q&A, general questions, writing suggestions, conversations.\n- 'research': Comprehensive synthesis, deep analysis, research on a topic, or requests for a deep investigation.\n- 'image': Requests to generate, create, draw, paint, or design an image/illustration.\n- 'report': Requests to voice over, summarize, or translate an audio or video file/link into a narrated report.\nOutput ONLY the lowercase classification string (e.g. 'chat' or 'research') and absolutely nothing else.", 'presshub-ai-editor' );
@@ -1233,7 +1255,7 @@ class PressHub_AI_API_Client {
             $template
         );
 
-        $sys_prompt = 'You are a professional editorial photojournalist and visual director. You output only detailed, realistic image prompts with zero preamble.';
+        $sys_prompt = 'You are a professional editorial photographer and visual director. You output only detailed, realistic image prompts with zero preamble. Your prompts build images from symbols, places and objects and never depict identifiable people or public figures.';
 
         $result = $client->call_provider( $sys_prompt, $user_prompt, false, [], 0.3 );
         if ( is_wp_error( $result ) ) {
@@ -1255,12 +1277,15 @@ class PressHub_AI_API_Client {
      * @param string $prompt       Visual prompt description.
      * @param string $aspect_ratio Desired aspect ratio ('16:9', '1:1', '4:3'). Defaults to settings option.
      * @param int    $post_id      Optional post ID to attach the image to.
+     * @param array  $context      Optional article context for the Media Library metadata:
+     *                             ['title' => string, 'content' => string]. When omitted it is
+     *                             read from $post_id (post text, or the podcast script).
      * @return array|WP_Error Array with 'id', 'url', 'prompt' on success, WP_Error on failure.
      */
-    public function generate_featured_image( string $prompt, string $aspect_ratio = '', int $post_id = 0 ) {
+    public function generate_featured_image( string $prompt, string $aspect_ratio = '', int $post_id = 0, array $context = [] ) {
         $t0     = self::begin_generation_record();
         $trace  = [];
-        $result = $this->run_featured_image_generation( $prompt, $aspect_ratio, $post_id, $trace );
+        $result = $this->run_featured_image_generation( $prompt, $aspect_ratio, $post_id, $trace, $context );
         $this->record_image_generation( $t0, 'generate_featured_image', $prompt, $result, $post_id, $trace );
         return $result;
     }
@@ -1323,7 +1348,7 @@ class PressHub_AI_API_Client {
      * Generation body for generate_featured_image(). Fills $trace with the resolved
      * request details (client, provider type, model, aspect ratio) for the record.
      */
-    private function run_featured_image_generation( string $prompt, string $aspect_ratio, int $post_id, array &$trace ) {
+    private function run_featured_image_generation( string $prompt, string $aspect_ratio, int $post_id, array &$trace, array $context = [] ) {
         $this->current_action = 'generate_image';
         $client = new self( 'image_generation' );
         $trace['client'] = $client;
@@ -1511,9 +1536,21 @@ class PressHub_AI_API_Client {
             return new WP_Error( 'image_synthesis_failed', __( 'Could not synthesize image data.', 'presshub-ai-editor' ) );
         }
 
+        // Describe the image for the Media Library (title, alt, caption, description,
+        // descriptive filename) so it can be found and reused later.
+        $article_title   = (string) ( $context['title'] ?? '' );
+        $article_content = (string) ( $context['content'] ?? '' );
+        if ( ( '' === trim( $article_title ) || '' === trim( $article_content ) ) && $post_id > 0 ) {
+            $post_ctx        = PressHub_AI_SEO::article_context_for_post( $post_id );
+            $article_title   = '' !== trim( $article_title ) ? $article_title : $post_ctx['title'];
+            $article_content = '' !== trim( $article_content ) ? $article_content : $post_ctx['content'];
+        }
+        $media_meta = PressHub_AI_SEO::generate_image_metadata( $prompt, $article_title, PressHub_AI_SEO::clean_text( $article_content ), $post_id );
+        $trace['media_meta_source'] = (string) ( $media_meta['source'] ?? '' );
+
         // Sideload into WordPress Media Library
-        $filename = 'ai-featured-' . gmdate( 'Ymd-His' ) . '-' . ( function_exists( 'wp_generate_password' ) ? wp_generate_password( 6, false, false ) : substr( md5( uniqid( '', true ) ), 0, 6 ) ) . '.' . $ext;
-        $title    = 'AI Featured Image ' . gmdate( 'Y-m-d H:i' );
+        $filename = PressHub_AI_SEO::image_filename( $media_meta, $ext );
+        $title    = '' !== $media_meta['title'] ? $media_meta['title'] : 'AI Featured Image ' . gmdate( 'Y-m-d H:i' );
         $sideload = $this->sideload_media( $filename, $image_data, $post_id, $title );
 
         if ( is_wp_error( $sideload ) ) {
@@ -1528,6 +1565,7 @@ class PressHub_AI_API_Client {
         if ( $media_id > 0 && function_exists( 'update_post_meta' ) ) {
             update_post_meta( $media_id, '_presshub_ai_image_prompt', $prompt );
         }
+        PressHub_AI_SEO::apply_image_metadata( $media_id, $media_meta );
 
         if ( $post_id > 0 && function_exists( 'update_post_meta' ) ) {
             update_post_meta( $post_id, '_presshub_ai_image_prompt', $prompt );
@@ -1540,9 +1578,12 @@ class PressHub_AI_API_Client {
         }
 
         return [
-            'id'     => $media_id,
-            'url'    => $sideload['url'],
-            'prompt' => $prompt,
+            'id'       => $media_id,
+            'url'      => $sideload['url'],
+            'prompt'   => $prompt,
+            'title'    => $media_meta['title'],
+            'alt_text' => $media_meta['alt_text'],
+            'caption'  => $media_meta['caption'],
         ];
     }
 

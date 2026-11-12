@@ -157,6 +157,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-settings.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-metaboxes.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-seo.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviewer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';

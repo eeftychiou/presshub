@@ -108,6 +108,8 @@ jQuery(document).ready(function($) {
             cssClass = 'notice-error';
         } else if (type === 'success') {
             cssClass = 'notice-success';
+        } else if (type === 'warning') {
+            cssClass = 'notice-warning';
         }
 
         var $notice = $(
@@ -335,9 +337,9 @@ jQuery(document).ready(function($) {
         return $modal;
     }
 
-    function openDraftModal(draftHtml, currentHtml, $returnFocus) {
+    function openDraftModal(draftHtml, currentHtml, $returnFocus, seo) {
         var $modal = ensureDraftModal();
-        presshubPendingDraft = { html: draftHtml };
+        presshubPendingDraft = { html: draftHtml, seo: seo || null };
         presshubModalReturnFocus = $returnFocus || $('#presshub-ai-generate-draft');
 
         var oldPlain = plainText(currentHtml);
@@ -400,8 +402,12 @@ jQuery(document).ready(function($) {
             return;
         }
         var draftHtml = presshubPendingDraft.html;
+        var draftSeo = presshubPendingDraft.seo;
         var $generate = presshubModalReturnFocus || $('#presshub-ai-generate-draft');
         insertDraft(draftHtml);
+        if (draftSeo) {
+            applySeoSuggestions(draftSeo.tags || [], draftSeo.meta_description || '', false, $generate);
+        }
         closeDraftModal(false);
         if ($generate && $generate.length) {
             $generate.trigger('focus');
@@ -437,6 +443,214 @@ jQuery(document).ready(function($) {
         e.preventDefault();
         closeDraftModal(false);
     });
+
+    // ------------------------------------------------------------------
+    // SEO helpers: tags + meta description (excerpt) in the editor, and
+    // the SEO review panel.
+    // ------------------------------------------------------------------
+
+    function decodeEntities(str) {
+        var txt = document.createElement('textarea');
+        txt.innerHTML = String(str || '');
+        return txt.value;
+    }
+
+    // Resolve tag names to term IDs, creating missing tags (block editor).
+    function resolveTagIds(names) {
+        return Promise.all(names.map(function(name) {
+            return wp.apiFetch({
+                path: '/wp/v2/tags?search=' + encodeURIComponent(name) + '&per_page=20&_fields=id,name'
+            }).then(function(list) {
+                var wanted = String(name).toLocaleLowerCase();
+                for (var i = 0; i < (list || []).length; i++) {
+                    if (decodeEntities(list[i].name).toLocaleLowerCase() === wanted) {
+                        return list[i].id;
+                    }
+                }
+                return wp.apiFetch({ path: '/wp/v2/tags', method: 'POST', data: { name: name } })
+                    .then(function(term) { return term.id; });
+            }).catch(function(err) {
+                if (err && err.code === 'term_exists' && err.data && err.data.term_id) {
+                    return err.data.term_id;
+                }
+                return null;
+            });
+        })).then(function(ids) {
+            return ids.filter(function(id) { return !!id; });
+        });
+    }
+
+    // Add tags and (optionally) the meta description to the post being edited.
+    // Each outcome shows its own notice: tags added, already present, failed,
+    // excerpt updated, or no excerpt field to update.
+    function applySeoSuggestions(tags, metaDescription, overwriteExcerpt, $anchor) {
+        tags = (tags || []).filter(function(t) { return !!t; });
+        var select = wp.data && wp.data.select && wp.data.select('core/editor');
+        if (select && wp.data.dispatch && wp.apiFetch) {
+            var dispatcher = wp.data.dispatch('core/editor');
+            if (metaDescription) {
+                if (overwriteExcerpt || !select.getEditedPostAttribute('excerpt')) {
+                    dispatcher.editPost({ excerpt: metaDescription });
+                    if (overwriteExcerpt) {
+                        showNotice(__('Excerpt updated. Save the post to keep it.', 'presshub-ai-editor'), 'success', $anchor);
+                    }
+                }
+            }
+            if (!tags.length) {
+                return;
+            }
+            resolveTagIds(tags).then(function(ids) {
+                var current = select.getEditedPostAttribute('tags') || [];
+                var merged = current.slice();
+                var added = 0;
+                ids.forEach(function(id) {
+                    if (merged.indexOf(id) === -1) {
+                        merged.push(id);
+                        added++;
+                    }
+                });
+                var skipped = tags.length - ids.length;
+                if (added > 0) {
+                    dispatcher.editPost({ tags: merged });
+                    var msg = __('Added %s suggested tags. Save the post to keep them.', 'presshub-ai-editor').replace('%s', added);
+                    if (skipped > 0) {
+                        msg += ' ' + __('%s could not be added.', 'presshub-ai-editor').replace('%s', skipped);
+                    }
+                    showNotice(msg, skipped > 0 ? 'warning' : 'success', $anchor);
+                } else if (ids.length) {
+                    showNotice(__('The suggested tags are already on this post.', 'presshub-ai-editor'), 'info', $anchor);
+                } else {
+                    showNotice(__('Could not add the suggested tags. Check that you can create tags, then try again.', 'presshub-ai-editor'), 'error', $anchor);
+                }
+            });
+            return;
+        }
+        // Classic editor fallback.
+        if (metaDescription) {
+            var $excerpt = $('#excerpt');
+            if ($excerpt.length && (overwriteExcerpt || !$excerpt.val())) {
+                $excerpt.val(metaDescription);
+                if (overwriteExcerpt) {
+                    showNotice(__('Excerpt updated. Save the post to keep it.', 'presshub-ai-editor'), 'success', $anchor);
+                }
+            } else if (!$excerpt.length && overwriteExcerpt) {
+                showNotice(__('No excerpt field found. Enable "Excerpt" in Screen Options and try again.', 'presshub-ai-editor'), 'error', $anchor);
+            }
+        }
+        if (tags.length) {
+            var $newTag = $('#new-tag-post_tag');
+            if ($newTag.length) {
+                $newTag.val(tags.join(', '));
+                $newTag.closest('.tagsdiv, .ajaxtag').find('.tagadd').trigger('click');
+                showNotice(__('Suggested tags added. Save the post to keep them.', 'presshub-ai-editor'), 'success', $anchor);
+            } else {
+                showNotice(__('No tags box found on this screen.', 'presshub-ai-editor'), 'error', $anchor);
+            }
+        }
+    }
+
+    function collectSeoContext() {
+        var ctx = { title: '', excerpt: '', tag_ids: [], tag_names: [], category_ids: [], featured_media: 0 };
+        var select = wp.data && wp.data.select && wp.data.select('core/editor');
+        if (select) {
+            ctx.title = select.getEditedPostAttribute('title') || '';
+            ctx.excerpt = select.getEditedPostAttribute('excerpt') || '';
+            ctx.tag_ids = select.getEditedPostAttribute('tags') || [];
+            ctx.category_ids = select.getEditedPostAttribute('categories') || [];
+            ctx.featured_media = select.getEditedPostAttribute('featured_media') || 0;
+        } else {
+            ctx.title = $('#title').val() || '';
+            ctx.excerpt = $('#excerpt').val() || '';
+            var rawTags = $('textarea[name="tax_input[post_tag]"]').val() || '';
+            ctx.tag_names = rawTags.split(',').map(function(t) { return $.trim(t); }).filter(function(t) { return !!t; });
+            $('#categorychecklist input:checked').each(function() {
+                ctx.category_ids.push(parseInt($(this).val(), 10));
+            });
+            ctx.featured_media = parseInt($('#_thumbnail_id').val(), 10) || 0;
+        }
+        return ctx;
+    }
+
+    function renderSeoReview(seo) {
+        var $box = $('#presshub-ai-seo-results');
+        if (!$box.length) {
+            return;
+        }
+        if (!seo || seo.seo_score === undefined || seo.seo_score === null) {
+            $box.empty();
+            return;
+        }
+        var score = parseInt(seo.seo_score, 10);
+        var tone = score < 50 ? 'presshub-score-low' : (score < 75 ? 'presshub-score-mid' : 'presshub-score-high');
+        var html = '<div class="scorecard-box presshub-seo-box ' + tone + '">' +
+            '<span class="presshub-score-badge" aria-hidden="true">' + presshubEsc(score) + '/100</span>' +
+            '<strong>' + __('SEO Score: %s/100', 'presshub-ai-editor').replace('%s', presshubEsc(score)) + '</strong>';
+        if (seo.focus_keyphrase) {
+            html += '<p class="presshub-seo-keyphrase">' + presshubEsc(__('Focus keyphrase:', 'presshub-ai-editor')) + ' <code>' + presshubEsc(seo.focus_keyphrase) + '</code></p>';
+        }
+        if (seo.summary) {
+            html += '<p>' + presshubEsc(seo.summary) + '</p>';
+        }
+        if (seo.suggestions && seo.suggestions.length) {
+            html += '<strong>' + presshubEsc(__('Suggestions', 'presshub-ai-editor')) + '</strong><ul class="presshub-seo-suggestions">';
+            seo.suggestions.forEach(function(s) {
+                html += '<li>' + presshubEsc(s) + '</li>';
+            });
+            html += '</ul>';
+        }
+        var issues = (seo.checks || []).filter(function(c) { return c.status !== 'pass'; });
+        if (issues.length) {
+            html += '<details class="presshub-seo-checks"><summary>' +
+                presshubEsc(__('On-page checks needing attention (%s)', 'presshub-ai-editor').replace('%s', issues.length)) +
+                '</summary><ul>';
+            issues.forEach(function(c) {
+                html += '<li class="presshub-seo-' + presshubEsc(c.status) + '"><strong>' + presshubEsc(c.label) + ':</strong> ' + presshubEsc(c.detail) + '</li>';
+            });
+            html += '</ul></details>';
+        }
+        var actions = '';
+        if (seo.suggested_tags && seo.suggested_tags.length) {
+            html += '<p class="presshub-seo-tags"><strong>' + presshubEsc(__('Suggested tags:', 'presshub-ai-editor')) + '</strong> ' +
+                seo.suggested_tags.map(function(t) { return '<span class="presshub-seo-tag">' + presshubEsc(t) + '</span>'; }).join(' ') + '</p>';
+            actions += '<button type="button" class="button presshub-seo-apply-tags">' + presshubEsc(__('Add suggested tags', 'presshub-ai-editor')) + '</button> ';
+        }
+        if (seo.suggested_meta_description) {
+            html += '<p class="presshub-seo-desc"><strong>' + presshubEsc(__('Suggested meta description:', 'presshub-ai-editor')) + '</strong> ' + presshubEsc(seo.suggested_meta_description) + '</p>';
+            actions += '<button type="button" class="button presshub-seo-apply-desc">' + presshubEsc(__('Use as excerpt', 'presshub-ai-editor')) + '</button>';
+        }
+        if (actions) {
+            html += '<p class="presshub-seo-actions">' + actions + '</p>';
+        }
+        html += '</div>';
+        $box.html(html).data('seo', seo);
+    }
+
+    $(document).on('click', '#presshub-ai-seo-results .presshub-seo-apply-tags', function(e) {
+        e.preventDefault();
+        var seo = $('#presshub-ai-seo-results').data('seo') || {};
+        applySeoSuggestions(seo.suggested_tags || [], '', false, $(this));
+    });
+    $(document).on('click', '#presshub-ai-seo-results .presshub-seo-apply-desc', function(e) {
+        e.preventDefault();
+        var seo = $('#presshub-ai-seo-results').data('seo') || {};
+        if (!seo.suggested_meta_description) {
+            showNotice(__('There is no suggested meta description to use.', 'presshub-ai-editor'), 'info', $(this));
+            return;
+        }
+        applySeoSuggestions([], seo.suggested_meta_description, true, $(this));
+    });
+
+    // Render a previously saved SEO review on page load.
+    (function() {
+        var $box = $('#presshub-ai-seo-results');
+        if ($box.length && $box.attr('data-seo')) {
+            try {
+                renderSeoReview(JSON.parse($box.attr('data-seo')));
+            } catch (err) {
+                // Ignore malformed saved data.
+            }
+        }
+    })();
 
     // ------------------------------------------------------------------
     // Scorecard rendering (ME-4 / F-23): color-coded border + score
@@ -559,6 +773,7 @@ jQuery(document).ready(function($) {
         formData.append('action', 'presshub_ai_generate_draft');
         formData.append('nonce', presshubAI.nonce);
         formData.append('post_id', postId);
+        formData.append('title', collectSeoContext().title);
         formData.append('sources', sources);
         formData.append('instructions', instructions);
         formData.append('instruction_preset_id', $('#presshub-ai-preset').val() || '');
@@ -590,7 +805,8 @@ jQuery(document).ready(function($) {
                     openDraftModal(
                         response.data.draft,
                         getEditorContent(),
-                        $btn
+                        $btn,
+                        response.data.seo || null
                     );
                 } else {
                     showNotice(
@@ -632,11 +848,19 @@ jQuery(document).ready(function($) {
             .text(__('Running review…', 'presshub-ai-editor'));
         $btn.prop('disabled', true);
 
+        var seoCtx = collectSeoContext();
         $.post(presshubAI.ajax_url, {
             action: 'presshub_ai_run_review',
             nonce: presshubAI.nonce,
             post_id: postId,
-            content: content
+            content: content,
+            has_seo_context: 1,
+            title: seoCtx.title,
+            excerpt: seoCtx.excerpt,
+            tag_ids: seoCtx.tag_ids,
+            tag_names: seoCtx.tag_names,
+            category_ids: seoCtx.category_ids,
+            featured_media: seoCtx.featured_media
         }, function(response) {
             $('#presshub-ai-review-spinner').removeClass('is-active');
             $('#presshub-ai-review-spinner .screen-reader-text').text('');
@@ -649,6 +873,7 @@ jQuery(document).ready(function($) {
                     response.data.libel_risk,
                     response.data.legal_concerns
                 );
+                renderSeoReview(response.data.seo || null);
 
                 // ME-8 / F-29: tell the journalist what happened to the
                 // post status, derived from the server response.
@@ -826,6 +1051,13 @@ jQuery(document).ready(function($) {
         $btn.prop('disabled', true);
         $status.css('color', '#2271b1').text(__('Synthesizing image… This may take up to 30 seconds.', 'presshub-ai-editor'));
 
+        var imgTitle = '';
+        if (wp.data && wp.data.select && wp.data.select('core/editor')) {
+            imgTitle = wp.data.select('core/editor').getEditedPostAttribute('title') || '';
+        } else {
+            imgTitle = $('#title').val() || '';
+        }
+
         $.ajax({
             url: presshubAI.ajax_url,
             type: 'POST',
@@ -833,7 +1065,9 @@ jQuery(document).ready(function($) {
                 action: 'presshub_ai_generate_featured_image',
                 nonce: presshubAI.nonce,
                 post_id: postId,
-                prompt: prompt
+                prompt: prompt,
+                title: imgTitle,
+                content: getEditorContent()
             }
         }).done(function(response) {
             if (response && response.success && response.data && response.data.url) {
@@ -843,7 +1077,13 @@ jQuery(document).ready(function($) {
                 var $setBtn = $('#presshub-ai-set-featured-btn');
                 $setBtn.data('attachment-id', imgData.id).prop('disabled', false);
                 $btn.html('<span class="dashicons dashicons-image-rotate" style="vertical-align: middle; margin-right: 4px;"></span> ' + __('Regenerate Image', 'presshub-ai-editor'));
-                $status.css('color', '#46b450').text(__('Image synthesized & saved to Media Library (ID: #' + imgData.id + ')', 'presshub-ai-editor'));
+                $status.css('color', '#46b450').text(__('Image synthesized & saved to Media Library (ID: #%s)', 'presshub-ai-editor').replace('%s', imgData.id));
+                if (imgData.alt_text) {
+                    $('#presshub-ai-image-preview-img').attr('alt', imgData.alt_text);
+                }
+                if (imgData.title) {
+                    $status.append($('<br>')).append($('<span>').css('color', '#50575e').text(__('Title: ', 'presshub-ai-editor') + imgData.title));
+                }
             } else {
                 var msg = (response && response.data) ? response.data : __('Image generation failed.', 'presshub-ai-editor');
                 $status.css('color', '#dc3232').text(msg);

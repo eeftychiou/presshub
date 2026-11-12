@@ -88,6 +88,10 @@ $presshub_ai_options = [
     'presshub_ai_social_monitor_posts',
     'presshub_ai_social_monitor_last_scan',
     'presshub_ai_social_monitor_scan_started',
+    'presshub_ai_image_metadata_enabled',
+    'presshub_ai_seo_auto_enabled',
+    'presshub_ai_seo_max_tags',
+    'presshub_ai_seo_review_enabled',
 ];
 
 foreach ( $presshub_ai_options as $presshub_ai_option ) {
@@ -151,6 +155,12 @@ while ( true ) {
         wp_delete_post( $presshub_ai_post_id, true );
     }
     $presshub_ai_offset += count( $presshub_ai_research_posts );
+}
+
+// SEO metadata and SEO review results stored on posts.
+if ( function_exists( 'delete_post_meta_by_key' ) ) {
+    delete_post_meta_by_key( '_presshub_ai_seo' );
+    delete_post_meta_by_key( '_presshub_ai_seo_review' );
 }
 
 // Belt-and-braces: no scheduled work may survive uninstall.

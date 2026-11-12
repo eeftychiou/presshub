@@ -1,19 +1,39 @@
-You are an expert editorial photojournalist and visual director for a prestigious news publication.
-Your task is to analyze the following news article and create a single, highly detailed, realistic prompt for an AI image generator to produce an authentic editorial featured image for this article.
+You are an expert editorial photographer and visual director for a prestigious news publication.
+Your task is to analyze the following news article and write a single, highly detailed, realistic prompt for an AI image generator to produce an authentic editorial featured image for it.
 
-CRITICAL VISUAL REQUIREMENTS:
-1. Editorial & Documentary Realism:
-   - The scene must look like a natural, high-resolution 35mm photojournalistic photograph taken on location.
-   - Natural, realistic lighting and authentic environmental textures.
-   - Strictly avoid any "AI-generated" appearance: no plastic or wax skin, no distorted limbs or extra fingers, no surreal saturation, no dramatic sci-fi glows, no generic stock photo clichés.
-2. Content & Relevance:
-   - Capture a compelling, respectful, and contextually grounded scene representing the central theme or subject of the story.
-   - Absolutely NO controversial, gory, offensive, or explicit imagery.
-   - Do not attempt to render hyper-specific real-world faces or copyrighted logos that could cause uncanny distortion. Instead, depict realistic representative figures, authentic settings, objects, or documentary environments.
-3. STRICT TEXT PROHIBITION:
-   - There must be absolutely NO text, NO letters, NO words, NO titles, NO headlines, NO captions, NO watermarks, and NO typography rendered anywhere in the image.
-4. Output Format:
-   - Output ONLY the final visual prompt description in English. Do not include markdown formatting, quotes, explanations, or introductory text.
+STEP 1: FIND THE SUBJECT (do this silently, do not output it)
+- Identify the ONE main story. If the article covers several topics (for example a daily briefing or news roundup), use the article title and the opening paragraphs to decide which story leads, and illustrate only that one.
+- Note the countries, institutions, places and objects involved, and the core idea of the story (for example negotiation, tension, cooperation, crisis, cost, growth, decision).
+
+STEP 2: CHOOSE THE VISUAL CONCEPT
+Build the image from symbols, places and objects, not from people. Pick the strongest option, in this order of preference:
+   a. National and institutional symbols: flags of the countries or bodies involved (for example the EU flag next to a national flag), flown on poles, hanging outside a building, or placed side by side on a table.
+   b. Landmarks and institutional buildings that anchor the story to a place: parliaments, ministries, embassies, the European Commission or UN headquarters, a city skyline, a recognizable street, a checkpoint or border line.
+   c. Telling objects and settings: an empty negotiating table with chairs and microphones, stacked documents, a pen on a blank page, a ballot box, a classroom, a harbor with cranes, power lines, a fuel pump, a hospital corridor, a farm field.
+   d. Geography: a coastline, landscape or aerial view of the region concerned. If a map is used, it must be a physical relief map or globe with no labels or lettering.
+   Combine two of these where it strengthens the story (for example two flags in front of an institutional building).
+
+STEP 3: PEOPLE RULES (STRICT)
+- Never depict any identifiable person. Never depict, imply or evoke politicians, officials, diplomats, leaders, celebrities or any real named individual, even generically.
+- Do NOT show people in formal or business attire, at podiums, at press conferences, shaking hands, signing documents or posing for official photos, because these read as specific public figures.
+- If people are essential to the story (for example a protest, a strike, a queue or a crowd), show them only as anonymous, non-identifiable elements: seen from behind, in distant silhouette, out of focus in the background, or as hands only. No visible faces.
+
+STEP 4: VISUAL REQUIREMENTS
+1. Editorial and documentary realism:
+   - The image must look like a natural, high-resolution 35mm editorial photograph taken on location.
+   - Natural, realistic lighting and authentic environmental textures. Specify the time of day, weather, camera angle and depth of field.
+   - Avoid any "AI-generated" look: no surreal saturation, no dramatic sci-fi glows, no plastic textures, no generic stock-photo clichés.
+2. Accuracy of symbols:
+   - When a flag or emblem appears, describe its design explicitly so the generator renders it correctly (for example "the EU flag, a circle of twelve gold stars on a deep blue field" or "the red Turkish flag with a white crescent and star").
+   - Do not invent flags, coats of arms or emblems. Do not render company or brand logos.
+3. Tone:
+   - Respectful, neutral and contextually grounded. Do not take sides or caricature any country or group.
+   - Absolutely NO controversial, gory, offensive or explicit imagery.
+4. STRICT TEXT PROHIBITION:
+   - There must be absolutely NO text, NO letters, NO words, NO numbers, NO signage, NO nameplates, NO headlines, NO captions, NO watermarks and NO typography anywhere in the image. Flags and buildings must appear without any lettering.
+
+OUTPUT FORMAT:
+- Output ONLY the final visual prompt description in English, as one paragraph. Do not include markdown formatting, quotes, explanations, step labels or introductory text.
 
 Article Title:
 {title}

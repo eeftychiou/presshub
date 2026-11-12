@@ -330,7 +330,7 @@ $GLOBALS['OPTIONS_STORE']['presshub_ai_curation_max_chars_per_article'] = 3000;
 $GLOBALS['GRE_LLM_REPLIES'] = [ "# Τίτλος Ημέρας\n\nΚείμενο." ];
 $res = ( new PressHub_AI_News_Curator() )->generate_briefing( $date, new PressHub_AI_API_Client( 'briefing_text' ), '__none__', [], 'morning' );
 gre_check( 'briefing: generation succeeded through the real client', is_array( $res ) && ! empty( $res['post_id'] ) );
-gre_check( 'briefing: exactly one briefing_text record and no generic record (the QA review is its own scorecard record)', 1 === count( gre_records( 'briefing_text' ) ) && 0 === count( gre_records( 'generic' ) ) && count( gre_records() ) === 1 + count( gre_records( 'scorecard' ) ) );
+gre_check( 'briefing: exactly one briefing_text record and no generic record (the QA review is its own scorecard record, automatic tagging its own seo record)', 1 === count( gre_records( 'briefing_text' ) ) && 0 === count( gre_records( 'generic' ) ) && count( gre_records() ) === 1 + count( gre_records( 'scorecard' ) ) + count( gre_records( 'seo' ) ) );
 
 gre_reset();
 $GLOBALS['GRE_LLM_REPLIES'] = [ "[SPEAKER_1]: Καλημέρα σας!\n[SPEAKER_2]: Καλημέρα, ξεκινάμε." ];
