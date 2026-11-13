@@ -926,6 +926,7 @@ function presshub_ai_execute_generation_cron() {
 
     // 3. Audio podcast synthesis
     if ( ! is_wp_error( $results['podcast'] ) ) {
+        presshub_ai_arm_synthesis_watchdog( $date, 'morning' );
         try {
             $synthesizer = new PressHub_AI_Audio_Synthesizer();
             $results['synthesis'] = $synthesizer->synthesize_podcast( $date );
@@ -948,6 +949,9 @@ function presshub_ai_execute_generation_cron() {
             }
             $results['synthesis'] = new WP_Error( 'synthesis_exception', $t->getMessage() );
         }
+        // The watchdog only covers a process that never returns: a returned
+        // result replaces it (success: nothing to retry; error: the regular retry).
+        presshub_ai_disarm_synthesis_watchdog( $date, 'morning' );
         if ( is_wp_error( $results['synthesis'] ) ) {
             presshub_ai_maybe_schedule_synthesis_retry( $date, 'morning', $results['synthesis'] );
         }
@@ -1019,6 +1023,68 @@ function presshub_ai_maybe_schedule_synthesis_retry( $date, $edition, $error ) {
         ] );
     }
     return true;
+}
+
+/**
+ * Minutes after the start of a scheduled synthesis before the watchdog retry
+ * fires. Longer than a normal synthesis (4-6 minutes) so the retry never runs
+ * alongside the original.
+ */
+function presshub_ai_synthesis_watchdog_delay_min() {
+    $delay_min = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_cron_retry_delay_min() : 0;
+    return $delay_min > 0 ? max( 20, $delay_min ) : 0;
+}
+
+/**
+ * Before a scheduled synthesis starts, queue its one retry in advance.
+ *
+ * When the host kills the PHP process mid-synthesis (time or memory limit),
+ * synthesize_podcast() never returns and no error-driven retry is scheduled:
+ * the podcast is silently lost (13/11/2026 morning edition). The watchdog
+ * retry is queued first and removed as soon as synthesis returns, so it only
+ * fires when the process died. It resumes from the turn cache and skips when
+ * a podcast post already exists. Not armed when retries are disabled (delay 0).
+ *
+ * @param string $date    Briefing date (Y-m-d).
+ * @param string $edition morning | noon.
+ * @return bool True when the watchdog was armed.
+ */
+function presshub_ai_arm_synthesis_watchdog( $date, $edition ) {
+    $delay_min = presshub_ai_synthesis_watchdog_delay_min();
+    $args      = [ (string) $date, (string) $edition ];
+    if ( $delay_min <= 0 || ! function_exists( 'wp_schedule_single_event' ) ) {
+        return false;
+    }
+    if ( function_exists( 'wp_next_scheduled' ) && wp_next_scheduled( 'presshub_ai_retry_podcast_synthesis', $args ) ) {
+        return false;
+    }
+    $when = time() + $delay_min * 60;
+    wp_schedule_single_event( $when, 'presshub_ai_retry_podcast_synthesis', $args );
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( sprintf( 'Podcast synthesis watchdog armed: a retry runs in %d minutes unless synthesis finishes first.', $delay_min ), [
+            'date'     => $date,
+            'edition'  => $edition,
+            'retry_at' => gmdate( 'c', $when ),
+        ] );
+    }
+    return true;
+}
+
+/**
+ * Remove the watchdog retry once synthesis has returned (success or error).
+ *
+ * @param string $date    Briefing date (Y-m-d).
+ * @param string $edition morning | noon.
+ */
+function presshub_ai_disarm_synthesis_watchdog( $date, $edition ) {
+    $args = [ (string) $date, (string) $edition ];
+    if ( ! function_exists( 'wp_next_scheduled' ) || ! function_exists( 'wp_unschedule_event' ) ) {
+        return;
+    }
+    $timestamp = wp_next_scheduled( 'presshub_ai_retry_podcast_synthesis', $args );
+    if ( $timestamp ) {
+        wp_unschedule_event( $timestamp, 'presshub_ai_retry_podcast_synthesis', $args );
+    }
 }
 
 /**
@@ -1192,6 +1258,7 @@ function presshub_ai_execute_noon_generation_cron() {
 
     // 3. Audio podcast synthesis
     if ( ! is_wp_error( $results['podcast'] ) ) {
+        presshub_ai_arm_synthesis_watchdog( $date, 'noon' );
         try {
             $synthesizer = new PressHub_AI_Audio_Synthesizer();
             $results['synthesis'] = $synthesizer->synthesize_podcast( $date, '', 'noon' );
@@ -1214,6 +1281,9 @@ function presshub_ai_execute_noon_generation_cron() {
             }
             $results['synthesis'] = new WP_Error( 'synthesis_exception', $t->getMessage() );
         }
+        // The watchdog only covers a process that never returns: a returned
+        // result replaces it (success: nothing to retry; error: the regular retry).
+        presshub_ai_disarm_synthesis_watchdog( $date, 'noon' );
         if ( is_wp_error( $results['synthesis'] ) ) {
             presshub_ai_maybe_schedule_synthesis_retry( $date, 'noon', $results['synthesis'] );
         }
