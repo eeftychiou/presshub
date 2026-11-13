@@ -572,7 +572,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_tiktok_video_duration',
                 'min'    => 5,
-                'max'    => 60,
+                'max'    => 600,
                 'unit'   => __( 'seconds', 'presshub-social-autopost' ),
             ]
         );

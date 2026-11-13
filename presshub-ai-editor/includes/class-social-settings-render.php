@@ -246,7 +246,7 @@ class PressHub_Social_Settings_Render {
     public function render_ai_temperature_field(): void {
         $temp = get_option( 'presshub_social_ai_temperature', '0.7' );
         ?>
-        <input type="number" step="0.05" min="0" max="2" id="presshub_social_ai_temperature" name="presshub_social_ai_temperature" value="<?php echo esc_attr( $temp ); ?>" class="small-text" />
+        <input type="number" step="0.01" min="0" max="2" id="presshub_social_ai_temperature" name="presshub_social_ai_temperature" value="<?php echo esc_attr( $temp ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'Creativity vs determinism (0.0 to 2.0). Default: 0.7. Leave blank to defer to provider default.', 'presshub-social-autopost' ); ?></p>
         <?php
     }
@@ -314,11 +314,22 @@ class PressHub_Social_Settings_Render {
 
     public function render_number_field( array $args ): void {
         $option = $args['option'];
-        $val    = (int) get_option( $option, $args['default'] ?? 0 );
         $min    = $args['min'] ?? 0;
         $max    = $args['max'] ?? 10000;
         $step   = $args['step'] ?? 1;
         $desc   = $args['desc'] ?? '';
+
+        // Without an explicit default, read the option with a single argument so the
+        // default from register_setting() applies. Passing 0 here rendered 0 for any
+        // option that was never stored, which is below the field's min.
+        $raw = array_key_exists( 'default', $args ) ? get_option( $option, $args['default'] ) : get_option( $option );
+        $val = (int) $raw;
+
+        // Every tab lives in one form and the inactive tabs are display:none. A value
+        // outside min/max in a hidden tab makes the browser refuse the whole submit
+        // with no visible message, so nothing on the page is saved. Clamp what we show
+        // to the range the field accepts.
+        $val = max( (int) $min, min( (int) $max, $val ) );
         ?>
         <input type="number" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" min="<?php echo esc_attr( $min ); ?>" max="<?php echo esc_attr( $max ); ?>" step="<?php echo esc_attr( $step ); ?>" class="small-text" />
         <?php if ( ! empty( $args['unit'] ) ) : ?>

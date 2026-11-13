@@ -32,6 +32,39 @@
             }
         });
 
+        // All tabs share one form and inactive tabs are hidden. When a field in a
+        // hidden tab fails the browser's validation, the browser cancels the submit
+        // and shows nothing, so the save silently does nothing. Show the tab that
+        // holds the first invalid field so its message is visible.
+        var $form = $('#presshub-social-settings-form');
+        var revealedThisSubmit = false;
+        $form.find(':submit').on('click', function () {
+            revealedThisSubmit = false;
+        });
+        if ($form.length && $form[0].addEventListener) {
+            $form[0].addEventListener('invalid', function (e) {
+                if (revealedThisSubmit) {
+                    return;
+                }
+                var $pane = $(e.target).closest('.presshub-social-tab-pane');
+                if (!$pane.length || $pane.is(':visible')) {
+                    return;
+                }
+                revealedThisSubmit = true;
+                var tabId = ($pane.attr('id') || '').replace('presshub-social-tab-pane-', '');
+                var $link = $('.presshub-social-tab-link[data-tab="' + tabId + '"]');
+                $('.presshub-social-tab-link').removeClass('nav-tab-active');
+                $link.addClass('nav-tab-active');
+                $('.presshub-social-tab-pane').hide();
+                $pane.show();
+                setTimeout(function () {
+                    if (e.target.reportValidity) {
+                        e.target.reportValidity();
+                    }
+                }, 0);
+            }, true);
+        }
+
         // Handle Test Connection Buttons
         $(document).on('click', '.presshub-social-test-btn, .presshub-btn-test-connection, [data-test-platform]', function (e) {
             e.preventDefault();
