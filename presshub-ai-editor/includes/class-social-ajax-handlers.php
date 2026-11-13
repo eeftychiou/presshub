@@ -27,6 +27,7 @@ class PressHub_Social_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_social_update_job_copy', [ __CLASS__, 'handle_update_job_copy' ] );
         add_action( 'wp_ajax_presshub_social_repost_job', [ __CLASS__, 'handle_repost_job' ] );
         add_action( 'wp_ajax_presshub_social_render_test_shorts', [ __CLASS__, 'handle_render_test_shorts' ] );
+        add_action( 'wp_ajax_presshub_social_generate_music_track', [ __CLASS__, 'handle_generate_music_track' ] );
     }
 
     /**
@@ -179,6 +180,48 @@ class PressHub_Social_Ajax_Handlers {
                 count( $ids )
             ),
             'job_ids' => $ids,
+        ] );
+    }
+
+    /**
+     * AJAX handler: generate one missing background music track for TikTok shorts (one
+     * Lyria call). The settings page calls it again while `remaining` is above 0.
+     * `reset=1` first deletes every track, so a new set is made.
+     * Capability: manage_options (each call spends on the Gemini API).
+     *
+     * @return void
+     */
+    public static function handle_generate_music_track(): void {
+        check_ajax_referer( 'presshub_social_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+        }
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- one Lyria call can take a minute or more.
+        }
+
+        if ( ! empty( $_POST['reset'] ) ) {
+            PressHub_Social_TikTok_Music::clear_library();
+        }
+
+        $result = PressHub_Social_TikTok_Music::generate_next();
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( [ 'message' => ucfirst( $result->get_error_message() ) ], 400 );
+        }
+
+        wp_send_json_success( [
+            'mood'      => $result['mood'],
+            'url'       => $result['track']['url'] ?? '',
+            'remaining' => (int) $result['remaining'],
+            'message'   => '' === $result['mood']
+                ? __( 'Every mood has its tracks.', 'presshub-social-autopost' )
+                : sprintf(
+                    /* translators: 1: mood, 2: tracks still to make */
+                    __( 'Made a %1$s track. %2$d to go.', 'presshub-social-autopost' ),
+                    $result['mood'],
+                    (int) $result['remaining']
+                ),
         ] );
     }
 

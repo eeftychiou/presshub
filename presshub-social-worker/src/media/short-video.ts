@@ -75,6 +75,11 @@ export interface GenerateShortOptions {
   outputDir?: string;
   /** Seconds the end card stays after the voice ends. */
   tailSeconds?: number;
+  /** Background music, looped and mixed under the voice (ducked while someone speaks). */
+  musicUrl?: string;
+  musicPath?: string;
+  /** Music level under the voice, 0-1 (default 0.15). */
+  musicVolume?: number;
 }
 
 export interface ShortVideoResult {
@@ -84,7 +89,12 @@ export interface ShortVideoResult {
   duration: number;
   captions: number;
   images: number;
+  /** Whether background music was mixed in. */
+  music: boolean;
 }
+
+/** Default music level under the voice (about -16 dB). */
+export const DEFAULT_MUSIC_VOLUME = 0.15;
 
 // Layout on the 1080x1920 ASS canvas (libass scales it to the output size).
 export const CANVAS = { width: 1080, height: 1920 };
@@ -144,7 +154,7 @@ export function assertFfmpegCapabilities(ffmpegBin: string = resolveFfmpegPath()
   if (!filterCheck) {
     filterCheck = execFileAsync(ffmpegBin, ['-hide_banner', '-filters'], { maxBuffer: 8 * 1024 * 1024 })
       .then(({ stdout }) => {
-        const missing = ['subtitles', 'zoompan', 'drawbox', 'overlay'].filter(
+        const missing = ['subtitles', 'zoompan', 'drawbox', 'overlay', 'sidechaincompress', 'amix'].filter(
           (f) => !new RegExp(`\\s${f}\\s`).test(stdout)
         );
         if (missing.length > 0) {
@@ -523,6 +533,29 @@ function runFfmpeg(bin: string, args: string[], cwd: string): Promise<void> {
 }
 
 /**
+ * The audio part of the filter graph. Without music the voice is padded with silence
+ * for the end card. With music the track (looped) sits under the voice at `volume`, is
+ * pushed down further by a sidechain compressor keyed on the voice while someone speaks,
+ * and fades in at the start and out over the last two seconds. amix halves each input,
+ * so the mix is doubled back to the voice's own level.
+ */
+export function audioGraph(voiceIdx: number, musicIdx: number | null, total: number, volume?: number): string[] {
+  const fmt = 'aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo';
+  if (musicIdx === null) {
+    return [`[${voiceIdx}:a]apad[a]`];
+  }
+  const level = Math.max(0, Math.min(1, Number.isFinite(volume as number) ? (volume as number) : DEFAULT_MUSIC_VOLUME));
+  const fadeOut = Math.max(0, total - 2).toFixed(3);
+  return [
+    // The voice is mono: copied to both channels at full level (a plain upmix lowers it 3 dB).
+    `[${voiceIdx}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,pan=stereo|c0=c0|c1=c0,apad,asplit=2[vo][key]`,
+    `[${musicIdx}:a]${fmt},volume=${level.toFixed(3)},afade=t=in:st=0:d=1.5,afade=t=out:st=${fadeOut}:d=2[bed]`,
+    `[bed][key]sidechaincompress=threshold=0.02:ratio=6:attack=20:release=400[duck]`,
+    `[vo][duck]amix=inputs=2:duration=first:dropout_transition=0,volume=2[a]`,
+  ];
+}
+
+/**
  * Builds the FFmpeg arguments. Paths are relative to the work directory (the process
  * cwd), so the subtitles filter needs no Windows drive-letter escaping.
  */
@@ -540,6 +573,10 @@ export function buildFfmpegArgs(p: {
   total: number;
   /** PressHub logo (transparent PNG): top-right corner, then large on the end card. */
   logo?: string;
+  /** Background music, looped for the whole video. */
+  music?: string;
+  /** Music level under the voice, 0-1. */
+  musicVolume?: number;
 }): string[] {
   const args: string[] = ['-hide_banner', '-y'];
   p.slots.forEach((slot) => {
@@ -554,6 +591,10 @@ export function buildFfmpegArgs(p: {
   const logoIdx = barIdx + 1;
   if (p.logo) {
     args.push('-loop', '1', '-framerate', String(p.fps), '-i', p.logo);
+  }
+  const musicIdx = logoIdx + (p.logo ? 1 : 0);
+  if (p.music) {
+    args.push('-stream_loop', '-1', '-i', p.music);
   }
 
   const parts: string[] = [];
@@ -581,7 +622,7 @@ export function buildFfmpegArgs(p: {
     parts.push(`[bar]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.55:t=fill:enable='gte(t,${endStart})'[dim]`);
   }
   parts.push(`[dim]subtitles=${p.ass}:fontsdir=${p.fonts},format=yuv420p[v]`);
-  parts.push(`[${audioIdx}:a]apad[a]`);
+  parts.push(...audioGraph(audioIdx, p.music ? musicIdx : null, p.total, p.musicVolume));
 
   args.push(
     '-filter_complex', parts.join(';'),
@@ -662,6 +703,24 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       WorkerLogger.warn('ShortVideo', 'PressHub logo (assets/brand/presshub-logo.png) is missing; writing the site name as text.');
     }
 
+    // Background music. A track that cannot be read is a warning: the short is
+    // rendered with the voice alone rather than not at all.
+    let music = '';
+    if (options.musicPath && fs.existsSync(options.musicPath)) {
+      music = path.join(work, `music${path.extname(options.musicPath) || '.mp3'}`);
+      fs.copyFileSync(options.musicPath, music);
+    } else if (options.musicUrl) {
+      const ext = (options.musicUrl.match(/\.(wav|mp3|m4a|aac|ogg)(\?|$)/i)?.[1] || 'mp3').toLowerCase();
+      const dest = path.join(work, `music.${ext}`);
+      if (await download(options.musicUrl, dest)) music = dest;
+    }
+    if (music && !(((await probeAudioDuration(music)) ?? 0) > 0)) {
+      WorkerLogger.warn('ShortVideo', `Background music ${options.musicUrl || options.musicPath} is not readable audio; rendering the short without music.`);
+      music = '';
+    } else if (!music && (options.musicUrl || options.musicPath)) {
+      WorkerLogger.warn('ShortVideo', `Background music ${options.musicUrl || options.musicPath} could not be fetched; rendering the short without music.`);
+    }
+
     // Captions.
     const segments = fitSegments(options.segments || [], audioDuration);
     if (segments.length === 0) {
@@ -695,16 +754,18 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       fps,
       total,
       logo: logo ? path.basename(logo) : undefined,
+      music: music ? path.basename(music) : undefined,
+      musicVolume: options.musicVolume,
     });
 
-    WorkerLogger.info('ShortVideo', `Rendering short (${total.toFixed(1)}s, ${storyImages} story image(s), ${chunks.length} caption chunks, ${slots.length} shots)`);
+    WorkerLogger.info('ShortVideo', `Rendering short (${total.toFixed(1)}s, ${storyImages} story image(s), ${chunks.length} caption chunks, ${slots.length} shots, ${music ? 'with' : 'no'} music)`);
     const started = Date.now();
     await runFfmpeg(ffmpegBin, args, work);
     const finalPath = path.join(outputDir, outName);
     fs.renameSync(path.join(work, outName), finalPath);
     WorkerLogger.info('ShortVideo', `Short rendered in ${((Date.now() - started) / 1000).toFixed(1)}s: ${finalPath}`);
 
-    return { filePath: finalPath, width, height, duration: total, captions: chunks.length, images: storyImages };
+    return { filePath: finalPath, width, height, duration: total, captions: chunks.length, images: storyImages, music: Boolean(music) };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }

@@ -11,6 +11,7 @@ import {
   planSlots,
   hookSeconds,
   buildFfmpegArgs,
+  audioGraph,
   generateShortVideo,
   resolveFfmpegPath,
   logoPath,
@@ -162,6 +163,71 @@ describe('TikTok short renderer', () => {
     expect(args[args.length - 1]).toBe('out.mp4');
   });
 
+  test('without music the voice is only padded for the end card', () => {
+    expect(audioGraph(3, null, 10)).toEqual(['[3:a]apad[a]']);
+  });
+
+  test('music is looped under the voice, ducked while someone speaks, and faded out at the end', () => {
+    const args = buildFfmpegArgs({
+      slots: planSlots(8, 1),
+      images: ['img-0.jpg'],
+      audio: 'voice.wav',
+      shade: 'shade.png',
+      ass: 'captions.ass',
+      fonts: 'fonts',
+      output: 'out.mp4',
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      total: 8,
+      logo: 'logo.png',
+      music: 'music.mp3',
+      musicVolume: 0.2
+    });
+    // Inputs: 2 shots, voice (2), shade (3), bar (4), logo (5), music (6), looped.
+    const musicArg = args.indexOf('music.mp3');
+    expect(args.slice(musicArg - 3, musicArg)).toEqual(['-stream_loop', '-1', '-i']);
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain('[2:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,pan=stereo|c0=c0|c1=c0,apad,asplit=2[vo][key]');
+    expect(graph).toContain('[6:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.200,afade=t=in:st=0:d=1.5,afade=t=out:st=6.000:d=2[bed]');
+    expect(graph).toContain('[bed][key]sidechaincompress=');
+    expect(graph).toContain('[vo][duck]amix=inputs=2:duration=first:dropout_transition=0,volume=2[a]');
+    expect(audioGraph(2, 6, 8, 5)[1]).toContain('volume=1.000');
+  });
+
+  test('renders a short with background music mixed under the voice', async () => {
+    fs.mkdirSync(OUT, { recursive: true });
+    const voice = path.join(OUT, 'voice.wav');
+    const music = path.join(OUT, 'bed.mp3');
+    execFileSync(resolveFfmpegPath(), ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', voice]);
+    execFileSync(resolveFfmpegPath(), ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=220:duration=1.5', '-ac', '2', music]);
+    const result = await generateShortVideo({
+      audioPath: voice,
+      musicPath: music,
+      musicVolume: 0.2,
+      hook: 'Νέος μισθός',
+      segments: [{ speaker: 1, text: 'Χίλια ευρώ από τον Ιανουάριο.', start: 0, end: 3 }],
+      tailSeconds: 0.5,
+      outputDir: OUT
+    });
+    expect(result.music).toBe(true);
+    expect(result.duration).toBeCloseTo(3.5, 1);
+    expect(fs.statSync(result.filePath).size).toBeGreaterThan(10000);
+    fs.rmSync(OUT, { recursive: true, force: true });
+  }, 120000);
+
+  test('an unreadable music track is skipped, not fatal', async () => {
+    fs.mkdirSync(OUT, { recursive: true });
+    const voice = path.join(OUT, 'voice.wav');
+    const music = path.join(OUT, 'broken.mp3');
+    fs.writeFileSync(music, 'not audio');
+    execFileSync(resolveFfmpegPath(), ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', voice]);
+    const result = await generateShortVideo({ audioPath: voice, musicPath: music, hook: 'x', tailSeconds: 0.5, outputDir: OUT });
+    expect(result.music).toBe(false);
+    expect(fs.existsSync(result.filePath)).toBe(true);
+    fs.rmSync(OUT, { recursive: true, force: true });
+  }, 120000);
+
   test('renders a short video with captions over the branded background', async () => {
     fs.mkdirSync(OUT, { recursive: true });
     const voice = path.join(OUT, 'voice.wav');
@@ -179,6 +245,7 @@ describe('TikTok short renderer', () => {
     expect(fs.statSync(result.filePath).size).toBeGreaterThan(10000);
     expect(result.duration).toBeCloseTo(3.5, 1);
     expect(result.images).toBe(0);
+    expect(result.music).toBe(false);
     // The work directory is cleaned up; only the voice and the video remain.
     expect(fs.readdirSync(OUT).filter((f) => f.startsWith('short-') && !f.endsWith('.mp4'))).toHaveLength(0);
     fs.rmSync(OUT, { recursive: true, force: true });

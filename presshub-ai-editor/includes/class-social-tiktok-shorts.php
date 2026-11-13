@@ -36,6 +36,10 @@
  * the job ends as cancelled with the video's path in its note. Shorts need not be
  * enabled for a test render, only Pull Mode.
  *
+ * Background music (PressHub_Social_TikTok_Music): the plan picks a `mood` per story; at
+ * claim time music_for() adds one of that mood's generated tracks (`music_url`,
+ * `music_volume`) when music is on. `none` and a mood without tracks get no music.
+ *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
  *
@@ -301,7 +305,35 @@ class PressHub_Social_TikTok_Shorts {
             'images'   => array_values( array_filter( array_map( fn( $img ) => is_array( $img ) ? (string) ( $img['url'] ?? '' ) : '', (array) ( $short['images'] ?? [] ) ) ) ),
             'segments' => array_values( (array) ( $short['audio']['segments'] ?? [] ) ),
         ];
+        $job['tiktok_short'] = array_merge( $job['tiktok_short'], self::music_for( $short, $job_id ) );
         return $job;
+    }
+
+    /**
+     * Background music for a claimed short: the story's mood and one of that mood's
+     * tracks, or nothing when music is off, the mood is `none` or the mood has no track
+     * yet (a WARNING, the short is still rendered).
+     *
+     * @return array{mood?:string,music_url?:string,music_volume?:float}
+     */
+    public static function music_for( array $short, int $job_id ): array {
+        if ( ! PressHub_Social_Settings_Storage::get_tiktok_shorts_music_enabled() ) {
+            return [];
+        }
+        $mood = PressHub_Social_TikTok_Music::normalize_mood( $short['mood'] ?? '' );
+        if ( PressHub_Social_TikTok_Music::NO_MUSIC === $mood ) {
+            return [ 'mood' => $mood ];
+        }
+        $url = PressHub_Social_TikTok_Music::pick_track( $mood, $job_id );
+        if ( '' === $url ) {
+            PressHub_Social_Logger::warning( sprintf( 'TikTok short job #%d has no %s music track, so it is rendered without music. Generate the tracks in PressHub Social → Settings → Automation Worker → Generate Music Tracks.', $job_id, $mood ) );
+            return [ 'mood' => $mood ];
+        }
+        return [
+            'mood'         => $mood,
+            'music_url'    => $url,
+            'music_volume' => round( PressHub_Social_Settings_Storage::get_tiktok_shorts_music_volume() / 100, 3 ),
+        ];
     }
 
     /**
@@ -383,6 +415,7 @@ class PressHub_Social_TikTok_Shorts {
                 'topic'       => $short['topic'],
                 'hook'        => $short['hook'],
                 'caption'     => $short['caption'],
+                'mood'        => (string) ( $short['mood'] ?? '' ),
                 'audio'       => $audio,
                 'images'      => $images['images'],
                 'images_hash' => $images['hash'],
@@ -464,7 +497,7 @@ class PressHub_Social_TikTok_Shorts {
         $script    = (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
-        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::host_count() . '|' . $images );
+        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::host_count() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
@@ -508,6 +541,7 @@ class PressHub_Social_TikTok_Shorts {
             '{count}'     => (string) $count,
             '{max_words}' => (string) $max_words,
             '{image_count}' => (string) $image_count,
+            '{moods}'     => implode( ', ', PressHub_Social_TikTok_Music::moods() ),
             '{speakers}'  => $speakers,
             '{title}'     => $title,
             '{site_name}' => '' !== $site_name ? $site_name : 'PressHub',
@@ -523,7 +557,8 @@ class PressHub_Social_TikTok_Shorts {
      * @param int $max_words   Word cap from the prompt; a script over 1.5x the cap is rejected.
      * @param int $image_count Image descriptions kept per short (extra ones are dropped;
      *                         missing ones are allowed and the short uses fewer images).
-     * @return array|WP_Error List of shorts {topic, hook, script, caption, visuals}.
+     * @return array|WP_Error List of shorts {topic, hook, script, caption, visuals, mood}.
+     *                        A missing or unknown mood becomes the default mood.
      */
     public static function parse_plan( string $raw, int $count, int $max_words = 0, int $image_count = 3 ) {
         $text  = (string) preg_replace( '/^```(?:json)?\s*|\s*```$/iu', '', trim( $raw ) );
@@ -572,6 +607,7 @@ class PressHub_Social_TikTok_Shorts {
                 'script'  => $script,
                 'caption' => $caption,
                 'visuals' => array_slice( $visuals, 0, max( 0, $image_count ) ),
+                'mood'    => PressHub_Social_TikTok_Music::normalize_mood( $item['mood'] ?? '' ),
             ];
         }
         return $shorts;

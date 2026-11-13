@@ -429,7 +429,10 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
                     topic: 'Κατώτατος μισθός',
                     hook: 'Νέος μισθός από τον Ιανουάριο',
                     images: ['https://presshub.cy/wp-content/uploads/short-1.jpg', '', 'https://presshub.cy/wp-content/uploads/short-2.jpg'],
-                    segments: [{ speaker: 1, text: 'Χίλια ευρώ.', start: 0, end: 1.2 }]
+                    segments: [{ speaker: 1, text: 'Χίλια ευρώ.', start: 0, end: 1.2 }],
+                    music_url: 'https://presshub.cy/wp-content/uploads/presshub-music-serious-1.mp3',
+                    music_volume: 0.12,
+                    mood: 'serious'
                   }
                 }
               ]
@@ -443,7 +446,7 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       });
 
       const mockGenerateVideo = jest.fn();
-      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: '/tmp/short.mp4', width: 1080, height: 1920, duration: 48, captions: 20, images: 2 });
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: '/tmp/short.mp4', width: 1080, height: 1920, duration: 48, captions: 20, images: 2, music: true });
       const mockPoster = jest.fn().mockResolvedValue({ success: true, platform: 'tiktok', externalPostUrl: 'https://www.tiktok.com/@presshub/video/1' });
 
       const poller = new PressHubPoller({
@@ -465,7 +468,9 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
           badge: 'ΕΙΔΗΣΗ 2/3',
           audioUrl: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-77-2-abcd1234.wav',
           imageUrls: ['https://presshub.cy/wp-content/uploads/short-1.jpg', 'https://presshub.cy/wp-content/uploads/short-2.jpg'],
-          segments: [{ speaker: 1, text: 'Χίλια ευρώ.', start: 0, end: 1.2 }]
+          segments: [{ speaker: 1, text: 'Χίλια ευρώ.', start: 0, end: 1.2 }],
+          musicUrl: 'https://presshub.cy/wp-content/uploads/presshub-music-serious-1.mp3',
+          musicVolume: 0.12
         })
       );
       // The podcast's featured image is never used for a short.
@@ -501,7 +506,7 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
         }
         return { ok: false, status: 404 } as any;
       });
-      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: rendered, width: 1080, height: 1920, duration: 30, captions: 10, images: 0 });
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: rendered, width: 1080, height: 1920, duration: 30, captions: 10, images: 0, music: false });
       const mockPoster = jest.fn();
       const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster, generateShortFn: mockGenerateShort, outputDir: outDir });
 
