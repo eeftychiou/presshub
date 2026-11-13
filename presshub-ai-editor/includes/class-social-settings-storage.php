@@ -271,6 +271,12 @@ class PressHub_Social_Settings_Storage {
             'default'           => 3,
         ] );
 
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_caption_words', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_caption_words' ],
+            'default'           => 120,
+        ] );
+
         register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_enabled' ],
@@ -375,6 +381,13 @@ class PressHub_Social_Settings_Storage {
             'default'           => '',
         ] );
 
+        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_image_moods', [
+            'type'              => 'string',
+            'sanitize_callback' => function ( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_image_moods' );
+            },
+        ] );
+
         register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_music', [
             'type'              => 'string',
             'sanitize_callback' => function ( $val ) {
@@ -464,6 +477,14 @@ class PressHub_Social_Settings_Storage {
                 update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
             } catch ( Exception $e ) {
                 PressHub_Social_Logger::error( 'Failed to seed TikTok shorts image style prompt: ' . $e->getMessage() );
+            }
+        }
+
+        if ( false === get_option( 'presshub_social_prompt_tiktok_shorts_image_moods', false ) ) {
+            try {
+                update_option( 'presshub_social_prompt_tiktok_shorts_image_moods', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_moods.txt' ) );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to seed TikTok shorts image mood styles: ' . $e->getMessage() );
             }
         }
 
@@ -621,6 +642,7 @@ class PressHub_Social_Settings_Storage {
         update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_music', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_music.txt' ) );
+        update_option( 'presshub_social_prompt_tiktok_shorts_image_moods', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_moods.txt' ) );
     }
 
     // ------------------------------------------------------------------
@@ -1187,6 +1209,33 @@ class PressHub_Social_Settings_Storage {
         return max( 0, min( 4, (int) $value ) );
     }
 
+    /** Length of a short's post text (the story summary), in words without hashtags (40-300, default 120). */
+    public static function get_tiktok_shorts_caption_words(): int {
+        return self::sanitize_tiktok_shorts_caption_words( get_option( 'presshub_social_tiktok_shorts_caption_words', 120 ) );
+    }
+
+    public static function sanitize_tiktok_shorts_caption_words( $value ): int {
+        return max( 40, min( 300, (int) $value ) );
+    }
+
+    /**
+     * Image styles per mood, one "mood: style" line each (same form as the Image Prompt,
+     * with {description}). A mood without a line uses the Image Prompt. Seeds from
+     * social_tiktok_shorts_image_moods.txt if the option does not exist yet.
+     */
+    public static function get_tiktok_shorts_image_moods(): string {
+        $val = get_option( 'presshub_social_prompt_tiktok_shorts_image_moods', false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_moods.txt' );
+                update_option( 'presshub_social_prompt_tiktok_shorts_image_moods', $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
+        return is_string( $val ) ? trim( $val ) : '';
+    }
+
     /** Default Lyria model for the shorts' background music (30-second instrumental clips). */
     public const DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL = 'lyria-3-clip-preview';
 
@@ -1257,6 +1306,7 @@ class PressHub_Social_Settings_Storage {
     private const LEGACY_TIKTOK_SHORTS_PROMPT_HASHES = [
         'e5b721e8c94a252df788a967504c5061b975581411b3f4d20fc6f3097657832b', // v2.18: no story images.
         'f338073d72d1e8f1c4bf479d3dc1340105784a8152ab7bcd51907604b361dd83', // v2.21: no mood for the music.
+        'aece0ed31bbdd3bfaba2d6705f4e979463c7f3b1cc30f7a35de6a3eae0b61742', // v2.22: 1-2 sentence caption, no comment question.
     ];
 
     public static function is_legacy_tiktok_shorts_prompt( string $prompt ): bool {

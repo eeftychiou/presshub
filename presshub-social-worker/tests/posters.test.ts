@@ -6,6 +6,7 @@ import {
   postTikTok,
   postFacebook,
   postInstagram,
+  markTikTokAiGenerated,
   getTwitterWeightedLength,
   sanitizeTwitterCopy,
   getTwitterSnowflakeTimestampMs,
@@ -287,6 +288,39 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     expect(res.success).toBe(true);
     expect(res.platform).toBe('tiktok');
     expect(res.externalPostUrl).toMatch(/https:\/\/www\.tiktok\.com\/@creator\/video\/tt-\d+/);
+  });
+
+  test('markTikTokAiGenerated opens "Show more", turns the AI label on and confirms it', async () => {
+    const page = await context.newPage();
+    await page.setContent(`<html><body>
+      <button id="more">Show more</button>
+      <div id="opts" style="display:none">
+        <div class="row"><span>Allow comments</span><div role="switch" aria-checked="true" style="width:40px;height:20px"></div></div>
+        <div class="row"><span>AI-generated content</span><div id="ai" role="switch" aria-checked="false" style="width:40px;height:20px"></div></div>
+      </div>
+      <script>
+        document.getElementById('more').onclick = () => { document.getElementById('opts').style.display = 'block'; };
+        document.getElementById('ai').onclick = () => {
+          const d = document.createElement('div');
+          d.setAttribute('role', 'dialog');
+          d.innerHTML = '<p>Label as AI-generated?</p><button id="ok">Turn on</button>';
+          document.body.appendChild(d);
+          document.getElementById('ok').onclick = () => { document.getElementById('ai').setAttribute('aria-checked', 'true'); d.remove(); };
+        };
+      </script>
+    </body></html>`);
+    expect(await markTikTokAiGenerated(page)).toBe(true);
+    expect(await page.getAttribute('#ai', 'aria-checked')).toBe('true');
+    // Already on: nothing is clicked again.
+    expect(await markTikTokAiGenerated(page)).toBe(true);
+    await page.close();
+  });
+
+  test('markTikTokAiGenerated reports false instead of failing when the switch is missing', async () => {
+    const page = await context.newPage();
+    await page.setContent('<html><body><div contenteditable="true"></div><button>Post</button></body></html>');
+    expect(await markTikTokAiGenerated(page)).toBe(false);
+    await page.close();
   });
 
   test('postInstagram handles multiple buttons and media upload without strict mode violation', async () => {

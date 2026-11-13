@@ -684,6 +684,22 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_tiktok_shorts_caption_words',
+            __( 'Short Post Text Length', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_caption_words',
+                'default' => 120,
+                'min'     => 40,
+                'max'     => 300,
+                'unit'    => __( 'words', 'presshub-social-autopost' ),
+                'desc'    => __( 'Length of the text posted with each short (a summary of the story, before the hashtags). Longer texts are found more often in TikTok search; 120 words is 4-6 short sentences.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
             'presshub_social_tiktok_shorts_music_enabled',
             __( 'Shorts Background Music', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_shorts_music_enabled_field' ],
@@ -873,7 +889,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
-                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Daily Briefing host count). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Daily Briefing host count). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -887,6 +903,19 @@ class PressHub_Social_Settings {
                 'option' => 'presshub_social_prompt_tiktok_shorts_image_style',
                 'rows'   => 3,
                 'desc'   => __( 'Sent to the image generator for each story image of a short (9:16). {description} is one image description written by the Script Prompt (its "visuals" rules decide what the images show); this text sets the look. Without {description} the description is put first. Empty sends the description alone.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_tiktok_shorts_image_moods',
+            __( 'TikTok Shorts: Image Styles per Mood', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_prompts',
+            'presshub_social_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_shorts_image_moods',
+                'rows'   => 5,
+                'desc'   => __( 'One line per mood, "mood: style", written like the Image Prompt ({description} is the image description). A short uses the line of the mood its Script Prompt chose; a mood without a line (by default serious, urgent and none) uses the Image Prompt above. The defaults give neutral and upbeat stories bold editorial illustrations. Keep real people out of the images.', 'presshub-social-autopost' ),
             ]
         );
 

@@ -90,7 +90,7 @@ class PressHub_Social_TikTok_Music {
      *
      * @return array<string,string> mood => prompt, in the setting's order.
      */
-    public static function parse_prompts( string $text ): array {
+    public static function parse_prompts( string $text, bool $allow_none = false ): array {
         $moods = [];
         foreach ( preg_split( '/\R/u', $text ) ?: [] as $line ) {
             $line = trim( $line );
@@ -99,7 +99,7 @@ class PressHub_Social_TikTok_Music {
             }
             if ( preg_match( '/^([a-z0-9_-]+)\s*:\s*(.+)$/iu', $line, $m ) ) {
                 $mood = strtolower( $m[1] );
-                if ( self::NO_MUSIC !== $mood && '' !== trim( $m[2] ) ) {
+                if ( ( $allow_none || self::NO_MUSIC !== $mood ) && '' !== trim( $m[2] ) ) {
                     $moods[ $mood ] = trim( $m[2] );
                 }
             }

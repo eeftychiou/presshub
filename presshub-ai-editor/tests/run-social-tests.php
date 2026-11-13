@@ -2121,7 +2121,8 @@ assert_true( ! str_contains( $shorts_ai_calls[0], '{max_words}' ) && str_contain
 assert_equals( 3, count( $shorts_tts ), 'Preparation synthesizes every queued short, using the count the jobs were queued with' );
 assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $claim_ids[2] ) ), 'Prepared short jobs are ready' );
 assert_equals( 6, count( $shorts_images ), 'Preparation asks for each short\'s image descriptions (2 per short here)' );
-assert_true( 1 === count( array_filter( $shorts_images, fn( $p ) => str_starts_with( $p, 'Limassol harbour at dawn 1 ' ) && str_contains( $p, 'Vertical 9:16' ) ) ), 'Image prompts start from the plan\'s description and ask for a vertical frame' );
+assert_true( 1 === count( array_filter( $shorts_images, fn( $p ) => str_starts_with( $p, 'Limassol harbour at dawn 1 ' ) && str_contains( $p, '9:16' ) ) ), 'Image prompts start from the plan\'s description and ask for a vertical frame' );
+assert_true( str_contains( $shorts_images[0], 'editorial illustration' ), 'A neutral story (the default mood) gets the illustrated style' );
 assert_true( str_contains( $shorts_ai_calls[0], '3 περιγραφές εικόνων' ), 'The shorts prompt asks for the configured number of images' );
 $third_meta = json_decode( (string) PressHub_Social_Queue::get_job( $claim_ids[2] )['metadata'], true )['tiktok_short'];
 assert_equals( 1, count( $third_meta['images'] ), 'A failed story image is skipped; the short keeps the images that worked' );
@@ -2369,6 +2370,25 @@ PressHub_Social_TikTok_Music::set_generator( function () use ( $fake_mp3 ) {
 for ( $i = 0; $i < 10 && PressHub_Social_TikTok_Music::missing_count() > 0; $i++ ) {
     PressHub_Social_TikTok_Music::generate_next();
 }
+
+// Image style per mood: neutral and upbeat are illustrated, the others use the Image Prompt.
+delete_option( 'presshub_social_prompt_tiktok_shorts_image_moods' );
+assert_true( str_contains( PressHub_Social_TikTok_Shorts::image_style_for( 'upbeat' ), 'playful editorial illustration' ), 'An upbeat story gets the playful illustration style' );
+assert_equals( PressHub_Social_Settings_Storage::get_tiktok_shorts_image_style(), PressHub_Social_TikTok_Shorts::image_style_for( 'serious' ), 'A serious story keeps the photographic Image Prompt' );
+assert_equals( PressHub_Social_Settings_Storage::get_tiktok_shorts_image_style(), PressHub_Social_TikTok_Shorts::image_style_for( 'none' ), 'A sad story keeps the photographic Image Prompt' );
+assert_true( str_contains( PressHub_Social_TikTok_Shorts::image_style_for( '' ), 'editorial illustration' ), 'A short without a mood uses the neutral style' );
+update_option( 'presshub_social_prompt_tiktok_shorts_image_moods', "none: {description} Black and white photo." );
+assert_equals( '{description} Black and white photo.', PressHub_Social_TikTok_Shorts::image_style_for( 'none' ), 'A "none:" image style line is allowed' );
+delete_option( 'presshub_social_prompt_tiktok_shorts_image_moods' );
+
+// Post text length and the comment question.
+update_option( 'presshub_social_tiktok_shorts_caption_words', 150 );
+assert_equals( 'W=150', PressHub_Social_TikTok_Shorts::build_prompt( 880, 'W={caption_words}', '', 3, 130 ), 'build_prompt fills {caption_words} from Short Post Text Length' );
+update_option( 'presshub_social_tiktok_shorts_caption_words', 9999 );
+assert_equals( 300, PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words(), 'Short Post Text Length is capped at 300 words' );
+delete_option( 'presshub_social_tiktok_shorts_caption_words' );
+assert_equals( 120, PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words(), 'Short Post Text Length defaults to 120 words' );
+assert_true( str_contains( $shipped_prompt, '{caption_words}' ) && str_contains( $shipped_prompt, 'σχόλια' ), 'The shorts prompt asks for a story summary and a comment question' );
 
 // Music for a claimed short.
 update_option( 'presshub_social_tiktok_shorts_music_enabled', false );

@@ -25,6 +25,8 @@ export interface PostOptions {
   cdpUrl?: string;
   browserSession?: ChromeConnection;
   headless?: boolean;
+  /** TikTok: switch on "AI-generated content" (AI voice and images), as TikTok requires. */
+  aiGenerated?: boolean;
 }
 
 export interface PostResult {
@@ -897,6 +899,64 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
 }
 
 /**
+ * Switches on TikTok Studio's "AI-generated content" disclosure (under "Show more").
+ * Returns true when the switch is on. A missing switch is a WARNING, not a failure: the
+ * upload page changes often, and the post is still valid; the log says to label it by hand.
+ */
+export async function markTikTokAiGenerated(page: any): Promise<boolean> {
+  const label = /AI-generated content|AI-generated|Περιεχόμενο που δημιουργήθηκε από AI/i;
+  const findSwitch = () =>
+    page
+      .locator('div, label')
+      .filter({ hasText: label })
+      .filter({ has: page.locator('[role="switch"], input[type="checkbox"]') })
+      .last()
+      .locator('[role="switch"], input[type="checkbox"]')
+      .first();
+  const isOn = async (sw: any): Promise<boolean> =>
+    (await sw.getAttribute('aria-checked').catch(() => null)) === 'true' || (await sw.isChecked().catch(() => false));
+
+  try {
+    let sw = findSwitch();
+    // The switch sits under "Show more" and may be in the page but hidden until it is opened.
+    if ((await sw.count()) === 0 || !(await sw.isVisible().catch(() => false))) {
+      const more = page.locator('button:has-text("Show more"), div[role="button"]:has-text("Show more"), button:has-text("More options")').first();
+      if ((await more.count()) > 0) {
+        await more.click({ timeout: 5000 }).catch(() => more.click({ force: true }).catch(() => {}));
+        await page.waitForTimeout(600);
+      }
+      sw = findSwitch();
+    }
+    if ((await sw.count()) === 0) {
+      WorkerLogger.warn('TikTok Automation', 'Could not find the "AI-generated content" switch; the short is posted without the AI label. Turn it on by hand in TikTok and report the page change.');
+      return false;
+    }
+    if (await isOn(sw)) {
+      WorkerLogger.debug('TikTok Automation', '"AI-generated content" is already on.');
+      return true;
+    }
+    await sw.click({ timeout: 5000 }).catch(() => sw.click({ force: true }));
+    await page.waitForTimeout(500);
+    // TikTok asks to confirm the label in a dialog ("Turn on").
+    const confirm = page.locator('div[role="dialog"] button:has-text("Turn on"), .TUXModal button:has-text("Turn on")').first();
+    if ((await confirm.count()) > 0 && (await confirm.isVisible().catch(() => false))) {
+      await confirm.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(400);
+    }
+    const on = await isOn(findSwitch());
+    if (on) {
+      WorkerLogger.info('TikTok Automation', 'Marked the video as AI-generated content.');
+    } else {
+      WorkerLogger.warn('TikTok Automation', 'Clicked "AI-generated content" but it did not turn on; check the label on the posted video.');
+    }
+    return on;
+  } catch (err: any) {
+    WorkerLogger.warn('TikTok Automation', `Could not set the "AI-generated content" label: ${err.message}`);
+    return false;
+  }
+}
+
+/**
  * TikTok Studio / Creator Center automation poster using saved browser session or running Chrome.
  */
 export async function postTikTok(options: PostOptions): Promise<PostResult> {
@@ -1040,6 +1100,11 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     }
 
     await dismissTikTokOverlays();
+
+    if (options.aiGenerated) {
+      await markTikTokAiGenerated(page);
+      await dismissTikTokOverlays();
+    }
 
     // Helper: Determine if Post button is currently disabled
     const isPostButtonDisabled = async (btn: any): Promise<boolean> => {
