@@ -2,7 +2,7 @@
 
 Enterprise AI Newsroom, Editorial Co-Pilot & Multimedia Publishing Pipeline for WordPress.
 
-[![Version](https://img.shields.io/badge/version-2.18.0-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
+[![Version](https://img.shields.io/badge/version-2.18.1-blue.svg)](presshub-ai-editor/presshub-ai-editor.php)
 [![WordPress](https://img.shields.io/badge/WordPress-%E2%89%A5%206.0-21759b.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-%E2%89%A5%207.4-777bb4.svg)](https://php.net)
 [![PHP Unit Tests](https://img.shields.io/badge/PHP%20Tests-101%20passed%20%7C%20100%25-brightgreen.svg)](presshub-ai-editor/tests/)
@@ -82,7 +82,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
   - **Unified Turn-by-Turn Synthesis & Voice Identity Isolation**: Synthesizes turns individually via `synthesize_turn()` with dedicated single-speaker `voiceConfig` across 1, 2, and 3 hosts, completely eliminating voice identity bleeding and multiSpeaker drift.
   - **Resumable Turn Disk Cache**: Deterministically caches each synthesized WAV/MP3 chunk (`tts-cache/{date}/turn_{hash}`), allowing failed or interrupted runs to resume instantly without re-calling the API for completed turns.
   - **Settings-First Pauses & Throttling**: Configurable turn pauses (`presshub_ai_briefing_tts_turn_pause_ms`, default 250ms), topic pauses (`presshub_ai_briefing_tts_topic_pause_ms`, default 600ms), and inter-turn request delays (`presshub_ai_briefing_tts_request_delay_ms`, default 250ms) with intro/transition/outro SFX stitching.
-  - **Rate Limiting, Retries & Dialogue Colon Protection**: Paces Gemini TTS to a per-minute budget (`presshub_ai_briefing_tts_requests_per_minute`, default 9), waits the server's retry delay on HTTP 429 (capped), retries 5xx with exponential backoff (`retry_backoff_ms * 2^attempt`), never retries a per-day quota, and retries a failed scheduled synthesis once after 5 minutes. Tightened regex prevents mid-sentence colons in Greek dialogue from being misidentified as speaker turns.
+  - **Rate Limiting, Retries, Watchdog & Dialogue Colon Protection**: Paces Gemini TTS to a per-minute budget (`presshub_ai_briefing_tts_requests_per_minute`, default 9), waits the server's retry delay on HTTP 429 (capped), retries 5xx with exponential backoff (`retry_backoff_ms * 2^attempt`), never retries a per-day quota, guards against killed cron processes with an advance watchdog (`presshub_ai_arm_synthesis_watchdog`, minimum 20m), and retries a failed scheduled synthesis once after configured delay. Tightened regex prevents mid-sentence colons in Greek dialogue from being misidentified as speaker turns.
   - **Zero-Silent-Fallback Enforcement**: Strict validation across all TTS entry points; functions default to empty voice strings and throw explicit `missing_tts_voice` or `missing_tts_model` `WP_Error`s, completely removing silent code defaults.
   - **RIFF WAV Header Handling**: Detects RIFF headers on incoming audio bytes from Gemini 3.8 to prevent double-wrapping WAV headers.
 - **Gemini Speech API JSON Inspector & Live Voice Testing Studio**:
