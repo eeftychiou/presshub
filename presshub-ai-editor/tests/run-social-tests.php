@@ -1243,6 +1243,75 @@ assert_true( ! str_contains( $prov_html, 'Anthropic Disabled' ), 'AI provider dr
 assert_true( ! str_contains( $prov_html, 'Gemini Missing Key' ), 'AI provider dropdown excludes unconfigured providers without API keys' );
 
 // ----------------------------------------------------------------------
+// Test Suite 16b: Number fields never render a value the browser rejects
+// ----------------------------------------------------------------------
+// All settings tabs share one form and inactive tabs are hidden. A number input
+// in a hidden tab whose value is outside its min/max makes the browser cancel
+// the whole submit without a visible message, so nothing on the page saves.
+echo "\n--- Suite 16b: Number field values stay inside min/max ---\n";
+
+$settings_src = (string) file_get_contents( $base_dir . '/includes/class-social-settings.php' );
+preg_match_all(
+    "/'render_number_field'\s*\],.*?\[\s*(.*?)\]\s*\);/s",
+    $settings_src,
+    $number_field_blocks
+);
+$number_fields = [];
+foreach ( $number_field_blocks[1] as $block ) {
+    if ( preg_match( "/'option'\s*=>\s*'([a-z0-9_]+)'/", $block, $m_opt )
+        && preg_match( "/'min'\s*=>\s*(-?\d+)/", $block, $m_min )
+        && preg_match( "/'max'\s*=>\s*(-?\d+)/", $block, $m_max ) ) {
+        $number_fields[ $m_opt[1] ] = [ 'option' => $m_opt[1], 'min' => (int) $m_min[1], 'max' => (int) $m_max[1] ];
+        if ( preg_match( "/'default'\s*=>\s*(-?\d+)/", $block, $m_def ) ) {
+            $number_fields[ $m_opt[1] ]['default'] = (int) $m_def[1];
+        }
+    }
+}
+assert_true( count( $number_fields ) >= 10, 'found the number fields registered on the settings page' );
+
+$render_number_value = function ( array $args ) use ( $renderer ): ?int {
+    ob_start();
+    $renderer->render_number_field( $args );
+    $html = ob_get_clean();
+    return preg_match( '/value="(-?\d+)"/', $html, $m ) ? (int) $m[1] : null;
+};
+
+foreach ( $number_fields as $opt => $field ) {
+    $saved = get_option( $opt, null );
+
+    delete_option( $opt );
+    $v = $render_number_value( $field );
+    assert_true( null !== $v && $v >= $field['min'] && $v <= $field['max'], "{$opt}: never-saved option renders inside {$field['min']}-{$field['max']} (got " . var_export( $v, true ) . ')' );
+
+    update_option( $opt, $field['max'] + 1000 );
+    $v = $render_number_value( $field );
+    assert_equals( $field['max'], $v, "{$opt}: stored value above max renders as max" );
+
+    update_option( $opt, $field['min'] - 1000 );
+    $v = $render_number_value( $field );
+    assert_equals( $field['min'], $v, "{$opt}: stored value below min renders as min" );
+
+    // The field must accept every value the sanitizer can store, and the sanitizer
+    // must not change a value the field accepts.
+    $sanitizer = 'sanitize_' . substr( $opt, strlen( 'presshub_social_' ) );
+    if ( method_exists( 'PressHub_Social_Settings_Storage', $sanitizer ) ) {
+        assert_equals( $field['min'], PressHub_Social_Settings_Storage::$sanitizer( $field['min'] - 1000 ), "{$opt}: sanitizer lower bound matches field min" );
+        assert_equals( $field['max'], PressHub_Social_Settings_Storage::$sanitizer( $field['max'] + 1000 ), "{$opt}: sanitizer upper bound matches field max" );
+    }
+
+    if ( null !== $saved ) {
+        update_option( $opt, $saved );
+    } else {
+        delete_option( $opt );
+    }
+}
+
+ob_start();
+$renderer->render_ai_temperature_field();
+$temp_html = ob_get_clean();
+assert_true( str_contains( $temp_html, 'step="0.01"' ), 'temperature field step matches the 2-decimal sanitizer' );
+
+// ----------------------------------------------------------------------
 // Test Suite 17: Multi-Tab Settings Persistence, v2.6.3 Auto-Repair & Batch Copy Generation
 // ----------------------------------------------------------------------
 echo "\n--- Suite 17: Multi-Tab Settings Persistence, v2.6.3 Auto-Repair & Batch Copy Generation ---\n";
