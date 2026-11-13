@@ -804,34 +804,57 @@ class PressHub_Social_Settings {
 
         add_settings_field(
             'presshub_social_prompt_tiktok_shorts',
-            __( 'TikTok Shorts AI Prompt', 'presshub-social-autopost' ),
+            __( 'TikTok Shorts: Script Prompt', 'presshub-social-autopost' ),
             [ $render, 'render_textarea_field' ],
             'presshub_social_prompts',
             'presshub_social_prompts_sec',
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
-                'desc'   => __( 'Writes the TikTok shorts of a podcast post as JSON {"shorts":[{"topic","hook","script","caption"}]}. Placeholders: {count}, {max_words}, {speakers}, {title}, {site_name}, {date}, {script}.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","caption"}]}: the spoken script, the on-screen hook, the image descriptions and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {speakers} (Daily Briefing host count). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
             ]
         );
 
+        add_settings_field(
+            'presshub_social_prompt_tiktok_shorts_image_style',
+            __( 'TikTok Shorts: Image Prompt', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_prompts',
+            'presshub_social_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_shorts_image_style',
+                'rows'   => 3,
+                'desc'   => __( 'Sent to the image generator for each story image of a short (9:16). {description} is one image description written by the Script Prompt (its "visuals" rules decide what the images show); this text sets the look. Without {description} the description is put first. Empty sends the description alone.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        $platform_labels = [
+            'twitter'   => 'X/Twitter',
+            'facebook'  => 'Facebook',
+            'instagram' => 'Instagram',
+            'tiktok'    => 'TikTok',
+        ];
         foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $platform ) {
+            $label    = $platform_labels[ $platform ] ?? ucfirst( $platform );
+            $use_note = 'tiktok' === $platform
+                ? __( ' Writes the caption of a normal TikTok post: an article, or the whole podcast when TikTok Shorts are off. Shorts write their own captions with the Shorts Script Prompt.', 'presshub-social-autopost' )
+                : '';
             add_settings_field(
                 'presshub_social_prompt_' . $platform,
-                ucfirst( $platform ) . ' ' . __( 'AI Prompt', 'presshub-social-autopost' ),
+                $label . ' ' . __( 'Caption Prompt', 'presshub-social-autopost' ),
                 [ $render, 'render_textarea_field' ],
                 'presshub_social_prompts',
                 'presshub_social_prompts_sec',
                 [
                     'option' => 'presshub_social_prompt_' . $platform,
                     'rows'   => 5,
-                    'desc'   => sprintf( __( 'Prompt template for %s. Placeholders: {title}, {excerpt}, {content}, {url}, {site_name}%s.', 'presshub-social-autopost' ), ucfirst( $platform ), 'twitter' === $platform ? ', {max_chars}' : '' ),
+                    'desc'   => sprintf( __( 'Writes the %1$s post copy with AI.%2$s Placeholders from the post: {title}, {excerpt}, {content}, {url}, {hashtags}. {site_name} is the site title.%3$s', 'presshub-social-autopost' ), $label, $use_note, 'twitter' === $platform ? __( ' {max_chars} is X/Twitter Max Characters (Automation Worker → Media & Video Specifications).', 'presshub-social-autopost' ) : '' ),
                 ]
             );
 
             add_settings_field(
                 'presshub_social_template_' . $platform,
-                ucfirst( $platform ) . ' ' . __( 'Static Fallback Template', 'presshub-social-autopost' ),
+                $label . ' ' . __( 'Static Fallback Template', 'presshub-social-autopost' ),
                 [ $render, 'render_textarea_field' ],
                 'presshub_social_prompts',
                 'presshub_social_prompts_sec',

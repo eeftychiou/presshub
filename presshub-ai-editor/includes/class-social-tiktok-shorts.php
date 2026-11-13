@@ -705,6 +705,19 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
+     * Fill the image style prompt with one image description.
+     */
+    public static function image_prompt( string $style, string $description ): string {
+        if ( '' === trim( $style ) ) {
+            return $description;
+        }
+        if ( str_contains( $style, '{description}' ) ) {
+            return trim( strtr( $style, [ '{description}' => $description ] ) );
+        }
+        return trim( $description . ' ' . $style );
+    }
+
+    /**
      * Generate the short's story images (9:16) from the plan's descriptions, or reuse the
      * job's earlier ones when the descriptions and the setting are unchanged.
      *
@@ -716,7 +729,8 @@ class PressHub_Social_TikTok_Shorts {
     private static function get_images( array $job, array $short, int $post_id ): array {
         $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
         $visuals = array_slice( (array) ( $short['visuals'] ?? [] ), 0, $count );
-        $hash    = hash( 'sha256', $count . '|' . implode( "\n", $visuals ) );
+        $style   = PressHub_Social_Settings_Storage::get_tiktok_shorts_image_style();
+        $hash    = hash( 'sha256', $count . '|' . $style . '|' . implode( "\n", $visuals ) );
         $job_id  = (int) ( $job['id'] ?? 0 );
 
         $meta = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? [];
@@ -733,7 +747,7 @@ class PressHub_Social_TikTok_Shorts {
 
         $images = [];
         foreach ( $visuals as $i => $visual ) {
-            $prompt = $visual . ' Vertical 9:16 editorial news photograph, main subject centred with space above and below, no text, no lettering, no identifiable faces.';
+            $prompt = self::image_prompt( $style, $visual );
             try {
                 if ( null !== self::$image_generator ) {
                     $result = call_user_func( self::$image_generator, $prompt, $post_id, $short );
