@@ -407,7 +407,7 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(capturedReports[0].error).toMatch(/FFmpeg binary missing/);
     });
 
-    test('renders a TikTok short with its hook as title and its number as the badge', async () => {
+    test('renders a TikTok short with its hook, badge, story images and caption timings', async () => {
       const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string) => {
         if (url.endsWith('/worker/claim')) {
           return {
@@ -422,7 +422,15 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
                   post_copy: 'Λεζάντα του short #κύπρος',
                   audio_url: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-77-2-abcd1234.wav',
                   video_title: 'Νέος μισθός από τον Ιανουάριο',
-                  tiktok_short: { index: 1, count: 3, topic: 'Κατώτατος μισθός', hook: 'Νέος μισθός από τον Ιανουάριο' }
+                  media_url: 'https://presshub.cy/wp-content/uploads/podcast-featured.jpg',
+                  tiktok_short: {
+                    index: 1,
+                    count: 3,
+                    topic: 'Κατώτατος μισθός',
+                    hook: 'Νέος μισθός από τον Ιανουάριο',
+                    images: ['https://presshub.cy/wp-content/uploads/short-1.jpg', '', 'https://presshub.cy/wp-content/uploads/short-2.jpg'],
+                    segments: [{ speaker: 1, text: 'Χίλια ευρώ.', start: 0, end: 1.2 }]
+                  }
                 }
               ]
             })
@@ -434,7 +442,8 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
         return { ok: false, status: 404 } as any;
       });
 
-      const mockGenerateVideo = jest.fn().mockResolvedValue({ filePath: '/tmp/short.mp4', width: 1080, height: 1920, duration: 48 });
+      const mockGenerateVideo = jest.fn();
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: '/tmp/short.mp4', width: 1080, height: 1920, duration: 48, captions: 20, images: 2 });
       const mockPoster = jest.fn().mockResolvedValue({ success: true, platform: 'tiktok', externalPostUrl: 'https://www.tiktok.com/@presshub/video/1' });
 
       const poller = new PressHubPoller({
@@ -442,21 +451,56 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
         workerSecret: 'test-secret',
         fetchFn: mockFetch,
         posterHandler: mockPoster,
-        generateVideoFn: mockGenerateVideo
+        generateVideoFn: mockGenerateVideo,
+        generateShortFn: mockGenerateShort
       });
 
       const stats = await poller.pollOnce();
       expect(stats.succeeded).toBe(1);
-      expect(mockGenerateVideo).toHaveBeenCalledWith(
+      expect(mockGenerateVideo).not.toHaveBeenCalled();
+      expect(mockGenerateShort).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Νέος μισθός από τον Ιανουάριο',
-          subtitle: 'Κατώτατος μισθός',
-          category: 'ΕΙΔΗΣΗ 2/3',
-          isPodcast: false,
-          audioUrl: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-77-2-abcd1234.wav'
+          hook: 'Νέος μισθός από τον Ιανουάριο',
+          topic: 'Κατώτατος μισθός',
+          badge: 'ΕΙΔΗΣΗ 2/3',
+          audioUrl: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-77-2-abcd1234.wav',
+          imageUrls: ['https://presshub.cy/wp-content/uploads/short-1.jpg', 'https://presshub.cy/wp-content/uploads/short-2.jpg'],
+          segments: [{ speaker: 1, text: 'Χίλια ευρώ.', start: 0, end: 1.2 }]
         })
       );
+      // The podcast's featured image is never used for a short.
+      expect(JSON.stringify(mockGenerateShort.mock.calls[0][0])).not.toContain('podcast-featured.jpg');
+      expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ mediaPath: '/tmp/short.mp4' }));
       expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ copy: 'Λεζάντα του short #κύπρος' }));
+    });
+
+    test('fails a TikTok short that has no audio instead of posting it silent', async () => {
+      const reports: any[] = [];
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [{ id: 402, platform: 'tiktok', post_copy: 'Λεζάντα', video_title: 'Hook', tiktok_short: { index: 0, count: 1, hook: 'Hook' } }]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          reports.push(JSON.parse(init.body));
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      const mockGenerateShort = jest.fn();
+      const mockPoster = jest.fn();
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster, generateShortFn: mockGenerateShort });
+
+      const stats = await poller.pollOnce();
+      expect(stats.failed).toBe(1);
+      expect(mockGenerateShort).not.toHaveBeenCalled();
+      expect(mockPoster).not.toHaveBeenCalled();
+      expect(reports[0]).toEqual(expect.objectContaining({ job_id: 402, status: 'failed' }));
+      expect(reports[0].error).toMatch(/no audio_url/);
     });
   });
 

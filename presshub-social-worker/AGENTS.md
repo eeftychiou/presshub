@@ -12,6 +12,7 @@
 - `src/auth.ts`: Constant-time authentication middleware via SHA-256 and `crypto.timingSafeEqual`.
 - `src/media/card-generator.ts`: SVG layout generator & `sharp` PNG compositor (`generateSocialCard`, `generateCard`).
 - `src/media/video-generator.ts`: `fluent-ffmpeg` vertical MP4 generator with `probeAudioDuration` for full podcast playback and TikTok 600s clamping (`generateSocialVideo`, `generateVideo`).
+- `src/media/short-video.ts`: TikTok short renderer (`generateShortVideo`): word-synced captions burned in with libass (ASS file, bundled Inter fonts in `assets/fonts`, SIL OFL 1.1), hook overlay, story images with zoom/pan shots, progress bar and end card. Fails when the FFmpeg build lacks libass; `FFMPEG_PATH` overrides the binary. Tests in `tests/short-video.test.ts`.
 - `src/automation/session-manager.ts`: Cookie validation, platform allowlisting, and storageState persistence (`SessionManager`, `verifySession`).
 - `src/automation/browser-helper.ts`: Chrome launcher & CDP connection with `resolveHeadless` (reads `PRESSHUB_HEADLESS`), stealth arguments, and Windows visible browser support.
 - `src/automation/posters.ts`: Playwright automation implementations for Twitter, TikTok, Facebook, Instagram (`dispatchBrowserPost`, `defaultPosterHandler`, `captureErrorScreenshot`, `captureAutomationFailure`, overlay/cookie dismissal, force-click fallback, TikTok upload progress observation up to 120s, post confirmation verification up to 60s, and Zero-Silent-Fallback error propagation).
