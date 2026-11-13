@@ -11,6 +11,10 @@
  * Text sits inside TikTok's safe zone: nothing in the top 15% except the thin progress
  * bar, nothing in the bottom 25%, and wide side margins for the right-hand buttons.
  *
+ * The PressHub logo (assets/brand/presshub-logo.png, the mic wordmark from
+ * media/PressHub.cy Mic.png with its background removed) sits in the top-right corner
+ * and large on the end card; without it the site name is written as text.
+ *
  * Captions are burned in with libass (FFmpeg `subtitles` filter) using the bundled Inter
  * fonts (assets/fonts, SIL OFL 1.1), which cover Greek. When the FFmpeg build has no
  * libass the render fails loudly instead of posting a short without captions.
@@ -117,6 +121,14 @@ export function resolveFfmpegPath(): string {
   }
   return ffmpegInstaller && ffmpegInstaller.path ? ffmpegInstaller.path : 'ffmpeg';
 }
+
+export function logoPath(): string | null {
+  const file = path.resolve(__dirname, '..', '..', 'assets', 'brand', 'presshub-logo.png');
+  return fs.existsSync(file) ? file : null;
+}
+
+// Logo placement on the 1080x1920 canvas.
+export const LOGO = { cornerWidth: 230, cornerY: 262, endWidth: 640, endY: 520 };
 
 export function fontsDir(): string {
   // src/media and dist/media are both two levels below the package root.
@@ -313,6 +325,8 @@ export interface AssOptions {
   siteName: string;
   chunks: CaptionChunk[];
   totalDuration: number;
+  /** The logo image is overlaid by FFmpeg, so the site name is not written as text. */
+  hasLogo?: boolean;
 }
 
 /**
@@ -359,7 +373,9 @@ export function buildAssScript(opts: AssOptions): string {
   if (opts.badge && opts.badge.trim() !== '') {
     dialogue(1, 0, endCardStart, 'Badge', `{\\pos(${m},${LAYOUT.badgeY})}${assEscape(opts.badge)}`);
   }
-  dialogue(1, 0, endCardStart, 'Brand', `{\\pos(${CANVAS.width - m},${LAYOUT.badgeY - 4})}${assEscape(opts.siteName)}`);
+  if (!opts.hasLogo) {
+    dialogue(1, 0, endCardStart, 'Brand', `{\\pos(${CANVAS.width - m},${LAYOUT.badgeY - 4})}${assEscape(opts.siteName)}`);
+  }
   if (opts.topic && opts.topic.trim() !== '') {
     dialogue(1, 0, endCardStart, 'Topic', `{\\pos(${m},${LAYOUT.topicY})}${assEscape(opts.topic)}`);
   }
@@ -391,7 +407,9 @@ export function buildAssScript(opts: AssOptions): string {
   });
 
   // End card over the dimmed picture.
-  dialogue(4, endCardStart, total, 'EndTitle', `{\\pos(${cx},820)\\fad(200,0)\\fscx85\\fscy85\\t(0,200,\\fscx100\\fscy100)}${assEscape(opts.siteName)}`);
+  if (!opts.hasLogo) {
+    dialogue(4, endCardStart, total, 'EndTitle', `{\\pos(${cx},820)\\fad(200,0)\\fscx85\\fscy85\\t(0,200,\\fscx100\\fscy100)}${assEscape(opts.siteName)}`);
+  }
   dialogue(4, endCardStart, total, 'EndLine', `{\\pos(${cx},970)\\fad(250,0)}${assEscape(END_CARD_TEXT.follow)}`);
   dialogue(4, endCardStart, total, 'EndBio', `{\\pos(${cx},1070)\\fad(300,0)}${assEscape(END_CARD_TEXT.bio)}`);
 
@@ -453,7 +471,20 @@ async function brandedBackgrounds(dir: string, width: number, height: number): P
   ${Array.from({ length: 9 }, (_, k) => `<circle cx="${(k * 0.17 + (i ? 0.1 : 0)) % 1 * w}" cy="${((k * 0.29) % 1) * h}" r="${w * (0.08 + (k % 3) * 0.05)}" fill="none" stroke="${accent}" stroke-opacity="0.12" stroke-width="${w * 0.006}"/>`).join('\n  ')}
 </svg>`;
     const file = path.join(dir, `bg-${i}.jpg`);
-    await sharp(Buffer.from(svg)).jpeg({ quality: 90 }).toFile(file);
+    const composites: sharp.OverlayOptions[] = [];
+    const logo = logoPath();
+    if (logo) {
+      // A faint, large PressHub logo as a watermark behind the text.
+      const mark = await sharp(logo)
+        .resize(Math.round(w * 0.8))
+        .ensureAlpha()
+        .composite([{ input: Buffer.from([255, 255, 255, 36]), raw: { width: 1, height: 1, channels: 4 }, tile: true, blend: 'dest-in' }])
+        .png()
+        .toBuffer();
+      const meta = await sharp(mark).metadata();
+      composites.push({ input: mark, left: Math.round((w - (meta.width || 0)) / 2), top: Math.round(h * (i ? 0.62 : 0.46)) });
+    }
+    await sharp(Buffer.from(svg)).composite(composites).jpeg({ quality: 90 }).toFile(file);
     out.push(file);
   }
   return out;
@@ -507,6 +538,8 @@ export function buildFfmpegArgs(p: {
   height: number;
   fps: number;
   total: number;
+  /** PressHub logo (transparent PNG): top-right corner, then large on the end card. */
+  logo?: string;
 }): string[] {
   const args: string[] = ['-hide_banner', '-y'];
   p.slots.forEach((slot) => {
@@ -518,6 +551,10 @@ export function buildFfmpegArgs(p: {
   args.push('-i', p.audio);
   args.push('-loop', '1', '-i', p.shade);
   args.push('-f', 'lavfi', '-i', `color=c=0xFACC15:s=${p.width}x10:r=${p.fps}`);
+  const logoIdx = barIdx + 1;
+  if (p.logo) {
+    args.push('-loop', '1', '-framerate', String(p.fps), '-i', p.logo);
+  }
 
   const parts: string[] = [];
   let frameBudget = Math.round(p.total * p.fps);
@@ -530,7 +567,19 @@ export function buildFfmpegArgs(p: {
   parts.push(`[bg][${shadeIdx}:v]overlay=0:0:shortest=1[shaded]`);
   parts.push(`[shaded][${barIdx}:v]overlay=x='-w+w*t/${p.total.toFixed(3)}':y=0:shortest=1[bar]`);
   const endStart = Math.max(0, p.total - END_CARD_SECONDS).toFixed(3);
-  parts.push(`[bar]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.55:t=fill:enable='gte(t,${endStart})'[dim]`);
+  const k = p.width / CANVAS.width;
+  if (p.logo) {
+    const small = Math.round(LOGO.cornerWidth * k);
+    const big = Math.round(LOGO.endWidth * k);
+    parts.push(`[${logoIdx}:v]format=rgba,split=2[lg1][lg2]`);
+    parts.push(`[lg1]scale=${small}:-1[lgs]`);
+    parts.push(`[lg2]scale=${big}:-1,fade=t=in:st=${endStart}:d=0.3:alpha=1[lgb]`);
+    parts.push(`[bar][lgs]overlay=x=W-w-${Math.round(LAYOUT.sideMargin * k)}:y=${Math.round(LOGO.cornerY * k)}:shortest=1:enable='lt(t,${endStart})'[branded]`);
+    parts.push(`[branded]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.55:t=fill:enable='gte(t,${endStart})'[dimmed]`);
+    parts.push(`[dimmed][lgb]overlay=x=(W-w)/2:y=${Math.round(LOGO.endY * k)}:shortest=1:enable='gte(t,${endStart})'[dim]`);
+  } else {
+    parts.push(`[bar]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.55:t=fill:enable='gte(t,${endStart})'[dim]`);
+  }
   parts.push(`[dim]subtitles=${p.ass}:fontsdir=${p.fonts},format=yuv420p[v]`);
   parts.push(`[${audioIdx}:a]apad[a]`);
 
@@ -603,6 +652,16 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       images.push(...(await brandedBackgrounds(work, width, height)));
     }
 
+    // PressHub logo, copied into the work directory like every other input.
+    const logoSrc = logoPath();
+    let logo = '';
+    if (logoSrc) {
+      logo = path.join(work, 'logo.png');
+      fs.copyFileSync(logoSrc, logo);
+    } else {
+      WorkerLogger.warn('ShortVideo', 'PressHub logo (assets/brand/presshub-logo.png) is missing; writing the site name as text.');
+    }
+
     // Captions.
     const segments = fitSegments(options.segments || [], audioDuration);
     if (segments.length === 0) {
@@ -616,6 +675,7 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       siteName: options.siteName || 'PressHub.Cy',
       chunks,
       totalDuration: total,
+      hasLogo: Boolean(logo),
     });
     fs.writeFileSync(path.join(work, 'captions.ass'), ass, 'utf8');
     const shade = await shadeOverlay(work, width, height);
@@ -634,6 +694,7 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       height,
       fps,
       total,
+      logo: logo ? path.basename(logo) : undefined,
     });
 
     WorkerLogger.info('ShortVideo', `Rendering short (${total.toFixed(1)}s, ${storyImages} story image(s), ${chunks.length} caption chunks, ${slots.length} shots)`);

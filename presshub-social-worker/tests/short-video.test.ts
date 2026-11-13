@@ -13,6 +13,7 @@ import {
   buildFfmpegArgs,
   generateShortVideo,
   resolveFfmpegPath,
+  logoPath,
   END_CARD_SECONDS,
   ShortSegment
 } from '../src/media/short-video';
@@ -96,6 +97,35 @@ describe('TikTok short renderer', () => {
       expect(toSec(end)).toBeLessThanOrEqual(total - END_CARD_SECONDS + 0.01);
     }
     expect(ass).toMatch(/Dialogue: 4,0:00:05\.50,0:00:08\.00,EndTitle,.*PressHub\.Cy/);
+  });
+
+  test('with the logo the site name is not written as text', () => {
+    const ass = buildAssScript({ hook: 'Hook', siteName: 'PressHub.Cy', chunks: [], totalDuration: 8, hasLogo: true });
+    expect(ass).not.toMatch(/Dialogue: .*,(Brand|EndTitle),/);
+    expect(ass).toMatch(/Dialogue: 4,.*,EndLine,/);
+  });
+
+  test('the bundled PressHub logo exists and is overlaid in the corner and on the end card', () => {
+    expect(logoPath()).not.toBeNull();
+    const args = buildFfmpegArgs({
+      slots: planSlots(8, 1),
+      images: ['img-0.jpg'],
+      audio: 'voice.wav',
+      shade: 'shade.png',
+      ass: 'captions.ass',
+      fonts: 'fonts',
+      output: 'out.mp4',
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      total: 8,
+      logo: 'logo.png'
+    });
+    expect(args).toContain('logo.png');
+    const graph = args[args.indexOf('-filter_complex') + 1];
+    expect(graph).toContain("[lgs]overlay=x=W-w-90:y=262:shortest=1:enable='lt(t,5.500)'");
+    expect(graph).toContain("[lgb]overlay=x=(W-w)/2:y=520:shortest=1:enable='gte(t,5.500)'");
+    expect(graph).toContain('scale=640:-1,fade=t=in:st=5.500');
   });
 
   test('planSlots changes the shot about every 4 seconds and varies the motion', () => {
