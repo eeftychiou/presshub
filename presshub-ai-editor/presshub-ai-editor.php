@@ -1082,8 +1082,14 @@ function presshub_ai_disarm_synthesis_watchdog( $date, $edition ) {
         return;
     }
     $timestamp = wp_next_scheduled( 'presshub_ai_retry_podcast_synthesis', $args );
-    if ( $timestamp ) {
+    if ( false !== $timestamp ) {
         wp_unschedule_event( $timestamp, 'presshub_ai_retry_podcast_synthesis', $args );
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::debug( 'Podcast synthesis watchdog disarmed: synthesis returned.', [
+                'date'    => $date,
+                'edition' => $edition,
+            ] );
+        }
     }
 }
 

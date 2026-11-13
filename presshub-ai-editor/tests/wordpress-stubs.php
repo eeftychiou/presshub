@@ -512,8 +512,8 @@ if ( ! function_exists( 'wp_unschedule_event' ) ) {
         }
         $GLOBALS['SCHEDULED_EVENTS'] = array_values( array_filter(
             (array) ( $GLOBALS['SCHEDULED_EVENTS'] ?? [] ),
-            function ( $e ) use ( $hook, $args ) {
-                return ! ( ( $e['hook'] ?? '' ) === $hook && ( $e['args'] ?? [] ) === $args );
+            function ( $e ) use ( $timestamp, $hook, $args ) {
+                return ! ( (int) ( $e['time'] ?? 0 ) === (int) $timestamp && ( $e['hook'] ?? '' ) === $hook && ( $e['args'] ?? [] ) === $args );
             }
         ) );
         return true;
