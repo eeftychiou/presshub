@@ -286,6 +286,46 @@ $fail = presshub_ai_execute_synthesis_retry( '2099-01-01', 'noon' );
 $log  = (string) file_get_contents( $log_file );
 trl_check( 'cron retry: a failed retry returns the error, logs ERROR and never reschedules', is_wp_error( $fail ) && false !== strpos( $log, 'giving up' ) && [] === $GLOBALS['SCHEDULED_EVENTS'] );
 
+// 7b. Watchdog: the retry is queued before synthesis, so a killed process
+//     (host time/memory limit) still gets one retry; removed once it returns.
+trl_reset( 0 );
+$before = time();
+$armed  = presshub_ai_arm_synthesis_watchdog( '2026-11-13', 'morning' );
+$ev     = $GLOBALS['SCHEDULED_EVENTS'][0] ?? [];
+trl_check( 'watchdog: armed once, at least 20 minutes later, with date and edition', true === $armed && 1 === count( $GLOBALS['SCHEDULED_EVENTS'] ) && 'presshub_ai_retry_podcast_synthesis' === ( $ev['hook'] ?? '' ) && [ '2026-11-13', 'morning' ] === ( $ev['args'] ?? [] ) && ( $ev['time'] ?? 0 ) >= $before + 1200 && ( $ev['time'] ?? 0 ) <= time() + 1200 );
+
+trl_reset( 0 );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_cron_retry_delay_min'] = 45;
+presshub_ai_arm_synthesis_watchdog( '2026-11-13', 'noon' );
+trl_check( 'watchdog: a retry delay above 20 minutes is used as is', ( $GLOBALS['SCHEDULED_EVENTS'][0]['time'] ?? 0 ) >= $before + 2700 );
+
+trl_reset( 0 );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_cron_retry_delay_min'] = 0;
+trl_check( 'watchdog: not armed when retries are disabled', false === presshub_ai_arm_synthesis_watchdog( '2026-11-13', 'morning' ) && [] === $GLOBALS['SCHEDULED_EVENTS'] );
+
+trl_reset( 0 );
+$GLOBALS['NEXT_SCHEDULED']['presshub_ai_retry_podcast_synthesis'] = time() + 600;
+trl_check( 'watchdog: not armed twice', false === presshub_ai_arm_synthesis_watchdog( '2026-11-13', 'morning' ) && [] === $GLOBALS['SCHEDULED_EVENTS'] );
+
+trl_reset( 0 );
+presshub_ai_arm_synthesis_watchdog( '2026-11-13', 'morning' );
+$GLOBALS['NEXT_SCHEDULED']['presshub_ai_retry_podcast_synthesis'] = $GLOBALS['SCHEDULED_EVENTS'][0]['time'];
+presshub_ai_disarm_synthesis_watchdog( '2026-11-13', 'morning' );
+trl_check( 'watchdog: disarm removes the queued retry', [] === $GLOBALS['SCHEDULED_EVENTS'] && 'presshub_ai_retry_podcast_synthesis' === ( $GLOBALS['UNSCHEDULED_EVENTS'][0]['hook'] ?? '' ) );
+
+trl_reset( 0 );
+$GLOBALS['UNSCHEDULED_EVENTS'] = [];
+presshub_ai_disarm_synthesis_watchdog( '2026-11-13', 'morning' );
+trl_check( 'watchdog: disarm without a queued retry does nothing', [] === $GLOBALS['UNSCHEDULED_EVENTS'] );
+
+$src = (string) file_get_contents( dirname( __DIR__ ) . '/presshub-ai-editor.php' );
+foreach ( [ 'morning', 'noon' ] as $ed ) {
+    $arm    = strpos( $src, "presshub_ai_arm_synthesis_watchdog( \$date, '{$ed}' );" );
+    $disarm = strpos( $src, "presshub_ai_disarm_synthesis_watchdog( \$date, '{$ed}' );" );
+    $retry  = strpos( $src, "presshub_ai_maybe_schedule_synthesis_retry( \$date, '{$ed}'" );
+    trl_check( "watchdog: {$ed} cron arms before synthesis and disarms before the error retry", false !== $arm && false !== $disarm && false !== $retry && $arm < $disarm && $disarm < $retry );
+}
+
 // =========================================================================
 // 8. Settings-First registration
 // =========================================================================

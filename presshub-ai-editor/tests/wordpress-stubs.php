@@ -496,6 +496,30 @@ if ( ! function_exists( 'wp_schedule_single_event' ) ) {
     }
 }
 
+if ( ! function_exists( 'wp_unschedule_event' ) ) {
+    function wp_unschedule_event( $timestamp, $hook, $args = [] ) {
+        $GLOBALS['UNSCHEDULED_EVENTS'][] = [ 'time' => $timestamp, 'hook' => $hook, 'args' => $args ];
+        if ( isset( $GLOBALS['NEXT_SCHEDULED'][ $hook ] ) ) {
+            unset( $GLOBALS['NEXT_SCHEDULED'][ $hook ] );
+        }
+        if ( isset( $GLOBALS['RECURRING_EVENTS'] ) ) {
+            $GLOBALS['RECURRING_EVENTS'] = array_values( array_filter(
+                $GLOBALS['RECURRING_EVENTS'],
+                function ( $e ) use ( $hook ) {
+                    return ( $e['hook'] ?? '' ) !== $hook;
+                }
+            ) );
+        }
+        $GLOBALS['SCHEDULED_EVENTS'] = array_values( array_filter(
+            (array) ( $GLOBALS['SCHEDULED_EVENTS'] ?? [] ),
+            function ( $e ) use ( $hook, $args ) {
+                return ! ( ( $e['hook'] ?? '' ) === $hook && ( $e['args'] ?? [] ) === $args );
+            }
+        ) );
+        return true;
+    }
+}
+
 if ( ! function_exists( 'wp_html_excerpt' ) ) {
     function wp_html_excerpt( $str, $length, $more = '&hellip;' ) {
         $str = wp_strip_all_tags( $str );
