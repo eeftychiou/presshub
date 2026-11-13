@@ -26,6 +26,7 @@ class PressHub_Social_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_social_regenerate_job_copy', [ __CLASS__, 'handle_regenerate_job_copy' ] );
         add_action( 'wp_ajax_presshub_social_update_job_copy', [ __CLASS__, 'handle_update_job_copy' ] );
         add_action( 'wp_ajax_presshub_social_repost_job', [ __CLASS__, 'handle_repost_job' ] );
+        add_action( 'wp_ajax_presshub_social_render_test_shorts', [ __CLASS__, 'handle_render_test_shorts' ] );
     }
 
     /**
@@ -148,6 +149,36 @@ class PressHub_Social_Ajax_Handlers {
             'message' => sprintf( __( 'Successfully queued %d social post(s).', 'presshub-social-autopost' ), count( $job_ids ) ),
             'post_id' => $post_id,
             'job_ids' => $job_ids,
+        ] );
+    }
+
+    /**
+     * AJAX handler: queue a test render of a podcast post's TikTok shorts (real prompts,
+     * voices and images; the worker saves the videos and posts nothing).
+     * Capability: manage_options (each test render calls the LLM, TTS and image APIs).
+     *
+     * @return void
+     */
+    public static function handle_render_test_shorts(): void {
+        check_ajax_referer( 'presshub_social_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+        }
+
+        $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
+        $ids     = PressHub_Social_TikTok_Shorts::enqueue_test_render( $post_id );
+        if ( is_wp_error( $ids ) ) {
+            wp_send_json_error( [ 'message' => ucfirst( $ids->get_error_message() ) ], 400 );
+        }
+
+        wp_send_json_success( [
+            'message' => sprintf(
+                /* translators: %d: number of test shorts */
+                __( 'Queued %d test shorts. They are prepared with the real prompts, voices and images, then the worker saves the videos in its output folder under tiktok-short-tests (nothing is posted). Follow them in the Social Queue.', 'presshub-social-autopost' ),
+                count( $ids )
+            ),
+            'job_ids' => $ids,
         ] );
     }
 

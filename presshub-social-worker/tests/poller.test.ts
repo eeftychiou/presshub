@@ -474,6 +474,47 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ copy: 'Λεζάντα του short #κύπρος' }));
     });
 
+    test('saves a TikTok short test render and never posts it', async () => {
+      const fs = require('fs');
+      const os = require('os');
+      const pathMod = require('path');
+      const outDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'ph-test-render-'));
+      const rendered = pathMod.join(outDir, 'short-render.mp4');
+      fs.writeFileSync(rendered, 'video');
+      const reports: any[] = [];
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [{
+                id: 403, platform: 'tiktok', post_id: 637, post_copy: 'Λεζάντα', video_title: 'Hook', test_render: true,
+                audio_url: 'https://presshub.cy/wp-content/uploads/short.wav',
+                tiktok_short: { index: 1, count: 3, hook: 'Hook', images: [], segments: [] }
+              }]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          reports.push(JSON.parse(init.body));
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: rendered, width: 1080, height: 1920, duration: 30, captions: 10, images: 0 });
+      const mockPoster = jest.fn();
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster, generateShortFn: mockGenerateShort, outputDir: outDir });
+
+      const stats = await poller.pollOnce();
+      expect(stats.succeeded).toBe(1);
+      expect(mockPoster).not.toHaveBeenCalled();
+      expect(reports[0]).toEqual(expect.objectContaining({ job_id: 403, status: 'test_rendered' }));
+      const saved = reports[0].metadata.test_render_file;
+      expect(saved).toContain(pathMod.join('tiktok-short-tests', 'post-637-short-2-'));
+      expect(fs.existsSync(saved)).toBe(true);
+      fs.rmSync(outDir, { recursive: true, force: true });
+    });
+
     test('fails a TikTok short that has no audio instead of posting it silent', async () => {
       const reports: any[] = [];
       const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {

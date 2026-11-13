@@ -4,6 +4,8 @@ import { generateCard, CardResult } from './media/card-generator';
 import { generateVideo, VideoResult } from './media/video-generator';
 import { generateShortVideo, ShortSegment, ShortVideoResult, GenerateShortOptions } from './media/short-video';
 import { WorkerLogger } from './logger';
+import fs from 'fs';
+import path from 'path';
 import { SocialMonitor } from './monitor/monitor-client';
 
 export interface ClaimedJob {
@@ -13,6 +15,8 @@ export interface ClaimedJob {
   post_title?: string;
   post_copy: string;
   site_name?: string;
+  /** A TikTok short test render: render and save the video, never post it. */
+  test_render?: boolean;
   /** On-screen title for the TikTok video (a short's hook); falls back to post_title. */
   video_title?: string;
   /** Set on TikTok short jobs: which story of the podcast this video covers. */
@@ -129,10 +133,11 @@ export class PressHubPoller {
    */
   private async reportComplete(payload: {
     job_id: number | string;
-    status: 'published' | 'failed';
+    status: 'published' | 'failed' | 'test_rendered';
     external_post_id?: string;
     external_post_url?: string;
     error?: string;
+    metadata?: Record<string, any>;
   }): Promise<void> {
     const url = `${this.wpUrl}/wp-json/presshub-social/v1/worker/complete`;
     WorkerLogger.info('Poller', `Reporting '${payload.status}' status for job #${payload.job_id} to WordPress...`, payload);
@@ -321,6 +326,22 @@ export class PressHubPoller {
             });
             mediaPath = video?.filePath;
             WorkerLogger.info('Poller', `${jobTag} Short rendered at: ${mediaPath}`);
+
+            if (job.test_render) {
+              // Test render: keep the video for review and post nothing.
+              if (!mediaPath || !fs.existsSync(mediaPath)) {
+                throw new Error('Test render produced no video file.');
+              }
+              const testDir = path.join(this.outputDir || path.resolve(process.cwd(), 'output'), 'tiktok-short-tests');
+              fs.mkdirSync(testDir, { recursive: true });
+              const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+              const testFile = path.resolve(testDir, `post-${job.post_id || 0}-short-${short.index + 1}-${stamp}.mp4`);
+              fs.renameSync(mediaPath, testFile);
+              WorkerLogger.info('Poller', `${jobTag} Test render saved (not posted): ${testFile}`);
+              await this.reportComplete({ job_id: job.id, status: 'test_rendered', metadata: { test_render_file: testFile } });
+              succeeded++;
+              continue;
+            }
           } else if (platform === 'tiktok') {
             const hasAudio = Boolean(audioUrl);
             WorkerLogger.info(

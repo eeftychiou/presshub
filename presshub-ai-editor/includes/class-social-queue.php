@@ -748,6 +748,39 @@ class PressHub_Social_Queue {
      * @param int $job_id
      * @return bool
      */
+    /**
+     * Close a TikTok short test render: the worker saved the video instead of posting it.
+     * The job ends as cancelled (it was never meant to be posted), with the video's path
+     * on the worker in its note and in metadata.test_render.
+     */
+    public static function mark_test_rendered( int $job_id, string $file ): bool {
+        $job = self::get_job( $job_id );
+        if ( ! $job ) {
+            return false;
+        }
+        $meta = is_array( $job['metadata'] ?? null ) ? $job['metadata'] : json_decode( (string) ( $job['metadata'] ?? '' ), true );
+        $meta = is_array( $meta ) ? $meta : [];
+        $now  = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+        $meta['test_render'] = [ 'file' => $file, 'rendered_at' => $now ];
+        $note = sprintf( 'Test render only, not posted. Video saved on the worker: %s', '' !== $file ? $file : '(path not reported)' );
+        $data = [
+            'status'     => 'cancelled',
+            'last_error' => $note,
+            'metadata'   => function_exists( 'wp_json_encode' ) ? wp_json_encode( $meta ) : json_encode( $meta ),
+            'updated_at' => $now,
+        ];
+
+        if ( self::is_db_ready() ) {
+            global $wpdb;
+            return false !== $wpdb->update( PressHub_Social_Activator::get_table_name(), $data, [ 'id' => $job_id ] );
+        }
+        if ( isset( self::$memory_store[ $job_id ] ) ) {
+            self::$memory_store[ $job_id ] = array_merge( self::$memory_store[ $job_id ], $data );
+            return true;
+        }
+        return false;
+    }
+
     public static function cancel_job( int $job_id ): bool {
         $job = self::get_job( $job_id );
         if ( ! $job ) {

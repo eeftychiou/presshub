@@ -90,6 +90,18 @@ class PressHub_Social_Metabox {
                     </label>
                     <span class="spinner" id="presshub-social-global-spinner"></span>
                 </div>
+                <?php if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_podcast_post( (int) $post_id ) && current_user_can( 'manage_options' ) ) : ?>
+                    <div class="presshub-social-test-shorts" style="margin-top:8px;">
+                        <button type="button" class="button button-secondary" id="presshub-render-test-shorts" data-post-id="<?php echo esc_attr( $post_id ); ?>">
+                            <span class="dashicons dashicons-video-alt3" style="vertical-align:middle;"></span>
+                            <?php esc_html_e( 'Render Test TikTok Shorts', 'presshub-social-autopost' ); ?>
+                        </button>
+                        <span class="spinner" id="presshub-test-shorts-spinner"></span>
+                        <p class="description" id="presshub-test-shorts-status">
+                            <?php esc_html_e( 'Makes this podcast\'s shorts with the real prompts, voices and images, and saves the videos in the worker\'s output folder (tiktok-short-tests). Nothing is posted.', 'presshub-social-autopost' ); ?>
+                        </p>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <div class="presshub-social-platforms-grid">

@@ -14,6 +14,39 @@
                     $('[name="presshub_social_metabox_nonce"]').val() ||
                     $('[name="presshub_social_nonce"]').val();
 
+        // Render Test TikTok Shorts (podcast posts): queued like real shorts, saved by the
+        // worker instead of posted. Feedback is shown inline, never in a dialog.
+        $(document).on('click', '#presshub-render-test-shorts', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var $spinner = $('#presshub-test-shorts-spinner');
+            var $status = $('#presshub-test-shorts-status');
+
+            $btn.prop('disabled', true);
+            $spinner.addClass('is-active');
+
+            $.ajax({
+                url: (window.presshubSocial && window.presshubSocial.ajaxurl) || window.ajaxurl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'presshub_social_render_test_shorts',
+                    post_id: $btn.data('post-id'),
+                    nonce: nonce
+                }
+            }).done(function (res) {
+                var ok = res && res.success;
+                var msg = (res && res.data && res.data.message) ? res.data.message : (ok ? 'Queued.' : 'The test render could not be queued.');
+                $status.text(msg).css('color', ok ? '#00a32a' : '#d63638');
+            }).fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) ? xhr.responseJSON.data.message : 'Request failed.';
+                $status.text(msg).css('color', '#d63638');
+            }).always(function () {
+                $btn.prop('disabled', false);
+                $spinner.removeClass('is-active');
+            });
+        });
+
         // Update live character counters on typing
         $(document).on('input', '.presshub-copy-textarea', function () {
             var $textarea = $(this);

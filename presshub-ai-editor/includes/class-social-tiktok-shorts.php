@@ -29,6 +29,13 @@
  *    short's images and turn timings, and the caption in place of the placeholder copy
  *    (a copy an editor wrote is kept).
  *
+ * Test renders (enqueue_test_render(), "Render Test TikTok Shorts" on a podcast post):
+ * the same jobs flagged `metadata.tiktok_short.test`, queued now and prepared with the
+ * real prompts, voices and images. The worker renders them and saves the videos in its
+ * output folder (tiktok-short-tests/) instead of posting, then reports `test_rendered`;
+ * the job ends as cancelled with the video's path in its note. Shorts need not be
+ * enabled for a test render, only Pull Mode.
+ *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
  *
@@ -150,9 +157,9 @@ class PressHub_Social_TikTok_Shorts {
      *
      * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().
      */
-    public static function build_jobs( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time ): array {
+    public static function build_jobs( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time, bool $test = false ): array {
         $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
-        $spacing = PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
+        $spacing = $test ? 0 : PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
         $jobs    = [];
         for ( $i = 0; $i < $count; $i++ ) {
             $jobs[] = [
@@ -164,10 +171,50 @@ class PressHub_Social_TikTok_Shorts {
                 'media_type'   => $media_type,
                 'scheduled_at' => gmdate( 'Y-m-d H:i:s', $start_time + ( $i * $spacing ) ),
                 'status'       => 'pending',
-                'metadata'     => [ self::JOB_META_KEY => [ 'index' => $i, 'count' => $count ] ],
+                'metadata'     => [ self::JOB_META_KEY => array_merge( [ 'index' => $i, 'count' => $count ], $test ? [ 'test' => true ] : [] ) ],
             ];
         }
         return $jobs;
+    }
+
+    /**
+     * Queue a test render of a podcast post's shorts: the real prompts, voices and images,
+     * rendered by the worker into its output folder and never posted.
+     *
+     * @return int[]|WP_Error IDs of the queued test jobs.
+     */
+    public static function enqueue_test_render( int $post_id ) {
+        if ( ! self::is_podcast_post( $post_id ) ) {
+            return new WP_Error( 'tiktok_short_no_script', sprintf( 'post #%d is not a Daily Briefing podcast post with a script.', $post_id ) );
+        }
+        if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() ) {
+            return new WP_Error( 'tiktok_short_needs_pull', 'test renders are made by the local worker, so the worker must be in Pull Mode.' );
+        }
+
+        $ids = [];
+        foreach ( self::build_jobs( $post_id, 'automation', null, null, time(), true ) as $job ) {
+            $id = PressHub_Social_Queue::enqueue( $job );
+            if ( is_wp_error( $id ) ) {
+                foreach ( $ids as $done ) {
+                    PressHub_Social_Queue::cancel_job( $done );
+                }
+                return $id;
+            }
+            $ids[] = (int) $id;
+        }
+        self::schedule_prepare( $post_id );
+        PressHub_Social_Logger::info( sprintf( 'Queued a test render of %d TikTok shorts for post #%d (jobs %s). They are rendered by the worker and not posted.', count( $ids ), $post_id, implode( ', ', $ids ) ) );
+        return $ids;
+    }
+
+    /**
+     * Whether a job is a test render of a short (rendered by the worker, never posted).
+     */
+    public static function is_test_job( array $job ): bool {
+        if ( ! self::is_short_job( $job ) ) {
+            return false;
+        }
+        return ! empty( self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ]['test'] );
     }
 
     /**
@@ -242,6 +289,7 @@ class PressHub_Social_TikTok_Shorts {
         }
 
         $job['post_copy']    = $copy;
+        $job['test_render']  = ! empty( $short['test'] );
         $job['audio_url']    = (string) $short['audio']['audio_url'];
         $job['video_title']  = (string) $short['hook'];
         $job['tiktok_short'] = [

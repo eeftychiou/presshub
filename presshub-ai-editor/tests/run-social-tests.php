@@ -2168,6 +2168,42 @@ $push_short = PressHub_Social_Dispatcher::dispatch_job( $repost_id );
 assert_true( is_wp_error( $push_short ) && 'tiktok_short_needs_pull' === $push_short->get_error_code(), 'Dispatching a short outside Pull Mode fails loudly' );
 update_option( 'presshub_social_worker_mode', 'pull' );
 
+// Test render: real preparation, claimed with test_render, saved by the worker, never posted.
+update_option( 'presshub_social_tiktok_shorts_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+$test_ids = PressHub_Social_TikTok_Shorts::enqueue_test_render( 880 );
+assert_true( is_array( $test_ids ) && 3 === count( $test_ids ), 'A test render queues one job per short, even with shorts off' );
+$test_jobs = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), $test_ids );
+assert_equals( $test_jobs[0]['scheduled_at'], $test_jobs[2]['scheduled_at'], 'Test render jobs are all due now, not spaced out' );
+assert_true( PressHub_Social_TikTok_Shorts::is_test_job( $test_jobs[1] ), 'Test render jobs are flagged as tests' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::enqueue_test_render( 501 ) ), 'A test render needs a podcast post' );
+update_option( 'presshub_social_worker_mode', 'push' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::enqueue_test_render( 880 ) ), 'A test render needs Pull Mode' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+$test_claim = PressHub_Social_REST_Controller::handle_claim( $req_short );
+assert_equals( 3, count( $test_claim['jobs'] ), 'Prepared test shorts are claimed' );
+assert_true( ! empty( $test_claim['jobs'][0]['test_render'] ) && ! empty( $test_claim['jobs'][0]['tiktok_short']['segments'] ), 'A claimed test short carries test_render and the real timings' );
+$req_test_done = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_test_done->set_param( 'job_id', $test_ids[0] );
+$req_test_done->set_param( 'status', 'test_rendered' );
+$req_test_done->set_param( 'metadata', [ 'test_render_file' => 'C:\\presshub\\output\\tiktok-short-tests\\post-880-short-1.mp4' ] );
+$res_test_done = PressHub_Social_REST_Controller::handle_complete( $req_test_done );
+$test_done_job = PressHub_Social_Queue::get_job( $test_ids[0] );
+assert_equals( 'cancelled', $test_done_job['status'], 'A finished test render ends as cancelled (never posted)' );
+assert_true( str_contains( (string) $test_done_job['last_error'], 'post-880-short-1.mp4' ), 'The test render note names the saved video' );
+$req_test_pub = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_test_pub->set_param( 'job_id', $test_ids[1] );
+$req_test_pub->set_param( 'status', 'published' );
+PressHub_Social_REST_Controller::handle_complete( $req_test_pub );
+assert_true( 'published' !== PressHub_Social_Queue::get_job( $test_ids[1] )['status'], 'A test render reported as published is not recorded as published' );
+$plain_job = PressHub_Social_Queue::enqueue( [ 'post_id' => 501, 'platform' => 'twitter', 'engine' => 'automation', 'post_copy' => 'Tweet.' ] );
+$req_bad_test = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_bad_test->set_param( 'job_id', $plain_job );
+$req_bad_test->set_param( 'status', 'test_rendered' );
+assert_true( is_wp_error( PressHub_Social_REST_Controller::handle_complete( $req_bad_test ) ), 'Only a test short can be completed as test_rendered' );
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+
 // The plan has fewer stories than jobs: the surplus job is cancelled, not failed.
 update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
 PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => $short_json( 2 ) );
