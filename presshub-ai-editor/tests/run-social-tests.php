@@ -499,6 +499,7 @@ require_once $base_dir . '/includes/class-social-activator.php';
 require_once $base_dir . '/includes/class-social-queue.php';
 require_once $base_dir . '/includes/class-social-tiktok-narrator.php';
 require_once $base_dir . '/includes/class-social-tiktok-shorts.php';
+require_once $base_dir . '/includes/class-social-tiktok-music.php';
 require_once $base_dir . '/includes/class-social-meta-api-client.php';
 require_once $base_dir . '/includes/class-social-worker-client.php';
 require_once $base_dir . '/includes/class-social-dispatcher.php';
@@ -2272,6 +2273,106 @@ PressHub_Social_TikTok_Shorts::set_ai_caller( null );
 PressHub_Social_TikTok_Shorts::set_synthesizer( null );
 PressHub_Social_TikTok_Shorts::set_image_generator( null );
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
+
+// ----------------------------------------------------------------------
+// TikTok shorts background music: mood per story, Lyria track library
+// ----------------------------------------------------------------------
+delete_option( 'presshub_social_prompt_tiktok_shorts_music' );
+delete_option( PressHub_Social_TikTok_Music::LIBRARY_OPTION );
+assert_equals( [ 'neutral', 'serious', 'upbeat', 'urgent', 'none' ], PressHub_Social_TikTok_Music::moods(), 'The default music prompts give four moods plus none' );
+assert_equals(
+    [ 'calm' => 'Soft piano. Instrumental.', 'tense-2' => 'Ticking clock' ],
+    PressHub_Social_TikTok_Music::parse_prompts( "# comment\n\nCalm: Soft piano. Instrumental.\nnone: ignored\nbroken line\ntense-2 : Ticking clock\nempty:   " ),
+    'parse_prompts reads "mood: prompt" lines and skips comments, none, blanks and broken lines'
+);
+$shipped_prompt = PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' );
+assert_true( str_contains( $shipped_prompt, '{moods}' ) && str_contains( $shipped_prompt, '"mood"' ), 'The shorts prompt asks for a mood from {moods}' );
+assert_true( str_contains( PressHub_Social_TikTok_Shorts::build_prompt( 880, 'M={moods}', '', 3, 130 ), 'M=neutral, serious, upbeat, urgent, none' ), 'build_prompt fills {moods}' );
+$mood_plan = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"hook":"a","script":"[SPEAKER_1]: Α","caption":"c","mood":" Serious "},{"hook":"a","script":"[SPEAKER_1]: Α","caption":"c","mood":"none"},{"hook":"a","script":"[SPEAKER_1]: Α","caption":"c","mood":"epic"},{"hook":"a","script":"[SPEAKER_1]: Α","caption":"c"}]}', 4 );
+assert_equals( [ 'serious', 'none', 'neutral', 'neutral' ], array_column( $mood_plan, 'mood' ), 'parse_plan keeps a known mood and turns a missing or unknown one into neutral' );
+
+// Lyria response parsing.
+$fake_mp3   = 'ID3' . str_repeat( "\x00", 2000 );
+$lyria_body = wp_json_encode( [ 'steps' => [
+    [ 'type' => 'user_input', 'content' => [ [ 'type' => 'text', 'text' => 'prompt' ] ] ],
+    [ 'type' => 'model_output', 'content' => [ [ 'type' => 'text', 'text' => '[Intro]' ], [ 'type' => 'audio', 'data' => base64_encode( $fake_mp3 ) ] ] ],
+] ] );
+assert_equals( $fake_mp3, PressHub_Social_TikTok_Music::audio_from_response( $lyria_body ), 'audio_from_response decodes the audio block of the model output' );
+$no_audio = PressHub_Social_TikTok_Music::audio_from_response( wp_json_encode( [ 'steps' => [ [ 'type' => 'model_output', 'content' => [ [ 'type' => 'text', 'text' => 'x' ] ] ] ] ] ) );
+assert_true( is_wp_error( $no_audio ) && 'tiktok_music_no_audio' === $no_audio->get_error_code(), 'A response without audio is an error' );
+
+// Generating the library, one track per call.
+update_option( 'presshub_social_tiktok_shorts_music_tracks', 2 );
+$lyria_calls = [];
+$uploads     = [];
+PressHub_Social_TikTok_Music::set_generator( function ( string $prompt, string $model ) use ( &$lyria_calls, $fake_mp3 ) {
+    $lyria_calls[] = [ $prompt, $model ];
+    return $fake_mp3;
+} );
+PressHub_Social_TikTok_Music::set_uploader( function ( string $filename, string $bytes, string $title ) use ( &$uploads ) {
+    $uploads[] = $filename;
+    return [ 'id' => 9000 + count( $uploads ), 'url' => 'https://example.com/uploads/' . $filename ];
+} );
+assert_equals( 8, PressHub_Social_TikTok_Music::missing_count(), 'Four moods with two tracks each are missing at first' );
+$first_track = PressHub_Social_TikTok_Music::generate_next();
+assert_equals( 'neutral', $first_track['mood'] ?? '', 'The first generated track is for the first mood' );
+assert_equals( 7, $first_track['remaining'] ?? null, 'Each call makes one track' );
+assert_equals( 'lyria-3-clip-preview', $lyria_calls[0][1] ?? '', 'Tracks use the default Lyria model' );
+assert_true( str_contains( $lyria_calls[0][0], 'Instrumental only' ), 'The mood prompt is sent to Lyria' );
+assert_true( (bool) preg_match( '/^presshub-music-neutral-1-[0-9a-f]{8}\.mp3$/', $uploads[0] ?? '' ), 'The track is saved as an MP3 named after its mood' );
+for ( $i = 0; $i < 10 && PressHub_Social_TikTok_Music::missing_count() > 0; $i++ ) {
+    PressHub_Social_TikTok_Music::generate_next();
+}
+assert_equals( 8, count( $lyria_calls ), 'Generating stops when every mood has its tracks' );
+assert_equals( [ 'mood' => '', 'remaining' => 0 ], PressHub_Social_TikTok_Music::generate_next(), 'Nothing is generated when no track is missing' );
+assert_equals( 8, count( $lyria_calls ), 'A complete library makes no Lyria call' );
+
+// A changed mood prompt replaces only that mood's tracks.
+update_option( 'presshub_social_prompt_tiktok_shorts_music', str_replace( 'Serious, restrained', 'Very serious', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_music.txt' ) ) );
+assert_equals( 2, PressHub_Social_TikTok_Music::missing_count(), 'Changing one mood prompt makes only that mood\'s tracks stale' );
+assert_equals( 'serious', PressHub_Social_TikTok_Music::generate_next()['mood'] ?? '', 'The stale mood is generated again' );
+assert_equals( 1, count( PressHub_Social_TikTok_Music::library()['serious'] ?? [] ), 'The stale tracks are dropped when the first new one is made' );
+PressHub_Social_TikTok_Music::generate_next();
+
+// A Lyria failure is reported, nothing is stored.
+PressHub_Social_TikTok_Music::clear_library();
+PressHub_Social_TikTok_Music::set_generator( fn() => new WP_Error( 'tiktok_music_http_429', 'Lyria returned HTTP 429.' ) );
+$lyria_fail = PressHub_Social_TikTok_Music::generate_next();
+assert_true( is_wp_error( $lyria_fail ) && 'tiktok_music_http_429' === $lyria_fail->get_error_code(), 'A Lyria error is returned to the settings page' );
+assert_equals( [], PressHub_Social_TikTok_Music::library(), 'A failed generation stores no track' );
+PressHub_Social_TikTok_Music::set_generator( fn() => 'tiny' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Music::generate_next() ), 'Empty audio from Lyria is an error' );
+PressHub_Social_TikTok_Music::set_generator( function () use ( $fake_mp3 ) {
+    return $fake_mp3;
+} );
+for ( $i = 0; $i < 10 && PressHub_Social_TikTok_Music::missing_count() > 0; $i++ ) {
+    PressHub_Social_TikTok_Music::generate_next();
+}
+
+// Music for a claimed short.
+update_option( 'presshub_social_tiktok_shorts_music_enabled', false );
+assert_equals( [], PressHub_Social_TikTok_Shorts::music_for( [ 'mood' => 'serious' ], 5 ), 'No music while background music is off' );
+update_option( 'presshub_social_tiktok_shorts_music_enabled', true );
+update_option( 'presshub_social_tiktok_shorts_music_volume', 12 );
+$serious_music = PressHub_Social_TikTok_Shorts::music_for( [ 'mood' => 'serious' ], 5 );
+assert_equals( 'serious', $serious_music['mood'] ?? '', 'The short keeps its mood' );
+assert_true( str_contains( (string) ( $serious_music['music_url'] ?? '' ), 'presshub-music-serious-' ), 'A serious story gets a serious track' );
+assert_equals( 0.12, $serious_music['music_volume'] ?? null, 'The music volume setting is sent as 0-1' );
+assert_equals( $serious_music['music_url'], PressHub_Social_TikTok_Shorts::music_for( [ 'mood' => 'serious' ], 5 )['music_url'] ?? '', 'The same job always gets the same track' );
+assert_true( $serious_music['music_url'] !== ( PressHub_Social_TikTok_Shorts::music_for( [ 'mood' => 'serious' ], 6 )['music_url'] ?? '' ), 'Shorts of the same mood take turns between its tracks' );
+assert_equals( [ 'mood' => 'none' ], PressHub_Social_TikTok_Shorts::music_for( [ 'mood' => 'none' ], 5 ), 'A sad story (none) gets no music' );
+assert_true( str_contains( (string) ( PressHub_Social_TikTok_Shorts::music_for( [], 5 )['music_url'] ?? '' ), 'presshub-music-neutral-' ), 'A short prepared before moods existed gets neutral music' );
+delete_option( PressHub_Social_TikTok_Music::LIBRARY_OPTION );
+assert_equals( [ 'mood' => 'upbeat' ], PressHub_Social_TikTok_Shorts::music_for( [ 'mood' => 'upbeat' ], 5 ), 'A mood without tracks renders without music instead of failing' );
+update_option( 'presshub_social_prompt_tiktok_shorts_music', '' );
+assert_equals( [ 'none' ], PressHub_Social_TikTok_Music::moods(), 'Emptied music prompts leave only none' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Music::generate_next() ), 'Generating with no music prompts fails loudly' );
+
+update_option( 'presshub_social_tiktok_shorts_music_enabled', false );
+delete_option( 'presshub_social_prompt_tiktok_shorts_music' );
+delete_option( PressHub_Social_TikTok_Music::LIBRARY_OPTION );
+PressHub_Social_TikTok_Music::set_generator( null );
+PressHub_Social_TikTok_Music::set_uploader( null );
 
 // ----------------------------------------------------------------------
 // Social Logger audit(): regression for TypeError (issue #139)

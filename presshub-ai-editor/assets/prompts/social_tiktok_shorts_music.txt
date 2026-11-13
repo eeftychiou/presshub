@@ -1,0 +1,4 @@
+neutral: Calm modern news background music, soft electronic pulse, light piano and warm pads, steady mid tempo around 100 BPM, understated and professional, loopable with no big build-ups. Instrumental only, no vocals.
+serious: Serious, restrained news background music, low strings and soft piano, slow tempo around 75 BPM, thoughtful and respectful, no drums hits or drama, loopable. Instrumental only, no vocals.
+upbeat: Bright, positive news background music, light plucked guitar, soft claps and marimba, mid-fast tempo around 115 BPM, friendly and optimistic but not cheesy, loopable. Instrumental only, no vocals.
+urgent: Tense, focused breaking-news background music, ticking hi-hats, pulsing synth bass and short string stabs, tempo around 120 BPM, driving but not dramatic, loopable. Instrumental only, no vocals.

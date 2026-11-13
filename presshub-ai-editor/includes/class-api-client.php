@@ -849,7 +849,7 @@ class PressHub_AI_API_Client {
      * @param string $type Provider type slug ('gemini', 'openai', 'anthropic', etc.)
      * @return string Unmasked API key, or '' when not found / masked.
      */
-    private static function lookup_provider_key_by_type( string $type ): string {
+    public static function lookup_provider_key_by_type( string $type ): string {
         if ( ! class_exists( 'PressHub_AI_Provider_Store' ) ) {
             return '';
         }

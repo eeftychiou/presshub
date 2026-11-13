@@ -683,6 +683,68 @@ class PressHub_Social_Settings {
             ]
         );
 
+        add_settings_field(
+            'presshub_social_tiktok_shorts_music_enabled',
+            __( 'Shorts Background Music', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_shorts_music_enabled_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_music_volume',
+            __( 'Music Volume', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_music_volume',
+                'default' => 15,
+                'min'     => 0,
+                'max'     => 60,
+                'unit'    => '%',
+                'desc'    => __( 'Level of the music under the voice, in percent of its full volume. It dips further while someone speaks and fades out at the end. 15% is a quiet bed; 0 mutes it.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_music_tracks',
+            __( 'Music Tracks per Mood', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_music_tracks',
+                'default' => 2,
+                'min'     => 1,
+                'max'     => 5,
+                'unit'    => __( 'tracks', 'presshub-social-autopost' ),
+                'desc'    => __( 'How many tracks Generate Music Tracks makes for each mood. Shorts of the same mood take turns between them.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_music_model',
+            __( 'Music Model', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'      => 'presshub_social_tiktok_shorts_music_model',
+                'default'     => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL,
+                'placeholder' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL,
+                'desc'        => __( 'Google Lyria model, called with the Gemini API key. lyria-3-clip-preview makes 30-second clips (looped under longer shorts); lyria-3.5 makes longer tracks. Changing it makes new tracks on the next Generate Music Tracks.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_music_library',
+            __( 'Music Tracks', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_shorts_music_library_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec'
+        );
+
         // ------------------------------------------------------------------
         // Tab 5: Queue & Alerts
         // ------------------------------------------------------------------
@@ -811,7 +873,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
-                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","caption"}]}: the spoken script, the on-screen hook, the image descriptions and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {speakers} (Daily Briefing host count). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Daily Briefing host count). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -825,6 +887,19 @@ class PressHub_Social_Settings {
                 'option' => 'presshub_social_prompt_tiktok_shorts_image_style',
                 'rows'   => 3,
                 'desc'   => __( 'Sent to the image generator for each story image of a short (9:16). {description} is one image description written by the Script Prompt (its "visuals" rules decide what the images show); this text sets the look. Without {description} the description is put first. Empty sends the description alone.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_tiktok_shorts_music',
+            __( 'TikTok Shorts: Music Prompts', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_prompts',
+            'presshub_social_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_shorts_music',
+                'rows'   => 6,
+                'desc'   => __( 'One line per mood, "mood: prompt". Each prompt is sent to Google Lyria to make that mood\'s background tracks (Automation Worker → Generate Music Tracks). The mood names are what the Script Prompt may choose ({moods}); "none" always means no music. A changed line makes that mood\'s tracks again on the next generate.', 'presshub-social-autopost' ),
             ]
         );
 

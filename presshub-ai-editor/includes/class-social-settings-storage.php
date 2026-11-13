@@ -271,6 +271,30 @@ class PressHub_Social_Settings_Storage {
             'default'           => 3,
         ] );
 
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_enabled' ],
+            'default'           => false,
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_volume', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_volume' ],
+            'default'           => 15,
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_tracks', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_tracks' ],
+            'default'           => 2,
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_model', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_model' ],
+            'default'           => self::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL,
+        ] );
+
         // 6. Alerts
         register_setting( self::OPTION_GROUP, 'presshub_social_alert_email_enabled', [
             'type'              => 'boolean',
@@ -349,6 +373,13 @@ class PressHub_Social_Settings_Storage {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_image_style' );
             },
             'default'           => '',
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_music', [
+            'type'              => 'string',
+            'sanitize_callback' => function ( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_music' );
+            },
         ] );
 
         register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts', [
@@ -433,6 +464,14 @@ class PressHub_Social_Settings_Storage {
                 update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
             } catch ( Exception $e ) {
                 PressHub_Social_Logger::error( 'Failed to seed TikTok shorts image style prompt: ' . $e->getMessage() );
+            }
+        }
+
+        if ( false === get_option( 'presshub_social_prompt_tiktok_shorts_music', false ) ) {
+            try {
+                update_option( 'presshub_social_prompt_tiktok_shorts_music', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_music.txt' ) );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to seed TikTok shorts music prompts: ' . $e->getMessage() );
             }
         }
 
@@ -581,6 +620,7 @@ class PressHub_Social_Settings_Storage {
         }
         update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
+        update_option( 'presshub_social_prompt_tiktok_shorts_music', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_music.txt' ) );
     }
 
     // ------------------------------------------------------------------
@@ -1147,6 +1187,68 @@ class PressHub_Social_Settings_Storage {
         return max( 0, min( 4, (int) $value ) );
     }
 
+    /** Default Lyria model for the shorts' background music (30-second instrumental clips). */
+    public const DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL = 'lyria-3-clip-preview';
+
+    /** Background music under TikTok shorts (default off until the tracks are generated). */
+    public static function get_tiktok_shorts_music_enabled(): bool {
+        return in_array( get_option( 'presshub_social_tiktok_shorts_music_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_tiktok_shorts_music_enabled( $value ): bool {
+        // An unchecked box posts nothing; the hidden "_present" field tells a save from another form.
+        if ( null === $value && empty( $_POST['presshub_social_tiktok_shorts_music_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_tiktok_shorts_music_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Music level under the voice, in percent of full volume (0-60, default 15). */
+    public static function get_tiktok_shorts_music_volume(): int {
+        return self::sanitize_tiktok_shorts_music_volume( get_option( 'presshub_social_tiktok_shorts_music_volume', 15 ) );
+    }
+
+    public static function sanitize_tiktok_shorts_music_volume( $value ): int {
+        return max( 0, min( 60, (int) $value ) );
+    }
+
+    /** Music tracks generated for each mood (1-5, default 2). */
+    public static function get_tiktok_shorts_music_tracks(): int {
+        return self::sanitize_tiktok_shorts_music_tracks( get_option( 'presshub_social_tiktok_shorts_music_tracks', 2 ) );
+    }
+
+    public static function sanitize_tiktok_shorts_music_tracks( $value ): int {
+        return max( 1, min( 5, (int) $value ) );
+    }
+
+    /** Lyria model that generates the music tracks. */
+    public static function get_tiktok_shorts_music_model(): string {
+        $model = self::sanitize_tiktok_shorts_music_model( get_option( 'presshub_social_tiktok_shorts_music_model', self::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL ) );
+        return '' !== $model ? $model : self::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL;
+    }
+
+    public static function sanitize_tiktok_shorts_music_model( $value ): string {
+        return (string) preg_replace( '/[^a-z0-9._\/-]/i', '', is_string( $value ) ? trim( $value ) : '' );
+    }
+
+    /**
+     * Music prompts, one line per mood ("mood: prompt"). Seeds from
+     * social_tiktok_shorts_music.txt if the option does not exist yet. An emptied option
+     * leaves no moods, so the shorts get no music.
+     */
+    public static function get_tiktok_shorts_music_prompts(): string {
+        $val = get_option( 'presshub_social_prompt_tiktok_shorts_music', false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_music.txt' );
+                update_option( 'presshub_social_prompt_tiktok_shorts_music', $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
+        return is_string( $val ) ? trim( $val ) : '';
+    }
+
     /**
      * SHA-256 of earlier default shorts prompts (trimmed, LF line endings). A stored prompt
      * that still equals one of them was never edited, so it is replaced by the current
@@ -1154,6 +1256,7 @@ class PressHub_Social_Settings_Storage {
      */
     private const LEGACY_TIKTOK_SHORTS_PROMPT_HASHES = [
         'e5b721e8c94a252df788a967504c5061b975581411b3f4d20fc6f3097657832b', // v2.18: no story images.
+        'f338073d72d1e8f1c4bf479d3dc1340105784a8152ab7bcd51907604b361dd83', // v2.21: no mood for the music.
     ];
 
     public static function is_legacy_tiktok_shorts_prompt( string $prompt ): bool {

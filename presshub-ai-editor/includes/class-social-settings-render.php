@@ -418,6 +418,62 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_tiktok_shorts_music_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_tiktok_shorts_music_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_tiktok_shorts_music_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_tiktok_shorts_music_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Play quiet background music under each short. The Script Prompt picks a mood for every story (neutral, serious, upbeat, urgent, or none for sad news) and the short uses one of that mood\'s tracks. Generate the tracks below first.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    /**
+     * Music library: the tracks of each mood with a player, and the buttons that generate
+     * the missing tracks or a whole new set (one Lyria call per AJAX request).
+     */
+    public function render_tiktok_shorts_music_library_field(): void {
+        $status  = PressHub_Social_TikTok_Music::status();
+        $missing = PressHub_Social_TikTok_Music::missing_count();
+        ?>
+        <div class="presshub-social-music-library">
+            <?php if ( empty( $status ) ) : ?>
+                <p><?php echo esc_html__( 'No moods: the TikTok Shorts: Music Prompts setting (Prompts tab) has no "mood: prompt" lines.', 'presshub-social-autopost' ); ?></p>
+            <?php else : ?>
+                <table class="widefat striped" style="max-width:800px;">
+                    <tbody>
+                    <?php foreach ( $status as $mood => $row ) : ?>
+                        <tr>
+                            <td style="width:110px;"><strong><?php echo esc_html( $mood ); ?></strong><br /><span class="description"><?php echo esc_html( sprintf( '%d/%d', $row['have'], $row['need'] ) ); ?></span></td>
+                            <td>
+                                <?php foreach ( $row['tracks'] as $track ) : ?>
+                                    <audio controls preload="none" src="<?php echo esc_url( $track['url'] ); ?>" style="height:32px; margin:2px 6px 2px 0; vertical-align:middle;"></audio>
+                                <?php endforeach; ?>
+                                <?php if ( empty( $row['tracks'] ) ) : ?>
+                                    <span class="description"><?php echo esc_html__( 'Not generated yet.', 'presshub-social-autopost' ); ?></span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+            <div class="presshub-social-music-row" style="margin-top:8px;">
+                <button type="button" class="button button-secondary presshub-social-music-btn" data-reset="0">
+                    <?php echo esc_html( $missing > 0 ? sprintf( __( 'Generate Music Tracks (%d missing)', 'presshub-social-autopost' ), $missing ) : __( 'Generate Music Tracks', 'presshub-social-autopost' ) ); ?>
+                </button>
+                <button type="button" class="button presshub-social-music-btn" data-reset="1">
+                    <?php echo esc_html__( 'Replace All Tracks', 'presshub-social-autopost' ); ?>
+                </button>
+                <span class="spinner" style="float:none; margin:0 0 0 6px;"></span>
+                <span class="presshub-social-music-status" style="margin-left:8px; font-weight:600;"></span>
+            </div>
+            <p class="description"><?php echo esc_html__( 'Makes the instrumental tracks of each mood with Google Lyria (Gemini API key), one at a time, about 30 seconds each. Save changed prompts or settings first. Replace All Tracks deletes the current tracks and makes a new set. Lyria audio carries Google\'s SynthID watermark.', 'presshub-social-autopost' ); ?></p>
+        </div>
+        <?php
+    }
+
     public function render_alert_email_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_alert_email_enabled();
         ?>

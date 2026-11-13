@@ -29,6 +29,12 @@ export interface ClaimedJob {
     images?: string[];
     /** Spoken turns with their start and end in seconds, for the synced captions. */
     segments?: ShortSegment[];
+    /** Background music for the story's mood (absent for no music). */
+    music_url?: string;
+    /** Music level under the voice, 0-1. */
+    music_volume?: number;
+    /** Mood the plan chose for the story, for the logs. */
+    mood?: string;
   };
   specs?: {
     tiktok_video_duration?: number;
@@ -312,7 +318,7 @@ export class PressHubPoller {
             const images = Array.isArray(short.images) ? short.images.filter((u) => typeof u === 'string' && u !== '') : [];
             WorkerLogger.info(
               'Poller',
-              `${jobTag} Rendering TikTok short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns)...`
+              `${jobTag} Rendering TikTok short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns, ${short.music_url ? `${short.mood || 'music'} music` : 'no music'})...`
             );
             const video = await this.generateShortFn({
               audioUrl,
@@ -322,6 +328,8 @@ export class PressHubPoller {
               badge: Number(short.count) > 0 ? `ΕΙΔΗΣΗ ${short.index + 1}/${short.count}` : `ΕΙΔΗΣΗ ${short.index + 1}`,
               siteName: job.site_name || 'PressHub.Cy',
               segments: Array.isArray(short.segments) ? short.segments : [],
+              musicUrl: typeof short.music_url === 'string' && short.music_url !== '' ? short.music_url : undefined,
+              musicVolume: typeof short.music_volume === 'number' ? short.music_volume : undefined,
               outputDir: this.outputDir
             });
             mediaPath = video?.filePath;

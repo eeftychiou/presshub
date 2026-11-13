@@ -65,6 +65,65 @@
             }, true);
         }
 
+        // Generate the TikTok shorts music tracks, one Lyria call per request, until none
+        // is missing. The page reloads at the end to show the new tracks.
+        $(document).on('click', '.presshub-social-music-btn', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var $row = $btn.closest('.presshub-social-music-row');
+            var $buttons = $row.find('.presshub-social-music-btn');
+            var $spinner = $row.find('.spinner');
+            var $status = $row.find('.presshub-social-music-status');
+            var made = 0;
+            var reset = $btn.data('reset') === 1 || $btn.data('reset') === '1';
+            if (reset && !window.confirm('Delete every music track and make a new set? Each track is a Lyria call on the Gemini API.')) {
+                return;
+            }
+
+            $buttons.prop('disabled', true);
+            $spinner.addClass('is-active');
+            $status.css('color', '#666').text('Generating music (about a minute per track)...');
+
+            function step(reset) {
+                $.post(ajaxurl, {
+                    action: 'presshub_social_generate_music_track',
+                    nonce: nonce,
+                    reset: reset ? 1 : 0
+                }).done(function (res) {
+                    if (!res || !res.success) {
+                        finish('#d63638', '✕ ' + (res && res.data && res.data.message ? res.data.message : 'Generation failed'));
+                        return;
+                    }
+                    if (res.data.mood) {
+                        made++;
+                    }
+                    if (res.data.remaining > 0) {
+                        $status.css('color', '#666').text(res.data.message);
+                        step(false);
+                        return;
+                    }
+                    finish('#007017', '✓ ' + (made ? 'Made ' + made + ' track(s). Reloading...' : res.data.message), made > 0);
+                }).fail(function (xhr) {
+                    var msg = 'HTTP Request Error';
+                    if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                        msg = xhr.responseJSON.data.message;
+                    }
+                    finish('#d63638', '✕ ' + msg + (made ? ' (' + made + ' track(s) made before the error)' : ''));
+                });
+            }
+
+            function finish(color, text, reload) {
+                $status.css('color', color).text(text);
+                $buttons.prop('disabled', false);
+                $spinner.removeClass('is-active');
+                if (reload) {
+                    setTimeout(function () { window.location.reload(); }, 1200);
+                }
+            }
+
+            step(reset);
+        });
+
         // Handle Test Connection Buttons
         $(document).on('click', '.presshub-social-test-btn, .presshub-btn-test-connection, [data-test-platform]', function (e) {
             e.preventDefault();

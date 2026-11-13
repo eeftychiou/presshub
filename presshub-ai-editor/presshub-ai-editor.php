@@ -201,6 +201,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-activator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-queue.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-narrator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-shorts.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-music.php';
 PressHub_Social_TikTok_Shorts::register_hooks();
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-worker-client.php';
