@@ -193,6 +193,8 @@ describe('TikTok short renderer', () => {
     expect(graph).toContain('[bed][key]sidechaincompress=');
     expect(graph).toContain('[vo][duck]amix=inputs=2:duration=first:dropout_transition=0,volume=2[a]');
     expect(audioGraph(2, 6, 8, 5)[1]).toContain('volume=1.000');
+    // A sub-2-second render keeps the fades inside its length.
+    expect(audioGraph(2, 6, 1.2)[1]).toContain('afade=t=in:st=0:d=0.6,afade=t=out:st=0.600:d=0.6');
   });
 
   test('renders a short with background music mixed under the voice', async () => {

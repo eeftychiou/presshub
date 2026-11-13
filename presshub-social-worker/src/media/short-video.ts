@@ -545,11 +545,14 @@ export function audioGraph(voiceIdx: number, musicIdx: number | null, total: num
     return [`[${voiceIdx}:a]apad[a]`];
   }
   const level = Math.max(0, Math.min(1, Number.isFinite(volume as number) ? (volume as number) : DEFAULT_MUSIC_VOLUME));
-  const fadeOut = Math.max(0, total - 2).toFixed(3);
+  // Fades fit inside very short renders: in over up to 1.5 s, out over up to the last 2 s.
+  const fadeIn = Math.min(1.5, total / 2);
+  const fadeLen = Math.min(2, total / 2);
+  const fadeOut = Math.max(0, total - fadeLen).toFixed(3);
   return [
     // The voice is mono: copied to both channels at full level (a plain upmix lowers it 3 dB).
     `[${voiceIdx}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,pan=stereo|c0=c0|c1=c0,apad,asplit=2[vo][key]`,
-    `[${musicIdx}:a]${fmt},volume=${level.toFixed(3)},afade=t=in:st=0:d=1.5,afade=t=out:st=${fadeOut}:d=2[bed]`,
+    `[${musicIdx}:a]${fmt},volume=${level.toFixed(3)},afade=t=in:st=0:d=${+fadeIn.toFixed(3)},afade=t=out:st=${fadeOut}:d=${+fadeLen.toFixed(3)}[bed]`,
     `[bed][key]sidechaincompress=threshold=0.02:ratio=6:attack=20:release=400[duck]`,
     `[vo][duck]amix=inputs=2:duration=first:dropout_transition=0,volume=2[a]`,
   ];

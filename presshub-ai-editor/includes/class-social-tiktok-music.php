@@ -52,6 +52,30 @@ class PressHub_Social_TikTok_Music {
      */
     private static $uploader = null;
 
+    /** Lyria calls per track when its copyright filter blocks the prompt. */
+    public const MAX_ATTEMPTS = 3;
+
+    /** Variations asked for in turn, so tracks of a mood differ and a blocked prompt is reworded. */
+    private const VARIATIONS = [
+        'Original composition with its own simple melody.',
+        'Original composition, a different melody and key from the first version, with a lighter arrangement.',
+        'Original composition, sparse and minimal, with a new melody.',
+        'Original composition, warmer instruments and a new chord progression.',
+        'Original composition, a fresh motif played softly.',
+    ];
+
+    /** The prompt sent for track $n (1-based) on retry $attempt: the mood prompt plus a variation. */
+    public static function variation_prompt( string $prompt, int $n, int $attempt = 0 ): string {
+        $i = ( max( 1, $n ) - 1 + $attempt * 2 ) % count( self::VARIATIONS );
+        return rtrim( $prompt ) . ' ' . self::VARIATIONS[ $i ];
+    }
+
+    /** Whether Lyria refused the prompt (copyright/recitation or safety filter) rather than failed. */
+    public static function is_blocked( WP_Error $error ): bool {
+        return 'tiktok_music_no_audio' === $error->get_error_code()
+            || (bool) preg_match( '/recitation|copyright|blocked|safety/i', $error->get_error_message() );
+    }
+
     public static function set_generator( ?callable $generator ): void {
         self::$generator = $generator;
     }
@@ -165,6 +189,25 @@ class PressHub_Social_TikTok_Music {
      *         `mood` is '' when nothing was missing.
      */
     public static function generate_next() {
+        // One generation at a time, so two admins never overwrite each other's new track.
+        $lock = 'presshub_social_music_generating';
+        if ( function_exists( 'get_transient' ) && get_transient( $lock ) ) {
+            return new WP_Error( 'tiktok_music_busy', 'another music track is being generated right now. Try again in a minute.' );
+        }
+        if ( function_exists( 'set_transient' ) ) {
+            set_transient( $lock, 1, 300 );
+        }
+        try {
+            return self::generate_next_unlocked();
+        } finally {
+            if ( function_exists( 'delete_transient' ) ) {
+                delete_transient( $lock );
+            }
+        }
+    }
+
+    /** @return array|WP_Error See generate_next(). */
+    private static function generate_next_unlocked() {
         $prompts = self::prompts();
         if ( empty( $prompts ) ) {
             return new WP_Error( 'tiktok_music_no_prompts', 'the Music Prompts setting has no "mood: prompt" lines.' );
@@ -178,13 +221,30 @@ class PressHub_Social_TikTok_Music {
                 continue;
             }
 
-            $audio = self::call_lyria( $prompt, $model );
+            $n = count( $tracks ) + 1;
+
+            // Lyria's copyright filter sometimes blocks a harmless prompt, and a repeat of the
+            // same prompt is more likely to be blocked. Each track and each retry asks for a
+            // different variation of the same mood.
+            $audio = null;
+            for ( $attempt = 0; $attempt < self::MAX_ATTEMPTS; $attempt++ ) {
+                $audio = self::call_lyria( self::variation_prompt( $prompt, $n, $attempt ), $model );
+                if ( ! is_wp_error( $audio ) || ! self::is_blocked( $audio ) ) {
+                    break;
+                }
+                PressHub_Social_Logger::warning( sprintf( 'TikTok shorts music: Lyria blocked the %s track %d (attempt %d/%d): %s', $mood, $n, $attempt + 1, self::MAX_ATTEMPTS, $audio->get_error_message() ) );
+            }
             if ( is_wp_error( $audio ) ) {
                 PressHub_Social_Logger::error( sprintf( 'TikTok shorts music: the %s track could not be generated: %s', $mood, $audio->get_error_message() ) );
+                if ( self::is_blocked( $audio ) ) {
+                    return new WP_Error(
+                        $audio->get_error_code(),
+                        sprintf( 'Lyria blocked the %s track %d times with its copyright filter. Reword the "%s:" line in TikTok Shorts: Music Prompts (fewer genre and production terms), save, and generate again.', $mood, self::MAX_ATTEMPTS, $mood )
+                    );
+                }
                 return $audio;
             }
 
-            $n        = count( $tracks ) + 1;
             $hash     = self::track_hash( $prompt, $model );
             $is_wav   = 'RIFF' === substr( $audio, 0, 4 );
             $filename = sprintf( 'presshub-music-%s-%d-%s.%s', $mood, $n, substr( $hash, 0, 8 ), $is_wav ? 'wav' : 'mp3' );
