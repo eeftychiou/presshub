@@ -343,6 +343,14 @@ class PressHub_Social_Settings_Storage {
             },
         ] );
 
+        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_image_style', [
+            'type'              => 'string',
+            'sanitize_callback' => function ( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_image_style' );
+            },
+            'default'           => '',
+        ] );
+
         register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts', [
             'type'              => 'string',
             'sanitize_callback' => function( $val ) {
@@ -417,6 +425,14 @@ class PressHub_Social_Settings_Storage {
                 update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
             } catch ( Exception $e ) {
                 PressHub_Social_Logger::error( 'Failed to seed TikTok shorts prompt: ' . $e->getMessage() );
+            }
+        }
+
+        if ( false === get_option( 'presshub_social_prompt_tiktok_shorts_image_style', false ) ) {
+            try {
+                update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to seed TikTok shorts image style prompt: ' . $e->getMessage() );
             }
         }
 
@@ -564,6 +580,7 @@ class PressHub_Social_Settings_Storage {
             update_option( 'presshub_social_template_' . $platform, PressHub_Social_Prompt_Loader::load( 'template_' . $platform . '.txt' ) );
         }
         update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
+        update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
     }
 
     // ------------------------------------------------------------------
@@ -1159,6 +1176,25 @@ class PressHub_Social_Settings_Storage {
             } catch ( Exception $e ) {
                 // An unedited older default still works (without story images).
                 $val = is_string( $val ) ? $val : '';
+            }
+        }
+        return is_string( $val ) ? trim( $val ) : '';
+    }
+
+    /**
+     * Image prompt for each AI story image of a TikTok short. `{description}` is replaced
+     * by one of the plan's image descriptions; without the placeholder the description is
+     * put first. Seeds from social_tiktok_shorts_image_style.txt if the option does not
+     * exist yet; an emptied option sends the description alone.
+     */
+    public static function get_tiktok_shorts_image_style(): string {
+        $val = get_option( 'presshub_social_prompt_tiktok_shorts_image_style', false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' );
+                update_option( 'presshub_social_prompt_tiktok_shorts_image_style', $val );
+            } catch ( Exception $e ) {
+                $val = '';
             }
         }
         return is_string( $val ) ? trim( $val ) : '';

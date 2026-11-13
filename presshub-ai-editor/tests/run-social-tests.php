@@ -1908,6 +1908,13 @@ if ( '' !== trim( $legacy_file ) ) {
     delete_option( 'presshub_social_prompt_tiktok_shorts' );
 }
 
+// The image prompt for story images is a setting with a {description} placeholder.
+$image_style = PressHub_Social_Settings_Storage::get_tiktok_shorts_image_style();
+assert_true( str_contains( $image_style, '{description}' ) && str_contains( $image_style, '9:16' ), 'The shorts image prompt is seeded from social_tiktok_shorts_image_style.txt' );
+assert_equals( 'A harbour. Vertical photo.', PressHub_Social_TikTok_Shorts::image_prompt( '{description} Vertical photo.', 'A harbour.' ), 'image_prompt fills {description}' );
+assert_equals( 'A harbour. Vertical photo.', PressHub_Social_TikTok_Shorts::image_prompt( 'Vertical photo.', 'A harbour.' ), 'image_prompt puts the description first when the placeholder is missing' );
+assert_equals( 'A harbour.', PressHub_Social_TikTok_Shorts::image_prompt( '', 'A harbour.' ), 'An empty image prompt sends the description alone' );
+
 // Turn timings for the synced captions.
 $pcm_1s  = str_repeat( "\x00", 48000 );
 $wav_1s5 = 'RIFF' . pack( 'V', 36 + 72000 ) . 'WAVEfmt ' . pack( 'VvvVVvv', 16, 1, 1, 24000, 48000, 2, 16 ) . 'data' . pack( 'V', 72000 ) . str_repeat( "\x00", 72000 );
