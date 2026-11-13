@@ -497,7 +497,7 @@ class PressHub_Social_TikTok_Shorts {
         $script    = (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
-        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::host_count() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) );
+        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::host_count() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
@@ -541,6 +541,7 @@ class PressHub_Social_TikTok_Shorts {
             '{count}'     => (string) $count,
             '{max_words}' => (string) $max_words,
             '{image_count}' => (string) $image_count,
+            '{caption_words}' => (string) PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words(),
             '{moods}'     => implode( ', ', PressHub_Social_TikTok_Music::moods() ),
             '{speakers}'  => $speakers,
             '{title}'     => $title,
@@ -802,6 +803,16 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
+     * The image style for a story's mood: its line in TikTok Shorts: Image Styles per Mood,
+     * or the Image Prompt when the mood has none.
+     */
+    public static function image_style_for( string $mood ): string {
+        $mood   = PressHub_Social_TikTok_Music::normalize_mood( $mood );
+        $styles = PressHub_Social_TikTok_Music::parse_prompts( PressHub_Social_Settings_Storage::get_tiktok_shorts_image_moods(), true );
+        return $styles[ $mood ] ?? PressHub_Social_Settings_Storage::get_tiktok_shorts_image_style();
+    }
+
+    /**
      * Generate the short's story images (9:16) from the plan's descriptions, or reuse the
      * job's earlier ones when the descriptions and the setting are unchanged.
      *
@@ -813,7 +824,7 @@ class PressHub_Social_TikTok_Shorts {
     private static function get_images( array $job, array $short, int $post_id ): array {
         $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
         $visuals = array_slice( (array) ( $short['visuals'] ?? [] ), 0, $count );
-        $style   = PressHub_Social_Settings_Storage::get_tiktok_shorts_image_style();
+        $style   = self::image_style_for( (string) ( $short['mood'] ?? '' ) );
         $hash    = hash( 'sha256', $count . '|' . $style . '|' . implode( "\n", $visuals ) );
         $job_id  = (int) ( $job['id'] ?? 0 );
 

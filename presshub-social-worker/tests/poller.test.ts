@@ -477,6 +477,8 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(JSON.stringify(mockGenerateShort.mock.calls[0][0])).not.toContain('podcast-featured.jpg');
       expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ mediaPath: '/tmp/short.mp4' }));
       expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ copy: 'Λεζάντα του short #κύπρος' }));
+      // Shorts carry an AI voice and AI images, so they are posted with TikTok's AI label.
+      expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ aiGenerated: true }));
     });
 
     test('saves a TikTok short test render and never posts it', async () => {

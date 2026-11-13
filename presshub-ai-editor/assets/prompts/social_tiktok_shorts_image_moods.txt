@@ -1,0 +1,2 @@
+neutral: {description} Bold flat editorial illustration in a modern newspaper style, vivid colours, clean shapes and soft shadows, vertical 9:16, main subject centred with space above and below, no text, no lettering, no real people's likenesses.
+upbeat: {description} Bright, playful editorial illustration, vivid saturated colours, rounded shapes, cheerful mood, vertical 9:16, main subject centred with space above and below, no text, no lettering, no real people's likenesses.

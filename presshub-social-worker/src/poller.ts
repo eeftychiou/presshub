@@ -392,7 +392,9 @@ export class PressHubPoller {
             platform: platform as Platform,
             copy,
             mediaPath,
-            sessionsDir: this.sessionsDir
+            sessionsDir: this.sessionsDir,
+            // Shorts use an AI voice and AI images: TikTok requires the AI-generated label.
+            ...(platform === 'tiktok' && job.tiktok_short ? { aiGenerated: true } : {})
           });
 
           if (result && result.success) {
