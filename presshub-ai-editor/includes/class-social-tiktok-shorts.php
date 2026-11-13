@@ -14,14 +14,20 @@
  *    from social_tiktok_shorts.txt), stored in post meta `_presshub_tiktok_shorts`. Each
  *    pending short job's script is then synthesized turn by turn with the Daily Briefing
  *    voices (turn cache under the briefing date), stitched, sideloaded and stored in the
- *    job's `metadata.tiktok_short` with its topic, hook and caption. Surplus jobs (the
+ *    job's `metadata.tiktok_short` with its topic, hook and caption, plus the start and
+ *    end of every spoken turn (`audio.segments`) for the worker's synced captions. Then
+ *    up to `presshub_social_tiktok_shorts_images` story images are generated (9:16) from
+ *    the plan's `visuals` and stored as `images`. A failed image is a WARNING, not a
+ *    failure: the worker renders the short on a branded background instead (never on
+ *    the podcast's featured image). Surplus jobs (the
  *    plan has fewer stories than jobs) are cancelled. Failures go through the queue's
  *    retry budget (mark_failed), so a job is never left in `processing`.
  * 3. Claim (PressHub_Social_REST_Controller::handle_claim): a short job is claimed only
  *    once it is prepared; an unprepared one stays pending and its preparation is
  *    (re)scheduled. attach_short() only reads the prepared metadata, so the claim request
- *    makes no LLM or TTS call. The job gets `audio_url`, `video_title` (the hook) and the
- *    caption in place of the placeholder copy (a copy an editor wrote is kept).
+ *    makes no LLM or TTS call. The job gets `audio_url`, `video_title` (the hook), the
+ *    short's images and turn timings, and the caption in place of the placeholder copy
+ *    (a copy an editor wrote is kept).
  *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
@@ -65,6 +71,18 @@ class PressHub_Social_TikTok_Shorts {
      * @var callable|null
      */
     private static $synthesizer = null;
+
+    /**
+     * Optional image generator override for tests.
+     * Signature: fn( string $prompt, int $post_id, array $short ): array{url:string,id:int}|WP_Error
+     *
+     * @var callable|null
+     */
+    private static $image_generator = null;
+
+    public static function set_image_generator( ?callable $generator ): void {
+        self::$image_generator = $generator;
+    }
 
     public static function set_ai_caller( ?callable $caller ): void {
         self::$ai_caller = $caller;
@@ -175,12 +193,16 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
-     * Whether a short job has its audio, hook and caption prepared.
+     * Whether a short job has its audio (with turn timings), hook, caption and images
+     * prepared. A job prepared before turn timings and images existed is prepared again
+     * (the turn audio comes from the disk cache).
      */
     public static function is_ready( array $job ): bool {
         $short = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? null;
         return is_array( $short )
             && ! empty( $short['audio']['audio_url'] )
+            && ! empty( $short['audio']['segments'] )
+            && is_array( $short['images'] ?? null )
             && '' !== trim( (string) ( $short['hook'] ?? '' ) )
             && '' !== trim( (string) ( $short['caption'] ?? '' ) );
     }
@@ -226,8 +248,10 @@ class PressHub_Social_TikTok_Shorts {
             'index' => (int) $short['index'],
             // Stories the plan actually has (surplus jobs are cancelled), for the n/N badge.
             'count' => (int) ( $short['total'] ?? $short['count'] ?? 0 ),
-            'topic' => (string) ( $short['topic'] ?? '' ),
-            'hook'  => (string) $short['hook'],
+            'topic'    => (string) ( $short['topic'] ?? '' ),
+            'hook'     => (string) $short['hook'],
+            'images'   => array_values( array_filter( array_map( fn( $img ) => is_array( $img ) ? (string) ( $img['url'] ?? '' ) : '', (array) ( $short['images'] ?? [] ) ) ) ),
+            'segments' => array_values( (array) ( $short['audio']['segments'] ?? [] ) ),
         ];
         return $job;
     }
@@ -244,7 +268,7 @@ class PressHub_Social_TikTok_Shorts {
             return;
         }
         if ( function_exists( 'set_transient' ) ) {
-            set_transient( $lock, 1, 900 );
+            set_transient( $lock, 1, 1800 ); // TTS plus image generation for every short.
         }
 
         try {
@@ -304,12 +328,16 @@ class PressHub_Social_TikTok_Shorts {
                 continue;
             }
 
+            $images = self::get_images( $job, $short, $post_id );
+
             $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], [
-                'total'   => count( $plan['shorts'] ),
-                'topic'   => $short['topic'],
-                'hook'    => $short['hook'],
-                'caption' => $short['caption'],
-                'audio'   => $audio,
+                'total'       => count( $plan['shorts'] ),
+                'topic'       => $short['topic'],
+                'hook'        => $short['hook'],
+                'caption'     => $short['caption'],
+                'audio'       => $audio,
+                'images'      => $images['images'],
+                'images_hash' => $images['hash'],
             ] );
             PressHub_Social_Queue::update_job( $job_id, [
                 'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
@@ -387,14 +415,15 @@ class PressHub_Social_TikTok_Shorts {
         $count     = max( 1, $count );
         $script    = (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
-        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::host_count() );
+        $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
+        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::host_count() . '|' . $images );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
             return $stored;
         }
 
-        $user_prompt = self::build_prompt( $post_id, $prompt, $script, $count, $max_words );
+        $user_prompt = self::build_prompt( $post_id, $prompt, $script, $count, $max_words, $images );
         $sys_prompt  = PressHub_Social_Settings_Storage::get_system_prompt();
 
         PressHub_Social_Logger::info( sprintf( 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
@@ -403,7 +432,7 @@ class PressHub_Social_TikTok_Shorts {
             return $raw;
         }
 
-        $shorts = self::parse_plan( (string) $raw, $count, $max_words );
+        $shorts = self::parse_plan( (string) $raw, $count, $max_words, $images );
         if ( is_wp_error( $shorts ) ) {
             PressHub_Social_Logger::error( sprintf( 'TikTok shorts plan for post #%d is invalid: %s', $post_id, $shorts->get_error_message() ), [ 'response' => mb_substr( (string) $raw, 0, 500 ) ] );
             return $shorts;
@@ -421,7 +450,7 @@ class PressHub_Social_TikTok_Shorts {
     /**
      * Fill the shorts prompt placeholders in one pass (a value is never re-expanded).
      */
-    public static function build_prompt( int $post_id, string $template, string $script, int $count, int $max_words ): string {
+    public static function build_prompt( int $post_id, string $template, string $script, int $count, int $max_words, int $image_count = 3 ): string {
         $post      = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         $title     = $post ? (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) ) : '';
         $site_name = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'name' ) : '';
@@ -430,6 +459,7 @@ class PressHub_Social_TikTok_Shorts {
         return strtr( $template, [
             '{count}'     => (string) $count,
             '{max_words}' => (string) $max_words,
+            '{image_count}' => (string) $image_count,
             '{speakers}'  => $speakers,
             '{title}'     => $title,
             '{site_name}' => '' !== $site_name ? $site_name : 'PressHub',
@@ -441,11 +471,13 @@ class PressHub_Social_TikTok_Shorts {
     /**
      * Parse and validate the LLM's JSON plan.
      *
-     * @param int $count     Stories requested; extra items are dropped, fewer are allowed.
-     * @param int $max_words Word cap from the prompt; a script over 1.5x the cap is rejected.
-     * @return array|WP_Error List of shorts {topic, hook, script, caption}.
+     * @param int $count       Stories requested; extra items are dropped, fewer are allowed.
+     * @param int $max_words   Word cap from the prompt; a script over 1.5x the cap is rejected.
+     * @param int $image_count Image descriptions kept per short (extra ones are dropped;
+     *                         missing ones are allowed and the short uses fewer images).
+     * @return array|WP_Error List of shorts {topic, hook, script, caption, visuals}.
      */
-    public static function parse_plan( string $raw, int $count, int $max_words = 0 ) {
+    public static function parse_plan( string $raw, int $count, int $max_words = 0, int $image_count = 3 ) {
         $text  = (string) preg_replace( '/^```(?:json)?\s*|\s*```$/iu', '', trim( $raw ) );
         $start = strpos( $text, '{' );
         $end   = strrpos( $text, '}' );
@@ -479,11 +511,19 @@ class PressHub_Social_TikTok_Shorts {
                     return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'short %d script has %d words, over the %d-word cap.', $i + 1, $words, $max_words ) );
                 }
             }
+            $visuals = [];
+            foreach ( is_array( $item['visuals'] ?? null ) ? $item['visuals'] : [] as $visual ) {
+                $visual = trim( preg_replace( '/\s+/u', ' ', is_string( $visual ) ? $visual : '' ) );
+                if ( '' !== $visual ) {
+                    $visuals[] = mb_substr( $visual, 0, 600 );
+                }
+            }
             $shorts[] = [
                 'topic'   => '' !== $topic ? $topic : $hook,
                 'hook'    => $hook,
                 'script'  => $script,
                 'caption' => $caption,
+                'visuals' => array_slice( $visuals, 0, max( 0, $image_count ) ),
             ];
         }
         return $shorts;
@@ -498,7 +538,7 @@ class PressHub_Social_TikTok_Shorts {
         $metadata = self::decode_metadata( $job['metadata'] ?? null );
         $hash     = self::audio_hash( $short['script'] );
         $cached   = $metadata[ self::JOB_META_KEY ]['audio'] ?? null;
-        if ( is_array( $cached ) && ( $cached['hash'] ?? '' ) === $hash && ! empty( $cached['audio_url'] ) ) {
+        if ( is_array( $cached ) && ( $cached['hash'] ?? '' ) === $hash && ! empty( $cached['audio_url'] ) && ! empty( $cached['segments'] ) ) {
             return $cached;
         }
 
@@ -525,11 +565,15 @@ class PressHub_Social_TikTok_Shorts {
         if ( empty( $result['url'] ) ) {
             return new WP_Error( 'tiktok_short_no_audio', 'synthesized audio has no URL.' );
         }
+        if ( empty( $result['segments'] ) || ! is_array( $result['segments'] ) ) {
+            return new WP_Error( 'tiktok_short_no_timings', 'synthesized audio has no turn timings for the captions.' );
+        }
 
         return [
             'hash'                 => $hash,
             'audio_url'            => (string) $result['url'],
             'attachment_id'        => (int) ( $result['id'] ?? 0 ),
+            'segments'             => array_values( $result['segments'] ),
             'generated_at'         => gmdate( 'c' ),
             'generation_record_id' => $record_id,
         ];
@@ -588,8 +632,145 @@ class PressHub_Social_TikTok_Shorts {
         if ( is_wp_error( $upload ) ) {
             return $upload;
         }
-        $upload['voices'] = $voices;
+        $upload['voices']   = $voices;
+        $upload['segments'] = self::turn_timings( $turns, $chunks, $pause, $is_mp3 );
         return $upload;
+    }
+
+    /**
+     * Start and end of each spoken turn in the stitched audio, in seconds, for the
+     * worker's synced captions. WAV turns are measured exactly from their PCM length;
+     * MP3 turns are estimated from the text length (marked `estimated`), and the worker
+     * scales them to the real audio length.
+     *
+     * @param array<int, array{speaker?:string,text?:string}> $turns  Parsed turns, in order.
+     * @param array<int, string>                              $chunks Audio of each turn.
+     * @return array<int, array{speaker:int,text:string,start:float,end:float}>
+     */
+    public static function turn_timings( array $turns, array $chunks, int $pause_ms, bool $is_mp3 ): array {
+        $segments = [];
+        $t        = 0.0;
+        $pause    = max( 0, $pause_ms ) / 1000;
+        foreach ( array_values( $turns ) as $i => $turn ) {
+            $text = trim( (string) ( $turn['text'] ?? '' ) );
+            if ( $is_mp3 ) {
+                $seconds = max( 0.5, mb_strlen( $text ) / 14 );
+            } else {
+                $seconds = self::pcm_seconds( (string) ( $chunks[ $i ] ?? '' ) );
+            }
+            if ( $i > 0 ) {
+                $t += $pause;
+            }
+            $segment = [
+                'speaker' => ( 'male' === ( $turn['speaker'] ?? '' ) && 1 !== self::host_count() ) ? 2 : 1,
+                'text'    => $text,
+                'start'   => round( $t, 3 ),
+                'end'     => round( $t + $seconds, 3 ),
+            ];
+            if ( $is_mp3 ) {
+                $segment['estimated'] = true;
+            }
+            $segments[] = $segment;
+            $t         += $seconds;
+        }
+        return $segments;
+    }
+
+    /**
+     * Length in seconds of a WAV buffer, or of raw 24 kHz 16-bit mono PCM.
+     */
+    public static function pcm_seconds( string $buffer ): float {
+        $rate     = 24000;
+        $channels = 1;
+        $bits     = 16;
+        $bytes    = strlen( $buffer );
+        if ( $bytes >= 44 && 'RIFF' === substr( $buffer, 0, 4 ) && 'WAVE' === substr( $buffer, 8, 4 ) ) {
+            $fmt = strpos( $buffer, 'fmt ' );
+            if ( false !== $fmt && strlen( $buffer ) >= $fmt + 24 ) {
+                $f        = unpack( 'vformat/vchannels/Vrate/Vbyterate/vblock/vbits', substr( $buffer, $fmt + 8, 16 ) );
+                $channels = max( 1, (int) ( $f['channels'] ?? 1 ) );
+                $rate     = max( 1, (int) ( $f['rate'] ?? 24000 ) );
+                $bits     = max( 8, (int) ( $f['bits'] ?? 16 ) );
+            }
+            $data = strpos( $buffer, 'data' );
+            if ( false !== $data && strlen( $buffer ) >= $data + 8 ) {
+                $size  = (int) ( unpack( 'V', substr( $buffer, $data + 4, 4 ) )[1] ?? 0 );
+                $avail = strlen( $buffer ) - $data - 8;
+                $bytes = ( $size > 0 && $size <= $avail ) ? $size : $avail;
+            } else {
+                $bytes -= 44;
+            }
+        }
+        return max( 0, $bytes ) / ( $rate * $channels * ( $bits / 8 ) );
+    }
+
+    /**
+     * Generate the short's story images (9:16) from the plan's descriptions, or reuse the
+     * job's earlier ones when the descriptions and the setting are unchanged.
+     *
+     * Never fails the short: a failed or missing image is a WARNING and the worker shows
+     * the images it has, or a branded background when there are none.
+     *
+     * @return array{hash:string,images:array<int,array{url:string,id:int,prompt:string}>}
+     */
+    private static function get_images( array $job, array $short, int $post_id ): array {
+        $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
+        $visuals = array_slice( (array) ( $short['visuals'] ?? [] ), 0, $count );
+        $hash    = hash( 'sha256', $count . '|' . implode( "\n", $visuals ) );
+        $job_id  = (int) ( $job['id'] ?? 0 );
+
+        $meta = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? [];
+        if ( is_array( $meta['images'] ?? null ) && ( $meta['images_hash'] ?? '' ) === $hash ) {
+            return [ 'hash' => $hash, 'images' => $meta['images'] ];
+        }
+        if ( 0 === $count ) {
+            return [ 'hash' => $hash, 'images' => [] ];
+        }
+        if ( empty( $visuals ) ) {
+            PressHub_Social_Logger::warning( sprintf( 'TikTok short job #%d has no image descriptions in its plan (does the shorts prompt ask for "visuals"?); it will use the branded background.', $job_id ) );
+            return [ 'hash' => $hash, 'images' => [] ];
+        }
+
+        $images = [];
+        foreach ( $visuals as $i => $visual ) {
+            $prompt = $visual . ' Vertical 9:16 editorial news photograph, main subject centred with space above and below, no text, no lettering, no identifiable faces.';
+            try {
+                if ( null !== self::$image_generator ) {
+                    $result = call_user_func( self::$image_generator, $prompt, $post_id, $short );
+                } elseif ( class_exists( 'PressHub_AI_API_Client' ) ) {
+                    $client = new PressHub_AI_API_Client();
+                    $result = $client->generate_featured_image( $prompt, '9:16', $post_id, [
+                        'title'   => (string) $short['topic'],
+                        'content' => (string) preg_replace( '/\[\s*SPEAKER_[12]\s*\]\s*:/iu', '', (string) $short['script'] ),
+                    ] );
+                } else {
+                    $result = new WP_Error( 'missing_api_client', 'PressHub_AI_API_Client is not loaded.' );
+                }
+            } catch ( Throwable $e ) {
+                $result = new WP_Error( 'image_generation_exception', $e->getMessage() );
+            }
+
+            if ( is_wp_error( $result ) || empty( $result['url'] ) ) {
+                PressHub_Social_Logger::warning( sprintf(
+                    'TikTok short job #%d: story image %d/%d failed: %s',
+                    $job_id,
+                    $i + 1,
+                    count( $visuals ),
+                    is_wp_error( $result ) ? $result->get_error_message() : 'no image URL returned'
+                ) );
+                continue;
+            }
+            $images[] = [
+                'url'    => (string) $result['url'],
+                'id'     => (int) ( $result['id'] ?? 0 ),
+                'prompt' => $visual,
+            ];
+        }
+
+        if ( empty( $images ) ) {
+            PressHub_Social_Logger::warning( sprintf( 'TikTok short job #%d has no story image (all %d failed); it will use the branded background.', $job_id, count( $visuals ) ) );
+        }
+        return [ 'hash' => $hash, 'images' => $images ];
     }
 
     /**

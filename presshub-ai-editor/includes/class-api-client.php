@@ -1462,7 +1462,8 @@ class PressHub_AI_API_Client {
             $model_name = ! empty( $model ) ? $model : 'dall-e-3';
             $trace['model'] = (string) $model_name;
             $url        = 'https://api.openai.com/v1/images/generations';
-            $size       = ( '1:1' === $aspect_ratio ) ? '1024x1024' : '1792x1024';
+            // Portrait ratios (9:16 for TikTok shorts, 3:4) get the portrait size.
+            $size       = ( '1:1' === $aspect_ratio ) ? '1024x1024' : ( in_array( $aspect_ratio, [ '9:16', '3:4' ], true ) ? '1024x1792' : '1792x1024' );
 
             $body = [
                 'model'           => $model_name,

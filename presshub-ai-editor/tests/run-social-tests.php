@@ -1886,8 +1886,43 @@ assert_equals( 5, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_count
 assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_count( 0 ), 'Shorts count clamps to 1' );
 assert_equals( 720, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_spacing_minutes( 5000 ), 'Shorts spacing clamps to 720 minutes' );
 assert_equals( 60, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_max_words( 10 ), 'Short word cap clamps to 60' );
+assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_shorts_images(), 'Story images per short default to 3' );
+assert_equals( 4, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( 9 ), 'Story images per short clamp to 4' );
+assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( -1 ), 'Story images per short clamp to 0' );
 $shorts_prompt = PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt();
 assert_true( str_contains( $shorts_prompt, '{script}' ) && str_contains( $shorts_prompt, '"shorts"' ), 'Shorts prompt is seeded from social_tiktok_shorts.txt' );
+assert_true( str_contains( $shorts_prompt, '"visuals"' ) && str_contains( $shorts_prompt, '{image_count}' ), 'Shorts prompt asks for story image descriptions' );
+
+// An unedited older default prompt (no story images) is upgraded; an edited one is kept.
+$legacy_prompt = "Γράψε {count} σύντομα βίντεο TikTok (shorts) από το παρακάτω podcast ενημέρωσης του {site_name} ({title}). Κάθε short καλύπτει ΜΙΑ είδηση και διαρκεί 30 έως 60 δευτερόλεπτα.";
+assert_false( PressHub_Social_Settings_Storage::is_legacy_tiktok_shorts_prompt( $legacy_prompt ), 'A prompt that differs from the old default is not treated as legacy' );
+$legacy_hash_ok = 'e5b721e8c94a252df788a967504c5061b975581411b3f4d20fc6f3097657832b';
+assert_true( in_array( $legacy_hash_ok, ( new ReflectionClassConstant( 'PressHub_Social_Settings_Storage', 'LEGACY_TIKTOK_SHORTS_PROMPT_HASHES' ) )->getValue(), true ), 'The v2.18 default prompt hash is listed as legacy' );
+$legacy_file = (string) shell_exec( 'git -C ' . escapeshellarg( $base_dir ) . ' show 63b77c4:presshub-ai-editor/assets/prompts/social_tiktok_shorts.txt 2>/dev/null' );
+if ( '' !== trim( $legacy_file ) ) {
+    assert_true( PressHub_Social_Settings_Storage::is_legacy_tiktok_shorts_prompt( str_replace( "\n", "\r\n", $legacy_file ) ), 'The v2.18 default prompt is recognised (also with CRLF line endings)' );
+    update_option( 'presshub_social_prompt_tiktok_shorts', $legacy_file );
+    assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt(), '"visuals"' ), 'An unedited v2.18 prompt is upgraded to the current default' );
+    update_option( 'presshub_social_prompt_tiktok_shorts', $legacy_file . "\nΔική μου οδηγία." );
+    assert_true( str_contains( PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt(), 'Δική μου οδηγία.' ), 'An edited prompt is kept as it is' );
+    delete_option( 'presshub_social_prompt_tiktok_shorts' );
+}
+
+// Turn timings for the synced captions.
+$pcm_1s  = str_repeat( "\x00", 48000 );
+$wav_1s5 = 'RIFF' . pack( 'V', 36 + 72000 ) . 'WAVEfmt ' . pack( 'VvvVVvv', 16, 1, 1, 24000, 48000, 2, 16 ) . 'data' . pack( 'V', 72000 ) . str_repeat( "\x00", 72000 );
+assert_equals( 1.0, PressHub_Social_TikTok_Shorts::pcm_seconds( $pcm_1s ), 'pcm_seconds measures raw 24 kHz PCM' );
+assert_equals( 1.5, PressHub_Social_TikTok_Shorts::pcm_seconds( $wav_1s5 ), 'pcm_seconds measures a WAV from its data chunk' );
+$timings = PressHub_Social_TikTok_Shorts::turn_timings(
+    [ [ 'speaker' => 'female', 'text' => 'Πρώτη ατάκα.' ], [ 'speaker' => 'male', 'text' => 'Δεύτερη ατάκα.' ] ],
+    [ $pcm_1s, $wav_1s5 ],
+    400,
+    false
+);
+assert_equals( [ 1, 0.0, 1.0 ], [ $timings[0]['speaker'], $timings[0]['start'], $timings[0]['end'] ], 'The first turn starts at 0 and lasts its audio length' );
+assert_equals( [ 2, 1.4, 2.9 ], [ $timings[1]['speaker'], $timings[1]['start'], $timings[1]['end'] ], 'The next turn starts after the stitched pause' );
+$mp3_timings = PressHub_Social_TikTok_Shorts::turn_timings( [ [ 'speaker' => 'female', 'text' => str_repeat( 'α', 28 ) ] ], [ 'mp3' ], 400, true );
+assert_true( ! empty( $mp3_timings[0]['estimated'] ) && 2.0 === $mp3_timings[0]['end'], 'MP3 turn timings are estimates marked as such' );
 
 $short_json = function ( int $n ): string {
     $shorts = [];
@@ -1896,6 +1931,7 @@ $short_json = function ( int $n ): string {
             'topic'   => "Θέμα {$i}",
             'hook'    => "Hook {$i} σε λίγες λέξεις",
             'script'  => "[SPEAKER_1]: Γεγονός {$i}, γιατί μας αφορά;\n[SPEAKER_2]: Γιατί αλλάζει το πορτοφόλι μας.\n[SPEAKER_1]: Ακολούθησε το PressHub.",
+            'visuals' => [ "Limassol harbour at dawn {$i}", "  Close-up of a payslip {$i}  ", '' ],
             'caption' => "Λεζάντα {$i}\nΟλόκληρη η ενημέρωση: λινκ στο bio #κύπρος #cyprus #ειδήσεις",
         ];
     }
@@ -1905,6 +1941,11 @@ $short_json = function ( int $n ): string {
 $parsed = PressHub_Social_TikTok_Shorts::parse_plan( "```json\n" . $short_json( 4 ) . "\n```", 3 );
 assert_true( is_array( $parsed ) && 3 === count( $parsed ), 'parse_plan strips code fences and keeps at most the configured count' );
 assert_equals( 'Hook 1 σε λίγες λέξεις', $parsed[0]['hook'] ?? '', 'parse_plan keeps the hook' );
+assert_equals( [ 'Limassol harbour at dawn 1', 'Close-up of a payslip 1' ], $parsed[0]['visuals'] ?? null, 'parse_plan keeps the image descriptions, trimmed, without empty ones' );
+$one_visual = PressHub_Social_TikTok_Shorts::parse_plan( $short_json( 1 ), 3, 0, 1 );
+assert_equals( 1, count( $one_visual[0]['visuals'] ?? [] ), 'parse_plan keeps at most the configured number of image descriptions' );
+$no_visuals = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"[SPEAKER_1]: Α","caption":"c"}]}', 3 );
+assert_equals( [], $no_visuals[0]['visuals'] ?? null, 'A plan without image descriptions is still valid' );
 $bad_speakers = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"Χωρίς ετικέτες","caption":"c"}]}', 3 );
 assert_true( is_wp_error( $bad_speakers ), 'parse_plan rejects a script without [SPEAKER_N]: lines' );
 assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( 'Δεν είναι JSON', 3 ) ), 'parse_plan rejects a non-JSON response' );
@@ -1933,7 +1974,19 @@ PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $us
 $shorts_tts = [];
 PressHub_Social_TikTok_Shorts::set_synthesizer( function ( array $short, array $job ) use ( &$shorts_tts ) {
     $shorts_tts[] = $short['script'];
-    return [ 'url' => 'https://example.com/uploads/short-' . count( $shorts_tts ) . '.wav', 'id' => 950 + count( $shorts_tts ) ];
+    return [
+        'url'      => 'https://example.com/uploads/short-' . count( $shorts_tts ) . '.wav',
+        'id'       => 950 + count( $shorts_tts ),
+        'segments' => [ [ 'speaker' => 1, 'text' => 'Γεγονός.', 'start' => 0.0, 'end' => 1.2 ], [ 'speaker' => 2, 'text' => 'Γιατί.', 'start' => 1.6, 'end' => 2.4 ] ],
+    ];
+} );
+$shorts_images = [];
+PressHub_Social_TikTok_Shorts::set_image_generator( function ( string $prompt, int $post_id, array $short ) use ( &$shorts_images ) {
+    $shorts_images[] = $prompt;
+    if ( str_contains( $prompt, 'payslip 3' ) ) {
+        return new WP_Error( 'image_http_429', 'Image API rate limit' );
+    }
+    return [ 'url' => 'https://example.com/uploads/short-img-' . count( $shorts_images ) . '.png', 'id' => 1200 + count( $shorts_images ) ];
 } );
 PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Γενική λεζάντα TikTok #news' );
 
@@ -1979,7 +2032,7 @@ $req_short->set_param( 'limit', 5 );
 $res_unready = PressHub_Social_REST_Controller::handle_claim( $req_short );
 assert_equals( 0, count( $res_unready['jobs'] ), 'Unprepared short jobs are not claimed' );
 assert_equals( 'pending', PressHub_Social_Queue::get_job( $claim_ids[0] )['status'], 'An unprepared short job stays pending (never stuck in processing)' );
-assert_equals( 0, count( $shorts_ai_calls ) + count( $shorts_tts ), 'The claim request makes no LLM or TTS call' );
+assert_equals( 0, count( $shorts_ai_calls ) + count( $shorts_tts ) + count( $shorts_images ), 'The claim request makes no LLM, TTS or image call' );
 
 // The new live count must not change how many stories the queued jobs get.
 update_option( 'presshub_social_tiktok_shorts_count', 1 );
@@ -1990,22 +2043,38 @@ assert_true( str_contains( $shorts_ai_calls[0], 'Ο κατώτατος μισθ�
 assert_true( ! str_contains( $shorts_ai_calls[0], '{max_words}' ) && str_contains( $shorts_ai_calls[0], '130' ), 'The shorts prompt placeholders are filled' );
 assert_equals( 3, count( $shorts_tts ), 'Preparation synthesizes every queued short, using the count the jobs were queued with' );
 assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $claim_ids[2] ) ), 'Prepared short jobs are ready' );
+assert_equals( 6, count( $shorts_images ), 'Preparation asks for each short\'s image descriptions (2 per short here)' );
+assert_true( 1 === count( array_filter( $shorts_images, fn( $p ) => str_starts_with( $p, 'Limassol harbour at dawn 1 ' ) && str_contains( $p, 'Vertical 9:16' ) ) ), 'Image prompts start from the plan\'s description and ask for a vertical frame' );
+assert_true( str_contains( $shorts_ai_calls[0], '3 περιγραφές εικόνων' ), 'The shorts prompt asks for the configured number of images' );
+$third_meta = json_decode( (string) PressHub_Social_Queue::get_job( $claim_ids[2] )['metadata'], true )['tiktok_short'];
+assert_equals( 1, count( $third_meta['images'] ), 'A failed story image is skipped; the short keeps the images that worked' );
+assert_equals( 2, count( $third_meta['audio']['segments'] ?? [] ), 'The short stores its turn timings with its audio' );
 assert_true( is_array( get_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, true ) ), 'The plan is stored on the podcast post' );
 
 $res_short = PressHub_Social_REST_Controller::handle_claim( $req_short );
 assert_equals( 3, count( $res_short['jobs'] ), 'All three prepared short jobs are claimed' );
 assert_equals( 1, count( $shorts_ai_calls ), 'Claiming prepared shorts makes no LLM call' );
 assert_equals( 3, count( $shorts_tts ), 'Claiming prepared shorts makes no TTS call' );
+assert_equals( 6, count( $shorts_images ), 'Claiming prepared shorts makes no image call' );
 $claimed_by_index = [];
 foreach ( $res_short['jobs'] as $cj ) {
     $claimed_by_index[ (int) $cj['tiktok_short']['index'] ] = $cj;
 }
 assert_equals( 'https://example.com/uploads/short-2.wav', $claimed_by_index[1]['audio_url'] ?? '', 'A short job carries its own audio, not the full podcast' );
 assert_equals( 'Hook 2 σε λίγες λέξεις', $claimed_by_index[1]['video_title'] ?? '', 'The second short job shows the second hook' );
+assert_equals( [ 'https://example.com/uploads/short-img-3.png', 'https://example.com/uploads/short-img-4.png' ], $claimed_by_index[1]['tiktok_short']['images'] ?? null, 'A claimed short carries its own story images' );
+assert_equals( 1.6, $claimed_by_index[1]['tiktok_short']['segments'][1]['start'] ?? null, 'A claimed short carries its turn timings for the captions' );
 assert_true( str_starts_with( (string) $claimed_by_index[1]['post_copy'], 'Λεζάντα 2' ), 'The placeholder copy is replaced by the short caption' );
 assert_true( str_starts_with( (string) PressHub_Social_Queue::get_job( $claimed_by_index[1]['id'] )['post_copy'], 'Λεζάντα 2' ), 'The short caption is saved on the job' );
 assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_short )['jobs'] ), 'A second overlapping claim gets none of the already-claimed jobs' );
 assert_false( PressHub_Social_Queue::claim_for_processing( (int) $claimed_by_index[0]['id'] ), 'claim_for_processing refuses a job that is no longer pending' );
+
+// A short prepared before turn timings and images existed is prepared again.
+$old_style = PressHub_Social_Queue::get_job( $claimed_by_index[2]['id'] );
+$old_meta  = json_decode( (string) $old_style['metadata'], true );
+unset( $old_meta['tiktok_short']['audio']['segments'], $old_meta['tiktok_short']['images'] );
+$old_style['metadata'] = wp_json_encode( $old_meta );
+assert_false( PressHub_Social_TikTok_Shorts::is_ready( $old_style ), 'A short prepared without timings or images is not ready' );
 
 // An editor's copy is kept.
 PressHub_Social_Queue::update_job_copy( $claimed_by_index[2]['id'], 'Δική μου λεζάντα' );
@@ -2089,6 +2158,7 @@ delete_option( 'presshub_social_prompt_tiktok_shorts' );
 update_option( 'presshub_social_tiktok_shorts_enabled', false );
 PressHub_Social_TikTok_Shorts::set_ai_caller( null );
 PressHub_Social_TikTok_Shorts::set_synthesizer( null );
+PressHub_Social_TikTok_Shorts::set_image_generator( null );
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
 
 // ----------------------------------------------------------------------

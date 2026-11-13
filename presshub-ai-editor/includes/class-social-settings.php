@@ -667,6 +667,22 @@ class PressHub_Social_Settings {
             ]
         );
 
+        add_settings_field(
+            'presshub_social_tiktok_shorts_images',
+            __( 'Story Images per Short', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_images',
+                'default' => 3,
+                'min'     => 0,
+                'max'     => 4,
+                'unit'    => __( 'images', 'presshub-social-autopost' ),
+                'desc'    => __( 'AI images made for each short with the site\'s image generator (9:16), shown in turn behind the captions. 0 uses a branded background. The podcast\'s featured image is never used.', 'presshub-social-autopost' ),
+            ]
+        );
+
         // ------------------------------------------------------------------
         // Tab 5: Queue & Alerts
         // ------------------------------------------------------------------

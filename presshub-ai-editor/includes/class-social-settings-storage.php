@@ -265,6 +265,12 @@ class PressHub_Social_Settings_Storage {
             'default'           => 130,
         ] );
 
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_images', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_images' ],
+            'default'           => 3,
+        ] );
+
         // 6. Alerts
         register_setting( self::OPTION_GROUP, 'presshub_social_alert_email_enabled', [
             'type'              => 'boolean',
@@ -406,7 +412,7 @@ class PressHub_Social_Settings_Storage {
         }
 
         $shorts_prompt = get_option( 'presshub_social_prompt_tiktok_shorts', false );
-        if ( false === $shorts_prompt || '' === trim( (string) $shorts_prompt ) ) {
+        if ( false === $shorts_prompt || '' === trim( (string) $shorts_prompt ) || self::is_legacy_tiktok_shorts_prompt( (string) $shorts_prompt ) ) {
             try {
                 update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
             } catch ( Exception $e ) {
@@ -1115,6 +1121,29 @@ class PressHub_Social_Settings_Storage {
         return max( 60, min( 250, (int) $value ) );
     }
 
+    /** AI images made for each short, shown in turn behind the captions (0-4, default 3; 0 = branded background). */
+    public static function get_tiktok_shorts_images(): int {
+        return self::sanitize_tiktok_shorts_images( get_option( 'presshub_social_tiktok_shorts_images', 3 ) );
+    }
+
+    public static function sanitize_tiktok_shorts_images( $value ): int {
+        return max( 0, min( 4, (int) $value ) );
+    }
+
+    /**
+     * SHA-256 of earlier default shorts prompts (trimmed, LF line endings). A stored prompt
+     * that still equals one of them was never edited, so it is replaced by the current
+     * default; an edited prompt is kept as it is.
+     */
+    private const LEGACY_TIKTOK_SHORTS_PROMPT_HASHES = [
+        'e5b721e8c94a252df788a967504c5061b975581411b3f4d20fc6f3097657832b', // v2.18: no story images.
+    ];
+
+    public static function is_legacy_tiktok_shorts_prompt( string $prompt ): bool {
+        $normalized = trim( str_replace( "\r\n", "\n", $prompt ) );
+        return in_array( hash( 'sha256', $normalized ), self::LEGACY_TIKTOK_SHORTS_PROMPT_HASHES, true );
+    }
+
     /**
      * Prompt that writes the TikTok shorts of a podcast post.
      *
@@ -1123,12 +1152,13 @@ class PressHub_Social_Settings_Storage {
      */
     public static function get_tiktok_shorts_prompt(): string {
         $val = get_option( 'presshub_social_prompt_tiktok_shorts', false );
-        if ( false === $val ) {
+        if ( false === $val || ( is_string( $val ) && self::is_legacy_tiktok_shorts_prompt( $val ) ) ) {
             try {
                 $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' );
                 update_option( 'presshub_social_prompt_tiktok_shorts', $val );
             } catch ( Exception $e ) {
-                $val = '';
+                // An unedited older default still works (without story images).
+                $val = is_string( $val ) ? $val : '';
             }
         }
         return is_string( $val ) ? trim( $val ) : '';

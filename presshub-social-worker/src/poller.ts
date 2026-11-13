@@ -2,6 +2,7 @@ import { SessionManager, Platform } from './automation/session-manager';
 import { dispatchBrowserPost, PosterHandler, PostResult } from './automation/posters';
 import { generateCard, CardResult } from './media/card-generator';
 import { generateVideo, VideoResult } from './media/video-generator';
+import { generateShortVideo, ShortSegment, ShortVideoResult, GenerateShortOptions } from './media/short-video';
 import { WorkerLogger } from './logger';
 import { SocialMonitor } from './monitor/monitor-client';
 
@@ -20,6 +21,10 @@ export interface ClaimedJob {
     count: number;
     topic?: string;
     hook?: string;
+    /** Story images for the short (9:16), shown in turn with a slow zoom or pan. */
+    images?: string[];
+    /** Spoken turns with their start and end in seconds, for the synced captions. */
+    segments?: ShortSegment[];
   };
   specs?: {
     tiktok_video_duration?: number;
@@ -42,6 +47,7 @@ export interface PollerOptions {
   posterHandler?: PosterHandler;
   generateCardFn?: (params: any) => Promise<CardResult>;
   generateVideoFn?: (params: any) => Promise<VideoResult>;
+  generateShortFn?: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
   /** Social Monitor run alongside job polling (WordPress decides when a scan is due). */
   monitor?: SocialMonitor;
 }
@@ -73,6 +79,7 @@ export class PressHubPoller {
   private readonly posterHandler: PosterHandler;
   private readonly generateCardFn: (params: any) => Promise<CardResult>;
   private readonly generateVideoFn: (params: any) => Promise<VideoResult>;
+  private readonly generateShortFn: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
   private readonly monitor?: SocialMonitor;
 
   private pollTimer?: NodeJS.Timeout;
@@ -98,6 +105,7 @@ export class PressHubPoller {
     this.posterHandler = options.posterHandler || dispatchBrowserPost;
     this.generateCardFn = options.generateCardFn || generateCard;
     this.generateVideoFn = options.generateVideoFn || generateVideo;
+    this.generateShortFn = options.generateShortFn || generateShortVideo;
     this.monitor = options.monitor;
   }
 
@@ -289,30 +297,46 @@ export class PressHubPoller {
             copy.toLowerCase().includes('podcast')
           );
 
-          if (platform === 'tiktok') {
-            const hasAudio = Boolean(audioUrl);
-            // A short shows its hook as the title and its topic underneath, numbered
-            // within the day's shorts, instead of the podcast title and caption.
+          if (platform === 'tiktok' && job.tiktok_short) {
+            // A short is rendered with synced captions over its own story images. It
+            // never falls back to the podcast's featured image.
             const short = job.tiktok_short;
-            const videoTitle = job.video_title ? String(job.video_title) : title;
-            const videoSubtitle = short ? String(short.topic || '') : copy.slice(0, 120);
+            if (!audioUrl) {
+              throw new Error('TikTok short has no audio_url.');
+            }
+            const images = Array.isArray(short.images) ? short.images.filter((u) => typeof u === 'string' && u !== '') : [];
+            WorkerLogger.info(
+              'Poller',
+              `${jobTag} Rendering TikTok short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns)...`
+            );
+            const video = await this.generateShortFn({
+              audioUrl,
+              imageUrls: images,
+              hook: String(job.video_title || short.hook || title),
+              topic: String(short.topic || ''),
+              badge: Number(short.count) > 0 ? `ΕΙΔΗΣΗ ${short.index + 1}/${short.count}` : `ΕΙΔΗΣΗ ${short.index + 1}`,
+              siteName: job.site_name || 'PressHub.Cy',
+              segments: Array.isArray(short.segments) ? short.segments : [],
+              outputDir: this.outputDir
+            });
+            mediaPath = video?.filePath;
+            WorkerLogger.info('Poller', `${jobTag} Short rendered at: ${mediaPath}`);
+          } else if (platform === 'tiktok') {
+            const hasAudio = Boolean(audioUrl);
             WorkerLogger.info(
               'Poller',
               `${jobTag} Generating vertical video (${job.specs?.tiktok_video_width || 1080}x${job.specs?.tiktok_video_height || 1920}${hasAudio ? ', with audio track' : `, ${job.specs?.tiktok_video_duration || 10}s`})...`
             );
             const video = await this.generateVideoFn({
               postId: Number(job.post_id) || 1,
-              title: videoTitle,
-              subtitle: videoSubtitle,
-              category: short
-                ? (Number(short.count) > 0 ? `ΕΙΔΗΣΗ ${short.index + 1}/${short.count}` : `ΕΙΔΗΣΗ ${short.index + 1}`)
-                : undefined,
+              title,
+              subtitle: copy.slice(0, 120),
               durationSec: job.specs?.tiktok_video_duration || 10,
               width: job.specs?.tiktok_video_width || 1080,
               height: job.specs?.tiktok_video_height || 1920,
               mediaUrl: imageUrl,
               audioUrl: audioUrl,
-              isPodcast: short ? false : isPodcast,
+              isPodcast,
               siteName: job.site_name || 'PressHub.Cy',
               outputDir: this.outputDir
             });
