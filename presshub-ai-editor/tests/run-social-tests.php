@@ -2340,6 +2340,27 @@ PressHub_Social_TikTok_Music::set_generator( fn() => new WP_Error( 'tiktok_music
 $lyria_fail = PressHub_Social_TikTok_Music::generate_next();
 assert_true( is_wp_error( $lyria_fail ) && 'tiktok_music_http_429' === $lyria_fail->get_error_code(), 'A Lyria error is returned to the settings page' );
 assert_equals( [], PressHub_Social_TikTok_Music::library(), 'A failed generation stores no track' );
+// Lyria's copyright filter: retried with a reworded prompt, then a clear message.
+$blocked_calls = [];
+PressHub_Social_TikTok_Music::set_generator( function ( string $prompt ) use ( &$blocked_calls, $fake_mp3 ) {
+    $blocked_calls[] = $prompt;
+    return 1 === count( $blocked_calls ) ? new WP_Error( 'tiktok_music_http_400', 'Lyria returned HTTP 400: Request blocked due to copyright/recitation content. Please modify your input and retry.' ) : $fake_mp3;
+} );
+$after_block = PressHub_Social_TikTok_Music::generate_next();
+assert_equals( 'neutral', $after_block['mood'] ?? '', 'A track blocked by the copyright filter is retried and saved' );
+assert_equals( 2, count( $blocked_calls ), 'The blocked track took one retry' );
+assert_true( $blocked_calls[0] !== $blocked_calls[1], 'The retry sends a reworded prompt' );
+assert_true( PressHub_Social_TikTok_Music::variation_prompt( 'P.', 1 ) !== PressHub_Social_TikTok_Music::variation_prompt( 'P.', 2 ), 'Each track of a mood asks for a different variation' );
+assert_true( str_starts_with( PressHub_Social_TikTok_Music::variation_prompt( 'Calm piano.', 2, 1 ), 'Calm piano. ' ), 'The variation is added after the mood prompt' );
+$blocked_calls = [];
+PressHub_Social_TikTok_Music::set_generator( function ( string $prompt ) use ( &$blocked_calls ) {
+    $blocked_calls[] = $prompt;
+    return new WP_Error( 'tiktok_music_http_400', 'Lyria returned HTTP 400: Request blocked due to copyright/recitation content.' );
+} );
+$always_blocked = PressHub_Social_TikTok_Music::generate_next();
+assert_equals( PressHub_Social_TikTok_Music::MAX_ATTEMPTS, count( $blocked_calls ), 'A blocked track is tried MAX_ATTEMPTS times' );
+assert_true( is_wp_error( $always_blocked ) && str_contains( $always_blocked->get_error_message(), 'Reword the "neutral:" line' ), 'A track blocked every time tells the operator which prompt line to reword' );
+PressHub_Social_TikTok_Music::clear_library();
 PressHub_Social_TikTok_Music::set_generator( fn() => 'tiny' );
 assert_true( is_wp_error( PressHub_Social_TikTok_Music::generate_next() ), 'Empty audio from Lyria is an error' );
 PressHub_Social_TikTok_Music::set_generator( function () use ( $fake_mp3 ) {
