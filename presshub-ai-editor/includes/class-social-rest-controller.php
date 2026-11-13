@@ -401,7 +401,23 @@ class PressHub_Social_REST_Controller {
             );
         }
 
-        if ( 'published' === $status ) {
+        $job     = PressHub_Social_Queue::get_job( $job_id );
+        $is_test = is_array( $job ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_test_job( $job );
+
+        if ( 'test_rendered' === $status ) {
+            if ( ! $is_test ) {
+                return new WP_Error(
+                    'not_a_test_render',
+                    __( 'Only a TikTok short test render can be completed as test_rendered.', 'presshub-social-autopost' ),
+                    [ 'status' => 400 ]
+                );
+            }
+            PressHub_Social_Queue::mark_test_rendered( $job_id, sanitize_text_field( (string) ( $metadata['test_render_file'] ?? '' ) ) );
+        } elseif ( 'published' === $status && $is_test ) {
+            // A test render is never posted; a worker that posted it anyway is a bug.
+            $status = 'failed';
+            PressHub_Social_Queue::mark_failed( $job_id, 'A TikTok short test render was reported as published; test renders must not be posted.', $metadata );
+        } elseif ( 'published' === $status ) {
             PressHub_Social_Queue::mark_published( $job_id, $external_post_id, $external_post_url, $metadata );
         } else {
             $status = 'failed';
