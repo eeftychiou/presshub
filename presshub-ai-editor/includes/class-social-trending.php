@@ -243,7 +243,7 @@ class PressHub_AI_Social_Trending {
         }
         $plan['due']     = true;
         $plan['run_id']  = (string) $state['run_id'];
-        $plan['targets'] = self::build_targets();
+        $plan['targets'] = self::build_targets( $now );
         $state['plan_handed'] = $now;
         self::save_state( $state );
         return $plan;
@@ -254,11 +254,17 @@ class PressHub_AI_Social_Trending {
      *
      * @return array<int, array{platform:string, url:string, label:string}>
      */
-    public static function build_targets(): array {
+    public static function build_targets( ?int $now = null ): array {
+        $now      = $now ?? time();
         $worker   = self::worker_platforms();
         $keywords = PressHub_AI_Settings_Storage::get_social_trending_keywords();
         $min      = PressHub_AI_Settings_Storage::get_social_trending_min_engagement();
         $targets  = [];
+        // The Top tab is mostly older posts unless told otherwise, and anything
+        // past the age window is dropped later, so ask X for recent posts only.
+        // since: takes a UTC date, so this window is up to a day wider than the
+        // age limit; select() trims the rest.
+        $since    = ' since:' . gmdate( 'Y-m-d', $now - PressHub_AI_Settings_Storage::get_social_trending_max_age_hours() * 3600 );
 
         if ( in_array( 'x', $worker, true ) && ! empty( $keywords ) ) {
             // Greek terms and Latin-script terms are searched separately: English
@@ -275,12 +281,12 @@ class PressHub_AI_Social_Trending {
                 }
             }
             $groups = [
-                [ $greek, ' lang:el', max( 1, (int) floor( $min / 2 ) ), 'X search (Greek)' ],
+                [ $greek, ' lang:el', self::min_engagement_for_greek( $min ), 'X search (Greek)' ],
                 [ $latin, '', max( 1, $min * 2 ), 'X search (English / other)' ],
             ];
             $x_pages = 0;
             foreach ( $groups as [ $terms, $lang, $faves, $label ] ) {
-                $suffix = $lang . ' -filter:replies -filter:retweets' . ( $min > 0 ? ' min_faves:' . $faves : '' );
+                $suffix = $lang . ' -filter:replies -filter:retweets' . ( $min > 0 ? ' min_faves:' . $faves : '' ) . $since;
                 foreach ( self::chunk_or_terms( $terms, self::X_QUERY_MAX_CHARS - self::strlen( $suffix ) - 2 ) as $chunk ) {
                     if ( $x_pages >= self::MAX_X_PAGES ) {
                         break 2;
@@ -617,6 +623,22 @@ class PressHub_AI_Social_Trending {
     }
 
     /**
+     * Engagement bar for Greek-language posts: local discussion draws far fewer
+     * likes than global English posts, so it gets half the bar (the Greek X
+     * search asks for the same).
+     */
+    public static function min_engagement_for_greek( int $min ): int {
+        return $min > 0 ? max( 1, (int) floor( $min / 2 ) ) : 0;
+    }
+
+    /**
+     * Engagement bar for one candidate: the Greek bar when its text is Greek.
+     */
+    public static function min_engagement_for( array $item, int $min ): int {
+        return preg_match( '/\p{Greek}/u', (string) ( $item['text'] ?? '' ) ) ? self::min_engagement_for_greek( $min ) : $min;
+    }
+
+    /**
      * Pick the posts for the roundup: best per platform, then mixed in turn.
      *
      * @return array[]
@@ -634,7 +656,7 @@ class PressHub_AI_Social_Trending {
             if ( ! is_array( $c ) || $now - (int) $c['created_ts'] > $max_age ) {
                 continue;
             }
-            if ( self::engagement( $c ) < $min || self::is_excluded( $c, $excluded ) ) {
+            if ( self::engagement( $c ) < self::min_engagement_for( $c, $min ) || self::is_excluded( $c, $excluded ) ) {
                 continue;
             }
             $c['score'] = self::score( $c, $now );

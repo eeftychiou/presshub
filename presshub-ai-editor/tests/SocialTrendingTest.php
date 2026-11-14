@@ -149,7 +149,8 @@ st_check( 'plan: Greek and other X searches on the Top tab', 2 === count( $by['x
 $xg = rawurldecode( $by['x'][0] );
 $xe = rawurldecode( $by['x'][1] );
 st_check( 'plan: Greek X search uses lang:el and a lower bar', false !== strpos( $xg, 'Κύπρος OR Κύπρου OR Λευκωσία' ) && false !== strpos( $xg, 'lang:el' ) && false !== strpos( $xg, 'min_faves:5' ) && false === strpos( $xg, 'Cyprus' ) );
-st_check( 'plan: other X search has a higher bar and no language', '(Cyprus OR Nicosia OR Limassol) -filter:replies -filter:retweets min_faves:20' === explode( 'q=', explode( '&src', $xe )[0] )[1] );
+st_check( 'plan: other X search has a higher bar and no language', '(Cyprus OR Nicosia OR Limassol) -filter:replies -filter:retweets min_faves:20 since:' . gmdate( 'Y-m-d', $now - 24 * 3600 ) === explode( 'q=', explode( '&src', $xe )[0] )[1] );
+st_check( 'plan: Greek X search asks for recent posts too', false !== strpos( $xg, ' since:' . gmdate( 'Y-m-d', $now - 24 * 3600 ) ) );
 st_check( 'plan: TikTok hashtag pages first, then two searches', [ 'https://www.tiktok.com/tag/cyprus', 'https://www.tiktok.com/tag/' . rawurlencode( 'κύπρος' ), 'https://www.tiktok.com/tag/limassol' ] === array_slice( $by['tiktok'] ?? [], 0, 3 ) && 5 === count( $by['tiktok'] ) && 'https://www.tiktok.com/search/video?q=' . rawurlencode( 'Κύπρος' ) === $by['tiktok'][3] && 'https://www.tiktok.com/search/video?q=Cyprus' === $by['tiktok'][4] );
 // Many terms: X queries split to stay under the length limit, capped in pages.
 $many = [];
@@ -201,7 +202,7 @@ foreach ( [
     st_post( 'x', '12', 400, 60 ),
     st_post( 'x', '13', 300, 60 ),
     st_post( 'x', '14', 200, 60 ),
-    st_post( 'x', '15', 5, 60 ),                                   // below min engagement
+    st_post( 'x', '15', 4, 60 ),                                   // below the Greek bar (half of 10)
     st_post( 'tiktok', '21', 9000, 60 ),
     st_post( 'tiktok', '22', 8000, 60, [ 'handle' => 'acct21' ] ),
     st_post( 'tiktok', '23', 7000, 60, [ 'handle' => 'acct21' ] ), // third by same account
@@ -216,6 +217,12 @@ st_check( 'select: total cap', 6 === count( $picked ) );
 st_check( 'select: below min engagement dropped', ! in_array( 'x_15', $keys, true ) );
 st_check( 'select: per-account cap of 2', ! in_array( 'tiktok_23', $keys, true ) );
 st_check( 'select: platforms take turns, strongest first', [ 'tiktok_21', 'x_11', 'facebook_31', 'tiktok_22', 'x_12', 'x_13' ] === $keys );
+// Greek posts get half the engagement bar, matching the Greek X search's min_faves.
+$gr = $T::normalize_item( st_post( 'x', '51', 6, 30 ), $now );
+$en = $T::normalize_item( st_post( 'x', '52', 6, 30, [ 'text' => 'Cyprus news in English' ] ), $now );
+$gk = array_map( static function ( $p ) { return $p['key']; }, $T::select( [ $gr['key'] => $gr, $en['key'] => $en ], $now ) );
+st_check( 'select: Greek post passes at half the bar, English post does not', [ 'x_51' ] === $gk );
+st_check( 'select: Greek bar is half, never below 1, 0 when off', 5 === $T::min_engagement_for_greek( 10 ) && 1 === $T::min_engagement_for_greek( 1 ) && 0 === $T::min_engagement_for_greek( 0 ) );
 // Excluded words and accounts without a handle.
 $spam  = $T::normalize_item( st_post( 'x', '43', 900, 30, [ 'text' => 'Free BITCOIN airdrop Cyprus' ] ), $now );
 $ok    = $T::normalize_item( st_post( 'x', '44', 900, 30, [ 'text' => 'Bitcoiners? no: Cyprus news' ] ), $now );
