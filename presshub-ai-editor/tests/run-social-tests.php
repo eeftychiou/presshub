@@ -1520,6 +1520,43 @@ assert_equals( 'published', $published_auto_job['status'], 'Job transitioned to 
 assert_equals( 'tweet_889977', $published_auto_job['external_post_id'], 'External post ID recorded' );
 assert_equals( 'https://x.com/presshub/status/889977', $published_auto_job['external_post_url'], 'External post URL recorded' );
 
+// A job whose copy is still the failed-generation placeholder is never handed to the worker as is
+$job_placeholder = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 501,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => '[AI Copy Generation Failed: Invalid response from Gemini.]',
+    'scheduled_at' => $past_time,
+] );
+$saved_copy_mode = get_option( 'presshub_social_copy_mode', 'ai' );
+update_option( 'presshub_social_copy_mode', 'ai' );
+PressHub_Social_AI_Copywriter::set_ai_caller( function () {
+    return new WP_Error( 'gemini_invalid', 'Invalid response from Gemini.' );
+} );
+$res_ph = PressHub_Social_REST_Controller::handle_claim( new WP_REST_Request( 'POST', '/worker/claim' ) );
+$ph_ids = array_map( fn( $j ) => (int) $j['id'], $res_ph['jobs'] ?? [] );
+assert_true( ! in_array( (int) $job_placeholder, $ph_ids, true ), 'Claim does not hand out a job whose copy is the failed-generation placeholder' );
+$ph_row = PressHub_Social_Queue::get_job( $job_placeholder );
+assert_true( 'failed' === $ph_row['status'] || ( 'pending' === $ph_row['status'] && strtotime( $ph_row['scheduled_at'] . ' UTC' ) > time() ), 'Placeholder job is failed or retried later when its copy cannot be regenerated' );
+assert_true( str_contains( (string) $ph_row['last_error'], 'Invalid response from Gemini' ), 'Placeholder job records the regeneration error' );
+
+PressHub_Social_Queue::retry_job( $job_placeholder );
+PressHub_Social_AI_Copywriter::set_ai_caller( function () {
+    return 'Regenerated tweet about the worker pull article';
+} );
+$res_ph2 = PressHub_Social_REST_Controller::handle_claim( new WP_REST_Request( 'POST', '/worker/claim' ) );
+$ph_job  = null;
+foreach ( $res_ph2['jobs'] ?? [] as $j ) {
+    if ( (int) $j['id'] === (int) $job_placeholder ) {
+        $ph_job = $j;
+    }
+}
+assert_true( is_array( $ph_job ) && str_contains( (string) $ph_job['post_copy'], 'Regenerated tweet' ), 'Retried placeholder job is claimed with freshly generated copy' );
+assert_true( ! str_contains( (string) PressHub_Social_Queue::get_job( $job_placeholder )['post_copy'], 'AI Copy Generation Failed' ), 'Regenerated copy is saved on the job' );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+update_option( 'presshub_social_copy_mode', $saved_copy_mode );
+PressHub_Social_Queue::mark_failed( $job_placeholder, 'test cleanup' );
+
 $job_fail = PressHub_Social_Queue::enqueue( [
     'post_id'      => 501,
     'platform'     => 'tiktok',

@@ -8,6 +8,11 @@ import fs from 'fs';
 import path from 'path';
 import { SocialMonitor } from './monitor/monitor-client';
 
+/** True when the copy is WordPress's "[AI Copy Generation Failed: ...]" placeholder. */
+export function isFailedCopyPlaceholder(copy: string): boolean {
+  return /^\s*\[AI Copy Generation Failed:/i.test(copy || '');
+}
+
 export interface ClaimedJob {
   id: number | string;
   platform: string;
@@ -299,6 +304,11 @@ export class PressHubPoller {
           const platform = (job.platform || '').toLowerCase().trim();
           const copy = job.post_copy || '';
           const title = job.post_title || 'PressHub';
+
+          // Copy that is still WordPress's failed-generation placeholder must never be posted.
+          if (isFailedCopyPlaceholder(copy)) {
+            throw new Error(`Post copy is the failed AI generation placeholder, not posting it: ${copy.slice(0, 160)}`);
+          }
 
           let mediaPath: string | undefined;
 

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { parseEnv, loadEnv, getWorkerConfig } from '../src/config';
-import { PressHubPoller, ClaimedJob } from '../src/poller';
+import { PressHubPoller, ClaimedJob, isFailedCopyPlaceholder } from '../src/poller';
 import { SessionManager, saveSession } from '../src/automation/session-manager';
 import { PostOptions, PostResult } from '../src/automation/posters';
 
@@ -549,6 +549,42 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(mockPoster).not.toHaveBeenCalled();
       expect(reports[0]).toEqual(expect.objectContaining({ job_id: 402, status: 'failed' }));
       expect(reports[0].error).toMatch(/no audio_url/);
+    });
+  });
+
+  describe('4b. Failed copy placeholder', () => {
+    test('never posts the failed AI copy placeholder and reports the job failed', async () => {
+      const reports: any[] = [];
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [{ id: 96, platform: 'twitter', post_copy: '[AI Copy Generation Failed: Invalid response from Gemini.]' }]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          reports.push(JSON.parse(init.body));
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      const mockPoster = jest.fn();
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster });
+
+      const stats = await poller.pollOnce();
+      expect(stats.failed).toBe(1);
+      expect(mockPoster).not.toHaveBeenCalled();
+      expect(reports[0]).toEqual(expect.objectContaining({ job_id: 96, status: 'failed' }));
+      expect(reports[0].error).toMatch(/placeholder/);
+    });
+
+    test('isFailedCopyPlaceholder only matches the placeholder', () => {
+      expect(isFailedCopyPlaceholder('[AI Copy Generation Failed: x]')).toBe(true);
+      expect(isFailedCopyPlaceholder('  [AI Copy Generation Failed: x]')).toBe(true);
+      expect(isFailedCopyPlaceholder('Κανονικό κείμενο [AI Copy Generation Failed: x]')).toBe(false);
+      expect(isFailedCopyPlaceholder('')).toBe(false);
     });
   });
 
