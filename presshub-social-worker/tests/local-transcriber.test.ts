@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { LocalTranscriber, LocalTranscriberConfig, cleanTranscript, localTranscriberConfigFromEnv } from '../src/monitor/local-transcriber';
-import { SocialMonitor } from '../src/monitor/monitor-client';
+import { removeStaleVideos, SocialMonitor } from '../src/monitor/monitor-client';
 import { orderVideoSources, ScanPlan, ScanSession } from '../src/monitor/scanner';
 import { ScannedPost } from '../src/monitor/parsers';
 
@@ -196,6 +196,30 @@ describe('SocialMonitor with local transcription', () => {
     expect(calls.some((c) => c.url.endsWith('/monitor/media?id=tiktok_7300000000000000009&failed=local_transcribe'))).toBe(true);
   });
 
+  it('reports a transcript WordPress did not accept, except a 404', async () => {
+    for (const [status, expectFailed] of [[500, true], [404, false]] as const) {
+      const { fn, calls } = makeFetch({ accepted: 1, wants_media: [], wants_transcript: ['tiktok_7300000000000000009'] }, false);
+      fn.mockImplementation(async (url: string, init: any = {}) => {
+        calls.push({ url, init });
+        if (url.includes('/monitor/targets')) return { ok: true, status: 200, json: async () => ({ ...plan }) } as any;
+        if (url.includes('/monitor/posts')) return { ok: true, status: 200, json: async () => ({ accepted: 1, wants_transcript: ['tiktok_7300000000000000009'] }) } as any;
+        if (url.includes('/monitor/transcript')) return { ok: false, status, json: async () => ({}) } as any;
+        return { ok: true, status: 200, json: async () => ({}) } as any;
+      });
+      const { t } = fakeTranscriber('text');
+      const monitor = new SocialMonitor({
+        wpUrl: 'https://site.test',
+        workerSecret: 's',
+        fetchFn: fn as any,
+        transcriber: t,
+        scanFn: async () => ({ posts: [longPost], errors: [], download: async () => ({ bytes: Buffer.from('v'), mime: 'video/mp4' }), close: async () => {} })
+      });
+      await monitor.runOnce();
+      await monitor.idle();
+      expect(calls.some((c) => c.url.endsWith('failed=local_transcribe'))).toBe(expectFailed);
+    }
+  });
+
   it('reports a failed download', async () => {
     const { fn, calls } = makeFetch({ accepted: 1, wants_transcript: ['tiktok_7300000000000000009'] });
     const { t } = fakeTranscriber('x');
@@ -226,5 +250,28 @@ describe('SocialMonitor with local transcription', () => {
     const sent = JSON.parse(calls.find((c) => c.url.includes('/monitor/posts'))!.init.body);
     expect(sent).not.toHaveProperty('local_transcribe');
     expect(download).not.toHaveBeenCalled();
+  });
+});
+
+describe('Stale temp videos', () => {
+  it('removes old presshub-long videos only', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'presshub-stale-'));
+    try {
+      const now = Date.now();
+      const old = path.join(dir, 'presshub-long-tiktok_1-1.mp4');
+      const fresh = path.join(dir, 'presshub-long-tiktok_2-2.mp4');
+      const other = path.join(dir, 'other.mp4');
+      for (const f of [old, fresh, other]) fs.writeFileSync(f, 'x');
+      const past = new Date(now - 13 * 3600 * 1000);
+      fs.utimesSync(old, past, past);
+      fs.utimesSync(other, past, past);
+      expect(removeStaleVideos(dir, now)).toBe(1);
+      expect(fs.existsSync(old)).toBe(false);
+      expect(fs.existsSync(fresh)).toBe(true);
+      expect(fs.existsSync(other)).toBe(true);
+      expect(removeStaleVideos(path.join(dir, 'missing'), now)).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

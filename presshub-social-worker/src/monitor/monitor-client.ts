@@ -31,6 +31,31 @@ export interface MonitorRunResult {
 
 const IDLE: MonitorRunResult = { ran: false, scanned: 0, accepted: 0, media_uploaded: 0, errors: 0 };
 
+/** Temp videos older than this were left by a worker that stopped mid-queue. */
+const STALE_VIDEO_MS = 12 * 3600 * 1000;
+
+/** Remove `presshub-long-*` temp videos left behind by an earlier run. */
+export function removeStaleVideos(dir: string = os.tmpdir(), now: number = Date.now()): number {
+  let removed = 0;
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (!/^presshub-long-.*\.mp4$/.test(name)) continue;
+      const file = path.join(dir, name);
+      try {
+        if (now - fs.statSync(file).mtimeMs > STALE_VIDEO_MS) {
+          fs.rmSync(file, { force: true });
+          removed++;
+        }
+      } catch {
+        // Gone already or in use; leave it.
+      }
+    }
+  } catch {
+    // Temp folder unreadable; nothing to clean.
+  }
+  return removed;
+}
+
 export class SocialMonitor {
   private readonly wpUrl: string;
   private readonly secret: string;
@@ -53,6 +78,7 @@ export class SocialMonitor {
       this.transcriber = cfg ? new LocalTranscriber(cfg) : null;
     }
     if (this.transcriber) {
+      removeStaleVideos();
       WorkerLogger.info('Social Monitor', `Local transcription on: videos up to ${Math.round(this.transcriber.config.maxSec / 60)} min with whisper.cpp (${path.basename(this.transcriber.config.model)}, ${this.transcriber.config.threads} threads).`);
     }
   }
@@ -224,6 +250,8 @@ export class SocialMonitor {
         WorkerLogger.info('Social Monitor', `Local transcript for ${storeId}: ${text.length} chars in ${secs}s.`);
       } else {
         WorkerLogger.warn('Social Monitor', `Sending the local transcript for ${storeId} failed with HTTP ${res.status}`);
+        // 404: WordPress no longer holds the post, so nothing waits for it.
+        if (res.status !== 404) await this.reportMediaFailed(storeId, 'local_transcribe');
       }
     } catch (err: any) {
       WorkerLogger.warn('Social Monitor', `Local transcription failed for ${storeId}: ${err.message}`);
