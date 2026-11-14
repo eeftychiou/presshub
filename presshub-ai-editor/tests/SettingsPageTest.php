@@ -286,6 +286,7 @@ class SettingsPageTest
             'presshub_ai_image_analysis_prompt',
             'presshub_ai_image_metadata_enabled',
             'presshub_ai_seo_auto_enabled',
+            'presshub_ai_briefing_seo_enhance_enabled',
             'presshub_ai_seo_max_tags',
             'presshub_ai_seo_review_enabled',
             'presshub_ai_briefing_podcast_include_text',

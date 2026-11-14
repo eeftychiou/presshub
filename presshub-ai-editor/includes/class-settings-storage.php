@@ -505,6 +505,10 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_seo_auto_enabled' ],
             'type'              => 'integer',
         ] );
+        register_setting( 'presshub_ai_options', 'presshub_ai_briefing_seo_enhance_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_seo_enhance_enabled' ],
+            'type'              => 'integer',
+        ] );
         register_setting( 'presshub_ai_options', 'presshub_ai_seo_max_tags', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_seo_max_tags' ],
             'type'              => 'integer',
@@ -870,6 +874,7 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_image_analysis_prompt', __( 'Article Analysis Prompt Template', 'presshub-ai-editor' ), [ $render, 'render_image_analysis_prompt_field' ], 'presshub-ai', 'presshub_ai_images' );
         add_settings_field( 'presshub_ai_image_metadata_enabled', __( 'AI Image Metadata', 'presshub-ai-editor' ), [ $render, 'render_image_metadata_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
         add_settings_field( 'presshub_ai_seo_auto_enabled', __( 'Automatic Tags & SEO', 'presshub-ai-editor' ), [ $render, 'render_seo_auto_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
+        add_settings_field( 'presshub_ai_briefing_seo_enhance_enabled', __( 'Daily Briefing SEO Structure', 'presshub-ai-editor' ), [ $render, 'render_briefing_seo_enhance_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
         add_settings_field( 'presshub_ai_seo_max_tags', __( 'Maximum Tags per Post', 'presshub-ai-editor' ), [ $render, 'render_seo_max_tags_field' ], 'presshub-ai', 'presshub_ai_images' );
         add_settings_field( 'presshub_ai_seo_review_enabled', __( 'SEO Score in Editorial Review', 'presshub-ai-editor' ), [ $render, 'render_seo_review_enabled_field' ], 'presshub-ai', 'presshub_ai_images' );
     }
@@ -3691,6 +3696,20 @@ class PressHub_AI_Settings_Storage {
         return 1 === (int) get_option( 'presshub_ai_seo_auto_enabled', 1 );
     }
 
+    /**
+     * presshub_ai_briefing_seo_enhance_enabled: structural SEO for Daily
+     * Briefing text posts (title within 65 characters, validated inline
+     * source links plus a "Πηγές" list, short paragraphs, tag links and a
+     * "Διαβάστε επίσης" list). See PressHub_AI_Briefing_SEO. Default: on.
+     */
+    public static function sanitize_briefing_seo_enhance_enabled( $value ): int {
+        return self::sanitize_checkbox( $value );
+    }
+
+    public static function get_briefing_seo_enhance_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_briefing_seo_enhance_enabled', 1 );
+    }
+
     public static function default_seo_max_tags(): int {
         return 8;
     }
@@ -4082,6 +4101,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_image_analysis_prompt'     => [ __CLASS__, 'sanitize_image_analysis_prompt' ],
             'presshub_ai_image_metadata_enabled'    => [ __CLASS__, 'sanitize_image_metadata_enabled' ],
             'presshub_ai_seo_auto_enabled'          => [ __CLASS__, 'sanitize_seo_auto_enabled' ],
+            'presshub_ai_briefing_seo_enhance_enabled' => [ __CLASS__, 'sanitize_briefing_seo_enhance_enabled' ],
             'presshub_ai_seo_max_tags'              => [ __CLASS__, 'sanitize_seo_max_tags' ],
             'presshub_ai_seo_review_enabled'        => [ __CLASS__, 'sanitize_seo_review_enabled' ],
         ];

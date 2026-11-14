@@ -22,6 +22,7 @@ require_once __DIR__ . '/class-api-client.php';
 require_once __DIR__ . '/class-prompt-loader.php';
 require_once __DIR__ . '/class-settings-storage.php';
 require_once __DIR__ . '/class-qa-reviewer.php';
+require_once __DIR__ . '/class-briefing-seo.php';
 
 class PressHub_AI_News_Curator {
 
@@ -104,6 +105,15 @@ class PressHub_AI_News_Curator {
     private static $last_breakdown_sent = [];
 
     /**
+     * Title / source / URL of each article rendered into the last prompt.
+     * create_wordpress_post() uses it to validate the model's source links
+     * and to build the "Πηγές" list (PressHub_AI_Briefing_SEO).
+     *
+     * @var array<int,array{title:string,source:string,url:string}>
+     */
+    private static $last_source_articles = [];
+
+    /**
      * @internal Issue #131 - articles dropped by the max_articles slice in the
      * most recent format_articles_context() call (reason 'cap_articles').
      *
@@ -180,6 +190,7 @@ class PressHub_AI_News_Curator {
     public function format_articles_context( array $articles ): string {
         self::$last_breakdown_sent        = [];
         self::$last_breakdown_dropped_cap = [];
+        self::$last_source_articles       = [];
 
         if ( empty( $articles ) ) {
             return __( 'Δεν υπάρχουν διαθέσιμα άρθρα.', 'presshub-ai-editor' );
@@ -277,6 +288,7 @@ class PressHub_AI_News_Curator {
             }
 
             $blocks[] = $block;
+            self::$last_source_articles[] = [ 'title' => $title, 'source' => $source, 'url' => $url ];
         }
 
         $rendered = implode( "\n\n---\n\n", $blocks );
@@ -347,6 +359,10 @@ class PressHub_AI_News_Curator {
      *
      * @return array{sent:array,dropped:array}
      */
+    public function last_source_articles(): array {
+        return self::$last_source_articles;
+    }
+
     public function last_articles_breakdown(): array {
         return [
             'sent'    => array_values( self::$last_breakdown_sent ),
@@ -770,10 +786,57 @@ class PressHub_AI_News_Curator {
             }
         }
 
+        // Headline length, short paragraphs and inline source links. Kept in
+        // the code-built user prompt so a customised system prompt keeps them.
+        if ( PressHub_AI_Briefing_SEO::enabled() ) {
+            $user_prompt .= PressHub_AI_Briefing_SEO::prompt_rules( $this->headline_char_budget( $date, $edition ) );
+        }
+
         return [
             'system_prompt' => $system_prompt,
             'user_prompt'   => $user_prompt,
         ];
+    }
+
+    /**
+     * Remove a masthead the model put in front of its headline
+     * ("Πρωινή Ενημέρωση – 26/08/2026: Χ" becomes "Χ"), so shortening works
+     * on the headline itself and the prefix and date are not repeated.
+     */
+    private function strip_masthead_from_headline( string $headline, string $formatted_date, string $edition ): string {
+        $prefix = 'noon' === $edition
+            ? PressHub_AI_Settings_Storage::get_briefing_noon_text_title_prefix()
+            : PressHub_AI_Settings_Storage::get_briefing_text_title_prefix();
+        $word = trim( (string) preg_replace( '/^[\s:\-–—]+|[\s:\-–—]+$/u', '', (string) $prefix ) );
+        if ( '' === $word ) {
+            return $headline;
+        }
+        $date_re = '' !== $formatted_date ? '(?:' . preg_quote( $formatted_date, '/' ) . ')?' : '';
+        $core    = preg_replace( '/^' . preg_quote( $word, '/' ) . '\s*[:\-–—]?\s*' . $date_re . '\s*[:\-–—]?\s*/iu', '', $headline, 1 );
+        $core    = is_string( $core ) ? trim( $core ) : '';
+        return ( '' !== $core && $core !== $headline ) ? $core : $headline;
+    }
+
+    /**
+     * Characters left for the headline once the configured prefix and date
+     * suffix are added, so the full title fits PressHub_AI_Briefing_SEO::title_max_chars().
+     */
+    public function headline_char_budget( string $date, string $edition = 'morning' ): int {
+        $probe    = 'Χ';
+        $title    = $this->compose_text_story_title( $probe, $this->format_title_date( $date ), $edition );
+        $overhead = mb_strlen( $title ) - mb_strlen( $probe );
+        return max( PressHub_AI_Briefing_SEO::MIN_HEADLINE_CHARS, PressHub_AI_Briefing_SEO::title_max_chars() - $overhead );
+    }
+
+    /**
+     * Date as it appears in the post title (operator-configured format token).
+     */
+    private function format_title_date( string $date ): string {
+        $timestamp         = strtotime( $date );
+        $date_format_token = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
+        return ( false !== $timestamp && '' !== $date_format_token )
+            ? ( function_exists( 'date_i18n' ) ? date_i18n( $date_format_token, $timestamp ) : date( $date_format_token, $timestamp ) )
+            : $date;
     }
 
     /**
@@ -934,16 +997,33 @@ class PressHub_AI_News_Curator {
         // Format date for title using the operator-configurable date()
         // format token from Settings (default "d/m/Y" e.g. 26/08/2026),
         // or fallback to the raw date when the token is empty/invalid.
-        $timestamp = strtotime( $date );
-        $date_format_token = PressHub_AI_Settings_Storage::get_briefing_text_title_date_format();
-        $formatted_date = ( false !== $timestamp && '' !== $date_format_token )
-            ? ( function_exists( 'date_i18n' ) ? date_i18n( $date_format_token, $timestamp ) : date( $date_format_token, $timestamp ) )
-            : $date;
+        $formatted_date = $this->format_title_date( $date );
 
         // Issue #65 — compose title via the Settings-First helper, which
         // applies the prefix-collision guard and reads the prefix/date
         // format from operator-configurable Settings (not hard-coded).
         $post_title = $this->compose_text_story_title( $headline, $formatted_date, $edition );
+
+        // Keep the full title within the search-result limit: shorten the
+        // headline part (the prefix and date stay as configured).
+        $seo_enhance = PressHub_AI_Briefing_SEO::enabled();
+        $seo_report  = [];
+        $title_max   = PressHub_AI_Briefing_SEO::title_max_chars();
+        if ( $seo_enhance && mb_strlen( $post_title ) > $title_max && '' !== $headline ) {
+            $original_title = $post_title;
+            $core_headline  = $this->strip_masthead_from_headline( $headline, $formatted_date, $edition );
+            $post_title     = $this->compose_text_story_title( $core_headline, $formatted_date, $edition );
+            if ( mb_strlen( $post_title ) > $title_max ) {
+                $overhead       = mb_strlen( $post_title ) - mb_strlen( $core_headline );
+                $short_headline = PressHub_AI_Briefing_SEO::shorten_headline( $core_headline, $title_max - $overhead );
+                if ( '' !== $short_headline ) {
+                    $post_title = $this->compose_text_story_title( $short_headline, $formatted_date, $edition );
+                }
+            }
+            if ( $post_title !== $original_title ) {
+                $seo_report['title_shortened_from'] = $original_title;
+            }
+        }
 
         // Read category setting
         $category_id = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_text_category() : (int) get_option( self::OPTION_CATEGORY, 0 );
@@ -988,6 +1068,13 @@ class PressHub_AI_News_Curator {
         // Issue #65 — strip the leading <h1>/<h2> block so the body does
         // not duplicate the headline that now lives in the title field.
         $html_content = $this->strip_leading_heading_block( $html_content );
+
+        // Validate source links, split long paragraphs, add the "Πηγές" list.
+        if ( $seo_enhance ) {
+            $prepared     = PressHub_AI_Briefing_SEO::prepare_content( $html_content, self::$last_source_articles );
+            $html_content = $prepared['html'];
+            $seo_report   = array_merge( $seo_report, $prepared['report'] );
+        }
 
         $postarr = [
             'post_title'   => $post_title,
@@ -1096,6 +1183,30 @@ class PressHub_AI_News_Curator {
         // Tags, SEO meta description (excerpt) and focus keyphrase.
         if ( class_exists( 'PressHub_AI_SEO' ) ) {
             PressHub_AI_SEO::auto_optimize_post( $post_id, $post_title, $story_content, 'briefing_text' );
+        }
+
+        // Internal links need the tags, so they are added after tagging:
+        // the first mention of each tag links to its archive, and a
+        // "Διαβάστε επίσης" list points to related earlier posts.
+        if ( $seo_enhance ) {
+            try {
+                $linked = PressHub_AI_Briefing_SEO::add_internal_links( $post_id, wp_kses_post( $html_content ) );
+                $seo_report = array_merge( $seo_report, $linked['report'] );
+                if ( $linked['report']['tag_links'] > 0 || $linked['report']['related_posts'] > 0 ) {
+                    wp_update_post( [
+                        'ID'           => $post_id,
+                        'post_content' => wp_kses_post( $linked['html'] ),
+                    ] );
+                }
+            } catch ( Throwable $t ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Briefing internal linking failed: ' . $t->getMessage(), [ 'post_id' => $post_id ] );
+                }
+            }
+            update_post_meta( $post_id, PressHub_AI_Briefing_SEO::META_APPLIED, $seo_report );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Briefing SEO structure applied', array_merge( [ 'post_id' => $post_id, 'title_chars' => mb_strlen( $post_title ) ], $seo_report ) );
+            }
         }
 
         // Issue #79 — surface the source-context the LLM was actually fed so
