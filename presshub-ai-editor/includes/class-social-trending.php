@@ -82,6 +82,8 @@ class PressHub_AI_Social_Trending {
         add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
         add_action( self::CRON_HOOK, [ __CLASS__, 'cron_tick' ] );
         add_action( 'admin_post_' . self::RUN_ACTION, [ __CLASS__, 'handle_run_now' ] );
+        add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_front_assets' ] );
+        add_action( 'wp_body_open', [ __CLASS__, 'print_fb_root' ] );
         if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( self::CRON_HOOK ) ) {
             wp_schedule_event( time() + 300, 'hourly', self::CRON_HOOK );
         }
@@ -902,6 +904,7 @@ class PressHub_AI_Social_Trending {
                     return $res;
                 }
                 update_post_meta( $existing, self::META_ITEMS, $items_meta );
+                self::maybe_set_featured_image( $existing, $items );
                 return $existing;
             }
         }
@@ -933,6 +936,7 @@ class PressHub_AI_Social_Trending {
             $map = array_slice( $map, -self::MAX_POST_KEYS, null, true );
         }
         update_option( self::OPTION_POSTS, $map, false );
+        self::maybe_set_featured_image( (int) $id, $items );
         return (int) $id;
     }
 
@@ -955,10 +959,93 @@ class PressHub_AI_Social_Trending {
         return 1 === $h ? 'πριν από 1 ώρα' : sprintf( 'πριν από %d ώρες', $h );
     }
 
+    /** @var callable|null fn( string $url ): bool — oEmbed availability override for tests. */
+    public static $oembed_check = null;
+
+    /** @var callable|null fn( string $image_url, int $post_id, string $desc ): int|WP_Error — sideload override for tests. */
+    public static $sideload = null;
+
+    /** @var array<string, bool> oEmbed results within one request. */
+    private static $oembed_cache = [];
+
     /**
-     * Block-editor content: intro, then one section per post. X and TikTok use
-     * the core embed block (WordPress oEmbed); Instagram and Facebook embeds
-     * need a Meta app token in WordPress, so they are shown as a quote with a link.
+     * Can WordPress embed this X / TikTok link right now? Checked when the post
+     * is written, so a post whose oEmbed fails gets a readable card instead of
+     * a bare link. Without wp_oembed_get (tests) the embed is assumed to work.
+     */
+    private static function oembed_ok( string $url ): bool {
+        if ( is_callable( self::$oembed_check ) ) {
+            return (bool) call_user_func( self::$oembed_check, $url );
+        }
+        if ( isset( self::$oembed_cache[ $url ] ) ) {
+            return self::$oembed_cache[ $url ];
+        }
+        if ( function_exists( 'wp_oembed_get' ) ) {
+            $ok = false !== wp_oembed_get( $url );
+        } else {
+            $ok = true;
+        }
+        return self::$oembed_cache[ $url ] = $ok;
+    }
+
+    private static function excerpt( string $text, int $max = 400 ): string {
+        $text = trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+        if ( self::strlen( $text ) > $max ) {
+            $text = rtrim( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, $max ) : substr( $text, 0, $max ) ) . '…';
+        }
+        return $text;
+    }
+
+    /** Readable card (quote + link) used for Instagram/Facebook fallbacks and failed oEmbeds. */
+    private static function quote_block( array $it ): string {
+        $label = self::PLATFORM_LABELS[ $it['platform'] ];
+        $text  = self::excerpt( (string) $it['text'] );
+        $quote = '' !== $text ? '<p>' . esc_html( $text ) . '</p>' : '';
+        $cite  = '<cite><a href="' . esc_url( $it['url'] ) . '" target="_blank" rel="noopener nofollow">' . esc_html( sprintf( 'Δείτε την ανάρτηση στο %s', $label ) ) . '</a></cite>';
+        return "<!-- wp:quote {\"className\":\"presshub-trending-fallback\"} -->\n<blockquote class=\"wp-block-quote presshub-trending-fallback\">" . $quote . $cite . "</blockquote>\n<!-- /wp:quote -->";
+    }
+
+    /**
+     * The embed for one post.
+     *
+     * X / TikTok: core embed block (WordPress oEmbed), or the quote card if
+     * oEmbed fails. Instagram: Instagram's own embed markup, turned into the
+     * post card by instagram.com/embed.js. Facebook: the fb-post / fb-video
+     * markup of Facebook's embedded posts plugin (the JS SDK renders it). Both
+     * need no Meta app token, keep the caption and link inside as the fallback
+     * when the script is blocked, and survive post kses (div/blockquote/a with
+     * class and data-* attributes only).
+     */
+    public static function embed_block( array $it ): string {
+        $label = self::PLATFORM_LABELS[ $it['platform'] ];
+        $url   = esc_url( $it['url'] );
+        $text  = self::excerpt( (string) $it['text'], 300 );
+        $link  = '<a href="' . $url . '" target="_blank" rel="noopener nofollow">' . esc_html( sprintf( 'Δείτε την ανάρτηση στο %s', $label ) ) . '</a>';
+
+        if ( in_array( $it['platform'], [ 'x', 'tiktok' ], true ) ) {
+            $provider = 'x' === $it['platform'] ? 'twitter' : 'tiktok';
+            $type     = 'x' === $it['platform'] ? 'rich' : 'video';
+            // twitter.com links are what every WordPress version's oEmbed provider list knows.
+            $embed = 'x' === $it['platform'] ? (string) preg_replace( '#^https://x\.com/#', 'https://twitter.com/', $it['url'] ) : $it['url'];
+            if ( ! self::oembed_ok( $embed ) ) {
+                return self::quote_block( $it );
+            }
+            $attrs = json_encode( [ 'url' => $embed, 'type' => $type, 'providerNameSlug' => $provider, 'responsive' => true ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );
+            return "<!-- wp:embed " . $attrs . " -->\n<figure class=\"wp-block-embed is-type-{$type} is-provider-{$provider} wp-block-embed-{$provider}\"><div class=\"wp-block-embed__wrapper\">\n" . esc_url( $embed ) . "\n</div></figure>\n<!-- /wp:embed -->";
+        }
+        if ( 'instagram' === $it['platform'] ) {
+            $inner = ( '' !== $text ? '<p>' . esc_html( $text ) . '</p>' : '' ) . '<p>' . $link . '</p>';
+            return "<!-- wp:html -->\n<div class=\"presshub-trending-embed presshub-trending-embed-instagram\"><blockquote class=\"instagram-media\" data-instgrm-permalink=\"" . $url . "\" data-instgrm-version=\"14\" data-instgrm-captioned>" . $inner . "</blockquote></div>\n<!-- /wp:html -->";
+        }
+        // Facebook.
+        $class = 'video' === $it['media_type'] ? 'fb-video' : 'fb-post';
+        $inner = '<blockquote cite="' . $url . '" class="fb-xfbml-parse-ignore">' . ( '' !== $text ? '<p>' . esc_html( $text ) . '</p>' : '' ) . '<p>' . $link . '</p></blockquote>';
+        return "<!-- wp:html -->\n<div class=\"presshub-trending-embed presshub-trending-embed-facebook\"><div class=\"" . $class . "\" data-href=\"" . $url . "\" data-width=\"500\" data-show-text=\"true\" data-lazy=\"true\">" . $inner . "</div></div>\n<!-- /wp:html -->";
+    }
+
+    /**
+     * Block-editor content: intro, then one card (group block) per post with a
+     * heading (rank, author, platform badge), the engagement line and the embed.
      */
     public static function build_content( array $items, int $now ): string {
         $platforms = [];
@@ -973,49 +1060,139 @@ class PressHub_AI_Social_Trending {
             $updated
         );
         $out = [];
-        $out[] = "<!-- wp:paragraph -->\n<p>" . esc_html( $intro ) . "</p>\n<!-- /wp:paragraph -->";
+        $out[] = "<!-- wp:paragraph {\"className\":\"presshub-trending-intro\"} -->\n<p class=\"presshub-trending-intro\">" . esc_html( $intro ) . "</p>\n<!-- /wp:paragraph -->";
 
         foreach ( array_values( $items ) as $i => $it ) {
-            $label  = self::PLATFORM_LABELS[ $it['platform'] ];
+            $p      = $it['platform'];
+            $label  = self::PLATFORM_LABELS[ $p ];
             $author = '' !== $it['author_name'] ? $it['author_name'] : ( '' !== $it['handle'] ? '@' . $it['handle'] : $label );
-            $head   = sprintf( '%d. %s στο %s', $i + 1, $author, $label );
-            $out[]  = "<!-- wp:heading {\"level\":3} -->\n<h3 class=\"wp-block-heading\">" . esc_html( $head ) . "</h3>\n<!-- /wp:heading -->";
+            $handle = '' !== $it['handle'] && 0 !== strpos( $it['handle'], 'id-' ) && '@' . $it['handle'] !== $author ? ' <span class="presshub-trending-handle">@' . esc_html( $it['handle'] ) . '</span>' : '';
+            $head   = '<span class="presshub-trending-rank">' . ( $i + 1 ) . '.</span> ' . esc_html( $author ) . $handle . ' <span class="presshub-trending-badge presshub-trending-badge-' . $p . '">' . esc_html( $label ) . '</span>';
 
             $stats = [];
             if ( $it['likes'] > 0 ) {
-                $stats[] = self::fmt_count( (int) $it['likes'] ) . ( 'facebook' === $it['platform'] ? ' αντιδράσεις' : ' likes' );
+                $stats[] = self::fmt_count( (int) $it['likes'] ) . ( 'facebook' === $p ? ' αντιδράσεις' : ' likes' );
             }
             if ( $it['comments'] > 0 ) {
                 $stats[] = self::fmt_count( (int) $it['comments'] ) . ' σχόλια';
             }
             if ( $it['shares'] > 0 ) {
-                $stats[] = self::fmt_count( (int) $it['shares'] ) . ( 'x' === $it['platform'] ? ' αναδημοσιεύσεις' : ' κοινοποιήσεις' );
+                $stats[] = self::fmt_count( (int) $it['shares'] ) . ( 'x' === $p ? ' αναδημοσιεύσεις' : ' κοινοποιήσεις' );
             }
             if ( $it['views'] > 0 ) {
                 $stats[] = self::fmt_count( (int) $it['views'] ) . ' προβολές';
             }
             $stats[] = self::ago( (int) $it['created_ts'], $now );
-            $out[]   = "<!-- wp:paragraph {\"className\":\"presshub-trending-stats\"} -->\n<p class=\"presshub-trending-stats\"><em>" . esc_html( implode( ' · ', $stats ) ) . "</em></p>\n<!-- /wp:paragraph -->";
 
-            $url = esc_url( $it['url'] );
-            if ( in_array( $it['platform'], [ 'x', 'tiktok' ], true ) ) {
-                $provider = 'x' === $it['platform'] ? 'twitter' : 'tiktok';
-                $type     = 'x' === $it['platform'] ? 'rich' : 'video';
-                // twitter.com links are what every WordPress version's oEmbed provider list knows.
-                $embed    = 'x' === $it['platform'] ? (string) preg_replace( '#^https://x\.com/#', 'https://twitter.com/', $it['url'] ) : $it['url'];
-                $attrs    = json_encode( [ 'url' => $embed, 'type' => $type, 'providerNameSlug' => $provider, 'responsive' => true ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );
-                $out[] = "<!-- wp:embed " . $attrs . " -->\n<figure class=\"wp-block-embed is-type-{$type} is-provider-{$provider} wp-block-embed-{$provider}\"><div class=\"wp-block-embed__wrapper\">\n" . esc_url( $embed ) . "\n</div></figure>\n<!-- /wp:embed -->";
-            } else {
-                $text = trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) );
-                if ( function_exists( 'mb_strlen' ) && mb_strlen( $text ) > 400 ) {
-                    $text = rtrim( mb_substr( $text, 0, 400 ) ) . '…';
-                }
-                $quote = '' !== $text ? '<p>' . esc_html( $text ) . '</p>' : '';
-                $cite  = '<cite><a href="' . $url . '" target="_blank" rel="noopener nofollow">' . esc_html( sprintf( 'Δείτε την ανάρτηση στο %s', $label ) ) . '</a></cite>';
-                $out[] = "<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\">" . $quote . $cite . "</blockquote>\n<!-- /wp:quote -->";
-            }
+            $card   = "presshub-trending-card presshub-trending-{$p}";
+            $out[]  = "<!-- wp:group {\"className\":\"{$card}\",\"layout\":{\"type\":\"constrained\"}} -->\n<div class=\"wp-block-group {$card}\">"
+                . "<!-- wp:heading {\"level\":3,\"className\":\"presshub-trending-title\"} -->\n<h3 class=\"wp-block-heading presshub-trending-title\">" . $head . "</h3>\n<!-- /wp:heading -->\n\n"
+                . "<!-- wp:paragraph {\"className\":\"presshub-trending-stats\"} -->\n<p class=\"presshub-trending-stats\">" . esc_html( implode( ' · ', $stats ) ) . "</p>\n<!-- /wp:paragraph -->\n\n"
+                . self::embed_block( $it )
+                . "</div>\n<!-- /wp:group -->";
         }
         return implode( "\n\n", $out );
+    }
+
+    /* ------------------------------------------------------------------
+     * Front end: embed scripts and card styling on roundup posts
+     * ---------------------------------------------------------------- */
+
+    private static function is_roundup_view(): bool {
+        if ( ! function_exists( 'is_singular' ) || ! is_singular( 'post' ) ) {
+            return false;
+        }
+        $id = function_exists( 'get_queried_object_id' ) ? (int) get_queried_object_id() : 0;
+        return $id > 0 && '' !== (string) get_post_meta( $id, self::META_KEY, true );
+    }
+
+    public static function enqueue_front_assets(): void {
+        if ( ! self::is_roundup_view() ) {
+            return;
+        }
+        $post    = get_post( (int) get_queried_object_id() );
+        $content = $post ? (string) $post->post_content : '';
+        $args    = [ 'in_footer' => true, 'strategy' => 'async' ];
+        if ( false !== strpos( $content, 'instagram-media' ) ) {
+            wp_enqueue_script( 'presshub-instagram-embed', 'https://www.instagram.com/embed.js', [], null, $args );
+        }
+        if ( false !== strpos( $content, 'fb-post' ) || false !== strpos( $content, 'fb-video' ) ) {
+            $locale = function_exists( 'get_locale' ) ? (string) get_locale() : 'el_GR';
+            $locale = preg_match( '/^[a-z]{2}_[A-Z]{2}$/', $locale ) ? $locale : 'el_GR';
+            wp_enqueue_script( 'presshub-facebook-sdk', 'https://connect.facebook.net/' . $locale . '/sdk.js#xfbml=1&version=' . PressHub_Social_Meta_API_Client::GRAPH_API_VERSION, [], null, $args );
+        }
+        wp_register_style( 'presshub-social-trending', false, [], PRESSHUB_AI_VERSION );
+        wp_enqueue_style( 'presshub-social-trending' );
+        wp_add_inline_style( 'presshub-social-trending', self::front_css() );
+    }
+
+    /** The Facebook SDK expects a #fb-root element in the page. */
+    public static function print_fb_root(): void {
+        if ( self::is_roundup_view() ) {
+            echo '<div id="fb-root"></div>';
+        }
+    }
+
+    public static function front_css(): string {
+        return '.presshub-trending-card{border:1px solid rgba(0,0,0,.1);border-radius:12px;padding:1rem 1.25rem;margin:1.5rem 0;}'
+            . '.presshub-trending-card .presshub-trending-title{margin:0 0 .25rem;font-size:1.15em;display:flex;flex-wrap:wrap;align-items:center;gap:.4em;}'
+            . '.presshub-trending-rank{opacity:.55;}'
+            . '.presshub-trending-handle{font-weight:400;opacity:.65;font-size:.85em;}'
+            . '.presshub-trending-badge{font-size:.7em;font-weight:600;letter-spacing:.02em;text-transform:uppercase;padding:.15em .55em;border-radius:999px;color:#fff;background:#555;}'
+            . '.presshub-trending-badge-x{background:#000;}'
+            . '.presshub-trending-badge-tiktok{background:#fe2c55;}'
+            . '.presshub-trending-badge-instagram{background:linear-gradient(45deg,#f58529,#dd2a7b,#8134af);}'
+            . '.presshub-trending-badge-facebook{background:#1877f2;}'
+            . '.presshub-trending-stats{margin:0 0 .75rem;font-size:.9em;opacity:.75;}'
+            . '.presshub-trending-card .wp-block-embed,.presshub-trending-embed{margin:0;max-width:100%;overflow:hidden;}'
+            . '.presshub-trending-embed .instagram-media,.presshub-trending-embed .fb-post,.presshub-trending-embed .fb-video{max-width:540px;margin:0 auto;}'
+            . '.presshub-trending-fallback{margin:0;}'
+            . '@media (prefers-color-scheme:dark){.presshub-trending-card{border-color:rgba(255,255,255,.15);}}';
+    }
+
+    /* ------------------------------------------------------------------
+     * Featured image
+     * ---------------------------------------------------------------- */
+
+    /**
+     * Give a roundup post without a featured image the picture of its top
+     * post. The image is copied into the Media Library (platform image links
+     * are signed and expire), once per post, so a daily post adds one image a day.
+     */
+    public static function maybe_set_featured_image( int $post_id, array $items ): int {
+        if ( $post_id <= 0 || ( function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id ) ) ) {
+            return 0;
+        }
+        $pick = null;
+        foreach ( $items as $it ) {
+            if ( '' !== (string) ( $it['thumbnail'] ?? '' ) ) {
+                $pick = $it;
+                break;
+            }
+        }
+        if ( null === $pick ) {
+            return 0;
+        }
+        $desc = sprintf( '%s · %s', self::PLATFORM_LABELS[ $pick['platform'] ], '' !== $pick['author_name'] ? $pick['author_name'] : $pick['handle'] );
+        if ( is_callable( self::$sideload ) ) {
+            $att = call_user_func( self::$sideload, $pick['thumbnail'], $post_id, $desc );
+        } else {
+            if ( ! function_exists( 'media_sideload_image' ) && defined( 'ABSPATH' ) && file_exists( ABSPATH . 'wp-admin/includes/media.php' ) ) {
+                require_once ABSPATH . 'wp-admin/includes/file.php';
+                require_once ABSPATH . 'wp-admin/includes/media.php';
+                require_once ABSPATH . 'wp-admin/includes/image.php';
+            }
+            if ( ! function_exists( 'media_sideload_image' ) ) {
+                return 0;
+            }
+            $att = media_sideload_image( $pick['thumbnail'], $post_id, $desc, 'id' );
+        }
+        if ( is_wp_error( $att ) || (int) $att <= 0 ) {
+            self::log( 'info', 'Social trending: featured image not set: ' . ( is_wp_error( $att ) ? $att->get_error_message() : 'no attachment' ) );
+            return 0;
+        }
+        set_post_thumbnail( $post_id, (int) $att );
+        return (int) $att;
     }
 
     /* ------------------------------------------------------------------

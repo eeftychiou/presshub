@@ -17,6 +17,7 @@ export interface FacebookPost {
   created_at: string;
   media: { type: 'video' | 'image' | 'none'; duration_sec: number };
   metrics: PostMetrics;
+  thumbnail?: string;
 }
 
 /**
@@ -117,6 +118,11 @@ function parseStory(story: any): FacebookPost | null {
   const hasVideo = bfs<boolean>(story, (k, v) => (k === '__typename' && v === 'Video' ? true : undefined)) === true;
   const hasPhoto = !hasVideo && bfs<boolean>(story, (k, v) => (k === '__typename' && v === 'Photo' ? true : undefined)) === true;
 
+  const thumbnail =
+    bfs<string>(story, (k, v) => (k === 'preferred_thumbnail' && typeof v?.image?.uri === 'string' && /^https:\/\//.test(v.image.uri) ? v.image.uri : undefined)) ||
+    bfs<string>(story, (k, v) =>
+      (k === 'photo_image' || k === 'image' || k === 'large_share_image') && typeof v?.uri === 'string' && /^https:\/\/[^/]*(fbcdn|scontent)/.test(v.uri) ? v.uri : undefined
+    );
   const actorUrl = typeof actor.url === 'string' ? actor.url : typeof actor.profile_url === 'string' ? actor.profile_url : '';
   const actorId = typeof actor.id === 'string' && /^\d{5,25}$/.test(actor.id) ? actor.id : '';
   return {
@@ -128,7 +134,8 @@ function parseStory(story: any): FacebookPost | null {
     text,
     created_at: new Date(created * 1000).toISOString(),
     media: { type: hasVideo ? 'video' : hasPhoto ? 'image' : 'none', duration_sec: 0 },
-    metrics: { likes: toCount(reactions), comments: toCount(comments), shares: toCount(shares), views: toCount(views) }
+    metrics: { likes: toCount(reactions), comments: toCount(comments), shares: toCount(shares), views: toCount(views) },
+    ...(thumbnail ? { thumbnail } : {})
   };
 }
 
@@ -157,6 +164,7 @@ export function parseFacebookStories(values: any[]): FacebookPost[] {
           prev.text = prev.text || post.text;
           prev.author_name = prev.author_name || post.author_name;
           prev.handle = prev.handle || post.handle;
+          prev.thumbnail = prev.thumbnail || post.thumbnail;
           for (const k of ['likes', 'comments', 'shares', 'views'] as const) prev.metrics[k] = Math.max(prev.metrics[k], post.metrics[k]);
         }
         continue;

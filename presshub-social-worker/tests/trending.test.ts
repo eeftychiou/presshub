@@ -263,3 +263,22 @@ describe('Facebook handles', () => {
     expect(parseFacebookStories([s])[0].handle).toBe('id-100064123456789');
   });
 });
+
+describe('Thumbnails', () => {
+  test('Facebook preferred thumbnail, TikTok cover and X photo are read; the monitor never gets them', () => {
+    const s = fbStory('623456789012');
+    s.comet_sections.content.story.attachments = [{ media: { __typename: 'Photo', photo_image: { uri: 'https://scontent.fnic1-1.fna.fbcdn.net/v/p.jpg' } } }];
+    expect(parseFacebookStories([s])[0].thumbnail).toBe('https://scontent.fnic1-1.fna.fbcdn.net/v/p.jpg');
+    const v = fbStory('723456789012');
+    v.comet_sections.content.story.attachments = [{ media: { __typename: 'Video', preferred_thumbnail: { image: { uri: 'https://scontent.xx.fbcdn.net/v/thumb.jpg' } } } }];
+    const fv = parseFacebookStories([v])[0];
+    expect(fv.thumbnail).toBe('https://scontent.xx.fbcdn.net/v/thumb.jpg');
+    expect(fv.media.type).toBe('video');
+
+    const item = { id: '7400000000000000002', desc: 'x', createTime: nowSec, author: { uniqueId: 'a.b' }, video: { duration: 5, cover: 'https://p16-sign.tiktokcdn.com/c.jpeg' } };
+    const t = parseTikTokItemList({ itemList: [item] }, 0)[0];
+    expect(t.thumbnail).toBe('https://p16-sign.tiktokcdn.com/c.jpeg');
+    expect(toWirePost(t)).not.toHaveProperty('thumbnail');
+    expect(parseTrendingBody('tiktok', JSON.stringify({ itemList: [item] }))[0].thumbnail).toBe('https://p16-sign.tiktokcdn.com/c.jpeg');
+  });
+});

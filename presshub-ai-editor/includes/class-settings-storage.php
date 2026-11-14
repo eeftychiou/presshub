@@ -2650,6 +2650,8 @@ class PressHub_AI_Settings_Storage {
     const SOCIAL_TRENDING_DEFAULT_HASHTAGS = "cyprus\nκύπρος\nlimassol";
     const SOCIAL_TRENDING_DEFAULT_TITLE    = 'Τι συζητά η Κύπρος στα social – {date}';
     const SOCIAL_TRENDING_DEFAULT_CATEGORY = 'Trending στα Social';
+    /** Starter list of Cypriot news Pages (each checked to exist on Facebook, 14/11/2026). */
+    const SOCIAL_TRENDING_DEFAULT_FACEBOOK_PAGES = "https://www.facebook.com/philenews\nhttps://www.facebook.com/SigmaLive\nhttps://www.facebook.com/Kathimerini.com.cy\nhttps://www.facebook.com/alphanews.live\nhttps://www.facebook.com/omegalivecy\nhttps://www.facebook.com/rik.cybc\nhttps://www.facebook.com/24hcomcy\nhttps://www.facebook.com/cyprus.times\nhttps://www.facebook.com/CyprusMail\nhttps://www.facebook.com/inCYPRUS";
     const SOCIAL_TRENDING_DEFAULT_EXCLUDED = "crypto\nbitcoin\nforex\nairdrop\ncasino\nbetting\nonlyfans\nescort\n#realestate";
 
     /**
@@ -2836,7 +2838,8 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function get_social_trending_facebook_pages(): array {
-        return array_values( array_filter( explode( "\n", self::sanitize_social_trending_facebook_pages( get_option( 'presshub_ai_social_trending_facebook_pages', '' ) ) ) ) );
+        // Until the setting is saved, the starter list applies, so Facebook works out of the box.
+        return array_values( array_filter( explode( "\n", self::sanitize_social_trending_facebook_pages( get_option( 'presshub_ai_social_trending_facebook_pages', self::SOCIAL_TRENDING_DEFAULT_FACEBOOK_PAGES ) ) ) ) );
     }
 
     public static function get_social_trending_category(): string {

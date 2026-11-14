@@ -2761,7 +2761,8 @@ class PressHub_AI_Settings_Render {
             <th scope="row"><label for="presshub_ai_social_trending_facebook_pages"><?php echo esc_html__( 'Facebook Pages', 'presshub-ai-editor' ); ?></label></th>
             <td>
                 <textarea name="presshub_ai_social_trending_facebook_pages" id="presshub_ai_social_trending_facebook_pages" rows="4" class="large-text code" placeholder="https://www.facebook.com/philenews"><?php echo esc_textarea( $fb_pages ); ?></textarea>
-                <p class="description"><?php echo esc_html__( 'One Page URL per line. Facebook has no public search, so the worker reads these Cypriot Pages and the roundup keeps their most engaging recent posts. Needs a Facebook reader session on the worker.', 'presshub-ai-editor' ); ?></p>
+                <p class="description"><?php echo esc_html__( 'One Page URL per line. Facebook has no public search, so the worker reads these Cypriot Pages and the roundup keeps their most engaging recent posts. Each Page is one visit per refresh. Needs a Facebook reader session on the worker.', 'presshub-ai-editor' ); ?>
+                    <button type="button" class="button-link" onclick="document.getElementById('presshub_ai_social_trending_facebook_pages').value = <?php echo esc_attr( wp_json_encode( PressHub_AI_Settings_Storage::SOCIAL_TRENDING_DEFAULT_FACEBOOK_PAGES ) ); ?>;"><?php echo esc_html__( 'Load the starter list of Cyprus news Pages', 'presshub-ai-editor' ); ?></button></p>
             </td>
         </tr>
         <tr>

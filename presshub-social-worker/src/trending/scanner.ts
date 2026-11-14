@@ -40,6 +40,7 @@ export interface TrendingPost {
   created_at: string;
   media: { type: 'video' | 'image' | 'none'; duration_sec: number };
   metrics: PostMetrics;
+  thumbnail?: string;
 }
 
 export interface TrendingError {
@@ -84,7 +85,8 @@ export function fromScanned(p: ScannedPost): TrendingPost {
     text: p.text,
     created_at: p.created_at,
     media: p.media,
-    metrics: p.metrics || { ...ZERO }
+    metrics: p.metrics || { ...ZERO },
+    ...(p.thumbnail ? { thumbnail: p.thumbnail } : {})
   };
 }
 

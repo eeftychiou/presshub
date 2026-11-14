@@ -33,6 +33,12 @@ export interface ScannedPost {
   pinned?: boolean;
   /** Engagement counts as shown when the post was read (used by the trending roundup). */
   metrics?: PostMetrics;
+  /** Image of the post (photo or video cover), https; used by the trending roundup. */
+  thumbnail?: string;
+}
+
+function httpsUrl(v: any): string | undefined {
+  return typeof v === 'string' && /^https:\/\//.test(v) ? v : undefined;
 }
 
 export interface PostMetrics {
@@ -150,6 +156,7 @@ export function parseXTweet(node: any, maxVideoBytes: number): ScannedPost | nul
     created_at: created.toISOString(),
     media: mediaInfo,
     video,
+    thumbnail: httpsUrl(media[0]?.media_url_https),
     metrics: {
       likes: toCount(legacy.favorite_count),
       comments: toCount(legacy.reply_count),
@@ -254,6 +261,7 @@ export function parseTikTokItemList(json: any, maxVideoBytes: number): ScannedPo
       created_at: new Date(createdSec * 1000).toISOString(),
       media: isPhoto ? { type: 'image', duration_sec: 0 } : { type: 'video', duration_sec: Math.round(durationSec) },
       video: isPhoto ? undefined : sources,
+      thumbnail: httpsUrl(item?.video?.cover) || httpsUrl(item?.video?.originCover) || httpsUrl(item?.imagePost?.cover?.imageURL?.urlList?.[0]),
       metrics: {
         likes: toCount(item?.statsV2?.diggCount ?? item?.stats?.diggCount),
         comments: toCount(item?.statsV2?.commentCount ?? item?.stats?.commentCount),
@@ -267,7 +275,7 @@ export function parseTikTokItemList(json: any, maxVideoBytes: number): ScannedPo
 }
 
 /** Strip worker-only fields before sending a post to the Social Monitor. */
-export function toWirePost(p: ScannedPost): Omit<ScannedPost, 'video' | 'pinned' | 'metrics'> {
-  const { video, pinned, metrics, ...rest } = p;
+export function toWirePost(p: ScannedPost): Omit<ScannedPost, 'video' | 'pinned' | 'metrics' | 'thumbnail'> {
+  const { video, pinned, metrics, thumbnail, ...rest } = p;
   return rest;
 }

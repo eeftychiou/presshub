@@ -106,6 +106,10 @@ st_check( 'map: every boolean is in the map', [] === array_diff( $S::get_social_
 st_check( 'map: merged into the briefing section map', isset( $S::get_section_options_map( 'briefing' )['presshub_ai_social_trending_interval_hours'] ) );
 st_reset( [ 'presshub_ai_social_trending_keywords' => '' ] );
 st_check( 'defaults: empty keywords use the defaults', in_array( 'Cyprus', $S::get_social_trending_keywords(), true ) );
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_facebook_pages'] );
+st_check( 'defaults: unsaved Facebook Pages use the starter list', 10 === count( $S::get_social_trending_facebook_pages() ) && 'https://www.facebook.com/philenews' === $S::get_social_trending_facebook_pages()[0] );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_facebook_pages'] = '';
+st_check( 'defaults: an emptied list stays empty', [] === $S::get_social_trending_facebook_pages() );
 st_check( 'defaults: platforms read from options', [ 'x', 'tiktok', 'facebook' ] === $S::get_social_trending_platforms() );
 
 // =========================================================================
@@ -331,11 +335,40 @@ $items = [
 $html = $T::build_content( $items, $now );
 st_check( 'content: X embed via twitter.com', false !== strpos( $html, '<!-- wp:embed {"url":"https://twitter.com/acct101/status/101"' ) && false !== strpos( $html, 'wp-block-embed-twitter' ) );
 st_check( 'content: TikTok embed', false !== strpos( $html, '"providerNameSlug":"tiktok"' ) );
-st_check( 'content: Instagram quoted with link, text escaped', false !== strpos( $html, 'https://www.instagram.com/p/AbC_1/' ) && false === strpos( $html, '<script>' ) && false !== strpos( $html, 'Δείτε την ανάρτηση στο Instagram' ) );
-st_check( 'content: Instagram without author shows platform', false !== strpos( $html, '3. Instagram στο Instagram' ) || false !== strpos( $html, '3. @acct103 στο Instagram' ) );
+st_check( 'content: Instagram official embed markup, caption escaped inside', false !== strpos( $html, '<blockquote class="instagram-media" data-instgrm-permalink="https://www.instagram.com/p/AbC_1/" data-instgrm-version="14"' ) && false === strpos( $html, '<script>' ) && false !== strpos( $html, 'Δείτε την ανάρτηση στο Instagram' ) && false !== strpos( $html, '<!-- wp:html -->' ) );
+st_check( 'content: Facebook embedded post plugin markup', false !== strpos( $html, '<div class="fb-post" data-href="https://www.facebook.com/philenews/posts/1"' ) && false !== strpos( $html, 'class="fb-xfbml-parse-ignore"' ) );
+st_check( 'content: cards with platform badges', 4 === substr_count( $html, '<div class="wp-block-group presshub-trending-card' ) && false !== strpos( $html, 'presshub-trending-badge-instagram">Instagram</span>' ) );
+st_check( 'content: rank, author and handle in the heading', false !== strpos( $html, '<span class="presshub-trending-rank">1.</span> Account 101 <span class="presshub-trending-handle">@acct101</span>' ) );
+st_check( 'content: Instagram without author shows handle', false !== strpos( $html, '<span class="presshub-trending-rank">3.</span> @acct103 <span class="presshub-trending-badge' ) );
+$fbv  = $T::normalize_item( st_post( 'facebook', '105', 100, 30, [ 'url' => 'https://www.facebook.com/philenews/videos/9', 'media' => [ 'type' => 'video' ] ] ), $now );
+st_check( 'content: Facebook video uses fb-video', false !== strpos( $T::embed_block( $fbv ), '<div class="fb-video"' ) );
+// oEmbed fallback: a link WordPress cannot embed becomes a readable card.
+$T::$oembed_check = static function ( $url ) { return false === strpos( $url, '/status/101' ); };
+$fallback = $T::build_content( $items, $now );
+st_check( 'content: failed X oEmbed falls back to a quote card', false === strpos( $fallback, 'twitter.com/acct101/status/101"' ) && false !== strpos( $fallback, 'presshub-trending-fallback' ) && false !== strpos( $fallback, 'Δείτε την ανάρτηση στο X' ) && false !== strpos( $fallback, '"providerNameSlug":"tiktok"' ) );
+$T::$oembed_check = null;
 st_check( 'content: stats line', false !== strpos( $html, '1.500 likes · 20 σχόλια · 30 αναδημοσιεύσεις · 25K προβολές · πριν από 1 ώρα' ) );
 st_check( 'content: facebook reactions wording', false !== strpos( $html, '100 αντιδράσεις' ) );
 st_check( 'content: intro names platforms', false !== strpos( $html, 'X, TikTok, Instagram, Facebook' ) );
+
+// Featured image: the top post with a picture, sideloaded once per post.
+function has_post_thumbnail( $id ) { return ! empty( $GLOBALS['THUMBS'][ $id ] ); }
+function set_post_thumbnail( $id, $att ) { $GLOBALS['THUMBS'][ $id ] = $att; return true; }
+st_reset();
+$GLOBALS['THUMBS'] = [];
+$sideloads = [];
+$T::$sideload = static function ( $url, $post_id, $desc ) use ( &$sideloads ) { $sideloads[] = [ $url, $post_id, $desc ]; return 9000 + count( $sideloads ); };
+$plan = $T::get_worker_plan( false, $now );
+$res  = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '201', 900, 10 ), st_post( 'tiktok', '202', 800, 10, [ 'thumbnail' => 'https://p16-sign.tiktokcdn.com/c.jpeg' ] ) ], [], $now );
+st_check( 'featured: top post with a picture is sideloaded and set', 1 === count( $sideloads ) && 'https://p16-sign.tiktokcdn.com/c.jpeg' === $sideloads[0][0] && $res['post_id'] === $sideloads[0][1] && 9001 === $GLOBALS['THUMBS'][ $res['post_id'] ] );
+$plan = $T::get_worker_plan( false, $now + 6 * 3600 + 5 );
+$T::ingest_worker_posts( $plan['run_id'], [ st_post( 'tiktok', '203', 800, 10, [ 'thumbnail' => 'https://p16-sign.tiktokcdn.com/d.jpeg' ] ) ], [], $now + 6 * 3600 + 5 );
+st_check( 'featured: not replaced on later updates', 1 === count( $sideloads ) );
+st_check( 'featured: no picture, nothing to do', 0 === $T::maybe_set_featured_image( 77, [ $T::normalize_item( st_post( 'x', '204', 1, 10 ), $now ) ] ) );
+$T::$sideload = static function () { return new WP_Error( 'http', 'expired' ); };
+st_check( 'featured: sideload failure tolerated', 0 === $T::maybe_set_featured_image( 78, [ $T::normalize_item( st_post( 'x', '205', 1, 10, [ 'thumbnail' => 'https://pbs.twimg.com/media/a.jpg' ] ), $now ) ] ) && empty( $GLOBALS['THUMBS'][78] ) );
+$T::$sideload = null;
+st_check( 'front css: platform badges styled', false !== strpos( $T::front_css(), '.presshub-trending-badge-facebook' ) );
 
 // =========================================================================
 // 8. Instagram Graph API
@@ -405,6 +438,7 @@ ob_start();
 ( new PressHub_AI_Settings_Render() )->render_social_trending_rows();
 $out = ob_get_clean();
 st_check( 'render: fields present', false !== strpos( $out, 'name="presshub_ai_social_trending_interval_hours"' ) && false !== strpos( $out, 'name="presshub_ai_social_trending_platform_instagram"' ) && false !== strpos( $out, 'name="presshub_ai_social_trending_post_mode"' ) );
+st_check( 'render: starter list button', false !== strpos( $out, 'Load the starter list of Cyprus news Pages' ) );
 st_check( 'render: refresh-now link when enabled', false !== strpos( $out, 'action=' . $T::RUN_ACTION ) );
 
 // Editorial QA gate leaves roundup posts alone (they follow their own status setting).
