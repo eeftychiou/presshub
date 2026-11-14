@@ -2390,6 +2390,10 @@ delete_option( 'presshub_social_tiktok_shorts_caption_words' );
 assert_equals( 120, PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words(), 'Short Post Text Length defaults to 120 words' );
 assert_true( str_contains( $shipped_prompt, '{caption_words}' ) && str_contains( $shipped_prompt, 'σχόλια' ), 'The shorts prompt asks for a story summary and a comment question' );
 
+// A saved prompt keeps its backslashes (options.php has already unslashed it).
+assert_equals( '{"script":"[SPEAKER_1]: ...\\n[SPEAKER_2]: ..."}', PressHub_Social_Settings_Storage::sanitize_prompt( '{"script":"[SPEAKER_1]: ...\\n[SPEAKER_2]: ..."}', 'presshub_social_prompt_tiktok_shorts' ), 'sanitize_prompt keeps the \\n of a JSON example' );
+assert_equals( 'a\\b', PressHub_Social_Settings_Storage::sanitize_template( 'a\\b', 'presshub_social_template_twitter' ), 'sanitize_template keeps backslashes' );
+
 // Music for a claimed short.
 update_option( 'presshub_social_tiktok_shorts_music_enabled', false );
 assert_equals( [], PressHub_Social_TikTok_Shorts::music_for( [ 'mood' => 'serious' ], 5 ), 'No music while background music is off' );
