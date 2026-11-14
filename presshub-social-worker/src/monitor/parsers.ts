@@ -31,6 +31,27 @@ export interface ScannedPost {
   video?: VideoSource[];
   /** Pinned to the top of the profile (often old). Not sent to WordPress. */
   pinned?: boolean;
+  /** Engagement counts as shown when the post was read (used by the trending roundup). */
+  metrics?: PostMetrics;
+  /** Image of the post (photo or video cover), https; used by the trending roundup. */
+  thumbnail?: string;
+}
+
+function httpsUrl(v: any): string | undefined {
+  return typeof v === 'string' && /^https:\/\//.test(v) ? v : undefined;
+}
+
+export interface PostMetrics {
+  likes: number;
+  comments: number;
+  shares: number;
+  views: number;
+}
+
+/** Count from a number or a numeric string ("1234"); 0 otherwise. */
+export function toCount(v: any): number {
+  const n = typeof v === 'string' ? Number(v.replace(/[,\s]/g, '')) : Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
 export interface XVideoVariant {
@@ -134,7 +155,14 @@ export function parseXTweet(node: any, maxVideoBytes: number): ScannedPost | nul
     text: expandXText(legacy, noteText),
     created_at: created.toISOString(),
     media: mediaInfo,
-    video
+    video,
+    thumbnail: httpsUrl(media[0]?.media_url_https),
+    metrics: {
+      likes: toCount(legacy.favorite_count),
+      comments: toCount(legacy.reply_count),
+      shares: toCount(legacy.retweet_count) + toCount(legacy.quote_count),
+      views: toCount(tweet?.views?.count)
+    }
   };
 }
 
@@ -185,7 +213,16 @@ export function parseXGraphql(json: any, maxVideoBytes: number): ScannedPost[] {
  * Parse a TikTok /api/post/item_list/ response.
  */
 export function parseTikTokItemList(json: any, maxVideoBytes: number): ScannedPost[] {
-  const items: any[] = Array.isArray(json?.itemList) ? json.itemList : Array.isArray(json?.items) ? json.items : [];
+  // Profile / hashtag pages: itemList. Video search: item_list. General search: data[].item.
+  const items: any[] = Array.isArray(json?.itemList)
+    ? json.itemList
+    : Array.isArray(json?.items)
+      ? json.items
+      : Array.isArray(json?.item_list)
+        ? json.item_list
+        : Array.isArray(json?.data)
+          ? json.data.map((d: any) => d?.item).filter(Boolean)
+          : [];
   const out: ScannedPost[] = [];
   for (const item of items) {
     const id = String(item?.id || '');
@@ -224,14 +261,21 @@ export function parseTikTokItemList(json: any, maxVideoBytes: number): ScannedPo
       created_at: new Date(createdSec * 1000).toISOString(),
       media: isPhoto ? { type: 'image', duration_sec: 0 } : { type: 'video', duration_sec: Math.round(durationSec) },
       video: isPhoto ? undefined : sources,
+      thumbnail: httpsUrl(item?.video?.cover) || httpsUrl(item?.video?.originCover) || httpsUrl(item?.imagePost?.cover?.imageURL?.urlList?.[0]),
+      metrics: {
+        likes: toCount(item?.statsV2?.diggCount ?? item?.stats?.diggCount),
+        comments: toCount(item?.statsV2?.commentCount ?? item?.stats?.commentCount),
+        shares: toCount(item?.statsV2?.shareCount ?? item?.stats?.shareCount),
+        views: toCount(item?.statsV2?.playCount ?? item?.stats?.playCount)
+      },
       ...(item?.isPinnedItem ? { pinned: true } : {})
     });
   }
   return out;
 }
 
-/** Strip worker-only fields before sending a post to WordPress. */
-export function toWirePost(p: ScannedPost): Omit<ScannedPost, 'video' | 'pinned'> {
-  const { video, pinned, ...rest } = p;
+/** Strip worker-only fields before sending a post to the Social Monitor. */
+export function toWirePost(p: ScannedPost): Omit<ScannedPost, 'video' | 'pinned' | 'metrics' | 'thumbnail'> {
+  const { video, pinned, metrics, thumbnail, ...rest } = p;
   return rest;
 }

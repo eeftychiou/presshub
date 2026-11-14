@@ -176,6 +176,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-imap-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-mime-parser.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-press-release-inbox.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-monitor.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-trending.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
@@ -313,6 +314,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( 'presshub_ai_prune_memory_entries' );
     wp_clear_scheduled_hook( PressHub_AI_Generation_Recorder::PRUNE_HOOK );
     wp_clear_scheduled_hook( 'presshub_ai_prune_log_files' );
+    wp_clear_scheduled_hook( PressHub_AI_Social_Trending::CRON_HOOK );
     PressHub_AI_Memory_Rollup_Builder::clear_cron();
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
         PressHub_Social_Activator::deactivate();
@@ -390,6 +392,7 @@ function presshub_ai_init() {
     new PressHub_AI_Memory_Editor();
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
+    PressHub_AI_Social_Trending::register_hooks();
     PressHub_AI_Research_Cleanup::register();
     if ( class_exists( 'PressHub_AI_Log_Exposure_Check' ) ) {
         PressHub_AI_Log_Exposure_Check::register();

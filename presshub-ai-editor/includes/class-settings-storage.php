@@ -270,7 +270,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
         // Social media monitoring (X / TikTok via the social worker).
-        foreach ( self::get_social_monitor_options_map() as $sm_option => $sm_sanitizer ) {
+        foreach ( array_merge( self::get_social_monitor_options_map(), self::get_social_trending_options_map() ) as $sm_option => $sm_sanitizer ) {
             register_setting( 'presshub_ai_options', $sm_option, [
                 'sanitize_callback' => $sm_sanitizer,
             ] );
@@ -2638,6 +2638,242 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_social_monitor_max_video_mb( get_option( 'presshub_ai_social_monitor_max_video_mb', 15 ) );
     }
 
+    /* ---------------------------------------------------------------------
+     * Trending in Cyprus: social roundup posts
+     *
+     * Every N hours the most engaging recent posts about Cyprus on X,
+     * TikTok, Instagram and Facebook are collected (worker + Instagram
+     * Graph API) and published as one post in their own category.
+     * ------------------------------------------------------------------- */
+
+    const SOCIAL_TRENDING_DEFAULT_KEYWORDS = "Κύπρος\nΚύπρου\nΛευκωσία\nΛεμεσός\nΛάρνακα\nΠάφος\nΑμμόχωστος\nCyprus\nNicosia\nLimassol";
+    const SOCIAL_TRENDING_DEFAULT_HASHTAGS = "cyprus\nκύπρος\nlimassol";
+    const SOCIAL_TRENDING_DEFAULT_TITLE    = 'Τι συζητά η Κύπρος στα social – {date}';
+    const SOCIAL_TRENDING_DEFAULT_CATEGORY = 'Trending στα Social';
+    /** Starter list of Cypriot news Pages (each checked to exist on Facebook, 14/11/2026). */
+    const SOCIAL_TRENDING_DEFAULT_FACEBOOK_PAGES = "https://www.facebook.com/philenews\nhttps://www.facebook.com/SigmaLive\nhttps://www.facebook.com/Kathimerini.com.cy\nhttps://www.facebook.com/alphanews.live\nhttps://www.facebook.com/omegalivecy\nhttps://www.facebook.com/rik.cybc\nhttps://www.facebook.com/24hcomcy\nhttps://www.facebook.com/cyprus.times\nhttps://www.facebook.com/CyprusMail\nhttps://www.facebook.com/inCYPRUS";
+    const SOCIAL_TRENDING_DEFAULT_EXCLUDED = "crypto\nbitcoin\nforex\nairdrop\ncasino\nbetting\nonlyfans\nescort\n#realestate";
+
+    /**
+     * @return array<string, callable>
+     */
+    public static function get_social_trending_options_map(): array {
+        return [
+            'presshub_ai_social_trending_enabled'           => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_trending_interval_hours'    => [ __CLASS__, 'sanitize_social_trending_interval_hours' ],
+            'presshub_ai_social_trending_platform_x'        => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_trending_platform_tiktok'   => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_trending_platform_instagram' => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_trending_platform_facebook' => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_trending_keywords'          => [ __CLASS__, 'sanitize_social_trending_keywords' ],
+            'presshub_ai_social_trending_hashtags'          => [ __CLASS__, 'sanitize_social_trending_hashtags' ],
+            'presshub_ai_social_trending_facebook_pages'    => [ __CLASS__, 'sanitize_social_trending_facebook_pages' ],
+            'presshub_ai_social_trending_category'          => [ __CLASS__, 'sanitize_social_trending_category' ],
+            'presshub_ai_social_trending_post_mode'         => [ __CLASS__, 'sanitize_social_trending_post_mode' ],
+            'presshub_ai_social_trending_post_status'       => [ __CLASS__, 'sanitize_social_trending_post_status' ],
+            'presshub_ai_social_trending_title'             => [ __CLASS__, 'sanitize_social_trending_title' ],
+            'presshub_ai_social_trending_max_items'         => [ __CLASS__, 'sanitize_social_trending_max_items' ],
+            'presshub_ai_social_trending_max_per_platform'  => [ __CLASS__, 'sanitize_social_trending_max_per_platform' ],
+            'presshub_ai_social_trending_max_age_hours'     => [ __CLASS__, 'sanitize_social_trending_max_age_hours' ],
+            'presshub_ai_social_trending_min_engagement'    => [ __CLASS__, 'sanitize_social_trending_min_engagement' ],
+            'presshub_ai_social_trending_excluded_words'    => [ __CLASS__, 'sanitize_social_trending_excluded_words' ],
+        ];
+    }
+
+    public static function get_social_trending_boolean_options(): array {
+        return [
+            'presshub_ai_social_trending_enabled',
+            'presshub_ai_social_trending_platform_x',
+            'presshub_ai_social_trending_platform_tiktok',
+            'presshub_ai_social_trending_platform_instagram',
+            'presshub_ai_social_trending_platform_facebook',
+        ];
+    }
+
+    public static function sanitize_social_trending_interval_hours( $value ): int {
+        return self::clamp_int_option( $value, 1, 48, 6 );
+    }
+
+    public static function sanitize_social_trending_max_items( $value ): int {
+        return self::clamp_int_option( $value, 3, 50, 15 );
+    }
+
+    public static function sanitize_social_trending_max_per_platform( $value ): int {
+        return self::clamp_int_option( $value, 1, 20, 5 );
+    }
+
+    public static function sanitize_social_trending_max_age_hours( $value ): int {
+        return self::clamp_int_option( $value, 1, 72, 24 );
+    }
+
+    public static function sanitize_social_trending_min_engagement( $value ): int {
+        return self::clamp_int_option( $value, 0, 100000, 20 );
+    }
+
+    /** One entry per line; trimmed, de-duplicated, at most $max entries of $len characters. */
+    private static function sanitize_lines( $value, int $max, int $len ): array {
+        $value = is_array( $value ) ? implode( "\n", $value ) : (string) wp_unslash( (string) $value );
+        $out   = [];
+        foreach ( preg_split( '/[\r\n]+/', $value ) as $line ) {
+            $line = trim( wp_strip_all_tags( (string) $line ) );
+            $line = function_exists( 'mb_substr' ) ? mb_substr( $line, 0, $len ) : substr( $line, 0, $len );
+            $key  = function_exists( 'mb_strtolower' ) ? mb_strtolower( $line ) : strtolower( $line );
+            if ( '' !== $line && ! isset( $out[ $key ] ) ) {
+                $out[ $key ] = $line;
+            }
+            if ( count( $out ) >= $max ) {
+                break;
+            }
+        }
+        return array_values( $out );
+    }
+
+    /** Posts containing one of these words or phrases (whole words, any case) are left out. */
+    public static function sanitize_social_trending_excluded_words( $value ): string {
+        return implode( "\n", self::sanitize_lines( $value, 100, 60 ) );
+    }
+
+    public static function get_social_trending_excluded_words(): array {
+        $raw = get_option( 'presshub_ai_social_trending_excluded_words', self::SOCIAL_TRENDING_DEFAULT_EXCLUDED );
+        return array_values( array_filter( explode( "\n", self::sanitize_social_trending_excluded_words( $raw ) ) ) );
+    }
+
+    public static function sanitize_social_trending_keywords( $value ): string {
+        return implode( "\n", self::sanitize_lines( $value, 20, 60 ) );
+    }
+
+    /** Instagram hashtags: letters, digits and underscores, without '#'. At most 5 (Graph API allows 30 per week). */
+    public static function sanitize_social_trending_hashtags( $value ): string {
+        $tags = [];
+        foreach ( self::sanitize_lines( $value, 20, 60 ) as $tag ) {
+            $tag = ltrim( $tag, '#' );
+            $tag = function_exists( 'mb_strtolower' ) ? mb_strtolower( $tag ) : strtolower( $tag );
+            if ( preg_match( '/^[\p{L}\p{N}_]{1,60}$/u', $tag ) && ! in_array( $tag, $tags, true ) ) {
+                $tags[] = $tag;
+            }
+            if ( count( $tags ) >= 5 ) {
+                break;
+            }
+        }
+        return implode( "\n", $tags );
+    }
+
+    /** Facebook Page URLs, normalised to https://www.facebook.com/<page>. */
+    public static function sanitize_social_trending_facebook_pages( $value ): string {
+        $pages = [];
+        foreach ( self::sanitize_lines( $value, 30, 300 ) as $line ) {
+            if ( ! preg_match( '#^https?://(?:www\.|m\.|web\.)?facebook\.com/(.+)$#i', $line, $m ) ) {
+                continue;
+            }
+            $path = trim( (string) parse_url( 'https://x/' . $m[1], PHP_URL_PATH ), '/' );
+            $query = (string) parse_url( 'https://x/' . $m[1], PHP_URL_QUERY );
+            if ( 'profile.php' === $path && preg_match( '/(?:^|&)id=(\d+)/', $query, $q ) ) {
+                $url = 'https://www.facebook.com/profile.php?id=' . $q[1];
+            } elseif ( preg_match( '#^[A-Za-z0-9.\-]{2,100}$#', $path ) ) {
+                $url = 'https://www.facebook.com/' . $path;
+            } else {
+                continue;
+            }
+            if ( ! in_array( $url, $pages, true ) ) {
+                $pages[] = $url;
+            }
+        }
+        return implode( "\n", $pages );
+    }
+
+    public static function sanitize_social_trending_category( $value ): string {
+        $value = trim( wp_strip_all_tags( (string) wp_unslash( (string) $value ) ) );
+        $value = function_exists( 'mb_substr' ) ? mb_substr( $value, 0, 100 ) : substr( $value, 0, 100 );
+        return '' !== $value ? $value : self::SOCIAL_TRENDING_DEFAULT_CATEGORY;
+    }
+
+    /** daily: one post per day, updated each run; rolling: one post, always updated; each: a new post every run. */
+    public static function sanitize_social_trending_post_mode( $value ): string {
+        $value = (string) $value;
+        return in_array( $value, [ 'daily', 'rolling', 'each' ], true ) ? $value : 'daily';
+    }
+
+    public static function sanitize_social_trending_post_status( $value ): string {
+        return 'draft' === (string) $value ? 'draft' : 'publish';
+    }
+
+    public static function sanitize_social_trending_title( $value ): string {
+        $value = trim( wp_strip_all_tags( (string) wp_unslash( (string) $value ) ) );
+        $value = function_exists( 'mb_substr' ) ? mb_substr( $value, 0, 200 ) : substr( $value, 0, 200 );
+        return '' !== $value ? $value : self::SOCIAL_TRENDING_DEFAULT_TITLE;
+    }
+
+    public static function get_social_trending_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_social_trending_enabled', 0 );
+    }
+
+    public static function get_social_trending_interval_hours(): int {
+        return self::sanitize_social_trending_interval_hours( get_option( 'presshub_ai_social_trending_interval_hours', 6 ) );
+    }
+
+    /**
+     * Platforms switched on for the roundup.
+     *
+     * @return string[] Subset of x, tiktok, instagram, facebook.
+     */
+    public static function get_social_trending_platforms(): array {
+        $out = [];
+        foreach ( [ 'x', 'tiktok', 'instagram', 'facebook' ] as $p ) {
+            if ( 1 === (int) get_option( 'presshub_ai_social_trending_platform_' . $p, 1 ) ) {
+                $out[] = $p;
+            }
+        }
+        return $out;
+    }
+
+    public static function get_social_trending_keywords(): array {
+        $raw = get_option( 'presshub_ai_social_trending_keywords', self::SOCIAL_TRENDING_DEFAULT_KEYWORDS );
+        $raw = '' === trim( (string) $raw ) ? self::SOCIAL_TRENDING_DEFAULT_KEYWORDS : $raw;
+        return array_values( array_filter( explode( "\n", self::sanitize_social_trending_keywords( $raw ) ) ) );
+    }
+
+    public static function get_social_trending_hashtags(): array {
+        $raw = get_option( 'presshub_ai_social_trending_hashtags', self::SOCIAL_TRENDING_DEFAULT_HASHTAGS );
+        return array_values( array_filter( explode( "\n", self::sanitize_social_trending_hashtags( $raw ) ) ) );
+    }
+
+    public static function get_social_trending_facebook_pages(): array {
+        // Until the setting is saved, the starter list applies, so Facebook works out of the box.
+        return array_values( array_filter( explode( "\n", self::sanitize_social_trending_facebook_pages( get_option( 'presshub_ai_social_trending_facebook_pages', self::SOCIAL_TRENDING_DEFAULT_FACEBOOK_PAGES ) ) ) ) );
+    }
+
+    public static function get_social_trending_category(): string {
+        return self::sanitize_social_trending_category( get_option( 'presshub_ai_social_trending_category', self::SOCIAL_TRENDING_DEFAULT_CATEGORY ) );
+    }
+
+    public static function get_social_trending_post_mode(): string {
+        return self::sanitize_social_trending_post_mode( get_option( 'presshub_ai_social_trending_post_mode', 'daily' ) );
+    }
+
+    public static function get_social_trending_post_status(): string {
+        return self::sanitize_social_trending_post_status( get_option( 'presshub_ai_social_trending_post_status', 'publish' ) );
+    }
+
+    public static function get_social_trending_title(): string {
+        return self::sanitize_social_trending_title( get_option( 'presshub_ai_social_trending_title', self::SOCIAL_TRENDING_DEFAULT_TITLE ) );
+    }
+
+    public static function get_social_trending_max_items(): int {
+        return self::sanitize_social_trending_max_items( get_option( 'presshub_ai_social_trending_max_items', 15 ) );
+    }
+
+    public static function get_social_trending_max_per_platform(): int {
+        return self::sanitize_social_trending_max_per_platform( get_option( 'presshub_ai_social_trending_max_per_platform', 5 ) );
+    }
+
+    public static function get_social_trending_max_age_hours(): int {
+        return self::sanitize_social_trending_max_age_hours( get_option( 'presshub_ai_social_trending_max_age_hours', 24 ) );
+    }
+
+    public static function get_social_trending_min_engagement(): int {
+        return self::sanitize_social_trending_min_engagement( get_option( 'presshub_ai_social_trending_min_engagement', 20 ) );
+    }
+
     /**
      * Helper to retrieve the operator-configurable "Raw debug dump (developer use)" TTS
      * toggle. Issue #80 — Settings-First: when enabled, every Gemini TTS API
@@ -4107,7 +4343,7 @@ class PressHub_AI_Settings_Storage {
         ];
 
         // Press release inbox knobs live on the Daily Briefing tab.
-        $briefing_map = array_merge( $briefing_map, self::get_press_inbox_options_map(), self::get_social_monitor_options_map() );
+        $briefing_map = array_merge( $briefing_map, self::get_press_inbox_options_map(), self::get_social_monitor_options_map(), self::get_social_trending_options_map() );
 
         switch ( $section ) {
             case 'coauthor':

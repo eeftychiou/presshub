@@ -88,6 +88,28 @@ $presshub_ai_options = [
     'presshub_ai_social_monitor_posts',
     'presshub_ai_social_monitor_last_scan',
     'presshub_ai_social_monitor_scan_started',
+    'presshub_ai_social_trending_enabled',
+    'presshub_ai_social_trending_interval_hours',
+    'presshub_ai_social_trending_platform_x',
+    'presshub_ai_social_trending_platform_tiktok',
+    'presshub_ai_social_trending_platform_instagram',
+    'presshub_ai_social_trending_platform_facebook',
+    'presshub_ai_social_trending_keywords',
+    'presshub_ai_social_trending_hashtags',
+    'presshub_ai_social_trending_facebook_pages',
+    'presshub_ai_social_trending_category',
+    'presshub_ai_social_trending_post_mode',
+    'presshub_ai_social_trending_post_status',
+    'presshub_ai_social_trending_title',
+    'presshub_ai_social_trending_max_items',
+    'presshub_ai_social_trending_max_per_platform',
+    'presshub_ai_social_trending_max_age_hours',
+    'presshub_ai_social_trending_min_engagement',
+    'presshub_ai_social_trending_excluded_words',
+    'presshub_ai_social_trending_state',
+    'presshub_ai_social_trending_candidates',
+    'presshub_ai_social_trending_posts',
+    'presshub_ai_social_trending_ig_tag_ids',
     'presshub_ai_image_metadata_enabled',
     'presshub_ai_seo_auto_enabled',
     'presshub_ai_briefing_seo_enhance_enabled',
@@ -167,3 +189,4 @@ if ( function_exists( 'delete_post_meta_by_key' ) ) {
 // Belt-and-braces: no scheduled work may survive uninstall.
 wp_clear_scheduled_hook( 'presshub_ai_cleanup_research' );
 wp_clear_scheduled_hook( 'presshub_ai_do_research' );
+wp_clear_scheduled_hook( 'presshub_ai_social_trending_tick' );

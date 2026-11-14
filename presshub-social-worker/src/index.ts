@@ -3,6 +3,7 @@ import { createApp } from './app';
 import { PressHubPoller } from './poller';
 import { WorkerLogger } from './logger';
 import { SocialMonitor } from './monitor/monitor-client';
+import { TrendingClient } from './trending/trending-client';
 
 export { WorkerLogger } from './logger';
 
@@ -44,7 +45,10 @@ export function startServer() {
       pollIntervalMs: config.pollIntervalMs,
       monitor: process.env.PRESSHUB_MONITOR_DISABLED === 'true'
         ? undefined
-        : new SocialMonitor({ wpUrl: WP_URL, workerSecret: SECRET })
+        : new SocialMonitor({ wpUrl: WP_URL, workerSecret: SECRET }),
+      trending: process.env.PRESSHUB_TRENDING_DISABLED === 'true'
+        ? undefined
+        : new TrendingClient({ wpUrl: WP_URL, workerSecret: SECRET })
     });
     activePoller.start();
   } else {

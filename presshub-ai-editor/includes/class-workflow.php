@@ -39,6 +39,12 @@ class PressHub_AI_Workflow {
             return;
         }
 
+        // The Trending in Cyprus social roundup is written by the worker / cron
+        // and follows its own "New posts are" setting.
+        if ( ! empty( get_post_meta( $post->ID, '_presshub_social_trending_key', true ) ) ) {
+            return;
+        }
+
         // Cron and headless flows run without a logged-in user (user 0) where
         // current_user_can() is unreliable. Never block scheduled/cron publishing.
         if ( ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
