@@ -2687,6 +2687,8 @@ class PressHub_AI_Settings_Render {
         $max_age   = $S::get_social_trending_max_age_hours();
         $min_eng   = $S::get_social_trending_min_engagement();
         $excluded  = implode( "\n", $S::get_social_trending_excluded_words() );
+        $brief_on  = $S::get_social_trending_briefing_enabled();
+        $brief_n   = $S::get_social_trending_briefing_count();
 
         $state    = class_exists( 'PressHub_AI_Social_Trending' ) ? PressHub_AI_Social_Trending::get_state() : [];
         $fmt      = static function ( $ts ) {
@@ -2780,6 +2782,14 @@ class PressHub_AI_Settings_Render {
                 <br /><label><?php echo esc_html__( 'Only posts from the last (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="72" name="presshub_ai_social_trending_max_age_hours" id="presshub_ai_social_trending_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
                 &nbsp; <label><?php echo esc_html__( 'Minimum engagement', 'presshub-ai-editor' ); ?> <input type="number" min="0" max="100000" name="presshub_ai_social_trending_min_engagement" id="presshub_ai_social_trending_min_engagement" value="<?php echo self::esc_attr_safe( (string) $min_eng ); ?>" class="small-text" /></label>
                 <p class="description"><?php echo esc_html__( 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. At most two posts per account, and a story that several posts share (same link or same opening text) is shown once.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_briefing_enabled"><?php echo esc_html__( 'Use in the Briefing', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <label><input type="checkbox" name="presshub_ai_social_trending_briefing_enabled" id="presshub_ai_social_trending_briefing_enabled" value="1" <?php checked( $brief_on ); ?> /> <?php echo esc_html__( 'Add the top trending posts to each briefing edition', 'presshub-ai-editor' ); ?></label>
+                &nbsp; <label><?php echo esc_html__( 'Posts per edition', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="15" name="presshub_ai_social_trending_briefing_count" id="presshub_ai_social_trending_briefing_count" value="<?php echo self::esc_attr_safe( (string) $brief_n ); ?>" class="small-text" /></label>
+                <p class="description"><?php echo esc_html__( 'The best posts from the roundups since the last edition go into the harvest as one item, "What Cyprus is talking about on social media", marked as public conversation rather than verified news. The brief and the podcast get one short social segment from it. Each post is used once; posts by monitored accounts and by the news sites in the source list are left out, since those already reach the harvest.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>

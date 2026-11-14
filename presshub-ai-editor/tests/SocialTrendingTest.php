@@ -456,6 +456,58 @@ $GLOBALS['WP_UPDATE_POST_CALLS'] = 0;
 ( new PressHub_AI_Workflow() )->enforce_editorial_workflow( 'publish', 'new', (object) [ 'ID' => 900, 'post_type' => 'post', 'post_content' => 'x' ] );
 st_check( 'workflow: roundup post not sent back to pending', 0 === $GLOBALS['WP_UPDATE_POST_CALLS'] );
 
+// =========================================================================
+// 11. Briefing: trending posts as one harvest item
+// =========================================================================
+unset( $GLOBALS['ST_NOW'] );
+$sources = json_encode( [
+    [ 'id' => 's1', 'name' => 'Philenews', 'url' => 'https://www.philenews.com/', 'type' => 'text_news', 'enabled' => true, 'category' => 'General', 'notes' => '', 'max_articles' => 5 ],
+    [ 'id' => 's2', 'name' => 'Omega', 'url' => 'https://omegalive.com.cy/', 'type' => 'text_news', 'enabled' => true, 'category' => 'General', 'notes' => '', 'max_articles' => 5 ],
+    [ 'id' => 's3', 'name' => 'BBC', 'url' => 'https://www.bbc.com/news', 'type' => 'text_news', 'enabled' => true, 'category' => 'General', 'notes' => '', 'max_articles' => 5 ],
+    [ 'id' => 's4', 'name' => 'Volt', 'url' => 'https://x.com/VoltCyprus', 'type' => 'social_x', 'enabled' => true, 'category' => 'Social', 'notes' => '', 'max_articles' => 5 ],
+] );
+st_reset( [ 'presshub_ai_briefing_sources' => $sources ] );
+$names = $T::news_site_names();
+st_check( 'briefing: news site names from text/RSS sources only', [ 'philenews', 'omegalive', 'bbc' ] === $names );
+st_check( 'briefing: news accounts recognised', $T::is_news_account( [ 'handle' => 'philenews' ], $names ) && $T::is_news_account( [ 'handle' => 'omegalivecy' ], $names ) && $T::is_news_account( [ 'handle' => 'BBCcy' ], $names ) );
+st_check( 'briefing: short names do not catch other accounts', ! $T::is_news_account( [ 'handle' => 'bbcfoodlover' ], $names ) && ! $T::is_news_account( [ 'handle' => 'acct1' ], $names ) );
+
+$bi = [];
+foreach ( [
+    st_post( 'x', '61', 300, 30, [ 'text' => 'Πρώτη δημοφιλής ανάρτηση' ] ),
+    st_post( 'x', '62', 200, 30, [ 'text' => 'Δεύτερη ανάρτηση' ] ),
+    st_post( 'facebook', '63', 900, 30, [ 'handle' => 'philenews', 'text' => 'Είδηση από μέσο' ] ),
+    st_post( 'x', '64', 800, 30, [ 'handle' => 'voltcyprus', 'text' => 'Από παρακολουθούμενο λογαριασμό' ] ),
+    st_post( 'x', '65', 100, 30, [ 'text' => str_repeat( 'λ', 700 ) ] ),
+] as $raw ) {
+    $bi[] = $T::normalize_item( $raw, $now );
+}
+$T::add_to_briefing_pool( $bi, $now );
+st_check( 'briefing: off by default, nothing taken', [] === $T::take_for_briefing( '2026-11-14', 'morning', $now ) );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_briefing_enabled'] = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_briefing_count']   = 2;
+$arts = $T::take_for_briefing( '2026-11-14', 'morning', $now );
+st_check( 'briefing: one grouped item', 1 === count( $arts ) && ! empty( $arts[0]['is_social_post'] ) && ! empty( $arts[0]['is_trending'] ) );
+st_check( 'briefing: best two, news site and monitored account left out', [ 'x_61', 'x_62' ] === $arts[0]['trending_keys'] );
+st_check( 'briefing: item says it is public conversation', false !== strpos( $arts[0]['content'], 'όχι επιβεβαιωμένες ειδήσεις' ) && false !== strpos( $arts[0]['content'], '@acct61' ) && false !== strpos( $arts[0]['content'], 'https://x.com/acct61/status/61' ) );
+$arts2 = $T::take_for_briefing( '2026-11-14', 'noon', $now + 60 );
+st_check( 'briefing: posts are not used twice', 1 === count( $arts2 ) && [ 'x_65' ] === $arts2[0]['trending_keys'] );
+st_check( 'briefing: long text cut', false !== strpos( $arts2[0]['content'], str_repeat( 'λ', $T::BRIEFING_TEXT_CHARS ) . '…' ) && false === strpos( $arts2[0]['content'], str_repeat( 'λ', $T::BRIEFING_TEXT_CHARS + 1 ) ) );
+st_check( 'briefing: nothing left', [] === $T::take_for_briefing( '2026-11-15', 'morning', $now + 120 ) );
+$T::add_to_briefing_pool( [ $bi[0] ], $now + 200 );
+st_check( 'briefing: re-pooling keeps the used marker', '2026-11-14|morning' === $GLOBALS['OPTIONS_STORE'][ $T::OPTION_BRIEFING_POOL ]['x_61']['used_in'] );
+$T::add_to_briefing_pool( [], $now + $T::BRIEFING_POOL_TTL + 3600 );
+st_check( 'briefing: old pool entries dropped', [] === $GLOBALS['OPTIONS_STORE'][ $T::OPTION_BRIEFING_POOL ] );
+// Too old for the age window: not offered even if unused.
+st_reset( [ 'presshub_ai_briefing_sources' => $sources, 'presshub_ai_social_trending_briefing_enabled' => 1 ] );
+$T::add_to_briefing_pool( [ $T::normalize_item( st_post( 'x', '66', 300, 30 ), $now ) ], $now );
+st_check( 'briefing: posts past the age window skipped', [] === $T::take_for_briefing( '2026-11-15', 'morning', $now + 25 * 3600 ) );
+// finalize_run feeds the pool.
+st_reset();
+$GLOBALS['OPTIONS_STORE'][ $T::OPTION_CANDIDATES ] = [ 'x_67' => $T::normalize_item( st_post( 'x', '67', 300, 30 ), $now ) ];
+$T::finalize_run( $now );
+st_check( 'briefing: a run adds its picks to the pool', isset( $GLOBALS['OPTIONS_STORE'][ $T::OPTION_BRIEFING_POOL ]['x_67'] ) );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "{$failures} failure(s)\n" );
     exit( 1 );

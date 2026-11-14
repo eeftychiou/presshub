@@ -31,6 +31,12 @@ class PressHub_AI_Social_Trending {
     const OPTION_CANDIDATES = 'presshub_ai_social_trending_candidates';
     const OPTION_POSTS      = 'presshub_ai_social_trending_posts';
     const OPTION_IG_TAG_IDS = 'presshub_ai_social_trending_ig_tag_ids';
+    /** Posts picked by roundups, kept for the briefing until used or too old. */
+    const OPTION_BRIEFING_POOL = 'presshub_ai_social_trending_briefing_pool';
+    /** Pool entries older than this are dropped (seconds). */
+    const BRIEFING_POOL_TTL = 259200;
+    /** Characters of each post's text that go into the briefing item. */
+    const BRIEFING_TEXT_CHARS = 500;
 
     const CRON_HOOK  = 'presshub_ai_social_trending_tick';
     const RUN_ACTION = 'presshub_ai_social_trending_run_now';
@@ -826,6 +832,10 @@ class PressHub_AI_Social_Trending {
             }
         }
 
+        if ( ! empty( $picked ) ) {
+            self::add_to_briefing_pool( $picked, $now );
+        }
+
         $state['open']           = false;
         $state['worker_pending'] = false;
         $state['last_finished']  = $now;
@@ -837,6 +847,188 @@ class PressHub_AI_Social_Trending {
         self::save_state( $state );
         update_option( self::OPTION_CANDIDATES, [], false );
         return $post_id;
+    }
+
+    /* ------------------------------------------------------------------
+     * Briefing: trending posts as one harvest item
+     * ---------------------------------------------------------------- */
+
+    /**
+     * Keep a run's picks for the next briefing edition. A post already in the
+     * pool keeps its used marker; its numbers and score are refreshed.
+     */
+    public static function add_to_briefing_pool( array $picked, int $now ): void {
+        $pool = get_option( self::OPTION_BRIEFING_POOL, [] );
+        $pool = is_array( $pool ) ? $pool : [];
+        foreach ( $picked as $it ) {
+            if ( ! is_array( $it ) || empty( $it['key'] ) ) {
+                continue;
+            }
+            $key           = (string) $it['key'];
+            $it['used_in'] = (string) ( $pool[ $key ]['used_in'] ?? '' );
+            $it['pooled']  = (int) ( $pool[ $key ]['pooled'] ?? $now );
+            $pool[ $key ]  = $it;
+        }
+        foreach ( $pool as $key => $it ) {
+            if ( $now - (int) ( $it['created_ts'] ?? 0 ) > self::BRIEFING_POOL_TTL ) {
+                unset( $pool[ $key ] );
+            }
+        }
+        update_option( self::OPTION_BRIEFING_POOL, $pool, false );
+    }
+
+    /**
+     * Short names of the news sites in the briefing source list (philenews,
+     * sigmalive, ...), to recognise their social accounts.
+     *
+     * @return string[]
+     */
+    public static function news_site_names(): array {
+        $names = [];
+        foreach ( PressHub_AI_Settings_Storage::get_briefing_sources() as $src ) {
+            if ( ! in_array( (string) ( $src['type'] ?? '' ), [ 'text_news', 'rss_feed' ], true ) ) {
+                continue;
+            }
+            $host = strtolower( (string) parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) );
+            $host = (string) preg_replace( '/^(www|m|en|el|gr)\./', '', $host );
+            $name = (string) preg_replace( '/[^a-z0-9]/', '', explode( '.', $host )[0] ?? '' );
+            if ( '' !== $name ) {
+                $names[ $name ] = true;
+            }
+        }
+        return array_keys( $names );
+    }
+
+    /**
+     * Is this post by a news site in the source list? Its handle, without
+     * punctuation, is the site's name or starts with it (omegalivecy for
+     * omegalive.com.cy). Short names (bbc, rik) must match exactly or with
+     * a cy suffix, so they do not catch unrelated accounts.
+     */
+    public static function is_news_account( array $item, array $site_names ): bool {
+        $h = (string) preg_replace( '/[^a-z0-9]/', '', strtolower( (string) ( $item['handle'] ?? '' ) ) );
+        if ( '' === $h ) {
+            return false;
+        }
+        foreach ( $site_names as $n ) {
+            if ( $h === $n || $h === $n . 'cy' || ( strlen( $n ) >= 5 && 0 === strpos( $h, $n ) ) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The trending posts for one briefing edition, as a single harvest item.
+     * Picks the best unused posts from the pool, leaving out posts by monitored
+     * accounts (they reach the harvest on their own) and by news sites in the
+     * source list, and marks them used for this edition.
+     *
+     * @return array[] Zero or one article.
+     */
+    public static function take_for_briefing( string $date, string $edition, ?int $now = null ): array {
+        if ( ! PressHub_AI_Settings_Storage::get_social_trending_briefing_enabled() ) {
+            return [];
+        }
+        $now   = $now ?? time();
+        $pool  = get_option( self::OPTION_BRIEFING_POOL, [] );
+        $pool  = is_array( $pool ) ? $pool : [];
+        $floor = $now - PressHub_AI_Settings_Storage::get_social_trending_max_age_hours() * 3600;
+        $sites = self::news_site_names();
+        $monitored = [];
+        if ( class_exists( 'PressHub_AI_Social_Monitor' ) ) {
+            foreach ( PressHub_AI_Social_Monitor::get_targets() as $t ) {
+                $monitored[ $t['platform'] . ':' . strtolower( (string) $t['handle'] ) ] = true;
+            }
+        }
+
+        $cands = [];
+        foreach ( $pool as $key => $it ) {
+            if ( '' !== (string) ( $it['used_in'] ?? '' ) || (int) ( $it['created_ts'] ?? 0 ) < $floor ) {
+                continue;
+            }
+            if ( isset( $monitored[ $it['platform'] . ':' . strtolower( (string) $it['handle'] ) ] ) || self::is_news_account( $it, $sites ) ) {
+                continue;
+            }
+            if ( '' === trim( (string) ( $it['text'] ?? '' ) ) ) {
+                continue;
+            }
+            $it['score']   = self::score( $it, $now );
+            $cands[ $key ] = $it;
+        }
+        if ( empty( $cands ) ) {
+            return [];
+        }
+        uasort( $cands, static function ( $a, $b ) {
+            return $b['score'] <=> $a['score'];
+        } );
+        $picked = array_slice( $cands, 0, PressHub_AI_Settings_Storage::get_social_trending_briefing_count(), true );
+        foreach ( array_keys( $picked ) as $key ) {
+            $pool[ $key ]['used_in'] = $date . '|' . $edition;
+        }
+        update_option( self::OPTION_BRIEFING_POOL, $pool, false );
+
+        $state = self::get_state();
+        return [ self::briefing_article( array_values( $picked ), (int) ( $state['last_post_id'] ?? 0 ), $now ) ];
+    }
+
+    /**
+     * One harvest item that lists the trending posts.
+     */
+    public static function briefing_article( array $items, int $roundup_id, int $now ): array {
+        $fmt   = static function ( int $ts ): string {
+            return function_exists( 'wp_date' ) ? wp_date( 'j/n H:i', $ts ) : gmdate( 'j/n H:i', $ts );
+        };
+        $lines   = [];
+        $lines[] = 'Δημοφιλείς αναρτήσεις για την Κύπρο στα μέσα κοινωνικής δικτύωσης, με βάση τις αντιδράσεις των χρηστών. Δείχνουν τι συζητά το κοινό: είναι απόψεις και ισχυρισμοί λογαριασμών, όχι επιβεβαιωμένες ειδήσεις. Αν χρησιμοποιηθούν, να παρουσιαστούν ως σύντομη αναφορά στη δημόσια συζήτηση, με απόδοση στον λογαριασμό.';
+        $keys    = [];
+        foreach ( $items as $i => $it ) {
+            $keys[] = (string) $it['key'];
+            $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? $it['platform'];
+            $name   = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : (string) $it['handle'];
+            $text   = trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) );
+            if ( ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text ) ) > self::BRIEFING_TEXT_CHARS ) {
+                $text = ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, self::BRIEFING_TEXT_CHARS ) : substr( $text, 0, self::BRIEFING_TEXT_CHARS ) ) . '…';
+            }
+            $lines[] = sprintf(
+                "%d. %s (@%s) στο %s, %s · %d likes, %d σχόλια, %d κοινοποιήσεις\n%s\n%s",
+                $i + 1,
+                $name,
+                $it['handle'],
+                $label,
+                $fmt( (int) $it['created_ts'] ),
+                (int) $it['likes'],
+                (int) $it['comments'],
+                (int) $it['shares'],
+                $text,
+                $it['url']
+            );
+        }
+        $content = implode( "\n\n", $lines );
+        $url     = $roundup_id > 0 && function_exists( 'get_permalink' ) ? (string) get_permalink( $roundup_id ) : '';
+        if ( '' === $url ) {
+            $url = (string) ( $items[0]['url'] ?? '' );
+        }
+        return [
+            'id'             => 'st_' . substr( md5( implode( ',', $keys ) ), 0, 12 ),
+            'url'            => $url,
+            'title'          => 'Τι συζητά η Κύπρος στα social',
+            'content'        => $content,
+            'source'         => 'Μέσα κοινωνικής δικτύωσης · δημοφιλείς αναρτήσεις',
+            'source_type'    => 'social_post',
+            'tier'           => 'social_post',
+            'platform'       => 'mixed',
+            'handle'         => '',
+            'media_type'     => 'none',
+            'has_transcript' => false,
+            'published_at'   => gmdate( 'c', $now ),
+            'char_count'     => function_exists( 'mb_strlen' ) ? mb_strlen( $content ) : strlen( $content ),
+            'is_manual'      => false,
+            'is_social_post' => true,
+            'is_trending'    => true,
+            'trending_keys'  => $keys,
+            'harvested_at'   => gmdate( 'c', $now ),
+        ];
     }
 
     /**
