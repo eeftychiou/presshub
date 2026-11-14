@@ -1998,6 +1998,7 @@ class PressHub_AI_Settings_Render {
             </div>
             <p class="description" style="margin-top: 8px;">
                 <?php echo esc_html__( 'Active text/RSS sources are crawled every morning during the harvest window. Multi-modal (video/audio) sources are preserved for upcoming ingestion pipelines.', 'presshub-ai-editor' ); ?>
+                <strong><?php echo esc_html__( 'Changes to this list are stored only when you click "Save Daily Briefing Settings".', 'presshub-ai-editor' ); ?></strong>
             </p>
         </div>
         <?php
