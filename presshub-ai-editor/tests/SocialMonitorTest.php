@@ -225,6 +225,21 @@ $p1       = $h->harvest_all( [], '2026-11-14', 30, 'morning' );
 sm_check( 'harvester: social post in pool', 1 === count( $p1['articles'] ) && 'sm_tiktok_7400000000000000001' === $p1['articles'][0]['id'] && 1 === $p1['social_posts_added'] );
 $p2 = $h->harvest_all( [], '2026-11-14', 30, 'morning' );
 sm_check( 'harvester: re-harvest keeps it', 1 === count( $p2['articles'] ) && 0 === $p2['social_posts_added'] && 1 === ( $p2['social_posts_total'] ?? 0 ) );
+// Trending item merges after the monitored accounts' posts.
+class SM_Test_Trending_Harvester extends SM_Test_Harvester {
+    public $trending = [];
+    protected function take_trending_posts( string $date, string $edition ): array {
+        $out = $this->trending;
+        $this->trending = [];
+        return $out;
+    }
+}
+$GLOBALS['UPLOAD_DIR'] = sys_get_temp_dir() . '/presshub-sm-test-' . uniqid();
+$ht           = new SM_Test_Trending_Harvester();
+$ht->queue    = [ $tiktok_article ];
+$ht->trending = [ PressHub_AI_Social_Trending::briefing_article( [ PressHub_AI_Social_Trending::normalize_item( [ 'platform' => 'x', 'id' => '501', 'handle' => 'someone', 'author_name' => 'Someone', 'text' => 'Συζήτηση', 'created_at' => gmdate( 'c', time() - 600 ), 'metrics' => [ 'likes' => 50 ] ], time() ) ], 0, time() ) ];
+$p3 = $ht->harvest_all( [], '2026-11-14', 30, 'morning' );
+sm_check( 'harvester: trending item merged after monitored posts', 2 === count( $p3['articles'] ) && ! empty( $p3['articles'][1]['is_trending'] ) && 1 === $p3['social_posts_added'] );
 
 // =========================================================================
 // 6. Curator

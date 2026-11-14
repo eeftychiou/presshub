@@ -2677,6 +2677,8 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_social_trending_max_age_hours'     => [ __CLASS__, 'sanitize_social_trending_max_age_hours' ],
             'presshub_ai_social_trending_min_engagement'    => [ __CLASS__, 'sanitize_social_trending_min_engagement' ],
             'presshub_ai_social_trending_excluded_words'    => [ __CLASS__, 'sanitize_social_trending_excluded_words' ],
+            'presshub_ai_social_trending_briefing_enabled'  => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_trending_briefing_count'    => [ __CLASS__, 'sanitize_social_trending_briefing_count' ],
         ];
     }
 
@@ -2687,6 +2689,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_social_trending_platform_tiktok',
             'presshub_ai_social_trending_platform_instagram',
             'presshub_ai_social_trending_platform_facebook',
+            'presshub_ai_social_trending_briefing_enabled',
         ];
     }
 
@@ -2708,6 +2711,10 @@ class PressHub_AI_Settings_Storage {
 
     public static function sanitize_social_trending_min_engagement( $value ): int {
         return self::clamp_int_option( $value, 0, 100000, 20 );
+    }
+
+    public static function sanitize_social_trending_briefing_count( $value ): int {
+        return self::clamp_int_option( $value, 1, 15, 5 );
     }
 
     /** One entry per line; trimmed, de-duplicated, at most $max entries of $len characters. */
@@ -2872,6 +2879,16 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_social_trending_min_engagement(): int {
         return self::sanitize_social_trending_min_engagement( get_option( 'presshub_ai_social_trending_min_engagement', 20 ) );
+    }
+
+    /** Add the top trending posts to each briefing edition (off by default). */
+    public static function get_social_trending_briefing_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_social_trending_briefing_enabled', 0 );
+    }
+
+    /** How many trending posts go into one edition. */
+    public static function get_social_trending_briefing_count(): int {
+        return self::sanitize_social_trending_briefing_count( get_option( 'presshub_ai_social_trending_briefing_count', 5 ) );
     }
 
     /**
