@@ -130,6 +130,15 @@ npm run login -- tiktok --reader
 ```
 Sessions are saved in `sessions-reader/` (or `PRESSHUB_MONITOR_SESSIONS_DIR`). For many X accounts, create a private List on the reader account with all of them and paste its URL into the **X List** setting: the worker then reads one page instead of one per account. `PRESSHUB_MONITOR_DISABLED=true` turns the monitor off on this worker.
 
+### Trending in Cyprus roundup (X, TikTok, Facebook)
+WordPress can publish a roundup post of the most engaging recent posts about Cyprus, refreshed every few hours (Settings → PressHub AI → Daily Briefing Hub → **Trending in Cyprus: Social Roundup Post**). When a refresh is due, the poller gets a plan from `GET /wp-json/presshub-social/v1/trending/plan` with ready-made URLs: one X search on the Top tab, a few TikTok video searches and the Facebook Pages you listed. The worker opens them one at a time with the **reader** sessions, reads the posts and their likes / comments / shares / views from the JSON the pages load, and sends them to `POST /trending/posts`. WordPress ranks them and writes the post. Instagram is read by WordPress itself through the Graph API, so it needs no worker.
+
+It runs after the Social Monitor, never at the same time. Add a Facebook reader session if you list Pages:
+```bash
+npm run login -- facebook --reader
+```
+`PRESSHUB_TRENDING_DISABLED=true` turns it off on this worker.
+
 ---
 
 ## 📡 API Endpoints

@@ -50,14 +50,14 @@ export interface ScanSession {
 
 export type ScanFn = (plan: ScanPlan) => Promise<ScanSession>;
 
-const SESSION_PLATFORM: Record<string, string> = { x: 'twitter', tiktok: 'tiktok' };
+const SESSION_PLATFORM: Record<string, string> = { x: 'twitter', tiktok: 'tiktok', facebook: 'facebook' };
 
 /**
  * Reader session file for a platform: `<monitor sessions dir>/<platform>-session.json`.
  * The monitor sessions dir is PRESSHUB_MONITOR_SESSIONS_DIR, else `sessions-reader`
  * next to the posting sessions. Falls back to the posting session (with a warning).
  */
-export function resolveReaderSession(platform: 'x' | 'tiktok', postingSessionsDir?: string): string | undefined {
+export function resolveReaderSession(platform: 'x' | 'tiktok' | 'facebook', postingSessionsDir?: string): string | undefined {
   const name = `${SESSION_PLATFORM[platform]}-session.json`;
   const postingDir = getSessionsDir(postingSessionsDir);
   const readerDir = getReaderSessionsDir(postingSessionsDir);

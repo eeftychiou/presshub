@@ -7,6 +7,7 @@ import { WorkerLogger } from './logger';
 import fs from 'fs';
 import path from 'path';
 import { SocialMonitor } from './monitor/monitor-client';
+import { TrendingClient } from './trending/trending-client';
 
 export interface ClaimedJob {
   id: number | string;
@@ -60,6 +61,8 @@ export interface PollerOptions {
   generateShortFn?: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
   /** Social Monitor run alongside job polling (WordPress decides when a scan is due). */
   monitor?: SocialMonitor;
+  /** Trending in Cyprus roundup reader, run after the monitor (WordPress decides when a run is due). */
+  trending?: TrendingClient;
 }
 
 export interface PollStats {
@@ -91,6 +94,8 @@ export class PressHubPoller {
   private readonly generateVideoFn: (params: any) => Promise<VideoResult>;
   private readonly generateShortFn: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
   private readonly monitor?: SocialMonitor;
+  private readonly trending?: TrendingClient;
+  private scansRunning = false;
 
   private pollTimer?: NodeJS.Timeout;
   private isRunning: boolean = false;
@@ -117,6 +122,7 @@ export class PressHubPoller {
     this.generateVideoFn = options.generateVideoFn || generateVideo;
     this.generateShortFn = options.generateShortFn || generateShortVideo;
     this.monitor = options.monitor;
+    this.trending = options.trending;
   }
 
   /**
@@ -465,9 +471,22 @@ export class PressHubPoller {
    * the previous one is still running.
    */
   private runMonitor(): void {
-    if (!this.monitor) return;
-    this.monitor.runOnce().catch((err: any) => {
-      WorkerLogger.warn('Poller', `Social monitor cycle failed: ${err.message}`);
+    if ((!this.monitor && !this.trending) || this.scansRunning) return;
+    this.scansRunning = true;
+    // One browser scan at a time: the monitor first, then the trending roundup.
+    (async () => {
+      if (this.monitor) {
+        await this.monitor.runOnce().catch((err: any) => {
+          WorkerLogger.warn('Poller', `Social monitor cycle failed: ${err.message}`);
+        });
+      }
+      if (this.trending) {
+        await this.trending.runOnce().catch((err: any) => {
+          WorkerLogger.warn('Poller', `Trending cycle failed: ${err.message}`);
+        });
+      }
+    })().finally(() => {
+      this.scansRunning = false;
     });
   }
 

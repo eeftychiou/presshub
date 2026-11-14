@@ -262,6 +262,7 @@ class PressHub_AI_Settings_Render {
                             </tr>
                             <?php $this->render_press_inbox_rows(); ?>
                             <?php $this->render_social_monitor_rows(); ?>
+                            <?php $this->render_social_trending_rows(); ?>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
@@ -2661,6 +2662,136 @@ class PressHub_AI_Settings_Render {
                 <br /><label><?php echo esc_html__( 'Skip videos longer than (seconds)', 'presshub-ai-editor' ); ?> <input type="number" min="10" max="600" name="presshub_ai_social_monitor_max_video_seconds" id="presshub_ai_social_monitor_max_video_seconds" value="<?php echo self::esc_attr_safe( (string) $max_secs ); ?>" class="small-text" /></label>
                 &nbsp; <label><?php echo esc_html__( 'Max video file size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_monitor_max_video_mb" id="presshub_ai_social_monitor_max_video_mb" value="<?php echo self::esc_attr_safe( (string) $max_mb ); ?>" class="small-text" /></label>
                 <p class="description"><?php echo esc_html__( 'Needs a Gemini provider. Gemini accepts inline files up to about 20 MB; the worker picks the smallest X video quality that fits.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <?php
+    }
+
+    /**
+     * Trending in Cyprus: social roundup post settings.
+     */
+    public function render_social_trending_rows() {
+        $S         = 'PressHub_AI_Settings_Storage';
+        $enabled   = $S::get_social_trending_enabled();
+        $interval  = $S::get_social_trending_interval_hours();
+        $platforms = $S::get_social_trending_platforms();
+        $keywords  = implode( "\n", $S::get_social_trending_keywords() );
+        $hashtags  = implode( "\n", $S::get_social_trending_hashtags() );
+        $fb_pages  = implode( "\n", $S::get_social_trending_facebook_pages() );
+        $category  = $S::get_social_trending_category();
+        $mode      = $S::get_social_trending_post_mode();
+        $status    = $S::get_social_trending_post_status();
+        $title     = $S::get_social_trending_title();
+        $max_items = $S::get_social_trending_max_items();
+        $per_plat  = $S::get_social_trending_max_per_platform();
+        $max_age   = $S::get_social_trending_max_age_hours();
+        $min_eng   = $S::get_social_trending_min_engagement();
+
+        $state    = class_exists( 'PressHub_AI_Social_Trending' ) ? PressHub_AI_Social_Trending::get_state() : [];
+        $fmt      = static function ( $ts ) {
+            $ts = (int) $ts;
+            return $ts > 0 ? ( function_exists( 'wp_date' ) ? wp_date( 'j/n/Y H:i', $ts ) : gmdate( 'j/n/Y H:i', $ts ) ) : __( 'never', 'presshub-ai-editor' );
+        };
+        $last_post = (int) ( $state['last_post_id'] ?? 0 );
+        $run_url   = function_exists( 'wp_nonce_url' )
+            ? wp_nonce_url( admin_url( 'admin-post.php?action=' . PressHub_AI_Social_Trending::RUN_ACTION ), PressHub_AI_Social_Trending::RUN_ACTION )
+            : '';
+        $labels = [
+            'x'         => __( 'X (worker: search, Top tab)', 'presshub-ai-editor' ),
+            'tiktok'    => __( 'TikTok (worker: video search)', 'presshub-ai-editor' ),
+            'instagram' => __( 'Instagram (Graph API hashtag top posts)', 'presshub-ai-editor' ),
+            'facebook'  => __( 'Facebook (worker: the Pages listed below)', 'presshub-ai-editor' ),
+        ];
+        ?>
+        <tr class="presshub-social-trending-heading">
+            <th scope="row" colspan="2"><h3 style="margin:1em 0 0;"><?php echo esc_html__( 'Trending in Cyprus: Social Roundup Post', 'presshub-ai-editor' ); ?></h3>
+                <p class="description" style="font-weight:normal;"><?php echo esc_html__( 'Every few hours, collect the most engaging recent posts about Cyprus and publish them as a roundup post in their own category. X, TikTok and Facebook are read by the social worker (Pull Mode, reader sessions); Instagram uses the Instagram account and Meta token from PressHub Social › API Credentials.', 'presshub-ai-editor' ); ?></p>
+                <p class="description" style="font-weight:normal;"><?php
+                    echo esc_html( sprintf(
+                        /* translators: 1: last run, 2: posts in last roundup, 3: run status */
+                        __( 'Last run: %1$s. Posts in the last roundup: %2$d. %3$s', 'presshub-ai-editor' ),
+                        $fmt( $state['last_run'] ?? 0 ),
+                        (int) ( $state['last_count'] ?? 0 ),
+                        ! empty( $state['open'] ) ? __( 'A run is waiting for the worker.', 'presshub-ai-editor' ) : ''
+                    ) );
+                    if ( $last_post > 0 && function_exists( 'get_permalink' ) ) {
+                        echo ' <a href="' . esc_url( (string) get_permalink( $last_post ) ) . '" target="_blank">' . esc_html__( 'View the roundup', 'presshub-ai-editor' ) . '</a>';
+                    }
+                    if ( '' !== (string) ( $state['last_note'] ?? '' ) ) {
+                        echo '<br />' . esc_html( (string) $state['last_note'] );
+                    }
+                ?></p>
+            </th>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_enabled"><?php echo esc_html__( 'Publish Trending Roundup', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <label><input type="checkbox" name="presshub_ai_social_trending_enabled" id="presshub_ai_social_trending_enabled" value="1" <?php checked( $enabled ); ?> /> <?php echo esc_html__( 'Collect trending Cyprus posts and publish the roundup', 'presshub-ai-editor' ); ?></label>
+                &nbsp; <label><?php echo esc_html__( 'Refresh every (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="48" name="presshub_ai_social_trending_interval_hours" id="presshub_ai_social_trending_interval_hours" value="<?php echo self::esc_attr_safe( (string) $interval ); ?>" class="small-text" /></label>
+                <?php if ( $enabled && '' !== $run_url ) : ?>
+                    &nbsp; <a class="button" href="<?php echo esc_url( $run_url ); ?>"><?php echo esc_html__( 'Refresh now', 'presshub-ai-editor' ); ?></a>
+                <?php endif; ?>
+                <p class="description"><?php echo esc_html__( 'Each refresh is a handful of page visits per platform on the reader accounts. Keep it at 3 hours or more.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Platforms', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <?php foreach ( $labels as $p => $label ) : ?>
+                    <label style="display:block;"><input type="checkbox" name="presshub_ai_social_trending_platform_<?php echo self::esc_attr_safe( $p ); ?>" id="presshub_ai_social_trending_platform_<?php echo self::esc_attr_safe( $p ); ?>" value="1" <?php checked( in_array( $p, $platforms, true ) ); ?> /> <?php echo esc_html( $label ); ?></label>
+                <?php endforeach; ?>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_keywords"><?php echo esc_html__( 'Search Terms (X, TikTok)', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <textarea name="presshub_ai_social_trending_keywords" id="presshub_ai_social_trending_keywords" rows="5" class="large-text code"><?php echo esc_textarea( $keywords ); ?></textarea>
+                <p class="description"><?php echo esc_html__( 'One per line. X searches all of them at once (Top results). TikTok searches the first three, one page each.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_hashtags"><?php echo esc_html__( 'Instagram Hashtags', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <textarea name="presshub_ai_social_trending_hashtags" id="presshub_ai_social_trending_hashtags" rows="3" class="large-text code"><?php echo esc_textarea( $hashtags ); ?></textarea>
+                <p class="description"><?php echo esc_html__( 'Up to 5, without #. Instagram allows 30 different hashtags per account per week, so change them rarely. The Meta app needs the instagram_basic permission and Instagram Public Content Access.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_facebook_pages"><?php echo esc_html__( 'Facebook Pages', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <textarea name="presshub_ai_social_trending_facebook_pages" id="presshub_ai_social_trending_facebook_pages" rows="4" class="large-text code" placeholder="https://www.facebook.com/philenews"><?php echo esc_textarea( $fb_pages ); ?></textarea>
+                <p class="description"><?php echo esc_html__( 'One Page URL per line. Facebook has no public search, so the worker reads these Cypriot Pages and the roundup keeps their most engaging recent posts. Needs a Facebook reader session on the worker.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Selection', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><?php echo esc_html__( 'Posts in the roundup', 'presshub-ai-editor' ); ?> <input type="number" min="3" max="50" name="presshub_ai_social_trending_max_items" id="presshub_ai_social_trending_max_items" value="<?php echo self::esc_attr_safe( (string) $max_items ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Max per platform', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_trending_max_per_platform" id="presshub_ai_social_trending_max_per_platform" value="<?php echo self::esc_attr_safe( (string) $per_plat ); ?>" class="small-text" /></label>
+                <br /><label><?php echo esc_html__( 'Only posts from the last (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="72" name="presshub_ai_social_trending_max_age_hours" id="presshub_ai_social_trending_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
+                &nbsp; <label><?php echo esc_html__( 'Minimum engagement', 'presshub-ai-editor' ); ?> <input type="number" min="0" max="100000" name="presshub_ai_social_trending_min_engagement" id="presshub_ai_social_trending_min_engagement" value="<?php echo self::esc_attr_safe( (string) $min_eng ); ?>" class="small-text" /></label>
+                <p class="description"><?php echo esc_html__( 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Roundup Post', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <label><?php echo esc_html__( 'Category', 'presshub-ai-editor' ); ?> <input type="text" name="presshub_ai_social_trending_category" id="presshub_ai_social_trending_category" value="<?php echo self::esc_attr_safe( $category ); ?>" class="regular-text" /></label>
+                <br /><label><?php echo esc_html__( 'Title', 'presshub-ai-editor' ); ?> <input type="text" name="presshub_ai_social_trending_title" id="presshub_ai_social_trending_title" value="<?php echo self::esc_attr_safe( $title ); ?>" class="regular-text" /></label>
+                <br /><label><?php echo esc_html__( 'Each refresh', 'presshub-ai-editor' ); ?>
+                    <select name="presshub_ai_social_trending_post_mode" id="presshub_ai_social_trending_post_mode">
+                        <option value="daily" <?php selected( $mode, 'daily' ); ?>><?php echo esc_html__( 'updates the day\'s post (new post each day)', 'presshub-ai-editor' ); ?></option>
+                        <option value="rolling" <?php selected( $mode, 'rolling' ); ?>><?php echo esc_html__( 'updates one single post', 'presshub-ai-editor' ); ?></option>
+                        <option value="each" <?php selected( $mode, 'each' ); ?>><?php echo esc_html__( 'creates a new post', 'presshub-ai-editor' ); ?></option>
+                    </select>
+                </label>
+                &nbsp; <label><?php echo esc_html__( 'New posts are', 'presshub-ai-editor' ); ?>
+                    <select name="presshub_ai_social_trending_post_status" id="presshub_ai_social_trending_post_status">
+                        <option value="publish" <?php selected( $status, 'publish' ); ?>><?php echo esc_html__( 'published', 'presshub-ai-editor' ); ?></option>
+                        <option value="draft" <?php selected( $status, 'draft' ); ?>><?php echo esc_html__( 'saved as drafts', 'presshub-ai-editor' ); ?></option>
+                    </select>
+                </label>
+                <p class="description"><?php echo esc_html__( 'The category is created if it does not exist. In the title, {date} and {time} are replaced with the refresh date and time. X and TikTok posts are embedded; Instagram and Facebook posts are quoted with a link.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <?php
