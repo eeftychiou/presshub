@@ -175,6 +175,13 @@ class ImagePromptTemplatesTest {
         $msgs = $this->last_messages();
         $this->assert( false !== strpos( $msgs['user'] ?? '', 'aerial photographer' ), 'AJAX draft uses the chosen template' );
         $this->assert( 'landscape_aerial' === get_post_meta( 55, '_presshub_ai_image_template', true ), 'Chosen template remembered on the post' );
+
+        // An oversized inline template is rejected before any provider call.
+        $before = count( $GLOBALS['CAPTURED_REQUESTS'] );
+        $_POST  = [ 'nonce' => 'n', 'post_id' => 55, 'content' => 'Body', 'title' => 'T', 'template_id' => 'editorial_photo', 'template' => str_repeat( 'a', PressHub_AI_Image_Prompt_Templates::MAX_TEMPLATE_LEN + 1 ) ];
+        $resp   = $this->call_ajax( 'generate_image_prompt' );
+        $this->assert( empty( $resp['success'] ), 'Oversized template rejected' );
+        $this->assert( count( $GLOBALS['CAPTURED_REQUESTS'] ) === $before, 'No provider call for an oversized template' );
         unset( $GLOBALS['CAPTURE_FILTER'] );
     }
 

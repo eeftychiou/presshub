@@ -3270,6 +3270,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         require_once __DIR__ . '/class-image-prompt-templates.php';
         $template_id = isset( $_POST['template_id'] ) ? sanitize_key( wp_unslash( $_POST['template_id'] ) ) : '';
         $template    = isset( $_POST['template'] ) ? trim( sanitize_textarea_field( wp_unslash( $_POST['template'] ) ) ) : '';
+        if ( mb_strlen( $template ) > PressHub_AI_Image_Prompt_Templates::MAX_TEMPLATE_LEN ) {
+            wp_send_json_error( __( 'The template text is too long.', 'presshub-ai-editor' ) );
+        }
         if ( '' === $template && '' !== $template_id ) {
             $stored   = PressHub_AI_Image_Prompt_Templates::get( $template_id );
             $template = $stored ? $stored['template'] : '';
