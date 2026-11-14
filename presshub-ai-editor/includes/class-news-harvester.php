@@ -1790,13 +1790,23 @@ class PressHub_AI_News_Harvester {
      * @param string $edition morning|noon.
      */
     protected function merge_social_posts( array &$payload, string $date, string $edition ): void {
-        if ( ! class_exists( 'PressHub_AI_Social_Monitor' ) ) {
-            return;
+        $posts = [];
+        if ( class_exists( 'PressHub_AI_Social_Monitor' ) ) {
+            try {
+                $posts = $this->take_social_posts( $date, $edition );
+            } catch ( \Throwable $e ) {
+                PressHub_AI_Logger::error( 'Social monitor merge failed: ' . $e->getMessage(), [ 'exception' => $e ] );
+            }
         }
-        try {
-            $posts = $this->take_social_posts( $date, $edition );
-        } catch ( \Throwable $e ) {
-            PressHub_AI_Logger::error( 'Social monitor merge failed: ' . $e->getMessage(), [ 'exception' => $e ] );
+        // Trending posts arrive as one grouped item after the monitored accounts' posts.
+        if ( class_exists( 'PressHub_AI_Social_Trending' ) ) {
+            try {
+                $posts = array_merge( $posts, $this->take_trending_posts( $date, $edition ) );
+            } catch ( \Throwable $e ) {
+                PressHub_AI_Logger::error( 'Social trending merge failed: ' . $e->getMessage(), [ 'exception' => $e ] );
+            }
+        }
+        if ( empty( $posts ) && ! class_exists( 'PressHub_AI_Social_Monitor' ) ) {
             return;
         }
         $known = [];
@@ -1830,6 +1840,13 @@ class PressHub_AI_News_Harvester {
      */
     protected function take_social_posts( string $date, string $edition ): array {
         return PressHub_AI_Social_Monitor::take_for_harvest( $date, $edition );
+    }
+
+    /**
+     * Seam for tests: the trending posts item for this edition.
+     */
+    protected function take_trending_posts( string $date, string $edition ): array {
+        return PressHub_AI_Social_Trending::take_for_briefing( $date, $edition );
     }
 
     /**
