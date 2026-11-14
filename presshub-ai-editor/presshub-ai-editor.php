@@ -154,6 +154,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-settings-storage.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-render.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-migration.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-image-prompt-templates.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-metaboxes.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';

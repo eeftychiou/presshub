@@ -977,6 +977,165 @@ jQuery(document).ready(function($) {
     // AI Featured Image Studio handlers
     // ------------------------------------------------------------------
 
+    // Prompt templates: the instructions the AI follows when it drafts the
+    // image prompt. Picking one fills the editable template text; the draft
+    // request sends whatever is in that box. Edits can be saved as a new
+    // shared template.
+    var imageTemplates = [];
+    (function initImageTemplates() {
+        var $wrap = $('#presshub-ai-image-templates');
+        if (!$wrap.length) {
+            return;
+        }
+        var raw = $wrap.attr('data-templates');
+        try {
+            imageTemplates = raw ? JSON.parse(raw) : [];
+        } catch (err) {
+            imageTemplates = [];
+        }
+        refreshImageTemplateControls();
+    })();
+
+    function findImageTemplate(id) {
+        for (var i = 0; i < imageTemplates.length; i++) {
+            if (imageTemplates[i].id === id) {
+                return imageTemplates[i];
+            }
+        }
+        return null;
+    }
+
+    function setImageTemplateStatus(text, isError) {
+        $('#presshub-ai-image-template-status')
+            .removeClass('is-error is-ok')
+            .addClass(text ? (isError ? 'is-error' : 'is-ok') : '')
+            .text(text || '');
+    }
+
+    function refreshImageTemplateControls() {
+        var tpl = findImageTemplate($('#presshub-ai-image-template-select').val());
+        var $del = $('#presshub-ai-image-template-delete');
+        $del.prop('hidden', !(tpl && tpl.deletable)).removeData('armed')
+            .text(__('Delete this template', 'presshub-ai-editor'));
+    }
+
+    $(document).on('change', '#presshub-ai-image-template-select', function() {
+        var tpl = findImageTemplate($(this).val());
+        $('#presshub-ai-image-template-text').val(tpl ? tpl.template : '').scrollTop(0);
+        setImageTemplateStatus('');
+        refreshImageTemplateControls();
+    });
+
+    $(document).on('click', '#presshub-ai-image-template-toggle', function(e) {
+        e.preventDefault();
+        var $editor = $('#presshub-ai-image-template-editor');
+        var show = $editor.prop('hidden');
+        $editor.prop('hidden', !show);
+        $(this).attr('aria-expanded', show ? 'true' : 'false')
+            .text(show ? __('Hide template', 'presshub-ai-editor') : __('View / edit template', 'presshub-ai-editor'));
+    });
+
+    $(document).on('click', '#presshub-ai-image-template-reset', function(e) {
+        e.preventDefault();
+        var tpl = findImageTemplate($('#presshub-ai-image-template-select').val());
+        $('#presshub-ai-image-template-text').val(tpl ? tpl.template : '');
+        setImageTemplateStatus(__('Template text restored.', 'presshub-ai-editor'), false);
+    });
+
+    $(document).on('click', '#presshub-ai-image-template-save', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        if ($btn.prop('disabled')) {
+            return;
+        }
+        var name = ($('#presshub-ai-image-template-name').val() || '').trim();
+        var text = ($('#presshub-ai-image-template-text').val() || '').trim();
+        if (!name) {
+            setImageTemplateStatus(__('Give the template a name.', 'presshub-ai-editor'), true);
+            $('#presshub-ai-image-template-name').trigger('focus');
+            return;
+        }
+        if (!text) {
+            setImageTemplateStatus(__('The template text is empty.', 'presshub-ai-editor'), true);
+            return;
+        }
+        $btn.prop('disabled', true);
+        setImageTemplateStatus(__('Saving…', 'presshub-ai-editor'), false);
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'presshub_ai_save_image_prompt_template',
+                nonce: presshubAI.nonce,
+                name: name,
+                template: text
+            }
+        }).done(function(response) {
+            if (response && response.success && response.data && response.data.template) {
+                var saved = response.data.template;
+                imageTemplates.push({
+                    id: saved.id,
+                    name: saved.name,
+                    template: saved.template,
+                    builtin: false,
+                    deletable: true
+                });
+                $('<option>').val(saved.id).text(saved.name)
+                    .appendTo('#presshub-ai-image-template-custom-group');
+                $('#presshub-ai-image-template-select').val(saved.id);
+                $('#presshub-ai-image-template-text').val(saved.template).scrollTop(0);
+                $('#presshub-ai-image-template-name').val('');
+                refreshImageTemplateControls();
+                setImageTemplateStatus(__('Saved as a new template.', 'presshub-ai-editor'), false);
+            } else {
+                setImageTemplateStatus((response && response.data) ? response.data : __('Could not save the template.', 'presshub-ai-editor'), true);
+            }
+        }).fail(function(xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.data) ? xhr.responseJSON.data : __('Could not save the template. Server error.', 'presshub-ai-editor');
+            setImageTemplateStatus(msg, true);
+        }).always(function() {
+            $btn.prop('disabled', false);
+        });
+    });
+
+    // Delete asks for a second click instead of a confirm() dialog.
+    $(document).on('click', '#presshub-ai-image-template-delete', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var id = $('#presshub-ai-image-template-select').val();
+        if (!$btn.data('armed')) {
+            $btn.data('armed', true).text(__('Click again to delete', 'presshub-ai-editor'));
+            return;
+        }
+        $btn.prop('disabled', true);
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'presshub_ai_delete_image_prompt_template',
+                nonce: presshubAI.nonce,
+                template_id: id
+            }
+        }).done(function(response) {
+            if (response && response.success) {
+                imageTemplates = imageTemplates.filter(function(t) { return t.id !== id; });
+                $('#presshub-ai-image-template-select option').filter(function() { return $(this).val() === id; }).remove();
+                $('#presshub-ai-image-template-select').val(imageTemplates.length ? imageTemplates[0].id : '').trigger('change');
+                setImageTemplateStatus(__('Template deleted.', 'presshub-ai-editor'), false);
+            } else {
+                refreshImageTemplateControls();
+                setImageTemplateStatus((response && response.data) ? response.data : __('Could not delete the template.', 'presshub-ai-editor'), true);
+            }
+        }).fail(function(xhr) {
+            refreshImageTemplateControls();
+            var msg = (xhr.responseJSON && xhr.responseJSON.data) ? xhr.responseJSON.data : __('Could not delete the template. Server error.', 'presshub-ai-editor');
+            setImageTemplateStatus(msg, true);
+        }).always(function() {
+            $btn.prop('disabled', false);
+        });
+    });
+
     $(document).on('click', '#presshub-ai-draft-image-prompt', function(e) {
         e.preventDefault();
         var $btn = $(this);
@@ -1008,7 +1167,9 @@ jQuery(document).ready(function($) {
                 nonce: presshubAI.nonce,
                 post_id: postId,
                 content: content,
-                title: title
+                title: title,
+                template_id: $('#presshub-ai-image-template-select').val() || '',
+                template: $('#presshub-ai-image-template-text').val() || ''
             }
         }).done(function(response) {
             if (response && response.success && response.data && response.data.prompt) {

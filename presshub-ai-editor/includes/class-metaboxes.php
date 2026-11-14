@@ -115,8 +115,10 @@ class PressHub_AI_Metaboxes {
             <hr />
             <h3><?php echo esc_html__( 'AI Featured Image Studio', 'presshub-ai-editor' ); ?></h3>
             <p class="description">
-                <?php echo esc_html__( 'Analyze the article text to draft an authentic photojournalistic prompt, synthesize a realistic image, and assign it as the featured image.', 'presshub-ai-editor' ); ?>
+                <?php echo esc_html__( 'Pick a prompt template, draft an image prompt from the article text, synthesize the image, and assign it as the featured image.', 'presshub-ai-editor' ); ?>
             </p>
+
+            <?php $this->render_image_template_picker( $post ); ?>
 
             <div class="presshub-image-studio-actions" style="margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                 <button type="button" id="presshub-ai-draft-image-prompt" class="button" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
@@ -155,6 +157,82 @@ class PressHub_AI_Metaboxes {
                         </button>
                         <span id="presshub-ai-image-status" style="font-weight: 600; font-size: 13px;"></span>
                     </div>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Featured Image Studio: the drafting-template dropdown and its editable
+     * text. Picking a template fills the text box; "Draft Image Prompt from
+     * Content" sends the (edited) text; "Save as new template" adds it to
+     * the shared list. Template data is embedded as JSON for admin.js.
+     */
+    private function render_image_template_picker( $post ): void {
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $templates = PressHub_AI_Image_Prompt_Templates::get_all();
+        if ( empty( $templates ) ) {
+            return;
+        }
+
+        $selected = (string) get_post_meta( $post->ID, PressHub_AI_Image_Prompt_Templates::POST_META, true );
+        $ids      = array_column( $templates, 'id' );
+        if ( '' === $selected || ! in_array( $selected, $ids, true ) ) {
+            $selected = PressHub_AI_Image_Prompt_Templates::DEFAULT_ID;
+        }
+
+        $user_id    = (int) get_current_user_id();
+        $can_manage = current_user_can( 'edit_others_posts' );
+        $payload    = [];
+        foreach ( $templates as $tpl ) {
+            $payload[] = [
+                'id'        => $tpl['id'],
+                'name'      => $tpl['name'],
+                'template'  => $tpl['template'],
+                'builtin'   => ! empty( $tpl['builtin'] ),
+                'deletable' => empty( $tpl['builtin'] ) && ( $can_manage || (int) ( $tpl['author'] ?? 0 ) === $user_id ),
+            ];
+        }
+        $selected_text = '';
+        foreach ( $templates as $tpl ) {
+            if ( $tpl['id'] === $selected ) {
+                $selected_text = $tpl['template'];
+            }
+        }
+        ?>
+        <div class="presshub-image-studio-templates" id="presshub-ai-image-templates" data-templates="<?php echo esc_attr( wp_json_encode( $payload ) ); ?>">
+            <label for="presshub-ai-image-template-select" class="presshub-image-studio-label">
+                <?php echo esc_html__( 'Prompt template:', 'presshub-ai-editor' ); ?>
+            </label>
+            <div class="presshub-image-studio-template-row">
+                <select id="presshub-ai-image-template-select">
+                    <optgroup label="<?php echo esc_attr__( 'Built-in', 'presshub-ai-editor' ); ?>">
+                        <?php foreach ( $templates as $tpl ) : if ( empty( $tpl['builtin'] ) ) { continue; } ?>
+                            <option value="<?php echo esc_attr( $tpl['id'] ); ?>" <?php selected( $selected, $tpl['id'] ); ?>><?php echo esc_html( $tpl['name'] ); ?></option>
+                        <?php endforeach; ?>
+                    </optgroup>
+                    <optgroup label="<?php echo esc_attr__( 'Saved templates', 'presshub-ai-editor' ); ?>" id="presshub-ai-image-template-custom-group">
+                        <?php foreach ( $templates as $tpl ) : if ( ! empty( $tpl['builtin'] ) ) { continue; } ?>
+                            <option value="<?php echo esc_attr( $tpl['id'] ); ?>" <?php selected( $selected, $tpl['id'] ); ?>><?php echo esc_html( $tpl['name'] ); ?></option>
+                        <?php endforeach; ?>
+                    </optgroup>
+                </select>
+                <button type="button" class="button-link" id="presshub-ai-image-template-toggle" aria-expanded="false" aria-controls="presshub-ai-image-template-editor">
+                    <?php echo esc_html__( 'View / edit template', 'presshub-ai-editor' ); ?>
+                </button>
+            </div>
+            <div id="presshub-ai-image-template-editor" class="presshub-image-studio-template-editor" hidden>
+                <p class="description">
+                    <?php echo esc_html__( 'These are the instructions the AI follows when it drafts the image prompt from the article. {title} and {content} are replaced with the article. Edits apply to the next draft; save them as a new template to reuse them.', 'presshub-ai-editor' ); ?>
+                </p>
+                <textarea id="presshub-ai-image-template-text" rows="10"><?php echo esc_textarea( $selected_text ); ?></textarea>
+                <div class="presshub-image-studio-template-actions">
+                    <input type="text" id="presshub-ai-image-template-name" maxlength="<?php echo esc_attr( PressHub_AI_Image_Prompt_Templates::MAX_NAME_LEN ); ?>" placeholder="<?php echo esc_attr__( 'New template name', 'presshub-ai-editor' ); ?>" />
+                    <button type="button" class="button" id="presshub-ai-image-template-save"><?php echo esc_html__( 'Save as new template', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button-link" id="presshub-ai-image-template-reset"><?php echo esc_html__( 'Undo my edits', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button-link button-link-delete" id="presshub-ai-image-template-delete" hidden><?php echo esc_html__( 'Delete this template', 'presshub-ai-editor' ); ?></button>
+                    <span id="presshub-ai-image-template-status" class="presshub-image-studio-template-status" role="status"></span>
                 </div>
             </div>
         </div>

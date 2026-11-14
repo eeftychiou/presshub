@@ -114,6 +114,7 @@ $presshub_ai_options = [
     'presshub_ai_social_trending_posts',
     'presshub_ai_social_trending_ig_tag_ids',
     'presshub_ai_image_metadata_enabled',
+    'presshub_ai_image_prompt_templates',
     'presshub_ai_seo_auto_enabled',
     'presshub_ai_briefing_seo_enhance_enabled',
     'presshub_ai_seo_max_tags',
