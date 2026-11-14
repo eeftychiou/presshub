@@ -1221,21 +1221,31 @@ class PressHub_AI_API_Client {
      * Analyze article content and generate a descriptive, realistic editorial image prompt.
      *
      * @param string $content Article content or summary.
-     * @param string $title   Optional article title or headline.
+     * @param string $title    Optional article title or headline.
+     * @param string $template Optional drafting template chosen in the Featured Image Studio
+     *                         (may be edited). Empty uses the Settings analysis prompt.
+     * @param string $template_id Id of the chosen template; picks the matching system prompt.
      * @return string|WP_Error Generated image prompt string on success, WP_Error on failure.
      */
-    public function analyze_article_for_image_prompt( string $content, string $title = '' ) {
+    public function analyze_article_for_image_prompt( string $content, string $title = '', string $template = '', string $template_id = '' ) {
         $this->current_action = 'generate_image_prompt';
         $client = new self( 'image_prompt' );
 
-        $template = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_image_analysis_prompt()
-            : '';
+        if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+        }
 
-        if ( empty( $template ) && class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
-            try {
-                $template = PressHub_AI_Prompt_Loader::load( 'article_image_analysis_prompt.txt' );
-            } catch ( Throwable $t ) {
+        if ( '' === trim( $template ) ) {
+            $template_id = PressHub_AI_Image_Prompt_Templates::DEFAULT_ID;
+            $template    = class_exists( 'PressHub_AI_Settings_Storage' )
+                ? PressHub_AI_Settings_Storage::get_image_analysis_prompt()
+                : '';
+
+            if ( empty( $template ) && class_exists( 'PressHub_AI_Prompt_Loader' ) ) {
+                try {
+                    $template = PressHub_AI_Prompt_Loader::load( 'article_image_analysis_prompt.txt' );
+                } catch ( Throwable $t ) {
+                }
             }
         }
 
@@ -1249,13 +1259,8 @@ class PressHub_AI_API_Client {
             $clean_content = mb_substr( $clean_content, 0, 8000 ) . '...';
         }
 
-        $user_prompt = str_replace(
-            [ '{title}', '{content}' ],
-            [ trim( $title ), trim( $clean_content ) ],
-            $template
-        );
-
-        $sys_prompt = 'You are a professional editorial photographer and visual director. You output only detailed, realistic image prompts with zero preamble. Your prompts build images from symbols, places and objects and never depict identifiable people or public figures.';
+        $user_prompt = PressHub_AI_Image_Prompt_Templates::render( $template, $title, $clean_content );
+        $sys_prompt  = PressHub_AI_Image_Prompt_Templates::system_prompt_for( '' === $template_id ? PressHub_AI_Image_Prompt_Templates::DEFAULT_ID : $template_id );
 
         $result = $client->call_provider( $sys_prompt, $user_prompt, false, [], 0.3 );
         if ( is_wp_error( $result ) ) {
