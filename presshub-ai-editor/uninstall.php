@@ -90,6 +90,7 @@ $presshub_ai_options = [
     'presshub_ai_social_monitor_scan_started',
     'presshub_ai_image_metadata_enabled',
     'presshub_ai_seo_auto_enabled',
+    'presshub_ai_briefing_seo_enhance_enabled',
     'presshub_ai_seo_max_tags',
     'presshub_ai_seo_review_enabled',
 ];

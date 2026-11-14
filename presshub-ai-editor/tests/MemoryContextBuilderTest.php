@@ -197,6 +197,10 @@ $baseline_podcast = function( array $art, string $d = '2026-09-10', string $dur 
     return [ 'system_prompt' => $sys, 'user_prompt' => $user ];
 };
 
+// The pre-#135 baselines predate the briefing SEO rules appended to the
+// user prompt (PressHub_AI_Briefing_SEO::prompt_rules()); compare without them.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_seo_enhance_enabled'] = 0;
+
 // --- Test A: When memory is disabled (presshub_ai_memory_enabled = 0) ---
 $GLOBALS['OPTIONS_STORE']['presshub_ai_memory_enabled'] = 0;
 $built_dis = PressHub_AI_Memory_Context_Builder::build( '2026-09-10', 'morning', 'briefing' );

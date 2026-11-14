@@ -2145,6 +2145,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'presshub_ai_memory_enabled',
                 'presshub_ai_image_metadata_enabled',
                 'presshub_ai_seo_auto_enabled',
+                'presshub_ai_briefing_seo_enhance_enabled',
                 'presshub_ai_seo_review_enabled',
             ];
             $boolean_options = array_merge( $boolean_options, PressHub_AI_Settings_Storage::get_press_inbox_boolean_options(), PressHub_AI_Settings_Storage::get_social_monitor_boolean_options() );

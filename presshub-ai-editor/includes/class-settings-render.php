@@ -794,6 +794,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><?php echo esc_html__( 'Daily Briefing SEO Structure', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_seo_enhance_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_seo_max_tags"><?php echo esc_html__( 'Maximum Tags per Post', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_seo_max_tags_field(); ?>
@@ -3597,6 +3603,19 @@ class PressHub_AI_Settings_Render {
             <?php echo esc_html__( 'Automatically fill tags, meta description and focus keyphrase for Daily Briefing posts, podcasts and AI Co-Author drafts.', 'presshub-ai-editor' ); ?>
         </label>
         <p class="description"><?php echo esc_html__( 'Default: Enabled. Briefing and podcast posts get tags and an SEO excerpt when they are created. For co-author drafts the tags and excerpt are added to the editor when you insert the draft, so you can still review them before saving.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_seo_enhance_enabled_field() {
+        $option  = 'presshub_ai_briefing_seo_enhance_enabled';
+        $enabled = PressHub_AI_Settings_Storage::get_briefing_seo_enhance_enabled();
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_briefing_seo_enhance_enabled">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_briefing_seo_enhance_enabled" value="1" <?php checked( true, $enabled ); ?> />
+            <?php echo esc_html__( 'Shape Daily Briefing posts for search: a title of at most 65 characters, short paragraphs, links to the source articles, and links to related earlier posts.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. Source links that do not match a harvested article are removed, a "Πηγές" list is added, the first mention of each tag links to its tag page, and a "Διαβάστε επίσης" list links up to 4 related posts.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
