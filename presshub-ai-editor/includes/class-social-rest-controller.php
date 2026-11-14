@@ -325,15 +325,6 @@ class PressHub_Social_REST_Controller {
                 }
             }
 
-            // Never hand out the failed-generation placeholder as post text: write the copy
-            // again now, or fail the job (ensure_post_copy marks it failed).
-            if ( ! $is_short && class_exists( 'PressHub_Social_Dispatcher' ) ) {
-                $job = PressHub_Social_Dispatcher::ensure_post_copy( $job );
-                if ( is_wp_error( $job ) ) {
-                    continue;
-                }
-            }
-
             // A TikTok short gets its own audio, caption and on-screen hook instead of the
             // full podcast.
             if ( $is_short ) {

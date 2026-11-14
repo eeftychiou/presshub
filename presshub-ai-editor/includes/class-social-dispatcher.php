@@ -177,7 +177,7 @@ class PressHub_Social_Dispatcher {
                     $generated = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
                     if ( is_wp_error( $generated ) ) {
                         $failed_error = $generated->get_error_message();
-                        $copy         = sprintf( self::FAILED_COPY_PREFIX . ' %s]', $failed_error );
+                        $copy         = sprintf( '[AI Copy Generation Failed: %s]', $failed_error );
                     } else {
                         $copy = (string) $generated;
                     }
@@ -222,61 +222,6 @@ class PressHub_Social_Dispatcher {
         }
 
         return $job_ids;
-    }
-
-    /** Prefix of the placeholder copy stored when AI copy generation failed at enqueue time. */
-    public const FAILED_COPY_PREFIX = '[AI Copy Generation Failed:';
-
-    /** Whether a job's copy is the failed-generation placeholder, which must never be posted. */
-    public static function has_failed_copy( array $job ): bool {
-        return str_starts_with( ltrim( (string) ( $job['post_copy'] ?? '' ) ), self::FAILED_COPY_PREFIX );
-    }
-
-    /**
-     * Make sure a job carries real copy before it is posted. Copy that is still the
-     * failed-generation placeholder is written again; if that fails too, the job is marked
-     * failed and a WP_Error is returned, so the placeholder text is never published.
-     *
-     * @param array $job Queue row.
-     * @return array|WP_Error The job with usable copy, or the error that failed it.
-     */
-    public static function ensure_post_copy( array $job ) {
-        if ( ! self::has_failed_copy( $job ) ) {
-            return $job;
-        }
-        $job_id   = (int) ( $job['id'] ?? 0 );
-        $post_id  = (int) ( $job['post_id'] ?? 0 );
-        $platform = sanitize_key( (string) ( $job['platform'] ?? '' ) );
-
-        $regenerated = ( $post_id > 0 && class_exists( 'PressHub_Social_AI_Copywriter' ) )
-            ? PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform )
-            : new WP_Error( 'missing_social_copy', 'The post copy could not be generated and there is no post to write it from.' );
-        if ( ! is_wp_error( $regenerated ) && '' === trim( (string) $regenerated ) ) {
-            $regenerated = new WP_Error( 'empty_social_copy', 'AI copy generation returned empty text.' );
-        }
-
-        if ( is_wp_error( $regenerated ) ) {
-            PressHub_Social_Logger::warning(
-                sprintf( 'Social job #%d not posted: its copy is still the failed-generation placeholder and regenerating it failed: %s', $job_id, $regenerated->get_error_message() ),
-                [ 'job_id' => $job_id, 'platform' => $platform ]
-            );
-            if ( $job_id > 0 ) {
-                PressHub_Social_Queue::mark_failed( $job_id, $regenerated->get_error_message(), [ 'error_code' => $regenerated->get_error_code() ] );
-            }
-            return $regenerated;
-        }
-
-        $copy = (string) $regenerated;
-        if ( 'twitter' === $platform && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
-            $article_url = function_exists( 'get_permalink' ) ? ( get_permalink( $post_id ) ?: '' ) : '';
-            $copy        = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $copy, $article_url );
-        }
-        $job['post_copy'] = $copy;
-        if ( $job_id > 0 ) {
-            PressHub_Social_Queue::update_job_copy( $job_id, $copy );
-        }
-        PressHub_Social_Logger::info( sprintf( 'Regenerated the failed copy of social job #%d before posting.', $job_id ), [ 'job_id' => $job_id, 'platform' => $platform ] );
-        return $job;
     }
 
     /**
@@ -332,9 +277,16 @@ class PressHub_Social_Dispatcher {
         PressHub_Social_Queue::mark_processing( $job_id );
 
         // If this job previously failed during AI copy generation, regenerate copy now before dispatching
-        $job = self::ensure_post_copy( $job );
-        if ( is_wp_error( $job ) ) {
-            return $job;
+        $current_copy = (string) ( $job['post_copy'] ?? '' );
+        if ( str_starts_with( $current_copy, '[AI Copy Generation Failed:' ) && $post_id > 0 && class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+            $regenerated = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
+            if ( is_wp_error( $regenerated ) ) {
+                $error_message = $regenerated->get_error_message();
+                PressHub_Social_Queue::mark_failed( $job_id, $error_message, [ 'error_code' => $regenerated->get_error_code() ] );
+                return $regenerated;
+            }
+            $job['post_copy'] = (string) $regenerated;
+            PressHub_Social_Queue::update_job_copy( $job_id, $job['post_copy'] );
         }
 
         // Dynamically resolve post thumbnail if media_url was not yet attached at enqueue time
