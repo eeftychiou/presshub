@@ -209,6 +209,34 @@ $GLOBALS['OPTIONS_STORE']['presshub_ai_social_monitor_enabled'] = 0;
 sm_check( 'harvest: disabled monitor adds nothing', [] === PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-13', 'morning', $now ) );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_social_monitor_enabled'] = 1;
 
+// Long videos: transcribed by the worker itself when it offers to.
+$long = [ [ 'platform' => 'tiktok', 'id' => '7400000000000000099', 'handle' => 'cypruspolice', 'text' => 'Μεγάλη συνέντευξη', 'created_at' => $now - 120, 'media' => [ 'type' => 'video', 'duration_sec' => 1500 ] ] ];
+$l0 = PressHub_AI_Social_Monitor::ingest_posts( $long, $now );
+sm_check( 'local: no offer, long video not requested', [] === $l0['wants_transcript'] && [] === $l0['wants_media'] );
+$l1 = PressHub_AI_Social_Monitor::ingest_posts( $long, $now + 5, 1800 );
+sm_check( 'local: known long video requested once the worker offers', [ 'tiktok_7400000000000000099' ] === $l1['wants_transcript'] && [] === $l1['wants_media'] );
+$l2 = PressHub_AI_Social_Monitor::ingest_posts( $long, $now + 10, 1800 );
+sm_check( 'local: not requested twice', [] === $l2['wants_transcript'] );
+$tooLong = [ [ 'platform' => 'tiktok', 'id' => '7400000000000000098', 'handle' => 'cypruspolice', 'text' => 'Πολύωρη', 'created_at' => $now - 120, 'media' => [ 'type' => 'video', 'duration_sec' => 4000 ] ] ];
+sm_check( 'local: over the worker limit not requested', [] === PressHub_AI_Social_Monitor::ingest_posts( $tooLong, $now, 1800 )['wants_transcript'] );
+$newLong = [ [ 'platform' => 'x', 'id' => '6002', 'handle' => 'christodulides', 'text' => 'Ομιλία', 'created_at' => $now - 60, 'media' => [ 'type' => 'video', 'duration_sec' => 1200 ] ] ];
+$l3 = PressHub_AI_Social_Monitor::ingest_posts( $newLong, $now, 1800 );
+sm_check( 'local: new long video requested, Gemini path not', [ 'x_6002' ] === $l3['wants_transcript'] && [] === $l3['wants_media'] );
+$ids = array_column( PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-15', 'morning', $now + 1200 ), 'id' );
+sm_check( 'local: harvest waits for the local transcript', ! in_array( 'sm_x_6002', $ids, true ) && ! in_array( 'sm_tiktok_7400000000000000099', $ids, true ) );
+$at = PressHub_AI_Social_Monitor::rest_transcript( [ 'id' => 'x_6002', 'text' => "Καλησπέρα σας.\nΣήμερα μιλούμε για το Κυπριακό.", 'engine' => 'whisper.cpp' ] );
+$at = is_object( $at ) && method_exists( $at, 'get_data' ) ? $at->get_data() : $at;
+sm_check( 'local: transcript accepted', 'x_6002' === ( $at['id'] ?? '' ) );
+sm_check( 'local: transcript stored and labelled', 0 === strpos( PressHub_AI_Social_Monitor::load()['x_6002']['transcript'], 'ΑΠΟΜΑΓΝΗΤΟΦΩΝΗΣΗ (αυτόματη, whisper.cpp):' ) );
+$arts = PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-15', 'noon', $now + 1300 );
+$got  = array_values( array_filter( $arts, static function ( $a ) { return 'sm_x_6002' === $a['id']; } ) );
+sm_check( 'local: transcribed post used with its transcript', 1 === count( $got ) && false !== strpos( $got[0]['content'], 'Σήμερα μιλούμε για το Κυπριακό' ) );
+sm_check( 'local: still waiting post skipped within the hour', ! in_array( 'sm_tiktok_7400000000000000099', array_column( $arts, 'id' ), true ) );
+sm_check( 'local: waiting ends after an hour', in_array( 'sm_tiktok_7400000000000000099', array_column( PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-16', 'morning', $now + 3700 ), 'id' ), true ) );
+sm_check( 'local: empty transcript means no speech', is_array( PressHub_AI_Social_Monitor::attach_transcript( 'tiktok_7400000000000000098', '', 'whisper.cpp' ) ) && false !== strpos( PressHub_AI_Social_Monitor::load()['tiktok_7400000000000000098']['transcript'], 'Χωρίς ομιλία' ) );
+sm_check( 'local: unknown post refused', is_wp_error( PressHub_AI_Social_Monitor::attach_transcript( 'x_999', 'x' ) ) );
+sm_check( 'local: missing text refused', is_wp_error( PressHub_AI_Social_Monitor::rest_transcript( [ 'id' => 'x_6002' ] ) ) );
+
 // Harvester merge + re-harvest.
 class SM_Test_Harvester extends PressHub_AI_News_Harvester {
     public $queue = [];

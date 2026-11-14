@@ -33,6 +33,10 @@ class PressHub_AI_Social_Monitor {
 
     /** A harvest waits this long for a requested video transcript before using the caption only. */
     const MEDIA_WAIT_SEC = 900;
+    /** How long the harvest waits for a transcript the worker makes itself (long videos). */
+    const LOCAL_WAIT_SEC = 3600;
+    /** Longest local transcription the worker may offer (seconds). */
+    const LOCAL_MAX_SEC = 14400;
 
     /** Days a post is kept in the store (used or not). Protocol constant, not a user knob. */
     const RETENTION_DAYS = 7;
@@ -250,7 +254,7 @@ class PressHub_AI_Social_Monitor {
      * @param array $posts List of {platform, id, handle, author_name, url, text, created_at, media:{type, duration_sec}}.
      * @return array{accepted:int, duplicates:int, rejected:array, wants_media:string[]}
      */
-    public static function ingest_posts( array $posts, ?int $now = null ): array {
+    public static function ingest_posts( array $posts, ?int $now = null, int $local_max_sec = 0 ): array {
         $now        = $now ?? time();
         $targets    = self::target_index();
         $store      = self::load();
@@ -258,7 +262,8 @@ class PressHub_AI_Social_Monitor {
         $per_acct   = PressHub_AI_Settings_Storage::get_social_monitor_max_posts_per_account();
         $transcribe = PressHub_AI_Settings_Storage::get_social_monitor_transcribe_videos();
         $max_secs   = PressHub_AI_Settings_Storage::get_social_monitor_max_video_seconds();
-        $result     = [ 'accepted' => 0, 'duplicates' => 0, 'rejected' => [], 'wants_media' => [] ];
+        $local_max  = max( 0, min( self::LOCAL_MAX_SEC, $local_max_sec ) );
+        $result     = [ 'accepted' => 0, 'duplicates' => 0, 'rejected' => [], 'wants_media' => [], 'wants_transcript' => [] ];
         $counts     = [];
 
         // Newest first, so the per-account cap keeps the latest posts whatever order the worker sent.
@@ -299,11 +304,17 @@ class PressHub_AI_Social_Monitor {
             $duration = max( 0, (int) ( $media['duration_sec'] ?? 0 ) );
             $is_video = 'video' === $mtype;
             $needs_av = $transcribe && $is_video && $duration <= $max_secs;
+            // Too long for Gemini: the worker transcribes it itself when it offers to.
+            $needs_local = $transcribe && $is_video && $duration > $max_secs && $duration <= $local_max;
 
             if ( isset( $store[ $store_id ] ) ) {
                 $result['duplicates']++;
                 if ( $needs_av && '' === (string) ( $store[ $store_id ]['transcript'] ?? '' ) && empty( $store[ $store_id ]['media_failed'] ) ) {
                     $result['wants_media'][] = $store_id;
+                }
+                if ( $needs_local && '' === (string) ( $store[ $store_id ]['transcript'] ?? '' ) && empty( $store[ $store_id ]['media_failed'] ) && empty( $store[ $store_id ]['local_requested'] ) ) {
+                    $store[ $store_id ]['local_requested'] = $now;
+                    $result['wants_transcript'][]          = $store_id;
                 }
                 continue;
             }
@@ -336,15 +347,19 @@ class PressHub_AI_Social_Monitor {
                 'transcript'   => '',
                 'media_failed' => '',
                 'used_in'      => '',
+                'local_requested' => $needs_local ? $now : 0,
             ];
             $result['accepted']++;
             if ( $needs_av ) {
                 $result['wants_media'][] = $store_id;
             }
+            if ( $needs_local ) {
+                $result['wants_transcript'][] = $store_id;
+            }
         }
 
         self::save( $store );
-        self::log( 'info', sprintf( 'Social monitor: %d new post(s), %d already known, %d rejected, %d video(s) requested.', $result['accepted'], $result['duplicates'], count( $result['rejected'] ), count( $result['wants_media'] ) ) );
+        self::log( 'info', sprintf( 'Social monitor: %d new post(s), %d already known, %d rejected, %d video(s) requested, %d long video(s) for local transcription.', $result['accepted'], $result['duplicates'], count( $result['rejected'] ), count( $result['wants_media'] ), count( $result['wants_transcript'] ) ) );
         return $result;
     }
 
@@ -410,6 +425,24 @@ class PressHub_AI_Social_Monitor {
         return [ 'id' => $store_id, 'chars' => strlen( $store[ $store_id ]['transcript'] ) ];
     }
 
+    /**
+     * Store a transcript the worker made itself (long videos, whisper.cpp).
+     *
+     * @return array{id:string, chars:int}|WP_Error
+     */
+    public static function attach_transcript( string $store_id, string $text, string $engine = '' ) {
+        $store = self::load();
+        if ( ! isset( $store[ $store_id ] ) ) {
+            return new WP_Error( 'unknown_post', 'Unknown post.', [ 'status' => 404 ] );
+        }
+        $engine = self::clean_text( $engine, 40 );
+        $body   = self::clean_text( $text, 40000 );
+        $store[ $store_id ]['transcript'] = sprintf( "ΑΠΟΜΑΓΝΗΤΟΦΩΝΗΣΗ (αυτόματη%s):\n%s", '' !== $engine ? ', ' . $engine : '', '' !== $body ? $body : 'Χωρίς ομιλία' );
+        self::save( $store );
+        self::log( 'info', sprintf( 'Social monitor: local transcript stored for %s (%d chars).', $store_id, strlen( $body ) ) );
+        return [ 'id' => $store_id, 'chars' => strlen( $body ) ];
+    }
+
     /* ------------------------------------------------------------------
      * Harvest
      * ---------------------------------------------------------------- */
@@ -443,6 +476,12 @@ class PressHub_AI_Social_Monitor {
             $awaiting = $transcribe && 'video' === ( $p['media_type'] ?? '' ) && (int) ( $p['duration_sec'] ?? 0 ) <= $max_secs
                 && '' === (string) ( $p['transcript'] ?? '' ) && '' === (string) ( $p['media_failed'] ?? '' );
             if ( $awaiting && ( $now - (int) ( $p['received_ts'] ?? 0 ) ) < self::MEDIA_WAIT_SEC ) {
+                continue;
+            }
+            // A long video the worker is transcribing itself: wait longer (whisper runs at about real time).
+            $local_wait = $transcribe && (int) ( $p['local_requested'] ?? 0 ) > 0
+                && '' === (string) ( $p['transcript'] ?? '' ) && '' === (string) ( $p['media_failed'] ?? '' );
+            if ( $local_wait && ( $now - (int) $p['local_requested'] ) < self::LOCAL_WAIT_SEC ) {
                 continue;
             }
             $candidates[ $id ] = $p;
@@ -530,6 +569,11 @@ class PressHub_AI_Social_Monitor {
             'callback'            => [ __CLASS__, 'rest_media' ],
             'permission_callback' => $auth,
         ] );
+        register_rest_route( $ns, '/monitor/transcript', [
+            'methods'             => 'POST',
+            'callback'            => [ __CLASS__, 'rest_transcript' ],
+            'permission_callback' => $auth,
+        ] );
     }
 
     private static function param( $request, string $key ) {
@@ -559,7 +603,9 @@ class PressHub_AI_Social_Monitor {
             self::log( 'warning', 'Social monitor: worker reported scan problems.', [ 'errors' => array_slice( $errors, 0, 20 ) ] );
         }
         self::mark_scan_done();
-        return self::response( self::ingest_posts( $posts ) );
+        $local = self::param( $request, 'local_transcribe' );
+        $local_max = is_array( $local ) ? (int) ( $local['max_sec'] ?? 0 ) : 0;
+        return self::response( self::ingest_posts( $posts, null, $local_max ) );
     }
 
     /**
@@ -582,6 +628,16 @@ class PressHub_AI_Social_Monitor {
             @set_time_limit( 300 ); // Gemini can take a while on a long clip.
         }
         $res = self::attach_media( $id, $bytes, $mime );
+        return is_wp_error( $res ) ? $res : self::response( $res );
+    }
+
+    public static function rest_transcript( $request ) {
+        $id   = sanitize_key( (string) self::param( $request, 'id' ) );
+        $text = self::param( $request, 'text' );
+        if ( '' === $id || ! is_string( $text ) ) {
+            return new WP_Error( 'invalid_transcript', 'id and text are required.', [ 'status' => 400 ] );
+        }
+        $res = self::attach_transcript( $id, $text, (string) self::param( $request, 'engine' ) );
         return is_wp_error( $res ) ? $res : self::response( $res );
     }
 
