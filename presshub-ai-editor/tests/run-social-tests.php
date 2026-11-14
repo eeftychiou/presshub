@@ -2026,6 +2026,19 @@ assert_equals( [ 1, 0.0, 1.0 ], [ $timings[0]['speaker'], $timings[0]['start'], 
 assert_equals( [ 2, 1.4, 2.9 ], [ $timings[1]['speaker'], $timings[1]['start'], $timings[1]['end'] ], 'The next turn starts after the stitched pause' );
 delete_option( 'presshub_social_tiktok_shorts_narrators' );
 
+// The voice dropdown lists every Gemini voice, whatever is selected.
+ob_start();
+( new PressHub_Social_Settings_Render() )->render_tiktok_shorts_voice_field( [ 'option' => 'presshub_social_tiktok_shorts_voice_1', 'narrator' => 1 ] );
+$voice_html = ob_get_clean();
+assert_equals( count( PressHub_Social_Settings_Storage::gemini_tts_voices() ) + 1, substr_count( $voice_html, '<option ' ), 'The narrator voice dropdown lists all Gemini voices plus the briefing voice' );
+assert_true( 30 === count( PressHub_Social_Settings_Storage::gemini_tts_voices() ), 'All 30 Gemini TTS voices are offered' );
+assert_true( false !== strpos( $voice_html, '<select' ) && preg_match( '/value="Puck"\s+selected/', $voice_html ) === 1, 'The dropdown selects the saved voice (Puck by default)' );
+update_option( 'presshub_social_tiktok_shorts_voice_1', 'NewVoice' );
+ob_start();
+( new PressHub_Social_Settings_Render() )->render_tiktok_shorts_voice_field( [ 'option' => 'presshub_social_tiktok_shorts_voice_1', 'narrator' => 1 ] );
+assert_true( false !== strpos( ob_get_clean(), 'value="NewVoice" selected' ), 'A saved voice missing from the list is kept and selected' );
+delete_option( 'presshub_social_tiktok_shorts_voice_1' );
+
 // Narrator settings.
 assert_equals( 1, PressHub_Social_Settings_Storage::get_tiktok_shorts_narrators(), 'Shorts default to a single narrator' );
 assert_equals( 'Puck', PressHub_Social_Settings_Storage::get_tiktok_shorts_voice( 1 ), 'The single narrator defaults to an upbeat Gemini voice' );
