@@ -2331,6 +2331,8 @@ jQuery(document).ready(function($) {
         var mediaTypesMeta = {
             'text_news': { label: 'News Website (HTML)', badgeClass: 'badge-active', icon: 'dashicons-admin-site-alt3' },
             'rss_feed': { label: 'RSS / Atom Feed', badgeClass: 'badge-active', icon: 'dashicons-rss' },
+            'social_x': { label: 'X (Twitter) Account', badgeClass: 'badge-active', icon: 'dashicons-twitter' },
+            'social_tiktok': { label: 'TikTok Account', badgeClass: 'badge-active', icon: 'dashicons-video-alt2' },
             'youtube': { label: 'YouTube Channel / Playlist', badgeClass: 'badge-planned', icon: 'dashicons-video-alt3' },
             'vlog': { label: 'Video / Vlog Feed', badgeClass: 'badge-planned', icon: 'dashicons-video-alt' },
             'podcast_audio': { label: 'Audio Podcast / RSS', badgeClass: 'badge-planned', icon: 'dashicons-format-audio' }
