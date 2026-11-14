@@ -1013,6 +1013,31 @@ $ai_tweet = PressHub_Social_AI_Copywriter::generate_from_data( [
 assert_true( is_string( $ai_tweet ) && PressHub_Social_AI_Copywriter::get_twitter_effective_length( $ai_tweet ) <= 280, 'AI copywriter truncates tweet to configured max_chars' );
 assert_true( is_string( $ai_tweet ) && str_contains( $ai_tweet, 'https://presshub.ai/story' ), 'AI copywriter preserves article URL during truncation' );
 
+// A speech/image model picked as the social copy provider falls back to a text provider
+assert_true( ! PressHub_Social_AI_Copywriter::is_text_model( 'gemini-3.8-flash-tts' ), 'is_text_model: TTS model is not a text model' );
+assert_true( ! PressHub_Social_AI_Copywriter::is_text_model( 'gemini-3.1-flash-lite-image' ), 'is_text_model: image model is not a text model' );
+assert_true( ! PressHub_Social_AI_Copywriter::is_text_model( 'models/imagen-4.0-generate-001' ), 'is_text_model: Imagen is not a text model' );
+assert_true( ! PressHub_Social_AI_Copywriter::is_text_model( 'lyria-3-clip-preview' ), 'is_text_model: Lyria is not a text model' );
+assert_true( PressHub_Social_AI_Copywriter::is_text_model( 'gemini-3.8-flash' ), 'is_text_model: Gemini Flash is a text model' );
+assert_true( PressHub_Social_AI_Copywriter::is_text_model( 'deepseek-v4-flash' ), 'is_text_model: DeepSeek is a text model' );
+$saved_providers = get_option( 'presshub_ai_configured_providers', [] );
+update_option( 'presshub_ai_configured_providers', [
+    [ 'id' => 'gemini-speech', 'type' => 'gemini', 'name' => 'Gemini Speech', 'api_key' => 'k-speech-1234567890', 'default_model' => 'gemini-3.8-flash-tts', 'enabled' => true ],
+    [ 'id' => 'gemini-main', 'type' => 'gemini', 'name' => 'Gemini', 'api_key' => 'k-main-1234567890', 'default_model' => 'gemini-3.1-flash-lite', 'enabled' => true ],
+] );
+update_option( 'presshub_social_ai_provider', 'gemini-speech' );
+$tts_cfg = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
+assert_true( is_array( $tts_cfg ) && 'gemini-main' === ( $tts_cfg['id'] ?? '' ), 'TTS provider chosen for social copy falls back to the first text provider' );
+assert_true( is_array( $tts_cfg ) && 'gemini-3.1-flash-lite' === ( $tts_cfg['model'] ?? '' ), 'Fallback uses the text provider model, not the TTS model' );
+update_option( 'presshub_social_ai_provider', '' );
+$auto_cfg = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
+assert_true( is_array( $auto_cfg ) && 'gemini-main' === ( $auto_cfg['id'] ?? '' ), 'Automatic provider skips a TTS provider listed first' );
+update_option( 'presshub_social_ai_provider', 'gemini-main' );
+$main_cfg = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
+assert_true( is_array( $main_cfg ) && 'gemini-main' === ( $main_cfg['id'] ?? '' ), 'A text provider chosen for social copy is used as is' );
+update_option( 'presshub_social_ai_provider', '' );
+update_option( 'presshub_ai_configured_providers', $saved_providers );
+
 // Twitter t.co character counting & Greek URL truncation test
 $greek_url = 'https://presshub.cy/%ce%b1%cf%80%ce%ac%ce%bd%cf%84%ce%b7%cf%83%ce%b7-%cf%83%cf%84%ce%b7-%cf%81%ce%b7%cf%84%ce%bf%cf%81%ce%b9%ce%ba%ce%ae-%cf%84%ce%bf%cf%85-%cf%86%cf%8c%ce%b2%ce%bf%cf%85-%ce%b7-%ce%ba%cf%8d%cf%80%cf%81/';
 $tweet_with_greek_url = 'Πώς μπορεί η Κύπρος να μετατραπεί σε «Ελβετία της Αν. Μεσογείου»; Αντί για ρητορική φόβου, η περιφερειακή συνεργασία σε ενέργεια και υποδομές ανοίγει νέες προοπτικές. Διαβάστε την ανάλυση: ' . $greek_url . ' #Cyprus #Analysis';

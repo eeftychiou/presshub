@@ -293,6 +293,30 @@ class PressHub_Social_AI_Copywriter {
     }
 
     /**
+     * Whether a model writes text. Speech (TTS), image, video, music and embedding models
+     * reject text and JSON requests ("JSON mode is not enabled for this model").
+     */
+    public static function is_text_model( string $model ): bool {
+        $model = strtolower( trim( preg_replace( '#^models/#', '', $model ) ) );
+        if ( '' === $model ) {
+            return true;
+        }
+        return ! preg_match( '/(^|[-_.\/])(tts|image|imagen|lyria|veo|embedding|embed)([-_.\/]|$)/', $model );
+    }
+
+    /**
+     * Whether a provider record can write social copy: a text provider type whose model
+     * (the module model override, else the record's default model) is a text model.
+     */
+    public static function is_text_provider( array $record, string $model_override = '' ): bool {
+        if ( 'google_cloud_tts' === ( $record['type'] ?? '' ) ) {
+            return false;
+        }
+        $model = '' !== $model_override ? $model_override : (string) ( $record['default_model'] ?? '' );
+        return self::is_text_model( $model );
+    }
+
+    /**
      * Resolve AI provider configuration strictly following Clean Slate Architecture precedence:
      * 1. Per-module explicit override option (presshub_social_ai_provider / presshub_social_ai_*)
      * 2. Configured provider record from PressHub_AI_Provider_Store (first enabled if none specified)
@@ -308,7 +332,18 @@ class PressHub_Social_AI_Copywriter {
         if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
             if ( '' !== $module_provider_id ) {
                 $candidate = PressHub_AI_Provider_Store::get( $module_provider_id );
-                if ( null !== $candidate && ! empty( $candidate['enabled'] ) && ( ! empty( $candidate['api_key'] ) || 'ollama_local' === ( $candidate['type'] ?? '' ) ) ) {
+                $module_model = PressHub_Social_Settings_Storage::get_ai_model();
+                if ( null !== $candidate && ! self::is_text_provider( $candidate, $module_model ) ) {
+                    // A speech, image or music model cannot write copy or JSON; every job would fail.
+                    PressHub_Social_Logger::warning(
+                        sprintf(
+                            'Social copy provider "%s" uses "%s", which is not a text model. Using the first enabled text provider instead. Pick a text model under PressHub Social > Settings > AI Provider.',
+                            $module_provider_id,
+                            '' !== $module_model ? $module_model : (string) ( $candidate['default_model'] ?? '' )
+                        ),
+                        [ 'module_provider' => $module_provider_id ]
+                    );
+                } elseif ( null !== $candidate && ! empty( $candidate['enabled'] ) && ( ! empty( $candidate['api_key'] ) || 'ollama_local' === ( $candidate['type'] ?? '' ) ) ) {
                     $provider_record = $candidate;
                     $provider_source = 'module_override:presshub_social_ai_provider';
                 } else {
@@ -324,7 +359,7 @@ class PressHub_Social_AI_Copywriter {
                 if ( ! empty( $enabled ) && is_array( $enabled ) ) {
                     foreach ( $enabled as $ep ) {
                         $ep_type = $ep['type'] ?? '';
-                        if ( ! empty( $ep['enabled'] ) && ( ! empty( $ep['api_key'] ) || 'ollama_local' === $ep_type ) ) {
+                        if ( ! empty( $ep['enabled'] ) && ( ! empty( $ep['api_key'] ) || 'ollama_local' === $ep_type ) && self::is_text_provider( $ep ) ) {
                             $provider_record = $ep;
                             $provider_source = 'store_fallback:first_enabled_provider';
                             break;
