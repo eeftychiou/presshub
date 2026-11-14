@@ -226,6 +226,14 @@ class PressHub_Social_Settings_Render {
                     $name  = $prov['name'] ?? ucfirst( $id );
                     $model = $prov['default_model'] ?? '';
                     $label = $name . ( '' !== $model ? ' (' . $model . ')' : '' );
+                    if ( class_exists( 'PressHub_Social_AI_Copywriter' ) && ! PressHub_Social_AI_Copywriter::is_text_provider( $prov ) ) {
+                        // Speech, image and music models cannot write copy. Only a saved choice
+                        // is still listed, marked, so the operator can see and change it.
+                        if ( $current !== $id ) {
+                            continue;
+                        }
+                        $label .= ' ' . __( '— not a text model, social copy uses the automatic provider', 'presshub-social-autopost' );
+                    }
                     echo '<option value="' . esc_attr( $id ) . '" ' . selected( $current, $id, false ) . '>' . esc_html( $label ) . '</option>';
                 }
             }
