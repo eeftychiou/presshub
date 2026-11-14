@@ -1307,6 +1307,11 @@ class PressHub_Social_Settings_Storage {
         'e5b721e8c94a252df788a967504c5061b975581411b3f4d20fc6f3097657832b', // v2.18: no story images.
         'f338073d72d1e8f1c4bf479d3dc1340105784a8152ab7bcd51907604b361dd83', // v2.21: no mood for the music.
         'aece0ed31bbdd3bfaba2d6705f4e979463c7f3b1cc30f7a35de6a3eae0b61742', // v2.22: 1-2 sentence caption, no comment question.
+        // The same defaults after a settings save before v2.23.1, which stripped their
+        // backslashes ("\n" in the JSON example became "n").
+        '0b3aeaf0ced22fa1acecf5735d32369f72e129a1859c03cdbb214bb6ce838339', // v2.18, saved.
+        '415fd9abe5d71a667702ccb123e3f2704d7c5999239edf65cf9bf22f6db8e377', // v2.21, saved.
+        'c86b10c3c659cbd194b493c313790b5bb22f77a0e809ed369d13c6d49dbf8745', // v2.22, saved.
     ];
 
     public static function is_legacy_tiktok_shorts_prompt( string $prompt ): bool {
@@ -1553,8 +1558,9 @@ class PressHub_Social_Settings_Storage {
         if ( ! is_string( $value ) ) {
             return '';
         }
-        $val = wp_unslash( $value );
-        return substr( trim( $val ), 0, 10000 );
+        // options.php already unslashes the posted value; unslashing again would strip
+        // real backslashes, such as the "\n" in a prompt's JSON example.
+        return substr( trim( $value ), 0, 10000 );
     }
 
     public static function sanitize_template( $value, string $option_name = '' ): string {
@@ -1564,8 +1570,8 @@ class PressHub_Social_Settings_Storage {
         if ( ! is_string( $value ) ) {
             return '';
         }
-        $val = wp_unslash( $value );
-        return substr( trim( $val ), 0, 5000 );
+        // options.php already unslashes the posted value (see sanitize_prompt()).
+        return substr( trim( $value ), 0, 5000 );
     }
 
     // ------------------------------------------------------------------
