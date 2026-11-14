@@ -247,3 +247,19 @@ describe('Poller runs the monitor and the trending reader one after the other', 
     expect(monitor.runOnce).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('Facebook handles', () => {
+  const { handleFromUrl } = require('../src/trending/facebook-parser');
+  test('vanity names, profile.php ids and people/ URLs', () => {
+    expect(handleFromUrl('https://www.facebook.com/philenews')).toBe('philenews');
+    expect(handleFromUrl('https://www.facebook.com/profile.php?id=100064123456789')).toBe('id-100064123456789');
+    expect(handleFromUrl('https://www.facebook.com/people/Some-Page/100064123456789/')).toBe('id-100064123456789');
+    expect(handleFromUrl('https://www.facebook.com/groups/123')).toBe('');
+  });
+
+  test('a Page without a vanity URL gets an id handle from the actor id', () => {
+    const s = fbStory('523456789012');
+    s.comet_sections.content.story.actors = [{ __typename: 'Page', id: '100064123456789', name: 'Δήμος', url: 'https://www.facebook.com/profile.php?id=100064123456789' }];
+    expect(parseFacebookStories([s])[0].handle).toBe('id-100064123456789');
+  });
+});

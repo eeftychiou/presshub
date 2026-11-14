@@ -69,7 +69,16 @@ function bfs<T>(root: any, pick: (key: string, value: any) => T | undefined, max
   return undefined;
 }
 
-function handleFromUrl(url: string): string {
+/**
+ * Account handle from an actor URL: the vanity name (facebook.com/philenews),
+ * or `id-<number>` for Pages without one (profile.php?id=123), so the
+ * per-account cap in WordPress still groups their posts.
+ */
+export function handleFromUrl(url: string): string {
+  const id = /^https:\/\/(?:www\.|web\.|m\.)?facebook\.com\/(?:profile\.php\?(?:.*&)?id=|people\/[^/]+\/)(\d{5,25})/.exec(url || '');
+  if (id) {
+    return `id-${id[1]}`;
+  }
   const m = /^https:\/\/(?:www\.|web\.|m\.)?facebook\.com\/([A-Za-z0-9.\-]{2,100})\/?(?:$|[?#])/.exec(url || '');
   if (m && !['profile.php', 'groups', 'watch', 'photo', 'reel', 'story.php', 'permalink.php'].includes(m[1].toLowerCase())) {
     return m[1].toLowerCase();
@@ -109,10 +118,11 @@ function parseStory(story: any): FacebookPost | null {
   const hasPhoto = !hasVideo && bfs<boolean>(story, (k, v) => (k === '__typename' && v === 'Photo' ? true : undefined)) === true;
 
   const actorUrl = typeof actor.url === 'string' ? actor.url : typeof actor.profile_url === 'string' ? actor.profile_url : '';
+  const actorId = typeof actor.id === 'string' && /^\d{5,25}$/.test(actor.id) ? actor.id : '';
   return {
     platform: 'facebook',
     id,
-    handle: handleFromUrl(actorUrl),
+    handle: handleFromUrl(actorUrl) || (actorId ? `id-${actorId}` : ''),
     author_name: String(actor.name || ''),
     url: permalink,
     text,

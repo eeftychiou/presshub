@@ -141,14 +141,19 @@ $by = [];
 foreach ( $plan['targets'] as $t ) {
     $by[ $t['platform'] ][] = $t['url'];
 }
-st_check( 'plan: one X search on the Top tab', 1 === count( $by['x'] ?? [] ) && false !== strpos( $by['x'][0], 'f=top' ) && false !== strpos( rawurldecode( $by['x'][0] ), 'Cyprus OR' ) && false !== strpos( rawurldecode( $by['x'][0] ), 'min_faves:5' ) );
-st_check( 'plan: three TikTok searches', 3 === count( $by['tiktok'] ?? [] ) && 0 === strpos( $by['tiktok'][0], 'https://www.tiktok.com/search/video?q=' ) );
+st_check( 'plan: Greek and other X searches on the Top tab', 2 === count( $by['x'] ?? [] ) && false !== strpos( $by['x'][0], 'f=top' ) );
+$xg = rawurldecode( $by['x'][0] );
+$xe = rawurldecode( $by['x'][1] );
+st_check( 'plan: Greek X search uses lang:el and a lower bar', false !== strpos( $xg, 'Κύπρος OR Λευκωσία' ) && false !== strpos( $xg, 'lang:el' ) && false !== strpos( $xg, 'min_faves:5' ) && false === strpos( $xg, 'Cyprus' ) );
+st_check( 'plan: other X search has a higher bar and no language', '(Cyprus) -filter:replies -filter:retweets min_faves:20' === explode( 'q=', explode( '&src', $xe )[0] )[1] );
+st_check( 'plan: TikTok hashtag pages first, then two searches', [ 'https://www.tiktok.com/tag/cyprus', 'https://www.tiktok.com/tag/' . rawurlencode( 'κύπρος' ), 'https://www.tiktok.com/tag/limassol' ] === array_slice( $by['tiktok'] ?? [], 0, 3 ) && 5 === count( $by['tiktok'] ) && 0 === strpos( $by['tiktok'][3], 'https://www.tiktok.com/search/video?q=' ) );
 st_check( 'plan: facebook pages', [ 'https://www.facebook.com/philenews' ] === ( $by['facebook'] ?? [] ) );
 st_check( 'plan: not handed out twice', false === $T::get_worker_plan( false, $now + 60 )['due'] );
 st_check( 'plan: handed out again after the lock', true === $T::get_worker_plan( false, $now + $T::PLAN_LOCK_SEC + 1 )['due'] );
 st_reset( [ 'presshub_ai_social_trending_keywords' => "Κύπρος\nΑγία Νάπα" ] );
 $plan = $T::get_worker_plan( false, $now );
 st_check( 'plan: multi-word terms quoted for X', false !== strpos( rawurldecode( $plan['targets'][0]['url'] ), '"Αγία Νάπα"' ) );
+st_check( 'plan: no English terms -> one X search', 1 === count( array_filter( $plan['targets'], static function ( $t ) { return 'x' === $t['platform']; } ) ) );
 
 // =========================================================================
 // 4. Ingest
@@ -196,6 +201,23 @@ st_check( 'select: total cap', 6 === count( $picked ) );
 st_check( 'select: below min engagement dropped', ! in_array( 'x_15', $keys, true ) );
 st_check( 'select: per-account cap of 2', ! in_array( 'tiktok_23', $keys, true ) );
 st_check( 'select: platforms take turns, strongest first', [ 'tiktok_21', 'x_11', 'facebook_31', 'tiktok_22', 'x_12', 'x_13' ] === $keys );
+// Excluded words and accounts without a handle.
+$spam  = $T::normalize_item( st_post( 'x', '43', 900, 30, [ 'text' => 'Free BITCOIN airdrop Cyprus' ] ), $now );
+$ok    = $T::normalize_item( st_post( 'x', '44', 900, 30, [ 'text' => 'Bitcoiners? no: Cyprus news' ] ), $now );
+$words = $S::get_social_trending_excluded_words();
+st_check( 'exclude: default list has spam words', in_array( 'crypto', $words, true ) );
+st_check( 'exclude: whole word, any case', $T::is_excluded( $spam, $words ) && ! $T::is_excluded( $ok, $words ) );
+st_check( 'exclude: dropped from selection', [] === $T::select( [ $spam['key'] => $spam ], $now ) );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_excluded_words'] = "ακίνητα προς πώληση";
+st_check( 'exclude: custom Greek phrase', $T::is_excluded( $T::normalize_item( st_post( 'facebook', '45', 90, 30, [ 'text' => 'Ακίνητα προς πώληση στη Λεμεσό' ] ), $now ), $S::get_social_trending_excluded_words() ) );
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_excluded_words'] );
+$fb = [];
+foreach ( [ '46', '47', '48' ] as $fid ) {
+    $c = $T::normalize_item( st_post( 'facebook', $fid, 100 + (int) $fid, 30, [ 'handle' => '', 'author_name' => 'Δήμος Λεμεσού' ] ), $now );
+    $fb[ $c['key'] ] = $c;
+}
+st_check( 'select: no handle -> capped by author name', 2 === count( $T::select( $fb, $now ) ) );
+st_check( 'account key: id handles kept', 'id-1000641' === $T::account_key( $T::normalize_item( st_post( 'facebook', '49', 100, 30, [ 'handle' => 'id-1000641' ] ), $now ) ) );
 $fresh = $T::normalize_item( st_post( 'x', '41', 100, 30 ), $now );
 $old   = $T::normalize_item( st_post( 'x', '42', 400, 20 * 60 ), $now );
 st_check( 'score: fresh post with traction beats an older bigger one', $T::score( $fresh, $now ) > $T::score( $old, $now ) );

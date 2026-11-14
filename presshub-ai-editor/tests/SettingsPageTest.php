@@ -246,6 +246,7 @@ class SettingsPageTest
             'presshub_ai_social_trending_max_per_platform',
             'presshub_ai_social_trending_max_age_hours',
             'presshub_ai_social_trending_min_engagement',
+            'presshub_ai_social_trending_excluded_words',
             'presshub_ai_curation_max_articles',
             'presshub_ai_curation_max_chars_per_article',
             'presshub_ai_briefing_text_preset',

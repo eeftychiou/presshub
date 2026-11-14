@@ -61,8 +61,9 @@ class PressHub_AI_Social_Trending {
         'facebook'  => 'Facebook',
     ];
 
-    /** Search terms used on X / TikTok per run (each one is a page visit). */
-    const MAX_TIKTOK_QUERIES = 3;
+    /** TikTok pages per run (each one is a page visit): hashtag pages, then keyword searches. */
+    const MAX_TIKTOK_TAGS    = 3;
+    const MAX_TIKTOK_QUERIES = 2;
 
     /** @var callable|null fn( string $url ): array|WP_Error — HTTP GET override for tests. */
     public static $http_get = null;
@@ -252,20 +253,49 @@ class PressHub_AI_Social_Trending {
         $targets  = [];
 
         if ( in_array( 'x', $worker, true ) && ! empty( $keywords ) ) {
-            $terms = array_map( static function ( $k ) {
-                return false !== strpos( $k, ' ' ) ? '"' . str_replace( '"', '', $k ) . '"' : $k;
-            }, $keywords );
-            $q = '(' . implode( ' OR ', $terms ) . ') -filter:replies -filter:retweets';
-            if ( $min > 0 ) {
-                $q .= ' min_faves:' . max( 1, (int) floor( $min / 2 ) );
+            // Greek terms and Latin-script terms are searched separately: English
+            // "Cyprus" draws global posts with far more likes, which would crowd out
+            // local Greek discussion, so the Greek search uses lang:el and a lower bar.
+            $greek = [];
+            $latin = [];
+            foreach ( $keywords as $k ) {
+                $term = false !== strpos( $k, ' ' ) ? '"' . str_replace( '"', '', $k ) . '"' : $k;
+                if ( preg_match( '/\p{Greek}/u', $k ) ) {
+                    $greek[] = $term;
+                } else {
+                    $latin[] = $term;
+                }
             }
-            $targets[] = [
-                'platform' => 'x',
-                'url'      => 'https://x.com/search?q=' . rawurlencode( $q ) . '&src=typed_query&f=top',
-                'label'    => 'X search',
+            $groups = [
+                [ $greek, ' lang:el', max( 1, (int) floor( $min / 2 ) ), 'X search (Greek)' ],
+                [ $latin, '', max( 1, $min * 2 ), 'X search (English / other)' ],
             ];
+            foreach ( $groups as [ $terms, $lang, $faves, $label ] ) {
+                if ( empty( $terms ) ) {
+                    continue;
+                }
+                $q = '(' . implode( ' OR ', $terms ) . ')' . $lang . ' -filter:replies -filter:retweets';
+                if ( $min > 0 ) {
+                    $q .= ' min_faves:' . $faves;
+                }
+                $targets[] = [
+                    'platform' => 'x',
+                    'url'      => 'https://x.com/search?q=' . rawurlencode( $q ) . '&src=typed_query&f=top',
+                    'label'    => $label,
+                ];
+            }
         }
         if ( in_array( 'tiktok', $worker, true ) ) {
+            // TikTok search has no date filter on the web and sorts by relevance, so
+            // most results are older than the window. Hashtag pages surface newer
+            // videos, so they come first; a couple of keyword searches add the rest.
+            foreach ( array_slice( PressHub_AI_Settings_Storage::get_social_trending_hashtags(), 0, self::MAX_TIKTOK_TAGS ) as $tag ) {
+                $targets[] = [
+                    'platform' => 'tiktok',
+                    'url'      => 'https://www.tiktok.com/tag/' . rawurlencode( $tag ),
+                    'label'    => 'TikTok #' . $tag,
+                ];
+            }
             foreach ( array_slice( $keywords, 0, self::MAX_TIKTOK_QUERIES ) as $k ) {
                 $targets[] = [
                     'platform' => 'tiktok',
@@ -454,6 +484,33 @@ class PressHub_AI_Social_Trending {
         update_option( self::OPTION_CANDIDATES, $store, false );
     }
 
+    /** Who posted it, for the per-account cap: handle, else display name, else the post itself. */
+    public static function account_key( array $item ): string {
+        if ( '' !== (string) $item['handle'] ) {
+            return (string) $item['handle'];
+        }
+        $name = trim( (string) $item['author_name'] );
+        if ( '' !== $name ) {
+            return 'name:' . ( function_exists( 'mb_strtolower' ) ? mb_strtolower( $name ) : strtolower( $name ) );
+        }
+        return 'post:' . $item['key'];
+    }
+
+    /** Matches one of the excluded words (spam / off-topic). */
+    public static function is_excluded( array $item, array $words ): bool {
+        if ( empty( $words ) ) {
+            return false;
+        }
+        $hay = ( function_exists( 'mb_strtolower' ) ? mb_strtolower( $item['text'] . ' ' . $item['author_name'] . ' ' . $item['handle'] ) : strtolower( $item['text'] . ' ' . $item['author_name'] . ' ' . $item['handle'] ) );
+        foreach ( $words as $w ) {
+            $w = function_exists( 'mb_strtolower' ) ? mb_strtolower( $w ) : strtolower( $w );
+            if ( '' !== $w && preg_match( '/(?<![\p{L}\p{N}])' . preg_quote( $w, '/' ) . '(?![\p{L}\p{N}])/u', $hay ) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function engagement( array $item ): int {
         return (int) $item['likes'] + 2 * (int) $item['comments'] + 3 * (int) $item['shares'];
     }
@@ -478,13 +535,14 @@ class PressHub_AI_Social_Trending {
         $max      = PressHub_AI_Settings_Storage::get_social_trending_max_items();
         $per      = PressHub_AI_Settings_Storage::get_social_trending_max_per_platform();
         $max_age  = PressHub_AI_Settings_Storage::get_social_trending_max_age_hours() * 3600;
+        $excluded = PressHub_AI_Settings_Storage::get_social_trending_excluded_words();
         $by       = [];
         $per_auth = [];
         foreach ( $candidates as $c ) {
             if ( ! is_array( $c ) || $now - (int) $c['created_ts'] > $max_age ) {
                 continue;
             }
-            if ( self::engagement( $c ) < $min ) {
+            if ( self::engagement( $c ) < $min || self::is_excluded( $c, $excluded ) ) {
                 continue;
             }
             $c['score'] = self::score( $c, $now );
@@ -497,7 +555,7 @@ class PressHub_AI_Social_Trending {
             // At most two posts by the same account per platform, so one busy account cannot fill it.
             $kept = [];
             foreach ( $list as $c ) {
-                $ak = $p . ':' . ( '' !== $c['handle'] ? $c['handle'] : $c['key'] );
+                $ak = $p . ':' . self::account_key( $c );
                 $per_auth[ $ak ] = ( $per_auth[ $ak ] ?? 0 ) + 1;
                 if ( $per_auth[ $ak ] > 2 ) {
                     continue;

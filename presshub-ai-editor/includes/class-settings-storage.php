@@ -2650,6 +2650,7 @@ class PressHub_AI_Settings_Storage {
     const SOCIAL_TRENDING_DEFAULT_HASHTAGS = "cyprus\nκύπρος\nlimassol";
     const SOCIAL_TRENDING_DEFAULT_TITLE    = 'Τι συζητά η Κύπρος στα social – {date}';
     const SOCIAL_TRENDING_DEFAULT_CATEGORY = 'Trending στα Social';
+    const SOCIAL_TRENDING_DEFAULT_EXCLUDED = "crypto\nbitcoin\nforex\nairdrop\ncasino\nbetting\nonlyfans";
 
     /**
      * @return array<string, callable>
@@ -2673,6 +2674,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_social_trending_max_per_platform'  => [ __CLASS__, 'sanitize_social_trending_max_per_platform' ],
             'presshub_ai_social_trending_max_age_hours'     => [ __CLASS__, 'sanitize_social_trending_max_age_hours' ],
             'presshub_ai_social_trending_min_engagement'    => [ __CLASS__, 'sanitize_social_trending_min_engagement' ],
+            'presshub_ai_social_trending_excluded_words'    => [ __CLASS__, 'sanitize_social_trending_excluded_words' ],
         ];
     }
 
@@ -2722,6 +2724,16 @@ class PressHub_AI_Settings_Storage {
             }
         }
         return array_values( $out );
+    }
+
+    /** Posts containing one of these words or phrases (whole words, any case) are left out. */
+    public static function sanitize_social_trending_excluded_words( $value ): string {
+        return implode( "\n", self::sanitize_lines( $value, 100, 60 ) );
+    }
+
+    public static function get_social_trending_excluded_words(): array {
+        $raw = get_option( 'presshub_ai_social_trending_excluded_words', self::SOCIAL_TRENDING_DEFAULT_EXCLUDED );
+        return array_values( array_filter( explode( "\n", self::sanitize_social_trending_excluded_words( $raw ) ) ) );
     }
 
     public static function sanitize_social_trending_keywords( $value ): string {

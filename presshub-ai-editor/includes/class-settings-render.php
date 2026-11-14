@@ -2686,6 +2686,7 @@ class PressHub_AI_Settings_Render {
         $per_plat  = $S::get_social_trending_max_per_platform();
         $max_age   = $S::get_social_trending_max_age_hours();
         $min_eng   = $S::get_social_trending_min_engagement();
+        $excluded  = implode( "\n", $S::get_social_trending_excluded_words() );
 
         $state    = class_exists( 'PressHub_AI_Social_Trending' ) ? PressHub_AI_Social_Trending::get_state() : [];
         $fmt      = static function ( $ts ) {
@@ -2746,14 +2747,14 @@ class PressHub_AI_Settings_Render {
             <th scope="row"><label for="presshub_ai_social_trending_keywords"><?php echo esc_html__( 'Search Terms (X, TikTok)', 'presshub-ai-editor' ); ?></label></th>
             <td>
                 <textarea name="presshub_ai_social_trending_keywords" id="presshub_ai_social_trending_keywords" rows="5" class="large-text code"><?php echo esc_textarea( $keywords ); ?></textarea>
-                <p class="description"><?php echo esc_html__( 'One per line. X searches all of them at once (Top results). TikTok searches the first three, one page each.', 'presshub-ai-editor' ); ?></p>
+                <p class="description"><?php echo esc_html__( 'One per line. X runs two Top searches: the Greek terms (Greek-language posts only, lower like threshold) and the other terms (higher threshold), so global English posts do not crowd out local ones. TikTok also searches the first two terms.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
-            <th scope="row"><label for="presshub_ai_social_trending_hashtags"><?php echo esc_html__( 'Instagram Hashtags', 'presshub-ai-editor' ); ?></label></th>
+            <th scope="row"><label for="presshub_ai_social_trending_hashtags"><?php echo esc_html__( 'Hashtags (Instagram, TikTok)', 'presshub-ai-editor' ); ?></label></th>
             <td>
                 <textarea name="presshub_ai_social_trending_hashtags" id="presshub_ai_social_trending_hashtags" rows="3" class="large-text code"><?php echo esc_textarea( $hashtags ); ?></textarea>
-                <p class="description"><?php echo esc_html__( 'Up to 5, without #. Instagram allows 30 different hashtags per account per week, so change them rarely. The Meta app needs the instagram_basic permission and Instagram Public Content Access.', 'presshub-ai-editor' ); ?></p>
+                <p class="description"><?php echo esc_html__( 'Up to 5, without #. The worker opens the TikTok page of the first three (they show newer videos than search). Instagram allows 30 different hashtags per account per week, so change them rarely. The Meta app needs the instagram_basic permission and Instagram Public Content Access.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
@@ -2761,6 +2762,13 @@ class PressHub_AI_Settings_Render {
             <td>
                 <textarea name="presshub_ai_social_trending_facebook_pages" id="presshub_ai_social_trending_facebook_pages" rows="4" class="large-text code" placeholder="https://www.facebook.com/philenews"><?php echo esc_textarea( $fb_pages ); ?></textarea>
                 <p class="description"><?php echo esc_html__( 'One Page URL per line. Facebook has no public search, so the worker reads these Cypriot Pages and the roundup keeps their most engaging recent posts. Needs a Facebook reader session on the worker.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_excluded_words"><?php echo esc_html__( 'Excluded Words', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <textarea name="presshub_ai_social_trending_excluded_words" id="presshub_ai_social_trending_excluded_words" rows="4" class="large-text code"><?php echo esc_textarea( $excluded ); ?></textarea>
+                <p class="description"><?php echo esc_html__( 'One word or phrase per line. Posts that contain one (as a whole word, in the text, name or handle) are left out of the roundup. Useful against crypto, betting and similar spam.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
