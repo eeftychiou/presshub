@@ -497,7 +497,7 @@ class PressHub_Social_TikTok_Shorts {
         $script    = (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
-        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::host_count() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() );
+        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
@@ -535,7 +535,9 @@ class PressHub_Social_TikTok_Shorts {
         $post      = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         $title     = $post ? (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) ) : '';
         $site_name = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'name' ) : '';
-        $speakers  = 1 === self::host_count() ? '[SPEAKER_1] μόνο' : '[SPEAKER_1] και [SPEAKER_2], εναλλάξ';
+        $speakers  = 1 === self::narrators()
+            ? '[SPEAKER_1] μόνο: ένας αφηγητής που μιλά απευθείας στον θεατή, σε β\' ενικό, με ρυθμό και ζωντάνια'
+            : '[SPEAKER_1] και [SPEAKER_2], εναλλάξ';
 
         return strtr( $template, [
             '{count}'     => (string) $count,
@@ -678,20 +680,20 @@ class PressHub_Social_TikTok_Shorts {
 
         $synth    = new PressHub_AI_Audio_Synthesizer();
         $producer = new PressHub_AI_Podcast_Producer();
-        $turns    = $producer->parse_script_turns( $short['script'] );
+        $turns    = self::merge_turns( $producer->parse_script_turns( $short['script'] ), self::narrators() );
         if ( empty( $turns ) ) {
             return new WP_Error( 'tiktok_short_no_turns', 'the short script has no speaker turns.' );
         }
 
         $voices = self::voices( $synth );
-        $speed  = PressHub_AI_Settings_Storage::get_voice_speed();
+        $speed  = self::speed();
         $pitch  = PressHub_AI_Settings_Storage::get_voice_pitch();
         $style  = self::style();
         $engine = PressHub_AI_Settings_Storage::get_briefing_tts_engine();
 
         $chunks = [];
         foreach ( $turns as $turn ) {
-            $voice = ( 'male' === ( $turn['speaker'] ?? '' ) && 1 !== self::host_count() ) ? $voices['speaker_2'] : $voices['speaker_1'];
+            $voice = 2 === self::speaker_number( $turn, self::narrators() ) ? $voices['speaker_2'] : $voices['speaker_1'];
             $audio = $synth->synthesize_turn( (string) $turn['text'], $voice, $speed, $pitch, null, $style, $date );
             if ( is_wp_error( $audio ) ) {
                 return $audio;
@@ -747,7 +749,7 @@ class PressHub_Social_TikTok_Shorts {
                 $t += $pause;
             }
             $segment = [
-                'speaker' => ( 'male' === ( $turn['speaker'] ?? '' ) && 1 !== self::host_count() ) ? 2 : 1,
+                'speaker' => self::speaker_number( $turn, self::narrators() ),
                 'text'    => $text,
                 'start'   => round( $t, 3 ),
                 'end'     => round( $t + $seconds, 3 ),
@@ -886,11 +888,10 @@ class PressHub_Social_TikTok_Shorts {
      * Cache key of a short's audio: every setting that changes how it sounds.
      */
     private static function audio_hash( string $script ): string {
-        $parts = [ $script, self::style(), (string) self::host_count() ];
+        $parts = [ $script, self::style(), (string) self::narrators(), (string) self::speed() ];
         if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
             $parts[] = PressHub_AI_Settings_Storage::get_briefing_tts_engine();
             $parts[] = PressHub_AI_Settings_Storage::get_briefing_tts_model();
-            $parts[] = (string) PressHub_AI_Settings_Storage::get_voice_speed();
             $parts[] = (string) PressHub_AI_Settings_Storage::get_voice_pitch();
             $parts[] = (string) PressHub_AI_Settings_Storage::get_briefing_tts_turn_pause_ms();
         }
@@ -900,15 +901,40 @@ class PressHub_Social_TikTok_Shorts {
         return hash( 'sha256', implode( '|', $parts ) );
     }
 
-    /** @return array{speaker_1:string,speaker_2:string} */
+    /**
+     * Voices of the shorts' narrators: the TikTok Shorts voice settings, or the Daily
+     * Briefing presenter voices where those are empty. A voice made for the other TTS
+     * engine (a Gemini name under Google Cloud, or the reverse) cannot be spoken, so the
+     * presenter voice is used and a warning is logged.
+     *
+     * @return array{speaker_1:string,speaker_2:string}
+     */
     private static function voices( PressHub_AI_Audio_Synthesizer $synth ): array {
-        return [
-            'speaker_1' => $synth->get_voice_for_speaker( 'presenter_1' ),
-            'speaker_2' => $synth->get_voice_for_speaker( 'presenter_2' ),
-        ];
+        $engine = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
+        $voices = [];
+        foreach ( [ 1, 2 ] as $n ) {
+            $voice = PressHub_Social_Settings_Storage::get_tiktok_shorts_voice( $n );
+            if ( '' !== $voice && ! self::voice_fits_engine( $voice, $engine ) ) {
+                PressHub_Social_Logger::warning( sprintf( 'TikTok Shorts voice %d "%s" is not a %s voice; the Daily Briefing presenter %d voice is used instead.', $n, $voice, 'google_cloud' === $engine ? 'Google Cloud' : 'Gemini', $n ) );
+                $voice = '';
+            }
+            $voices[ 'speaker_' . $n ] = '' !== $voice ? $voice : $synth->get_voice_for_speaker( 'presenter_' . $n );
+        }
+        return $voices;
     }
 
+    /** Google Cloud voices are named like el-GR-Wavenet-A; Gemini voices are one word. */
+    public static function voice_fits_engine( string $voice, string $engine ): bool {
+        $is_cloud = false !== strpos( $voice, '-' );
+        return 'google_cloud' === $engine ? $is_cloud : ! $is_cloud;
+    }
+
+    /** Delivery instruction: the TikTok Shorts narration style, else the Daily Briefing style. */
     private static function style(): string {
+        $shorts = PressHub_Social_Settings_Storage::get_tiktok_shorts_tts_style();
+        if ( '' !== $shorts ) {
+            return $shorts;
+        }
         if ( ! class_exists( 'PressHub_AI_Settings_Storage' ) ) {
             return '';
         }
@@ -917,8 +943,45 @@ class PressHub_Social_TikTok_Shorts {
         return ( 'custom' === $key && '' !== trim( $custom ) ) ? $custom : $key;
     }
 
-    private static function host_count(): int {
-        return class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_host_count() : 2;
+    private static function narrators(): int {
+        return PressHub_Social_Settings_Storage::get_tiktok_shorts_narrators();
+    }
+
+    /** Speaking rate multiplier of the shorts (TikTok Shorts: Voice Speed). */
+    private static function speed(): float {
+        return PressHub_Social_Settings_Storage::get_tiktok_shorts_voice_speed() / 100;
+    }
+
+    /** Narrator (1 or 2) of a parsed turn; always 1 with a single narrator. */
+    public static function speaker_number( array $turn, int $narrators ): int {
+        return ( 2 === $narrators && 'male' === ( $turn['speaker'] ?? '' ) ) ? 2 : 1;
+    }
+
+    /**
+     * Join consecutive turns of the same narrator, so a single narrator is read in one
+     * TTS call and keeps a natural flow instead of restarting at every line.
+     *
+     * @param array<int, array{speaker?:string,text?:string}> $turns
+     * @return array<int, array{speaker?:string,text?:string}>
+     */
+    public static function merge_turns( array $turns, int $narrators ): array {
+        $merged = [];
+        $last   = 0;
+        foreach ( $turns as $turn ) {
+            $text = trim( (string) ( $turn['text'] ?? '' ) );
+            if ( '' === $text ) {
+                continue;
+            }
+            $speaker = self::speaker_number( $turn, $narrators );
+            if ( ! empty( $merged ) && $speaker === $last ) {
+                $merged[ count( $merged ) - 1 ]['text'] .= ' ' . $text;
+                continue;
+            }
+            $turn['text'] = $text;
+            $merged[]     = $turn;
+            $last         = $speaker;
+        }
+        return $merged;
     }
 
     /**
@@ -1031,7 +1094,9 @@ class PressHub_Social_TikTok_Shorts {
                 'engine'         => $has_settings ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : '',
                 'model'          => $has_settings ? PressHub_AI_Settings_Storage::get_briefing_tts_model() : '',
                 'voices'         => (array) ( $result['voices'] ?? [] ),
-                'speed'          => $has_settings ? PressHub_AI_Settings_Storage::get_voice_speed() : null,
+                'speed'          => self::speed(),
+                'style'          => self::style(),
+                'narrators'      => self::narrators(),
                 'pitch'          => $has_settings ? PressHub_AI_Settings_Storage::get_voice_pitch() : null,
                 'audio_url'      => (string) $result['url'],
                 'attachment_id'  => (int) ( $result['id'] ?? 0 ),

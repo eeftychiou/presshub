@@ -277,6 +277,30 @@ class PressHub_Social_Settings_Storage {
             'default'           => 120,
         ] );
 
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_narrators', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_narrators' ],
+            'default'           => 1,
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_1', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_voice' ],
+            'default'           => self::DEFAULT_TIKTOK_SHORTS_VOICE_1,
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_2', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_voice' ],
+            'default'           => '',
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_speed', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_voice_speed' ],
+            'default'           => 110,
+        ] );
+
         register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_enabled' ],
@@ -388,6 +412,13 @@ class PressHub_Social_Settings_Storage {
             },
         ] );
 
+        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_tts_style', [
+            'type'              => 'string',
+            'sanitize_callback' => function ( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_tts_style' );
+            },
+        ] );
+
         register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_music', [
             'type'              => 'string',
             'sanitize_callback' => function ( $val ) {
@@ -477,6 +508,14 @@ class PressHub_Social_Settings_Storage {
                 update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
             } catch ( Exception $e ) {
                 PressHub_Social_Logger::error( 'Failed to seed TikTok shorts image style prompt: ' . $e->getMessage() );
+            }
+        }
+
+        if ( false === get_option( 'presshub_social_prompt_tiktok_shorts_tts_style', false ) ) {
+            try {
+                update_option( 'presshub_social_prompt_tiktok_shorts_tts_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_tts_style.txt' ) );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to seed TikTok shorts narration style: ' . $e->getMessage() );
             }
         }
 
@@ -643,6 +682,7 @@ class PressHub_Social_Settings_Storage {
         update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_music', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_music.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_moods', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_moods.txt' ) );
+        update_option( 'presshub_social_prompt_tiktok_shorts_tts_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_tts_style.txt' ) );
     }
 
     // ------------------------------------------------------------------
@@ -1216,6 +1256,79 @@ class PressHub_Social_Settings_Storage {
 
     public static function sanitize_tiktok_shorts_caption_words( $value ): int {
         return max( 40, min( 300, (int) $value ) );
+    }
+
+    /** Default voice of a short's narrator: an upbeat Gemini TTS voice. */
+    public const DEFAULT_TIKTOK_SHORTS_VOICE_1 = 'Puck';
+
+    /**
+     * Gemini TTS voices and their character, for the shorts' voice fields.
+     *
+     * @return array<string, string> voice => character
+     */
+    public static function gemini_tts_voices(): array {
+        return [
+            'Puck' => 'Upbeat', 'Laomedeia' => 'Upbeat', 'Fenrir' => 'Excitable', 'Sadachbia' => 'Lively',
+            'Zephyr' => 'Bright', 'Autonoe' => 'Bright', 'Aoede' => 'Breezy', 'Leda' => 'Youthful',
+            'Achird' => 'Friendly', 'Sulafat' => 'Warm', 'Vindemiatrix' => 'Gentle', 'Callirrhoe' => 'Easy-going',
+            'Umbriel' => 'Easy-going', 'Zubenelgenubi' => 'Casual', 'Kore' => 'Firm', 'Orus' => 'Firm',
+            'Alnilam' => 'Firm', 'Charon' => 'Informative', 'Rasalgethi' => 'Informative', 'Sadaltager' => 'Knowledgeable',
+            'Iapetus' => 'Clear', 'Erinome' => 'Clear', 'Schedar' => 'Even', 'Achernar' => 'Soft',
+            'Despina' => 'Smooth', 'Algieba' => 'Smooth', 'Enceladus' => 'Breathy', 'Algenib' => 'Gravelly',
+            'Gacrux' => 'Mature', 'Pulcherrima' => 'Forward',
+        ];
+    }
+
+    /** How many narrators read a short: 1 (default, one voice) or 2 (alternating voices). */
+    public static function get_tiktok_shorts_narrators(): int {
+        return self::sanitize_tiktok_shorts_narrators( get_option( 'presshub_social_tiktok_shorts_narrators', 1 ) );
+    }
+
+    public static function sanitize_tiktok_shorts_narrators( $value ): int {
+        return max( 1, min( 2, (int) $value ) );
+    }
+
+    /**
+     * Voice of a short's narrator (1 or 2), as typed: a Gemini voice name such as Puck,
+     * or a Google Cloud voice such as el-GR-Chirp3-HD-Achird. Empty means the Daily
+     * Briefing presenter voice of the same number.
+     */
+    public static function get_tiktok_shorts_voice( int $narrator ): string {
+        $option = 2 === $narrator ? 'presshub_social_tiktok_shorts_voice_2' : 'presshub_social_tiktok_shorts_voice_1';
+        $default = 2 === $narrator ? '' : self::DEFAULT_TIKTOK_SHORTS_VOICE_1;
+        return self::sanitize_tiktok_shorts_voice( get_option( $option, $default ) );
+    }
+
+    public static function sanitize_tiktok_shorts_voice( $value ): string {
+        $value = is_string( $value ) ? trim( $value ) : '';
+        return (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', $value );
+    }
+
+    /** Speaking rate of the shorts, in percent of normal (70-150, default 110). */
+    public static function get_tiktok_shorts_voice_speed(): int {
+        return self::sanitize_tiktok_shorts_voice_speed( get_option( 'presshub_social_tiktok_shorts_voice_speed', 110 ) );
+    }
+
+    public static function sanitize_tiktok_shorts_voice_speed( $value ): int {
+        return max( 70, min( 150, (int) $value ) );
+    }
+
+    /**
+     * Delivery instruction sent to the TTS with every short. Seeds from
+     * social_tiktok_shorts_tts_style.txt if the option does not exist yet; empty means
+     * the Daily Briefing speaking style.
+     */
+    public static function get_tiktok_shorts_tts_style(): string {
+        $val = get_option( 'presshub_social_prompt_tiktok_shorts_tts_style', false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_tts_style.txt' );
+                update_option( 'presshub_social_prompt_tiktok_shorts_tts_style', $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
+        return is_string( $val ) ? trim( $val ) : '';
     }
 
     /**

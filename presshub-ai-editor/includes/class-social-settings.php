@@ -700,6 +700,74 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_tiktok_shorts_narrators',
+            __( 'Short Narrators', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_narrators',
+                'default' => 1,
+                'min'     => 1,
+                'max'     => 2,
+                'unit'    => __( 'voices', 'presshub-social-autopost' ),
+                'desc'    => __( 'How many voices read each short. 1 (recommended) is one presenter talking straight to the viewer, read in one go for a natural flow. 2 alternates two voices like the podcast. Independent of the Daily Briefing host count.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        $voice_suggestions = [];
+        foreach ( PressHub_Social_Settings_Storage::gemini_tts_voices() as $voice => $character ) {
+            $voice_suggestions[ $voice ] = $character;
+        }
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_voice_1',
+            __( 'Short Narrator Voice', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'      => 'presshub_social_tiktok_shorts_voice_1',
+                'default'     => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SHORTS_VOICE_1,
+                'placeholder' => __( 'Daily Briefing presenter 1 voice', 'presshub-social-autopost' ),
+                'suggestions' => $voice_suggestions,
+                'desc'        => __( 'Gemini TTS voice of the (first) narrator; pick from the list or type a name. Lively choices: Puck (upbeat, male), Laomedeia (upbeat, female), Fenrir (excitable), Sadachbia (lively), Zephyr (bright). With the Google Cloud engine type a Cloud voice such as el-GR-Chirp3-HD-Achird. Empty uses the Daily Briefing presenter 1 voice.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_voice_2',
+            __( 'Second Narrator Voice', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'      => 'presshub_social_tiktok_shorts_voice_2',
+                'default'     => '',
+                'placeholder' => __( 'Daily Briefing presenter 2 voice', 'presshub-social-autopost' ),
+                'suggestions' => $voice_suggestions,
+                'desc'        => __( 'Used only with 2 narrators. Pick a voice that sounds clearly different from the first. Empty uses the Daily Briefing presenter 2 voice.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_tiktok_shorts_voice_speed',
+            __( 'Short Voice Speed', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec',
+            [
+                'option'  => 'presshub_social_tiktok_shorts_voice_speed',
+                'default' => 110,
+                'min'     => 70,
+                'max'     => 150,
+                'step'    => 5,
+                'unit'    => '%',
+                'desc'    => __( 'Speaking rate of the shorts, in percent of normal. Short videos keep attention with a slightly faster pace; 110% is brisk but clear. The tone is set in Prompts → TikTok Shorts: Narration Style.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
             'presshub_social_tiktok_shorts_music_enabled',
             __( 'Shorts Background Music', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_shorts_music_enabled_field' ],
@@ -889,7 +957,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
-                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Daily Briefing host count). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -916,6 +984,19 @@ class PressHub_Social_Settings {
                 'option' => 'presshub_social_prompt_tiktok_shorts_image_moods',
                 'rows'   => 5,
                 'desc'   => __( 'One line per mood, "mood: style", written like the Image Prompt ({description} is the image description). A short uses the line of the mood its Script Prompt chose; a mood without a line (by default serious, urgent and none) uses the Image Prompt above. The defaults give neutral and upbeat stories bold editorial illustrations. Keep real people out of the images.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_tiktok_shorts_tts_style',
+            __( 'TikTok Shorts: Narration Style', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_prompts',
+            'presshub_social_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_shorts_tts_style',
+                'rows'   => 4,
+                'desc'   => __( 'How the voice reads the shorts: tone, energy, pace and emotion, as an instruction to the Gemini TTS (write more than a few words). The default is an energetic, warm TikTok presenter. Empty uses the Daily Briefing speaking style.', 'presshub-social-autopost' ),
             ]
         );
 
