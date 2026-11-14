@@ -2015,6 +2015,7 @@ $pcm_1s  = str_repeat( "\x00", 48000 );
 $wav_1s5 = 'RIFF' . pack( 'V', 36 + 72000 ) . 'WAVEfmt ' . pack( 'VvvVVvv', 16, 1, 1, 24000, 48000, 2, 16 ) . 'data' . pack( 'V', 72000 ) . str_repeat( "\x00", 72000 );
 assert_equals( 1.0, PressHub_Social_TikTok_Shorts::pcm_seconds( $pcm_1s ), 'pcm_seconds measures raw 24 kHz PCM' );
 assert_equals( 1.5, PressHub_Social_TikTok_Shorts::pcm_seconds( $wav_1s5 ), 'pcm_seconds measures a WAV from its data chunk' );
+update_option( 'presshub_social_tiktok_shorts_narrators', 2 );
 $timings = PressHub_Social_TikTok_Shorts::turn_timings(
     [ [ 'speaker' => 'female', 'text' => 'Πρώτη ατάκα.' ], [ 'speaker' => 'male', 'text' => 'Δεύτερη ατάκα.' ] ],
     [ $pcm_1s, $wav_1s5 ],
@@ -2023,6 +2024,32 @@ $timings = PressHub_Social_TikTok_Shorts::turn_timings(
 );
 assert_equals( [ 1, 0.0, 1.0 ], [ $timings[0]['speaker'], $timings[0]['start'], $timings[0]['end'] ], 'The first turn starts at 0 and lasts its audio length' );
 assert_equals( [ 2, 1.4, 2.9 ], [ $timings[1]['speaker'], $timings[1]['start'], $timings[1]['end'] ], 'The next turn starts after the stitched pause' );
+delete_option( 'presshub_social_tiktok_shorts_narrators' );
+
+// Narrator settings.
+assert_equals( 1, PressHub_Social_Settings_Storage::get_tiktok_shorts_narrators(), 'Shorts default to a single narrator' );
+assert_equals( 'Puck', PressHub_Social_Settings_Storage::get_tiktok_shorts_voice( 1 ), 'The single narrator defaults to an upbeat Gemini voice' );
+assert_equals( '', PressHub_Social_Settings_Storage::get_tiktok_shorts_voice( 2 ), 'The second voice defaults to the briefing presenter 2 voice' );
+assert_equals( 110, PressHub_Social_Settings_Storage::get_tiktok_shorts_voice_speed(), 'Shorts default to a brisk 110% speed' );
+assert_equals( [ 1, 2, 2 ], [ PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_narrators( 0 ), PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_narrators( 2 ), PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_narrators( 5 ) ], 'Narrators are clamped to 1-2' );
+assert_equals( [ 70, 150 ], [ PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_voice_speed( 10 ), PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_voice_speed( 400 ) ], 'Voice speed is clamped to 70-150%' );
+assert_equals( 'el-GR-Chirp3-HD-Achird', PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_voice( ' el-GR-Chirp3-HD-Achird; ' ), 'Voice names keep letters, digits and dashes only' );
+assert_true( strlen( PressHub_Social_Settings_Storage::get_tiktok_shorts_tts_style() ) > 15, 'The narration style seeds an energetic instruction long enough to be sent as is' );
+assert_true( isset( PressHub_Social_Settings_Storage::gemini_tts_voices()['Puck'] ), 'The Gemini voice list offers Puck' );
+assert_true( PressHub_Social_TikTok_Shorts::voice_fits_engine( 'Puck', 'gemini' ) && ! PressHub_Social_TikTok_Shorts::voice_fits_engine( 'Puck', 'google_cloud' ), 'A Gemini voice fits only the Gemini engine' );
+assert_true( PressHub_Social_TikTok_Shorts::voice_fits_engine( 'el-GR-Wavenet-A', 'google_cloud' ) && ! PressHub_Social_TikTok_Shorts::voice_fits_engine( 'el-GR-Wavenet-A', 'gemini' ), 'A Cloud voice fits only the Google Cloud engine' );
+$two_voice_turns = [ [ 'speaker' => 'female', 'text' => 'Ένα.' ], [ 'speaker' => 'male', 'text' => 'Δύο.' ], [ 'speaker' => 'male', 'text' => 'Τρία.' ], [ 'speaker' => 'female', 'text' => ' ' ] ];
+$merged_one = PressHub_Social_TikTok_Shorts::merge_turns( $two_voice_turns, 1 );
+assert_equals( [ 1, 'Ένα. Δύο. Τρία.' ], [ count( $merged_one ), $merged_one[0]['text'] ], 'A single narrator reads the whole script in one turn' );
+$merged_two = PressHub_Social_TikTok_Shorts::merge_turns( $two_voice_turns, 2 );
+assert_equals( [ 'Ένα.', 'Δύο. Τρία.' ], array_column( $merged_two, 'text' ), 'With two narrators only consecutive lines of the same voice are joined' );
+$single_timings = PressHub_Social_TikTok_Shorts::turn_timings( [ [ 'speaker' => 'male', 'text' => 'Δύο.' ] ], [ $pcm_1s ], 400, false );
+assert_equals( 1, $single_timings[0]['speaker'], 'With one narrator every caption segment is narrator 1' );
+$one_prompt = PressHub_Social_TikTok_Shorts::build_prompt( 0, '{speakers}', '', 1, 100 );
+assert_true( false !== strpos( $one_prompt, '[SPEAKER_1] μόνο' ) && false === strpos( $one_prompt, '[SPEAKER_2]' ), 'The script prompt asks for a single narrator by default' );
+update_option( 'presshub_social_tiktok_shorts_narrators', 2 );
+assert_true( false !== strpos( PressHub_Social_TikTok_Shorts::build_prompt( 0, '{speakers}', '', 1, 100 ), '[SPEAKER_2]' ), 'With 2 narrators the script prompt asks for two alternating voices' );
+delete_option( 'presshub_social_tiktok_shorts_narrators' );
 $mp3_timings = PressHub_Social_TikTok_Shorts::turn_timings( [ [ 'speaker' => 'female', 'text' => str_repeat( 'α', 28 ) ] ], [ 'mp3' ], 400, true );
 assert_true( ! empty( $mp3_timings[0]['estimated'] ) && 2.0 === $mp3_timings[0]['end'], 'MP3 turn timings are estimates marked as such' );
 

@@ -285,7 +285,15 @@ class PressHub_Social_Settings_Render {
         $placeholder = $args['placeholder'] ?? '';
         $desc        = $args['desc'] ?? '';
         ?>
-        <input type="text" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" class="regular-text" placeholder="<?php echo esc_attr( $placeholder ); ?>" />
+        <?php $suggestions = (array) ( $args['suggestions'] ?? [] ); ?>
+        <input type="text" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" class="regular-text" placeholder="<?php echo esc_attr( $placeholder ); ?>"<?php echo empty( $suggestions ) ? '' : ' list="' . esc_attr( $option . '_list' ) . '"'; ?> />
+        <?php if ( ! empty( $suggestions ) ) : ?>
+            <datalist id="<?php echo esc_attr( $option . '_list' ); ?>">
+                <?php foreach ( $suggestions as $value => $label ) : ?>
+                    <option value="<?php echo esc_attr( (string) $value ); ?>"><?php echo esc_html( (string) $label ); ?></option>
+                <?php endforeach; ?>
+            </datalist>
+        <?php endif; ?>
         <?php if ( '' !== $desc ) : ?>
             <p class="description"><?php echo esc_html( $desc ); ?></p>
         <?php endif; ?>
