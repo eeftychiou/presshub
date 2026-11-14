@@ -715,37 +715,32 @@ class PressHub_Social_Settings {
             ]
         );
 
-        $voice_suggestions = [];
-        foreach ( PressHub_Social_Settings_Storage::gemini_tts_voices() as $voice => $character ) {
-            $voice_suggestions[ $voice ] = $character;
-        }
-
         add_settings_field(
             'presshub_social_tiktok_shorts_voice_1',
             __( 'Short Narrator Voice', 'presshub-social-autopost' ),
-            [ $render, 'render_text_field' ],
+            [ $render, 'render_tiktok_shorts_voice_field' ],
             'presshub_social_worker',
             'presshub_social_media_specs_sec',
             [
+                'narrator'    => 1,
                 'option'      => 'presshub_social_tiktok_shorts_voice_1',
                 'default'     => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SHORTS_VOICE_1,
                 'placeholder' => __( 'Daily Briefing presenter 1 voice', 'presshub-social-autopost' ),
-                'suggestions' => $voice_suggestions,
-                'desc'        => __( 'Gemini TTS voice of the (first) narrator; pick from the list or type a name. Lively choices: Puck (upbeat, male), Laomedeia (upbeat, female), Fenrir (excitable), Sadachbia (lively), Zephyr (bright). With the Google Cloud engine type a Cloud voice such as el-GR-Chirp3-HD-Achird. Empty uses the Daily Briefing presenter 1 voice.', 'presshub-social-autopost' ),
+                'desc'        => __( 'Gemini TTS voice of the (first) narrator; the list has all 30 Gemini voices with their character. Lively choices: Puck (upbeat, male), Laomedeia (upbeat, female), Fenrir (excitable), Sadachbia (lively), Zephyr (bright). With the Google Cloud engine this is a text field for a Cloud voice such as el-GR-Chirp3-HD-Achird. "Daily Briefing presenter voice" (or an empty field) uses the Daily Briefing presenter 1 voice.', 'presshub-social-autopost' ),
             ]
         );
 
         add_settings_field(
             'presshub_social_tiktok_shorts_voice_2',
             __( 'Second Narrator Voice', 'presshub-social-autopost' ),
-            [ $render, 'render_text_field' ],
+            [ $render, 'render_tiktok_shorts_voice_field' ],
             'presshub_social_worker',
             'presshub_social_media_specs_sec',
             [
+                'narrator'    => 2,
                 'option'      => 'presshub_social_tiktok_shorts_voice_2',
                 'default'     => '',
                 'placeholder' => __( 'Daily Briefing presenter 2 voice', 'presshub-social-autopost' ),
-                'suggestions' => $voice_suggestions,
                 'desc'        => __( 'Used only with 2 narrators. Pick a voice that sounds clearly different from the first. Empty uses the Daily Briefing presenter 2 voice.', 'presshub-social-autopost' ),
             ]
         );

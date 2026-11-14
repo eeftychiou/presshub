@@ -285,15 +285,7 @@ class PressHub_Social_Settings_Render {
         $placeholder = $args['placeholder'] ?? '';
         $desc        = $args['desc'] ?? '';
         ?>
-        <?php $suggestions = (array) ( $args['suggestions'] ?? [] ); ?>
-        <input type="text" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" class="regular-text" placeholder="<?php echo esc_attr( $placeholder ); ?>"<?php echo empty( $suggestions ) ? '' : ' list="' . esc_attr( $option . '_list' ) . '"'; ?> />
-        <?php if ( ! empty( $suggestions ) ) : ?>
-            <datalist id="<?php echo esc_attr( $option . '_list' ); ?>">
-                <?php foreach ( $suggestions as $value => $label ) : ?>
-                    <option value="<?php echo esc_attr( (string) $value ); ?>"><?php echo esc_html( (string) $label ); ?></option>
-                <?php endforeach; ?>
-            </datalist>
-        <?php endif; ?>
+        <input type="text" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" class="regular-text" placeholder="<?php echo esc_attr( $placeholder ); ?>" />
         <?php if ( '' !== $desc ) : ?>
             <p class="description"><?php echo esc_html( $desc ); ?></p>
         <?php endif; ?>
@@ -351,6 +343,41 @@ class PressHub_Social_Settings_Render {
         <?php if ( ! empty( $args['unit'] ) ) : ?>
             <span style="margin-left:4px;"><?php echo esc_html( $args['unit'] ); ?></span>
         <?php endif; ?>
+        <?php if ( '' !== $desc ) : ?>
+            <p class="description"><?php echo esc_html( $desc ); ?></p>
+        <?php endif; ?>
+        <?php
+    }
+
+    /**
+     * Voice of a short's narrator. With the Gemini engine, a dropdown of every Gemini
+     * TTS voice (a text list with suggestions only shows the names matching what is
+     * already typed); with Google Cloud, a text field for a Cloud voice name.
+     */
+    public function render_tiktok_shorts_voice_field( array $args ): void {
+        $option   = $args['option'];
+        $narrator = (int) ( $args['narrator'] ?? 1 );
+        $val      = PressHub_Social_Settings_Storage::get_tiktok_shorts_voice( $narrator );
+        $desc     = $args['desc'] ?? '';
+        $engine   = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
+
+        if ( 'google_cloud' === $engine ) {
+            $this->render_text_field( $args );
+            return;
+        }
+
+        $voices = PressHub_Social_Settings_Storage::gemini_tts_voices();
+        ksort( $voices );
+        ?>
+        <select id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>">
+            <option value="" <?php selected( $val, '' ); ?>><?php echo esc_html( sprintf( __( 'Daily Briefing presenter %d voice', 'presshub-social-autopost' ), $narrator ) ); ?></option>
+            <?php if ( '' !== $val && ! isset( $voices[ $val ] ) ) : ?>
+                <option value="<?php echo esc_attr( $val ); ?>" selected="selected"><?php echo esc_html( $val ); ?></option>
+            <?php endif; ?>
+            <?php foreach ( $voices as $voice => $character ) : ?>
+                <option value="<?php echo esc_attr( $voice ); ?>" <?php selected( $val, $voice ); ?>><?php echo esc_html( $voice . ' (' . $character . ')' ); ?></option>
+            <?php endforeach; ?>
+        </select>
         <?php if ( '' !== $desc ) : ?>
             <p class="description"><?php echo esc_html( $desc ); ?></p>
         <?php endif; ?>
