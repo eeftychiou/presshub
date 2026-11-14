@@ -61,6 +61,12 @@ class PressHub_AI_Social_Trending {
         'facebook'  => 'Facebook',
     ];
 
+    /** X rejects long search queries; each query stays under this many characters. */
+    const X_QUERY_MAX_CHARS = 450;
+
+    /** X search pages per run (queries are split when the terms do not fit in one). */
+    const MAX_X_PAGES = 4;
+
     /** TikTok pages per run (each one is a page visit): hashtag pages, then keyword searches. */
     const MAX_TIKTOK_TAGS    = 3;
     const MAX_TIKTOK_QUERIES = 2;
@@ -270,19 +276,20 @@ class PressHub_AI_Social_Trending {
                 [ $greek, ' lang:el', max( 1, (int) floor( $min / 2 ) ), 'X search (Greek)' ],
                 [ $latin, '', max( 1, $min * 2 ), 'X search (English / other)' ],
             ];
+            $x_pages = 0;
             foreach ( $groups as [ $terms, $lang, $faves, $label ] ) {
-                if ( empty( $terms ) ) {
-                    continue;
+                $suffix = $lang . ' -filter:replies -filter:retweets' . ( $min > 0 ? ' min_faves:' . $faves : '' );
+                foreach ( self::chunk_or_terms( $terms, self::X_QUERY_MAX_CHARS - self::strlen( $suffix ) - 2 ) as $chunk ) {
+                    if ( $x_pages >= self::MAX_X_PAGES ) {
+                        break 2;
+                    }
+                    $x_pages++;
+                    $targets[] = [
+                        'platform' => 'x',
+                        'url'      => 'https://x.com/search?q=' . rawurlencode( '(' . implode( ' OR ', $chunk ) . ')' . $suffix ) . '&src=typed_query&f=top',
+                        'label'    => $label,
+                    ];
                 }
-                $q = '(' . implode( ' OR ', $terms ) . ')' . $lang . ' -filter:replies -filter:retweets';
-                if ( $min > 0 ) {
-                    $q .= ' min_faves:' . $faves;
-                }
-                $targets[] = [
-                    'platform' => 'x',
-                    'url'      => 'https://x.com/search?q=' . rawurlencode( $q ) . '&src=typed_query&f=top',
-                    'label'    => $label,
-                ];
             }
         }
         if ( in_array( 'tiktok', $worker, true ) ) {
@@ -296,7 +303,15 @@ class PressHub_AI_Social_Trending {
                     'label'    => 'TikTok #' . $tag,
                 ];
             }
-            foreach ( array_slice( $keywords, 0, self::MAX_TIKTOK_QUERIES ) as $k ) {
+            // One Greek and one other term, so two near-identical Greek forms do not use both searches.
+            $picks = [];
+            foreach ( $keywords as $k ) {
+                $script = preg_match( '/\p{Greek}/u', $k ) ? 'el' : 'other';
+                if ( ! isset( $picks[ $script ] ) ) {
+                    $picks[ $script ] = $k;
+                }
+            }
+            foreach ( array_slice( array_values( $picks ), 0, self::MAX_TIKTOK_QUERIES ) as $k ) {
                 $targets[] = [
                     'platform' => 'tiktok',
                     'url'      => 'https://www.tiktok.com/search/video?q=' . rawurlencode( $k ),
@@ -314,6 +329,36 @@ class PressHub_AI_Social_Trending {
             }
         }
         return $targets;
+    }
+
+    private static function strlen( string $s ): int {
+        return function_exists( 'mb_strlen' ) ? mb_strlen( $s ) : strlen( $s );
+    }
+
+    /**
+     * Split search terms into groups whose "a OR b OR c" form fits in $max characters.
+     *
+     * @return array<int, string[]>
+     */
+    public static function chunk_or_terms( array $terms, int $max ): array {
+        $chunks = [];
+        $cur    = [];
+        $len    = 0;
+        foreach ( $terms as $t ) {
+            $add = self::strlen( $t ) + ( $cur ? 4 : 0 );
+            if ( $cur && $len + $add > $max ) {
+                $chunks[] = $cur;
+                $cur      = [];
+                $len      = 0;
+                $add      = self::strlen( $t );
+            }
+            $cur[] = $t;
+            $len  += $add;
+        }
+        if ( $cur ) {
+            $chunks[] = $cur;
+        }
+        return $chunks;
     }
 
     /**
@@ -496,6 +541,50 @@ class PressHub_AI_Social_Trending {
         return 'post:' . $item['key'];
     }
 
+    /**
+     * Fingerprints of a post's story: the links it shares (other than the
+     * platforms themselves) and the start of its text, normalised.
+     *
+     * @return string[]
+     */
+    public static function fingerprints( array $item ): array {
+        $out  = [];
+        $text = (string) $item['text'];
+        if ( preg_match_all( '#https?://[^\s]+#u', $text, $m ) ) {
+            foreach ( $m[0] as $u ) {
+                $host = strtolower( (string) parse_url( $u, PHP_URL_HOST ) );
+                $host = (string) preg_replace( '/^(www\.|m\.)/', '', $host );
+                if ( '' === $host || preg_match( '/(^|\.)(x|twitter|t|tiktok|instagram|facebook|fb)\.(com|co|me|watch)$/', $host ) ) {
+                    continue;
+                }
+                $path  = rtrim( (string) parse_url( $u, PHP_URL_PATH ), '/' );
+                $out[] = 'u:' . $host . strtolower( $path );
+            }
+        }
+        $norm = preg_replace( '#https?://\S+#u', ' ', $text );
+        $norm = preg_replace( '/[#@][\p{L}\p{N}_.]+/u', ' ', (string) $norm );
+        $norm = preg_replace( '/[^\p{L}\p{N}]+/u', ' ', (string) $norm );
+        $norm = trim( function_exists( 'mb_strtolower' ) ? mb_strtolower( (string) $norm ) : strtolower( (string) $norm ) );
+        if ( self::strlen( $norm ) >= 25 ) {
+            $out[] = 't:' . ( function_exists( 'mb_substr' ) ? mb_substr( $norm, 0, 60 ) : substr( $norm, 0, 60 ) );
+        }
+        return $out;
+    }
+
+    /** True when the post shares a fingerprint with one already kept; otherwise records it. */
+    private static function seen_before( array $item, array &$seen ): bool {
+        $fps = self::fingerprints( $item );
+        foreach ( $fps as $fp ) {
+            if ( isset( $seen[ $fp ] ) && $seen[ $fp ] !== $item['key'] ) {
+                return true;
+            }
+        }
+        foreach ( $fps as $fp ) {
+            $seen[ $fp ] = $item['key'];
+        }
+        return false;
+    }
+
     /** Matches one of the excluded words (spam / off-topic). */
     public static function is_excluded( array $item, array $words ): bool {
         if ( empty( $words ) ) {
@@ -536,6 +625,7 @@ class PressHub_AI_Social_Trending {
         $per      = PressHub_AI_Settings_Storage::get_social_trending_max_per_platform();
         $max_age  = PressHub_AI_Settings_Storage::get_social_trending_max_age_hours() * 3600;
         $excluded = PressHub_AI_Settings_Storage::get_social_trending_excluded_words();
+        $seen     = [];
         $by       = [];
         $per_auth = [];
         foreach ( $candidates as $c ) {
@@ -555,6 +645,9 @@ class PressHub_AI_Social_Trending {
             // At most two posts by the same account per platform, so one busy account cannot fill it.
             $kept = [];
             foreach ( $list as $c ) {
+                if ( self::seen_before( $c, $seen ) ) {
+                    continue;
+                }
                 $ak = $p . ':' . self::account_key( $c );
                 $per_auth[ $ak ] = ( $per_auth[ $ak ] ?? 0 ) + 1;
                 if ( $per_auth[ $ak ] > 2 ) {
@@ -572,13 +665,18 @@ class PressHub_AI_Social_Trending {
         usort( $order, static function ( $a, $b ) use ( $by ) {
             return ( $by[ $b ][0]['score'] ?? 0 ) <=> ( $by[ $a ][0]['score'] ?? 0 );
         } );
-        $out = [];
+        $out      = [];
+        $seen_out = [];
         for ( $i = 0; count( $out ) < $max; $i++ ) {
             $added = false;
             foreach ( $order as $p ) {
                 if ( isset( $by[ $p ][ $i ] ) && count( $out ) < $max ) {
-                    $out[] = $by[ $p ][ $i ];
                     $added = true;
+                    // The same story posted on two platforms is shown once (the first, stronger one).
+                    if ( self::seen_before( $by[ $p ][ $i ], $seen_out ) ) {
+                        continue;
+                    }
+                    $out[] = $by[ $p ][ $i ];
                 }
             }
             if ( ! $added ) {

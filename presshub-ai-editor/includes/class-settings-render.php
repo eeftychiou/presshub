@@ -2778,7 +2778,7 @@ class PressHub_AI_Settings_Render {
                 &nbsp; <label><?php echo esc_html__( 'Max per platform', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_trending_max_per_platform" id="presshub_ai_social_trending_max_per_platform" value="<?php echo self::esc_attr_safe( (string) $per_plat ); ?>" class="small-text" /></label>
                 <br /><label><?php echo esc_html__( 'Only posts from the last (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="72" name="presshub_ai_social_trending_max_age_hours" id="presshub_ai_social_trending_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
                 &nbsp; <label><?php echo esc_html__( 'Minimum engagement', 'presshub-ai-editor' ); ?> <input type="number" min="0" max="100000" name="presshub_ai_social_trending_min_engagement" id="presshub_ai_social_trending_min_engagement" value="<?php echo self::esc_attr_safe( (string) $min_eng ); ?>" class="small-text" /></label>
-                <p class="description"><?php echo esc_html__( 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed.', 'presshub-ai-editor' ); ?></p>
+                <p class="description"><?php echo esc_html__( 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. At most two posts per account, and a story that several posts share (same link or same opening text) is shown once.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>

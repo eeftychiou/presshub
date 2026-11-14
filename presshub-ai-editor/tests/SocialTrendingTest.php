@@ -144,9 +144,20 @@ foreach ( $plan['targets'] as $t ) {
 st_check( 'plan: Greek and other X searches on the Top tab', 2 === count( $by['x'] ?? [] ) && false !== strpos( $by['x'][0], 'f=top' ) );
 $xg = rawurldecode( $by['x'][0] );
 $xe = rawurldecode( $by['x'][1] );
-st_check( 'plan: Greek X search uses lang:el and a lower bar', false !== strpos( $xg, 'Κύπρος OR Λευκωσία' ) && false !== strpos( $xg, 'lang:el' ) && false !== strpos( $xg, 'min_faves:5' ) && false === strpos( $xg, 'Cyprus' ) );
-st_check( 'plan: other X search has a higher bar and no language', '(Cyprus) -filter:replies -filter:retweets min_faves:20' === explode( 'q=', explode( '&src', $xe )[0] )[1] );
-st_check( 'plan: TikTok hashtag pages first, then two searches', [ 'https://www.tiktok.com/tag/cyprus', 'https://www.tiktok.com/tag/' . rawurlencode( 'κύπρος' ), 'https://www.tiktok.com/tag/limassol' ] === array_slice( $by['tiktok'] ?? [], 0, 3 ) && 5 === count( $by['tiktok'] ) && 0 === strpos( $by['tiktok'][3], 'https://www.tiktok.com/search/video?q=' ) );
+st_check( 'plan: Greek X search uses lang:el and a lower bar', false !== strpos( $xg, 'Κύπρος OR Κύπρου OR Λευκωσία' ) && false !== strpos( $xg, 'lang:el' ) && false !== strpos( $xg, 'min_faves:5' ) && false === strpos( $xg, 'Cyprus' ) );
+st_check( 'plan: other X search has a higher bar and no language', '(Cyprus OR Nicosia OR Limassol) -filter:replies -filter:retweets min_faves:20' === explode( 'q=', explode( '&src', $xe )[0] )[1] );
+st_check( 'plan: TikTok hashtag pages first, then two searches', [ 'https://www.tiktok.com/tag/cyprus', 'https://www.tiktok.com/tag/' . rawurlencode( 'κύπρος' ), 'https://www.tiktok.com/tag/limassol' ] === array_slice( $by['tiktok'] ?? [], 0, 3 ) && 5 === count( $by['tiktok'] ) && 'https://www.tiktok.com/search/video?q=' . rawurlencode( 'Κύπρος' ) === $by['tiktok'][3] && 'https://www.tiktok.com/search/video?q=Cyprus' === $by['tiktok'][4] );
+// Many terms: X queries split to stay under the length limit, capped in pages.
+$many = [];
+for ( $i = 1; $i <= 20; $i++ ) {
+    $many[] = 'Λέξη' . $i . 'μεγάλη' . str_repeat( 'α', 20 );
+}
+$chunks = $T::chunk_or_terms( $many, 200 );
+st_check( 'x chunks: every chunk fits', count( $chunks ) > 1 && max( array_map( static function ( $c ) { return mb_strlen( implode( ' OR ', $c ) ); }, $chunks ) ) <= 200 && 20 === count( array_merge( ...$chunks ) ) );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_keywords'] = implode( "\n", $many );
+$xs = array_filter( $T::build_targets(), static function ( $t ) { return 'x' === $t['platform']; } );
+st_check( 'x chunks: long term lists split, each query under the limit, page cap', count( $xs ) > 1 && count( $xs ) <= $T::MAX_X_PAGES && max( array_map( static function ( $t ) { return mb_strlen( rawurldecode( explode( '&src', explode( 'q=', $t['url'] )[1] )[0] ) ); }, $xs ) ) <= $T::X_QUERY_MAX_CHARS );
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_keywords'] );
 st_check( 'plan: facebook pages', [ 'https://www.facebook.com/philenews' ] === ( $by['facebook'] ?? [] ) );
 st_check( 'plan: not handed out twice', false === $T::get_worker_plan( false, $now + 60 )['due'] );
 st_check( 'plan: handed out again after the lock', true === $T::get_worker_plan( false, $now + $T::PLAN_LOCK_SEC + 1 )['due'] );
@@ -218,6 +229,23 @@ foreach ( [ '46', '47', '48' ] as $fid ) {
 }
 st_check( 'select: no handle -> capped by author name', 2 === count( $T::select( $fb, $now ) ) );
 st_check( 'account key: id handles kept', 'id-1000641' === $T::account_key( $T::normalize_item( st_post( 'facebook', '49', 100, 30, [ 'handle' => 'id-1000641' ] ), $now ) ) );
+// Same story on several accounts / platforms is shown once.
+$dup = [];
+foreach ( [
+    st_post( 'x', '51', 500, 30, [ 'text' => 'Μεγάλη φωτιά στη Λεμεσό, εκκενώνονται χωριά https://philenews.com/fotia-lemesos/ #cyprus' ] ),
+    st_post( 'tiktok', '52', 9000, 30, [ 'text' => 'Δείτε εδώ: https://www.philenews.com/fotia-lemesos' ] ),
+    st_post( 'x', '53', 300, 30, [ 'text' => '@someone Μεγάλη φωτιά στη Λεμεσό!! Εκκενώνονται χωριά' ] ),
+    st_post( 'x', '54', 200, 30, [ 'text' => 'Something else entirely about Paphos airport https://x.com/a/status/1' ] ),
+    st_post( 'facebook', '55', 200, 30, [ 'text' => 'Short' ] ),
+    st_post( 'facebook', '56', 150, 30, [ 'text' => 'Short' ] ),
+] as $raw ) {
+    $c = $T::normalize_item( $raw, $now );
+    $dup[ $c['key'] ] = $c;
+}
+$dk = array_map( static function ( $p ) { return $p['key']; }, $T::select( $dup, $now ) );
+st_check( 'dedup: shared link across platforms shown once', in_array( 'tiktok_52', $dk, true ) xor in_array( 'x_51', $dk, true ) );
+st_check( 'dedup: same text by another account dropped', ! in_array( 'x_53', $dk, true ) );
+st_check( 'dedup: platform links and short texts are not fingerprints', in_array( 'x_54', $dk, true ) && in_array( 'facebook_55', $dk, true ) && in_array( 'facebook_56', $dk, true ) );
 $fresh = $T::normalize_item( st_post( 'x', '41', 100, 30 ), $now );
 $old   = $T::normalize_item( st_post( 'x', '42', 400, 20 * 60 ), $now );
 st_check( 'score: fresh post with traction beats an older bigger one', $T::score( $fresh, $now ) > $T::score( $old, $now ) );

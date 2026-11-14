@@ -2646,11 +2646,11 @@ class PressHub_AI_Settings_Storage {
      * Graph API) and published as one post in their own category.
      * ------------------------------------------------------------------- */
 
-    const SOCIAL_TRENDING_DEFAULT_KEYWORDS = "Κύπρος\nCyprus\nΛευκωσία\nΛεμεσός\nΛάρνακα\nΠάφος";
+    const SOCIAL_TRENDING_DEFAULT_KEYWORDS = "Κύπρος\nΚύπρου\nΛευκωσία\nΛεμεσός\nΛάρνακα\nΠάφος\nΑμμόχωστος\nCyprus\nNicosia\nLimassol";
     const SOCIAL_TRENDING_DEFAULT_HASHTAGS = "cyprus\nκύπρος\nlimassol";
     const SOCIAL_TRENDING_DEFAULT_TITLE    = 'Τι συζητά η Κύπρος στα social – {date}';
     const SOCIAL_TRENDING_DEFAULT_CATEGORY = 'Trending στα Social';
-    const SOCIAL_TRENDING_DEFAULT_EXCLUDED = "crypto\nbitcoin\nforex\nairdrop\ncasino\nbetting\nonlyfans";
+    const SOCIAL_TRENDING_DEFAULT_EXCLUDED = "crypto\nbitcoin\nforex\nairdrop\ncasino\nbetting\nonlyfans\nescort\n#realestate";
 
     /**
      * @return array<string, callable>
