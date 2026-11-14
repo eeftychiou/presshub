@@ -130,6 +130,20 @@ npm run login -- tiktok --reader
 ```
 Sessions are saved in `sessions-reader/` (or `PRESSHUB_MONITOR_SESSIONS_DIR`). For many X accounts, create a private List on the reader account with all of them and paste its URL into the **X List** setting: the worker then reads one page instead of one per account. `PRESSHUB_MONITOR_DISABLED=true` turns the monitor off on this worker.
 
+#### Long videos: local transcription with whisper.cpp
+Gemini only gets videos up to the "Skip videos longer than" setting (at most 10 minutes / 20 MB). For longer ones the worker can make the transcript itself, offline, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp):
+
+1. Download a whisper.cpp release for your system (on Windows the x64 zip with `whisper-cli.exe`) and a ggml model, for example `ggml-large-v3-turbo-q5_0.bin` (about 550 MB, good with Greek). Keep them out of git, e.g. in `tools/whisper/`.
+2. Set in `.env`:
+   ```
+   PRESSHUB_WHISPER_BIN=C:\path\to\whisper-cli.exe
+   PRESSHUB_WHISPER_MODEL=C:\path\to\ggml-large-v3-turbo-q5_0.bin
+   PRESSHUB_WHISPER_THREADS=6
+   ```
+3. Restart the worker. The log shows `Local transcription on: ...`.
+
+The worker then tells WordPress it can transcribe videos up to `PRESSHUB_LOCAL_TRANSCRIBE_MAX_SEC` (default 30 minutes). WordPress asks for the long ones in `wants_transcript`; the worker downloads the lightest version (up to `PRESSHUB_LOCAL_TRANSCRIBE_MAX_MB`, default 300), extracts 16 kHz mono audio with ffmpeg (`FFMPEG_PATH` or the bundled one), runs whisper (`PRESSHUB_WHISPER_LANG`, default `el`; `auto` detects) and sends the text to `POST /monitor/transcript`. Transcriptions run one at a time in the background, so scans and posting continue; on a CPU expect roughly real time. The harvest waits up to an hour for a requested transcript, then uses the post with its caption. Short videos still go to Gemini, which also describes what is on screen. `PRESSHUB_LOCAL_TRANSCRIBE_DISABLED=true` turns it off.
+
 ### Trending in Cyprus roundup (X, TikTok, Facebook)
 WordPress can publish a roundup post of the most engaging recent posts about Cyprus, refreshed every few hours (Settings → PressHub AI → Daily Briefing Hub → **Trending in Cyprus: Social Roundup Post**). When a refresh is due, the poller gets a plan from `GET /wp-json/presshub-social/v1/trending/plan` with ready-made URLs: two X searches on the Top tab (Greek terms with `lang:el`, and the other terms with a higher like threshold), TikTok hashtag pages plus two video searches, and the Facebook Pages you listed. The worker opens them one at a time with the **reader** sessions, reads the posts and their likes / comments / shares / views from the JSON the pages load, and sends them to `POST /trending/posts`. WordPress ranks them and writes the post: one card per post, with the platform's own embed (X and TikTok through WordPress oEmbed, Instagram and Facebook through their embed scripts, which the post loads). Instagram is read by WordPress itself through the Graph API, so it needs no worker. The worker also sends each post's picture; the top one becomes the roundup's featured image.
 

@@ -31,6 +31,8 @@ export interface ScanPlan {
   transcribe_videos: boolean;
   max_video_seconds: number;
   max_video_mb: number;
+  /** Set by the worker when it transcribes long videos itself: scan with this larger size cap. */
+  local_max_mb?: number;
 }
 
 export interface ScanError {
@@ -43,12 +45,29 @@ export interface ScanError {
 export interface ScanSession {
   posts: ScannedPost[];
   errors: ScanError[];
-  /** Download one post's video (bytes) through the same browser, or null. */
-  download: (post: ScannedPost) => Promise<{ bytes: Buffer; mime: string } | null>;
+  /**
+   * Download one post's video (bytes) through the same browser, or null.
+   * maxBytes defaults to the plan's Gemini cap; smallestFirst picks the
+   * lightest source (enough for speech-to-text).
+   */
+  download: (post: ScannedPost, opts?: DownloadOptions) => Promise<{ bytes: Buffer; mime: string } | null>;
   close: () => Promise<void>;
 }
 
+export interface DownloadOptions {
+  maxBytes?: number;
+  smallestFirst?: boolean;
+}
+
 export type ScanFn = (plan: ScanPlan) => Promise<ScanSession>;
+
+/** Order a post's video sources for download: biggest that fits first, or smallest first. Unknown sizes go last. */
+export function orderVideoSources<T extends { estimatedBytes?: number }>(sources: T[], maxBytes: number, smallestFirst = false): T[] {
+  const known = sources.filter((s) => (s.estimatedBytes || 0) > 0 && (s.estimatedBytes || 0) <= maxBytes);
+  const unknown = sources.filter((s) => !((s.estimatedBytes || 0) > 0));
+  known.sort((a, b) => (smallestFirst ? 1 : -1) * ((a.estimatedBytes || 0) - (b.estimatedBytes || 0)));
+  return [...known, ...unknown];
+}
 
 const SESSION_PLATFORM: Record<string, string> = { x: 'twitter', tiktok: 'tiktok', facebook: 'facebook' };
 
@@ -165,7 +184,9 @@ export function buildScrollStop(targets: ScanTarget[]): (list: ScannedPost[], ha
  * Default scanner using Playwright.
  */
 export const browserScan: ScanFn = async (plan: ScanPlan) => {
-  const maxVideoBytes = plan.max_video_mb * 1024 * 1024;
+  const geminiMaxBytes = plan.max_video_mb * 1024 * 1024;
+  // Scan with the larger cap so long videos keep their sources for local transcription.
+  const maxVideoBytes = Math.max(geminiMaxBytes, (plan.local_max_mb || 0) * 1024 * 1024);
   const posts: ScannedPost[] = [];
   const errors: ScanError[] = [];
   const connections: Partial<Record<'x' | 'tiktok', ChromeConnection>> = {};
@@ -223,15 +244,16 @@ export const browserScan: ScanFn = async (plan: ScanPlan) => {
     await sleep(jitter(5000, 12000));
   }
 
-  const download = async (post: ScannedPost) => {
+  const download = async (post: ScannedPost, opts: DownloadOptions = {}) => {
     const conn = connections[post.platform];
     if (!conn || !post.video || post.video.length === 0) return null;
-    for (const src of post.video) {
+    const cap = opts.maxBytes && opts.maxBytes > 0 ? opts.maxBytes : geminiMaxBytes;
+    for (const src of orderVideoSources(post.video, cap, Boolean(opts.smallestFirst))) {
       try {
-        const res = await conn.context.request.get(src.url, { headers: src.headers, timeout: 120000 });
+        const res = await conn.context.request.get(src.url, { headers: src.headers, timeout: 300000 });
         if (!res.ok()) continue;
         const bytes = await res.body();
-        if (bytes.length === 0 || bytes.length > maxVideoBytes) continue;
+        if (bytes.length === 0 || bytes.length > cap) continue;
         const type = (res.headers()['content-type'] || 'video/mp4').split(';')[0].trim();
         return { bytes, mime: type.startsWith('video/') ? type : 'video/mp4' };
       } catch (err: any) {

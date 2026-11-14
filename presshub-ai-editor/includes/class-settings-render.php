@@ -2662,6 +2662,7 @@ class PressHub_AI_Settings_Render {
                 <br /><label><?php echo esc_html__( 'Skip videos longer than (seconds)', 'presshub-ai-editor' ); ?> <input type="number" min="10" max="600" name="presshub_ai_social_monitor_max_video_seconds" id="presshub_ai_social_monitor_max_video_seconds" value="<?php echo self::esc_attr_safe( (string) $max_secs ); ?>" class="small-text" /></label>
                 &nbsp; <label><?php echo esc_html__( 'Max video file size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_monitor_max_video_mb" id="presshub_ai_social_monitor_max_video_mb" value="<?php echo self::esc_attr_safe( (string) $max_mb ); ?>" class="small-text" /></label>
                 <p class="description"><?php echo esc_html__( 'Needs a Gemini provider. Gemini accepts inline files up to about 20 MB; the worker picks the smallest X video quality that fits.', 'presshub-ai-editor' ); ?></p>
+                <p class="description"><?php echo esc_html__( 'Longer videos: a worker set up with local transcription (whisper.cpp, see the worker README) transcribes them on its own machine and sends only the text. The harvest waits up to an hour for those transcripts.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <?php

@@ -6,3 +6,6 @@ tmp/
 coverage/
 *.log
 .env
+
+# Local whisper.cpp binaries and models
+tools/whisper/
