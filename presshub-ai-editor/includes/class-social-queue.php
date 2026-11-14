@@ -720,6 +720,24 @@ class PressHub_Social_Queue {
             return new WP_Error( 'empty_copy', __( 'Post copy content cannot be empty.', 'presshub-social-autopost' ) );
         }
 
+        if ( str_starts_with( ltrim( $post_copy ), '[AI Copy Generation Failed:' ) ) {
+            $source_post_id  = (int) ( $source['post_id'] ?? 0 );
+            $source_platform = sanitize_key( (string) ( $source['platform'] ?? '' ) );
+            if ( $source_post_id > 0 && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'generate_for_post' ) ) {
+                $regenerated = PressHub_Social_AI_Copywriter::generate_for_post( $source_post_id, $source_platform );
+                if ( is_wp_error( $regenerated ) ) {
+                    return $regenerated;
+                }
+                $regenerated_str = trim( (string) $regenerated );
+                if ( '' === $regenerated_str || str_starts_with( ltrim( $regenerated_str ), '[AI Copy Generation Failed:' ) ) {
+                    return new WP_Error( 'failed_copy_placeholder', __( 'Cannot repost a job whose AI copy generation failed.', 'presshub-social-autopost' ) );
+                }
+                $post_copy = $regenerated_str;
+            } else {
+                return new WP_Error( 'failed_copy_placeholder', __( 'Cannot repost a job whose AI copy generation failed.', 'presshub-social-autopost' ) );
+            }
+        }
+
         if ( 'twitter' === ( $source['platform'] ?? '' ) && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'sanitize_twitter_copy' ) ) {
             $post_url  = function_exists( 'get_permalink' ) ? ( get_permalink( (int) $source['post_id'] ) ?: '' ) : '';
             $post_copy = PressHub_Social_AI_Copywriter::sanitize_twitter_copy( $post_copy, $post_url );

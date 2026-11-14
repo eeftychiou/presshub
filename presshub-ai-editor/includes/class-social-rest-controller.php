@@ -304,6 +304,30 @@ class PressHub_Social_REST_Controller {
             }
 
             $post_id    = (int) ( $job['post_id'] ?? 0 );
+
+            // Never hand a job with an AI copy failure placeholder to the worker.
+            // Attempt to regenerate copy on the spot; if that fails, mark the job failed.
+            $raw_copy = (string) ( $job['post_copy'] ?? '' );
+            if ( str_starts_with( ltrim( $raw_copy ), '[AI Copy Generation Failed:' ) ) {
+                $platform_key = sanitize_key( (string) ( $job['platform'] ?? '' ) );
+                if ( $post_id <= 0 || ! class_exists( 'PressHub_Social_AI_Copywriter' ) || ! method_exists( 'PressHub_Social_AI_Copywriter', 'generate_for_post' ) ) {
+                    PressHub_Social_Queue::mark_failed( $job_id, 'Job has an AI copy generation failure placeholder and cannot be published.', [ 'error_code' => 'failed_copy_placeholder' ] );
+                    continue;
+                }
+                $regenerated = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform_key );
+                if ( is_wp_error( $regenerated ) ) {
+                    PressHub_Social_Queue::mark_failed( $job_id, $regenerated->get_error_message(), [ 'error_code' => $regenerated->get_error_code() ] );
+                    continue;
+                }
+                $regenerated_str = trim( (string) $regenerated );
+                if ( '' === $regenerated_str || str_starts_with( ltrim( $regenerated_str ), '[AI Copy Generation Failed:' ) ) {
+                    PressHub_Social_Queue::mark_failed( $job_id, 'Regenerated AI copy is empty or invalid.', [ 'error_code' => 'failed_copy_placeholder' ] );
+                    continue;
+                }
+                $job['post_copy'] = $regenerated_str;
+                PressHub_Social_Queue::update_job_copy( $job_id, $job['post_copy'] );
+            }
+
             $post       = $post_id > 0 && function_exists( 'get_post' ) ? get_post( $post_id ) : null;
             $post_title = '';
             if ( $post ) {

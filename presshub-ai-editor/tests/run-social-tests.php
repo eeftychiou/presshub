@@ -2469,6 +2469,101 @@ if ( 1 === count( $audit_rows ) ) {
 }
 
 // ----------------------------------------------------------------------
+// Guard against publishing "[AI Copy Generation Failed: ...]" placeholders
+// ----------------------------------------------------------------------
+echo "\n--- Suite: Failed AI Copy Placeholder Guards ---\n";
+
+assert_true(
+    PressHub_Social_Dispatcher::is_failed_copy_placeholder( '[AI Copy Generation Failed: Invalid response from Gemini.]' ),
+    'is_failed_copy_placeholder detects failed AI copy prefix'
+);
+assert_true(
+    PressHub_Social_Dispatcher::is_failed_copy_placeholder( '  [AI Copy Generation Failed: Timeout]' ),
+    'is_failed_copy_placeholder trims leading whitespace'
+);
+assert_false(
+    PressHub_Social_Dispatcher::is_failed_copy_placeholder( 'Breaking news from Cyprus https://presshub.cy/1' ),
+    'is_failed_copy_placeholder allows normal social copy'
+);
+
+$bad_copy = '[AI Copy Generation Failed: Invalid response from Gemini.]';
+
+$meta_reject = PressHub_Social_Meta_API_Client::publish( [
+    'id'        => 9901,
+    'post_id'   => 101,
+    'platform'  => 'twitter',
+    'post_copy' => $bad_copy,
+] );
+assert_true( is_wp_error( $meta_reject ), 'Meta/Twitter API client rejects failed AI copy placeholder' );
+assert_equals( 'failed_copy_placeholder', $meta_reject->get_error_code(), 'Meta/Twitter API client returns failed_copy_placeholder code' );
+
+$worker_reject = PressHub_Social_Worker_Client::dispatch( [
+    'id'        => 9902,
+    'post_id'   => 101,
+    'platform'  => 'twitter',
+    'post_copy' => $bad_copy,
+] );
+assert_true( is_wp_error( $worker_reject ), 'Worker client rejects failed AI copy placeholder' );
+assert_equals( 'failed_copy_placeholder', $worker_reject->get_error_code(), 'Worker client returns failed_copy_placeholder code' );
+
+// Enqueue a failed job with placeholder copy, retry it, and verify Pull Mode claim & dispatch_job guard it.
+$placeholder_job_id = PressHub_Social_Queue::enqueue( [
+    'post_id'      => 902,
+    'platform'     => 'twitter',
+    'engine'       => 'automation',
+    'post_copy'    => $bad_copy,
+    'status'       => 'failed',
+    'last_error'   => 'Invalid response from Gemini.',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ),
+] );
+assert_true( is_int( $placeholder_job_id ) && $placeholder_job_id > 0, 'Placeholder failed job enqueued for guard test' );
+
+// Reposting a job with placeholder copy when AI copywriter fails must return WP_Error instead of queueing the error string.
+update_option( 'presshub_ai_providers', [
+    'openai-test' => [
+        'id'            => 'openai-test',
+        'type'          => 'openai',
+        'name'          => 'Test OpenAI',
+        'api_key'       => 'sk-test-key-12345',
+        'default_model' => 'gpt-4o',
+        'enabled'       => true,
+    ],
+] );
+PressHub_Social_AI_Copywriter::set_ai_caller( function() {
+    return new WP_Error( 'api_error', 'Invalid response from Gemini.' );
+} );
+update_option( 'presshub_social_copy_mode', 'ai' );
+update_option( 'presshub_social_prompt_twitter', 'Write a tweet for {title} {url}' );
+$repost_err = PressHub_Social_Queue::repost_as_new_job( $placeholder_job_id );
+assert_true( is_wp_error( $repost_err ), 'repost_as_new_job refuses placeholder copy when AI regeneration fails' );
+
+// Retry sets status=pending; handle_claim must NOT hand it to worker when regeneration fails, and must record failure.
+PressHub_Social_Queue::retry_job( $placeholder_job_id );
+PressHub_Social_Queue::update_job( $placeholder_job_id, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+$claim_res_fail = PressHub_Social_REST_Controller::handle_claim( [
+    'platforms' => [ 'twitter' ],
+    'limit'     => 10,
+] );
+$claimed_ids_fail = array_map( static fn( $j ) => (int) ( $j['id'] ?? 0 ), $claim_res_fail['jobs'] ?? [] );
+assert_false( in_array( $placeholder_job_id, $claimed_ids_fail, true ), 'handle_claim never returns job with failed AI copy placeholder when regeneration fails' );
+$after_fail_job = PressHub_Social_Queue::get_job( $placeholder_job_id );
+assert_equals( 'Invalid response from Gemini.', $after_fail_job['last_error'] ?? null, 'handle_claim records failure reason when regeneration fails' );
+assert_true( (int) ( $after_fail_job['attempts'] ?? 0 ) >= 1, 'handle_claim increments attempts via mark_failed' );
+
+// When AI regeneration succeeds, dispatch_job in Pull Mode regenerates copy before queueing pending, and handle_claim returns the clean copy.
+PressHub_Social_AI_Copywriter::set_ai_caller( function() {
+    return 'Fresh regenerated tweet copy!';
+} );
+update_option( 'presshub_social_worker_mode', 'pull' );
+$dispatch_pull = PressHub_Social_Dispatcher::dispatch_job( $placeholder_job_id );
+assert_true( is_wp_error( $dispatch_pull ) && 'pull_mode_queued' === $dispatch_pull->get_error_code(), 'dispatch_job in Pull Mode succeeds in regenerating and queueing job' );
+$after_regen_job = PressHub_Social_Queue::get_job( $placeholder_job_id );
+assert_true( str_contains( (string) ( $after_regen_job['post_copy'] ?? '' ), 'Fresh regenerated tweet copy!' ), 'dispatch_job replaced placeholder copy with regenerated copy' );
+assert_false( PressHub_Social_Dispatcher::is_failed_copy_placeholder( (string) ( $after_regen_job['post_copy'] ?? '' ) ), 'Regenerated job no longer has failed copy placeholder' );
+
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+
+// ----------------------------------------------------------------------
 // Test Summary
 // ----------------------------------------------------------------------
 echo "\n=================================================================\n";

@@ -360,6 +360,54 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(capturedReports[0].error).toMatch(/Twitter rate limit/);
     });
 
+    test('refuses to publish AI copy generation error placeholder and reports failed', async () => {
+      const capturedReports: any[] = [];
+
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, options: any) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                {
+                  id: 202,
+                  platform: 'twitter',
+                  post_copy: '[AI Copy Generation Failed: Invalid response from Gemini.]'
+                }
+              ]
+            })
+          } as any;
+        }
+
+        if (url.endsWith('/worker/complete')) {
+          capturedReports.push(JSON.parse(options.body));
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+
+        return { ok: false, status: 404 } as any;
+      });
+
+      const mockPoster = jest.fn();
+
+      const poller = new PressHubPoller({
+        wpUrl: 'https://presshub.cy',
+        workerSecret: 'test-secret',
+        fetchFn: mockFetch,
+        posterHandler: mockPoster
+      });
+
+      const stats = await poller.pollOnce();
+      expect(stats.claimed).toBe(1);
+      expect(stats.succeeded).toBe(0);
+      expect(stats.failed).toBe(1);
+      expect(mockPoster).not.toHaveBeenCalled();
+
+      expect(capturedReports).toHaveLength(1);
+      expect(capturedReports[0].job_id).toBe(202);
+      expect(capturedReports[0].status).toBe('failed');
+      expect(capturedReports[0].error).toMatch(/AI copy generation error placeholder/);
+    });
+
     test('catches unhandled exceptions during job execution and reports failed', async () => {
       const capturedReports: any[] = [];
 

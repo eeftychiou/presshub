@@ -12,6 +12,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 class PressHub_Social_Dispatcher {
 
     /**
+     * Prefix used when initial AI copy generation fails at enqueue time.
+     */
+    public const FAILED_COPY_PREFIX = '[AI Copy Generation Failed:';
+
+    /**
+     * Check whether a post_copy string is an AI copy generation failure placeholder.
+     *
+     * @param string $copy
+     * @return bool
+     */
+    public static function is_failed_copy_placeholder( string $copy ): bool {
+        return str_starts_with( ltrim( $copy ), self::FAILED_COPY_PREFIX );
+    }
+
+    /**
      * Hook into post status transitions to automatically enqueue social posts.
      *
      * @param string  $new_status
@@ -245,6 +260,31 @@ class PressHub_Social_Dispatcher {
         $engine   = sanitize_key( (string) ( $job['engine'] ?? 'api' ) );
         $post_id  = (int) ( $job['post_id'] ?? 0 );
 
+        // If this job previously failed during AI copy generation, regenerate copy BEFORE
+        // entering Pull Mode or dispatching so an error placeholder is never queued as pending.
+        $current_copy = (string) ( $job['post_copy'] ?? '' );
+        if ( self::is_failed_copy_placeholder( $current_copy ) ) {
+            if ( $post_id <= 0 || ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+                $error = new WP_Error( 'failed_copy_placeholder', __( 'Cannot dispatch job with an AI copy generation failure placeholder.', 'presshub-social-autopost' ) );
+                PressHub_Social_Queue::mark_failed( $job_id, $error->get_error_message(), [ 'error_code' => 'failed_copy_placeholder' ] );
+                return $error;
+            }
+            $regenerated = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
+            if ( is_wp_error( $regenerated ) ) {
+                $error_message = $regenerated->get_error_message();
+                PressHub_Social_Queue::mark_failed( $job_id, $error_message, [ 'error_code' => $regenerated->get_error_code() ] );
+                return $regenerated;
+            }
+            $regenerated_str = trim( (string) $regenerated );
+            if ( '' === $regenerated_str || self::is_failed_copy_placeholder( $regenerated_str ) ) {
+                $error = new WP_Error( 'failed_copy_placeholder', __( 'Regenerated copy is empty or invalid.', 'presshub-social-autopost' ) );
+                PressHub_Social_Queue::mark_failed( $job_id, $error->get_error_message(), [ 'error_code' => 'failed_copy_placeholder' ] );
+                return $error;
+            }
+            $job['post_copy'] = $regenerated_str;
+            PressHub_Social_Queue::update_job_copy( $job_id, $job['post_copy'] );
+        }
+
         // In Pull Mode, automation jobs are polled and executed by the local worker via REST.
         // Keep the job pending with scheduled_at = now so it is picked up immediately on the next poll.
         $worker_mode = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_worker_mode' )
@@ -275,19 +315,6 @@ class PressHub_Social_Dispatcher {
 
         // Transition job to processing
         PressHub_Social_Queue::mark_processing( $job_id );
-
-        // If this job previously failed during AI copy generation, regenerate copy now before dispatching
-        $current_copy = (string) ( $job['post_copy'] ?? '' );
-        if ( str_starts_with( $current_copy, '[AI Copy Generation Failed:' ) && $post_id > 0 && class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
-            $regenerated = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
-            if ( is_wp_error( $regenerated ) ) {
-                $error_message = $regenerated->get_error_message();
-                PressHub_Social_Queue::mark_failed( $job_id, $error_message, [ 'error_code' => $regenerated->get_error_code() ] );
-                return $regenerated;
-            }
-            $job['post_copy'] = (string) $regenerated;
-            PressHub_Social_Queue::update_job_copy( $job_id, $job['post_copy'] );
-        }
 
         // Dynamically resolve post thumbnail if media_url was not yet attached at enqueue time
         if ( empty( $job['media_url'] ) && $post_id > 0 && function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id ) ) {
