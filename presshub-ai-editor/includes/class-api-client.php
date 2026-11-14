@@ -3547,26 +3547,44 @@ class PressHub_AI_API_Client {
             $this->log_provider_error( 'gemini', $this->model, $response->get_error_message(), $response, $duration_ms );
             return $response;
         }
-        $body = json_decode( wp_remote_retrieve_body( $response ), true );
-        if ( isset( $body['candidates'][0]['content']['parts'][0]['text'] ) ) {
-            $prompt_tokens     = (int) ( $body['usageMetadata']['promptTokenCount'] ?? 0 );
-            $completion_tokens = (int) ( $body['usageMetadata']['candidatesTokenCount'] ?? 0 );
-            $finish_reason     = (string) ( $body['candidates'][0]['finishReason'] ?? ( $body['candidates'][0]['finish_reason'] ?? '' ) );
+        $http_code = (int) wp_remote_retrieve_response_code( $response );
+        $body      = json_decode( wp_remote_retrieve_body( $response ), true );
 
-            if ( in_array( strtoupper( $finish_reason ), [ 'MAX_TOKENS', 'LENGTH' ], true ) ) {
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::warning( sprintf( 'LLM output truncated: provider "gemini", model "%s" reached maximum output tokens limit (%d tokens).', $this->model, $this->max_tokens ) );
-                }
-                if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                    PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', 'LLM output truncated: maximum output tokens limit reached (finishReason: MAX_TOKENS).', [ 'truncated' => true, 'finish_reason' => $finish_reason, 'max_tokens' => $this->max_tokens ] );
-                }
-                return new WP_Error( 'output_truncated', __( 'The AI response was truncated because it reached the maximum output tokens limit. Please increase Maximum Output Tokens in settings or request a shorter response.', 'presshub-ai-editor' ) );
+        $candidate         = ( is_array( $body ) && isset( $body['candidates'][0] ) && is_array( $body['candidates'][0] ) ) ? $body['candidates'][0] : [];
+        $prompt_tokens     = (int) ( $body['usageMetadata']['promptTokenCount'] ?? 0 );
+        $completion_tokens = (int) ( $body['usageMetadata']['candidatesTokenCount'] ?? 0 );
+        $finish_reason     = (string) ( $candidate['finishReason'] ?? ( $candidate['finish_reason'] ?? '' ) );
+        $block_reason      = (string) ( $body['promptFeedback']['blockReason'] ?? '' );
+
+        if ( in_array( strtoupper( $finish_reason ), [ 'MAX_TOKENS', 'LENGTH' ], true ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( sprintf( 'LLM output truncated: provider "gemini", model "%s" reached maximum output tokens limit (%d tokens).', $this->model, $this->max_tokens ) );
             }
+            if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', 'LLM output truncated: maximum output tokens limit reached (finishReason: MAX_TOKENS).', [ 'truncated' => true, 'finish_reason' => $finish_reason, 'max_tokens' => $this->max_tokens ] );
+            }
+            return new WP_Error( 'output_truncated', __( 'The AI response was truncated because it reached the maximum output tokens limit. Please increase Maximum Output Tokens in settings or request a shorter response.', 'presshub-ai-editor' ) );
+        }
 
+        $parts        = ( isset( $candidate['content']['parts'] ) && is_array( $candidate['content']['parts'] ) ) ? $candidate['content']['parts'] : [];
+        $answer_parts = [];
+        $any_parts    = [];
+        foreach ( $parts as $part ) {
+            if ( ! is_array( $part ) || ! isset( $part['text'] ) ) {
+                continue;
+            }
+            $part_text   = (string) $part['text'];
+            $any_parts[] = $part_text;
+            if ( empty( $part['thought'] ) ) {
+                $answer_parts[] = $part_text;
+            }
+        }
+        $extracted_parts = ! empty( $answer_parts ) ? $answer_parts : $any_parts;
+        if ( ! empty( $extracted_parts ) ) {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
                 PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
             }
-            return $body['candidates'][0]['content']['parts'][0]['text'];
+            return implode( '', $extracted_parts );
         }
         if ( isset( $body['error']['message'] ) ) {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
@@ -3575,11 +3593,26 @@ class PressHub_AI_API_Client {
             $this->log_provider_error( 'gemini', $this->model, $body['error']['message'], $response, $duration_ms );
             return new WP_Error( 'api_error', $body['error']['message'] );
         }
-        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-            PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, 0, 0, $duration_ms, 'error', 'Invalid response from Gemini.' );
+
+        $reason_parts = [];
+        if ( $http_code >= 400 || 0 === $http_code ) {
+            $reason_parts[] = sprintf( 'HTTP %d', $http_code );
         }
-        $this->log_provider_error( 'gemini', $this->model, 'Invalid response from Gemini.', $response, $duration_ms );
-        return new WP_Error( 'api_error', __( 'Invalid response from Gemini.', 'presshub-ai-editor' ) );
+        if ( '' !== $finish_reason ) {
+            $reason_parts[] = 'finishReason: ' . $finish_reason;
+        }
+        if ( '' !== $block_reason ) {
+            $reason_parts[] = 'blockReason: ' . $block_reason;
+        }
+        $err_msg = ! empty( $reason_parts )
+            ? sprintf( 'Invalid response from Gemini (%s).', implode( ', ', $reason_parts ) )
+            : __( 'Invalid response from Gemini.', 'presshub-ai-editor' );
+
+        if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'error', $err_msg );
+        }
+        $this->log_provider_error( 'gemini', $this->model, $err_msg, $response, $duration_ms );
+        return new WP_Error( 'api_error', $err_msg );
     }
     /**
      * Dynamically fetch available models from a provider's models API endpoint.

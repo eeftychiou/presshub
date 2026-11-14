@@ -300,6 +300,18 @@ export class PressHubPoller {
           const copy = job.post_copy || '';
           const title = job.post_title || 'PressHub';
 
+          if (copy.trimStart().startsWith('[AI Copy Generation Failed:')) {
+            const errMsg = 'Refusing to publish AI copy generation error placeholder.';
+            WorkerLogger.error('Poller', `${jobTag} ${errMsg} Copy: ${copy}`);
+            await this.reportComplete({
+              job_id: job.id,
+              status: 'failed',
+              error: errMsg
+            });
+            failed++;
+            continue;
+          }
+
           let mediaPath: string | undefined;
 
           const { imageUrl, audioUrl } = await this.resolveJobMedia(job);

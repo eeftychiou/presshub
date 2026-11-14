@@ -282,6 +282,17 @@ class PressHub_Social_Worker_Client {
      * @return array|WP_Error
      */
     public static function dispatch( array $job ): array|WP_Error {
+        $copy = (string) ( $job['post_copy'] ?? '' );
+        if ( str_starts_with( ltrim( $copy ), '[AI Copy Generation Failed:' ) ) {
+            if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
+                PressHub_Social_Logger::error( 'Worker dispatch rejected: post_copy contains AI copy failure placeholder.' );
+            }
+            return new WP_Error(
+                'failed_copy_placeholder',
+                __( 'Refusing to dispatch AI copy generation error placeholder to worker.', 'presshub-social-autopost' )
+            );
+        }
+
         $payload = [
             'job_id'     => (int) ( $job['id'] ?? 0 ),
             'post_id'    => (int) ( $job['post_id'] ?? 0 ),
