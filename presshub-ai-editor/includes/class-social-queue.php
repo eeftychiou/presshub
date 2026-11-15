@@ -745,6 +745,13 @@ class PressHub_Social_Queue {
 
         $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
 
+        $repost_meta = ! empty( $source['metadata'] )
+            ? ( is_string( $source['metadata'] ) ? json_decode( $source['metadata'], true ) : $source['metadata'] )
+            : null;
+        if ( is_array( $repost_meta ) ) {
+            unset( $repost_meta['instagram_creation_id'] );
+        }
+
         $new_job_data = [
             'post_id'      => (int) $source['post_id'],
             'platform'     => (string) $source['platform'],
@@ -754,7 +761,7 @@ class PressHub_Social_Queue {
             'media_type'   => $source['media_type'] ?? null,
             'status'       => 'pending',
             'scheduled_at' => $now,
-            'metadata'     => ! empty( $source['metadata'] ) ? ( is_string( $source['metadata'] ) ? json_decode( $source['metadata'], true ) : $source['metadata'] ) : null,
+            'metadata'     => $repost_meta,
         ];
 
         return self::enqueue( $new_job_data );
