@@ -737,6 +737,34 @@ $issue91_text_content = get_post( (int) $issue91_text_post_id )->post_content ??
 as_check( 'issue_91: post_content preserves dialogue when include_text enabled', false !== strpos( $issue91_text_content, 'Καλημέρα σας' ) && false !== strpos( $issue91_text_content, 'Ευχαριστούμε' ) );
 delete_option( 'presshub_ai_briefing_podcast_include_text' );
 
+// Issue #191 — show notes: topic list with times, brief link, sources.
+$sn_script = "[Μαρία]: Καλημέρα σας ένα δύο τρία τέσσερα πέντε έξι.\n[TOPIC_START: Οικονομία]\n[Νίκος]: " . str_repeat( 'λέξη ', 60 ) . "\n[TOPIC_END]\n[TOPIC_START: Καιρός]\n[Μαρία]: " . str_repeat( 'λέξη ', 20 ) . "\n[TOPIC_END]";
+$sn_topics = $synthesizer->show_notes_topics( $sn_script );
+as_check( 'issue_191: two topics parsed in order', 2 === count( $sn_topics ) && 'Οικονομία' === $sn_topics[0]['title'] && 'Καιρός' === $sn_topics[1]['title'] );
+as_check( 'issue_191: topic offsets count spoken words before each topic', 8 === $sn_topics[0]['offset_words'] && 68 === $sn_topics[1]['offset_words'] && 60 === $sn_topics[0]['words'] );
+$GLOBALS['GET_POSTS_RESULT'] = [];
+$sn_html = $synthesizer->build_show_notes_html( $sn_script, '2026-11-15', 'morning', 0 );
+// 88 words at 150 wpm = 35.2 s; 8 words → 0:03, 68 words → 0:27.
+as_check( 'issue_191: topic list with estimated times', false !== strpos( $sn_html, '<strong>0:03</strong> Οικονομία' ) && false !== strpos( $sn_html, '<strong>0:27</strong> Καιρός' ) );
+as_check( 'issue_191: no brief means no link or sources', false === strpos( $sn_html, 'presshub-podcast-brief-link' ) && false === strpos( $sn_html, 'Πηγές' ) );
+$GLOBALS['GET_POSTS_RESULT'] = [ (object) [
+    'ID'           => 5150,
+    'post_status'  => 'publish',
+    'post_title'   => 'Πρωινή ενημέρωση 15/11',
+    'post_content' => '<p>Κείμενο</p><h2 class="presshub-briefing-sources">Πηγές</h2><ul class="presshub-briefing-sources"><li><a href="https://philenews.com/a">Άρθρο</a></li></ul>',
+] ];
+$sn_html = $synthesizer->build_show_notes_html( $sn_script, '2026-11-15', 'morning', 0 );
+as_check( 'issue_191: links the published brief', false !== strpos( $sn_html, 'presshub-podcast-brief-link' ) && false !== strpos( $sn_html, 'Πρωινή ενημέρωση 15/11' ) );
+as_check( 'issue_191: copies the brief sources list', false !== strpos( $sn_html, '<ul class="presshub-briefing-sources"><li><a href="https://philenews.com/a">Άρθρο</a></li></ul>' ) );
+$GLOBALS['GET_POSTS_RESULT'][0]->post_status = 'pending';
+$sn_html = $synthesizer->build_show_notes_html( $sn_script, '2026-11-15', 'morning', 0 );
+as_check( 'issue_191: an unpublished brief is not linked but its sources are kept', false === strpos( $sn_html, 'presshub-podcast-brief-link' ) && false !== strpos( $sn_html, 'philenews.com/a' ) );
+$GLOBALS['GET_POSTS_RESULT'] = [];
+as_check( 'issue_191: a script without topic markers and no brief gives no notes', '' === $synthesizer->build_show_notes_html( "[Μαρία]: Γεια.", '2026-11-15', 'morning', 0 ) );
+$sn_post_id = $synthesizer->create_podcast_post( 'http://example.test/sn.mp3', 4321, $sn_script, '2026-11-15', 'SN' );
+$sn_content = get_post( (int) $sn_post_id )->post_content ?? '';
+as_check( 'issue_191: create_podcast_post adds the show notes after the player', false !== strpos( $sn_content, 'presshub-podcast-show-notes' ) && strpos( $sn_content, 'wp:audio' ) < strpos( $sn_content, 'presshub-podcast-show-notes' ) );
+
 
 // =========================================================================
 // 12. Topic SFX Stitching — Zero Transition SFX between Intro/Outro and Topics

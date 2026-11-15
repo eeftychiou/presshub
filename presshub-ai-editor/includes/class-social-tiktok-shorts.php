@@ -157,6 +157,46 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
+     * Issue #189: when a new podcast post gets its shorts, cancel the shorts of earlier
+     * podcast posts that have not been posted yet. A morning short left for 13:00 would
+     * otherwise go out with 06:45 news while the noon edition is being published.
+     * Test renders, and jobs already claimed by the worker, are left alone. Filter:
+     * `presshub_social_tiktok_shorts_cancel_superseded` (default true).
+     *
+     * @param int $post_id The new podcast post.
+     * @return int[] IDs of the cancelled jobs.
+     */
+    public static function cancel_superseded( int $post_id ): array {
+        $on = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_social_tiktok_shorts_cancel_superseded', true, $post_id ) : true;
+        if ( ! $on || $post_id <= 0 ) {
+            return [];
+        }
+        $cancelled = [];
+        foreach ( PressHub_Social_Queue::query_jobs( [ 'status' => 'pending', 'platform' => 'tiktok', 'limit' => 100 ] ) as $job ) {
+            $job_post = (int) ( $job['post_id'] ?? 0 );
+            if ( $job_post === $post_id || $job_post <= 0 ) {
+                continue;
+            }
+            $short = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? null;
+            if ( ! is_array( $short ) || ! empty( $short['test'] ) ) {
+                continue;
+            }
+            if ( PressHub_Social_Queue::cancel_job( (int) $job['id'] ) ) {
+                $cancelled[] = (int) $job['id'];
+                PressHub_Social_Logger::info( sprintf(
+                    'TikTok short job #%d (post #%d, short %d/%d) cancelled: podcast post #%d is newer.',
+                    (int) $job['id'],
+                    $job_post,
+                    (int) ( $short['index'] ?? 0 ) + 1,
+                    (int) ( $short['count'] ?? 0 ),
+                    $post_id
+                ) );
+            }
+        }
+        return $cancelled;
+    }
+
+    /**
      * Build the job rows for the shorts of a podcast post.
      *
      * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().

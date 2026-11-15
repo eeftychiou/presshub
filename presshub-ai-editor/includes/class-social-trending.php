@@ -645,6 +645,49 @@ class PressHub_AI_Social_Trending {
     }
 
     /**
+     * Issue #192: how many posts one account may have in a roundup (per platform).
+     * Filter: `presshub_social_trending_max_per_account` (default 1).
+     */
+    public static function max_per_account(): int {
+        $n = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_social_trending_max_per_account', 1 ) : 1;
+        return max( 1, $n );
+    }
+
+    /**
+     * Issue #192: local hour (site time zone) before which a new roundup is held as a
+     * scheduled post, so its social posts go out when people read rather than at 04:00.
+     * Filter: `presshub_social_trending_share_after_hour` (default 8, 0 turns it off).
+     */
+    public static function share_after_hour(): int {
+        $h = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_social_trending_share_after_hour', 8 ) : 8;
+        return max( 0, min( 23, $h ) );
+    }
+
+    /**
+     * When a new roundup created at $now should go live, as [ local 'Y-m-d H:i:s', GMT
+     * 'Y-m-d H:i:s' ], or null to publish now.
+     *
+     * @return array{0:string,1:string}|null
+     */
+    public static function held_publish_time( int $now ): ?array {
+        $hour = self::share_after_hour();
+        if ( $hour <= 0 ) {
+            return null;
+        }
+        $tz = function_exists( 'wp_timezone' ) ? wp_timezone() : null;
+        if ( ! $tz instanceof DateTimeZone ) {
+            $offset = (float) get_option( 'gmt_offset', 0 );
+            $tz     = new DateTimeZone( sprintf( '%+03d:%02d', (int) $offset, (int) round( abs( $offset - (int) $offset ) * 60 ) ) );
+        }
+        $local = ( new DateTimeImmutable( '@' . $now ) )->setTimezone( $tz );
+        if ( (int) $local->format( 'G' ) >= $hour ) {
+            return null;
+        }
+        $at = $local->setTime( $hour, 0, 0 );
+        return [ $at->format( 'Y-m-d H:i:s' ), gmdate( 'Y-m-d H:i:s', $at->getTimestamp() ) ];
+    }
+
+    /**
      * Pick the posts for the roundup: best per platform, then mixed in turn.
      *
      * @return array[]
@@ -672,7 +715,8 @@ class PressHub_AI_Social_Trending {
             usort( $list, static function ( $a, $b ) {
                 return $b['score'] <=> $a['score'];
             } );
-            // At most two posts by the same account per platform, so one busy account cannot fill it.
+            // At most max_per_account() posts by the same account (one by default, #192),
+            // so one busy account cannot fill the roundup.
             $kept = [];
             foreach ( $list as $c ) {
                 if ( self::seen_before( $c, $seen ) ) {
@@ -680,7 +724,7 @@ class PressHub_AI_Social_Trending {
                 }
                 $ak = $p . ':' . self::account_key( $c );
                 $per_auth[ $ak ] = ( $per_auth[ $ak ] ?? 0 ) + 1;
-                if ( $per_auth[ $ak ] > 2 ) {
+                if ( $per_auth[ $ak ] > self::max_per_account() ) {
                     continue;
                 }
                 $kept[] = $c;
@@ -1137,6 +1181,13 @@ class PressHub_AI_Social_Trending {
         ];
         if ( $cat > 0 ) {
             $postarr['post_category'] = [ $cat ];
+        }
+        $held = 'publish' === $status ? self::held_publish_time( $now ) : null;
+        if ( null !== $held ) {
+            $postarr['post_status']   = 'future';
+            $postarr['post_date']     = $held[0];
+            $postarr['post_date_gmt'] = $held[1];
+            self::log( 'info', sprintf( 'Social trending: roundup scheduled for %s (site time) so its social posts go out then.', $held[0] ) );
         }
         $id = wp_insert_post( $postarr, true );
         if ( is_wp_error( $id ) ) {
