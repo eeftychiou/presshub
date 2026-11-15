@@ -1651,6 +1651,10 @@ class PressHub_AI_News_Harvester {
         $this->merge_press_releases( $payload );
         // Posts from monitored X / TikTok accounts, sent in by the social worker.
         $this->merge_social_posts( $payload, $date, $edition );
+        // Issue #190: clean content and drop stale, promo, too-short and duplicate items.
+        if ( class_exists( 'PressHub_AI_Pool_Cleaner' ) ) {
+            PressHub_AI_Pool_Cleaner::clean( $payload, $date );
+        }
 
         $duration_ms                 = (int) round( ( microtime( true ) - $start_time ) * 1000 );
         $payload['budget_exceeded']  = $budget_exceeded;

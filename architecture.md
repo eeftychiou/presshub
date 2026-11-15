@@ -85,6 +85,13 @@ graph TD
     - Morning: `raw-articles.json` + `presshub_ai_harvest_snapshot_{date}` transient.
     - Noon: `raw-articles-noon.json` + `presshub_ai_harvest_snapshot_noon_{date}` transient.
 
+- **Pool cleanup (`PressHub_AI_Pool_Cleaner`, Issue #190)**: `harvest_all()` runs `PressHub_AI_Pool_Cleaner::clean( $payload, $date )` after the press releases and social posts are merged and before the snapshot is saved.
+  - Content: strips `<style>`/`<script>`/`<noscript>`/`<svg>` blocks, comments, `data:` URIs, stray CSS rules, tags and repeated whitespace, then recounts `char_count`. Items longer than 20,000 characters are cut and flagged `content_trimmed`.
+  - Stale: a title or URL date earlier than the briefing date and within the last 31 days, or a `published_at` older than 48 hours (filter `presshub_ai_pool_max_age_hours`).
+  - Filler: promo titles (`presshub_ai_pool_promo_patterns`), score-only results stubs under 150 words, and an optional minimum word count for scraped pages (`presshub_ai_pool_min_scraped_words`, off by default).
+  - Near-duplicates: 3-word shingle overlap of title plus the first 1,500 characters at 60% or more (`presshub_ai_pool_duplicate_similarity`). The copy with the higher source priority wins, then the one with a transcript, then the longer text.
+  - Manual uploads and press releases are cleaned but never dropped. `$payload['pool_cleanup']` lists counts and every dropped item with its reason, plus the copy kept for duplicates. `presshub_ai_pool_cleanup_enabled` turns cleanup off. Tests: `tests/PoolCleanerTest.php`.
+
 ### 4.2 News Curator (`PressHub_AI_News_Curator`)
 - **Role**: Selects, deduplicates, and curates news stories into a coherent news briefing.
 - **Context Management**:
