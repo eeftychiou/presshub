@@ -9,6 +9,7 @@
  */
 import { connectOrLaunchChrome, ChromeConnection } from '../automation/browser-helper';
 import { WorkerLogger } from '../logger';
+import { challengeBackoffUntil, clearChallenge, isChallengeError, recordChallenge } from '../automation/challenge-backoff';
 import { parseTikTokItemList, parseXGraphql, PostMetrics, ScannedPost } from '../monitor/parsers';
 import { resolveReaderSession } from '../monitor/scanner';
 import { parseFacebookStories, splitFacebookPayload } from './facebook-parser';
@@ -193,6 +194,13 @@ export const browserTrendingScan: TrendingScanFn = async (plan: TrendingPlan) =>
   try {
     for (const target of plan.targets) {
       if (!RESPONSE_MATCH[target.platform] || blocked.has(target.platform)) continue;
+      const paused = challengeBackoffUntil(target.platform);
+      if (paused) {
+        blocked.add(target.platform);
+        errors.push({ platform: target.platform, url: target.url, error: `skipped: verification challenge back-off until ${new Date(paused).toISOString()}` });
+        WorkerLogger.info('Trending', `${target.platform} skipped until ${new Date(paused).toISOString()} after a verification challenge.`);
+        continue;
+      }
       try {
         if (!connections[target.platform]) {
           connections[target.platform] = await connectOrLaunchChrome({
@@ -202,10 +210,15 @@ export const browserTrendingScan: TrendingScanFn = async (plan: TrendingPlan) =>
         }
         const got = await scanTrendingPage(connections[target.platform] as ChromeConnection, target);
         posts.push(...got);
+        if (got.length > 0) clearChallenge(target.platform);
         WorkerLogger.info('Trending', `${target.label || target.url}: ${got.length} post(s).`);
       } catch (err: any) {
         errors.push({ platform: target.platform, url: target.url, error: err.message });
-        WorkerLogger.warn('Trending', `${target.label || target.url} failed: ${err.message}`);
+        if (isChallengeError(err.message)) {
+          recordChallenge(target.platform, 'Trending');
+        } else {
+          WorkerLogger.warn('Trending', `${target.label || target.url} failed: ${err.message}`);
+        }
         // A login wall or a challenge will not go away on the next page of the same platform.
         if (/login|verification/i.test(err.message)) blocked.add(target.platform);
       }

@@ -181,6 +181,7 @@ export class SocialMonitor {
             });
             if (up.ok) {
               uploaded++;
+              WorkerLogger.info('Social Monitor', `Video for ${storeId} sent for transcription (${(media.bytes.length / 1048576).toFixed(1)} MB).`);
             } else {
               WorkerLogger.warn('Social Monitor', `Video upload for ${storeId} failed with HTTP ${up.status}`);
             }

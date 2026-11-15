@@ -172,6 +172,12 @@ class PressHub_AI_Social_Trending {
         if ( ! empty( $state['open'] ) && ! $force ) {
             return $state;
         }
+        // #179: a forced start must not replace a run the worker is reading right
+        // now, or the worker's results come back to a closed run (HTTP 409).
+        if ( $force && ! empty( $state['open'] ) && (int) $state['plan_handed'] > 0 && ( $now - (int) $state['plan_handed'] ) < self::PLAN_LOCK_SEC ) {
+            self::log( 'info', sprintf( 'Social trending: run %s is still being read by the worker; not starting another one.', $state['run_id'] ) );
+            return $state;
+        }
         $interval = PressHub_AI_Settings_Storage::get_social_trending_interval_hours() * 3600;
         if ( ! $force && ( $now - (int) $state['last_run'] ) < $interval ) {
             return null;
@@ -384,7 +390,11 @@ class PressHub_AI_Social_Trending {
         $now   = $now ?? time();
         $state = self::get_state();
         if ( empty( $state['open'] ) || '' === $run_id || $run_id !== (string) $state['run_id'] ) {
-            return new WP_Error( 'stale_run', 'This run is no longer open.', [ 'status' => 409 ] );
+            $why = empty( $state['open'] )
+                ? sprintf( 'no run is open (the last one, %s, already closed)', (string) $state['run_id'] )
+                : sprintf( 'run %s replaced it', (string) $state['run_id'] );
+            self::log( 'warning', sprintf( 'Social trending: results for run %s refused: %s.', $run_id, $why ) );
+            return new WP_Error( 'stale_run', sprintf( 'This run is no longer open: %s.', $why ), [ 'status' => 409 ] );
         }
         if ( ! empty( $errors ) ) {
             self::log( 'warning', 'Social trending: worker reported problems.', [ 'errors' => array_slice( $errors, 0, 20 ) ] );
