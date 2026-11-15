@@ -1600,19 +1600,35 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     }
 
     WorkerLogger.debug('Instagram Automation', 'Opening create/new post modal...');
+    const fileInput = page.locator('input[type="file"]').first();
+    const composerOpen = async (ms: number): Promise<boolean> =>
+      fileInput.waitFor({ state: 'attached', timeout: ms }).then(() => true).catch(() => false);
+    // Older layout: "New post" icon or a "Create" link. Current layout (Nov 2026): the
+    // sidebar "Create" opens a menu whose "Post" entry (svg aria-label="Post") opens the composer.
     const createNav = page.locator(
-      'svg[aria-label="New post"], a[role="link"]:has-text("Create")'
+      'svg[aria-label="New post"], svg[aria-label="Create"], a[role="link"]:has-text("Create")'
     ).first();
-    if ((await createNav.count()) > 0) {
-      await createNav.click();
+    if (!(await composerOpen(500)) && (await createNav.count()) > 0) {
+      await createNav.click().catch(() => {});
       await page.waitForTimeout(1000);
+    }
+    if (!(await composerOpen(1500))) {
+      const postEntry = page.locator(
+        'a:has(svg[aria-label="Post"]), [role="link"]:has(svg[aria-label="Post"]), [role="button"]:has(svg[aria-label="Post"]), [role="menuitem"]:has(svg[aria-label="Post"]), svg[aria-label="Post"]'
+      ).first();
+      if ((await postEntry.count()) > 0) {
+        WorkerLogger.debug('Instagram Automation', 'Clicking the "Post" entry to open the composer...');
+        await postEntry.click().catch(() => {});
+        await page.waitForTimeout(1000);
+      }
+    }
+    if (!(await composerOpen(Math.min(timeout, 15000)))) {
+      throw new Error('Instagram composer did not open: no "New post", "Create" or "Post" entry led to an upload field (Instagram layout may have changed).');
     }
 
     const mediaSize = fs.statSync(options.mediaPath).size;
     const isVideo = /\.(mp4|mov|webm|m4v)$/i.test(options.mediaPath);
     WorkerLogger.info('Instagram Automation', `Uploading ${isVideo ? 'video/Reel' : 'image'} attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
-    const fileInput = page.locator('input[type="file"]').first();
-    await fileInput.waitFor({ state: 'attached', timeout });
     await fileInput.setInputFiles(path.resolve(options.mediaPath));
     await page.waitForTimeout(2000);
 
