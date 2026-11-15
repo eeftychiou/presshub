@@ -104,6 +104,21 @@ sh_check( 'merge fiches: alias, positions, sightings moved, duplicate removed', 
 sh_check( 'merge fiches: same fiche refused', is_wp_error( $S::merge_fiches( 'νικοσ-χριστοδουλιδησ', 'νικοσ-χριστοδουλιδησ' ) ) );
 sh_check( 'merged alias now matches in later merges', '' !== $S::find_slug( $S::all(), 'Ν. Χριστοδουλίδης' ) );
 
+// Review follow-ups: punctuation-only names skipped; merged mentions survive the seen_in cap.
+$before = count( $S::all() );
+$pst    = $S::merge_people( [ [ 'name' => '-- ..' ] ], '2026-11-15', '2026-11-15-morning' );
+sh_check( 'merge: punctuation-only name skipped', 1 === $pst['skipped'] && $before === count( $S::all() ) );
+$raw = get_option( $S::OPTION );
+$raw['big-a'] = [ 'name' => 'Άλφα Πρώτος', 'mentions' => 30, 'seen_in' => [ 'x1', 'x2' ] ];
+$raw['big-b'] = [ 'name' => 'Βήτα Δεύτερος', 'mentions' => 25, 'seen_in' => [ 'x2', 'x3' ] ];
+update_option( $S::OPTION, $raw );
+$big = $S::merge_fiches( 'big-a', 'big-b' );
+sh_check( 'merge fiches: mentions kept beyond the seen_in cap, shared edition once', 54 === $big['mentions'] );
+$S::merge_fiches( 'big-a', 'big-a' );
+$raw = get_option( $S::OPTION );
+unset( $raw['big-a'] );
+update_option( $S::OPTION, $raw );
+
 // 4. parse_response.
 sh_check( 'parse: fenced JSON', 1 === count( (array) $S::parse_response( "```json\n{\"people\":[{\"name\":\"Α Β\"}]}\n```" ) ) );
 sh_check( 'parse: JSON inside prose', is_array( $S::parse_response( 'Ορίστε: {"people":[]} τέλος' ) ) );

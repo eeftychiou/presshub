@@ -266,6 +266,10 @@ class PressHub_AI_Stakeholders {
             $is_new  = '' === $slug;
             if ( $is_new ) {
                 $slug = self::slug( $name );
+                if ( '' === trim( $slug, '-' ) ) {
+                    $stats['skipped']++; // Punctuation-only name.
+                    continue;
+                }
                 $fiches[ $slug ] = self::normalize( [ 'name' => $name, 'first_seen' => $date ] );
             }
             $f = $fiches[ $slug ];
@@ -352,8 +356,10 @@ class PressHub_AI_Stakeholders {
         $b = $fiches[ $from ];
         $a['aliases']    = array_merge( $a['aliases'], [ $b['name'] ], '' !== $b['name_en'] ? [ $b['name_en'] ] : [], $b['aliases'] );
         $a['positions']  = array_merge( $a['positions'], $b['positions'] );
+        $shared          = count( array_intersect( $a['seen_in'], $b['seen_in'] ) );
         $a['seen_in']    = array_values( array_unique( array_merge( $a['seen_in'], $b['seen_in'] ) ) );
-        $a['mentions']   = count( $a['seen_in'] ) ?: ( $a['mentions'] + $b['mentions'] );
+        // seen_in keeps only the last 20 editions, so take the larger of the two counts.
+        $a['mentions']   = max( count( $a['seen_in'] ), $a['mentions'] + $b['mentions'] - $shared );
         $a['first_seen'] = min( array_filter( [ $a['first_seen'], $b['first_seen'] ] ) ?: [ '' ] );
         $a['last_seen']  = max( $a['last_seen'], $b['last_seen'] );
         foreach ( [ 'role', 'party', 'bio', 'name_en' ] as $field ) {

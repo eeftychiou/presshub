@@ -1593,6 +1593,10 @@ class PressHub_AI_Audio_Synthesizer {
         try {
             $result = $this->synthesize_podcast_run( $date, $custom_script, $edition_or_client, $api_client, $existing_post_id );
             return $result;
+        } catch ( \Throwable $e ) {
+            // Keep the exception's message for the audio card, then let it through.
+            $result = new WP_Error( 'synthesis_exception', $e->getMessage() );
+            throw $e;
         } finally {
             if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
                 PressHub_AI_TTS_Call_Recorder::end_session();
