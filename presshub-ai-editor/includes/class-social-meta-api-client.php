@@ -194,18 +194,26 @@ class PressHub_Social_Meta_API_Client {
                 $container_body['image_url']   = $media_url;
             }
 
-            $response1 = wp_remote_post( $container_endpoint, [
-                'timeout'   => 45,
-                'body'      => $container_body,
-                'sslverify' => true,
-            ] );
+            $response1 = null !== self::$http_post
+                ? call_user_func( self::$http_post, $container_endpoint, $container_body )
+                : wp_remote_post( $container_endpoint, [
+                    'timeout'   => 45,
+                    'body'      => $container_body,
+                    'sslverify' => true,
+                ] );
 
             if ( is_wp_error( $response1 ) ) {
                 return $response1;
             }
 
-            $code1 = (int) wp_remote_retrieve_response_code( $response1 );
-            $data1 = json_decode( wp_remote_retrieve_body( $response1 ), true );
+            if ( is_array( $response1 ) && array_key_exists( 'body', $response1 ) && isset( $response1['code'] ) ) {
+                $code1 = (int) $response1['code'];
+                $data1 = is_array( $response1['body'] ) ? $response1['body'] : json_decode( (string) $response1['body'], true );
+            } else {
+                $code1 = (int) wp_remote_retrieve_response_code( $response1 );
+                $data1 = json_decode( wp_remote_retrieve_body( $response1 ), true );
+            }
+            $data1 = is_array( $data1 ) ? $data1 : [];
 
             if ( $code1 >= 400 || empty( $data1['id'] ) ) {
                 $err_msg = $data1['error']['message'] ?? sprintf( 'Instagram container creation failed with HTTP %d', $code1 );
@@ -229,15 +237,9 @@ class PressHub_Social_Meta_API_Client {
         if ( 'video' === $media_type ) {
             $ready = self::wait_for_instagram_container( $version, $creation_id, $token );
             if ( is_wp_error( $ready ) ) {
-                if ( 'instagram_container_processing_error' === $ready->get_error_code()
-                    && ! empty( $job['id'] )
-                    && isset( $job_meta['instagram_creation_id'] )
-                    && class_exists( 'PressHub_Social_Queue' )
-                ) {
-                    unset( $job_meta['instagram_creation_id'] );
-                    PressHub_Social_Queue::update_job( (int) $job['id'], [
-                        'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
-                    ] );
+                $err_code = $ready->get_error_code();
+                if ( in_array( $err_code, [ 'instagram_container_processing_error', 'instagram_container_status_error' ], true ) ) {
+                    self::forget_instagram_container( $job, $job_meta );
                 }
                 return $ready;
             }
@@ -245,21 +247,30 @@ class PressHub_Social_Meta_API_Client {
 
         // Step 2: Publish media container
         $publish_endpoint = "https://graph.facebook.com/{$version}/{$ig_user_id}/media_publish";
-        $response2        = wp_remote_post( $publish_endpoint, [
-            'timeout'   => 45,
-            'body'      => [
-                'creation_id'  => $creation_id,
-                'access_token' => $token,
-            ],
-            'sslverify' => true,
-        ] );
+        $publish_body     = [
+            'creation_id'  => $creation_id,
+            'access_token' => $token,
+        ];
+        $response2        = null !== self::$http_post
+            ? call_user_func( self::$http_post, $publish_endpoint, $publish_body )
+            : wp_remote_post( $publish_endpoint, [
+                'timeout'   => 45,
+                'body'      => $publish_body,
+                'sslverify' => true,
+            ] );
 
         if ( is_wp_error( $response2 ) ) {
             return $response2;
         }
 
-        $code2 = (int) wp_remote_retrieve_response_code( $response2 );
-        $data2 = json_decode( wp_remote_retrieve_body( $response2 ), true );
+        if ( is_array( $response2 ) && array_key_exists( 'body', $response2 ) && isset( $response2['code'] ) ) {
+            $code2 = (int) $response2['code'];
+            $data2 = is_array( $response2['body'] ) ? $response2['body'] : json_decode( (string) $response2['body'], true );
+        } else {
+            $code2 = (int) wp_remote_retrieve_response_code( $response2 );
+            $data2 = json_decode( wp_remote_retrieve_body( $response2 ), true );
+        }
+        $data2 = is_array( $data2 ) ? $data2 : [];
 
         if ( $code2 >= 400 || empty( $data2['id'] ) ) {
             $err_msg = $data2['error']['message'] ?? sprintf( 'Instagram publish container failed with HTTP %d', $code2 );
@@ -271,12 +282,7 @@ class PressHub_Social_Meta_API_Client {
 
         $media_id = (string) $data2['id'];
 
-        if ( ! empty( $job['id'] ) && isset( $job_meta['instagram_creation_id'] ) && class_exists( 'PressHub_Social_Queue' ) ) {
-            unset( $job_meta['instagram_creation_id'] );
-            PressHub_Social_Queue::update_job( (int) $job['id'], [
-                'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
-            ] );
-        }
+        self::forget_instagram_container( $job, $job_meta );
 
         return [
             'external_post_id'  => $media_id,
@@ -288,11 +294,31 @@ class PressHub_Social_Meta_API_Client {
         ];
     }
 
+    /**
+     * Remove a stored Instagram container ID from job metadata so retries or reposts create a fresh container.
+     */
+    private static function forget_instagram_container( array $job, array &$job_meta ): void {
+        if ( empty( $job['id'] ) || ! isset( $job_meta['instagram_creation_id'] ) || ! class_exists( 'PressHub_Social_Queue' ) ) {
+            return;
+        }
+        unset( $job_meta['instagram_creation_id'] );
+        PressHub_Social_Queue::update_job( (int) $job['id'], [
+            'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
+        ] );
+    }
+
     /** @var callable|null Optional HTTP GET override for unit tests. */
     private static $http_get = null;
 
+    /** @var callable|null Optional HTTP POST override for unit tests. */
+    private static $http_post = null;
+
     public static function set_http_get( ?callable $http_get ): void {
         self::$http_get = $http_get;
+    }
+
+    public static function set_http_post( ?callable $http_post ): void {
+        self::$http_post = $http_post;
     }
 
     /**
@@ -325,31 +351,47 @@ class PressHub_Social_Meta_API_Client {
             if ( is_wp_error( $res ) ) {
                 return $res;
             }
-            if ( is_array( $res ) && ( isset( $res['status_code'] ) || isset( $res['error'] ) ) ) {
-                $http_code = 200;
+            if ( is_array( $res ) && ( isset( $res['status_code'] ) || isset( $res['error'] ) || isset( $res['http_code'] ) ) ) {
+                $http_code = (int) ( $res['http_code'] ?? 200 );
                 $data      = $res;
             } else {
                 $http_code = (int) wp_remote_retrieve_response_code( $res );
-                $data      = json_decode( wp_remote_retrieve_body( $res ), true );
+                $decoded   = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+                $data      = is_array( $decoded ) ? $decoded : [];
             }
-            if ( $http_code >= 400 || ! empty( $data['error'] ) ) {
-                $msg = (string) ( $data['error']['message'] ?? sprintf( 'Instagram container status check failed with HTTP %d', $http_code ) );
-                if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
-                    PressHub_Social_Logger::error( 'Instagram container status error: ' . $msg );
-                }
-                return new WP_Error( 'instagram_container_status_error', $msg );
-            }
-            $status_code = strtoupper( (string) ( $data['status_code'] ?? '' ) );
 
-            if ( 'FINISHED' === $status_code || 'PUBLISHED' === $status_code ) {
-                return true;
-            }
-            if ( 'ERROR' === $status_code || 'EXPIRED' === $status_code ) {
-                $msg = (string) ( $data['status'] ?? $data['error']['message'] ?? "Instagram container processing failed ({$status_code})" );
-                if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
-                    PressHub_Social_Logger::error( 'Instagram container status error: ' . $msg );
+            if ( $http_code >= 400 || ! empty( $data['error'] ) ) {
+                $err          = is_array( $data['error'] ?? null ) ? $data['error'] : [];
+                $graph_code   = (int) ( $err['code'] ?? 0 );
+                $is_transient = $http_code >= 500
+                    || 429 === $http_code
+                    || ! empty( $err['is_transient'] )
+                    || in_array( $graph_code, [ 2, 4, 17, 32, 613 ], true );
+
+                if ( ! $is_transient ) {
+                    $msg           = (string) ( $err['message'] ?? sprintf( 'Instagram container status check failed with HTTP %d', $http_code ) );
+                    $is_auth_error = ( 190 === $graph_code || 'OAuthException' === (string) ( $err['type'] ?? '' ) || 401 === $http_code );
+                    if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
+                        PressHub_Social_Logger::error( 'Instagram container status error: ' . $msg );
+                    }
+                    return new WP_Error(
+                        $is_auth_error ? 'instagram_container_auth_error' : 'instagram_container_status_error',
+                        $msg
+                    );
                 }
-                return new WP_Error( 'instagram_container_processing_error', $msg );
+            } else {
+                $status_code = strtoupper( (string) ( $data['status_code'] ?? '' ) );
+
+                if ( 'FINISHED' === $status_code || 'PUBLISHED' === $status_code ) {
+                    return true;
+                }
+                if ( 'ERROR' === $status_code || 'EXPIRED' === $status_code ) {
+                    $msg = (string) ( $data['status'] ?? $data['error']['message'] ?? "Instagram container processing failed ({$status_code})" );
+                    if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
+                        PressHub_Social_Logger::error( 'Instagram container status error: ' . $msg );
+                    }
+                    return new WP_Error( 'instagram_container_processing_error', $msg );
+                }
             }
 
             if ( $sleep_seconds > 0 && $attempt < $max_attempts - 1 ) {

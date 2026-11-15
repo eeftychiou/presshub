@@ -2791,7 +2791,108 @@ $ig_repost_meta = is_string( $ig_repost_job['metadata'] ?? null ) ? json_decode(
 assert_false( isset( $ig_repost_meta['instagram_creation_id'] ), 'repost strips stale instagram_creation_id from metadata' );
 assert_equals( 'yes', $ig_repost_meta['keep_key'] ?? '', 'repost preserves unrelated metadata keys' );
 
+// Verify transient HTTP 5xx, 429, is_transient, Graph rate-limit codes, and non-JSON 200 HTML keep polling
+$transient_calls = 0;
+PressHub_Social_Meta_API_Client::set_http_get( function() use ( &$transient_calls ) {
+    $transient_calls++;
+    if ( 1 === $transient_calls ) {
+        return [ 'http_code' => 502, 'error' => [ 'message' => 'Bad Gateway' ] ];
+    }
+    if ( 2 === $transient_calls ) {
+        return [ 'http_code' => 429, 'error' => [ 'message' => 'Too Many Requests' ] ];
+    }
+    if ( 3 === $transient_calls ) {
+        return [ 'error' => [ 'code' => 4, 'message' => 'Application request limit reached' ] ];
+    }
+    if ( 4 === $transient_calls ) {
+        return [ 'error' => [ 'code' => 2, 'is_transient' => true, 'message' => 'Unexpected error' ] ];
+    }
+    if ( 5 === $transient_calls ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => '<html>temporary proxy</html>' ];
+    }
+    return [ 'status_code' => 'FINISHED' ];
+} );
+$poll_transient = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 8, 0 );
+assert_true( true === $poll_transient, 'wait_for_instagram_container keeps polling through transient errors and non-JSON 200' );
+assert_equals( 6, $transient_calls, 'wait_for_instagram_container rode out all 5 transient responses before FINISHED' );
+
+// Verify publish_instagram clears instagram_creation_id after media_publish, clears on dead container (code 100), and keeps on auth error (code 190)
+update_option( 'presshub_social_meta_access_token', 'test-meta-token' );
+update_option( 'presshub_social_instagram_account_id', 'ig-user-1' );
+
+$pub_job_id = PressHub_Social_Queue::enqueue( [
+    'post_id'      => $ig_short_post_id,
+    'platform'     => 'instagram',
+    'engine'       => 'api',
+    'post_copy'    => 'Reel publish clear test',
+    'media_url'    => 'https://example.com/reel-pub.mp4',
+    'media_type'   => 'video',
+    'status'       => 'pending',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s' ),
+    'metadata'     => [ 'keep_key' => 'yes' ],
+] );
+PressHub_Social_Meta_API_Client::set_http_post( function( $endpoint ) {
+    if ( false !== strpos( $endpoint, '/media_publish' ) ) {
+        return [ 'code' => 200, 'body' => [ 'id' => 'media-999' ] ];
+    }
+    return [ 'code' => 200, 'body' => [ 'id' => 'creation-111' ] ];
+} );
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'status_code' => 'FINISHED' ];
+} );
+$pub_res = PressHub_Social_Meta_API_Client::publish_instagram( PressHub_Social_Queue::get_job( (int) $pub_job_id ) );
+assert_true( is_array( $pub_res ) && 'media-999' === ( $pub_res['external_post_id'] ?? '' ), 'publish_instagram succeeds via mocked HTTP endpoints' );
+$pub_job_after = PressHub_Social_Queue::get_job( (int) $pub_job_id );
+$pub_meta_after = is_string( $pub_job_after['metadata'] ?? null ) ? json_decode( $pub_job_after['metadata'], true ) : ( $pub_job_after['metadata'] ?? [] );
+assert_false( isset( $pub_meta_after['instagram_creation_id'] ), 'publish_instagram clears instagram_creation_id after media_publish succeeds' );
+assert_equals( 'yes', $pub_meta_after['keep_key'] ?? '', 'publish_instagram preserves other metadata keys when clearing container ID' );
+
+// Dead container (Graph code 100) clears instagram_creation_id so retry creates a fresh container
+$dead_job_id = PressHub_Social_Queue::enqueue( [
+    'post_id'      => $ig_short_post_id,
+    'platform'     => 'instagram',
+    'engine'       => 'api',
+    'post_copy'    => 'Reel dead container test',
+    'media_url'    => 'https://example.com/reel-dead.mp4',
+    'media_type'   => 'video',
+    'status'       => 'pending',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s' ),
+    'metadata'     => [ 'instagram_creation_id' => 'dead-222' ],
+] );
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'http_code' => 400, 'error' => [ 'code' => 100, 'message' => 'Object with ID dead-222 does not exist' ] ];
+} );
+$dead_res = PressHub_Social_Meta_API_Client::publish_instagram( PressHub_Social_Queue::get_job( (int) $dead_job_id ) );
+assert_true( is_wp_error( $dead_res ) && 'instagram_container_status_error' === $dead_res->get_error_code(), 'publish_instagram returns WP_Error on dead container' );
+$dead_job_after  = PressHub_Social_Queue::get_job( (int) $dead_job_id );
+$dead_meta_after = is_string( $dead_job_after['metadata'] ?? null ) ? json_decode( $dead_job_after['metadata'], true ) : ( $dead_job_after['metadata'] ?? [] );
+assert_false( isset( $dead_meta_after['instagram_creation_id'] ), 'publish_instagram clears dead instagram_creation_id on non-auth 4xx status error' );
+
+// Auth error (Graph code 190) preserves instagram_creation_id so token refresh can resume same container
+$auth_job_id = PressHub_Social_Queue::enqueue( [
+    'post_id'      => $ig_short_post_id,
+    'platform'     => 'instagram',
+    'engine'       => 'api',
+    'post_copy'    => 'Reel auth error test',
+    'media_url'    => 'https://example.com/reel-auth.mp4',
+    'media_type'   => 'video',
+    'status'       => 'pending',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s' ),
+    'metadata'     => [ 'instagram_creation_id' => 'auth-333' ],
+] );
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'http_code' => 400, 'error' => [ 'code' => 190, 'type' => 'OAuthException', 'message' => 'Session has expired' ] ];
+} );
+$auth_res = PressHub_Social_Meta_API_Client::publish_instagram( PressHub_Social_Queue::get_job( (int) $auth_job_id ) );
+assert_true( is_wp_error( $auth_res ) && 'instagram_container_auth_error' === $auth_res->get_error_code(), 'publish_instagram returns auth WP_Error on OAuth error' );
+$auth_job_after  = PressHub_Social_Queue::get_job( (int) $auth_job_id );
+$auth_meta_after = is_string( $auth_job_after['metadata'] ?? null ) ? json_decode( $auth_job_after['metadata'], true ) : ( $auth_job_after['metadata'] ?? [] );
+assert_equals( 'auth-333', $auth_meta_after['instagram_creation_id'] ?? '', 'publish_instagram preserves instagram_creation_id on OAuth/auth error' );
+
 PressHub_Social_Meta_API_Client::set_http_get( null );
+PressHub_Social_Meta_API_Client::set_http_post( null );
+delete_option( 'presshub_social_meta_access_token' );
+delete_option( 'presshub_social_instagram_account_id' );
 delete_option( 'presshub_social_instagram_shorts_enabled' );
 delete_option( 'presshub_social_tiktok_shorts_enabled' );
 
