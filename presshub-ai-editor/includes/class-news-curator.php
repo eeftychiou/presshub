@@ -666,12 +666,8 @@ class PressHub_AI_News_Curator {
 
         // Issue #135: Compute effective memory budget and build tiered memory context
         $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars();
-        $configured_context_tokens = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_briefing_text_max_tokens()
-            : 0;
-        if ( $configured_context_tokens <= 0 ) {
-            $configured_context_tokens = PressHub_AI_Context_Estimator::DEFAULT_MAX_CONTEXT_TOKENS;
-        }
+        // Issue #188: the model's input window, not the module's max output tokens.
+        $configured_context_tokens = PressHub_AI_Context_Estimator::model_context_window_tokens( 'briefing_text' );
 
         // Full prompt size: system prompt (template + preset) + primary articles context
         $full_prompt_chars    = mb_strlen( $hydrated_prompt, 'UTF-8' ) + mb_strlen( $preset_text, 'UTF-8' ) + mb_strlen( $context, 'UTF-8' );

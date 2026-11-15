@@ -353,6 +353,13 @@ class PressHub_AI_Memory_Context_Builder {
         }
 
         // -------------------------------------------------------------
+        // Issue #188: one line per story thread. Digests repeat a running
+        // story every day under the same key; keep only its newest
+        // development (newest tier first) and note since when it runs.
+        // -------------------------------------------------------------
+        $deduped = self::dedupe_story_threads( $same_day_entry, $recent_entries, $background_entries );
+
+        // -------------------------------------------------------------
         // Podcast Opening/Closing Lines (target=podcast only)
         // -------------------------------------------------------------
         $podcast_lines = [];
@@ -399,7 +406,7 @@ class PressHub_AI_Memory_Context_Builder {
             while ( ! empty( $background_entries ) && ( 0 === $budget_chars || mb_strlen( $rendered, 'UTF-8' ) > $budget_chars ) ) {
                 $dropped_bg = array_pop( $background_entries );
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::warning(
+                    PressHub_AI_Logger::debug(
                         'Memory context builder trimmed background entry to fit budget',
                         [
                             'reason'       => 'budget_oldest_background',
@@ -454,7 +461,7 @@ class PressHub_AI_Memory_Context_Builder {
 
                 if ( is_array( $dropped_story ) && ! empty( $dropped_story['key'] ) ) {
                     if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                        PressHub_AI_Logger::warning(
+                        PressHub_AI_Logger::debug(
                             'Memory context builder trimmed story from oldest recent entry to fit budget',
                             [
                                 'reason'       => $reason,
@@ -506,7 +513,7 @@ class PressHub_AI_Memory_Context_Builder {
                     }
                     if ( is_array( $dropped_story ) && ! empty( $dropped_story['key'] ) ) {
                         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                            PressHub_AI_Logger::warning(
+                            PressHub_AI_Logger::debug(
                                 'Memory context builder trimmed story from same-day entry to fit budget',
                                 [
                                     'reason'    => $reason,
@@ -550,6 +557,22 @@ class PressHub_AI_Memory_Context_Builder {
 
             if ( 0 === $budget_chars ) {
                 $rendered = '';
+            }
+
+            // One summary line per build instead of one warning per trimmed item.
+            if ( ! empty( $trimmed ) && class_exists( 'PressHub_AI_Logger' ) ) {
+                $by_reason = array_count_values( array_column( $trimmed, 'reason' ) );
+                PressHub_AI_Logger::warning(
+                    sprintf( 'Memory context trimmed %d item(s) to fit the %d-char budget.', count( $trimmed ), $budget_chars ),
+                    [
+                        'target'       => $target,
+                        'date'         => $date,
+                        'edition'      => $edition,
+                        'budget_chars' => $budget_chars,
+                        'by_reason'    => $by_reason,
+                        'deduped'      => count( $deduped ),
+                    ]
+                );
             }
         }
 
@@ -652,6 +675,7 @@ class PressHub_AI_Memory_Context_Builder {
             'entries'             => $manifest_entries,
             'missing_digests'     => $missing_digests,
             'trimmed'             => $trimmed,
+            'deduped'             => $deduped,
             'podcast_lines_count' => count( $podcast_lines ),
         ];
 
@@ -842,6 +866,11 @@ class PressHub_AI_Memory_Context_Builder {
         ];
         $status_label = $status_labels[ $status ] ?? $status;
 
+        $since = isset( $story['since'] ) ? self::sanitize_field( (string) $story['since'] ) : '';
+        if ( '' !== $since ) {
+            $status_label .= ", από {$since}";
+        }
+
         $line = "- [{$key}] {$title} ({$status_label}): {$dev}";
         if ( ! empty( $story['entities'] ) && is_array( $story['entities'] ) ) {
             $sanitized_entities = array_map( [ __CLASS__, 'sanitize_field' ], $story['entities'] );
@@ -849,5 +878,96 @@ class PressHub_AI_Memory_Context_Builder {
         }
 
         return $line;
+    }
+
+    /**
+     * Issue #188: keep one entry per story thread (story key) across tiers.
+     *
+     * Tiers are walked newest first (same-day, recent newest-first, background
+     * newest-first). The first occurrence of a key is kept; older ones are
+     * removed, and the kept story gets `since` = the oldest date the thread
+     * was seen, so the model still knows how long it has been running.
+     * Stories without a key are never merged.
+     *
+     * @param array|null $same_day   Same-day entry (by reference).
+     * @param array      $recent     Recent entries (by reference).
+     * @param array      $background Background entries (by reference).
+     * @return array<int, array{tier:string,entry_id:int,period_start:string,edition:string,story_key:string}> Removed duplicates.
+     */
+    private static function dedupe_story_threads( ?array &$same_day, array &$recent, array &$background ): array {
+        $seen    = [];
+        $oldest  = [];
+        $removed = [];
+
+        $walk = static function ( array &$item, string $tier ) use ( &$seen, &$oldest, &$removed ): void {
+            if ( empty( $item['stories'] ) || ! is_array( $item['stories'] ) ) {
+                return;
+            }
+            $date = (string) ( $item['entry']['period_start'] ?? '' );
+            $kept = [];
+            foreach ( $item['stories'] as $story ) {
+                $key = is_array( $story ) ? trim( (string) ( $story['key'] ?? '' ) ) : '';
+                if ( '' === $key ) {
+                    $kept[] = $story;
+                    continue;
+                }
+                if ( '' !== $date && ( ! isset( $oldest[ $key ] ) || strcmp( $date, $oldest[ $key ] ) < 0 ) ) {
+                    $oldest[ $key ] = $date;
+                }
+                if ( isset( $seen[ $key ] ) ) {
+                    $removed[] = [
+                        'tier'         => $tier,
+                        'entry_id'     => (int) ( $item['entry']['id'] ?? 0 ),
+                        'period_start' => $date,
+                        'edition'      => (string) ( $item['entry']['edition'] ?? '' ),
+                        'story_key'    => $key,
+                    ];
+                    continue;
+                }
+                $seen[ $key ] = $date;
+                $kept[]       = $story;
+            }
+            $item['stories'] = $kept;
+        };
+
+        if ( null !== $same_day ) {
+            $walk( $same_day, 'same_day' );
+        }
+        foreach ( $recent as &$re ) {
+            $walk( $re, 'recent' );
+        }
+        unset( $re );
+        foreach ( $background as &$be ) {
+            $walk( $be, 'background' );
+        }
+        unset( $be );
+
+        $mark = static function ( array &$item ) use ( $seen, $oldest ): void {
+            foreach ( $item['stories'] ?? [] as $i => $story ) {
+                $key = is_array( $story ) ? trim( (string) ( $story['key'] ?? '' ) ) : '';
+                if ( '' !== $key && isset( $oldest[ $key ], $seen[ $key ] ) && $oldest[ $key ] !== $seen[ $key ] ) {
+                    $item['stories'][ $i ]['since'] = $oldest[ $key ];
+                }
+            }
+        };
+        if ( null !== $same_day ) {
+            $mark( $same_day );
+        }
+        foreach ( $recent as &$re ) {
+            $mark( $re );
+        }
+        unset( $re );
+        foreach ( $background as &$be ) {
+            $mark( $be );
+        }
+        unset( $be );
+
+        // Background rollups keep their narrative; a background daily left
+        // with no stories has nothing to add.
+        $background = array_values( array_filter( $background, static function ( $be ) {
+            return ! empty( $be['stories'] ) || ! empty( $be['narrative'] );
+        } ) );
+
+        return $removed;
     }
 }

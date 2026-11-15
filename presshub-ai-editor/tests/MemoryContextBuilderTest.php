@@ -666,6 +666,39 @@ mcb_check( 'noon missing digest: used_morning_digest is false', false === $noon_
 // =========================================================================
 // Summary
 // =========================================================================
+// =========================================================================
+// Issue #188: one line per story thread, and the context window check
+// =========================================================================
+reset_test_db();
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_enabled']         = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_daily_days']      = 7;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_memory_background_days'] = 7;
+$thread = static function ( string $date, string $dev ): array {
+    return [
+        'key'         => 'gsi-interconnector',
+        'title'       => 'Ηλεκτρική διασύνδεση',
+        'development' => $dev,
+        'status'      => 'developing',
+        'entities'    => [ 'ΑΔΜΗΕ' ],
+        'source_urls' => [ "https://example.com/gsi-{$date}" ],
+        'include'     => true,
+    ];
+};
+seed_daily_digest( '2026-11-12', 'morning', 'active', [ $thread( '2026-11-12', 'Παλιά εξέλιξη 12/11' ) ] );
+seed_daily_digest( '2026-11-13', 'morning', 'active', [ $thread( '2026-11-13', 'Εξέλιξη 13/11' ), [ 'key' => 'other-story', 'title' => 'Άλλο θέμα', 'development' => 'x', 'status' => 'new', 'entities' => [], 'source_urls' => [ 'https://example.com/other' ], 'include' => true ] ] );
+seed_daily_digest( '2026-11-14', 'noon', 'active', [ $thread( '2026-11-14', 'Νεότερη εξέλιξη 14/11' ) ] );
+$dd = PressHub_AI_Memory_Context_Builder::build( '2026-11-15', 'morning', 'briefing' );
+mcb_check( 'dedupe (#188): a running story appears once, with its newest development', 1 === substr_count( $dd['text'], '[gsi-interconnector]' ) && false !== strpos( $dd['text'], 'Νεότερη εξέλιξη 14/11' ) && false === strpos( $dd['text'], 'Παλιά εξέλιξη 12/11' ) );
+mcb_check( 'dedupe (#188): the kept line says since when the thread runs', false !== strpos( $dd['text'], 'από 2026-11-12' ) );
+mcb_check( 'dedupe (#188): other stories are untouched', false !== strpos( $dd['text'], '[other-story]' ) );
+mcb_check( 'dedupe (#188): manifest records the 2 removed duplicates', 2 === count( $dd['manifest']['deduped'] ?? [] ) && [ 'gsi-interconnector', 'gsi-interconnector' ] === array_column( $dd['manifest']['deduped'], 'story_key' ) );
+
+mcb_check( 'context window (#188): default model window is 1M tokens', 1000000 === PressHub_AI_Context_Estimator::model_context_window_tokens( 'briefing_text' ) );
+mcb_check( 'context window (#188): an 800k-char curation prompt keeps the full 12k memory budget', 12000 === PressHub_AI_Context_Estimator::compute_memory_budget_for_context( 12000, 814450, PressHub_AI_Context_Estimator::model_context_window_tokens( 'briefing_text' ) ) );
+$cur_src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-news-curator.php' ) . (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-podcast-producer.php' );
+mcb_check( 'context window (#188): curator and producer no longer use max output tokens as the context window', false === strpos( $cur_src, 'get_briefing_text_max_tokens()
+            : 0;' ) && 3 === substr_count( $cur_src, 'model_context_window_tokens(' ) );
+
 if ( $failures > 0 ) {
     echo "\nMemoryContextBuilderTest: {$failures} failure(s) out of {$checks} checks\n";
     exit( 1 );
