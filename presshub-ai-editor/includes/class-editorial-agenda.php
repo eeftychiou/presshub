@@ -635,8 +635,8 @@ class PressHub_AI_Editorial_Agenda {
                 (int) $suggestion['added'], (string) $suggestion['period_start'], (string) $suggestion['period_end']
             ) ) . '</h3>';
             $html .= self::themes_table( $suggestion['themes'], false, $today );
-            $html .= '<p><form method="post" action="' . $form_url . '" style="display:inline">' . self::hidden( self::POST_ACCEPT ) . '<button class="button button-primary">' . esc_html__( 'Accept suggestion', 'presshub-ai-editor' ) . '</button></form> ';
-            $html .= '<form method="post" action="' . $form_url . '" style="display:inline">' . self::hidden( self::POST_DISMISS ) . '<button class="button">' . esc_html__( 'Dismiss', 'presshub-ai-editor' ) . '</button></form></p></div>';
+            $html .= '<div class="presshub-agenda-suggestion-actions"><form method="post" action="' . $form_url . '" style="display:inline">' . self::hidden( self::POST_ACCEPT ) . '<button class="button button-primary">' . esc_html__( 'Accept suggestion', 'presshub-ai-editor' ) . '</button></form> ';
+            $html .= '<form method="post" action="' . $form_url . '" style="display:inline">' . self::hidden( self::POST_DISMISS ) . '<button class="button">' . esc_html__( 'Dismiss', 'presshub-ai-editor' ) . '</button></form></div></div>';
         }
 
         // Editor.
