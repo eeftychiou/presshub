@@ -118,6 +118,9 @@ function trl_http( $existing, $req ) {
         return null;
     }
     $GLOBALS['TRL_HTTP_COUNT']++;
+    if ( ! empty( $GLOBALS['TRL_HTTP_SLEEP_US'] ) ) {
+        usleep( (int) $GLOBALS['TRL_HTTP_SLEEP_US'] );
+    }
     $step = array_shift( $GLOBALS['TRL_HTTP_PLAN'] );
     return is_array( $step ) ? $step : trl_ok();
 }
@@ -319,12 +322,88 @@ presshub_ai_disarm_synthesis_watchdog( '2026-11-13', 'morning' );
 trl_check( 'watchdog: disarm without a queued retry does nothing', [] === $GLOBALS['UNSCHEDULED_EVENTS'] );
 
 $src = (string) file_get_contents( dirname( __DIR__ ) . '/presshub-ai-editor.php' );
+$step_fn = substr( $src, (int) strpos( $src, 'function presshub_ai_run_podcast_audio_step(' ) );
+$arm     = strpos( $step_fn, 'presshub_ai_arm_synthesis_watchdog( $date, $edition );' );
+$disarm  = strpos( $step_fn, 'presshub_ai_disarm_synthesis_watchdog( $date, $edition );', (int) $arm );
+$retry   = strpos( $step_fn, 'presshub_ai_maybe_schedule_synthesis_retry( $date, $edition, $result );' );
+trl_check( 'watchdog: the audio step arms before synthesis and disarms before the error retry', false !== $arm && false !== $disarm && false !== $retry && $arm < $disarm && $disarm < $retry );
 foreach ( [ 'morning', 'noon' ] as $ed ) {
-    $arm    = strpos( $src, "presshub_ai_arm_synthesis_watchdog( \$date, '{$ed}' );" );
-    $disarm = strpos( $src, "presshub_ai_disarm_synthesis_watchdog( \$date, '{$ed}' );" );
-    $retry  = strpos( $src, "presshub_ai_maybe_schedule_synthesis_retry( \$date, '{$ed}'" );
-    trl_check( "watchdog: {$ed} cron arms before synthesis and disarms before the error retry", false !== $arm && false !== $disarm && false !== $retry && $arm < $disarm && $disarm < $retry );
+    $fn = 'morning' === $ed ? 'presshub_ai_execute_generation_cron' : 'presshub_ai_execute_noon_generation_cron';
+    trl_check( "steps: {$ed} cron delegates to the shared edition cron", false !== strpos( $src, "function {$fn}() {\n    return presshub_ai_execute_edition_generation_cron( '{$ed}' );" ) );
 }
+
+// 7c. Issue #187 - script and audio run as their own cron steps.
+trl_reset( 0 );
+$before = time();
+$queued = presshub_ai_schedule_briefing_step( '2026-11-15', 'noon', 'audio', 2, 5 );
+$ev     = $GLOBALS['SCHEDULED_EVENTS'][0] ?? [];
+trl_check( 'steps: a step is queued on its own hook with date, edition, step and part', true === $queued && 'presshub_ai_run_briefing_step' === ( $ev['hook'] ?? '' ) && [ '2026-11-15', 'noon', 'audio', 2 ] === ( $ev['args'] ?? [] ) && ( $ev['time'] ?? 0 ) >= $before + 5 );
+trl_check( 'steps: the step hook is registered with 4 arguments', has_action( 'presshub_ai_run_briefing_step', 'presshub_ai_execute_briefing_step' ) !== false );
+
+trl_reset( 0 );
+add_filter( 'presshub_ai_briefing_split_steps', '__return_false' );
+trl_check( 'steps: the split filter turns queuing off (the caller runs the step inline)', false === presshub_ai_schedule_briefing_step( '2026-11-15', 'morning', 'script' ) && [] === $GLOBALS['SCHEDULED_EVENTS'] );
+remove_all_filters( 'presshub_ai_briefing_split_steps' );
+
+trl_check( 'steps: default budget is 180 s and 6 continuations', 180 === presshub_ai_briefing_step_time_budget_sec() && 6 === presshub_ai_briefing_step_max_continuations() );
+
+// The deadline stops new TTS calls but still serves cached turns.
+trl_reset( 0 );
+$GLOBALS['TRL_HTTP_PLAN'] = [ trl_ok() ];
+$synth = new PressHub_AI_Audio_Synthesizer();
+$first = $synth->synthesize_turn( 'Καλημέρα από το PressHub.', 'Charon', 1.0, 0.0, null, 'formal', '2026-11-15' );
+$synth->set_live_call_deadline( microtime( true ) - 1 );
+$cached = $synth->synthesize_turn( 'Καλημέρα από το PressHub.', 'Charon', 1.0, 0.0, null, 'formal', '2026-11-15' );
+$live   = $synth->synthesize_turn( 'Μια νέα πρόταση που δεν είναι στην cache.', 'Charon', 1.0, 0.0, null, 'formal', '2026-11-15' );
+trl_check( 'deadline: a cached turn is still returned after the deadline', is_string( $first ) && $first === $cached );
+trl_check( 'deadline: a new TTS call after the deadline returns synthesis_time_budget without HTTP', is_wp_error( $live ) && 'synthesis_time_budget' === $live->get_error_code() && 1 === $GLOBALS['TRL_HTTP_COUNT'] );
+$synth->set_live_call_deadline( 0 );
+$GLOBALS['TRL_HTTP_PLAN'] = [ trl_ok() ];
+trl_check( 'deadline: clearing it allows TTS calls again', is_string( $synth->synthesize_turn( 'Μια νέα πρόταση που δεν είναι στην cache.', 'Charon', 1.0, 0.0, null, 'formal', '2026-11-15' ) ) );
+
+// A step that reaches its budget hands over to a continuation step.
+$cont_date = '2026-11-16';
+$cont_dir  = trailingslashit( ( new PressHub_AI_News_Harvester() )->get_snapshot_dir( $cont_date ) );
+if ( ! is_dir( $cont_dir ) ) {
+    mkdir( $cont_dir, 0777, true );
+}
+file_put_contents( $cont_dir . 'podcast-script.txt', "[SPEAKER_1]: Πρώτη πρόταση της συνέχειας.\n[SPEAKER_2]: Δεύτερη πρόταση της συνέχειας." );
+foreach ( [ [ 6, 'continued' ], [ 0, 'exhausted' ] ] as [ $max_cont, $case ] ) {
+    trl_reset( 0 );
+    PressHub_AI_Audio_Synthesizer::clear_turn_cache( $cont_date );
+    $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_cron_retry_delay_min'] = 5;
+    $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_voice']                = 'Charon';
+    $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_voice_2']              = 'Kore';
+    $GLOBALS['TRL_HTTP_SLEEP_US'] = 1100000;
+    add_filter( 'presshub_ai_briefing_step_time_budget_sec', static function () { return 1; } );
+    add_filter( 'presshub_ai_briefing_step_max_continuations', static function () use ( $max_cont ) { return $max_cont; } );
+    $res = presshub_ai_run_podcast_audio_step( $cont_date, 'morning', 0, true );
+    remove_all_filters( 'presshub_ai_briefing_step_time_budget_sec' );
+    remove_all_filters( 'presshub_ai_briefing_step_max_continuations' );
+    $GLOBALS['TRL_HTTP_SLEEP_US'] = 0;
+    $steps = array_values( array_filter( $GLOBALS['SCHEDULED_EVENTS'], static fn( $e ) => 'presshub_ai_run_briefing_step' === $e['hook'] ) );
+    $retries = array_filter( $GLOBALS['SCHEDULED_EVENTS'], static fn( $e ) => 'presshub_ai_retry_podcast_synthesis' === $e['hook'] );
+    if ( 'continued' === $case ) {
+        trl_check( 'budget: the step stops after one TTS call and queues continuation 1', 'continued' === $res && 1 === $GLOBALS['TRL_HTTP_COUNT'] && 1 === count( $steps ) && [ $cont_date, 'morning', 'audio', 1 ] === $steps[0]['args'] && 1 === count( $retries ) );
+    } else {
+        $log = (string) file_get_contents( $log_file );
+        trl_check( 'budget: without continuations left, it logs ERROR and schedules the regular retry', is_wp_error( $res ) && 'synthesis_time_budget' === $res->get_error_code() && [] === $steps && 2 === count( $retries ) && false !== strpos( $log, 'ran out of continuation steps' ) );
+    }
+}
+
+// A continuation is skipped once the podcast post exists.
+trl_reset( 0 );
+$GLOBALS['GET_POSTS_RESULT'] = [ 722 ];
+$skip = presshub_ai_run_podcast_audio_step( '2026-11-15', 'morning', 1, true );
+trl_check( 'steps: a continuation skips when the podcast post already exists (no TTS, no new events)', null === $skip && 0 === $GLOBALS['TRL_HTTP_COUNT'] && [] === $GLOBALS['SCHEDULED_EVENTS'] );
+
+// A failing audio step disarms the watchdog and schedules the regular retry.
+trl_reset( 0 );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_cron_retry_delay_min'] = 5;
+$GLOBALS['UNSCHEDULED_EVENTS'] = [];
+$res   = presshub_ai_run_podcast_audio_step( '2099-01-01', 'noon', 0, true );
+$hooks = array_column( $GLOBALS['SCHEDULED_EVENTS'], 'hook' );
+trl_check( 'steps: a failed audio step arms the watchdog, then schedules the regular retry', is_wp_error( $res ) && 'synthesis_time_budget' !== $res->get_error_code() && [ 'presshub_ai_retry_podcast_synthesis', 'presshub_ai_retry_podcast_synthesis' ] === $hooks );
 
 // =========================================================================
 // 8. Settings-First registration

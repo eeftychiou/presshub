@@ -71,7 +71,11 @@ export class TrendingClient {
         body: JSON.stringify({ run_id: plan.run_id, posts: result.posts, errors: result.errors })
       });
       if (!res.ok) {
-        WorkerLogger.warn('Trending', `Sending results failed with HTTP ${res.status}`);
+        const reason = await res
+          .json()
+          .then((b: any) => String(b?.message || b?.code || ''))
+          .catch(() => '');
+        WorkerLogger.warn('Trending', `Sending results for run ${plan.run_id} failed with HTTP ${res.status}${reason ? `: ${reason}` : ''}`);
         return { ran: true, sent: result.posts.length, accepted: 0, errors: result.errors.length };
       }
       const body: any = await res.json().catch(() => ({}));

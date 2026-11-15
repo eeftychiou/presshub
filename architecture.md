@@ -85,6 +85,13 @@ graph TD
     - Morning: `raw-articles.json` + `presshub_ai_harvest_snapshot_{date}` transient.
     - Noon: `raw-articles-noon.json` + `presshub_ai_harvest_snapshot_noon_{date}` transient.
 
+- **Pool cleanup (`PressHub_AI_Pool_Cleaner`, Issue #190)**: `harvest_all()` runs `PressHub_AI_Pool_Cleaner::clean( $payload, $date )` after the press releases and social posts are merged and before the snapshot is saved.
+  - Content: strips `<style>`/`<script>`/`<noscript>`/`<svg>` blocks, comments, `data:` URIs, stray CSS rules, tags and repeated whitespace, then recounts `char_count`. Items longer than 20,000 characters are cut and flagged `content_trimmed`.
+  - Stale: a title or URL date earlier than the briefing date and within the last 31 days, or a `published_at` older than 48 hours (filter `presshub_ai_pool_max_age_hours`).
+  - Filler: promo titles (`presshub_ai_pool_promo_patterns`), score-only results stubs under 150 words, and an optional minimum word count for scraped pages (`presshub_ai_pool_min_scraped_words`, off by default).
+  - Near-duplicates: 3-word shingle overlap of title plus the first 1,500 characters at 60% or more (`presshub_ai_pool_duplicate_similarity`). The copy with the higher source priority wins, then the one with a transcript, then the longer text.
+  - Manual uploads and press releases are cleaned but never dropped. `$payload['pool_cleanup']` lists counts and every dropped item with its reason, plus the copy kept for duplicates. `presshub_ai_pool_cleanup_enabled` turns cleanup off. Tests: `tests/PoolCleanerTest.php`.
+
 ### 4.2 News Curator (`PressHub_AI_News_Curator`)
 - **Role**: Selects, deduplicates, and curates news stories into a coherent news briefing.
 - **Context Management**:
@@ -556,6 +563,16 @@ graph TD
 - **Escaping**: the page escapes every value (`esc_html`/`esc_attr`/`esc_url`); story text is model/editor content, so the client builds the editor from JSON with `.text()`/`.val()` and never assigns HTML (`assets/memory-editor.js`, enforced by a test).
 - **Logging**: each save/action logs ids and outcome through `PressHub_AI_Logger` (no story text); mutations are additionally audit-logged by the store.
 - **Tests**: `tests/MemoryEditorTest.php` (capability and nonce gates, invalid story status rejected with the store message, edit/reset/exclude/include create audit entries, XSS payloads inert, inspector filter URL, rollup actions hidden without #136).
+
+### 4.25a Editorial Agenda (`PressHub_AI_Editorial_Agenda` - Issue #198)
+- **Purpose**: an editor-maintained "current agenda" fiche that guides every editorial LLM call: up to 12 running themes (title, priority 1-5, framing notes, optional expiry date) plus standing editorial guidance (terms to use or avoid, balance rules).
+- **Storage**: options `presshub_ai_editorial_agenda` (current version: `version`, `updated_at`, `updated_by`, `note`, `themes`, `guidance`), `presshub_ai_editorial_agenda_history` (the last 20 earlier versions, newest first) and `presshub_ai_editorial_agenda_suggestion` (one pending suggestion). Version 0 means never saved; nothing is injected until the first save.
+- **Injection**: `PressHub_AI_API_Client::call_provider()` passes every system prompt through `PressHub_AI_Editorial_Agenda::apply( $sys_prompt, $action )`. A prompt containing `{editorial_agenda}` gets the block in place (or the placeholder removed when there is nothing to send); otherwise the block is appended for actions with a budget. Budgets (characters, filter `presshub_ai_editorial_agenda_budgets`): `briefing_curation` 3000, `podcast_script` 2000, `coauthor_draft` 2000, `copilot_chat` 1500, `social_tiktok_shorts` 1200, `social_copy_*` 800, `seo_*` 600, `generate_image_prompt` 600. Unlisted actions (memory digests and rollups, `classify_intent`, QA scorecards, press-release extraction, TTS, connection tests) get nothing.
+- **Rendering**: expired themes are skipped; themes are sorted by priority (ties keep editor order); when over budget the lowest-priority themes are dropped first, then the guidance is clipped. The block is in Greek and tells the model not to invent facts for agenda themes missing from the material.
+- **Generation records**: `apply()` keeps `last_applied()` (version, action, chars, the prompt as sent). `PressHub_AI_Generation_Recorder::finish_call()` stores `editorial_agenda_version` / `editorial_agenda_chars` in `config_json` and, when the caller passed the pre-injection system prompt, stores the prompt exactly as sent. `begin_call()` clears it so a record never inherits another call's agenda.
+- **Weekly suggestion**: `PressHub_AI_Memory_Rollup_Builder::build_week()` fires `presshub_ai_memory_rollup_built` (`$rollup_id`, `$week_start`). The agenda builds a pending suggestion from the rollup's open stories (current active themes first, new stories appended: `developing` -> priority 4, `new` -> 3, resolved skipped, known titles not duplicated). It is never applied on its own; the editor accepts (saved as a new version with a change note) or dismisses it.
+- **Screen**: **Daily Briefing Hub -> Memory -> Agenda** tab (`admin.php?page=presshub-ai-memory&tab=agenda`): theme table with three empty rows, guidance, change note, pending suggestion with Accept / Dismiss, a "suggest from the latest weekly rollup" button, a preview of the exact curation text and the edit history. Forms post to `admin-post.php` actions `presshub_ai_agenda_save|suggest|accept|dismiss`, each checking `edit_others_posts` and the `presshub_ai_agenda` nonce. All output is escaped.
+- **Tests**: `tests/EditorialAgendaTest.php`.
 
 ### 4.26 Press Release Inbox (`PressHub_AI_Press_Release_Inbox`)
 - **Role**: Reads a dedicated mailbox (e.g. `press@presshub.cy`) over IMAP during every morning and noon harvest and adds each email to the news pool as a press-release article.

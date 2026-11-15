@@ -263,7 +263,7 @@ class PressHub_Social_Settings_Storage {
         register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_spacing_minutes', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_spacing_minutes' ],
-            'default'           => 180,
+            'default'           => 90,
         ] );
 
         register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_max_words', [
@@ -1243,7 +1243,7 @@ class PressHub_Social_Settings_Storage {
 
     /** Minutes between consecutive shorts of the same podcast (0-720, default 180). */
     public static function get_tiktok_shorts_spacing_minutes(): int {
-        return self::sanitize_tiktok_shorts_spacing_minutes( get_option( 'presshub_social_tiktok_shorts_spacing_minutes', 180 ) );
+        return self::sanitize_tiktok_shorts_spacing_minutes( get_option( 'presshub_social_tiktok_shorts_spacing_minutes', 90 ) );
     }
 
     public static function sanitize_tiktok_shorts_spacing_minutes( $value ): int {

@@ -651,11 +651,11 @@ class PressHub_Social_Settings {
             'presshub_social_media_specs_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_spacing_minutes',
-                'default' => 180,
+                'default' => 90,
                 'min'     => 0,
                 'max'     => 720,
                 'unit'    => __( 'minutes', 'presshub-social-autopost' ),
-                'desc'    => __( 'The first short is posted when the podcast is published, the next ones this many minutes apart.', 'presshub-social-autopost' ),
+                'desc'    => __( 'The first short is posted when the podcast is published, the next ones this many minutes apart. Shorts from an earlier edition that have not been posted yet are cancelled when the next podcast is published.', 'presshub-social-autopost' ),
             ]
         );
 

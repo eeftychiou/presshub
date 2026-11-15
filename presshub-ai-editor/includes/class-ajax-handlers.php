@@ -40,6 +40,8 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_memory_backfill_status', [ $this, 'memory_backfill_status' ] );
         // AI Featured Image Studio endpoints
         add_action( 'wp_ajax_presshub_ai_generate_image_prompt', [ $this, 'generate_image_prompt' ] );
+        add_action( 'wp_ajax_presshub_ai_save_image_prompt_template', [ $this, 'save_image_prompt_template' ] );
+        add_action( 'wp_ajax_presshub_ai_delete_image_prompt_template', [ $this, 'delete_image_prompt_template' ] );
         add_action( 'wp_ajax_presshub_ai_generate_featured_image', [ $this, 'generate_featured_image' ] );
         add_action( 'wp_ajax_presshub_ai_set_featured_image', [ $this, 'set_featured_image' ] );
         // AJAX Settings Save
@@ -3263,9 +3265,22 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             wp_send_json_error( __( 'Please provide article content to analyze.', 'presshub-ai-editor' ) );
         }
 
+        // Drafting template picked (and possibly edited) in the studio. An
+        // empty template falls back to the Settings analysis prompt.
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $template_id = isset( $_POST['template_id'] ) ? sanitize_key( wp_unslash( $_POST['template_id'] ) ) : '';
+        $template    = isset( $_POST['template'] ) ? trim( sanitize_textarea_field( wp_unslash( $_POST['template'] ) ) ) : '';
+        if ( mb_strlen( $template ) > PressHub_AI_Image_Prompt_Templates::MAX_TEMPLATE_LEN ) {
+            wp_send_json_error( __( 'The template text is too long.', 'presshub-ai-editor' ) );
+        }
+        if ( '' === $template && '' !== $template_id ) {
+            $stored   = PressHub_AI_Image_Prompt_Templates::get( $template_id );
+            $template = $stored ? $stored['template'] : '';
+        }
+
         require_once __DIR__ . '/class-api-client.php';
         $client = new PressHub_AI_API_Client();
-        $prompt = $client->analyze_article_for_image_prompt( $content, $title );
+        $prompt = $client->analyze_article_for_image_prompt( $content, $title, $template, $template_id );
 
         if ( is_wp_error( $prompt ) ) {
             wp_send_json_error( $prompt->get_error_message() );
@@ -3273,11 +3288,79 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         if ( $post_id > 0 && function_exists( 'update_post_meta' ) ) {
             update_post_meta( $post_id, '_presshub_ai_image_prompt', $prompt );
+            if ( '' !== $template_id ) {
+                update_post_meta( $post_id, PressHub_AI_Image_Prompt_Templates::POST_META, $template_id );
+            }
         }
 
         wp_send_json_success( [
             'prompt'  => $prompt,
             'post_id' => $post_id,
+        ] );
+    }
+
+    /**
+     * AJAX: Save the (edited) drafting template as a new named template in
+     * the Featured Image Studio list. Shared with every editor on the site.
+     */
+    public function save_image_prompt_template() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( __( 'Unauthorized capability to save image prompt templates.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $name     = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+        $template = isset( $_POST['template'] ) ? sanitize_textarea_field( wp_unslash( $_POST['template'] ) ) : '';
+
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $saved = PressHub_AI_Image_Prompt_Templates::add( $name, $template, (int) get_current_user_id() );
+        if ( is_wp_error( $saved ) ) {
+            wp_send_json_error( $saved->get_error_message() );
+        }
+
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'image_prompt_template_saved', 'image_prompt_template', (string) $saved['id'], [ 'name' => $saved['name'] ] );
+        }
+
+        wp_send_json_success( [
+            'template' => $saved,
+            'message'  => __( 'Template saved.', 'presshub-ai-editor' ),
+        ] );
+    }
+
+    /**
+     * AJAX: Delete a saved drafting template. Built-ins cannot be deleted;
+     * a template can be deleted by whoever saved it or by an editor who can
+     * edit others' posts.
+     */
+    public function delete_image_prompt_template() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( __( 'Unauthorized capability to delete image prompt templates.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $id = isset( $_POST['template_id'] ) ? sanitize_key( wp_unslash( $_POST['template_id'] ) ) : '';
+
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $tpl = PressHub_AI_Image_Prompt_Templates::get( $id );
+        if ( $tpl && empty( $tpl['builtin'] ) && (int) $tpl['author'] !== (int) get_current_user_id() && ! current_user_can( 'edit_others_posts' ) ) {
+            wp_send_json_error( __( 'Only the editor who saved this template, or an editor, can delete it.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $result = PressHub_AI_Image_Prompt_Templates::delete( $id );
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'image_prompt_template_deleted', 'image_prompt_template', $id, [ 'name' => $tpl ? $tpl['name'] : '' ] );
+        }
+
+        wp_send_json_success( [
+            'template_id' => $id,
+            'message'     => __( 'Template deleted.', 'presshub-ai-editor' ),
         ] );
     }
 

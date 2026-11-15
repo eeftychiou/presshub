@@ -977,6 +977,165 @@ jQuery(document).ready(function($) {
     // AI Featured Image Studio handlers
     // ------------------------------------------------------------------
 
+    // Prompt templates: the instructions the AI follows when it drafts the
+    // image prompt. Picking one fills the editable template text; the draft
+    // request sends whatever is in that box. Edits can be saved as a new
+    // shared template.
+    var imageTemplates = [];
+    (function initImageTemplates() {
+        var $wrap = $('#presshub-ai-image-templates');
+        if (!$wrap.length) {
+            return;
+        }
+        var raw = $wrap.attr('data-templates');
+        try {
+            imageTemplates = raw ? JSON.parse(raw) : [];
+        } catch (err) {
+            imageTemplates = [];
+        }
+        refreshImageTemplateControls();
+    })();
+
+    function findImageTemplate(id) {
+        for (var i = 0; i < imageTemplates.length; i++) {
+            if (imageTemplates[i].id === id) {
+                return imageTemplates[i];
+            }
+        }
+        return null;
+    }
+
+    function setImageTemplateStatus(text, isError) {
+        $('#presshub-ai-image-template-status')
+            .removeClass('is-error is-ok')
+            .addClass(text ? (isError ? 'is-error' : 'is-ok') : '')
+            .text(text || '');
+    }
+
+    function refreshImageTemplateControls() {
+        var tpl = findImageTemplate($('#presshub-ai-image-template-select').val());
+        var $del = $('#presshub-ai-image-template-delete');
+        $del.prop('hidden', !(tpl && tpl.deletable)).removeData('armed')
+            .text(__('Delete this template', 'presshub-ai-editor'));
+    }
+
+    $(document).on('change', '#presshub-ai-image-template-select', function() {
+        var tpl = findImageTemplate($(this).val());
+        $('#presshub-ai-image-template-text').val(tpl ? tpl.template : '').scrollTop(0);
+        setImageTemplateStatus('');
+        refreshImageTemplateControls();
+    });
+
+    $(document).on('click', '#presshub-ai-image-template-toggle', function(e) {
+        e.preventDefault();
+        var $editor = $('#presshub-ai-image-template-editor');
+        var show = $editor.prop('hidden');
+        $editor.prop('hidden', !show);
+        $(this).attr('aria-expanded', show ? 'true' : 'false')
+            .text(show ? __('Hide template', 'presshub-ai-editor') : __('View / edit template', 'presshub-ai-editor'));
+    });
+
+    $(document).on('click', '#presshub-ai-image-template-reset', function(e) {
+        e.preventDefault();
+        var tpl = findImageTemplate($('#presshub-ai-image-template-select').val());
+        $('#presshub-ai-image-template-text').val(tpl ? tpl.template : '');
+        setImageTemplateStatus(__('Template text restored.', 'presshub-ai-editor'), false);
+    });
+
+    $(document).on('click', '#presshub-ai-image-template-save', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        if ($btn.prop('disabled')) {
+            return;
+        }
+        var name = ($('#presshub-ai-image-template-name').val() || '').trim();
+        var text = ($('#presshub-ai-image-template-text').val() || '').trim();
+        if (!name) {
+            setImageTemplateStatus(__('Give the template a name.', 'presshub-ai-editor'), true);
+            $('#presshub-ai-image-template-name').trigger('focus');
+            return;
+        }
+        if (!text) {
+            setImageTemplateStatus(__('The template text is empty.', 'presshub-ai-editor'), true);
+            return;
+        }
+        $btn.prop('disabled', true);
+        setImageTemplateStatus(__('Saving…', 'presshub-ai-editor'), false);
+
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'presshub_ai_save_image_prompt_template',
+                nonce: presshubAI.nonce,
+                name: name,
+                template: text
+            }
+        }).done(function(response) {
+            if (response && response.success && response.data && response.data.template) {
+                var saved = response.data.template;
+                imageTemplates.push({
+                    id: saved.id,
+                    name: saved.name,
+                    template: saved.template,
+                    builtin: false,
+                    deletable: true
+                });
+                $('<option>').val(saved.id).text(saved.name)
+                    .appendTo('#presshub-ai-image-template-custom-group');
+                $('#presshub-ai-image-template-select').val(saved.id);
+                $('#presshub-ai-image-template-text').val(saved.template).scrollTop(0);
+                $('#presshub-ai-image-template-name').val('');
+                refreshImageTemplateControls();
+                setImageTemplateStatus(__('Saved as a new template.', 'presshub-ai-editor'), false);
+            } else {
+                setImageTemplateStatus((response && response.data) ? response.data : __('Could not save the template.', 'presshub-ai-editor'), true);
+            }
+        }).fail(function(xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.data) ? xhr.responseJSON.data : __('Could not save the template. Server error.', 'presshub-ai-editor');
+            setImageTemplateStatus(msg, true);
+        }).always(function() {
+            $btn.prop('disabled', false);
+        });
+    });
+
+    // Delete asks for a second click instead of a confirm() dialog.
+    $(document).on('click', '#presshub-ai-image-template-delete', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var id = $('#presshub-ai-image-template-select').val();
+        if (!$btn.data('armed')) {
+            $btn.data('armed', true).text(__('Click again to delete', 'presshub-ai-editor'));
+            return;
+        }
+        $btn.prop('disabled', true);
+        $.ajax({
+            url: presshubAI.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'presshub_ai_delete_image_prompt_template',
+                nonce: presshubAI.nonce,
+                template_id: id
+            }
+        }).done(function(response) {
+            if (response && response.success) {
+                imageTemplates = imageTemplates.filter(function(t) { return t.id !== id; });
+                $('#presshub-ai-image-template-select option').filter(function() { return $(this).val() === id; }).remove();
+                $('#presshub-ai-image-template-select').val(imageTemplates.length ? imageTemplates[0].id : '').trigger('change');
+                setImageTemplateStatus(__('Template deleted.', 'presshub-ai-editor'), false);
+            } else {
+                refreshImageTemplateControls();
+                setImageTemplateStatus((response && response.data) ? response.data : __('Could not delete the template.', 'presshub-ai-editor'), true);
+            }
+        }).fail(function(xhr) {
+            refreshImageTemplateControls();
+            var msg = (xhr.responseJSON && xhr.responseJSON.data) ? xhr.responseJSON.data : __('Could not delete the template. Server error.', 'presshub-ai-editor');
+            setImageTemplateStatus(msg, true);
+        }).always(function() {
+            $btn.prop('disabled', false);
+        });
+    });
+
     $(document).on('click', '#presshub-ai-draft-image-prompt', function(e) {
         e.preventDefault();
         var $btn = $(this);
@@ -1008,7 +1167,9 @@ jQuery(document).ready(function($) {
                 nonce: presshubAI.nonce,
                 post_id: postId,
                 content: content,
-                title: title
+                title: title,
+                template_id: $('#presshub-ai-image-template-select').val() || '',
+                template: $('#presshub-ai-image-template-text').val() || ''
             }
         }).done(function(response) {
             if (response && response.success && response.data && response.data.prompt) {
@@ -1247,7 +1408,8 @@ jQuery(document).ready(function($) {
             if (!name || name === 'action' || name === 'option_page' || name === '_wp_http_referer' || name === '_wpnonce') {
                 return;
             }
-            if (id === 'presshub-ai-log-viewer' || $el.hasClass('presshub-no-dirty')) {
+            // The source modal's fields only feed the sources list (its hidden input is tracked).
+            if (id === 'presshub-ai-log-viewer' || $el.hasClass('presshub-no-dirty') || $el.closest('#presshub-source-modal').length) {
                 return;
             }
 
@@ -2312,6 +2474,12 @@ jQuery(document).ready(function($) {
         $('#presshub_ai_briefing_sources').val(JSON.stringify(presshubSourcesState)).trigger('input');
     }
 
+    // Issue #196: source priority, 1 (lowest) to 5 (highest), 3 = normal.
+    function presshubSourcePriority(v) {
+        var n = parseInt(v, 10);
+        return isNaN(n) ? 3 : Math.max(1, Math.min(5, n));
+    }
+
     function renderSourcesTable() {
         var $tbody = $('#presshub-sources-tbody');
         if (!$tbody.length) {
@@ -2331,6 +2499,8 @@ jQuery(document).ready(function($) {
         var mediaTypesMeta = {
             'text_news': { label: 'News Website (HTML)', badgeClass: 'badge-active', icon: 'dashicons-admin-site-alt3' },
             'rss_feed': { label: 'RSS / Atom Feed', badgeClass: 'badge-active', icon: 'dashicons-rss' },
+            'social_x': { label: 'X (Twitter) Account', badgeClass: 'badge-active', icon: 'dashicons-twitter' },
+            'social_tiktok': { label: 'TikTok Account', badgeClass: 'badge-active', icon: 'dashicons-video-alt2' },
             'youtube': { label: 'YouTube Channel / Playlist', badgeClass: 'badge-planned', icon: 'dashicons-video-alt3' },
             'vlog': { label: 'Video / Vlog Feed', badgeClass: 'badge-planned', icon: 'dashicons-video-alt' },
             'podcast_audio': { label: 'Audio Podcast / RSS', badgeClass: 'badge-planned', icon: 'dashicons-format-audio' }
@@ -2347,6 +2517,7 @@ jQuery(document).ready(function($) {
             var statusText = isEnabled ? 'Active' : 'Disabled';
             var toggleTitle = isEnabled ? 'Click to disable source' : 'Click to enable source';
             var maxArticles = src.max_articles ? Math.max(1, Math.min(30, parseInt(src.max_articles, 10))) : 5;
+            var priority = presshubSourcePriority(src.priority);
 
             var rowHtml = '<tr class="presshub-source-row ' + (isEnabled ? '' : 'is-disabled') + '" data-id="' + presshubEsc(src.id) + '">' +
                 '<td style="text-align: center; vertical-align: middle;">' +
@@ -2369,7 +2540,7 @@ jQuery(document).ready(function($) {
                 '</td>' +
                 '<td style="vertical-align: middle;">' +
                     '<span class="presshub-category-pill">' + presshubEsc(src.category || 'General') + '</span>' +
-                    '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">Quota: ' + maxArticles + ' articles</span></div>' +
+                    '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">Quota: ' + maxArticles + ' articles</span> <span class="presshub-source-priority" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">Priority: ' + priority + '/5</span></div>' +
                 '</td>' +
                 '<td style="text-align: right; vertical-align: middle;">' +
                     '<div class="presshub-source-actions" style="display: flex; gap: 6px; justify-content: flex-end;">' +
@@ -2401,6 +2572,7 @@ jQuery(document).ready(function($) {
         $('#source-form-type').val('text_news');
         $('#source-form-category').val('General');
         $('#source-form-max-articles').val('5');
+        $('#source-form-priority').val('3');
         $('#source-form-enabled').prop('checked', true);
         $('#presshub-source-modal-title').text('Add News Source');
         $('#presshub-source-form-notice').hide().empty();
@@ -2424,6 +2596,7 @@ jQuery(document).ready(function($) {
         $('#source-form-type').val(src.type || 'text_news');
         $('#source-form-category').val(src.category || 'General');
         $('#source-form-max-articles').val(src.max_articles ? Math.max(1, Math.min(30, parseInt(src.max_articles, 10))) : 5);
+        $('#source-form-priority').val(String(presshubSourcePriority(src.priority)));
         $('#source-form-notes').val(src.notes || '');
         var isEnabled = (src.enabled !== false && src.enabled !== 0 && src.enabled !== '0' && src.enabled !== 'false');
         $('#source-form-enabled').prop('checked', isEnabled);
@@ -2476,6 +2649,7 @@ jQuery(document).ready(function($) {
         }
         var notes       = $('#source-form-notes').val().trim();
         var enabled     = $('#source-form-enabled').is(':checked');
+        var priority    = presshubSourcePriority($('#source-form-priority').val());
 
         var $notice = $('#presshub-source-form-notice');
 
@@ -2499,6 +2673,7 @@ jQuery(document).ready(function($) {
                 existing.type         = type;
                 existing.category     = category;
                 existing.max_articles = maxArticles;
+                existing.priority     = priority;
                 existing.notes        = notes;
                 existing.enabled      = enabled;
             }
@@ -2511,6 +2686,7 @@ jQuery(document).ready(function($) {
                 type: type,
                 category: category,
                 max_articles: maxArticles,
+                priority: priority,
                 notes: notes,
                 enabled: enabled
             });
@@ -3369,8 +3545,6 @@ jQuery(document).ready(function($) {
 
             if (res && res.success) {
                 resetPressInboxPasswordField();
-                tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
-                updateTabDirtyState(tabKey);
 
                 var successMsg = (res.data && res.data.message) ? res.data.message : __('Settings saved successfully.', 'presshub-ai-editor');
                 if (res.data && res.data.sources !== undefined) {
@@ -3389,6 +3563,10 @@ jQuery(document).ready(function($) {
                         successMsg += ' [Sources: ' + presshubSourcesState.length + ' configured]';
                     }
                 }
+                // Issue #206: take the clean baseline only after the sources input
+                // holds the server's normalized list, or the tab looks unsaved.
+                tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
+                updateTabDirtyState(tabKey);
                 var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(successMsg) + '</p></div>';
                 $tabPane.prepend(noticeHtml);
 
@@ -3555,10 +3733,6 @@ jQuery(document).ready(function($) {
 
             if (res && res.success) {
                 resetPressInboxPasswordField();
-                initTabBaselines();
-                Object.keys(tabBaselines).forEach(function(k) {
-                    updateTabDirtyState(k);
-                });
 
                 var successMsg = (res.data && res.data.message) ? res.data.message : 'Settings saved successfully.';
                 if (res.data && res.data.sources !== undefined) {
@@ -3577,6 +3751,11 @@ jQuery(document).ready(function($) {
                         successMsg += ' [Sources: ' + presshubSourcesState.length + ' configured]';
                     }
                 }
+                // Issue #206: baselines after the sources input is re-synced (see above).
+                initTabBaselines();
+                Object.keys(tabBaselines).forEach(function(k) {
+                    updateTabDirtyState(k);
+                });
                 var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(successMsg) + '</p></div>';
                 $('#presshub-ai-settings-tabs').before(noticeHtml);
 

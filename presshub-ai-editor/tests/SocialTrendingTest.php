@@ -178,6 +178,17 @@ st_reset();
 $plan = $T::get_worker_plan( false, $now );
 $res  = $T::ingest_worker_posts( 'wrong', [], [], $now );
 st_check( 'ingest: stale run refused', is_wp_error( $res ) && 'stale_run' === $res->get_error_code() );
+st_check( 'ingest: the 409 says which run replaced it', false !== strpos( $res->get_error_message(), 'run ' . $plan['run_id'] . ' replaced it' ) );
+// #179: a forced start (Refresh now / ?force=1) keeps a run the worker is still reading.
+$forced = $T::maybe_start_run( $now + 120, true );
+st_check( 'force: a run being read is not replaced', $plan['run_id'] === ( $forced['run_id'] ?? '' ) );
+st_check( 'force: its results are still accepted', ! is_wp_error( $T::ingest_worker_posts( $plan['run_id'], [], [], $now + 130 ) ) );
+st_reset();
+$plan   = $T::get_worker_plan( false, $now );
+$forced = $T::maybe_start_run( $now + $T::PLAN_LOCK_SEC + 1, true );
+st_check( 'force: after the lock a forced start replaces the run', $plan['run_id'] !== ( $forced['run_id'] ?? '' ) );
+st_reset();
+$plan = $T::get_worker_plan( false, $now );
 
 st_check( 'normalize: x canonical url', 'https://x.com/acct1/status/1' === $T::normalize_item( st_post( 'x', '1', 50, 30, [ 'url' => 'https://evil.com' ] ), $now )['url'] );
 st_check( 'normalize: x non-numeric id rejected', null === $T::normalize_item( st_post( 'x', 'abc', 50, 30 ), $now ) );
@@ -213,10 +224,14 @@ foreach ( [
 }
 $picked = $T::select( $cands, $now );
 $keys   = array_map( static function ( $p ) { return $p['key']; }, $picked );
-st_check( 'select: total cap', 6 === count( $picked ) );
+st_check( 'select: total cap (5 left after the one-per-account rule)', 5 === count( $picked ) );
 st_check( 'select: below min engagement dropped', ! in_array( 'x_15', $keys, true ) );
-st_check( 'select: per-account cap of 2', ! in_array( 'tiktok_23', $keys, true ) );
-st_check( 'select: platforms take turns, strongest first', [ 'tiktok_21', 'x_11', 'facebook_31', 'tiktok_22', 'x_12', 'x_13' ] === $keys );
+st_check( 'select: one post per account by default (#192)', ! in_array( 'tiktok_22', $keys, true ) && ! in_array( 'tiktok_23', $keys, true ) );
+st_check( 'select: platforms take turns, strongest first', [ 'tiktok_21', 'x_11', 'facebook_31', 'x_12', 'x_13' ] === $keys );
+add_filter( 'presshub_social_trending_max_per_account', static function () { return 2; } );
+$keys2 = array_map( static function ( $p ) { return $p['key']; }, $T::select( $cands, $now ) );
+remove_all_filters( 'presshub_social_trending_max_per_account' );
+st_check( 'select: the per-account cap can be raised to 2', ! in_array( 'tiktok_23', $keys2, true ) && [ 'tiktok_21', 'x_11', 'facebook_31', 'tiktok_22', 'x_12', 'x_13' ] === $keys2 );
 // Greek posts get half the engagement bar, matching the Greek X search's min_faves.
 $gr = $T::normalize_item( st_post( 'x', '51', 6, 30 ), $now );
 $en = $T::normalize_item( st_post( 'x', '52', 6, 30, [ 'text' => 'Cyprus news in English' ] ), $now );
@@ -238,7 +253,7 @@ foreach ( [ '46', '47', '48' ] as $fid ) {
     $c = $T::normalize_item( st_post( 'facebook', $fid, 100 + (int) $fid, 30, [ 'handle' => '', 'author_name' => 'Δήμος Λεμεσού' ] ), $now );
     $fb[ $c['key'] ] = $c;
 }
-st_check( 'select: no handle -> capped by author name', 2 === count( $T::select( $fb, $now ) ) );
+st_check( 'select: no handle -> capped by author name (one per account)', 1 === count( $T::select( $fb, $now ) ) );
 st_check( 'account key: id handles kept', 'id-1000641' === $T::account_key( $T::normalize_item( st_post( 'facebook', '49', 100, 30, [ 'handle' => 'id-1000641' ] ), $now ) ) );
 // Same story on several accounts / platforms is shown once.
 $dup = [];
@@ -277,6 +292,13 @@ st_check( 'publish: meta key is the day', 'day:2026-11-14' === $ins['meta_input'
 $state = $T::get_state();
 st_check( 'publish: run closed with count', empty( $state['open'] ) && 2 === $state['last_count'] && $first_id === $state['last_post_id'] );
 st_check( 'publish: candidates cleared', [] === get_option( $T::OPTION_CANDIDATES ) );
+// #192: a roundup made before 08:00 site time is scheduled for 08:00.
+st_check( 'hold: after 08:00 site time it publishes now', null === $T::held_publish_time( $now ) );
+$early = 1794629000; // 2026-11-14 03:23 UTC = 05:23 site time (UTC+2)
+st_check( 'hold: before 08:00 site time it is held until 08:00', [ '2026-11-14 08:00:00', '2026-11-14 06:00:00' ] === $T::held_publish_time( $early ) );
+add_filter( 'presshub_social_trending_share_after_hour', static function () { return 0; } );
+st_check( 'hold: share hour 0 turns holding off', null === $T::held_publish_time( $early ) );
+remove_all_filters( 'presshub_social_trending_share_after_hour' );
 
 // Next run, same day: same post updated, no new category.
 $later = $now + 6 * 3600 + 5;
@@ -508,6 +530,14 @@ $GLOBALS['OPTIONS_STORE'][ $T::OPTION_CANDIDATES ] = [ 'x_67' => $T::normalize_i
 $T::finalize_run( $now );
 st_check( 'briefing: a run adds its picks to the pool', isset( $GLOBALS['OPTIONS_STORE'][ $T::OPTION_BRIEFING_POOL ]['x_67'] ) );
 
+st_reset();
+$GLOBALS['WP_INSERTED_POSTS'] = [];
+$early_plan = $T::get_worker_plan( true, $early );
+$GLOBALS['ST_NOW'] = $early;
+$early_res  = $T::ingest_worker_posts( $early_plan['run_id'], [ st_post( 'x', '61', 500, 30 ) ], [], $early );
+unset( $GLOBALS['ST_NOW'] );
+$early_ins  = $GLOBALS['WP_INSERTED_POSTS'][0] ?? [];
+st_check( 'hold: an early roundup is inserted as a scheduled post for 08:00', ( $early_res['post_id'] ?? 0 ) > 0 && 'future' === ( $early_ins['post_status'] ?? '' ) && '2026-11-14 08:00:00' === ( $early_ins['post_date'] ?? '' ) && '2026-11-14 06:00:00' === ( $early_ins['post_date_gmt'] ?? '' ) );
 if ( $failures > 0 ) {
     fwrite( STDERR, "{$failures} failure(s)\n" );
     exit( 1 );

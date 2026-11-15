@@ -440,12 +440,8 @@ class PressHub_AI_Podcast_Producer {
 
                 // Issue #135: Compute effective memory budget and build tiered memory context
                 $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_podcast_budget_chars();
-                $configured_context_tokens = class_exists( 'PressHub_AI_Settings_Storage' )
-                    ? PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens()
-                    : 0;
-                if ( $configured_context_tokens <= 0 ) {
-                    $configured_context_tokens = PressHub_AI_Context_Estimator::DEFAULT_MAX_CONTEXT_TOKENS;
-                }
+                // Issue #188: the model's input window, not the module's max output tokens.
+                $configured_context_tokens = PressHub_AI_Context_Estimator::model_context_window_tokens( 'briefing_podcast' );
 
                 $full_prompt_chars    = mb_strlen( $system_prompt, 'UTF-8' ) + $briefing_chars;
                 $effective_mem_budget = PressHub_AI_Context_Estimator::compute_memory_budget_for_context(
@@ -527,12 +523,8 @@ class PressHub_AI_Podcast_Producer {
 
         // Issue #135: Compute effective memory budget and build tiered memory context
         $configured_mem_budget     = PressHub_AI_Settings_Storage::get_memory_podcast_budget_chars();
-        $configured_context_tokens = class_exists( 'PressHub_AI_Settings_Storage' )
-            ? PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens()
-            : 0;
-        if ( $configured_context_tokens <= 0 ) {
-            $configured_context_tokens = PressHub_AI_Context_Estimator::DEFAULT_MAX_CONTEXT_TOKENS;
-        }
+        // Issue #188: the model's input window, not the module's max output tokens.
+        $configured_context_tokens = PressHub_AI_Context_Estimator::model_context_window_tokens( 'briefing_podcast' );
 
         $full_prompt_chars    = mb_strlen( $system_prompt, 'UTF-8' ) + $articles_chars;
         $effective_mem_budget = PressHub_AI_Context_Estimator::compute_memory_budget_for_context(

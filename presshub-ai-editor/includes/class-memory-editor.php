@@ -567,6 +567,19 @@ class PressHub_AI_Memory_Editor {
         $html .= '<p class="description">' . esc_html( sprintf( /* translators: %d: days */ __( 'Review and correct what the briefings remember. Showing the last %d days. Edits are marked as edited, survive regeneration and are written to the audit log.', 'presshub-ai-editor' ), $days ) ) . '</p>';
         $html .= '<div id="presshub-memory-notices" role="status" aria-live="polite"></div>';
 
+        // Issue #198: Timeline | Agenda tabs.
+        $tab = ( isset( $query['tab'] ) && 'agenda' === $query['tab'] && class_exists( 'PressHub_AI_Editorial_Agenda' ) ) ? 'agenda' : 'timeline';
+        if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
+            $base  = add_query_arg( [ 'page' => self::PAGE_SLUG ], admin_url( 'admin.php' ) );
+            $html .= '<nav class="nav-tab-wrapper presshub-memory-tabs">';
+            $html .= '<a href="' . esc_url( $base ) . '" class="nav-tab' . ( 'timeline' === $tab ? ' nav-tab-active' : '' ) . '">' . esc_html__( 'Timeline', 'presshub-ai-editor' ) . '</a>';
+            $html .= '<a href="' . esc_url( add_query_arg( [ 'tab' => 'agenda' ], $base ) ) . '" class="nav-tab' . ( 'agenda' === $tab ? ' nav-tab-active' : '' ) . '">' . esc_html__( 'Agenda', 'presshub-ai-editor' ) . '</a>';
+            $html .= '</nav>';
+        }
+        if ( 'agenda' === $tab ) {
+            return $html . PressHub_AI_Editorial_Agenda::build_tab( $query ) . '</div>';
+        }
+
         if ( ! PressHub_AI_Settings_Storage::get_memory_enabled() ) {
             $html .= '<div class="notice notice-warning inline"><p>' . esc_html__( 'Editorial memory is disabled in the settings, so nothing below is injected into new generations.', 'presshub-ai-editor' ) . '</p></div>';
         }

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import type { Page } from 'playwright';
 import { WorkerLogger } from '../logger';
 import {
   Platform,
@@ -959,6 +960,105 @@ export async function markTikTokAiGenerated(page: any): Promise<boolean> {
 /**
  * TikTok Studio / Creator Center automation poster using saved browser session or running Chrome.
  */
+export const TIKTOK_STUDIO_CONTENT_URL = 'https://www.tiktok.com/tiktokstudio/content';
+
+export interface TikTokResolvedUrl {
+  kind: 'video' | 'profile' | 'studio';
+  url: string;
+  videoId?: string;
+}
+
+/** Pull "/@handle/video/123" out of a URL or href. */
+export function parseTikTokVideoHref(href: string): { handle: string; videoId: string } | null {
+  const m = /\/@([A-Za-z0-9._-]+)\/video\/(\d{8,})/.exec(href || '');
+  return m ? { handle: m[1], videoId: m[2] } : null;
+}
+
+/** Pull the account handle out of a profile href like "/@handle" or "https://www.tiktok.com/@handle?lang=el". */
+export function parseTikTokProfileHref(href: string): string | null {
+  const m = /(?:^|tiktok\.com)\/@([A-Za-z0-9._-]+)\/?(?:[?#].*)?$/.exec(href || '');
+  return m ? m[1] : null;
+}
+
+/**
+ * After a TikTok upload is confirmed, find where the post lives:
+ *  1. the current page already points at the video;
+ *  2. TikTok Studio's content list has a row whose caption matches ours;
+ *  3. otherwise the account's profile (handle from any profile link);
+ *  4. otherwise the Studio content list itself.
+ * Never throws: a lookup problem must not turn a successful post into a failure.
+ */
+export async function resolveTikTokPostUrl(page: Page, caption: string, waitMs: number = 12000): Promise<TikTokResolvedUrl> {
+  const fromPage = parseTikTokVideoHref(page.url());
+  if (fromPage) {
+    return { kind: 'video', url: `https://www.tiktok.com/@${fromPage.handle}/video/${fromPage.videoId}`, videoId: fromPage.videoId };
+  }
+
+  const snippet = (caption || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  let handle: string | null = null;
+
+  const scan = async () => page.evaluate((snip: string) => {
+    const norm = (t: string) => (t || '').replace(/\s+/g, ' ').trim();
+    const doc = (globalThis as any).document;
+    const anchors = Array.from(doc.querySelectorAll('a[href]')) as any[];
+    const videos: { href: string; text: string }[] = [];
+    const profiles: string[] = [];
+    for (const a of anchors) {
+      const href = a.getAttribute('href') || '';
+      if (/\/@[^/]+\/video\/\d+/.test(href)) {
+        let el: any = a;
+        let text = '';
+        // Climb to the largest ancestor (the row) that still holds only this video link.
+        for (let i = 0; i < 8 && el; i++) {
+          if (el.querySelectorAll && el.querySelectorAll('a[href*="/video/"]').length > 1) break;
+          text = norm(el.innerText || el.textContent || '');
+          if (snip && text.includes(snip)) break;
+          el = el.parentElement;
+        }
+        videos.push({ href, text });
+      } else if (/\/@[^/?#]+\/?(?:[?#].*)?$/.test(href)) {
+        profiles.push(href);
+      }
+    }
+    return { videos, profiles };
+  }, snippet).catch(() => ({ videos: [] as { href: string; text: string }[], profiles: [] as string[] }));
+
+  try {
+    await page.goto(TIKTOK_STUDIO_CONTENT_URL, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => null);
+    const start = Date.now();
+    while (Date.now() - start < waitMs) {
+      const found = await scan();
+      if (!handle) {
+        for (const p of found.profiles) {
+          handle = parseTikTokProfileHref(p);
+          if (handle) break;
+        }
+      }
+      if (snippet) {
+        const match = found.videos.find((v) => v.text.includes(snippet));
+        const parsed = match ? parseTikTokVideoHref(match.href) : null;
+        if (parsed) {
+          return { kind: 'video', url: `https://www.tiktok.com/@${parsed.handle}/video/${parsed.videoId}`, videoId: parsed.videoId };
+        }
+      }
+      if (!handle) {
+        for (const v of found.videos) {
+          const parsed = parseTikTokVideoHref(v.href);
+          if (parsed) { handle = parsed.handle; break; }
+        }
+      }
+      await page.waitForTimeout(1500);
+    }
+  } catch (e: any) {
+    WorkerLogger.warn('TikTok Automation', `Could not read the posted video URL: ${e?.message || e}`);
+  }
+
+  if (handle) {
+    return { kind: 'profile', url: `https://www.tiktok.com/@${handle}` };
+  }
+  return { kind: 'studio', url: TIKTOK_STUDIO_CONTENT_URL };
+}
+
 export async function postTikTok(options: PostOptions): Promise<PostResult> {
   if (!options.mediaPath || !fs.existsSync(options.mediaPath)) {
     throw new Error('TikTok automation requires a valid video file path in mediaPath');
@@ -1343,9 +1443,11 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
     // Give TikTok a few seconds to finalize background API dispatches before page close
     await page.waitForTimeout(3000);
 
-    const generatedId = `tt-${Date.now()}`;
-    const postUrl = `https://www.tiktok.com/@creator/video/${generatedId}`;
-    WorkerLogger.info('TikTok Automation', `Post completed! URL: ${postUrl}, ID: ${generatedId}`);
+    // Issue #191: report the real video URL (or at least the profile) instead of a made-up one.
+    const resolved = await resolveTikTokPostUrl(page, options.copy);
+    const generatedId = resolved.videoId || `tt-${Date.now()}`;
+    const postUrl = resolved.url;
+    WorkerLogger.info('TikTok Automation', `Post completed! URL: ${postUrl} (${resolved.kind}), ID: ${generatedId}`);
 
     return {
       success: true,
@@ -1516,8 +1618,9 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
 
     // Instagram shows an informational "Video posts are now shared as reels" modal with an "OK" button on video uploads.
     if (isVideo) {
-      const reelsOk = page.locator('button:has-text("OK"), div[role="button"]:has-text("OK")').first();
-      if ((await reelsOk.count()) > 0 && (await reelsOk.isVisible().catch(() => false))) {
+      const reelsOk = page.getByRole('dialog').getByRole('button', { name: 'OK', exact: true }).first();
+      const hasReelsDialog = await reelsOk.waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false);
+      if (hasReelsDialog) {
         WorkerLogger.debug('Instagram Automation', 'Dismissing "Video posts are now shared as reels" dialog...');
         await reelsOk.click();
         await page.waitForTimeout(1000);
@@ -1542,22 +1645,23 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     const captionBox = page.locator(
       'div[aria-label*="Write a caption"], div[contenteditable="true"]'
     ).first();
-    if ((await captionBox.count()) > 0) {
-      await captionBox.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
-      await captionBox.click();
-      await captionBox.fill(options.copy);
-    }
+    await captionBox.waitFor({ state: 'visible', timeout: 15000 });
+    await captionBox.click();
+    await captionBox.fill(options.copy);
 
     WorkerLogger.info('Instagram Automation', 'Clicking Share button...');
     const shareButton = page.locator(
       'button:has-text("Share"), div[role="button"]:has-text("Share")'
     ).first();
-    if ((await shareButton.count()) > 0) {
-      await shareButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
-      await shareButton.click();
-      const sharedText = page.locator('text=/Your (reel|post) has been shared/i').first();
-      await sharedText.waitFor({ state: 'visible', timeout: isVideo ? 60000 : 15000 }).catch(async () => {
-        await page.waitForTimeout(isVideo ? 10000 : 3000);
+    await shareButton.waitFor({ state: 'visible', timeout: 15000 });
+    await shareButton.click();
+
+    const sharedText = page.locator('text=/Your (reel|post) has been shared/i').first();
+    if (isVideo) {
+      await sharedText.waitFor({ state: 'visible', timeout: 60000 });
+    } else {
+      await sharedText.waitFor({ state: 'visible', timeout: 15000 }).catch(async () => {
+        await page.waitForTimeout(3000);
       });
     }
 

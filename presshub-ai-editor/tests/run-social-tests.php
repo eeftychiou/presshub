@@ -1975,7 +1975,7 @@ echo "\n--- TikTok Shorts ---\n";
 
 assert_false( PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled(), 'TikTok shorts are off by default' );
 assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_shorts_count(), 'Shorts per podcast defaults to 3' );
-assert_equals( 180, PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes(), 'Shorts spacing defaults to 180 minutes' );
+assert_equals( 90, PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes(), 'Shorts spacing defaults to 90 minutes (#189)' );
 assert_equals( 130, PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words(), 'Short script word cap defaults to 130' );
 assert_equals( 5, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_count( 12 ), 'Shorts count clamps to 5' );
 assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_count( 0 ), 'Shorts count clamps to 1' );
@@ -1984,6 +1984,29 @@ assert_equals( 60, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_max_
 assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_shorts_images(), 'Story images per short default to 3' );
 assert_equals( 4, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( 9 ), 'Story images per short clamp to 4' );
 assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( -1 ), 'Story images per short clamp to 0' );
+
+// #189: a new podcast cancels the earlier edition's unposted shorts.
+PressHub_Social_Queue::reset_memory_store();
+$sup_ids = [];
+foreach ( PressHub_Social_TikTok_Shorts::build_jobs( 722, 'automation', null, null, time() - 60 ) as $sup_job ) {
+    $sup_ids[] = PressHub_Social_Queue::enqueue( $sup_job );
+}
+$sup_test  = PressHub_Social_TikTok_Shorts::build_jobs( 700, 'automation', null, null, time(), true )[0];
+$sup_test_id = PressHub_Social_Queue::enqueue( $sup_test );
+$sup_plain = PressHub_Social_Queue::enqueue( [ 'post_id' => 722, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Full podcast' ] );
+PressHub_Social_Queue::mark_processing( (int) $sup_ids[0] );
+$sup_cancelled = PressHub_Social_TikTok_Shorts::cancel_superseded( 730 );
+assert_equals( [ (int) $sup_ids[2], (int) $sup_ids[1] ], $sup_cancelled, 'A newer podcast cancels the pending shorts of the earlier one (#189)' );
+assert_equals( 'processing', PressHub_Social_Queue::get_job( (int) $sup_ids[0] )['status'], 'A short the worker already claimed is left alone (#189)' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( (int) $sup_test_id )['status'], 'Test-render shorts are never cancelled (#189)' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( (int) $sup_plain )['status'], 'Non-short TikTok jobs are never cancelled (#189)' );
+assert_equals( [], PressHub_Social_TikTok_Shorts::cancel_superseded( 722 ), 'A post never cancels its own shorts (#189)' );
+add_filter( 'presshub_social_tiktok_shorts_cancel_superseded', '__return_false' );
+PressHub_Social_Queue::reset_memory_store();
+$sup_off = PressHub_Social_Queue::enqueue( PressHub_Social_TikTok_Shorts::build_jobs( 722, 'automation', null, null, time() )[0] );
+assert_equals( [], PressHub_Social_TikTok_Shorts::cancel_superseded( 730 ), 'The filter turns superseded-short cancelling off (#189)' );
+remove_all_filters( 'presshub_social_tiktok_shorts_cancel_superseded' );
+PressHub_Social_Queue::reset_memory_store();
 $shorts_prompt = PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt();
 assert_true( str_contains( $shorts_prompt, '{script}' ) && str_contains( $shorts_prompt, '"shorts"' ), 'Shorts prompt is seeded from social_tiktok_shorts.txt' );
 assert_true( str_contains( $shorts_prompt, '"visuals"' ) && str_contains( $shorts_prompt, '{image_count}' ), 'Shorts prompt asks for story image descriptions' );
@@ -2144,7 +2167,7 @@ $short_job_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ]
 assert_equals( 3, count( $short_job_ids ), 'With shorts on a podcast post gets one TikTok job per short' );
 $short_jobs = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), $short_job_ids );
 assert_true( str_starts_with( (string) $short_jobs[0]['post_copy'], PressHub_Social_TikTok_Shorts::PLACEHOLDER_PREFIX ), 'Short jobs start with placeholder copy' );
-assert_equals( 180 * 60, strtotime( $short_jobs[1]['scheduled_at'] ) - strtotime( $short_jobs[0]['scheduled_at'] ), 'Shorts are scheduled 180 minutes apart' );
+assert_equals( 90 * 60, strtotime( $short_jobs[1]['scheduled_at'] ) - strtotime( $short_jobs[0]['scheduled_at'] ), 'Shorts are scheduled 90 minutes apart by default (#189)' );
 assert_equals( 2, json_decode( (string) $short_jobs[2]['metadata'], true )['tiktok_short']['index'] ?? null, 'Third short job carries index 2' );
 assert_equals( 0, count( $shorts_ai_calls ), 'No shorts LLM call at enqueue time' );
 
@@ -2701,6 +2724,45 @@ assert_true( PressHub_Social_TikTok_Shorts::is_ready( $prepared_ig_jobs[1] ), 'I
 PressHub_Social_TikTok_Shorts::set_ai_caller( null );
 PressHub_Social_TikTok_Shorts::set_synthesizer( null );
 PressHub_Social_TikTok_Shorts::set_image_generator( null );
+
+// Verify cancel_superseded cancels older pending Instagram short jobs for a newer podcast post
+$newer_ig_post_id = 911;
+$cancelled_ig     = PressHub_Social_TikTok_Shorts::cancel_superseded( $newer_ig_post_id, 'instagram' );
+assert_equals( 2, count( $cancelled_ig ), 'cancel_superseded cancels pending Instagram short jobs from older podcast post' );
+$after_cancel_ig = array_values( array_filter(
+    PressHub_Social_Queue::get_jobs_for_post( $ig_short_post_id ),
+    static fn( $j ) => 'instagram' === ( $j['platform'] ?? '' ) && 'cancelled' === ( $j['status'] ?? '' )
+) );
+assert_equals( 2, count( $after_cancel_ig ), 'Older Instagram short jobs transitioned to cancelled' );
+$still_pending_tt = array_values( array_filter(
+    PressHub_Social_Queue::get_jobs_for_post( $ig_short_post_id ),
+    static fn( $j ) => 'tiktok' === ( $j['platform'] ?? '' ) && 'pending' === ( $j['status'] ?? '' )
+) );
+assert_equals( 2, count( $still_pending_tt ), 'cancel_superseded(instagram) leaves TikTok short jobs pending' );
+
+// Verify wait_for_instagram_container handles IN_PROGRESS -> FINISHED, ERROR, and timeout
+$poll_calls = 0;
+PressHub_Social_Meta_API_Client::set_http_get( function() use ( &$poll_calls ) {
+    $poll_calls++;
+    return [ 'status_code' => $poll_calls < 2 ? 'IN_PROGRESS' : 'FINISHED' ];
+} );
+$poll_ok = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 5, 0 );
+assert_true( true === $poll_ok, 'wait_for_instagram_container returns true when container finishes' );
+assert_equals( 2, $poll_calls, 'wait_for_instagram_container polls until FINISHED' );
+
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'status_code' => 'ERROR', 'status' => 'Video codec unsupported' ];
+} );
+$poll_err = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 5, 0 );
+assert_true( is_wp_error( $poll_err ) && 'instagram_container_processing_error' === $poll_err->get_error_code(), 'wait_for_instagram_container fails loudly on ERROR status' );
+
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'status_code' => 'IN_PROGRESS' ];
+} );
+$poll_timeout = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 3, 0 );
+assert_true( is_wp_error( $poll_timeout ) && 'instagram_container_timeout' === $poll_timeout->get_error_code(), 'wait_for_instagram_container returns timeout WP_Error when never finishing' );
+
+PressHub_Social_Meta_API_Client::set_http_get( null );
 delete_option( 'presshub_social_instagram_shorts_enabled' );
 delete_option( 'presshub_social_tiktok_shorts_enabled' );
 

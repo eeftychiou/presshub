@@ -1678,6 +1678,58 @@ tr.presshub-setting-inactive button {
     flex-wrap: wrap;
 }
 
+.presshub-image-studio-templates {
+    margin: 12px 0;
+}
+.presshub-image-studio-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+.presshub-image-studio-template-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.presshub-image-studio-template-row select {
+    min-width: 240px;
+    max-width: 100%;
+}
+.presshub-image-studio-template-editor {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    background: #f6f7f7;
+}
+.presshub-image-studio-template-editor textarea {
+    width: 100%;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.presshub-image-studio-template-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+.presshub-image-studio-template-actions input[type="text"] {
+    min-width: 220px;
+}
+.presshub-image-studio-template-status {
+    font-weight: 600;
+    font-size: 13px;
+}
+.presshub-image-studio-template-status.is-error {
+    color: #d63638;
+}
+.presshub-image-studio-template-status.is-ok {
+    color: #00a32a;
+}
+
 /* SEO review panel */
 .presshub-ai-container .presshub-seo-box ul {
     margin: 6px 0 10px 18px;

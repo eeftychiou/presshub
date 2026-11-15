@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.28.0
+ * Version: 2.34.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -120,7 +120,7 @@ if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
 
-define( 'PRESSHUB_AI_VERSION', '2.28.0' );
+define( 'PRESSHUB_AI_VERSION', '2.34.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -154,6 +154,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-settings-storage.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-render.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-migration.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-image-prompt-templates.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-metaboxes.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
@@ -172,6 +173,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-author-presets.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-context-estimator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-prompt-loader.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-harvester.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-pool-cleaner.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-imap-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-mime-parser.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-press-release-inbox.php';
@@ -192,6 +194,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-memory-digest-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-rollup-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-context-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-editor.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-editorial-agenda.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
 
 // Social Auto-Post Subsystem Classes
@@ -390,6 +393,7 @@ function presshub_ai_init() {
     new PressHub_AI_Briefing_Admin();
     new PressHub_AI_Generation_Inspector();
     new PressHub_AI_Memory_Editor();
+    PressHub_AI_Editorial_Agenda::register_hooks();
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
     PressHub_AI_Social_Trending::register_hooks();
@@ -706,6 +710,7 @@ add_action( 'presshub_daily_news_generate', 'presshub_ai_execute_generation_cron
 add_action( 'presshub_noon_news_harvest', 'presshub_ai_execute_noon_harvest_cron' );
 add_action( 'presshub_noon_news_generate', 'presshub_ai_execute_noon_generation_cron' );
 add_action( 'presshub_ai_retry_podcast_synthesis', 'presshub_ai_execute_synthesis_retry', 10, 2 );
+add_action( 'presshub_ai_run_briefing_step', 'presshub_ai_execute_briefing_step', 10, 4 );
 add_action( 'update_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
@@ -874,9 +879,24 @@ function presshub_ai_execute_harvest_cron() {
 /**
  * Execute the automated news briefing generation cron (Text Story + Podcast Dialogue + Audio Synthesis).
  *
+ * Issue #187: the story runs here, and the podcast script and the audio run as
+ * their own cron steps (presshub_ai_run_briefing_step), each in a fresh request,
+ * so the host's per-request time limit cannot kill synthesis half-way.
+ *
  * @return array Generated results payload.
  */
 function presshub_ai_execute_generation_cron() {
+    return presshub_ai_execute_edition_generation_cron( 'morning' );
+}
+
+/**
+ * Shared body of the morning and noon generation crons (Issue #187).
+ *
+ * @param string $edition morning | noon.
+ * @return array{curation:mixed,podcast:mixed,synthesis:mixed} Results; 'scheduled'
+ *               for a step handed to its own cron event.
+ */
+function presshub_ai_execute_edition_generation_cron( $edition = 'morning' ) {
     if ( function_exists( 'set_time_limit' ) ) {
         @set_time_limit( 0 );
     }
@@ -884,10 +904,12 @@ function presshub_ai_execute_generation_cron() {
         @ignore_user_abort( true );
     }
 
-    $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
+    $edition = 'noon' === $edition ? 'noon' : 'morning';
+    $label   = 'noon' === $edition ? 'Noon News Briefing' : 'Daily News Briefing';
+    $date    = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
 
     if ( class_exists( 'PressHub_AI_Logger' ) ) {
-        PressHub_AI_Logger::info( sprintf( 'PressHub Daily News Generation Cron started for date: %s', $date ) );
+        PressHub_AI_Logger::info( sprintf( 'noon' === $edition ? 'PressHub Noon News Generation Cron started for date: %s' : 'PressHub Daily News Generation Cron started for date: %s', $date ) );
     }
 
     $results = [
@@ -899,69 +921,229 @@ function presshub_ai_execute_generation_cron() {
     // 1. Text story curation
     $curator = new PressHub_AI_News_Curator();
     $preset_text = (string) get_option( 'presshub_ai_briefing_text_preset', '' );
-    $results['curation'] = $curator->generate_story( $date, null, $preset_text );
+    $results['curation'] = $curator->generate_story( $date, null, $preset_text, [], $edition );
 
     if ( is_wp_error( $results['curation'] ) ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::error( 'Daily News Briefing generation cron error in text story curation: ' . $results['curation']->get_error_message() );
+            PressHub_AI_Logger::error( $label . ' generation cron error in text story curation: ' . $results['curation']->get_error_message() );
         }
     } else {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             $post_id = is_array( $results['curation'] ) ? (int) ( $results['curation']['post_id'] ?? 0 ) : 0;
-            PressHub_AI_Logger::info( sprintf( 'Daily News Briefing text story curated successfully (post ID: %d)', $post_id ) );
+            PressHub_AI_Logger::info( sprintf( $label . ' text story curated successfully (post ID: %d)', $post_id ) );
         }
     }
 
-    // 2. Podcast dialogue script generation
-    $producer = new PressHub_AI_Podcast_Producer();
-    $preset_podcast = (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
-    $duration = (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
-    $results['podcast'] = $producer->generate_dialogue_script( $date, null, $preset_podcast, $duration );
-
-    if ( is_wp_error( $results['podcast'] ) ) {
-        if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::error( 'Daily News Briefing generation cron error in podcast dialogue: ' . $results['podcast']->get_error_message() );
-        }
-    } else {
-        if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( 'Daily News Briefing podcast dialogue generated successfully.' );
-        }
+    // 2 + 3. Podcast script, then audio: each in its own request when possible.
+    if ( presshub_ai_schedule_briefing_step( $date, $edition, 'script' ) ) {
+        $results['podcast']   = 'scheduled';
+        $results['synthesis'] = 'scheduled';
+        return $results;
     }
 
-    // 3. Audio podcast synthesis
+    $results['podcast'] = presshub_ai_run_podcast_script_step( $date, $edition, false );
     if ( ! is_wp_error( $results['podcast'] ) ) {
-        presshub_ai_arm_synthesis_watchdog( $date, 'morning' );
-        try {
-            $synthesizer = new PressHub_AI_Audio_Synthesizer();
-            $results['synthesis'] = $synthesizer->synthesize_podcast( $date );
-
-            if ( is_wp_error( $results['synthesis'] ) ) {
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::error( 'Daily News Briefing generation cron error in audio synthesis: ' . $results['synthesis']->get_error_message() );
-                }
-            } else {
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::info( 'Daily News Briefing audio podcast synthesized successfully.' );
-                }
-            }
-        } catch ( \Throwable $t ) {
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::error( 'Daily News Briefing generation cron exception in audio synthesis: ' . $t->getMessage(), [
-                    'exception' => $t->getMessage(),
-                    'trace'     => $t->getTraceAsString(),
-                ] );
-            }
-            $results['synthesis'] = new WP_Error( 'synthesis_exception', $t->getMessage() );
-        }
-        // The watchdog only covers a process that never returns: a returned
-        // result replaces it (success: nothing to retry; error: the regular retry).
-        presshub_ai_disarm_synthesis_watchdog( $date, 'morning' );
-        if ( is_wp_error( $results['synthesis'] ) ) {
-            presshub_ai_maybe_schedule_synthesis_retry( $date, 'morning', $results['synthesis'] );
-        }
+        $results['synthesis'] = presshub_ai_run_podcast_audio_step( $date, $edition, 0, false );
     }
 
     return $results;
+}
+
+/**
+ * Whether the podcast script and audio run as separate cron steps. On by
+ * default; the `presshub_ai_briefing_split_steps` filter turns it off (every
+ * step then runs in the generation request, as before 2.30.0).
+ */
+function presshub_ai_briefing_split_steps() {
+    $on = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_briefing_split_steps', true ) : true;
+    return $on && function_exists( 'wp_schedule_single_event' );
+}
+
+/**
+ * Seconds a scheduled audio step may spend on new TTS calls before it hands
+ * over to a continuation step. Kept well under the ~300 s request limit seen
+ * on the host; cached turns do not count against it. Filter:
+ * `presshub_ai_briefing_step_time_budget_sec` (0 disables the budget).
+ */
+function presshub_ai_briefing_step_time_budget_sec() {
+    $sec = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_ai_briefing_step_time_budget_sec', 180 ) : 180;
+    return max( 0, $sec );
+}
+
+/**
+ * How many continuation steps an audio synthesis may use. Filter:
+ * `presshub_ai_briefing_step_max_continuations`.
+ */
+function presshub_ai_briefing_step_max_continuations() {
+    $n = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_ai_briefing_step_max_continuations', 6 ) : 6;
+    return max( 0, $n );
+}
+
+/**
+ * Queue one briefing step as its own cron event (Issue #187).
+ *
+ * @param string $date    Briefing date (Y-m-d).
+ * @param string $edition morning | noon.
+ * @param string $step    script | audio.
+ * @param int    $part    Audio continuation number (0 for the first run).
+ * @param int    $delay   Seconds from now.
+ * @return bool True when the event was queued; false means run it inline.
+ */
+function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, $delay = 0 ) {
+    if ( ! presshub_ai_briefing_split_steps() ) {
+        return false;
+    }
+    $args = [ (string) $date, (string) $edition, (string) $step, (int) $part ];
+    $ok   = wp_schedule_single_event( time() + max( 0, (int) $delay ), 'presshub_ai_run_briefing_step', $args );
+    if ( false === $ok || ( function_exists( 'is_wp_error' ) && is_wp_error( $ok ) ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; running it in this request.', [
+                'date'    => $date,
+                'edition' => $edition,
+                'step'    => $step,
+                'part'    => (int) $part,
+            ] );
+        }
+        return false;
+    }
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( sprintf( 'Briefing step "%s" queued as its own cron event.', $step ), [
+            'date'    => $date,
+            'edition' => $edition,
+            'part'    => (int) $part,
+        ] );
+    }
+    return true;
+}
+
+/**
+ * Cron handler for presshub_ai_run_briefing_step.
+ *
+ * @param string $date    Briefing date (Y-m-d).
+ * @param string $edition morning | noon.
+ * @param string $step    script | audio.
+ * @param int    $part    Audio continuation number.
+ * @return mixed Step result.
+ */
+function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $step = 'script', $part = 0 ) {
+    if ( function_exists( 'set_time_limit' ) ) {
+        @set_time_limit( 0 );
+    }
+    if ( function_exists( 'ignore_user_abort' ) ) {
+        @ignore_user_abort( true );
+    }
+    $date    = (string) $date;
+    $edition = 'noon' === $edition ? 'noon' : 'morning';
+
+    if ( 'audio' === $step ) {
+        return presshub_ai_run_podcast_audio_step( $date, $edition, (int) $part, true );
+    }
+    return presshub_ai_run_podcast_script_step( $date, $edition, true );
+}
+
+/**
+ * Podcast script step. On success, queues the audio step (or runs it inline
+ * when $chain is true and it cannot be queued).
+ *
+ * @param string $date    Briefing date (Y-m-d).
+ * @param string $edition morning | noon.
+ * @param bool   $chain   Continue with the audio step.
+ * @return array|WP_Error Script result.
+ */
+function presshub_ai_run_podcast_script_step( $date, $edition, $chain = true ) {
+    $label    = 'noon' === $edition ? 'Noon News Briefing' : 'Daily News Briefing';
+    $producer = new PressHub_AI_Podcast_Producer();
+    $preset   = (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
+    $duration = (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
+    $result   = $producer->generate_dialogue_script( $date, null, $preset, $duration, 'curated_briefing', [], $edition );
+
+    if ( is_wp_error( $result ) ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( $label . ' generation cron error in podcast dialogue: ' . $result->get_error_message() );
+        }
+        return $result;
+    }
+    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        PressHub_AI_Logger::info( $label . ' podcast dialogue generated successfully.' );
+    }
+
+    if ( $chain && ! presshub_ai_schedule_briefing_step( $date, $edition, 'audio' ) ) {
+        presshub_ai_run_podcast_audio_step( $date, $edition, 0, false );
+    }
+    return $result;
+}
+
+/**
+ * Audio synthesis step, guarded by the watchdog retry (#160).
+ *
+ * When $budgeted, new TTS calls stop after presshub_ai_briefing_step_time_budget_sec()
+ * and a continuation step resumes from the turn cache in a fresh request, so a
+ * long episode never runs into the host's request time limit.
+ *
+ * @param string $date     Briefing date (Y-m-d).
+ * @param string $edition  morning | noon.
+ * @param int    $part     Continuation number (0 for the first run).
+ * @param bool   $budgeted Apply the time budget (scheduled steps only).
+ * @return array|WP_Error|string Synthesis result, or 'continued'.
+ */
+function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budgeted = false ) {
+    $label = 'noon' === $edition ? 'Noon News Briefing' : 'Daily News Briefing';
+    $part  = max( 0, (int) $part );
+
+    if ( $part > 0 && presshub_ai_find_podcast_post_id( $date, $edition ) > 0 ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( 'Podcast synthesis continuation skipped: a podcast post already exists.', [ 'date' => $date, 'edition' => $edition, 'part' => $part ] );
+        }
+        presshub_ai_disarm_synthesis_watchdog( $date, $edition );
+        return null;
+    }
+
+    presshub_ai_arm_synthesis_watchdog( $date, $edition );
+    $budget = $budgeted ? presshub_ai_briefing_step_time_budget_sec() : 0;
+    try {
+        $synthesizer = new PressHub_AI_Audio_Synthesizer();
+        if ( $budget > 0 && method_exists( $synthesizer, 'set_live_call_deadline' ) ) {
+            $synthesizer->set_live_call_deadline( microtime( true ) + $budget );
+        }
+        $result = $synthesizer->synthesize_podcast( $date, '', $edition );
+
+        if ( is_wp_error( $result ) ) {
+            if ( 'synthesis_time_budget' !== $result->get_error_code() && class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( $label . ' generation cron error in audio synthesis: ' . $result->get_error_message() );
+            }
+        } elseif ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+        }
+    } catch ( \Throwable $t ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( $label . ' generation cron exception in audio synthesis: ' . $t->getMessage(), [
+                'exception' => $t->getMessage(),
+                'trace'     => $t->getTraceAsString(),
+            ] );
+        }
+        $result = new WP_Error( 'synthesis_exception', $t->getMessage() );
+    }
+    // The watchdog only covers a process that never returns: a returned
+    // result replaces it (success: nothing to retry; error: the regular retry).
+    presshub_ai_disarm_synthesis_watchdog( $date, $edition );
+
+    if ( is_wp_error( $result ) && 'synthesis_time_budget' === $result->get_error_code() ) {
+        if ( $part < presshub_ai_briefing_step_max_continuations()
+            && presshub_ai_schedule_briefing_step( $date, $edition, 'audio', $part + 1 )
+        ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( sprintf( 'Podcast synthesis reached its %d s step budget; continuation %d resumes from the turn cache.', $budget, $part + 1 ), [ 'date' => $date, 'edition' => $edition ] );
+            }
+            return 'continued';
+        }
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::error( $label . ' audio synthesis ran out of continuation steps.', [ 'date' => $date, 'edition' => $edition, 'part' => $part ] );
+        }
+    }
+    if ( is_wp_error( $result ) ) {
+        presshub_ai_maybe_schedule_synthesis_retry( $date, $edition, $result );
+    }
+    return $result;
 }
 
 /**
@@ -1210,96 +1392,13 @@ function presshub_ai_execute_noon_harvest_cron() {
 }
 
 /**
- * Execute the automated noon news briefing generation cron (Text Story + Podcast Dialogue + Audio Synthesis).
+ * Execute the automated noon news briefing generation cron (Issue #187: the
+ * script and audio run as their own cron steps, as for the morning edition).
  *
  * @return array Generated results payload.
  */
 function presshub_ai_execute_noon_generation_cron() {
-    if ( function_exists( 'set_time_limit' ) ) {
-        @set_time_limit( 0 );
-    }
-    if ( function_exists( 'ignore_user_abort' ) ) {
-        @ignore_user_abort( true );
-    }
-
-    $date = function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' );
-
-    if ( class_exists( 'PressHub_AI_Logger' ) ) {
-        PressHub_AI_Logger::info( sprintf( 'PressHub Noon News Generation Cron started for date: %s', $date ) );
-    }
-
-    $results = [
-        'curation'  => null,
-        'podcast'   => null,
-        'synthesis' => null,
-    ];
-
-    // 1. Text story curation
-    $curator = new PressHub_AI_News_Curator();
-    $preset_text = (string) get_option( 'presshub_ai_briefing_text_preset', '' );
-    $results['curation'] = $curator->generate_story( $date, null, $preset_text, [], 'noon' );
-
-    if ( is_wp_error( $results['curation'] ) ) {
-        if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::error( 'Noon News Briefing generation cron error in text story curation: ' . $results['curation']->get_error_message() );
-        }
-    } else {
-        if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            $post_id = is_array( $results['curation'] ) ? (int) ( $results['curation']['post_id'] ?? 0 ) : 0;
-            PressHub_AI_Logger::info( sprintf( 'Noon News Briefing text story curated successfully (post ID: %d)', $post_id ) );
-        }
-    }
-
-    // 2. Podcast dialogue script generation
-    $producer = new PressHub_AI_Podcast_Producer();
-    $preset_podcast = (string) get_option( 'presshub_ai_briefing_podcast_preset', '' );
-    $duration = (string) get_option( 'presshub_ai_briefing_target_duration', '5_min' );
-    $results['podcast'] = $producer->generate_dialogue_script( $date, null, $preset_podcast, $duration, 'curated_briefing', [], 'noon' );
-
-    if ( is_wp_error( $results['podcast'] ) ) {
-        if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::error( 'Noon News Briefing generation cron error in podcast dialogue: ' . $results['podcast']->get_error_message() );
-        }
-    } else {
-        if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( 'Noon News Briefing podcast dialogue generated successfully.' );
-        }
-    }
-
-    // 3. Audio podcast synthesis
-    if ( ! is_wp_error( $results['podcast'] ) ) {
-        presshub_ai_arm_synthesis_watchdog( $date, 'noon' );
-        try {
-            $synthesizer = new PressHub_AI_Audio_Synthesizer();
-            $results['synthesis'] = $synthesizer->synthesize_podcast( $date, '', 'noon' );
-
-            if ( is_wp_error( $results['synthesis'] ) ) {
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::error( 'Noon News Briefing generation cron error in audio synthesis: ' . $results['synthesis']->get_error_message() );
-                }
-            } else {
-                if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::info( 'Noon News Briefing audio podcast synthesized successfully.' );
-                }
-            }
-        } catch ( \Throwable $t ) {
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::error( 'Noon News Briefing generation cron exception in audio synthesis: ' . $t->getMessage(), [
-                    'exception' => $t->getMessage(),
-                    'trace'     => $t->getTraceAsString(),
-                ] );
-            }
-            $results['synthesis'] = new WP_Error( 'synthesis_exception', $t->getMessage() );
-        }
-        // The watchdog only covers a process that never returns: a returned
-        // result replaces it (success: nothing to retry; error: the regular retry).
-        presshub_ai_disarm_synthesis_watchdog( $date, 'noon' );
-        if ( is_wp_error( $results['synthesis'] ) ) {
-            presshub_ai_maybe_schedule_synthesis_retry( $date, 'noon', $results['synthesis'] );
-        }
-    }
-
-    return $results;
+    return presshub_ai_execute_edition_generation_cron( 'noon' );
 }
 
 

@@ -196,6 +196,30 @@ class PressHub_AI_Context_Estimator {
         return $value;
     }
 
+    /** Default model input window (tokens) used to fit memory next to the prompt (Issue #188). */
+    const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 1000000;
+
+    /**
+     * Input context window of the model behind a briefing module, in tokens.
+     *
+     * Issue #188: the memory budget used to be checked against the module's
+     * maximum *output* tokens (or 40,000 when unset). The curation prompt is
+     * ~800k chars, so the briefing memory budget was always shrunk to 0 and
+     * no editorial memory reached the story. This is the model's input
+     * window instead (Gemini text models: 1M tokens). Filter:
+     * `presshub_ai_model_context_window_tokens` ( $tokens, $module ).
+     *
+     * @param string $module briefing_text | briefing_podcast.
+     * @return int Tokens, at least MIN_MAX_CONTEXT_TOKENS.
+     */
+    public static function model_context_window_tokens( string $module = 'briefing_text' ): int {
+        $tokens = self::DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS;
+        if ( function_exists( 'apply_filters' ) ) {
+            $tokens = (int) apply_filters( 'presshub_ai_model_context_window_tokens', $tokens, $module );
+        }
+        return max( self::MIN_MAX_CONTEXT_TOKENS, $tokens );
+    }
+
     /**
      * Compute effective memory character budget within a model's max context limit.
      *

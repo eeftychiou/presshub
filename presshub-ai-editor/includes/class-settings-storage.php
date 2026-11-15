@@ -1263,6 +1263,34 @@ class PressHub_AI_Settings_Storage {
      * @param mixed $value JSON string, array of objects, array of URLs, or newline-delimited string.
      * @return array[] List of structured source arrays.
      */
+    /** Issue #196 — source priority: 1 (low) to 5 (high), 3 is normal. */
+    const SOURCE_PRIORITY_DEFAULT = 3;
+
+    public static function sanitize_source_priority( $value ): int {
+        $v = is_numeric( $value ) ? (int) $value : self::SOURCE_PRIORITY_DEFAULT;
+        return max( 1, min( 5, $v ) );
+    }
+
+    /**
+     * Issue #196 — host => priority for the configured sources (enabled or
+     * not), so harvested articles, which carry only their URL, can be weighted.
+     *
+     * @return array<string,int>
+     */
+    public static function get_source_priority_map(): array {
+        $map = [];
+        foreach ( self::normalize_sources( self::get_briefing_sources() ) as $src ) {
+            $host = strtolower( preg_replace( '/^www\./i', '', (string) parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) ) );
+            if ( '' === $host ) {
+                continue;
+            }
+            $p = self::sanitize_source_priority( $src['priority'] ?? self::SOURCE_PRIORITY_DEFAULT );
+            // Two sources on one host: the higher priority wins.
+            $map[ $host ] = max( $map[ $host ] ?? 0, $p );
+        }
+        return $map;
+    }
+
     public static function normalize_sources( $value ): array {
         if ( empty( $value ) ) {
             return PressHub_AI_Settings_Migration::default_structured_sources();
@@ -1314,6 +1342,7 @@ class PressHub_AI_Settings_Storage {
                         'category'     => 'General',
                         'notes'        => '',
                         'max_articles' => 5,
+                        'priority'     => self::SOURCE_PRIORITY_DEFAULT,
                     ];
                 } elseif ( is_array( $item ) ) {
                     // Structured source object
@@ -1360,6 +1389,8 @@ class PressHub_AI_Settings_Storage {
 
                     $max_articles = isset( $item['max_articles'] ) ? max( 1, min( 30, (int) $item['max_articles'] ) ) : 5;
 
+                    $priority = self::sanitize_source_priority( $item['priority'] ?? self::SOURCE_PRIORITY_DEFAULT );
+
                     $clean_sources[] = [
                         'id'           => $id,
                         'name'         => $name,
@@ -1369,6 +1400,7 @@ class PressHub_AI_Settings_Storage {
                         'category'     => $category,
                         'notes'        => $notes,
                         'max_articles' => $max_articles,
+                        'priority'     => $priority,
                     ];
                 }
             }

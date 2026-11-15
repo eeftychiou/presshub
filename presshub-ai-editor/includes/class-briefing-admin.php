@@ -81,6 +81,8 @@ class PressHub_AI_Briefing_Admin {
 
         $max_articles = isset( $data['max_articles'] ) ? max( 1, min( 30, (int) $data['max_articles'] ) ) : 5;
 
+        $priority = PressHub_AI_Settings_Storage::sanitize_source_priority( $data['priority'] ?? PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT );
+
         $clean = [
             'id'           => $id,
             'name'         => $name,
@@ -90,6 +92,7 @@ class PressHub_AI_Briefing_Admin {
             'category'     => $category,
             'notes'        => $notes,
             'max_articles' => $max_articles,
+            'priority'     => $priority,
         ];
 
         $existing_index  = null;
