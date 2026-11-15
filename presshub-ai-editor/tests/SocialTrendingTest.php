@@ -178,6 +178,17 @@ st_reset();
 $plan = $T::get_worker_plan( false, $now );
 $res  = $T::ingest_worker_posts( 'wrong', [], [], $now );
 st_check( 'ingest: stale run refused', is_wp_error( $res ) && 'stale_run' === $res->get_error_code() );
+st_check( 'ingest: the 409 says which run replaced it', false !== strpos( $res->get_error_message(), 'run ' . $plan['run_id'] . ' replaced it' ) );
+// #179: a forced start (Refresh now / ?force=1) keeps a run the worker is still reading.
+$forced = $T::maybe_start_run( $now + 120, true );
+st_check( 'force: a run being read is not replaced', $plan['run_id'] === ( $forced['run_id'] ?? '' ) );
+st_check( 'force: its results are still accepted', ! is_wp_error( $T::ingest_worker_posts( $plan['run_id'], [], [], $now + 130 ) ) );
+st_reset();
+$plan   = $T::get_worker_plan( false, $now );
+$forced = $T::maybe_start_run( $now + $T::PLAN_LOCK_SEC + 1, true );
+st_check( 'force: after the lock a forced start replaces the run', $plan['run_id'] !== ( $forced['run_id'] ?? '' ) );
+st_reset();
+$plan = $T::get_worker_plan( false, $now );
 
 st_check( 'normalize: x canonical url', 'https://x.com/acct1/status/1' === $T::normalize_item( st_post( 'x', '1', 50, 30, [ 'url' => 'https://evil.com' ] ), $now )['url'] );
 st_check( 'normalize: x non-numeric id rejected', null === $T::normalize_item( st_post( 'x', 'abc', 50, 30 ), $now ) );

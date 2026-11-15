@@ -10,6 +10,7 @@ import path from 'path';
 import { connectOrLaunchChrome, ChromeConnection } from '../automation/browser-helper';
 import { getReaderSessionsDir, getSessionsDir } from '../automation/session-manager';
 import { WorkerLogger } from '../logger';
+import { challengeBackoffUntil, clearChallenge, isChallengeError, recordChallenge } from '../automation/challenge-backoff';
 import { parseTikTokItemList, parseXGraphql, ScannedPost } from './parsers';
 
 export interface ScanTarget {
@@ -180,6 +181,16 @@ export function buildScrollStop(targets: ScanTarget[]): (list: ScannedPost[], ha
     });
 }
 
+/** Where the next TikTok pass starts (the account that was challenged last time). */
+let tiktokCursor = 0;
+
+/** `list` starting at index `start` and wrapping around. */
+export function rotate<T>(list: T[], start: number): T[] {
+  if (list.length === 0) return list;
+  const i = ((start % list.length) + list.length) % list.length;
+  return list.slice(i).concat(list.slice(0, i));
+}
+
 /**
  * Default scanner using Playwright.
  */
@@ -230,16 +241,26 @@ export const browserScan: ScanFn = async (plan: ScanPlan) => {
     }
   }
 
-  for (const t of tiktokTargets) {
+  const tiktokPaused = tiktokTargets.length ? challengeBackoffUntil('tiktok') : 0;
+  if (tiktokPaused) {
+    WorkerLogger.info('Social Monitor', `TikTok skipped until ${new Date(tiktokPaused).toISOString()} after a verification challenge (${tiktokTargets.length} account(s)).`);
+  }
+  // Start where the last scan stopped, so the same account is not always the first visit.
+  for (const t of tiktokPaused ? [] : rotate(tiktokTargets, tiktokCursor)) {
     try {
       const conn = await getConn('tiktok');
       const got = await scanPage(conn, t.url, 'tiktok', maxVideoBytes, (l) => oldestReached(l, t.handle), 2);
       posts.push(...got.filter(keep));
+      clearChallenge('tiktok');
       WorkerLogger.info('Social Monitor', `TikTok @${t.handle}: ${got.filter(keep).length} new post(s).`);
     } catch (err: any) {
       errors.push({ platform: 'tiktok', handle: t.handle, url: t.url, error: err.message });
+      if (isChallengeError(err.message)) {
+        tiktokCursor = tiktokTargets.indexOf(t);
+        recordChallenge('tiktok', 'Social Monitor');
+        break;
+      }
       WorkerLogger.warn('Social Monitor', `TikTok scan failed for @${t.handle}: ${err.message}`);
-      if (/verification/i.test(err.message)) break;
     }
     await sleep(jitter(5000, 12000));
   }
