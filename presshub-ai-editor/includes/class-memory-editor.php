@@ -568,16 +568,27 @@ class PressHub_AI_Memory_Editor {
         $html .= '<div id="presshub-memory-notices" role="status" aria-live="polite"></div>';
 
         // Issue #198: Timeline | Agenda tabs.
-        $tab = ( isset( $query['tab'] ) && 'agenda' === $query['tab'] && class_exists( 'PressHub_AI_Editorial_Agenda' ) ) ? 'agenda' : 'timeline';
+        $tab = 'timeline';
+        if ( isset( $query['tab'] ) && 'agenda' === $query['tab'] && class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
+            $tab = 'agenda';
+        } elseif ( isset( $query['tab'] ) && 'stakeholders' === $query['tab'] && class_exists( 'PressHub_AI_Stakeholders' ) ) {
+            $tab = 'stakeholders'; // Issue #197.
+        }
         if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
             $base  = add_query_arg( [ 'page' => self::PAGE_SLUG ], admin_url( 'admin.php' ) );
             $html .= '<nav class="nav-tab-wrapper presshub-memory-tabs">';
             $html .= '<a href="' . esc_url( $base ) . '" class="nav-tab' . ( 'timeline' === $tab ? ' nav-tab-active' : '' ) . '">' . esc_html__( 'Timeline', 'presshub-ai-editor' ) . '</a>';
             $html .= '<a href="' . esc_url( add_query_arg( [ 'tab' => 'agenda' ], $base ) ) . '" class="nav-tab' . ( 'agenda' === $tab ? ' nav-tab-active' : '' ) . '">' . esc_html__( 'Agenda', 'presshub-ai-editor' ) . '</a>';
+            if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
+                $html .= '<a href="' . esc_url( add_query_arg( [ 'tab' => 'stakeholders' ], $base ) ) . '" class="nav-tab' . ( 'stakeholders' === $tab ? ' nav-tab-active' : '' ) . '">' . esc_html__( 'People', 'presshub-ai-editor' ) . '</a>';
+            }
             $html .= '</nav>';
         }
         if ( 'agenda' === $tab ) {
             return $html . PressHub_AI_Editorial_Agenda::build_tab( $query ) . '</div>';
+        }
+        if ( 'stakeholders' === $tab ) {
+            return $html . PressHub_AI_Stakeholders::build_tab( $query ) . '</div>';
         }
 
         if ( ! PressHub_AI_Settings_Storage::get_memory_enabled() ) {
