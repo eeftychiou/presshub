@@ -271,6 +271,13 @@ class PressHub_Social_Meta_API_Client {
 
         $media_id = (string) $data2['id'];
 
+        if ( ! empty( $job['id'] ) && isset( $job_meta['instagram_creation_id'] ) && class_exists( 'PressHub_Social_Queue' ) ) {
+            unset( $job_meta['instagram_creation_id'] );
+            PressHub_Social_Queue::update_job( (int) $job['id'], [
+                'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
+            ] );
+        }
+
         return [
             'external_post_id'  => $media_id,
             'external_post_url' => "https://www.instagram.com/p/{$media_id}/",
@@ -318,7 +325,20 @@ class PressHub_Social_Meta_API_Client {
             if ( is_wp_error( $res ) ) {
                 return $res;
             }
-            $data        = is_array( $res ) && isset( $res['status_code'] ) ? $res : json_decode( wp_remote_retrieve_body( $res ), true );
+            if ( is_array( $res ) && ( isset( $res['status_code'] ) || isset( $res['error'] ) ) ) {
+                $http_code = 200;
+                $data      = $res;
+            } else {
+                $http_code = (int) wp_remote_retrieve_response_code( $res );
+                $data      = json_decode( wp_remote_retrieve_body( $res ), true );
+            }
+            if ( $http_code >= 400 || ! empty( $data['error'] ) ) {
+                $msg = (string) ( $data['error']['message'] ?? sprintf( 'Instagram container status check failed with HTTP %d', $http_code ) );
+                if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
+                    PressHub_Social_Logger::error( 'Instagram container status error: ' . $msg );
+                }
+                return new WP_Error( 'instagram_container_status_error', $msg );
+            }
             $status_code = strtoupper( (string) ( $data['status_code'] ?? '' ) );
 
             if ( 'FINISHED' === $status_code || 'PUBLISHED' === $status_code ) {

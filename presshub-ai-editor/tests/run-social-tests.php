@@ -2762,6 +2762,35 @@ PressHub_Social_Meta_API_Client::set_http_get( function() {
 $poll_timeout = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 3, 0 );
 assert_true( is_wp_error( $poll_timeout ) && 'instagram_container_timeout' === $poll_timeout->get_error_code(), 'wait_for_instagram_container returns timeout WP_Error when never finishing' );
 
+// Verify wait_for_instagram_container fails fast on Graph API error payload without status_code
+$api_err_calls = 0;
+PressHub_Social_Meta_API_Client::set_http_get( function() use ( &$api_err_calls ) {
+    $api_err_calls++;
+    return [ 'error' => [ 'message' => 'Invalid OAuth access token' ] ];
+} );
+$poll_api_err = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 5, 0 );
+assert_true( is_wp_error( $poll_api_err ) && 'instagram_container_status_error' === $poll_api_err->get_error_code(), 'wait_for_instagram_container fails fast on Graph API error payload' );
+assert_equals( 1, $api_err_calls, 'wait_for_instagram_container stops polling on first Graph API error' );
+
+// Verify repost strips instagram_creation_id so a reposted Reel creates a fresh container
+$ig_repost_src_id = PressHub_Social_Queue::enqueue( [
+    'post_id'      => $ig_short_post_id,
+    'platform'     => 'instagram',
+    'engine'       => 'api',
+    'post_copy'    => 'Reel repost test',
+    'media_url'    => 'https://example.com/reel.mp4',
+    'media_type'   => 'video',
+    'status'       => 'published',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s' ),
+    'metadata'     => [ 'instagram_creation_id' => '99887766', 'keep_key' => 'yes' ],
+] );
+$ig_repost_id = PressHub_Social_Queue::repost_as_new_job( (int) $ig_repost_src_id );
+assert_true( is_int( $ig_repost_id ) && $ig_repost_id > 0, 'repost creates a new Instagram job' );
+$ig_repost_job  = PressHub_Social_Queue::get_job( (int) $ig_repost_id );
+$ig_repost_meta = is_string( $ig_repost_job['metadata'] ?? null ) ? json_decode( $ig_repost_job['metadata'], true ) : ( $ig_repost_job['metadata'] ?? [] );
+assert_false( isset( $ig_repost_meta['instagram_creation_id'] ), 'repost strips stale instagram_creation_id from metadata' );
+assert_equals( 'yes', $ig_repost_meta['keep_key'] ?? '', 'repost preserves unrelated metadata keys' );
+
 PressHub_Social_Meta_API_Client::set_http_get( null );
 delete_option( 'presshub_social_instagram_shorts_enabled' );
 delete_option( 'presshub_social_tiktok_shorts_enabled' );
