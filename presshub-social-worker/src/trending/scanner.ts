@@ -220,7 +220,7 @@ export const browserTrendingScan: TrendingScanFn = async (plan: TrendingPlan) =>
           WorkerLogger.warn('Trending', `${target.label || target.url} failed: ${err.message}`);
         }
         // A login wall or a challenge will not go away on the next page of the same platform.
-        if (/login|verification/i.test(err.message)) blocked.add(target.platform);
+        if (isChallengeError(err.message) || /login/i.test(err.message)) blocked.add(target.platform);
       }
       await sleep(jitter(5000, 12000));
     }
