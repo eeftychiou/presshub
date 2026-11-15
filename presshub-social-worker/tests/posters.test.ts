@@ -12,7 +12,11 @@ import {
   getTwitterSnowflakeTimestampMs,
   makeTwitterSnowflakeId,
   TWITTER_URL_WEIGHT,
-  TWITTER_MAX_WEIGHTED_CHARS
+  TWITTER_MAX_WEIGHTED_CHARS,
+  parseTikTokVideoHref,
+  parseTikTokProfileHref,
+  resolveTikTokPostUrl,
+  TIKTOK_STUDIO_CONTENT_URL
 } from '../src/automation/posters';
 import { ChromeConnection } from '../src/automation/browser-helper';
 import { markSessionInvalid, clearSessionInvalid, verifySession } from '../src/automation/session-manager';
@@ -287,7 +291,56 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
 
     expect(res.success).toBe(true);
     expect(res.platform).toBe('tiktok');
-    expect(res.externalPostUrl).toMatch(/https:\/\/www\.tiktok\.com\/@creator\/video\/tt-\d+/);
+    // No real video link or profile link on the mock page: falls back to Studio's content list (#191).
+    expect(res.externalPostUrl).toBe('https://www.tiktok.com/tiktokstudio/content');
+    expect(res.externalPostUrl).not.toContain('@creator');
+  });
+
+  test('parseTikTokVideoHref / parseTikTokProfileHref read handles and video ids (#191)', () => {
+    expect(parseTikTokVideoHref('https://www.tiktok.com/@presshub.cy/video/7312345678901234567')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567' });
+    expect(parseTikTokVideoHref('/@presshub.cy/video/7312345678901234567?is_from_webapp=1')).toEqual({ handle: 'presshub.cy', videoId: '7312345678901234567' });
+    expect(parseTikTokVideoHref('https://www.tiktok.com/@creator/video/tt-123')).toBeNull();
+    expect(parseTikTokProfileHref('/@presshub.cy')).toBe('presshub.cy');
+    expect(parseTikTokProfileHref('https://www.tiktok.com/@presshub.cy?lang=el')).toBe('presshub.cy');
+    expect(parseTikTokProfileHref('/@presshub.cy/video/7312345678901234567')).toBeNull();
+  });
+
+  function studioPage(html: string) {
+    return context.newPage().then((page) => {
+      page.goto = async () => {
+        await page.setContent(html);
+        return null as any;
+      };
+      return page;
+    });
+  }
+
+  test('resolveTikTokPostUrl picks the Studio row whose caption matches (#191)', async () => {
+    const page = await studioPage(`<html><body>
+      <a href="/@presshub.cy">Profile</a>
+      <div class="row"><a href="/@presshub.cy/video/7300000000000000002">open</a><span>Κάτι άλλο παλιό</span></div>
+      <div class="row"><a href="/@presshub.cy/video/7300000000000000001">open</a><span>Σήμερα στην Κύπρο: τα νέα της ημέρας</span></div>
+    </body></html>`);
+    const res = await resolveTikTokPostUrl(page, 'Σήμερα στην Κύπρο: τα νέα της ημέρας #cyprus', 3000);
+    expect(res).toEqual({ kind: 'video', url: 'https://www.tiktok.com/@presshub.cy/video/7300000000000000001', videoId: '7300000000000000001' });
+    await page.close();
+  });
+
+  test('resolveTikTokPostUrl falls back to the profile when no row matches (#191)', async () => {
+    const page = await studioPage(`<html><body>
+      <a href="/@presshub.cy">Profile</a>
+      <div class="row"><a href="/@presshub.cy/video/7300000000000000002">open</a><span>Κάτι άλλο παλιό</span></div>
+    </body></html>`);
+    const res = await resolveTikTokPostUrl(page, 'Νέο βίντεο που δεν φαίνεται ακόμη', 2000);
+    expect(res).toEqual({ kind: 'profile', url: 'https://www.tiktok.com/@presshub.cy' });
+    await page.close();
+  });
+
+  test('resolveTikTokPostUrl falls back to Studio content when nothing is known (#191)', async () => {
+    const page = await studioPage('<html><body><p>Loading</p></body></html>');
+    const res = await resolveTikTokPostUrl(page, 'caption', 1000);
+    expect(res).toEqual({ kind: 'studio', url: TIKTOK_STUDIO_CONTENT_URL });
+    await page.close();
   });
 
   test('markTikTokAiGenerated opens "Show more", turns the AI label on and confirms it', async () => {

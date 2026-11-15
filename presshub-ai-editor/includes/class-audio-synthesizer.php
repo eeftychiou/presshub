@@ -986,6 +986,145 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
+     * Issue #191 — show notes under the audio player: the topic list with
+     * approximate start times, a link to the same edition's written brief,
+     * and that brief's sources list. Returns '' when there is nothing to show.
+     *
+     * Times come from each topic's share of the script's words, scaled to the
+     * audio length (attachment metadata), else to an assumed speaking rate.
+     */
+    public function build_show_notes_html( string $script, string $date, string $edition, int $attachment_id = 0 ): string {
+        if ( function_exists( 'apply_filters' ) && ! apply_filters( 'presshub_ai_podcast_show_notes_enabled', true, $date, $edition ) ) {
+            return '';
+        }
+
+        $blocks = [];
+
+        $topics = $this->show_notes_topics( $script );
+        if ( count( $topics ) >= 2 ) {
+            $total_words = 0;
+            foreach ( $topics as $t ) {
+                $total_words += $t['words'];
+            }
+            $all_words = max( 1, $this->count_words( $this->strip_topic_markers( $script ) ) );
+            $duration  = 0.0;
+            if ( $attachment_id > 0 && function_exists( 'wp_get_attachment_metadata' ) ) {
+                $meta     = wp_get_attachment_metadata( $attachment_id );
+                $duration = is_array( $meta ) ? (float) ( $meta['length'] ?? 0 ) : 0.0;
+            }
+            if ( $duration <= 0 ) {
+                $wpm      = function_exists( 'apply_filters' ) ? (float) apply_filters( 'presshub_ai_podcast_words_per_minute', 150 ) : 150.0;
+                $duration = $all_words / max( 60.0, $wpm ) * 60.0;
+            }
+            $sec_per_word = $duration / $all_words;
+
+            $items = '';
+            foreach ( $topics as $t ) {
+                $start  = (int) round( $t['offset_words'] * $sec_per_word );
+                $items .= '<li><strong>' . esc_html( sprintf( '%d:%02d', intdiv( $start, 60 ), $start % 60 ) ) . '</strong> ' . esc_html( $t['title'] ) . '</li>';
+            }
+            $blocks[] = '<h3 class="wp-block-heading">' . esc_html__( 'Θέματα του επεισοδίου', 'presshub-ai-editor' ) . '</h3>'
+                . '<ul class="presshub-podcast-topics">' . $items . '</ul>';
+        }
+
+        $brief = $this->find_brief_post( $date, $edition );
+        if ( $brief ) {
+            $status = (string) ( $brief->post_status ?? '' );
+            if ( 'publish' === $status && function_exists( 'get_permalink' ) ) {
+                $url = (string) get_permalink( (int) $brief->ID );
+                if ( '' !== $url ) {
+                    $blocks[] = '<p class="presshub-podcast-brief-link">' . esc_html__( 'Διαβάστε την πλήρη γραπτή ενημέρωση:', 'presshub-ai-editor' )
+                        . ' <a href="' . esc_url( $url ) . '">' . esc_html( (string) ( $brief->post_title ?? '' ) ) . '</a></p>';
+                }
+            }
+            $sources_class = class_exists( 'PressHub_AI_Briefing_SEO' ) ? PressHub_AI_Briefing_SEO::SOURCES_CLASS : 'presshub-briefing-sources';
+            if ( preg_match( '#<ul class="' . preg_quote( $sources_class, '#' ) . '">.*?</ul>#su', (string) ( $brief->post_content ?? '' ), $m ) ) {
+                $blocks[] = '<h3 class="wp-block-heading">' . esc_html__( 'Πηγές', 'presshub-ai-editor' ) . '</h3>' . $m[0];
+            }
+        }
+
+        if ( empty( $blocks ) ) {
+            return '';
+        }
+        return "<!-- wp:html -->\n<div class=\"presshub-podcast-show-notes\">" . implode( "\n", $blocks ) . "</div>\n<!-- /wp:html -->";
+    }
+
+    /**
+     * Topics marked in the script, in order, with their word counts and the
+     * number of spoken words before each one. [] when there are no markers.
+     */
+    public function show_notes_topics( string $script ): array {
+        $start_re = '/^\s*(?:\[|\<\!\-\-|\={2,3}|\#{2,3})?\s*TOPIC(?:_?START)?\s*:\s*([^\]\>\=]+?)\s*(?:\]|\-\-\>|\={2,3})?\s*$/iu';
+        $end_re   = '/^\s*(?:\[|\<\!\-\-)?\s*TOPIC_?END\s*(?:\]|\-\-\>)?\s*$/iu';
+        $topics   = [];
+        $current  = null;
+        $offset   = 0;
+        foreach ( preg_split( '/\r?\n/', $script ) as $line ) {
+            $trim = trim( $line );
+            if ( '' === $trim ) {
+                continue;
+            }
+            if ( preg_match( $start_re, $trim, $m ) ) {
+                if ( null !== $current ) {
+                    $topics[] = $current;
+                }
+                $current = [ 'title' => trim( $m[1] ), 'words' => 0, 'offset_words' => $offset ];
+                continue;
+            }
+            if ( preg_match( $end_re, $trim ) ) {
+                if ( null !== $current ) {
+                    $topics[] = $current;
+                    $current  = null;
+                }
+                continue;
+            }
+            $spoken = preg_replace( '/^\s*\[[^\]]*\]\s*:\s*/u', '', $trim );
+            $n      = $this->count_words( $spoken );
+            $offset += $n;
+            if ( null !== $current ) {
+                $current['words'] += $n;
+            }
+        }
+        if ( null !== $current ) {
+            $topics[] = $current;
+        }
+        return array_values( array_filter( $topics, function ( $t ) {
+            return '' !== $t['title'] && $t['words'] > 0;
+        } ) );
+    }
+
+    private function count_words( string $text ): int {
+        $text = preg_replace( '/^\s*\[[^\]]*\]\s*:\s*/mu', '', $text );
+        return (int) preg_match_all( '/[\p{L}\p{N}]+/u', $text );
+    }
+
+    /** The written brief post for this date and edition, or null. */
+    private function find_brief_post( string $date, string $edition ) {
+        if ( '' === $date || ! function_exists( 'get_posts' ) ) {
+            return null;
+        }
+        $posts = get_posts( [
+            'post_type'        => 'post',
+            'post_status'      => [ 'publish', 'future', 'pending', 'draft' ],
+            'numberposts'      => 1,
+            'suppress_filters' => true,
+            'meta_query'       => [
+                [ 'key' => '_presshub_briefing_date', 'value' => $date ],
+                [ 'key' => '_presshub_briefing_type', 'value' => 'text' ],
+                [ 'key' => '_presshub_briefing_edition', 'value' => $edition ],
+            ],
+        ] );
+        if ( empty( $posts ) ) {
+            return null;
+        }
+        $p = $posts[0];
+        if ( is_numeric( $p ) && function_exists( 'get_post' ) ) {
+            $p = get_post( (int) $p );
+        }
+        return is_object( $p ) ? $p : null;
+    }
+
+    /**
      * Format raw dialogue transcript into structured HTML paragraphs.
      *
      * @param string $transcript Raw dialogue script.
@@ -1113,6 +1252,11 @@ class PressHub_AI_Audio_Synthesizer {
             . "<figure class=\"wp-block-audio\"><audio controls src=\"" . esc_url_raw( $audio_url ) . "\"></audio></figure>\n"
             . "<!-- /wp:audio -->";
 
+        $show_notes = $this->build_show_notes_html( $transcript, $date, $edition, $attachment_id );
+        if ( '' !== $show_notes ) {
+            $post_content .= "\n\n" . $show_notes;
+        }
+
         if ( $include_text ) {
             // Issue #91 — strip audio-synthesis topic scaffolding BEFORE format_transcript_html()
             $formatted_transcript = $this->format_transcript_html( $this->strip_topic_markers( $transcript ) );
@@ -1237,6 +1381,11 @@ class PressHub_AI_Audio_Synthesizer {
         $post_content = "<!-- wp:audio {\"id\":{$attachment_id}} -->\n"
             . "<figure class=\"wp-block-audio\"><audio controls src=\"" . esc_url_raw( $audio_url ) . "\"></audio></figure>\n"
             . "<!-- /wp:audio -->";
+
+        $show_notes = $this->build_show_notes_html( $script, $date, $edition, $attachment_id );
+        if ( '' !== $show_notes ) {
+            $post_content .= "\n\n" . $show_notes;
+        }
 
         if ( $include_text ) {
             $formatted_transcript = $this->format_transcript_html( $this->strip_topic_markers( $script ) );

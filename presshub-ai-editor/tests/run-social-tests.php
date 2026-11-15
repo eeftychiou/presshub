@@ -1975,7 +1975,7 @@ echo "\n--- TikTok Shorts ---\n";
 
 assert_false( PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled(), 'TikTok shorts are off by default' );
 assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_shorts_count(), 'Shorts per podcast defaults to 3' );
-assert_equals( 180, PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes(), 'Shorts spacing defaults to 180 minutes' );
+assert_equals( 90, PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes(), 'Shorts spacing defaults to 90 minutes (#189)' );
 assert_equals( 130, PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words(), 'Short script word cap defaults to 130' );
 assert_equals( 5, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_count( 12 ), 'Shorts count clamps to 5' );
 assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_count( 0 ), 'Shorts count clamps to 1' );
@@ -1984,6 +1984,29 @@ assert_equals( 60, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_max_
 assert_equals( 3, PressHub_Social_Settings_Storage::get_tiktok_shorts_images(), 'Story images per short default to 3' );
 assert_equals( 4, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( 9 ), 'Story images per short clamp to 4' );
 assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_tiktok_shorts_images( -1 ), 'Story images per short clamp to 0' );
+
+// #189: a new podcast cancels the earlier edition's unposted shorts.
+PressHub_Social_Queue::reset_memory_store();
+$sup_ids = [];
+foreach ( PressHub_Social_TikTok_Shorts::build_jobs( 722, 'automation', null, null, time() - 60 ) as $sup_job ) {
+    $sup_ids[] = PressHub_Social_Queue::enqueue( $sup_job );
+}
+$sup_test  = PressHub_Social_TikTok_Shorts::build_jobs( 700, 'automation', null, null, time(), true )[0];
+$sup_test_id = PressHub_Social_Queue::enqueue( $sup_test );
+$sup_plain = PressHub_Social_Queue::enqueue( [ 'post_id' => 722, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Full podcast' ] );
+PressHub_Social_Queue::mark_processing( (int) $sup_ids[0] );
+$sup_cancelled = PressHub_Social_TikTok_Shorts::cancel_superseded( 730 );
+assert_equals( [ (int) $sup_ids[2], (int) $sup_ids[1] ], $sup_cancelled, 'A newer podcast cancels the pending shorts of the earlier one (#189)' );
+assert_equals( 'processing', PressHub_Social_Queue::get_job( (int) $sup_ids[0] )['status'], 'A short the worker already claimed is left alone (#189)' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( (int) $sup_test_id )['status'], 'Test-render shorts are never cancelled (#189)' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( (int) $sup_plain )['status'], 'Non-short TikTok jobs are never cancelled (#189)' );
+assert_equals( [], PressHub_Social_TikTok_Shorts::cancel_superseded( 722 ), 'A post never cancels its own shorts (#189)' );
+add_filter( 'presshub_social_tiktok_shorts_cancel_superseded', '__return_false' );
+PressHub_Social_Queue::reset_memory_store();
+$sup_off = PressHub_Social_Queue::enqueue( PressHub_Social_TikTok_Shorts::build_jobs( 722, 'automation', null, null, time() )[0] );
+assert_equals( [], PressHub_Social_TikTok_Shorts::cancel_superseded( 730 ), 'The filter turns superseded-short cancelling off (#189)' );
+remove_all_filters( 'presshub_social_tiktok_shorts_cancel_superseded' );
+PressHub_Social_Queue::reset_memory_store();
 $shorts_prompt = PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt();
 assert_true( str_contains( $shorts_prompt, '{script}' ) && str_contains( $shorts_prompt, '"shorts"' ), 'Shorts prompt is seeded from social_tiktok_shorts.txt' );
 assert_true( str_contains( $shorts_prompt, '"visuals"' ) && str_contains( $shorts_prompt, '{image_count}' ), 'Shorts prompt asks for story image descriptions' );
@@ -2144,7 +2167,7 @@ $short_job_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ]
 assert_equals( 3, count( $short_job_ids ), 'With shorts on a podcast post gets one TikTok job per short' );
 $short_jobs = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), $short_job_ids );
 assert_true( str_starts_with( (string) $short_jobs[0]['post_copy'], PressHub_Social_TikTok_Shorts::PLACEHOLDER_PREFIX ), 'Short jobs start with placeholder copy' );
-assert_equals( 180 * 60, strtotime( $short_jobs[1]['scheduled_at'] ) - strtotime( $short_jobs[0]['scheduled_at'] ), 'Shorts are scheduled 180 minutes apart' );
+assert_equals( 90 * 60, strtotime( $short_jobs[1]['scheduled_at'] ) - strtotime( $short_jobs[0]['scheduled_at'] ), 'Shorts are scheduled 90 minutes apart by default (#189)' );
 assert_equals( 2, json_decode( (string) $short_jobs[2]['metadata'], true )['tiktok_short']['index'] ?? null, 'Third short job carries index 2' );
 assert_equals( 0, count( $shorts_ai_calls ), 'No shorts LLM call at enqueue time' );
 
