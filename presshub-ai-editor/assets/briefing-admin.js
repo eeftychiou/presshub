@@ -573,8 +573,10 @@
                     row.append(chip);
                 }
                 if (event.completed_at) {
-                    var chip2 = $('<span class="presshub-timestamp-chip">✅ Completed: ' + escapeHtml(event.completed_at) + '</span>');
-                    chip2.attr('title', 'Pipeline stage completion timestamp');
+                    // Issue #154: a failed last run says so instead of "Completed".
+                    var failed = event.status === 'error';
+                    var chip2 = $('<span class="presshub-timestamp-chip">' + (failed ? '❌ Failed: ' : '✅ Completed: ') + escapeHtml(event.completed_at) + '</span>');
+                    chip2.attr('title', failed ? 'Pipeline stage failure timestamp' : 'Pipeline stage completion timestamp');
                     row.append(chip2);
                 }
                 if (event.duration_ms && event.duration_ms > 0) {

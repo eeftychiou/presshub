@@ -113,9 +113,9 @@ class BriefingStatusStageEventsTest {
             1
         );
 
-        // Audio (podcast_audio): 112s.
+        // Audio (podcast_audio_run, Issue #154): 112s.
         PressHub_AI_Token_Logger::log_tts_request(
-            'podcast_audio',
+            'podcast_audio_run',
             'gemini',
             'Kore+Fenrir',
             4000,
@@ -160,7 +160,7 @@ class BriefingStatusStageEventsTest {
         $wpdb->auto_increments['wp_presshub_ai_token_logs'] = 0;
         // First failed attempt.
         PressHub_AI_Token_Logger::log_tts_request(
-            'podcast_audio',
+            'podcast_audio_run',
             'gemini',
             'old_voice',
             1000,
@@ -172,7 +172,7 @@ class BriefingStatusStageEventsTest {
         );
         // Second successful attempt with new started_at metadata.
         PressHub_AI_Token_Logger::log_tts_request(
-            'podcast_audio',
+            'podcast_audio_run',
             'gemini',
             'Kore',
             4000,

@@ -449,12 +449,15 @@ class PressHub_AI_Briefing_Admin {
      *   audio:     array{attempted_at:string,completed_at:string,status:string,duration_ms:int,error_message:string}
      * } Per-stage execution event dictionary.
      */
-    public static function collect_stage_execution_events( string $date ): array {
+    public static function collect_stage_execution_events( string $date, string $edition = 'morning' ): array {
+        $edition = ( 'noon' === $edition ) ? 'noon' : 'morning';
+        // Issue #154: audio reads the run-level row written by synthesize_podcast(),
+        // not the per-turn podcast_audio rows.
         $stages = [
             'harvest'  => 'scrape_harvest',
             'curation' => 'briefing_curation',
             'script'   => 'podcast_script',
-            'audio'    => 'podcast_audio',
+            'audio'    => 'podcast_audio_run',
         ];
 
         $empty = [
@@ -482,19 +485,26 @@ class PressHub_AI_Briefing_Admin {
                 'per_page'   => 25, // bounded — one log row per stage attempt.
             ] );
             $items = is_array( $logs['items'] ?? null ) ? $logs['items'] : [];
+            // Issue #154: keep only this edition's rows. Rows from before the
+            // edition was recorded count as morning.
+            $items = array_values( array_filter( $items, static function ( $candidate ) use ( $edition ) {
+                return self::stage_row_edition( $candidate ) === $edition;
+            } ) );
             if ( empty( $items ) ) {
                 $out[ $stage_key ] = $empty;
                 continue;
             }
 
             // Prefer the most recent successful log; fall back to the most
-            // recent log of any status. This mirrors a typical "what's the
-            // last state of this stage" mental model.
+            // recent log of any status. The audio card shows the latest run as
+            // it is, so a failed last run reads as failed (Issue #154).
             $row  = null;
-            foreach ( $items as $candidate ) {
-                if ( isset( $candidate['status'] ) && 'success' === $candidate['status'] ) {
-                    $row = $candidate;
-                    break;
+            if ( 'audio' !== $stage_key ) {
+                foreach ( $items as $candidate ) {
+                    if ( isset( $candidate['status'] ) && 'success' === $candidate['status'] ) {
+                        $row = $candidate;
+                        break;
+                    }
                 }
             }
             if ( null === $row ) {
@@ -528,6 +538,15 @@ class PressHub_AI_Briefing_Admin {
         }
 
         return $out;
+    }
+
+    /** Edition recorded in a token-log row's metadata (Issue #154); 'morning' when absent. */
+    public static function stage_row_edition( $row ): string {
+        $meta = $row['metadata'] ?? null;
+        if ( is_string( $meta ) && '' !== $meta ) {
+            $meta = json_decode( $meta, true );
+        }
+        return ( is_array( $meta ) && 'noon' === ( $meta['edition'] ?? '' ) ) ? 'noon' : 'morning';
     }
 
     /**
@@ -719,7 +738,7 @@ class PressHub_AI_Briefing_Admin {
         // token logs / post meta on every AJAX refresh. All four sub-keys are
         // safe to expose and never leak API keys (verified by integration
         // tests in BriefingStatusStageEventsTest).
-        $stage_events = self::collect_stage_execution_events( $date );
+        $stage_events = self::collect_stage_execution_events( $date, $edition );
         $text_source_context = $text_created
             ? ( class_exists( 'PressHub_AI_News_Curator' )
                 ? PressHub_AI_News_Curator::get_source_context( (int) $text_post_id )
@@ -1545,7 +1564,11 @@ class PressHub_AI_Briefing_Admin {
                                     <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $au_attempted ) ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( '' !== $au_completed ) : ?>
+                                    <?php if ( 'error' === $au_status ) : // Issue #154: a failed last run says so. ?>
+                                    <span class="presshub-timestamp-chip">❌ <?php echo esc_html( sprintf( __( 'Failed: %s', 'presshub-ai-editor' ), $au_completed ) ); ?></span>
+                                    <?php else : ?>
                                     <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $au_completed ) ); ?></span>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                                 <?php if ( $au_duration_ms > 0 ) : ?>
                                     <span class="presshub-stat-pill">⏳ <?php

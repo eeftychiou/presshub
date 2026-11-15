@@ -1584,12 +1584,69 @@ class PressHub_AI_Audio_Synthesizer {
     public function synthesize_podcast( string $date = '', ?string $custom_script = '', $edition_or_client = 'morning', ?PressHub_AI_API_Client $api_client = null, int $existing_post_id = 0 ) {
         // Issue #140: synthesize_podcast_run() opens the TTS call session (current parent
         // generation record) once the script is resolved; it is always closed here.
+        // Issue #154: one run-level row per synthesis (start, end, status, edition,
+        // turns), so the Briefing Hub audio card shows the whole run rather than
+        // the last TTS turn. The per-turn podcast_audio rows still feed TTS stats.
+        $run_started    = microtime( true );
+        $run_started_at = function_exists( 'current_time' ) ? (string) current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+        $result         = null;
         try {
-            return $this->synthesize_podcast_run( $date, $custom_script, $edition_or_client, $api_client, $existing_post_id );
+            $result = $this->synthesize_podcast_run( $date, $custom_script, $edition_or_client, $api_client, $existing_post_id );
+            return $result;
         } finally {
             if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
                 PressHub_AI_TTS_Call_Recorder::end_session();
             }
+            self::log_audio_run( $result, $date, $custom_script, $edition_or_client, $run_started, $run_started_at );
+        }
+    }
+
+    /**
+     * Edition a synthesize_podcast() call is for (same argument shuffling as the run).
+     */
+    public static function resolve_run_edition( ?string $custom_script, $edition_or_client ): string {
+        if ( in_array( $custom_script, [ 'morning', 'noon' ], true ) && ( 'morning' === $edition_or_client || $edition_or_client instanceof PressHub_AI_API_Client || null === $edition_or_client ) ) {
+            return $custom_script;
+        }
+        return ( is_string( $edition_or_client ) && 'noon' === $edition_or_client ) ? 'noon' : 'morning';
+    }
+
+    /**
+     * Write the run-level podcast_audio_run token-log row (Issue #154). Never throws.
+     *
+     * @param mixed $result Return of synthesize_podcast_run(): array, WP_Error, or null when it threw.
+     */
+    private static function log_audio_run( $result, string $date, ?string $custom_script, $edition_or_client, float $started, string $started_at ): void {
+        if ( ! class_exists( 'PressHub_AI_Token_Logger' ) ) {
+            return;
+        }
+        try {
+            $is_ok    = is_array( $result ) && ! empty( $result['success'] );
+            $error    = $is_ok ? null : ( is_wp_error( $result ) ? $result->get_error_message() : __( 'Synthesis stopped before it finished.', 'presshub-ai-editor' ) );
+            $edition  = $is_ok && ! empty( $result['edition'] ) ? (string) $result['edition'] : self::resolve_run_edition( $custom_script, $edition_or_client );
+            $run_date = $is_ok && ! empty( $result['date'] ) ? (string) $result['date'] : ( '' !== $date ? $date : ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d' ) : gmdate( 'Y-m-d' ) ) );
+            $meta     = [
+                'edition'    => $edition,
+                'date'       => $run_date,
+                'started_at' => $started_at,
+                'turns'      => $is_ok ? (int) ( $result['turns_count'] ?? 0 ) : 0,
+                'post_id'    => $is_ok ? (int) ( $result['post_id'] ?? 0 ) : 0,
+            ];
+            if ( ! $is_ok && is_wp_error( $result ) ) {
+                $meta['error_code'] = (string) $result->get_error_code();
+            }
+            PressHub_AI_Token_Logger::log_tts_request(
+                'podcast_audio_run',
+                $is_ok ? (string) ( $result['engine'] ?? '' ) : '',
+                'run',
+                0, // characters are counted on the per-turn rows; do not double count.
+                (int) round( ( microtime( true ) - $started ) * 1000 ),
+                $is_ok ? 'success' : 'error',
+                $error,
+                $meta
+            );
+        } catch ( \Throwable $e ) {
+            // Logging must never break synthesis.
         }
     }
 
