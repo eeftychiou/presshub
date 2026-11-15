@@ -57,6 +57,23 @@ class PressHub_AI_Audio_Synthesizer {
     public $last_turn_was_cache_hit = false;
 
     /**
+     * Issue #187: microtime() after which no new TTS call is started (0 = no limit).
+     * Cached turns are still returned, so a continuation run resumes quickly.
+     *
+     * @var float
+     */
+    private $live_call_deadline = 0.0;
+
+    /**
+     * Stop starting new TTS calls after $deadline (a microtime(true) value; 0 clears it).
+     * synthesize_turn() then returns a `synthesis_time_budget` WP_Error, and the
+     * caller resumes in a fresh request from the turn cache.
+     */
+    public function set_live_call_deadline( float $deadline ): void {
+        $this->live_call_deadline = max( 0.0, $deadline );
+    }
+
+    /**
      * Constructor registers excerpt filter hooks.
      */
     public function __construct() {
@@ -791,6 +808,14 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         $this->last_turn_was_cache_hit = false;
+
+        if ( $this->live_call_deadline > 0 && microtime( true ) >= $this->live_call_deadline ) {
+            return new WP_Error(
+                'synthesis_time_budget',
+                __( 'Stopped before the request time limit; the next step resumes from the turn cache.', 'presshub-ai-editor' )
+            );
+        }
+
         $start_time = microtime( true );
 
         if ( 'google_cloud' === $engine ) {
