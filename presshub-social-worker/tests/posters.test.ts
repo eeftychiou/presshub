@@ -467,6 +467,75 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     }
   });
 
+  test('postInstagram opens the composer through the "Post" entry of the current Create menu', async () => {
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          const page = await context.newPage();
+          const html = `<html><body>
+            <a href="#" role="link" id="create"><svg aria-label="Create"></svg><span>Create</span></a>
+            <div id="menu" style="display:none">
+              <a href="#" id="post-entry" onclick="window.__postClicked = true; document.getElementById('composer').innerHTML = '<input type=file accept=video/mp4>'; return false;"><svg aria-label="Post"></svg><span>Post</span></a>
+              <a href="#"><svg aria-label="Live video"></svg><span>Live video</span></a>
+            </div>
+            <div id="composer"></div>
+            <script>document.getElementById('create').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('menu').style.display = 'block'; });</script>
+            <button>Next</button>
+            <div aria-label="Write a caption" contenteditable="true"></div>
+            <button>Share</button>
+          </body></html>`;
+          page.goto = async () => {
+            await page.setContent(html);
+            return null as any;
+          };
+          (mockSession as any).__page = page;
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    const res = await postInstagram({
+      platform: 'instagram',
+      copy: 'Instagram caption via Post entry',
+      mediaPath: dummyImagePath,
+      browserSession: mockSession
+    });
+
+    expect(res.success).toBe(true);
+  });
+
+  test('postInstagram fails clearly when the composer never opens', async () => {
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          const page = await context.newPage();
+          const html = `<html><body><a href="#"><svg aria-label="Live video"></svg>Live video</a></body></html>`;
+          page.goto = async () => {
+            await page.setContent(html);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    await expect(
+      postInstagram({
+        platform: 'instagram',
+        copy: 'No composer',
+        mediaPath: dummyImagePath,
+        timeoutMs: 2000,
+        browserSession: mockSession
+      })
+    ).rejects.toThrow(/composer did not open/);
+  });
+
   test('postInstagram throws when Share button is missing (Zero-Silent-Fallback)', async () => {
     const mockSession: ChromeConnection = {
       browser,
