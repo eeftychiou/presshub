@@ -418,6 +418,10 @@ class PressHub_AI_Memory_Digest_Builder {
         }
 
         $upsert_res['generation_record_id'] = $last_rec_id;
+        // Issue #197: stakeholder extraction (and other listeners) run off this.
+        if ( function_exists( 'do_action' ) ) {
+            do_action( 'presshub_ai_memory_digest_built', $post_id, (int) ( $upsert_res['id'] ?? 0 ) );
+        }
         return $upsert_res;
     }
 

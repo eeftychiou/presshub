@@ -3124,6 +3124,11 @@ class PressHub_AI_API_Client {
         if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
             $sys_prompt = PressHub_AI_Editorial_Agenda::apply( $sys_prompt, $this->get_action() );
         }
+        // Issue #197: fiches of the people named in the material (after the agenda,
+        // so the recorder can rebuild the prompt as sent from both).
+        if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
+            $sys_prompt = PressHub_AI_Stakeholders::apply( $sys_prompt, $user_prompt, $this->get_action() );
+        }
 
         if ( $this->provider === 'anthropic' ) {
             $result = $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature, $metadata );

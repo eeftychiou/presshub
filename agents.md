@@ -314,6 +314,10 @@ php dev-env/scripts/reset-db.php
    - New editorial actions need a budget in `PressHub_AI_Editorial_Agenda::BUDGETS` (or the `presshub_ai_editorial_agenda_budgets` filter). Factual extraction calls (memory digests, classification, QA, file reading) must stay unlisted.
    - Suggestions built from weekly rollups stay pending until an editor accepts them. Never apply one automatically.
 
+11. **Stakeholder fiches (Issue #197)**:
+   - People fiches reach the models only through `PressHub_AI_Stakeholders::apply()` in `call_provider()`, after the agenda. Do not inject them per caller. Only actions in `PressHub_AI_Stakeholders::BUDGETS` get them.
+   - Automatic updates must respect the editor: never change a locked fiche, never overwrite name, role or party on an edited one, never send an excluded one.
+
 ## 🔒 Security & Hardening Standards
 
 All code contributions must strictly adhere to WordPress security best practices:
