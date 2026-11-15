@@ -73,6 +73,9 @@ se_check( 'legacy row edition', 'morning' === $B::stage_row_edition( [ 'metadata
 // Status payload passes the edition through.
 $src = file_get_contents( dirname( __DIR__ ) . '/includes/class-briefing-admin.php' );
 se_check( 'wiring: status uses the edition', false !== strpos( $src, 'self::collect_stage_execution_events( $date, $edition )' ) );
+se_check( 'wiring: stage lookup wide enough for both editions', false !== strpos( $src, "'per_page'   => 100," ) );
+$syn_src = file_get_contents( dirname( __DIR__ ) . '/includes/class-audio-synthesizer.php' );
+se_check( 'wiring: an exception during synthesis is logged with its message', false !== strpos( $syn_src, "\$result = new WP_Error( 'synthesis_exception', \$e->getMessage() );" ) );
 
 // synthesize_podcast() writes a run row even when it fails early (no script).
 $wpdb->tables['wp_presshub_ai_token_logs']          = [];

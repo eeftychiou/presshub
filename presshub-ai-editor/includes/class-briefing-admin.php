@@ -482,7 +482,7 @@ class PressHub_AI_Briefing_Admin {
                 'end_date'   => $date,
                 'orderby'    => 'id',
                 'order'      => 'DESC',
-                'per_page'   => 25, // bounded — one log row per stage attempt.
+                'per_page'   => 100, // bounded; wide enough for both editions' retries on one day.
             ] );
             $items = is_array( $logs['items'] ?? null ) ? $logs['items'] : [];
             // Issue #154: keep only this edition's rows. Rows from before the
