@@ -486,6 +486,7 @@ class PressHub_AI_Generation_Inspector {
             'podcast_script' => __( 'Podcast script', 'presshub-ai-editor' ),
             'memory_digest'  => __( 'Memory digest', 'presshub-ai-editor' ),
             'memory_rollup'  => __( 'Memory rollup', 'presshub-ai-editor' ),
+            'memory_stakeholders' => __( 'Stakeholder fiches', 'presshub-ai-editor' ),
             'coauthor_draft' => __( 'Co-author draft', 'presshub-ai-editor' ),
             'scorecard'      => __( 'Editorial scorecard', 'presshub-ai-editor' ),
             'copilot_chat'   => __( 'Copilot chat', 'presshub-ai-editor' ),

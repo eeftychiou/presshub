@@ -122,6 +122,7 @@ $presshub_ai_options = [
     'presshub_ai_editorial_agenda',
     'presshub_ai_editorial_agenda_history',
     'presshub_ai_editorial_agenda_suggestion',
+    'presshub_ai_stakeholders',
 ];
 
 foreach ( $presshub_ai_options as $presshub_ai_option ) {

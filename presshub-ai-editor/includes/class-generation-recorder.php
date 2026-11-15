@@ -47,6 +47,7 @@ class PressHub_AI_Generation_Recorder {
         'podcast_script',
         'memory_digest',
         'memory_rollup',
+        'memory_stakeholders',
         'coauthor_draft',
         'scorecard',
         'copilot_chat',
@@ -330,6 +331,9 @@ class PressHub_AI_Generation_Recorder {
         if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
             PressHub_AI_Editorial_Agenda::clear_last_applied();
         }
+        if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
+            PressHub_AI_Stakeholders::clear_last_applied();
+        }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'reset_last_llm_request' ) ) {
             PressHub_AI_Token_Logger::reset_last_llm_request();
         }
@@ -369,6 +373,18 @@ class PressHub_AI_Generation_Recorder {
                     }
                 }
                 PressHub_AI_Editorial_Agenda::clear_last_applied();
+            }
+            // Issue #197: which stakeholder fiches went in (applied after the agenda).
+            if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
+                $fiches = PressHub_AI_Stakeholders::last_applied();
+                if ( is_array( $fiches ) ) {
+                    $config['stakeholders']       = array_values( (array) $fiches['people'] );
+                    $config['stakeholders_chars'] = (int) $fiches['chars'];
+                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $fiches['original_hash'] ) {
+                        $sys_prompt = $fiches['prompt'];
+                    }
+                }
+                PressHub_AI_Stakeholders::clear_last_applied();
             }
             $user_id     = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 );
             if ( $user_id > 0 ) {
