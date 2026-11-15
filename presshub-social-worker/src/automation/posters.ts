@@ -1507,20 +1507,32 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     }
 
     const mediaSize = fs.statSync(options.mediaPath).size;
-    WorkerLogger.info('Instagram Automation', `Uploading media attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
+    const isVideo = /\.(mp4|mov|webm|m4v)$/i.test(options.mediaPath);
+    WorkerLogger.info('Instagram Automation', `Uploading ${isVideo ? 'video/Reel' : 'image'} attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
     const fileInput = page.locator('input[type="file"]').first();
     await fileInput.waitFor({ state: 'attached', timeout });
     await fileInput.setInputFiles(path.resolve(options.mediaPath));
     await page.waitForTimeout(2000);
 
+    // Instagram shows an informational "Video posts are now shared as reels" modal with an "OK" button on video uploads.
+    if (isVideo) {
+      const reelsOk = page.locator('button:has-text("OK"), div[role="button"]:has-text("OK")').first();
+      if ((await reelsOk.count()) > 0 && (await reelsOk.isVisible().catch(() => false))) {
+        WorkerLogger.debug('Instagram Automation', 'Dismissing "Video posts are now shared as reels" dialog...');
+        await reelsOk.click();
+        await page.waitForTimeout(1000);
+      }
+    }
+
     WorkerLogger.debug('Instagram Automation', 'Advancing Next buttons...');
     const nextButton = page.locator(
       'button:has-text("Next"), div[role="button"]:has-text("Next")'
     ).first();
+    await nextButton.waitFor({ state: 'visible', timeout: isVideo ? 20000 : 10000 }).catch(() => {});
     if ((await nextButton.count()) > 0) {
       await nextButton.click();
       await page.waitForTimeout(1000);
-      if ((await nextButton.count()) > 0) {
+      if ((await nextButton.count()) > 0 && (await nextButton.isVisible().catch(() => false))) {
         await nextButton.click();
         await page.waitForTimeout(1000);
       }
@@ -1543,7 +1555,10 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     if ((await shareButton.count()) > 0) {
       await shareButton.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
       await shareButton.click();
-      await page.waitForTimeout(3000);
+      const sharedText = page.locator('text=/Your (reel|post) has been shared/i').first();
+      await sharedText.waitFor({ state: 'visible', timeout: isVideo ? 60000 : 15000 }).catch(async () => {
+        await page.waitForTimeout(isVideo ? 10000 : 3000);
+      });
     }
 
     const generatedId = `ig-${Date.now()}`;

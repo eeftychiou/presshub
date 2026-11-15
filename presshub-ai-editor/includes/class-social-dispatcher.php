@@ -162,17 +162,17 @@ class PressHub_Social_Dispatcher {
                 ? PressHub_Social_Settings_Storage::get_platform_engine( $platform )
                 : 'api';
 
-            // Podcast posts can go to TikTok as several short videos, one per top story.
+            // Podcast posts can go to TikTok and Instagram as several short videos, one per top story.
             // Their copy is written with the short when the worker claims the job.
-            if ( 'tiktok' === $platform && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine ) ) {
-                $short_jobs = PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ) );
+            if ( in_array( $platform, [ 'tiktok', 'instagram' ], true ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, $platform ) ) {
+                $short_jobs = PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ), false, $platform );
                 foreach ( $short_jobs as $short_job ) {
                     $job_id = PressHub_Social_Queue::enqueue( $short_job );
                     if ( is_wp_error( $job_id ) ) {
-                        PressHub_Social_Logger::error( sprintf( 'Failed to enqueue TikTok short for post #%d: %s', $post_id, $job_id->get_error_message() ) );
+                        PressHub_Social_Logger::error( sprintf( 'Failed to enqueue %s short for post #%d: %s', $platform, $post_id, $job_id->get_error_message() ) );
                     } elseif ( $job_id > 0 ) {
                         $job_ids[] = $job_id;
-                        PressHub_Social_Logger::info( sprintf( 'Enqueued TikTok short job #%d for post #%d (scheduled: %s)', $job_id, $post_id, $short_job['scheduled_at'] ) );
+                        PressHub_Social_Logger::info( sprintf( 'Enqueued %s short job #%d for post #%d (scheduled: %s)', $platform, $job_id, $post_id, $short_job['scheduled_at'] ) );
                     }
                 }
                 PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );

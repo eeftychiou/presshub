@@ -247,6 +247,13 @@ class PressHub_Social_Settings_Storage {
             'default'           => false,
         ] );
 
+        // Instagram Reels shorts (reuse the same generated shorts for Instagram)
+        register_setting( self::OPTION_GROUP, 'presshub_social_instagram_shorts_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_instagram_shorts_enabled' ],
+            'default'           => false,
+        ] );
+
         register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_count', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_count' ],
@@ -1209,6 +1216,18 @@ class PressHub_Social_Settings_Storage {
         // A save from another settings tab has no checkbox and no presence marker: keep the stored value.
         if ( null === $value && empty( $_POST['presshub_social_tiktok_shorts_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
             return self::get_tiktok_shorts_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Whether podcast posts also go to Instagram as Reels (one short per top story, default off). */
+    public static function get_instagram_shorts_enabled(): bool {
+        return in_array( get_option( 'presshub_social_instagram_shorts_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_instagram_shorts_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_instagram_shorts_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_instagram_shorts_enabled();
         }
         return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
     }

@@ -129,16 +129,20 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
-     * Whether the TikTok job for this post should be split into shorts. With shorts enabled
+     * Whether the TikTok/Instagram job for this post should be split into shorts. With shorts enabled
      * but an unsupported engine, the full podcast is posted and a WARNING says why.
      */
-    public static function should_split( int $post_id, string $engine ): bool {
-        if ( ! PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() || ! self::is_podcast_post( $post_id ) ) {
+    public static function should_split( int $post_id, string $engine, string $platform = 'tiktok' ): bool {
+        $enabled = 'instagram' === $platform
+            ? PressHub_Social_Settings_Storage::get_instagram_shorts_enabled()
+            : PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
+        if ( ! $enabled || ! self::is_podcast_post( $post_id ) ) {
             return false;
         }
         if ( ! self::engine_supported( $engine ) ) {
             PressHub_Social_Logger::warning( sprintf(
-                'TikTok shorts are enabled but post #%d is posted as the full podcast: shorts need the automation engine in Pull Mode (engine: %s, worker mode: %s).',
+                '%s shorts are enabled but post #%d is posted as the full podcast: shorts need the automation engine in Pull Mode (engine: %s, worker mode: %s).',
+                'instagram' === $platform ? 'Instagram' : 'TikTok',
                 $post_id,
                 $engine,
                 PressHub_Social_Settings_Storage::get_worker_mode()
@@ -161,14 +165,14 @@ class PressHub_Social_TikTok_Shorts {
      *
      * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().
      */
-    public static function build_jobs( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time, bool $test = false ): array {
+    public static function build_jobs( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time, bool $test = false, string $platform = 'tiktok' ): array {
         $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
         $spacing = $test ? 0 : PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
         $jobs    = [];
         for ( $i = 0; $i < $count; $i++ ) {
             $jobs[] = [
                 'post_id'      => $post_id,
-                'platform'     => 'tiktok',
+                'platform'     => $platform,
                 'engine'       => $engine,
                 'post_copy'    => self::placeholder_copy( $i, $count ),
                 'media_url'    => $media_url,
@@ -236,7 +240,7 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     public static function is_short_job( array $job ): bool {
-        if ( 'tiktok' !== ( $job['platform'] ?? '' ) ) {
+        if ( ! in_array( $job['platform'] ?? '', [ 'tiktok', 'instagram' ], true ) ) {
             return false;
         }
         $meta = self::decode_metadata( $job['metadata'] ?? null );
@@ -389,6 +393,22 @@ class PressHub_Social_TikTok_Shorts {
             $date = gmdate( 'Y-m-d' );
         }
 
+        $audio_by_index  = [];
+        $images_by_index = [];
+        foreach ( $all as $existing ) {
+            $em   = self::decode_metadata( $existing['metadata'] ?? null )[ self::JOB_META_KEY ] ?? [];
+            $eidx = isset( $em['index'] ) ? (int) $em['index'] : -1;
+            if ( $eidx < 0 ) {
+                continue;
+            }
+            if ( ! empty( $em['audio']['audio_url'] ) && ! empty( $em['audio']['segments'] ) && ! isset( $audio_by_index[ $eidx ] ) ) {
+                $audio_by_index[ $eidx ] = $em['audio'];
+            }
+            if ( is_array( $em['images'] ?? null ) && ! empty( $em['images_hash'] ) && ! isset( $images_by_index[ $eidx ] ) ) {
+                $images_by_index[ $eidx ] = [ 'hash' => (string) $em['images_hash'], 'images' => $em['images'] ];
+            }
+        }
+
         $failures = [];
         foreach ( $pending as $job ) {
             $job_id   = (int) $job['id'];
@@ -402,13 +422,25 @@ class PressHub_Social_TikTok_Shorts {
                 continue;
             }
 
-            $audio = self::get_audio( $job, $short, $date );
-            if ( is_wp_error( $audio ) ) {
-                $failures[] = [ $job, $audio ];
-                continue;
+            $expected_audio_hash = self::audio_hash( $short['script'] );
+            if ( isset( $audio_by_index[ $index ] ) && ( $audio_by_index[ $index ]['hash'] ?? '' ) === $expected_audio_hash ) {
+                $audio = $audio_by_index[ $index ];
+            } else {
+                $audio = self::get_audio( $job, $short, $date );
+                if ( is_wp_error( $audio ) ) {
+                    $failures[] = [ $job, $audio ];
+                    continue;
+                }
+                $audio_by_index[ $index ] = $audio;
             }
 
-            $images = self::get_images( $job, $short, $post_id );
+            $expected_images_hash = self::images_hash( $short );
+            if ( isset( $images_by_index[ $index ] ) && $images_by_index[ $index ]['hash'] === $expected_images_hash ) {
+                $images = $images_by_index[ $index ];
+            } else {
+                $images = self::get_images( $job, $short, $post_id );
+                $images_by_index[ $index ] = $images;
+            }
 
             $metadata[ self::JOB_META_KEY ] = array_merge( $metadata[ self::JOB_META_KEY ], [
                 'total'       => count( $plan['shorts'] ),
@@ -823,11 +855,18 @@ class PressHub_Social_TikTok_Shorts {
      *
      * @return array{hash:string,images:array<int,array{url:string,id:int,prompt:string}>}
      */
+    private static function images_hash( array $short ): string {
+        $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
+        $visuals = array_slice( (array) ( $short['visuals'] ?? [] ), 0, $count );
+        $style   = self::image_style_for( (string) ( $short['mood'] ?? '' ) );
+        return hash( 'sha256', $count . '|' . $style . '|' . implode( "\n", $visuals ) );
+    }
+
     private static function get_images( array $job, array $short, int $post_id ): array {
         $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
         $visuals = array_slice( (array) ( $short['visuals'] ?? [] ), 0, $count );
         $style   = self::image_style_for( (string) ( $short['mood'] ?? '' ) );
-        $hash    = hash( 'sha256', $count . '|' . $style . '|' . implode( "\n", $visuals ) );
+        $hash    = self::images_hash( $short );
         $job_id  = (int) ( $job['id'] ?? 0 );
 
         $meta = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? [];

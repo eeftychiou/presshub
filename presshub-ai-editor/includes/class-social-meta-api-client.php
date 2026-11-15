@@ -202,6 +202,14 @@ class PressHub_Social_Meta_API_Client {
 
         $creation_id = $data1['id'];
 
+        // Reels (video) containers are processed asynchronously by Meta; poll status before publishing.
+        if ( 'video' === $media_type ) {
+            $ready = self::wait_for_instagram_container( $version, (string) $creation_id, $token );
+            if ( is_wp_error( $ready ) ) {
+                return $ready;
+            }
+        }
+
         // Step 2: Publish media container
         $publish_endpoint = "https://graph.facebook.com/{$version}/{$ig_user_id}/media_publish";
         $response2        = wp_remote_post( $publish_endpoint, [
@@ -238,6 +246,59 @@ class PressHub_Social_Meta_API_Client {
                 'publish_id'  => $media_id,
             ],
         ];
+    }
+
+    /**
+     * Poll an Instagram Graph API media container until it finishes processing (required for REELS).
+     *
+     * @param string $version
+     * @param string $creation_id
+     * @param string $token
+     * @param int    $max_attempts
+     * @param int    $sleep_seconds
+     * @return true|WP_Error
+     */
+    public static function wait_for_instagram_container(
+        string $version,
+        string $creation_id,
+        string $token,
+        int $max_attempts = 20,
+        int $sleep_seconds = 3
+    ): bool|WP_Error {
+        $status_url = "https://graph.facebook.com/{$version}/" . rawurlencode( $creation_id )
+            . '?fields=status_code,status&access_token=' . rawurlencode( $token );
+
+        for ( $attempt = 0; $attempt < $max_attempts; $attempt++ ) {
+            $res = wp_remote_get( $status_url, [
+                'timeout'   => 15,
+                'sslverify' => true,
+            ] );
+            if ( is_wp_error( $res ) ) {
+                return $res;
+            }
+            $data        = json_decode( wp_remote_retrieve_body( $res ), true );
+            $status_code = strtoupper( (string) ( $data['status_code'] ?? '' ) );
+
+            if ( 'FINISHED' === $status_code || 'PUBLISHED' === $status_code ) {
+                return true;
+            }
+            if ( 'ERROR' === $status_code || 'EXPIRED' === $status_code ) {
+                $msg = (string) ( $data['status'] ?? $data['error']['message'] ?? "Instagram container processing failed ({$status_code})" );
+                if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
+                    PressHub_Social_Logger::error( 'Instagram container status error: ' . $msg );
+                }
+                return new WP_Error( 'instagram_container_processing_error', $msg );
+            }
+
+            if ( $sleep_seconds > 0 && $attempt < $max_attempts - 1 ) {
+                sleep( $sleep_seconds );
+            }
+        }
+
+        return new WP_Error(
+            'instagram_container_timeout',
+            __( 'Instagram video container did not finish processing in time.', 'presshub-social-autopost' )
+        );
     }
 
     /**
