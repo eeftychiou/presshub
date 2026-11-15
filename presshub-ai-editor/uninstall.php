@@ -119,6 +119,9 @@ $presshub_ai_options = [
     'presshub_ai_briefing_seo_enhance_enabled',
     'presshub_ai_seo_max_tags',
     'presshub_ai_seo_review_enabled',
+    'presshub_ai_editorial_agenda',
+    'presshub_ai_editorial_agenda_history',
+    'presshub_ai_editorial_agenda_suggestion',
 ];
 
 foreach ( $presshub_ai_options as $presshub_ai_option ) {

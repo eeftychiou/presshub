@@ -309,6 +309,11 @@ php dev-env/scripts/reset-db.php
 
 ---
 
+10. **Editorial Agenda (Issue #198)**:
+   - Every editorial LLM call gets the editor's agenda through the single helper `PressHub_AI_Editorial_Agenda::apply()` inside `call_provider()`. Do not inject it per caller. To control placement in a template, use the `{editorial_agenda}` placeholder.
+   - New editorial actions need a budget in `PressHub_AI_Editorial_Agenda::BUDGETS` (or the `presshub_ai_editorial_agenda_budgets` filter). Factual extraction calls (memory digests, classification, QA, file reading) must stay unlisted.
+   - Suggestions built from weekly rollups stay pending until an editor accepts them. Never apply one automatically.
+
 ## 🔒 Security & Hardening Standards
 
 All code contributions must strictly adhere to WordPress security best practices:
