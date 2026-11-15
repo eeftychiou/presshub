@@ -361,6 +361,16 @@ class PressHub_Social_Dispatcher {
             $result = PressHub_Social_Meta_API_Client::publish( $job );
         }
 
+        if ( is_wp_error( $result ) && PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $result->get_error_code() ) {
+            // Reels container still processing: check again shortly, keeping the job's retry budget.
+            $data        = $result->get_error_data();
+            $retry_after = is_array( $data ) && isset( $data['retry_after'] )
+                ? (int) $data['retry_after']
+                : PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_RECHECK_DELAY;
+            PressHub_Social_Queue::defer_job( $job_id, $retry_after, $result->get_error_message() );
+            return $result;
+        }
+
         if ( is_wp_error( $result ) ) {
             $error_message = $result->get_error_message();
             PressHub_Social_Queue::mark_failed( $job_id, $error_message, [ 'error_code' => $result->get_error_code() ] );
@@ -399,6 +409,7 @@ class PressHub_Social_Dispatcher {
             'succeeded' => 0,
             'failed'    => 0,
             'skipped'   => 0,
+            'deferred'  => 0,
             'job_ids'   => [],
         ];
 
@@ -416,6 +427,8 @@ class PressHub_Social_Dispatcher {
             $res = self::dispatch_job( $job_id );
             if ( true === $res ) {
                 $summary['succeeded']++;
+            } elseif ( is_wp_error( $res ) && PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $res->get_error_code() ) {
+                $summary['deferred']++;
             } else {
                 $summary['failed']++;
             }

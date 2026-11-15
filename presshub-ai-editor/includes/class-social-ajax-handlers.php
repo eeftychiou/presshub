@@ -299,6 +299,12 @@ class PressHub_Social_Ajax_Handlers {
                         'job_id'  => $job_id,
                     ] );
                 }
+                if ( PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $dispatch_result->get_error_code() ) {
+                    wp_send_json_success( [
+                        'message' => $dispatch_result->get_error_message(),
+                        'job_id'  => $job_id,
+                    ] );
+                }
                 wp_send_json_error( [
                     'message' => sprintf( __( 'Job retried but dispatch failed: %s', 'presshub-social-autopost' ), $dispatch_result->get_error_message() ),
                     'job_id'  => $job_id,
@@ -366,6 +372,12 @@ class PressHub_Social_Ajax_Handlers {
                 if ( 'pull_mode_queued' === $result->get_error_code() ) {
                     wp_send_json_success( [
                         'message' => __( 'Job is queued in Pull Mode and will be picked up by your local worker.', 'presshub-social-autopost' ),
+                        'job_id'  => $job_id,
+                    ] );
+                }
+                if ( PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $result->get_error_code() ) {
+                    wp_send_json_success( [
+                        'message' => $result->get_error_message(),
                         'job_id'  => $job_id,
                     ] );
                 }
