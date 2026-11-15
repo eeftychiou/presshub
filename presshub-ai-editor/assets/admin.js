@@ -1408,7 +1408,8 @@ jQuery(document).ready(function($) {
             if (!name || name === 'action' || name === 'option_page' || name === '_wp_http_referer' || name === '_wpnonce') {
                 return;
             }
-            if (id === 'presshub-ai-log-viewer' || $el.hasClass('presshub-no-dirty')) {
+            // The source modal's fields only feed the sources list (its hidden input is tracked).
+            if (id === 'presshub-ai-log-viewer' || $el.hasClass('presshub-no-dirty') || $el.closest('#presshub-source-modal').length) {
                 return;
             }
 
@@ -2474,15 +2475,10 @@ jQuery(document).ready(function($) {
     }
 
     // Issue #196: source priority, 1 (lowest) to 5 (highest), 3 = normal.
-
     function presshubSourcePriority(v) {
-
         var n = parseInt(v, 10);
-
         return isNaN(n) ? 3 : Math.max(1, Math.min(5, n));
-
     }
-
 
     function renderSourcesTable() {
         var $tbody = $('#presshub-sources-tbody');
@@ -3549,8 +3545,6 @@ jQuery(document).ready(function($) {
 
             if (res && res.success) {
                 resetPressInboxPasswordField();
-                tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
-                updateTabDirtyState(tabKey);
 
                 var successMsg = (res.data && res.data.message) ? res.data.message : __('Settings saved successfully.', 'presshub-ai-editor');
                 if (res.data && res.data.sources !== undefined) {
@@ -3569,6 +3563,10 @@ jQuery(document).ready(function($) {
                         successMsg += ' [Sources: ' + presshubSourcesState.length + ' configured]';
                     }
                 }
+                // Issue #206: take the clean baseline only after the sources input
+                // holds the server's normalized list, or the tab looks unsaved.
+                tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
+                updateTabDirtyState(tabKey);
                 var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(successMsg) + '</p></div>';
                 $tabPane.prepend(noticeHtml);
 
@@ -3735,10 +3733,6 @@ jQuery(document).ready(function($) {
 
             if (res && res.success) {
                 resetPressInboxPasswordField();
-                initTabBaselines();
-                Object.keys(tabBaselines).forEach(function(k) {
-                    updateTabDirtyState(k);
-                });
 
                 var successMsg = (res.data && res.data.message) ? res.data.message : 'Settings saved successfully.';
                 if (res.data && res.data.sources !== undefined) {
@@ -3757,6 +3751,11 @@ jQuery(document).ready(function($) {
                         successMsg += ' [Sources: ' + presshubSourcesState.length + ' configured]';
                     }
                 }
+                // Issue #206: baselines after the sources input is re-synced (see above).
+                initTabBaselines();
+                Object.keys(tabBaselines).forEach(function(k) {
+                    updateTabDirtyState(k);
+                });
                 var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(successMsg) + '</p></div>';
                 $('#presshub-ai-settings-tabs').before(noticeHtml);
 
