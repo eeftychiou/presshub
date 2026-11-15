@@ -483,6 +483,11 @@ class PressHub_AI_Memory_Rollup_Builder {
 
         PressHub_AI_Memory_Store::replace_rollup_links( $rollup_id, $digest_ids );
 
+        // Issue #198: lets the editorial agenda prepare a pending suggestion.
+        if ( function_exists( 'do_action' ) ) {
+            do_action( 'presshub_ai_memory_rollup_built', $rollup_id, $week_start );
+        }
+
         $upsert['status']               = 'built';
         $upsert['generation_record_id'] = $last_rec_id;
         $upsert['digest_ids']           = $digest_ids;

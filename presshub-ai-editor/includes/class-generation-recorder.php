@@ -327,6 +327,9 @@ class PressHub_AI_Generation_Recorder {
      * @return float Start time (microtime).
      */
     public static function begin_call(): float {
+        if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
+            PressHub_AI_Editorial_Agenda::clear_last_applied();
+        }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'reset_last_llm_request' ) ) {
             PressHub_AI_Token_Logger::reset_last_llm_request();
         }
@@ -354,6 +357,19 @@ class PressHub_AI_Generation_Recorder {
                 : [];
             $is_error    = is_wp_error( $result );
             $config      = self::build_client_config( $client, is_array( $extra['config'] ?? null ) ? $extra['config'] : [] );
+            // Issue #198: record the agenda version, and the system prompt as it was
+            // actually sent when the caller passed the prompt from before injection.
+            if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
+                $agenda = PressHub_AI_Editorial_Agenda::last_applied();
+                if ( is_array( $agenda ) ) {
+                    $config['editorial_agenda_version'] = (int) $agenda['version'];
+                    $config['editorial_agenda_chars']   = (int) $agenda['chars'];
+                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $agenda['original_hash'] ) {
+                        $sys_prompt = $agenda['prompt'];
+                    }
+                }
+                PressHub_AI_Editorial_Agenda::clear_last_applied();
+            }
             $user_id     = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 );
             if ( $user_id > 0 ) {
                 $config['user_id'] = $user_id;

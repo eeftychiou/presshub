@@ -3120,6 +3120,11 @@ class PressHub_AI_API_Client {
         $generic_record = empty( $this->suppress_provider_prompt_log ) && class_exists( 'PressHub_AI_Generation_Recorder' );
         $generic_t0     = $generic_record ? self::begin_generation_record() : 0.0;
 
+        // Issue #198: the editor's current agenda goes into every editorial call.
+        if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
+            $sys_prompt = PressHub_AI_Editorial_Agenda::apply( $sys_prompt, $this->get_action() );
+        }
+
         if ( $this->provider === 'anthropic' ) {
             $result = $this->call_anthropic( $sys_prompt, $user_prompt, $files, $temperature, $metadata );
         } elseif ( $this->provider === 'gemini' ) {
