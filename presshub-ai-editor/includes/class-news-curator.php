@@ -214,15 +214,41 @@ class PressHub_AI_News_Curator {
         $original_count = count( $articles );
         $truncated      = false;
         $truncation_suffix = __( '…[περικομμένο]', 'presshub-ai-editor' );
+        // Issue #196 - each article's source priority (1-5, 3 = normal).
+        $articles   = array_values( $articles );
+        $priorities = [];
+        foreach ( $articles as $i => $a ) {
+            $priorities[ $i ] = self::article_priority( is_array( $a ) ? $a : [] );
+        }
         if ( $original_count > $max_articles ) {
+            // Issue #196 - keep the highest-priority sources first (ties keep
+            // pool order), then render the kept ones in pool order.
+            $order = array_keys( $articles );
+            usort( $order, static function ( $a, $b ) use ( $priorities ) {
+                return ( $priorities[ $b ] <=> $priorities[ $a ] ) ?: ( $a <=> $b );
+            } );
+            $keep = array_slice( $order, 0, $max_articles );
+            sort( $keep );
+            $keep_set = array_flip( $keep );
             // Issue #131 - record what the cap drops (no effect on rendering).
-            foreach ( array_slice( $articles, $max_articles, null, true ) as $drop_idx => $dropped ) {
-                $entry           = self::breakdown_identity( $dropped, (int) $drop_idx );
-                $entry['reason'] = 'cap_articles';
+            foreach ( $articles as $drop_idx => $dropped ) {
+                if ( isset( $keep_set[ $drop_idx ] ) ) {
+                    continue;
+                }
+                $entry             = self::breakdown_identity( $dropped, (int) $drop_idx );
+                $entry['reason']   = 'cap_articles';
+                $entry['priority'] = $priorities[ $drop_idx ];
                 self::$last_breakdown_dropped_cap[] = $entry;
             }
-            $articles  = array_slice( $articles, 0, $max_articles );
-            $truncated = true;
+            $kept_articles   = [];
+            $kept_priorities = [];
+            foreach ( $keep as $k ) {
+                $kept_articles[]   = $articles[ $k ];
+                $kept_priorities[] = $priorities[ $k ];
+            }
+            $articles   = $kept_articles;
+            $priorities = $kept_priorities;
+            $truncated  = true;
         }
 
         $breakdown_sent = [];
@@ -250,12 +276,16 @@ class PressHub_AI_News_Curator {
             $entry['chars_sent']     = $art_truncated ? (int) $max_chars : $chars_original;
             $entry['chars_original'] = $chars_original;
             $entry['truncated']      = $art_truncated;
+            $entry['priority']       = $priorities[ $index ];
             $breakdown_sent[]        = $entry;
 
             $block = "### {$num}. {$title}\n";
             $block .= "**Πηγή:** {$source}";
             if ( ! empty( $url ) ) {
                 $block .= " | **URL:** {$url}";
+            }
+            if ( PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT !== $priorities[ $index ] ) {
+                $block .= ' | **' . __( 'Προτεραιότητα πηγής', 'presshub-ai-editor' ) . ':** ' . self::priority_label( $priorities[ $index ] ) . ' (' . $priorities[ $index ] . '/5)';
             }
             if ( $is_press_release ) {
                 // Press releases arrive by email: they are the sender's own
@@ -292,6 +322,13 @@ class PressHub_AI_News_Curator {
         }
 
         $rendered = implode( "\n\n---\n\n", $blocks );
+        if ( array_filter( $priorities, static function ( $p ) {
+            return PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT !== $p;
+        } ) ) {
+            // Issue #196 - say once what the priority labels mean.
+            $rendered = __( 'Σημείωση για τις πηγές: κάποια άρθρα έχουν «Προτεραιότητα πηγής» (1 = χαμηλή, 5 = υψηλή, χωρίς ένδειξη = κανονική). Για τα κύρια θέματα προτίμησε πηγές υψηλής προτεραιότητας. Ισχυρισμούς που στηρίζονται μόνο σε πηγή χαμηλής προτεραιότητας διασταύρωσέ τους με άλλη πηγή ή απόδωσέ τους ρητά.', 'presshub-ai-editor' )
+                . "\n\n---\n\n" . $rendered;
+        }
 
         self::$last_breakdown_sent          = $breakdown_sent;
         self::$last_context_truncated       = $truncated;
@@ -330,6 +367,60 @@ class PressHub_AI_News_Curator {
      * @param int   $index   Position in the array being iterated.
      * @return array{id:string,title:string,source:string,url:string}
      */
+    /**
+     * Issue #196 - an article's source priority: its own 'source_priority'
+     * when set, else the configured source on the same host (or a parent
+     * domain), else normal (3). Press releases and social posts stay normal.
+     */
+    public static function article_priority( array $article ): int {
+        $default = PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT;
+        if ( isset( $article['source_priority'] ) && is_numeric( $article['source_priority'] ) ) {
+            return PressHub_AI_Settings_Storage::sanitize_source_priority( $article['source_priority'] );
+        }
+        if ( ! empty( $article['is_press_release'] ) || ! empty( $article['is_social_post'] )
+            || in_array( $article['source_type'] ?? '', [ 'press_release', 'social_post' ], true ) ) {
+            return $default;
+        }
+        $host = strtolower( preg_replace( '/^www\./i', '', (string) parse_url( (string) ( $article['url'] ?? '' ), PHP_URL_HOST ) ) );
+        if ( '' === $host ) {
+            return $default;
+        }
+        if ( null === self::$priority_map ) {
+            self::$priority_map = PressHub_AI_Settings_Storage::get_source_priority_map();
+        }
+        // news.example.com matches a source configured as example.com.
+        for ( $h = $host; '' !== $h && false !== strpos( $h, '.' ); $h = (string) substr( $h, strpos( $h, '.' ) + 1 ) ) {
+            if ( isset( self::$priority_map[ $h ] ) ) {
+                return self::$priority_map[ $h ];
+            }
+        }
+        return $default;
+    }
+
+    /** Host => priority, read once per request. */
+    private static $priority_map = null;
+
+    /** Tests: forget the cached host => priority map. */
+    public static function reset_priority_map(): void {
+        self::$priority_map = null;
+    }
+
+    private static function priority_label( int $p ): string {
+        if ( $p >= 5 ) {
+            return __( 'πολύ υψηλή', 'presshub-ai-editor' );
+        }
+        if ( 4 === $p ) {
+            return __( 'υψηλή', 'presshub-ai-editor' );
+        }
+        if ( 2 === $p ) {
+            return __( 'χαμηλή', 'presshub-ai-editor' );
+        }
+        if ( $p <= 1 ) {
+            return __( 'πολύ χαμηλή', 'presshub-ai-editor' );
+        }
+        return __( 'κανονική', 'presshub-ai-editor' );
+    }
+
     private static function breakdown_identity( $article, int $index ): array {
         $article = is_array( $article ) ? $article : [];
         $url     = ! empty( $article['url'] ) ? trim( (string) $article['url'] ) : '';

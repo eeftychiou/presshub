@@ -2060,7 +2060,9 @@ class PressHub_AI_Settings_Render {
 
         $html .= '<td style="vertical-align: middle;">';
         $html .= '<span class="presshub-category-pill">' . $category . '</span>';
-        $html .= '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">' . sprintf( esc_html__( 'Quota: %d articles', 'presshub-ai-editor' ), $max_articles ) . '</span></div>';
+        $priority = PressHub_AI_Settings_Storage::sanitize_source_priority( $source['priority'] ?? PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT );
+        $html .= '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">' . sprintf( esc_html__( 'Quota: %d articles', 'presshub-ai-editor' ), $max_articles ) . '</span>'
+            . ' <span class="presshub-source-priority" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">' . sprintf( esc_html__( 'Priority: %d/5', 'presshub-ai-editor' ), $priority ) . '</span></div>';
         $html .= '</td>';
 
         $html .= '<td style="text-align: right; vertical-align: middle;">';
@@ -2129,6 +2131,17 @@ class PressHub_AI_Settings_Render {
                                 <label for="source-form-max-articles"><strong><?php esc_html_e( 'Max Articles to Harvest', 'presshub-ai-editor' ); ?></strong></label>
                                 <input type="number" id="source-form-max-articles" name="max_articles" min="1" max="30" value="5" class="widefat" style="margin-top: 4px;" />
                                 <p class="description"><?php esc_html_e( 'Maximum top news articles to scrape from this source during each daily briefing harvest (1–30, default: 5).', 'presshub-ai-editor' ); ?></p>
+                            </div>
+                            <div class="presshub-form-group" style="flex: 1;">
+                                <label for="source-form-priority"><strong><?php esc_html_e( 'Priority', 'presshub-ai-editor' ); ?></strong></label>
+                                <select id="source-form-priority" name="priority" class="widefat" style="margin-top: 4px;">
+                                    <option value="5"><?php esc_html_e( '5 – Highest', 'presshub-ai-editor' ); ?></option>
+                                    <option value="4"><?php esc_html_e( '4 – High', 'presshub-ai-editor' ); ?></option>
+                                    <option value="3" selected="selected"><?php esc_html_e( '3 – Normal', 'presshub-ai-editor' ); ?></option>
+                                    <option value="2"><?php esc_html_e( '2 – Low', 'presshub-ai-editor' ); ?></option>
+                                    <option value="1"><?php esc_html_e( '1 – Lowest', 'presshub-ai-editor' ); ?></option>
+                                </select>
+                                <p class="description"><?php esc_html_e( 'Higher-priority sources are kept first when the pool is larger than the curation limit, and the AI prefers them for lead stories.', 'presshub-ai-editor' ); ?></p>
                             </div>
                         </div>
 
