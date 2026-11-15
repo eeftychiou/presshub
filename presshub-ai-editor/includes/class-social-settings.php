@@ -621,6 +621,14 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_instagram_shorts_enabled',
+            __( 'Instagram Reels (Shorts)', 'presshub-social-autopost' ),
+            [ $render, 'render_instagram_shorts_enabled_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec'
+        );
+
+        add_settings_field(
             'presshub_social_tiktok_shorts_count',
             __( 'Shorts per Podcast', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],

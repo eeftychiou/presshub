@@ -529,6 +529,61 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ aiGenerated: true }));
     });
 
+    test('renders an Instagram Reel short with generateShortFn instead of square card', async () => {
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                {
+                  id: 405,
+                  platform: 'instagram',
+                  post_id: 77,
+                  post_title: 'Πρωινό Podcast Ενημέρωσης - 12/11/2026',
+                  post_copy: 'Instagram Reel caption #κύπρος',
+                  audio_url: 'https://presshub.cy/wp-content/uploads/tiktok-short-post-77-1-abcd1234.wav',
+                  video_title: 'Είδηση ημέρας',
+                  tiktok_short: {
+                    index: 0,
+                    count: 3,
+                    topic: 'Οικονομία',
+                    hook: 'Είδηση ημέρας',
+                    images: ['https://presshub.cy/wp-content/uploads/short-1.jpg'],
+                    segments: [{ speaker: 1, text: 'Καλημέρα.', start: 0, end: 1.0 }]
+                  }
+                }
+              ]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+
+      const mockGenerateCard = jest.fn();
+      const mockGenerateShort = jest.fn().mockResolvedValue({ filePath: '/tmp/ig-reel.mp4', width: 1080, height: 1920, duration: 35, captions: 10, images: 1, music: false });
+      const mockPoster = jest.fn().mockResolvedValue({ success: true, platform: 'instagram', externalPostUrl: 'https://instagram.com/p/ig-405' });
+
+      const poller = new PressHubPoller({
+        wpUrl: 'https://presshub.cy',
+        workerSecret: 'test-secret',
+        fetchFn: mockFetch,
+        posterHandler: mockPoster,
+        generateCardFn: mockGenerateCard,
+        generateShortFn: mockGenerateShort
+      });
+
+      const stats = await poller.pollOnce();
+      expect(stats.succeeded).toBe(1);
+      expect(mockGenerateCard).not.toHaveBeenCalled();
+      expect(mockGenerateShort).toHaveBeenCalledWith(expect.objectContaining({ hook: 'Είδηση ημέρας', badge: 'ΕΙΔΗΣΗ 1/3' }));
+      expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ platform: 'instagram', mediaPath: '/tmp/ig-reel.mp4', copy: 'Instagram Reel caption #κύπρος' }));
+      expect(mockPoster.mock.calls[0][0].aiGenerated).toBeUndefined();
+    });
+
     test('saves a TikTok short test render and never posts it', async () => {
       const fs = require('fs');
       const os = require('os');

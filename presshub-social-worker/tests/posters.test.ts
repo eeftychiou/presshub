@@ -416,6 +416,89 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     expect(res.externalPostUrl).toMatch(/https:\/\/instagram\.com\/p\/ig-\d+/);
   });
 
+  test('postInstagram for video dismisses exact dialog OK button and requires share confirmation', async () => {
+    const fsMod = require('fs');
+    const osMod = require('os');
+    const pathMod = require('path');
+    const dummyVideo = pathMod.join(osMod.tmpdir(), `ig-reel-test-${Date.now()}.mp4`);
+    fsMod.writeFileSync(dummyVideo, 'fake-mp4');
+
+    try {
+      const mockSession: ChromeConnection = {
+        browser,
+        isExternalCdp: false,
+        context: {
+          newPage: async () => {
+            const page = await context.newPage();
+            const html = `<html><body>
+              <button id="fb-btn" onclick="window.__fbClicked = true">Facebook</button>
+              <a role="link">Create</a>
+              <input type="file" />
+              <div role="dialog" id="reels-dialog">
+                <p>Video posts are now shared as reels</p>
+                <button id="ok-btn" onclick="document.getElementById('reels-dialog').style.display='none'; window.__okClicked = true;">OK</button>
+              </div>
+              <button>Next</button>
+              <div aria-label="Write a caption" contenteditable="true"></div>
+              <button onclick="document.getElementById('confirm').style.display='block'">Share</button>
+              <div id="confirm" style="display:none">Your reel has been shared.</div>
+            </body></html>`;
+            page.goto = async () => {
+              await page.setContent(html);
+              return null as any;
+            };
+            return page;
+          }
+        } as any,
+        close: async () => {}
+      };
+
+      const res = await postInstagram({
+        platform: 'instagram',
+        copy: 'Instagram Reel caption',
+        mediaPath: dummyVideo,
+        browserSession: mockSession
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.platform).toBe('instagram');
+    } finally {
+      if (fsMod.existsSync(dummyVideo)) fsMod.unlinkSync(dummyVideo);
+    }
+  });
+
+  test('postInstagram throws when Share button is missing (Zero-Silent-Fallback)', async () => {
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          const page = await context.newPage();
+          const html = `<html><body>
+            <input type="file" />
+            <div aria-label="Write a caption" contenteditable="true"></div>
+          </body></html>`;
+          page.goto = async () => {
+            await page.setContent(html);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    await expect(
+      postInstagram({
+        platform: 'instagram',
+        copy: 'Caption without share button',
+        mediaPath: dummyImagePath,
+        timeoutMs: 2000,
+        browserSession: mockSession
+      })
+    ).rejects.toThrow();
+  });
+
   test('postTwitter detects login onboarding redirect, marks session invalid, and throws re-authentication error', async () => {
     clearSessionInvalid('twitter');
     const mockSession: ChromeConnection = {

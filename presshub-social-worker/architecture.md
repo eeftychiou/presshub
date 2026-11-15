@@ -42,7 +42,7 @@ flowchart TD
         PlaywrightEngine -->|"Post tweet / upload media"| Twitter["Twitter / X"]
         PlaywrightEngine -->|"Upload vertical video"| TikTok["TikTok Creator Center"]
         PlaywrightEngine -->|"Share post"| Facebook["Facebook"]
-        PlaywrightEngine -->|"Create media post"| Instagram["Instagram"]
+        PlaywrightEngine -->|"Create media / Reel post"| Instagram["Instagram"]
     end
 ```
 

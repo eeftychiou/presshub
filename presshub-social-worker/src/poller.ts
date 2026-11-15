@@ -326,17 +326,17 @@ export class PressHubPoller {
             copy.toLowerCase().includes('podcast')
           );
 
-          if (platform === 'tiktok' && job.tiktok_short) {
+          if ((platform === 'tiktok' || platform === 'instagram') && job.tiktok_short) {
             // A short is rendered with synced captions over its own story images. It
             // never falls back to the podcast's featured image.
             const short = job.tiktok_short;
             if (!audioUrl) {
-              throw new Error('TikTok short has no audio_url.');
+              throw new Error(`${platform === 'instagram' ? 'Instagram Reel' : 'TikTok'} short has no audio_url.`);
             }
             const images = Array.isArray(short.images) ? short.images.filter((u) => typeof u === 'string' && u !== '') : [];
             WorkerLogger.info(
               'Poller',
-              `${jobTag} Rendering TikTok short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns, ${short.music_url ? `${short.mood || 'music'} music` : 'no music'})...`
+              `${jobTag} Rendering ${platform === 'instagram' ? 'Instagram Reel' : 'TikTok'} short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns, ${short.music_url ? `${short.mood || 'music'} music` : 'no music'})...`
             );
             const video = await this.generateShortFn({
               audioUrl,

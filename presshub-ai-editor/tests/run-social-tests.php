@@ -2627,6 +2627,146 @@ assert_false( PressHub_Social_Dispatcher::is_failed_copy_placeholder( (string) (
 PressHub_Social_AI_Copywriter::set_ai_caller( null );
 
 // ----------------------------------------------------------------------
+// Suite: Instagram Reels (Shorts) Integration
+// ----------------------------------------------------------------------
+echo "\n--- Suite: Instagram Reels (Shorts) Integration ---\n";
+
+delete_option( 'presshub_social_instagram_shorts_enabled' );
+assert_false( PressHub_Social_Settings_Storage::get_instagram_shorts_enabled(), 'Instagram shorts disabled by default' );
+
+update_option( 'presshub_social_instagram_shorts_enabled', true );
+$_POST = [ 'unrelated_tab' => '1' ];
+assert_true( PressHub_Social_Settings_Storage::sanitize_instagram_shorts_enabled( null ), 'sanitize_instagram_shorts_enabled preserves stored value when checkbox absent on another tab' );
+$_POST = [];
+
+update_option( 'presshub_social_worker_mode', 'pull' );
+update_option( 'presshub_social_tiktok_shorts_enabled', true );
+update_option( 'presshub_social_tiktok_shorts_count', 2 );
+update_option( 'presshub_social_tiktok_shorts_images', 1 );
+
+$ig_short_post_id = 910;
+$GLOBALS['mock_posts'][ $ig_short_post_id ] = (object) [
+    'ID'           => $ig_short_post_id,
+    'post_title'   => 'Daily Briefing Podcast IG Reels Test',
+    'post_content' => 'Podcast body',
+    'post_status'  => 'publish',
+    'post_type'    => 'post',
+];
+update_post_meta( $ig_short_post_id, '_presshub_briefing_type', 'podcast' );
+update_post_meta( $ig_short_post_id, '_presshub_podcast_script', '[SPEAKER_1]: Welcome to the news.' );
+
+assert_true( PressHub_Social_TikTok_Shorts::should_split( $ig_short_post_id, 'automation', 'instagram' ), 'should_split returns true for instagram when enabled in pull mode' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( $ig_short_post_id, 'api', 'instagram' ), 'should_split returns false for instagram when engine is api' );
+
+$ig_built = PressHub_Social_TikTok_Shorts::build_jobs( $ig_short_post_id, 'automation', null, null, time(), false, 'instagram' );
+assert_equals( 2, count( $ig_built ), 'build_jobs builds configured count of instagram short jobs' );
+assert_equals( 'instagram', $ig_built[0]['platform'] ?? '', 'build_jobs sets platform=instagram when requested' );
+assert_true( PressHub_Social_TikTok_Shorts::is_short_job( $ig_built[0] ), 'is_short_job recognizes instagram short jobs' );
+
+// Enqueue both TikTok and Instagram short jobs for the same podcast post and verify prepare_post reuses audio & images
+foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $ig_short_post_id, 'automation', null, null, time() - 60, false, 'tiktok' ) as $j ) {
+    PressHub_Social_Queue::enqueue( $j );
+}
+foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $ig_short_post_id, 'automation', null, null, time() - 60, false, 'instagram' ) as $j ) {
+    PressHub_Social_Queue::enqueue( $j );
+}
+
+$synth_calls = 0;
+$img_calls   = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function() {
+    return json_encode( [
+        'shorts' => [
+            [
+                'topic'   => 'Story One',
+                'hook'    => 'Breaking update',
+                'script'  => '[SPEAKER_1]: First story update.',
+                'caption' => 'Story one caption',
+                'mood'    => 'neutral',
+                'visuals' => [ 'Editorial scene one' ],
+            ],
+            [
+                'topic'   => 'Story Two',
+                'hook'    => 'Second headline',
+                'script'  => '[SPEAKER_1]: Second story update.',
+                'caption' => 'Story two caption',
+                'mood'    => 'serious',
+                'visuals' => [ 'Editorial scene two' ],
+            ],
+        ],
+    ] );
+} );
+PressHub_Social_TikTok_Shorts::set_synthesizer( function( $short, $job ) use ( &$synth_calls ) {
+    $synth_calls++;
+    return [
+        'url'      => 'https://example.com/audio-' . $synth_calls . '.mp3',
+        'id'       => 100 + $synth_calls,
+        'segments' => [ [ 'speaker' => 'SPEAKER_1', 'text' => 'Line', 'start' => 0.0, 'end' => 2.5 ] ],
+    ];
+} );
+PressHub_Social_TikTok_Shorts::set_image_generator( function( $prompt, $pid, $short ) use ( &$img_calls ) {
+    $img_calls++;
+    return [ 'url' => 'https://example.com/img-' . $img_calls . '.png', 'id' => 200 + $img_calls ];
+} );
+
+PressHub_Social_TikTok_Shorts::prepare_post( $ig_short_post_id );
+
+assert_equals( 2, $synth_calls, 'prepare_post synthesizes audio once per story across TikTok + Instagram sibling jobs' );
+assert_equals( 2, $img_calls, 'prepare_post generates images once per story across TikTok + Instagram sibling jobs' );
+
+$prepared_ig_jobs = array_values( array_filter(
+    PressHub_Social_Queue::get_jobs_for_post( $ig_short_post_id ),
+    static fn( $j ) => 'instagram' === ( $j['platform'] ?? '' )
+) );
+assert_equals( 2, count( $prepared_ig_jobs ), 'Both Instagram short jobs exist in queue' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( $prepared_ig_jobs[0] ), 'Instagram short job #1 is marked ready with shared audio and images' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( $prepared_ig_jobs[1] ), 'Instagram short job #2 is marked ready with shared audio and images' );
+
+PressHub_Social_TikTok_Shorts::set_ai_caller( null );
+PressHub_Social_TikTok_Shorts::set_synthesizer( null );
+PressHub_Social_TikTok_Shorts::set_image_generator( null );
+
+// Verify cancel_superseded cancels older pending Instagram short jobs for a newer podcast post
+$newer_ig_post_id = 911;
+$cancelled_ig     = PressHub_Social_TikTok_Shorts::cancel_superseded( $newer_ig_post_id, 'instagram' );
+assert_equals( 2, count( $cancelled_ig ), 'cancel_superseded cancels pending Instagram short jobs from older podcast post' );
+$after_cancel_ig = array_values( array_filter(
+    PressHub_Social_Queue::get_jobs_for_post( $ig_short_post_id ),
+    static fn( $j ) => 'instagram' === ( $j['platform'] ?? '' ) && 'cancelled' === ( $j['status'] ?? '' )
+) );
+assert_equals( 2, count( $after_cancel_ig ), 'Older Instagram short jobs transitioned to cancelled' );
+$still_pending_tt = array_values( array_filter(
+    PressHub_Social_Queue::get_jobs_for_post( $ig_short_post_id ),
+    static fn( $j ) => 'tiktok' === ( $j['platform'] ?? '' ) && 'pending' === ( $j['status'] ?? '' )
+) );
+assert_equals( 2, count( $still_pending_tt ), 'cancel_superseded(instagram) leaves TikTok short jobs pending' );
+
+// Verify wait_for_instagram_container handles IN_PROGRESS -> FINISHED, ERROR, and timeout
+$poll_calls = 0;
+PressHub_Social_Meta_API_Client::set_http_get( function() use ( &$poll_calls ) {
+    $poll_calls++;
+    return [ 'status_code' => $poll_calls < 2 ? 'IN_PROGRESS' : 'FINISHED' ];
+} );
+$poll_ok = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 5, 0 );
+assert_true( true === $poll_ok, 'wait_for_instagram_container returns true when container finishes' );
+assert_equals( 2, $poll_calls, 'wait_for_instagram_container polls until FINISHED' );
+
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'status_code' => 'ERROR', 'status' => 'Video codec unsupported' ];
+} );
+$poll_err = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 5, 0 );
+assert_true( is_wp_error( $poll_err ) && 'instagram_container_processing_error' === $poll_err->get_error_code(), 'wait_for_instagram_container fails loudly on ERROR status' );
+
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'status_code' => 'IN_PROGRESS' ];
+} );
+$poll_timeout = PressHub_Social_Meta_API_Client::wait_for_instagram_container( 'v22.0', '12345', 'tok', 3, 0 );
+assert_true( is_wp_error( $poll_timeout ) && 'instagram_container_timeout' === $poll_timeout->get_error_code(), 'wait_for_instagram_container returns timeout WP_Error when never finishing' );
+
+PressHub_Social_Meta_API_Client::set_http_get( null );
+delete_option( 'presshub_social_instagram_shorts_enabled' );
+delete_option( 'presshub_social_tiktok_shorts_enabled' );
+
+// ----------------------------------------------------------------------
 // Test Summary
 // ----------------------------------------------------------------------
 echo "\n=================================================================\n";

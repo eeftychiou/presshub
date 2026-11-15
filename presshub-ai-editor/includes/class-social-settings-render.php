@@ -461,6 +461,17 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_instagram_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_instagram_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_instagram_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Also post each podcast short as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
     public function render_tiktok_shorts_music_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_tiktok_shorts_music_enabled();
         ?>
