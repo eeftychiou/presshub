@@ -2473,6 +2473,17 @@ jQuery(document).ready(function($) {
         $('#presshub_ai_briefing_sources').val(JSON.stringify(presshubSourcesState)).trigger('input');
     }
 
+    // Issue #196: source priority, 1 (lowest) to 5 (highest), 3 = normal.
+
+    function presshubSourcePriority(v) {
+
+        var n = parseInt(v, 10);
+
+        return isNaN(n) ? 3 : Math.max(1, Math.min(5, n));
+
+    }
+
+
     function renderSourcesTable() {
         var $tbody = $('#presshub-sources-tbody');
         if (!$tbody.length) {
@@ -2510,6 +2521,7 @@ jQuery(document).ready(function($) {
             var statusText = isEnabled ? 'Active' : 'Disabled';
             var toggleTitle = isEnabled ? 'Click to disable source' : 'Click to enable source';
             var maxArticles = src.max_articles ? Math.max(1, Math.min(30, parseInt(src.max_articles, 10))) : 5;
+            var priority = presshubSourcePriority(src.priority);
 
             var rowHtml = '<tr class="presshub-source-row ' + (isEnabled ? '' : 'is-disabled') + '" data-id="' + presshubEsc(src.id) + '">' +
                 '<td style="text-align: center; vertical-align: middle;">' +
@@ -2532,7 +2544,7 @@ jQuery(document).ready(function($) {
                 '</td>' +
                 '<td style="vertical-align: middle;">' +
                     '<span class="presshub-category-pill">' + presshubEsc(src.category || 'General') + '</span>' +
-                    '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">Quota: ' + maxArticles + ' articles</span></div>' +
+                    '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">Quota: ' + maxArticles + ' articles</span> <span class="presshub-source-priority" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">Priority: ' + priority + '/5</span></div>' +
                 '</td>' +
                 '<td style="text-align: right; vertical-align: middle;">' +
                     '<div class="presshub-source-actions" style="display: flex; gap: 6px; justify-content: flex-end;">' +
@@ -2564,6 +2576,7 @@ jQuery(document).ready(function($) {
         $('#source-form-type').val('text_news');
         $('#source-form-category').val('General');
         $('#source-form-max-articles').val('5');
+        $('#source-form-priority').val('3');
         $('#source-form-enabled').prop('checked', true);
         $('#presshub-source-modal-title').text('Add News Source');
         $('#presshub-source-form-notice').hide().empty();
@@ -2587,6 +2600,7 @@ jQuery(document).ready(function($) {
         $('#source-form-type').val(src.type || 'text_news');
         $('#source-form-category').val(src.category || 'General');
         $('#source-form-max-articles').val(src.max_articles ? Math.max(1, Math.min(30, parseInt(src.max_articles, 10))) : 5);
+        $('#source-form-priority').val(String(presshubSourcePriority(src.priority)));
         $('#source-form-notes').val(src.notes || '');
         var isEnabled = (src.enabled !== false && src.enabled !== 0 && src.enabled !== '0' && src.enabled !== 'false');
         $('#source-form-enabled').prop('checked', isEnabled);
@@ -2639,6 +2653,7 @@ jQuery(document).ready(function($) {
         }
         var notes       = $('#source-form-notes').val().trim();
         var enabled     = $('#source-form-enabled').is(':checked');
+        var priority    = presshubSourcePriority($('#source-form-priority').val());
 
         var $notice = $('#presshub-source-form-notice');
 
@@ -2662,6 +2677,7 @@ jQuery(document).ready(function($) {
                 existing.type         = type;
                 existing.category     = category;
                 existing.max_articles = maxArticles;
+                existing.priority     = priority;
                 existing.notes        = notes;
                 existing.enabled      = enabled;
             }
@@ -2674,6 +2690,7 @@ jQuery(document).ready(function($) {
                 type: type,
                 category: category,
                 max_articles: maxArticles,
+                priority: priority,
                 notes: notes,
                 enabled: enabled
             });
