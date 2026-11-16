@@ -2889,6 +2889,137 @@ $auth_job_after  = PressHub_Social_Queue::get_job( (int) $auth_job_id );
 $auth_meta_after = is_string( $auth_job_after['metadata'] ?? null ) ? json_decode( $auth_job_after['metadata'], true ) : ( $auth_job_after['metadata'] ?? [] );
 assert_equals( 'auth-333', $auth_meta_after['instagram_creation_id'] ?? '', 'publish_instagram preserves instagram_creation_id on OAuth/auth error' );
 
+// Verify a Reels container still IN_PROGRESS after the short poll budget returns a retryable pending result (issue #218 item 2)
+PressHub_Social_Meta_API_Client::set_instagram_poll_budget( 3, 0 );
+$ig_jt = static function( int $id ): array {
+    $j = PressHub_Social_Queue::get_job( $id );
+    $m = is_string( $j['metadata'] ?? null ) ? json_decode( $j['metadata'], true ) : ( $j['metadata'] ?? [] );
+    return [ $j, is_array( $m ) ? $m : [] ];
+};
+$ig_posts = 0;
+PressHub_Social_Meta_API_Client::set_http_post( function( $endpoint ) use ( &$ig_posts ) {
+    $ig_posts++;
+    if ( false !== strpos( $endpoint, '/media_publish' ) ) {
+        return [ 'code' => 200, 'body' => [ 'id' => 'media-pending-1' ] ];
+    }
+    return [ 'code' => 200, 'body' => [ 'id' => 'creation-pending-1' ] ];
+} );
+$ig_status = 'IN_PROGRESS';
+$ig_polls  = 0;
+PressHub_Social_Meta_API_Client::set_http_get( function() use ( &$ig_status, &$ig_polls ) {
+    $ig_polls++;
+    return [ 'status_code' => $ig_status ];
+} );
+
+$pending_job_id = (int) PressHub_Social_Queue::enqueue( [
+    'post_id'      => $ig_short_post_id,
+    'platform'     => 'instagram',
+    'engine'       => 'api',
+    'post_copy'    => 'Reel pending container test',
+    'media_url'    => 'https://example.com/reel-pending.mp4',
+    'media_type'   => 'video',
+    'status'       => 'pending',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s' ),
+    'metadata'     => [ 'keep_key' => 'yes' ],
+] );
+$pending_res = PressHub_Social_Meta_API_Client::publish_instagram( PressHub_Social_Queue::get_job( $pending_job_id ) );
+assert_true( is_wp_error( $pending_res ) && PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $pending_res->get_error_code(), 'publish_instagram returns instagram_container_pending when container is still IN_PROGRESS' );
+assert_equals( 3, $ig_polls, 'publish_instagram polls only for the short per-run budget' );
+$pending_data = is_wp_error( $pending_res ) ? $pending_res->get_error_data() : [];
+assert_equals( PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_RECHECK_DELAY, (int) ( $pending_data['retry_after'] ?? 0 ), 'pending result carries the short recheck delay' );
+[ , $pending_meta ] = $ig_jt( $pending_job_id );
+assert_equals( 'creation-pending-1', $pending_meta['instagram_creation_id'] ?? '', 'pending result keeps instagram_creation_id in job metadata' );
+assert_true( (int) ( $pending_meta['instagram_container_started_at'] ?? 0 ) > 0, 'container start time is recorded when the Reels container is created' );
+assert_equals( 'yes', $pending_meta['keep_key'] ?? '', 'pending result preserves other metadata keys' );
+
+// Dispatcher defers the job: pending, short delay, attempt given back, container reused on the next run
+$ig_polls = 0;
+$ig_posts = 0;
+$disp_pending = PressHub_Social_Dispatcher::dispatch_job( $pending_job_id );
+assert_true( is_wp_error( $disp_pending ) && PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $disp_pending->get_error_code(), 'dispatch_job surfaces the pending result' );
+[ $deferred_job, $deferred_meta ] = $ig_jt( $pending_job_id );
+assert_equals( 'pending', $deferred_job['status'] ?? '', 'deferred Instagram job stays pending' );
+assert_equals( 0, (int) ( $deferred_job['attempts'] ?? -1 ), 'deferring an IN_PROGRESS container does not consume an attempt' );
+$deferred_delay = strtotime( (string) $deferred_job['scheduled_at'] . ' UTC' ) - time();
+assert_true( $deferred_delay > 30 && $deferred_delay <= PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_RECHECK_DELAY, 'deferred job is rescheduled for a short-delay check' );
+assert_true( str_contains( (string) ( $deferred_job['last_error'] ?? '' ), 'still processing' ), 'deferred job records a status note' );
+assert_equals( 0, $ig_posts, 'resumed dispatch reuses the stored container instead of creating a new one' );
+assert_equals( 'creation-pending-1', $deferred_meta['instagram_creation_id'] ?? '', 'deferred job keeps instagram_creation_id' );
+
+$disp_pending_2 = PressHub_Social_Dispatcher::dispatch_job( $pending_job_id );
+[ $deferred_job_2 ] = $ig_jt( $pending_job_id );
+assert_true( is_wp_error( $disp_pending_2 ) && 0 === (int) ( $deferred_job_2['attempts'] ?? -1 ), 'repeated pending checks never use up the retry budget' );
+
+$ig_status = 'FINISHED';
+$disp_done = PressHub_Social_Dispatcher::dispatch_job( $pending_job_id );
+[ $done_job, $done_meta ] = $ig_jt( $pending_job_id );
+assert_true( true === $disp_done && 'published' === ( $done_job['status'] ?? '' ), 'deferred job publishes once the container finishes' );
+assert_equals( 1, $ig_posts, 'finished container is published with a single media_publish call' );
+assert_false( isset( $done_meta['instagram_creation_id'] ) || isset( $done_meta['instagram_container_started_at'] ), 'publish clears the container ID and start time' );
+
+// Waiting cap: a container IN_PROGRESS for longer than INSTAGRAM_CONTAINER_MAX_WAIT fails with a clear error and is forgotten
+$ig_status   = 'IN_PROGRESS';
+$cap_job_id  = (int) PressHub_Social_Queue::enqueue( [
+    'post_id'      => $ig_short_post_id,
+    'platform'     => 'instagram',
+    'engine'       => 'api',
+    'post_copy'    => 'Reel wait cap test',
+    'media_url'    => 'https://example.com/reel-cap.mp4',
+    'media_type'   => 'video',
+    'status'       => 'pending',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s' ),
+    'metadata'     => [
+        'instagram_creation_id'         => 'creation-stuck-1',
+        'instagram_container_started_at' => time() - PressHub_Social_Meta_API_Client::INSTAGRAM_CONTAINER_MAX_WAIT - 5,
+    ],
+] );
+$ig_posts = 0;
+$cap_res  = PressHub_Social_Dispatcher::dispatch_job( $cap_job_id );
+assert_true( is_wp_error( $cap_res ) && 'instagram_container_timeout' === $cap_res->get_error_code(), 'container past the waiting cap fails with instagram_container_timeout' );
+assert_true( is_wp_error( $cap_res ) && str_contains( $cap_res->get_error_message(), 'creation-stuck-1' ), 'waiting-cap error names the stuck container' );
+[ $cap_job, $cap_meta ] = $ig_jt( $cap_job_id );
+assert_false( isset( $cap_meta['instagram_creation_id'] ) || isset( $cap_meta['instagram_container_started_at'] ), 'waiting cap clears the stuck container ID and start time' );
+assert_equals( 1, (int) ( $cap_job['attempts'] ?? 0 ), 'waiting-cap failure goes through the normal retry budget' );
+assert_equals( 0, $ig_posts, 'waiting-cap check does not create or publish a container' );
+
+// Container stored without a start time (before this change) starts the clock on its first pending check
+$legacy_job_id = (int) PressHub_Social_Queue::enqueue( [
+    'post_id'      => $ig_short_post_id,
+    'platform'     => 'instagram',
+    'engine'       => 'api',
+    'post_copy'    => 'Reel legacy container test',
+    'media_url'    => 'https://example.com/reel-legacy.mp4',
+    'media_type'   => 'video',
+    'status'       => 'pending',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s' ),
+    'metadata'     => [ 'instagram_creation_id' => 'creation-legacy-1' ],
+] );
+$legacy_res = PressHub_Social_Meta_API_Client::publish_instagram( PressHub_Social_Queue::get_job( $legacy_job_id ) );
+[ , $legacy_meta ] = $ig_jt( $legacy_job_id );
+assert_true( is_wp_error( $legacy_res ) && PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $legacy_res->get_error_code(), 'legacy stored container without start time is treated as pending' );
+assert_true( abs( (int) ( $legacy_meta['instagram_container_started_at'] ?? 0 ) - time() ) <= 5, 'legacy container gets its start time recorded on first pending check' );
+
+// ERROR containers keep the existing behaviour: fail and forget the container
+$ig_status   = 'ERROR';
+$err_job_id  = (int) PressHub_Social_Queue::enqueue( [
+    'post_id'      => $ig_short_post_id,
+    'platform'     => 'instagram',
+    'engine'       => 'api',
+    'post_copy'    => 'Reel error container test',
+    'media_url'    => 'https://example.com/reel-error.mp4',
+    'media_type'   => 'video',
+    'status'       => 'pending',
+    'scheduled_at' => gmdate( 'Y-m-d H:i:s' ),
+    'metadata'     => [ 'instagram_creation_id' => 'creation-err-1', 'instagram_container_started_at' => time() ],
+] );
+$err_res = PressHub_Social_Dispatcher::dispatch_job( $err_job_id );
+[ $err_job, $err_meta ] = $ig_jt( $err_job_id );
+assert_true( is_wp_error( $err_res ) && 'instagram_container_processing_error' === $err_res->get_error_code(), 'ERROR container still fails with instagram_container_processing_error' );
+assert_false( isset( $err_meta['instagram_creation_id'] ) || isset( $err_meta['instagram_container_started_at'] ), 'ERROR container is forgotten so the retry creates a fresh one' );
+assert_equals( 1, (int) ( $err_job['attempts'] ?? 0 ), 'ERROR container consumes a normal attempt' );
+
+PressHub_Social_Meta_API_Client::set_instagram_poll_budget( 4, 5 );
+
 PressHub_Social_Meta_API_Client::set_http_get( null );
 PressHub_Social_Meta_API_Client::set_http_post( null );
 delete_option( 'presshub_social_meta_access_token' );

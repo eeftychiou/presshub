@@ -17,6 +17,28 @@ class PressHub_Social_Meta_API_Client {
     public const GRAPH_API_VERSION = 'v21.0';
 
     /**
+     * Error code returned while a Reels container is still IN_PROGRESS after the short poll budget.
+     * The dispatcher reschedules the job (PressHub_Social_Queue::defer_job()) instead of failing it.
+     */
+    public const INSTAGRAM_PENDING_CODE = 'instagram_container_pending';
+
+    /**
+     * Seconds until the next status check of an IN_PROGRESS Reels container.
+     */
+    public const INSTAGRAM_PENDING_RECHECK_DELAY = 60;
+
+    /**
+     * Total seconds a Reels container may stay IN_PROGRESS before the job fails and a fresh container is created.
+     */
+    public const INSTAGRAM_CONTAINER_MAX_WAIT = 900;
+
+    /**
+     * Status polls per publish run, and seconds between them (about 15 s of sleeping per cron run).
+     */
+    private static int $instagram_poll_attempts = 4;
+    private static int $instagram_poll_interval = 5;
+
+    /**
      * Publish a social job using the appropriate official platform API.
      *
      * @param array $job
@@ -226,7 +248,8 @@ class PressHub_Social_Meta_API_Client {
             $creation_id = (string) $data1['id'];
 
             if ( 'video' === $media_type && ! empty( $job['id'] ) && class_exists( 'PressHub_Social_Queue' ) ) {
-                $job_meta['instagram_creation_id'] = $creation_id;
+                $job_meta['instagram_creation_id']         = $creation_id;
+                $job_meta['instagram_container_started_at'] = time();
                 PressHub_Social_Queue::update_job( (int) $job['id'], [
                     'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
                 ] );
@@ -235,11 +258,22 @@ class PressHub_Social_Meta_API_Client {
 
         // Reels (video) containers are processed asynchronously by Meta; poll status before publishing.
         if ( 'video' === $media_type ) {
-            $ready = self::wait_for_instagram_container( $version, $creation_id, $token );
+            // Poll only for a short budget so one cron run stays well under max_execution_time;
+            // a container still IN_PROGRESS afterwards is rechecked on a later run.
+            $ready = self::wait_for_instagram_container(
+                $version,
+                $creation_id,
+                $token,
+                self::$instagram_poll_attempts,
+                self::$instagram_poll_interval
+            );
             if ( is_wp_error( $ready ) ) {
                 $err_code = $ready->get_error_code();
                 if ( in_array( $err_code, [ 'instagram_container_processing_error', 'instagram_container_status_error' ], true ) ) {
                     self::forget_instagram_container( $job, $job_meta );
+                }
+                if ( 'instagram_container_timeout' === $err_code ) {
+                    return self::instagram_container_pending( $job, $job_meta, $creation_id );
                 }
                 return $ready;
             }
@@ -298,13 +332,82 @@ class PressHub_Social_Meta_API_Client {
      * Remove a stored Instagram container ID from job metadata so retries or reposts create a fresh container.
      */
     private static function forget_instagram_container( array $job, array &$job_meta ): void {
-        if ( empty( $job['id'] ) || ! isset( $job_meta['instagram_creation_id'] ) || ! class_exists( 'PressHub_Social_Queue' ) ) {
+        if ( empty( $job['id'] ) || ! class_exists( 'PressHub_Social_Queue' )
+            || ( ! isset( $job_meta['instagram_creation_id'] ) && ! isset( $job_meta['instagram_container_started_at'] ) ) ) {
             return;
         }
-        unset( $job_meta['instagram_creation_id'] );
+        unset( $job_meta['instagram_creation_id'], $job_meta['instagram_container_started_at'] );
         PressHub_Social_Queue::update_job( (int) $job['id'], [
             'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
         ] );
+    }
+
+    /**
+     * A Reels container is still IN_PROGRESS after this run's poll budget.
+     *
+     * Within INSTAGRAM_CONTAINER_MAX_WAIT of the container's creation, returns the retryable
+     * INSTAGRAM_PENDING_CODE error: instagram_creation_id stays in the job metadata, and the
+     * dispatcher reschedules the job for a short-delay check without using up an attempt.
+     * Past the cap, the container is forgotten and a plain instagram_container_timeout error
+     * is returned, so the job fails normally and its next retry creates a fresh container.
+     */
+    private static function instagram_container_pending( array $job, array &$job_meta, string $creation_id ): WP_Error {
+        $now        = time();
+        $started_at = (int) ( $job_meta['instagram_container_started_at'] ?? 0 );
+
+        if ( $started_at <= 0 ) {
+            // Container stored before its start time was recorded: start the clock now.
+            $started_at = $now;
+            if ( ! empty( $job['id'] ) && class_exists( 'PressHub_Social_Queue' ) ) {
+                $job_meta['instagram_container_started_at'] = $started_at;
+                PressHub_Social_Queue::update_job( (int) $job['id'], [
+                    'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
+                ] );
+            }
+        }
+
+        $waited = max( 0, $now - $started_at );
+
+        if ( $waited >= self::INSTAGRAM_CONTAINER_MAX_WAIT ) {
+            $msg = sprintf(
+                'Instagram Reels container %s was still processing after %d minutes; giving up on it (the next retry creates a new container).',
+                $creation_id,
+                (int) floor( $waited / 60 )
+            );
+            if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
+                PressHub_Social_Logger::error( $msg, [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'creation_id' => $creation_id ] );
+            }
+            self::forget_instagram_container( $job, $job_meta );
+            return new WP_Error( 'instagram_container_timeout', $msg );
+        }
+
+        $msg = sprintf(
+            'Instagram is still processing the Reel (container %s, waited %ds so far); checking again in %ds.',
+            $creation_id,
+            $waited,
+            self::INSTAGRAM_PENDING_RECHECK_DELAY
+        );
+        if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'info' ) ) {
+            PressHub_Social_Logger::info( $msg, [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'creation_id' => $creation_id ] );
+        }
+
+        return new WP_Error(
+            self::INSTAGRAM_PENDING_CODE,
+            $msg,
+            [
+                'retry_after' => self::INSTAGRAM_PENDING_RECHECK_DELAY,
+                'creation_id' => $creation_id,
+                'waited'      => $waited,
+            ]
+        );
+    }
+
+    /**
+     * Override the per-run Reels status poll budget (unit tests use a zero interval).
+     */
+    public static function set_instagram_poll_budget( int $attempts, int $interval_seconds ): void {
+        self::$instagram_poll_attempts = max( 1, $attempts );
+        self::$instagram_poll_interval = max( 0, $interval_seconds );
     }
 
     /** @var callable|null Optional HTTP GET override for unit tests. */

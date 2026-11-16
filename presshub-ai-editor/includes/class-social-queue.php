@@ -600,6 +600,44 @@ class PressHub_Social_Queue {
     }
 
     /**
+     * Put a processing job back to pending for a later check without using up an attempt.
+     *
+     * For work still in progress on the platform side (e.g. an Instagram Reels container
+     * that is still processing): the attempt counted by mark_processing() is given back,
+     * so waiting never consumes the job's failure/retry budget.
+     *
+     * @param int    $job_id
+     * @param int    $delay_seconds Seconds until the job is due again.
+     * @param string $note          Status note stored as the job's last message.
+     * @return bool
+     */
+    public static function defer_job( int $job_id, int $delay_seconds, string $note = '' ): bool {
+        $job = self::get_job( $job_id );
+        if ( ! $job ) {
+            return false;
+        }
+
+        $scheduled_at = gmdate( 'Y-m-d H:i:s', time() + max( 0, $delay_seconds ) );
+        $data         = [
+            'status'       => 'pending',
+            'attempts'     => max( 0, (int) ( $job['attempts'] ?? 0 ) - 1 ),
+            'scheduled_at' => $scheduled_at,
+        ];
+        if ( '' !== $note ) {
+            $data['last_error'] = $note;
+        }
+
+        if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'info' ) ) {
+            PressHub_Social_Logger::info(
+                sprintf( 'Social job #%d deferred until %s (attempt not counted).', $job_id, $scheduled_at ),
+                [ 'job_id' => $job_id, 'platform' => $job['platform'] ?? '', 'note' => $note ]
+            );
+        }
+
+        return self::update_job( $job_id, $data );
+    }
+
+    /**
      * Send email notification on permanent job failure if configured.
      *
      * @param array $job
@@ -749,7 +787,7 @@ class PressHub_Social_Queue {
             ? ( is_string( $source['metadata'] ) ? json_decode( $source['metadata'], true ) : $source['metadata'] )
             : null;
         if ( is_array( $repost_meta ) ) {
-            unset( $repost_meta['instagram_creation_id'] );
+            unset( $repost_meta['instagram_creation_id'], $repost_meta['instagram_container_started_at'] );
         }
 
         $new_job_data = [
