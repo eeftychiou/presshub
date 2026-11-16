@@ -378,6 +378,99 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     await page.close();
   });
 
+  test('markTikTokAiGenerated expands TikTok Studio div.more-btn "Show more" and toggles Switch__content inside aigc_container', async () => {
+    const page = await context.newPage();
+    await page.setContent(`<html><body>
+      <div class="card">
+        <div class="options-form" style="display:none">
+          <div data-e2e="disclose_content_container" class="container">
+            <span>Disclose post content</span>
+            <div class="Switch__root" data-layout="switch-root">
+              <div class="Switch__content Switch__content--checked-false" aria-checked="false" data-state="unchecked" style="width:28px;height:16px">
+                <span data-part="thumb" class="Switch__thumb"></span>
+                <input role="switch" type="checkbox" aria-hidden="true" class="Switch__input" style="appearance:none;width:28px;height:16px">
+              </div>
+            </div>
+          </div>
+          <div data-e2e="aigc_container" class="container">
+            <span>AI-generated content</span>
+            <div class="Tooltip__root">
+              <div class="switch">
+                <div class="Switch__root" data-layout="switch-root">
+                  <div id="aigc-content" class="Switch__content Switch__content--checked-false" aria-checked="false" data-state="unchecked" style="width:28px;height:16px">
+                    <span data-part="thumb" data-state="unchecked" class="Switch__thumb"></span>
+                    <input id="aigc-input" role="switch" type="checkbox" aria-hidden="true" class="Switch__input" style="appearance:none;width:28px;height:16px">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div data-e2e="advanced_settings_container" class="more-collapse collapsed">
+          <div id="more-btn" class="more-btn"><span>Show more</span></div>
+        </div>
+      </div>
+      <script>
+        document.getElementById('more-btn').onclick = () => {
+          document.querySelector('.options-form').style.display = 'block';
+          document.querySelector('.more-collapse').classList.remove('collapsed');
+        };
+        document.getElementById('aigc-content').onclick = () => {
+          const d = document.createElement('div');
+          d.setAttribute('role', 'dialog');
+          d.innerHTML = '<h2>Labelling AI-generated content</h2><button id="turn-on">Turn on</button>';
+          document.body.appendChild(d);
+          document.getElementById('turn-on').onclick = () => {
+            const c = document.getElementById('aigc-content');
+            c.setAttribute('aria-checked', 'true');
+            c.setAttribute('data-state', 'checked');
+            document.getElementById('aigc-input').checked = true;
+            d.remove();
+          };
+        };
+      </script>
+    </body></html>`);
+    expect(await markTikTokAiGenerated(page)).toBe(true);
+    expect(await page.getAttribute('#aigc-content', 'aria-checked')).toBe('true');
+    // Re-running when already enabled returns true without toggling off.
+    expect(await markTikTokAiGenerated(page)).toBe(true);
+    await page.close();
+  });
+
+  test('markTikTokAiGenerated skips hidden checkbox and clicks visible [role="switch"]', async () => {
+    const page = await context.newPage();
+    await page.setContent(`<html><body>
+      <div class="row">
+        <span>AI-generated content</span>
+        <input type="checkbox" style="display:none" />
+        <div id="visible-sw" role="switch" aria-checked="false" style="width:28px;height:16px;display:inline-block"></div>
+      </div>
+      <script>
+        document.getElementById('visible-sw').onclick = () => {
+          document.getElementById('visible-sw').setAttribute('aria-checked', 'true');
+        };
+      </script>
+    </body></html>`);
+    expect(await markTikTokAiGenerated(page)).toBe(true);
+    expect(await page.getAttribute('#visible-sw', 'aria-checked')).toBe('true');
+    await page.close();
+  });
+
+  test('markTikTokAiGenerated returns false cleanly when switch remains hidden after Show more', async () => {
+    const page = await context.newPage();
+    await page.setContent(`<html><body>
+      <div class="options-form" style="display:none">
+        <div data-e2e="aigc_container">
+          <span>AI-generated content</span>
+          <input role="switch" type="checkbox" />
+        </div>
+      </div>
+      <div data-e2e="advanced_settings_container"><div class="more-btn"><span>Show more</span></div></div>
+    </body></html>`);
+    expect(await markTikTokAiGenerated(page)).toBe(false);
+    await page.close();
+  });
+
   test('postInstagram handles multiple buttons and media upload without strict mode violation', async () => {
     const mockSession: ChromeConnection = {
       browser,
