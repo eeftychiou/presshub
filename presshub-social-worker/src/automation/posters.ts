@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import { WorkerLogger } from '../logger';
 import {
   Platform,
@@ -1725,6 +1725,31 @@ export async function dismissInstagramInterstitials(page: Page): Promise<string[
 }
 
 /**
+ * Find a button of Instagram's "Create new post" / "New reel" composer by its exact
+ * accessible name (e.g. "Next", "Share"). It is looked up inside the open dialog only, so
+ * look-alikes in the feed behind the modal ("Share" icons) or "Share to" never match. Only
+ * when no dialog is open at all does it fall back to a page-wide exact match. Returns null
+ * when the button does not become visible within `timeoutMs`.
+ */
+export async function findInstagramComposerButton(page: Page, name: string, timeoutMs: number): Promise<Locator | null> {
+  const inDialog = page.getByRole('dialog').getByRole('button', { name, exact: true }).first();
+  const anywhere = page.getByRole('button', { name, exact: true }).first();
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await inDialog.isVisible().catch(() => false)) {
+      return inDialog;
+    }
+    if ((await page.getByRole('dialog').count().catch(() => 0)) === 0 && (await anywhere.isVisible().catch(() => false))) {
+      return anywhere;
+    }
+    if (Date.now() >= deadline) {
+      return null;
+    }
+    await page.waitForTimeout(250);
+  }
+}
+
+/**
  * Instagram automation poster using saved browser session or running Chrome.
  */
 export async function postInstagram(options: PostOptions): Promise<PostResult> {
@@ -1824,17 +1849,14 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     }
 
     WorkerLogger.debug('Instagram Automation', 'Advancing Next buttons...');
-    const nextButton = page.locator(
-      'button:has-text("Next"), div[role="button"]:has-text("Next")'
-    ).first();
-    await nextButton.waitFor({ state: 'visible', timeout: isVideo ? 20000 : 10000 }).catch(() => {});
-    if ((await nextButton.count()) > 0) {
-      await nextButton.click();
+    // Crop -> Edit -> Caption: click the composer's own "Next" until it is gone (at most 3 steps).
+    for (let step = 0; step < 3; step++) {
+      const nextButton = await findInstagramComposerButton(page, 'Next', step === 0 ? (isVideo ? 20000 : 10000) : 3000);
+      if (!nextButton) break;
+      await nextButton.click({ timeout: 10000 }).catch((err: any) => {
+        throw new Error(`Instagram composer "Next" button could not be clicked: ${String(err?.message || err).split('\n')[0]}`);
+      });
       await page.waitForTimeout(1000);
-      if ((await nextButton.count()) > 0 && (await nextButton.isVisible().catch(() => false))) {
-        await nextButton.click();
-        await page.waitForTimeout(1000);
-      }
     }
 
     WorkerLogger.info('Instagram Automation', `Typing caption (${options.copy.length} chars)...`);
@@ -1846,11 +1868,16 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     await captionBox.fill(options.copy);
 
     WorkerLogger.info('Instagram Automation', 'Clicking Share button...');
-    const shareButton = page.locator(
-      'button:has-text("Share"), div[role="button"]:has-text("Share")'
-    ).first();
-    await shareButton.waitFor({ state: 'visible', timeout: 15000 });
-    await shareButton.click();
+    // Only the composer's own "Share": a page-wide `:has-text("Share")` also matches the feed's
+    // paper-plane Share icons behind the modal (their SVG title is "Share"), whose clicks the
+    // modal intercepts, and the composer's "Share to" toggle.
+    const shareButton = await findInstagramComposerButton(page, 'Share', 15000);
+    if (!shareButton) {
+      throw new Error('Instagram composer "Share" button not found (the composer may have closed or changed).');
+    }
+    await shareButton.click({ timeout: 10000 }).catch((err: any) => {
+      throw new Error(`Instagram composer "Share" button could not be clicked: ${String(err?.message || err).split('\n')[0]}`);
+    });
 
     const sharedText = page.locator('text=/Your (reel|post) has been shared/i').first();
     if (isVideo) {

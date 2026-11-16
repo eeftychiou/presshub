@@ -8,6 +8,7 @@ import {
   postInstagram,
   selectInstagramCrop,
   dismissInstagramInterstitials,
+  findInstagramComposerButton,
   markTikTokAiGenerated,
   getTwitterWeightedLength,
   sanitizeTwitterCopy,
@@ -663,10 +664,10 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
                   <div role="button" onclick="window.__crop='9:16'"><span>9:16</span></div>
                   <div role="button" onclick="window.__crop='16:9'"><span>16:9</span></div>
                 </div>
-                <button onclick="window.__nextCropAtClick = window.__nextCropAtClick || window.__crop || 'none'">Next</button>
+                <button onclick="window.__nextCropAtClick = window.__nextCropAtClick || window.__crop || 'none'; this.remove();">Next</button>
+                <div aria-label="Write a caption" contenteditable="true"></div>
+                <button onclick="document.getElementById('confirm').style.display='block'">Share</button>
               </div>
-              <div aria-label="Write a caption" contenteditable="true"></div>
-              <button onclick="document.getElementById('confirm').style.display='block'">Share</button>
               <div id="confirm" style="display:none">Your reel has been shared.</div>
             </body></html>`;
             page.goto = async () => {
@@ -758,6 +759,79 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     });
 
     expect(res.success).toBe(true);
+  });
+
+  test('postInstagram clicks the composer Share, not the feed Share icons behind the modal', async () => {
+    const page = await context.newPage();
+    try {
+      // Live DOM from 16/11/2026: feed posts behind the modal have div[role=button] Share
+      // icons (svg title "Share"); the composer dialog has "Share to" and the real "Share".
+      // The backdrop covers the feed, so clicking a feed icon is intercepted.
+      const html = `<html><body style="margin:0">
+        <a href="#" role="link" onclick="document.getElementById('composer').style.display='block'; document.getElementById('upload').innerHTML = '<input type=file accept=image/jpeg>'; return false;"><svg aria-label="Post" width="24" height="24"></svg>Post</a>
+        <main>
+          <div role="button" onclick="window.__feedShare = true"><svg aria-label="Share" width="24" height="24"><title>Share</title></svg></div>
+          <div role="button" onclick="window.__feedShare = true"><svg aria-label="Share" width="24" height="24"><title>Share</title></svg></div>
+        </main>
+        <div id="composer" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10">
+          <div role="dialog" aria-label="Create new post" style="background:#fff;margin:40px auto;width:600px;padding:12px">
+            <div id="upload"></div>
+            <div role="button" id="next1" onclick="this.remove(); document.getElementById('next2').style.display='inline-block'">Next</div>
+            <div role="button" id="next2" style="display:none" onclick="this.remove(); document.getElementById('caption-step').style.display='block'">Next</div>
+            <div id="caption-step" style="display:none">
+              <div role="button" onclick="window.__composerShare = true; document.getElementById('confirm').style.display='block'">Share</div>
+              <div aria-label="Write a caption…" contenteditable="true"></div>
+              <div role="button" onclick="window.__shareTo = true"><span>Share to</span></div>
+            </div>
+            <div id="confirm" style="display:none">Your post has been shared.</div>
+          </div>
+        </div>
+      </body></html>`;
+      const mockSession: ChromeConnection = {
+        browser,
+        isExternalCdp: false,
+        context: {
+          newPage: async () => {
+            page.goto = async () => {
+              await page.setContent(html);
+              return null as any;
+            };
+            page.close = async () => {};
+            return page;
+          }
+        } as any,
+        close: async () => {}
+      };
+
+      const res = await postInstagram({
+        platform: 'instagram',
+        copy: 'Card caption',
+        mediaPath: dummyImagePath,
+        browserSession: mockSession
+      });
+
+      expect(res.success).toBe(true);
+      expect(await page.evaluate('window.__composerShare')).toBe(true);
+      expect(await page.evaluate('window.__feedShare')).toBeUndefined();
+      expect(await page.evaluate('window.__shareTo')).toBeUndefined();
+    } finally {
+      await page.close();
+    }
+  }, 60000);
+
+  test('findInstagramComposerButton ignores matching buttons outside an open dialog', async () => {
+    const page = await context.newPage();
+    try {
+      await page.setContent(`<html><body>
+        <div role="button"><svg aria-label="Share"><title>Share</title></svg></div>
+        <div role="dialog"><div role="button">Share to</div></div>
+      </body></html>`);
+      expect(await findInstagramComposerButton(page, 'Share', 600)).toBeNull();
+      await page.setContent('<html><body><button>Share</button></body></html>');
+      expect(await findInstagramComposerButton(page, 'Share', 600)).not.toBeNull();
+    } finally {
+      await page.close();
+    }
   });
 
   test('postInstagram dismisses the "Turn on notifications" dialog that blocks the Post entry', async () => {
