@@ -785,3 +785,15 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
     });
   });
 });
+
+describe('shortBadge', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { shortBadge } = require('../src/poller');
+  test('uses the badge the site sent for an article short', () => {
+    expect(shortBadge({ index: 0, count: 1, badge: ' ΑΠΟΨΗ ' })).toBe('ΑΠΟΨΗ');
+  });
+  test('falls back to the story number of a podcast short', () => {
+    expect(shortBadge({ index: 1, count: 3 })).toBe('ΕΙΔΗΣΗ 2/3');
+    expect(shortBadge({ index: 0, count: 0, badge: '' })).toBe('ΕΙΔΗΣΗ 1');
+  });
+});

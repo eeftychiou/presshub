@@ -683,6 +683,14 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_tiktok_article_shorts_enabled',
+            __( 'Article Shorts', 'presshub-social-autopost' ),
+            [ $render, 'render_tiktok_article_shorts_enabled_field' ],
+            'presshub_social_worker',
+            'presshub_social_media_specs_sec'
+        );
+
+        add_settings_field(
             'presshub_social_tiktok_shorts_count',
             __( 'Shorts per Podcast', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
@@ -1041,6 +1049,19 @@ class PressHub_Social_Settings {
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
                 'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_tiktok_article_short',
+            __( 'Article Shorts: Script Prompt', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_prompts',
+            'presshub_social_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_tiktok_article_short',
+                'rows'   => 10,
+                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the TikTok or Instagram Caption Prompt; this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way.', 'presshub-social-autopost' ),
             ]
         );
 

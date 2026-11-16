@@ -165,9 +165,25 @@ class PressHub_Social_Dispatcher {
 
             // Podcast posts can go to TikTok and Instagram as several short videos, one per top story.
             // Their copy is written with the short when the worker claims the job.
+            // Articles go there as one short each, with the platform's usual AI caption as its
+            // post text (when that fails, the short's own caption is used).
             if ( in_array( $platform, [ 'tiktok', 'instagram' ], true ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, $platform ) ) {
-                PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, $platform );
-                $short_jobs = PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ), false, $platform );
+                $short_copy = null;
+                if ( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE === PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
+                    $copy_meta  = get_post_meta( $post_id, '_presshub_social_copy_' . $platform, true );
+                    $short_copy = is_string( $copy_meta ) ? trim( $copy_meta ) : '';
+                    if ( '' === $short_copy && class_exists( 'PressHub_Social_AI_Copywriter' ) && method_exists( 'PressHub_Social_AI_Copywriter', 'generate_for_post' ) ) {
+                        $generated = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform );
+                        if ( is_wp_error( $generated ) ) {
+                            PressHub_Social_Logger::warning( sprintf( '%s caption for article short of post #%d failed (%s); the short\'s own caption is used.', $platform, $post_id, $generated->get_error_message() ) );
+                        } else {
+                            $short_copy = (string) $generated;
+                        }
+                    }
+                } else {
+                    PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, $platform );
+                }
+                $short_jobs = PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ), false, $platform, $short_copy );
                 foreach ( $short_jobs as $short_job ) {
                     $job_id = PressHub_Social_Queue::enqueue( $short_job );
                     if ( is_wp_error( $job_id ) ) {

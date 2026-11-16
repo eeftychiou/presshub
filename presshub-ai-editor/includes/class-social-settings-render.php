@@ -483,6 +483,17 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_tiktok_article_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_tiktok_article_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_tiktok_article_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_tiktok_article_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Also turn every article and opinion piece into one short, made like the podcast shorts (narration, captions that follow the voice, AI images, music), on TikTok and, when Instagram Reels are on, on Instagram. The post text is the usual AI caption. If the short cannot be made, the article is posted the classic way.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
     public function render_tiktok_shorts_music_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_tiktok_shorts_music_enabled();
         ?>

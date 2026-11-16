@@ -2287,7 +2287,7 @@ assert_true( is_array( $test_ids ) && 3 === count( $test_ids ), 'A test render q
 $test_jobs = array_map( fn( $id ) => PressHub_Social_Queue::get_job( $id ), $test_ids );
 assert_equals( $test_jobs[0]['scheduled_at'], $test_jobs[2]['scheduled_at'], 'Test render jobs are all due now, not spaced out' );
 assert_true( PressHub_Social_TikTok_Shorts::is_test_job( $test_jobs[1] ), 'Test render jobs are flagged as tests' );
-assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::enqueue_test_render( 501 ) ), 'A test render needs a podcast post' );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::enqueue_test_render( 99999 ) ), 'A test render needs a podcast post or an article with text' );
 update_option( 'presshub_social_worker_mode', 'push' );
 assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::enqueue_test_render( 880 ) ), 'A test render needs Pull Mode' );
 update_option( 'presshub_social_worker_mode', 'pull' );
@@ -2346,6 +2346,116 @@ for ( $run = 2; $run <= PressHub_Social_Settings_Storage::get_max_attempts(); $r
     PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 }
 assert_equals( 'failed', PressHub_Social_Queue::get_job( $fail_ids[0] )['status'], 'After the max attempts the unprepared shorts fail permanently' );
+
+// Article shorts: every other post goes to TikTok (and Instagram Reels) as one short.
+echo "\n--- Article Shorts ---\n";
+if ( ! function_exists( 'get_the_category' ) ) {
+    function get_the_category( $post_id = 0 ) {
+        return $GLOBALS['test_categories'][ (int) $post_id ] ?? [];
+    }
+}
+$GLOBALS['POSTS_STORE'][890] = [
+    'ID'           => 890,
+    'post_title'   => 'Διασπαστικά βήματα μέσα στον αθλητισμό',
+    'post_content' => '<p>Ο αθλητισμός στην Κύπρο περνά κρίση εμπιστοσύνης.</p>[gallery ids="1,2"]<p>Οι ομοσπονδίες &amp; οι σύλλογοι διαφωνούν.</p>',
+    'post_excerpt' => 'Ένα άρθρο γνώμης για τον αθλητισμό.',
+    'post_status'  => 'publish',
+];
+$GLOBALS['test_posts'][890]      = new WP_Post( $GLOBALS['POSTS_STORE'][890] );
+$GLOBALS['test_categories'][890] = [ (object) [ 'name' => 'Άποψη', 'slug' => 'apopsi' ] ];
+assert_true( PressHub_Social_Settings_Storage::get_tiktok_article_shorts_enabled(), 'Article shorts are on by default' );
+assert_equals( 'article', PressHub_Social_TikTok_Shorts::source_type( 890 ), 'A post with text that is not a podcast is an article source' );
+assert_equals( 'podcast', PressHub_Social_TikTok_Shorts::source_type( 880 ), 'A podcast post with a script is a podcast source' );
+$art_text = PressHub_Social_TikTok_Shorts::article_text( 890 );
+assert_true( str_contains( $art_text, 'κρίση εμπιστοσύνης.' ) && str_contains( $art_text, 'ομοσπονδίες & οι' ) && ! str_contains( $art_text, '<p>' ), 'The article text has no markup and decoded entities' );
+assert_equals( 'ΑΠΟΨΗ', PressHub_Social_TikTok_Shorts::article_badge( 890 ), 'The badge is the category in capitals without accents' );
+assert_equals( 'ΑΡΘΡΟ', PressHub_Social_TikTok_Shorts::article_badge( 99999 ), 'A post without a category gets the ΑΡΘΡΟ badge' );
+
+$art_ai_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$art_ai_calls, $short_json ) {
+    $art_ai_calls[] = $user;
+    return $short_json( 3 );
+} );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός' );
+
+// Article shorts off: the classic single TikTok post.
+update_option( 'presshub_social_tiktok_article_shorts_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+$classic_ids = PressHub_Social_Dispatcher::enqueue_for_post( 890, [ 'tiktok' ] );
+assert_equals( 1, count( $classic_ids ), 'With article shorts off an article gets one TikTok job' );
+assert_false( PressHub_Social_TikTok_Shorts::is_short_job( PressHub_Social_Queue::get_job( $classic_ids[0] ) ), 'With article shorts off the article job is not a short' );
+update_option( 'presshub_social_tiktok_article_shorts_enabled', true );
+
+// Article shorts on: one short job, with the usual AI caption as its post text.
+PressHub_Social_Queue::reset_memory_store();
+$art_ids = PressHub_Social_Dispatcher::enqueue_for_post( 890, [ 'tiktok' ] );
+assert_equals( 1, count( $art_ids ), 'An article gets ONE TikTok short job, not Shorts per Podcast' );
+$art_job = PressHub_Social_Queue::get_job( $art_ids[0] );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( $art_job ), 'The article job is an article short' );
+assert_equals( 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός', $art_job['post_copy'], 'The article short keeps the TikTok caption prompt\'s copy' );
+assert_equals( 0, count( $art_ai_calls ), 'No shorts LLM call at enqueue time for an article' );
+
+// Instagram Reels get the article short too, when Instagram Reels are on.
+update_option( 'presshub_social_instagram_shorts_enabled', true );
+assert_true( PressHub_Social_TikTok_Shorts::should_split( 890, 'automation', 'instagram' ), 'An article becomes an Instagram Reel when Instagram Reels are on' );
+$ig_art = PressHub_Social_TikTok_Shorts::build_jobs( 890, 'automation', null, null, time() - 60, false, 'instagram', 'Λεζάντα Instagram' );
+assert_equals( 1, count( $ig_art ), 'An article gets one Instagram Reel job' );
+assert_equals( 'Λεζάντα Instagram', $ig_art[0]['post_copy'], 'The Instagram Reel of an article keeps its Instagram caption' );
+PressHub_Social_Queue::enqueue( $ig_art[0] );
+update_option( 'presshub_social_instagram_shorts_enabled', false );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( 890, 'automation', 'instagram' ), 'No Instagram Reel for an article when Instagram Reels are off' );
+assert_false( PressHub_Social_TikTok_Shorts::should_split( 890, 'api' ), 'Article shorts need the automation engine' );
+
+// A new podcast never cancels an article short.
+assert_equals( [], PressHub_Social_TikTok_Shorts::cancel_superseded( 880 ), 'A podcast does not cancel pending article shorts' );
+
+// Preparation: the plan comes from the article text, with one story.
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+PressHub_Social_TikTok_Shorts::prepare_post( 890 );
+assert_equals( 1, count( $art_ai_calls ), 'The article short plan takes one LLM call (shared by TikTok and Instagram)' );
+assert_true( str_contains( $art_ai_calls[0], 'κρίση εμπιστοσύνης' ) && str_contains( $art_ai_calls[0], 'Κατηγορία: Άποψη' ) && ! str_contains( $art_ai_calls[0], '{content}' ), 'The article short prompt carries the article text and category' );
+$art_ready = PressHub_Social_Queue::get_job( $art_ids[0] );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( $art_ready ), 'The article short is prepared' );
+$plan_890 = get_post_meta( 890, PressHub_Social_TikTok_Shorts::PLAN_META, true );
+assert_equals( 1, count( $plan_890['shorts'] ?? [] ), 'The article plan keeps one story' );
+foreach ( PressHub_Social_Queue::get_jobs_for_post( 890 ) as $aj ) {
+    PressHub_Social_Queue::update_job( (int) $aj['id'], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+}
+$req_art = new WP_REST_Request( 'POST', '/worker/claim' );
+$req_art->set_param( 'sessions', [ 'tiktok' => true, 'instagram' => true ] );
+$req_art->set_param( 'limit', 5 );
+$art_claim = PressHub_Social_REST_Controller::handle_claim( $req_art );
+$art_claimed = array_values( array_filter( $art_claim['jobs'], fn( $j ) => 'tiktok' === $j['platform'] ) )[0] ?? [];
+assert_equals( 'ΑΠΟΨΗ', $art_claimed['tiktok_short']['badge'] ?? '', 'A claimed article short carries its category badge' );
+assert_equals( 'article', $art_claimed['tiktok_short']['source'] ?? '', 'A claimed article short says it is an article short' );
+assert_equals( 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός', $art_claimed['post_copy'] ?? '', 'A claimed article short posts the TikTok caption, not the plan caption' );
+assert_true( '' !== (string) ( $art_claimed['audio_url'] ?? '' ) && ! empty( $art_claimed['tiktok_short']['segments'] ), 'A claimed article short carries its narration and timings' );
+assert_equals( 2, count( $art_claim['jobs'] ), 'The TikTok short and the Instagram Reel of the article are both claimed' );
+
+// Fallback: an article short that cannot be prepared is posted the classic way.
+update_post_meta( 890, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => 'Συγγνώμη, δεν μπορώ.' );
+PressHub_Social_Queue::reset_memory_store();
+$fb_ids = PressHub_Social_TikTok_Shorts::build_jobs( 890, 'automation', null, null, time() - 60, false, 'tiktok', '' );
+$fb_id  = PressHub_Social_Queue::enqueue( $fb_ids[0] );
+for ( $run = 1; $run < PressHub_Social_Settings_Storage::get_max_attempts(); $run++ ) {
+    PressHub_Social_TikTok_Shorts::prepare_post( 890 );
+}
+assert_true( PressHub_Social_TikTok_Shorts::is_short_job( PressHub_Social_Queue::get_job( $fb_id ) ), 'An article short is retried before it falls back' );
+PressHub_Social_TikTok_Shorts::prepare_post( 890 );
+$fb_job = PressHub_Social_Queue::get_job( $fb_id );
+assert_equals( 'pending', $fb_job['status'], 'An article short that cannot be made stays pending instead of failing' );
+assert_false( PressHub_Social_TikTok_Shorts::is_short_job( $fb_job ), 'The fallen-back article job is a classic post again' );
+assert_true( ! empty( json_decode( (string) $fb_job['metadata'], true )['tiktok_short_fallback']['error'] ?? '' ), 'The fallback keeps the reason in the job metadata' );
+assert_equals( 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός', $fb_job['post_copy'], 'The fallen-back job gets the usual TikTok caption in place of the placeholder' );
+PressHub_Social_TikTok_Narrator::set_synthesizer( fn() => [ 'url' => 'https://example.com/uploads/narration-890.wav', 'id' => 990 ] );
+$fb_claim = PressHub_Social_REST_Controller::handle_claim( $req_art );
+PressHub_Social_TikTok_Narrator::set_synthesizer( null );
+assert_equals( 1, count( $fb_claim['jobs'] ), 'The fallen-back article job is claimed as a classic TikTok post' );
+assert_true( empty( $fb_claim['jobs'][0]['tiktok_short'] ), 'The fallen-back article job is rendered the classic way' );
+
+PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => 'Συγγνώμη, δεν μπορώ.' );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Γενική λεζάντα TikTok #news' );
 
 // Unprepared shorts never starve ready jobs queued behind them in the claim.
 update_option( 'presshub_social_tiktok_shorts_count', 5 );

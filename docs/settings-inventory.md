@@ -9,8 +9,8 @@
 | Page | Options | Not shown on screen | Secrets |
 |---|---|---|---|
 | Settings → PressHub AI | 215 | 27 | 5 |
-| PressHub Social → Settings | 82 | 8 | 9 |
-| **Total** | **297** | | |
+| PressHub Social → Settings | 84 | 8 | 9 |
+| **Total** | **299** | | |
 
 **Scheduled for removal:** 4 option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).
 
@@ -311,7 +311,7 @@
 | `presshub_social_alert_email_enabled` | Enable Failure Email Alerts | boolean |  | checkbox |
 | `presshub_social_alert_email_address` | Alert Recipient Email | string |  |  |
 
-### Tab `worker` (28)
+### Tab `worker` (29)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
@@ -330,6 +330,7 @@
 | `presshub_social_tiktok_narration_voice` | TikTok Narration Voice | string |  | needs `presshub_social_tiktok_narration_enabled` on |
 | `presshub_social_tiktok_shorts_enabled` | TikTok Shorts | boolean |  | checkbox |
 | `presshub_social_instagram_shorts_enabled` | Instagram Reels (Shorts) | boolean |  | checkbox |
+| `presshub_social_tiktok_article_shorts_enabled` | Article Shorts | boolean |  | checkbox, needs `presshub_social_tiktok_shorts_enabled` on |
 | `presshub_social_tiktok_shorts_count` | Shorts per Podcast | integer | shorts | needs `presshub_social_tiktok_shorts_enabled` on |
 | `presshub_social_tiktok_shorts_spacing_minutes` | Time between shorts (min) | integer | min | needs `presshub_social_tiktok_shorts_enabled` on, was: Time Between Shorts |
 | `presshub_social_tiktok_shorts_max_words` | Short Script Length | integer | words | needs `presshub_social_tiktok_shorts_enabled` on |
@@ -359,7 +360,7 @@
 | `presshub_social_tiktok_access_token` | TikTok Access Token | string |  | secret, masked |
 | `presshub_social_tiktok_open_id` | TikTok Creator Open ID | string |  |  |
 
-### Tab `prompts` (16)
+### Tab `prompts` (17)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
@@ -370,6 +371,7 @@
 | `presshub_social_prompt_tiktok_shorts_image_moods` | TikTok Shorts: Image Styles per Mood | string |  |  |
 | `presshub_social_prompt_tiktok_shorts_tts_style` | TikTok Shorts: Narration Style | string |  |  |
 | `presshub_social_prompt_tiktok_shorts_music` | TikTok Shorts: Music Prompts | string |  |  |
+| `presshub_social_prompt_tiktok_article_short` | Article Shorts: Script Prompt | string |  |  |
 | `presshub_social_prompt_tiktok_shorts` | TikTok Shorts: Script Prompt | string |  |  |
 | `presshub_social_prompt_twitter` | X/Twitter Caption Prompt | string |  |  |
 | `presshub_social_template_twitter` | X/Twitter Static Fallback Template | string |  |  |
