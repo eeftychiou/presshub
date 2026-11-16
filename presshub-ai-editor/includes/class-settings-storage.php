@@ -1161,11 +1161,9 @@ class PressHub_AI_Settings_Storage {
         if ( ! is_numeric( $value ) ) {
             return self::default_temperature();
         }
-        $temp = (float) $value;
-        if ( $temp < 0.0 || $temp > 2.0 ) {
-            return self::default_temperature();
-        }
-        return round( $temp, 2 );
+        // Clamp to 0–2 like every other temperature field (#258); only a
+        // non-numeric value falls back to the default.
+        return round( max( 0.0, min( 2.0, (float) $value ) ), 2 );
     }
 
     /**
@@ -1217,11 +1215,10 @@ class PressHub_AI_Settings_Storage {
         if ( null === $value || '' === trim( (string) $value ) ) {
             return PressHub_AI_Provider_Defaults::DEFAULT_TIMEOUT;
         }
+        // 10 s is the shortest timeout the API client honours (#259); a
+        // lower stored value would be silently ignored there.
         $n = (int) wp_unslash( $value );
-        if ( $n <= 0 ) {
-            return 5;
-        }
-        return max( 5, min( 300, $n ) );
+        return max( 10, min( 300, $n ) );
     }
 
     public static function sanitize_rate_limit_per_hour( $value ) {

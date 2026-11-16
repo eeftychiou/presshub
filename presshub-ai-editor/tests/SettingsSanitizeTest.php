@@ -8,7 +8,7 @@
  * wiring, not just the static methods.
  *
  * Covers: provider whitelist, key stripping (+ masked/empty preserve),
- * temperature clamp to [0,2] with fallback to 0.7, integer limits for
+ * temperature clamp to [0,2] (non-numeric falls back to 0.7), integer limits for
  * max_tokens/timeout/rate limits, boolean coercion, slug sanitization for
  * project id + region, and per-provider model fallbacks.
  */
@@ -80,16 +80,16 @@ class SettingsSanitizeTest
             $failures[] = "a masked key post should preserve the saved key, not store the mask.";
         }
 
-        // --- Case 6: temperature clamp [0,2], out-of-range falls back to 0.7 ---
+        // --- Case 6: temperature clamps to [0,2]; only non-numeric falls back to 0.7 (#258) ---
         self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '5.0' ) !== 0.7 ) {
-            $failures[] = "temperature 5.0 should fall back to 0.7.";
+        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '5.0' ) !== 2.0 ) {
+            $failures[] = "temperature 5.0 should clamp to 2.";
         }
         if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '0.5' ) !== 0.5 ) {
             $failures[] = "temperature 0.5 should pass through.";
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '-1' ) !== 0.7 ) {
-            $failures[] = "temperature -1 should fall back to 0.7.";
+        if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', '-1' ) !== 0.0 ) {
+            $failures[] = "temperature -1 should clamp to 0.";
         }
         if ( self::sanitize( $cbs, 'presshub_ai_temperature_openai', 'abc' ) !== 0.7 ) {
             $failures[] = "non-numeric temperature should fall back to 0.7.";
@@ -118,13 +118,16 @@ class SettingsSanitizeTest
             $failures[] = 'non-numeric max_tokens should clamp to 1.';
         }
 
-        // --- Case 8: timeout int clamp [5, 300] ---
+        // --- Case 8: timeout int clamp [10, 300] (#259) ---
         self::reset_options();
         if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '45' ) !== 45 ) {
             $failures[] = 'timeout 45 should pass through.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '1' ) !== 5 ) {
-            $failures[] = 'timeout 1 should clamp to 5.';
+        if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '1' ) !== 10 ) {
+            $failures[] = 'timeout 1 should clamp to 10.';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '7' ) !== 10 ) {
+            $failures[] = 'timeout 7 should clamp to 10 (the API client ignores lower values).';
         }
         if ( self::sanitize( $cbs, 'presshub_ai_timeout_gemini', '1000' ) !== 300 ) {
             $failures[] = 'timeout 1000 should clamp to 300.';

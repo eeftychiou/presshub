@@ -115,9 +115,9 @@ class PressHub_AI_Settings_Render {
                                 <tr>
                                     <th scope="row"><label for="presshub_ai_coauthor_provider"><?php echo __( 'Active Co-Author Provider', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
-                                        <?php $cur_coauthor_prov = (string) get_option( 'presshub_ai_coauthor_provider', get_option( 'presshub_ai_provider', 'openai' ) ); ?>
+                                        <?php $cur_coauthor_prov = (string) get_option( 'presshub_ai_coauthor_provider', '' ); ?>
                                         <select name="presshub_ai_coauthor_provider" id="presshub_ai_coauthor_provider" class="regular-text">
-                                            <?php echo self::get_active_providers_options( $cur_coauthor_prov ); ?>
+                                            <?php echo self::get_active_providers_options( $cur_coauthor_prov, __( '-- Use Active Provider Default --', 'presshub-ai-editor' ) ); ?>
                                         </select>
                                         <p class="description"><?php echo __( 'Select which AI provider powers drafting and scorecard evaluation in the editor metabox.', 'presshub-ai-editor' ); ?></p>
                                     </td>
@@ -150,7 +150,7 @@ class PressHub_AI_Settings_Render {
                                     <th scope="row"><label for="presshub_ai_coauthor_timeout"><?php echo __( 'Request Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
                                         <?php $cur_coauthor_timeout = (int) get_option( 'presshub_ai_coauthor_timeout', 300 ); ?>
-                                        <input type="number" min="5" max="300" name="presshub_ai_coauthor_timeout" id="presshub_ai_coauthor_timeout" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_timeout ); ?>" class="small-text" />
+                                        <input type="number" min="10" max="300" name="presshub_ai_coauthor_timeout" id="presshub_ai_coauthor_timeout" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_timeout ); ?>" class="small-text" />
                                         <p class="description"><?php echo __( 'HTTP timeout for draft generation requests. Default 300s.', 'presshub-ai-editor' ); ?></p>
                                     </td>
                                 </tr>
@@ -888,7 +888,7 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_copilot_timeout"><?php echo __( 'Request Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $cur_copilot_timeout = (int) get_option( 'presshub_ai_copilot_timeout', 300 ); ?>
-                                    <input type="number" min="5" max="300" name="presshub_ai_copilot_timeout" id="presshub_ai_copilot_timeout" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_timeout ); ?>" class="small-text" />
+                                    <input type="number" min="10" max="300" name="presshub_ai_copilot_timeout" id="presshub_ai_copilot_timeout" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_timeout ); ?>" class="small-text" />
                                     <p class="description"><?php echo __( 'HTTP timeout for chat and research calls. Default 300s.', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
@@ -1305,7 +1305,7 @@ class PressHub_AI_Settings_Render {
                             </div>
                             <div class="presshub-form-group" style="flex: 1;">
                                 <label for="provider-form-timeout"><strong><?php echo __( 'Timeout (seconds):', 'presshub-ai-editor' ); ?></strong></label>
-                                <input type="number" id="provider-form-timeout" name="timeout" class="widefat" min="5" max="300" value="300" style="margin-top: 4px;" />
+                                <input type="number" id="provider-form-timeout" name="timeout" class="widefat" min="10" max="300" value="300" style="margin-top: 4px;" />
                             </div>
                         </div>
 
@@ -1839,8 +1839,8 @@ class PressHub_AI_Settings_Render {
         $option   = 'presshub_ai_timeout_' . $provider;
         $value    = (int) get_option( $option, PressHub_AI_Settings_Migration::default_timeout( $provider ) );
         ?>
-        <input type="number" min="5" max="300" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
-        <p class="description"><?php echo __( 'Request timeout in seconds (5-300). Default', 'presshub-ai-editor' ); ?> <?php echo (int) PressHub_AI_Settings_Migration::default_timeout( $provider ); ?>.</p>
+        <input type="number" min="10" max="300" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo __( 'Request timeout in seconds (10-300). Default', 'presshub-ai-editor' ); ?> <?php echo (int) PressHub_AI_Settings_Migration::default_timeout( $provider ); ?>.</p>
         <?php
     }
 
@@ -3351,6 +3351,25 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    /**
+     * Keeps a stored voice selectable when the speech engine no longer lists
+     * it (#256). Without this the browser shows the engine's first voice and
+     * the next save stores it although nobody picked it.
+     *
+     * @param string $selected      Stored voice name.
+     * @param array  $female_voices Voices of the current engine, keyed by name.
+     * @param array  $male_voices   Voices of the current engine, keyed by name.
+     * @return string Escaped <option> HTML, or '' when the voice is listed.
+     */
+    public static function unavailable_voice_option( string $selected, array $female_voices, array $male_voices ): string {
+        if ( '' === $selected || isset( $female_voices[ $selected ] ) || isset( $male_voices[ $selected ] ) ) {
+            return '';
+        }
+        /* translators: %s: stored voice name */
+        $label = sprintf( __( '%s (not available for this engine)', 'presshub-ai-editor' ), $selected );
+        return '<option value="' . esc_attr( $selected ) . '" selected="selected">' . esc_html( $label ) . '</option>';
+    }
+
     public function render_briefing_voice_female_field() {
         $option   = 'presshub_ai_briefing_voice_female';
         $selected = PressHub_AI_Settings_Storage::get_voice_female();
@@ -3362,6 +3381,7 @@ class PressHub_AI_Settings_Render {
         $male_voices   = $voices['male'] ?? [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); ?>
             <?php if ( ! empty( $female_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Female Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $female_voices as $key => $v ) : ?>
@@ -3396,6 +3416,7 @@ class PressHub_AI_Settings_Render {
         $male_voices   = $voices['male'] ?? [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); ?>
             <?php if ( ! empty( $male_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Male Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $male_voices as $key => $v ) : ?>
@@ -3430,6 +3451,7 @@ class PressHub_AI_Settings_Render {
         $male_voices   = $voices['male'] ?? [];
         ?>
         <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>">
+            <?php echo self::unavailable_voice_option( (string) $selected, $female_voices, $male_voices ); ?>
             <?php if ( ! empty( $male_voices ) ) : ?>
                 <optgroup label="<?php echo esc_attr__( 'Male Voices', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $male_voices as $key => $v ) : ?>

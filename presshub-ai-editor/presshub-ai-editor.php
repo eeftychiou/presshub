@@ -78,48 +78,6 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-/**
- * 2.5.3 migration: Purge corrupted max_tokens (< 64) and timeout (< 10) options
- * that were unintentionally set to 1 or 5 by unrendered form submissions.
- */
-if ( ! function_exists( 'presshub_ai_migrate_fix_corrupted_tuning_options' ) ) {
-    function presshub_ai_migrate_fix_corrupted_tuning_options() {
-        $token_options = [
-            'presshub_ai_coauthor_max_tokens',
-            'presshub_ai_copilot_max_tokens',
-            'presshub_ai_briefing_text_max_tokens',
-            'presshub_ai_briefing_podcast_max_tokens',
-            'presshub_ai_max_tokens_gemini',
-            'presshub_ai_max_tokens_openai',
-            'presshub_ai_max_tokens_anthropic',
-        ];
-        foreach ( $token_options as $opt ) {
-            $val = get_option( $opt, null );
-            if ( null !== $val && (int) $val < 64 ) {
-                delete_option( $opt );
-            }
-        }
-
-        $timeout_options = [
-            'presshub_ai_coauthor_timeout',
-            'presshub_ai_copilot_timeout',
-            'presshub_ai_briefing_text_timeout',
-            'presshub_ai_briefing_podcast_timeout',
-            'presshub_ai_timeout_openai',
-            'presshub_ai_timeout_anthropic',
-            'presshub_ai_timeout_gemini',
-        ];
-        foreach ( $timeout_options as $opt ) {
-            $val = get_option( $opt, null );
-            if ( null !== $val && (int) $val < 10 ) {
-                delete_option( $opt );
-            }
-        }
-    }
-}
-add_action( 'admin_init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
-add_action( 'init', 'presshub_ai_migrate_fix_corrupted_tuning_options' );
-
 define( 'PRESSHUB_AI_VERSION', '2.38.1' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );

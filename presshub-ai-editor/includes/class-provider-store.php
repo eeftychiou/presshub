@@ -527,9 +527,9 @@ class PressHub_AI_Provider_Store {
         // Timeout
         $timeout = 300;
         if ( isset( $data['timeout'] ) ) {
-            $timeout = max( 1, (int) $data['timeout'] );
+            $timeout = max( 10, min( 600, (int) $data['timeout'] ) ); // API client ignores < 10 s (#259).
         } elseif ( isset( $existing['timeout'] ) ) {
-            $timeout = max( 1, (int) $existing['timeout'] );
+            $timeout = max( 10, min( 600, (int) $existing['timeout'] ) );
         }
 
         // Temperature
