@@ -43,6 +43,50 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
 
 /**
+ * #263 repair: earlier saves unslashed JSON-encoded briefing sources, which
+ * turned "Η" escapes into literal "u0397" text in names, categories
+ * and notes. Turns such sequences (non-ASCII code points only, so ordinary
+ * Latin text is never touched) back into characters. Runs once; guarded by
+ * the presshub_ai_migrated_source_unicode flag.
+ */
+if ( ! function_exists( 'presshub_ai_migrate_repair_source_unicode' ) ) {
+    function presshub_ai_migrate_repair_source_unicode() {
+        if ( '1' === get_option( 'presshub_ai_migrated_source_unicode', '0' ) ) {
+            return;
+        }
+        if ( ! class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            return;
+        }
+        $sources = get_option( 'presshub_ai_briefing_sources', null );
+        if ( is_array( $sources ) ) {
+            $changed = false;
+            foreach ( $sources as $i => $src ) {
+                if ( ! is_array( $src ) ) {
+                    continue;
+                }
+                foreach ( array( 'name', 'category', 'notes' ) as $field ) {
+                    if ( isset( $src[ $field ] ) && is_string( $src[ $field ] ) ) {
+                        $fixed = PressHub_AI_Settings_Storage::repair_unslashed_unicode( $src[ $field ] );
+                        if ( $fixed !== $src[ $field ] ) {
+                            $sources[ $i ][ $field ] = $fixed;
+                            $changed                 = true;
+                        }
+                    }
+                }
+            }
+            if ( $changed ) {
+                update_option( 'presshub_ai_briefing_sources', $sources, false );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::info( 'Repaired unslashed unicode in briefing source names (#263)', array( 'sources' => count( $sources ) ) );
+                }
+            }
+        }
+        update_option( 'presshub_ai_migrated_source_unicode', '1', false );
+    }
+}
+add_action( 'admin_init', 'presshub_ai_migrate_repair_source_unicode' );
+
+/**
  * Purge legacy flat provider tuning options (max_tokens, temperature, timeout)
  * from wp_options so they no longer shadow Provider Store records.
  * Also migrate any uncustomized 16384 provider records in Provider Store to 20000.
