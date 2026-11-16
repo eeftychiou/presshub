@@ -1,0 +1,180 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}body{margin:0;background:#ddd;font:13px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:#1d2327}
+.screen{width:1180px;margin:20px;display:flex;background:#f0f0f1;border:1px solid #bbb;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.side{width:170px;background:#1d2327;color:#f0f0f1;padding:8px 0;flex:none}
+.side div{padding:6px 12px;color:#c3c4c7}.side .top{color:#fff;font-weight:600}.side .cur{background:#2271b1;color:#fff}
+.side .sub{padding:4px 12px 4px 22px;font-size:12px;background:#2c3338;color:#c3c4c7}.side .sub.cur{color:#fff;font-weight:600;background:#2c3338}
+.side .gap{height:10px;padding:0}
+.main{flex:1;padding:16px 22px 24px}
+h1{font-size:23px;font-weight:400;margin:0 0 4px}.crumb{color:#646970;margin-bottom:12px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #c3c4c7;margin-bottom:0}
+.tab{padding:6px 12px;border:1px solid #c3c4c7;border-bottom:none;background:#dcdcde;font-weight:600;font-size:13px;color:#50575e}
+.tab.on{background:#f0f0f1;color:#1d2327;margin-bottom:-1px}
+.subtabs{display:flex;gap:16px;margin:12px 0;border-bottom:1px solid #dcdcde;padding-bottom:6px;flex-wrap:wrap}
+.subtabs span{color:#2271b1}.subtabs .on{color:#1d2327;font-weight:600;border-bottom:3px solid #2271b1;padding-bottom:4px}
+.card{background:#fff;border:1px solid #c3c4c7;padding:14px 16px;margin-top:14px}
+.card h2{font-size:14px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.row{display:grid;grid-template-columns:220px 1fr;gap:12px;padding:7px 0;border-top:1px solid #f0f0f1;align-items:center}
+.row:first-of-type{border-top:none}.row label{font-weight:600}
+.in{border:1px solid #8c8f94;border-radius:4px;padding:4px 8px;background:#fff;display:inline-block;min-width:90px}
+.sel:after{content:" ▾";color:#646970}
+.hint{color:#646970;font-size:12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pill{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
+.ok{background:#e7f5ea;color:#00702a}.warn{background:#fcf0e1;color:#8a5400}.bad{background:#fbeaea;color:#b32d2e}.grey{background:#f0f0f1;color:#50575e}.new{background:#e5f0fa;color:#135e96}
+.notice{border-left:4px solid #dba617;background:#fff;padding:9px 12px;margin-top:12px;box-shadow:0 1px 1px rgba(0,0,0,.04)}
+.notice.info{border-color:#72aee6}.notice.err{border-color:#d63638}.notice.ok{border-color:#00a32a;background:#fff;color:inherit}
+.btn{display:inline-block;padding:4px 10px;border:1px solid #2271b1;color:#2271b1;border-radius:3px;background:#f6f7f7;font-size:12px}
+.btn.p{background:#2271b1;color:#fff}
+.save{margin-top:16px;display:flex;gap:10px;align-items:center}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #f0f0f1;vertical-align:middle}
+th{font-size:12px;color:#50575e;background:#f6f7f7}
+.adv{background:#f6f7f7}.mono{font-family:Consolas,monospace;font-size:12px}
+.collapsed{border:1px dashed #c3c4c7;padding:8px 12px;margin-top:10px;color:#50575e;background:#fafafa}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.conn{background:#fff;border:1px solid #c3c4c7;padding:12px}.conn h3{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between}
+.tag{font-size:10px;font-family:Consolas,monospace;padding:1px 5px;border-radius:3px;background:#e5f0fa;color:#135e96;margin-left:6px}
+.dim{opacity:.45}
+.lbl{position:relative}.callout{position:absolute;right:-6px;top:-10px;background:#d63638;color:#fff;font-size:10px;padding:1px 6px;border-radius:8px}
+</style></head><body>
+
+<!-- 1. Phase 1: hidden settings surfaced -->
+<div class="screen" id="p1">
+ <div class="side"><div>Dashboard</div><div>Posts</div><div class="gap"></div><div class="top">Settings</div><div class="sub">General</div><div class="sub cur">PressHub AI</div><div class="gap"></div><div>Daily Briefing Hub</div><div>PressHub Social</div></div>
+ <div class="main"><h1>PressHub AI Settings</h1><div class="crumb">Phase 1: same tabs as today. Only previously hidden settings become visible.</div>
+ <div class="tabs"><div class="tab">AI Providers</div><div class="tab">AI Co-Author &amp; Review</div><div class="tab on">Daily Briefing Hub</div><div class="tab">AI Featured Images</div><div class="tab">AI Copilot</div><div class="tab">Token &amp; Usage Logs</div><div class="tab">Advanced &amp; System</div></div>
+ <div class="two">
+ <div class="card"><h2>§2 Podcast &amp; Audio <span class="pill new">2 fields now visible</span></h2>
+  <div class="row"><label>Voice synthesis engine <span class="pill new">was hidden</span></label><div><span class="in sel">Gemini TTS</span><div class="hint">Also decides which voices the Shorts &amp; Reels narrator can use (Social → Automation Worker).</div></div></div>
+  <div class="row"><label>Podcast preset <span class="pill new">was hidden</span></label><div><span class="in sel">Conversational news (default)</span></div></div>
+  <div class="row"><label>Presenter 1 voice</label><div><span class="in sel">Kore</span></div></div>
+ </div>
+ <div class="card"><h2>§1 Text Story Curator: model <span class="pill new">2 fields now visible</span></h2>
+  <div class="row"><label>Curator provider / model</label><div><span class="in sel">Gemini</span> <span class="in sel">gemini-3.1-pro</span></div></div>
+  <div class="row"><label>Curator temperature <span class="pill new">was hidden</span></label><div><span class="in">0.4</span></div></div>
+  <div class="row"><label>Curator timeout (s) <span class="pill new">was hidden</span></label><div><span class="in">180</span></div></div>
+ </div></div>
+ <div class="card"><h2>Advanced &amp; System → Diagnostic logging</h2>
+  <div class="row"><label>Raw debug dump: prompts</label><div><span class="in">☐</span> <span class="hint">was labelled "Raw debug dump"</span></div></div>
+  <div class="row"><label>Raw debug dump: TTS payloads</label><div><span class="in">☐</span> <span class="hint">was also labelled "Raw debug dump"</span></div></div>
+ </div>
+ <div class="save"><span class="btn p">Save Daily Briefing Settings</span><span class="hint">One save path for every tab (options.php / AJAX / per-section maps merged into one option map).</span></div>
+ </div></div>
+
+<!-- 2. Phase 2: briefing sub-tabs -->
+<div class="screen" id="p2-briefing">
+ <div class="side"><div>Dashboard</div><div>Posts</div><div class="gap"></div><div class="top">Settings</div><div class="sub cur">PressHub AI</div><div class="gap"></div><div>Daily Briefing Hub</div><div>PressHub Social</div></div>
+ <div class="main"><h1>PressHub AI Settings</h1><div class="crumb">Phase 2: the 124-field Briefing tab split into sub-tabs. Option names unchanged.</div>
+ <div class="tabs"><div class="tab">AI Providers</div><div class="tab">AI Co-Author &amp; Review</div><div class="tab on">Daily Briefing Hub</div><div class="tab">AI Featured Images</div><div class="tab">AI Copilot</div><div class="tab">Social listening <span class="pill new">new</span></div><div class="tab">Advanced &amp; System</div></div>
+ <div class="subtabs"><span class="on">Schedule</span><span>Sources &amp; harvesting</span><span>Text story</span><span>Podcast script</span><span>Voices &amp; audio</span><span>Publishing</span><span>Editorial memory</span></div>
+ <div class="two">
+  <div class="card"><h2>Morning edition <span class="pill ok">On</span></h2>
+   <div class="row"><label>Enabled</label><div><span class="in">☑</span></div></div>
+   <div class="row"><label>Harvest at</label><div><span class="in">04:15</span></div></div>
+   <div class="row"><label>Generate at</label><div><span class="in">04:30</span></div></div></div>
+  <div class="card"><h2>Noon edition <span class="pill ok">On</span></h2>
+   <div class="row"><label>Enabled</label><div><span class="in">☑</span></div></div>
+   <div class="row"><label>Harvest at</label><div><span class="in">10:15</span></div></div>
+   <div class="row"><label>Generate at</label><div><span class="in">10:30</span></div></div></div>
+ </div>
+ <div class="card"><h2>Harvest</h2>
+  <div class="row"><label>Harvest time budget</label><div><span class="in">240 s</span></div></div>
+  <div class="row"><label>Social posts as sources</label><div><span class="in">☑</span> <span class="hint">Accounts and roundup are configured in <a href="#">Social listening →</a></span></div></div></div>
+ <div class="notice info"><b>Moved:</b> Press release inbox → <i>Sources &amp; harvesting</i>. Social monitoring and Trending in Cyprus → the new <i>Social listening</i> tab. Old links (#briefing) open the right sub-tab.</div>
+ <div class="save"><span class="btn p">Save Daily Briefing Settings</span><span class="hint">Saves only this tab's option group; a test checks no other option changes.</span></div>
+ </div></div>
+
+<!-- 3. Phase 2: Shorts & Reels tab -->
+<div class="screen" id="p2-shorts">
+ <div class="side"><div>Dashboard</div><div class="gap"></div><div class="top">PressHub Social</div><div class="sub">Queue</div><div class="sub cur">Settings</div><div class="gap"></div><div>Settings</div></div>
+ <div class="main"><h1>PressHub Social Settings</h1><div class="crumb">Phase 2: Shorts and Reels get their own tab, with dependency checks.</div>
+ <div class="tabs"><div class="tab">General &amp; Engines</div><div class="tab">AI Copywriter</div><div class="tab">API Credentials</div><div class="tab">Automation Worker</div><div class="tab on">Shorts &amp; Reels <span class="pill new">new</span></div><div class="tab">Queue &amp; Alerts</div><div class="tab">Prompts &amp; Templates</div></div>
+ <div class="notice err"><b>Shorts can't run yet:</b> the automation worker is in <b>Push</b> mode. Shorts and Reels need <b>Pull</b> mode. <a href="#">Change worker mode →</a></div>
+ <div class="card"><h2>Where to post</h2>
+  <div class="row"><label>Post to TikTok</label><div><span class="in">☑</span> <span class="pill ok">TikTok engine: automation</span></div></div>
+  <div class="row"><label>Post to Instagram Reels</label><div><span class="in">☑</span> <span class="pill ok">Instagram engine: API</span></div></div></div>
+ <div class="two">
+ <div class="card"><h2>Schedule &amp; script</h2>
+  <div class="row"><label>Shorts per edition</label><div><span class="in">3</span></div></div>
+  <div class="row"><label>Time between shorts</label><div><span class="in">90 min</span></div></div>
+  <div class="row"><label>Script length</label><div><span class="in">110 words</span></div></div>
+  <div class="row"><label>Story images per short</label><div><span class="in">3</span></div></div></div>
+ <div class="card"><h2>Narration</h2>
+  <div class="row"><label>Narrators</label><div><span class="in sel">1 (recommended)</span></div></div>
+  <div class="row"><label>Voice</label><div><span class="in sel">Puck: upbeat</span><div class="hint">Voices from the speech engine set in Daily Briefing (Gemini TTS).</div></div></div>
+  <div class="row dim"><label>Second voice</label><div><span class="in sel">Kore</span> <span class="hint">only with 2 narrators</span></div></div>
+  <div class="row"><label>Speed</label><div><span class="in">110%</span></div></div></div></div>
+ <div class="card"><h2>Background music</h2><div class="row"><label>Enabled</label><div><span class="in">☑</span> <span class="btn">Generate music tracks</span></div></div></div>
+ <div class="collapsed">▸ Shorts prompts (script, image, narration, music) — moved here from Prompts &amp; Templates</div>
+ </div></div>
+
+<!-- 4. Phase 3: one menu + connections -->
+<div class="screen" id="p3-connections">
+ <div class="side"><div>Dashboard</div><div>Posts</div><div class="gap"></div><div class="top cur">PressHub</div><div class="sub">Daily Briefing Hub</div><div class="sub">Generation records</div><div class="sub">Memory</div><div class="sub">Social Queue</div><div class="sub cur">Settings</div><div class="sub">Presets</div><div class="gap"></div><div>Settings</div></div>
+ <div class="main"><h1>PressHub Settings</h1><div class="crumb">Phase 3: one menu, one settings page. Connections holds every key and account.</div>
+ <div class="tabs"><div class="tab on">Connections</div><div class="tab">AI models</div><div class="tab">Editorial</div><div class="tab">Daily Briefing</div><div class="tab">Featured images</div><div class="tab">Social publishing</div><div class="tab">Social listening</div><div class="tab">Site &amp; system</div></div>
+ <div class="card"><h2>AI providers</h2>
+  <div class="grid3">
+   <div class="conn"><h3>Gemini <span class="pill ok">Connected</span></h3><div class="in mono">AIza••••••••••3kQ</div><div class="hint" style="margin-top:6px">Text, speech, image, music</div><div style="margin-top:6px"><span class="btn">Test</span> <span class="btn">Replace key</span></div></div>
+   <div class="conn"><h3>OpenAI <span class="pill grey">Not set</span></h3><div class="in mono">&nbsp;</div><div class="hint" style="margin-top:6px">Organisation ID (optional)</div><div style="margin-top:6px"><span class="btn">Add key</span></div></div>
+   <div class="conn"><h3>Google Cloud <span class="pill ok">Connected</span></h3><div class="in mono">AIza••••••••••x9P</div><div class="hint" style="margin-top:6px">Project <b>presshub-cy</b> · region <b>europe-west4</b></div><div style="margin-top:6px"><span class="btn">Test</span></div></div>
+  </div></div>
+ <div class="two">
+  <div class="card"><h2>Social accounts</h2>
+   <table><tr><th>Platform</th><th>Credential</th><th>Status</th></tr>
+   <tr><td>Facebook Page</td><td class="mono">Page 1043… · token ••••Zx</td><td><span class="pill ok">Valid, 54 days left</span></td></tr>
+   <tr><td>Instagram</td><td class="mono">Account 1784…</td><td><span class="pill ok">Linked</span></td></tr>
+   <tr><td>X</td><td class="mono">Bearer ••••Q2</td><td><span class="pill ok">Valid</span></td></tr>
+   <tr><td>TikTok</td><td class="mono">Open ID ••••a1</td><td><span class="pill warn">Expires in 3 days</span></td></tr></table>
+   <div class="hint" style="margin-top:6px">The 3 unused X OAuth1 fields are gone.</div></div>
+  <div class="card"><h2>Local worker <span class="pill ok">Heartbeat 2 min ago</span></h2>
+   <div class="row"><label>Mode</label><div><span class="in">◉ Pull</span> <span class="in">○ Push</span></div></div>
+   <div class="row"><label>Worker secret</label><div><span class="in mono">••••••••••••7f</span> <span class="btn">Regenerate</span></div></div>
+   <div class="row dim"><label>Worker URL / timeout</label><div class="hint">Shown only in Push mode</div></div>
+   <div class="row"><label>Sessions</label><div><span class="pill ok">X</span> <span class="pill ok">TikTok</span> <span class="pill ok">Instagram</span> <span class="pill warn">Facebook reader: login needed</span></div></div></div>
+ </div>
+ <div class="two">
+  <div class="card"><h2>Press release inbox</h2><div class="row"><label>IMAP</label><div class="mono">imap.gmail.com:993 · press@… · ••••••</div></div><div class="row"><label>Status</label><div><span class="pill ok">Last fetch 04:10, 3 new</span></div></div></div>
+  <div class="card"><h2>Plugin updates</h2><div class="row"><label>GitHub token</label><div><span class="in mono">ghp_••••••••3a</span> <span class="hint">one token (the Social copy is removed)</span></div></div></div>
+ </div>
+ <div class="notice info">Old addresses (<span class="mono">options-general.php?page=presshub-ai</span>, <span class="mono">admin.php?page=presshub-social-settings&amp;tab=…</span>) redirect to the matching tab here.</div>
+ </div></div>
+
+<!-- 5. Phase 4: AI models routing table -->
+<div class="screen" id="p4-models">
+ <div class="side"><div>Dashboard</div><div class="gap"></div><div class="top cur">PressHub</div><div class="sub">Daily Briefing Hub</div><div class="sub">Social Queue</div><div class="sub cur">Settings</div><div class="gap"></div><div>Settings</div></div>
+ <div class="main"><h1>PressHub Settings</h1><div class="crumb">Phase 4: one table answers "which model does what". Replaces 7 duplicated model blocks.</div>
+ <div class="tabs"><div class="tab">Connections</div><div class="tab on">AI models</div><div class="tab">Editorial</div><div class="tab">Daily Briefing</div><div class="tab">Featured images</div><div class="tab">Social publishing</div><div class="tab">Social listening</div><div class="tab">Site &amp; system</div></div>
+ <div class="card"><h2>Default provider</h2><div class="row"><label>Used when a task says "Default"</label><div><span class="in sel">Gemini</span> <span class="in sel">gemini-3.1-flash</span></div></div></div>
+ <div class="card"><h2>Model per task</h2>
+ <table><tr><th>Task</th><th>Where it's used</th><th>Provider</th><th>Model</th><th></th></tr>
+ <tr><td><b>Co-author</b></td><td class="hint">Draft from sources</td><td><span class="in sel">Default</span></td><td><span class="in sel">—</span></td><td><span class="btn">Advanced</span></td></tr>
+ <tr><td><b>Editorial QA</b></td><td class="hint">Score &amp; libel check</td><td><span class="in sel">Anthropic</span></td><td><span class="in sel">claude-…</span></td><td><span class="btn">Advanced</span></td></tr>
+ <tr><td><b>Copilot</b></td><td class="hint">Editor sidebar</td><td><span class="in sel">Default</span></td><td><span class="in sel">—</span></td><td><span class="btn">Advanced</span></td></tr>
+ <tr><td><b>Briefing curator</b></td><td class="hint">Text story</td><td><span class="in sel">Gemini</span></td><td><span class="in sel">gemini-3.1-pro</span></td><td><span class="btn p">Advanced ▴</span></td></tr>
+ <tr class="adv"><td></td><td colspan="4">Temperature <span class="in">0.4</span> &nbsp; Max tokens <span class="in">16000</span> &nbsp; Timeout <span class="in">180 s</span> &nbsp; <span class="hint">stored in presshub_ai_briefing_text_* (unchanged)</span></td></tr>
+ <tr><td><b>Podcast script</b></td><td class="hint">Dialogue</td><td><span class="in sel">Gemini</span></td><td><span class="in sel">gemini-3.1-pro</span></td><td><span class="btn">Advanced</span></td></tr>
+ <tr><td><b>Memory</b></td><td class="hint">Digest &amp; rollup</td><td><span class="in sel">Default</span></td><td><span class="in sel">—</span></td><td><span class="btn">Advanced</span></td></tr>
+ <tr><td><b>Image prompt</b></td><td class="hint">Article analysis</td><td><span class="in sel">Gemini</span></td><td><span class="in sel">gemini-3.1-flash</span></td><td><span class="btn">Advanced</span></td></tr>
+ <tr><td><b>Image generation</b></td><td class="hint">Featured &amp; post images</td><td><span class="in sel">Gemini</span></td><td><span class="in sel">imagen-…</span></td><td></td></tr>
+ <tr><td><b>Social copy</b></td><td class="hint">Captions</td><td><span class="in sel">Gemini</span></td><td><span class="in sel">gemini-3.1-flash-lite</span></td><td><span class="btn">Advanced</span></td></tr>
+ <tr><td><b>Speech (TTS)</b></td><td class="hint">Podcast, Shorts</td><td><span class="in sel">Gemini TTS</span></td><td><span class="in sel">gemini-…-tts</span></td><td><span class="btn">Advanced</span></td></tr>
+ <tr><td><b>Music</b></td><td class="hint">Shorts background</td><td><span class="in sel">Lyria</span></td><td><span class="in sel">lyria-…</span></td><td></td></tr>
+ </table>
+ <div class="notice err" style="margin-top:10px"><b>Social copy:</b> "gemini-…-tts" is a speech model and can't write post text. Pick a text model.</div>
+ </div></div></div>
+
+<!-- 6. Phase 5: migration notice -->
+<div class="screen" id="p5-migration">
+ <div class="side"><div>Dashboard</div><div class="gap"></div><div class="top cur">PressHub</div><div class="sub cur">Settings</div></div>
+ <div class="main"><h1>PressHub Settings</h1><div class="crumb">Phase 5 (only if approved): stored option names are renamed once, on update.</div>
+ <div class="notice ok"><b>PressHub updated its settings storage.</b> 21 Shorts settings and 6 presenter settings were copied to their new names. Nothing changed on screen. <a href="#">See what moved</a> · <a href="#">Dismiss</a></div>
+ <div class="card"><h2>Migration report <span class="pill ok">Done 2026-12-02 06:01</span></h2>
+ <table><tr><th>Old option</th><th>New option</th><th>Value kept</th><th>Old key</th></tr>
+ <tr class="mono"><td>presshub_social_tiktok_shorts_count</td><td>presshub_social_shorts_count</td><td>3</td><td>deleted after 1 release</td></tr>
+ <tr class="mono"><td>presshub_social_tiktok_shorts_voice_1</td><td>presshub_social_shorts_voice_1</td><td>Puck</td><td>deleted after 1 release</td></tr>
+ <tr class="mono"><td>presshub_ai_briefing_host_female</td><td>presshub_ai_briefing_presenter_1</td><td>Ελένη</td><td>deleted after 1 release</td></tr>
+ <tr class="mono"><td>presshub_ai_api_key (legacy)</td><td>provider grid → Gemini</td><td>already present</td><td>fallback removed</td></tr></table>
+ <div class="hint" style="margin-top:8px">The worker claim API keeps sending the same field names, so the worker on your PC doesn't need an update for this release.</div></div>
+ </div></div>
+</body></html>
