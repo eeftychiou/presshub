@@ -20,7 +20,9 @@ import {
   parseTikTokVideoHref,
   parseTikTokProfileHref,
   resolveTikTokPostUrl,
-  TIKTOK_STUDIO_CONTENT_URL
+  TIKTOK_STUDIO_CONTENT_URL,
+  splitTikTokCaption,
+  typeTikTokCaption
 } from '../src/automation/posters';
 import { ChromeConnection } from '../src/automation/browser-helper';
 import { markSessionInvalid, clearSessionInvalid, verifySession } from '../src/automation/session-manager';
@@ -344,6 +346,84 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     const page = await studioPage('<html><body><p>Loading</p></body></html>');
     const res = await resolveTikTokPostUrl(page, 'caption', 1000);
     expect(res).toEqual({ kind: 'studio', url: TIKTOK_STUDIO_CONTENT_URL });
+    await page.close();
+  });
+
+  test('splitTikTokCaption separates text, line breaks and hashtags in any script', () => {
+    expect(splitTikTokCaption('Νέα στην Κύπρο\n\n#κύπρος #cyprus C#')).toEqual([
+      { kind: 'text', value: 'Νέα στην Κύπρο' },
+      { kind: 'newline', value: '\n' },
+      { kind: 'newline', value: '\n' },
+      { kind: 'hashtag', value: '#κύπρος' },
+      { kind: 'text', value: ' ' },
+      { kind: 'hashtag', value: '#cyprus' },
+      { kind: 'text', value: ' C#' },
+    ]);
+  });
+
+  // A stand-in for TikTok Studio's caption editor: typing '#tag' opens a suggestion list;
+  // picking an entry turns the typed tag into a hashtag (a <span class="hashtag">).
+  const TIKTOK_EDITOR_MOCK = `<html><body>
+    <div id="ed" contenteditable="true" style="min-height:40px"></div>
+    <div id="pop" class="mention-list-popover" style="display:none"></div>
+    <script>
+      const ed = document.getElementById('ed');
+      const pop = document.getElementById('pop');
+      // Suggestions TikTok would show for a typed tag: the exact tag first, except for #rare.
+      const suggest = (t) => t === 'rare' ? ['#rarebits', '#rarely'] : t === 'second' ? ['#secondhand', '#second'] : ['#' + t, '#' + t + 'news'];
+      const current = () => { const m = ed.innerText.match(/#([\\p{L}\\p{N}_]+)$/u); return m ? m[1] : null; };
+      const pick = (tag) => {
+        const t = current();
+        ed.innerHTML = ed.innerHTML.replace(new RegExp('#' + t + '$', 'u'), '<span class="hashtag">' + tag + '</span>&nbsp;');
+        pop.style.display = 'none';
+        const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      };
+      ed.addEventListener('input', () => {
+        const t = current();
+        if (!t) { pop.style.display = 'none'; return; }
+        pop.innerHTML = suggest(t).map(x => '<div class="hashtag-item">' + x + ' 1.2M views</div>').join('');
+        pop.querySelectorAll('.hashtag-item').forEach(el => el.onclick = () => pick(el.textContent.split(' ')[0]));
+        pop.style.display = 'block';
+      });
+      ed.addEventListener('keydown', (e) => {
+        if (pop.style.display === 'none') return;
+        if (e.key === 'Enter') { e.preventDefault(); pick(pop.querySelector('.hashtag-item').textContent.split(' ')[0]); }
+        if (e.key === 'Escape') { pop.style.display = 'none'; }
+      });
+    </script>
+  </body></html>`;
+
+  test('typeTikTokCaption picks each hashtag from the suggestion list so TikTok links it', async () => {
+    const page = await context.newPage();
+    await page.setContent(TIKTOK_EDITOR_MOCK);
+    await page.click('#ed');
+    const res = await typeTikTokCaption(page, 'Η είδηση της ημέρας. #κύπρος #cyprus #second', 1500);
+    expect(res).toEqual({ hashtags: 3, linked: 3 });
+    const tags = await page.$$eval('#ed .hashtag', els => els.map(e => e.textContent));
+    expect(tags).toEqual(['#κύπρος', '#cyprus', '#second']);
+    expect(await page.innerText('#ed')).toContain('Η είδηση της ημέρας.');
+    await page.close();
+  });
+
+  test('typeTikTokCaption leaves a tag as typed when the list does not offer it', async () => {
+    const page = await context.newPage();
+    await page.setContent(TIKTOK_EDITOR_MOCK);
+    await page.click('#ed');
+    const res = await typeTikTokCaption(page, 'Κείμενο #rare', 1500);
+    expect(res).toEqual({ hashtags: 1, linked: 0 });
+    expect(await page.$$eval('#ed .hashtag', els => els.length)).toBe(0);
+    expect((await page.innerText('#ed')).trim()).toBe('Κείμενο #rare');
+    await page.close();
+  });
+
+  test('typeTikTokCaption still types the caption when no suggestion list appears', async () => {
+    const page = await context.newPage();
+    await page.setContent('<html><body><div id="ed" contenteditable="true"></div></body></html>');
+    await page.click('#ed');
+    const res = await typeTikTokCaption(page, 'Λεζάντα #κύπρος #ειδήσεις', 300);
+    expect(res).toEqual({ hashtags: 2, linked: 0 });
+    expect((await page.innerText('#ed')).trim()).toBe('Λεζάντα #κύπρος #ειδήσεις');
     await page.close();
   });
 

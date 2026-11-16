@@ -52,6 +52,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class PressHub_Social_TikTok_Shorts {
 
+    /** Hashtags a short's caption gets when the AI wrote none (the prompt asks for these first). */
+    const DEFAULT_HASHTAGS = '#κύπρος #cyprus #ειδήσεις';
+
     /** Post meta holding the generated plan of shorts for a podcast post. */
     public const PLAN_META = '_presshub_tiktok_shorts';
 
@@ -661,6 +664,8 @@ class PressHub_Social_TikTok_Shorts {
             if ( '' === $hook || '' === $script || '' === $caption ) {
                 return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'short %d is missing its hook, script or caption.', $i + 1 ) );
             }
+            // The prompt asks for hashtags; when the model left them out, add the standard ones.
+            $caption = PressHub_Social_AI_Copywriter::ensure_hashtags( $caption, self::DEFAULT_HASHTAGS );
             if ( ! preg_match( '/\[\s*SPEAKER_[12]\s*\]\s*:/iu', $script ) || preg_match( '/\[\s*SPEAKER_(?![12]\s*\])[^\]]*\]/iu', $script ) ) {
                 return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'short %d script must use only [SPEAKER_1]: and [SPEAKER_2]: lines.', $i + 1 ) );
             }
