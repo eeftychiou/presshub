@@ -1015,6 +1015,25 @@ $ai_tweet = PressHub_Social_AI_Copywriter::generate_from_data( [
 assert_true( is_string( $ai_tweet ) && PressHub_Social_AI_Copywriter::get_twitter_effective_length( $ai_tweet ) <= 280, 'AI copywriter truncates tweet to configured max_chars' );
 assert_true( is_string( $ai_tweet ) && str_contains( $ai_tweet, 'https://presshub.ai/story' ), 'AI copywriter preserves article URL during truncation' );
 
+// Hashtags: every AI copy carries them, even when the model leaves them out.
+PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $config ) {
+    return "Μεγάλη είδηση για την Κύπρο.\n\nΔιαβάστε: https://presshub.ai/story";
+} );
+$tagless_fb = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Big Story', 'url' => 'https://presshub.ai/story', 'hashtags' => '#Κύπρος #Οικονομία #Συντάξεις' ], 'facebook' );
+assert_true( is_string( $tagless_fb ) && str_ends_with( $tagless_fb, "\n\n#Κύπρος #Οικονομία #Συντάξεις" ), 'AI copy without hashtags gets the post hashtags appended' );
+$tagless_x = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Big Story', 'url' => 'https://presshub.ai/story', 'hashtags' => '#Κύπρος #Οικονομία #Συντάξεις' ], 'twitter' );
+assert_true( is_string( $tagless_x ) && str_contains( $tagless_x, '#Κύπρος #Οικονομία' ) && ! str_contains( $tagless_x, '#Συντάξεις' ), 'X/Twitter copy without hashtags gets the first two post hashtags' );
+PressHub_Social_AI_Copywriter::set_ai_caller( function( $sys, $user, $config ) {
+    return "Είδηση.\n\n#cyprus #news";
+} );
+$tagged = PressHub_Social_AI_Copywriter::generate_from_data( [ 'title' => 'Big Story', 'url' => 'https://presshub.ai/story', 'hashtags' => '#Κύπρος' ], 'instagram' );
+assert_equals( "Είδηση.\n\n#cyprus #news", $tagged, 'AI copy that has hashtags is left as written' );
+assert_true( PressHub_Social_AI_Copywriter::has_hashtag( 'Νέα #κύπρος' ), 'has_hashtag finds a Greek hashtag' );
+assert_false( PressHub_Social_AI_Copywriter::has_hashtag( 'https://presshub.cy/a#section C# &#8217; #2026' ), 'has_hashtag ignores URL fragments, C#, HTML entities and bare numbers' );
+assert_equals( 'Κείμενο', PressHub_Social_AI_Copywriter::ensure_hashtags( 'Κείμενο', '' ), 'ensure_hashtags adds nothing when the post has no hashtags' );
+$tagless_short = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"hook":"a","script":"[SPEAKER_1]: Α","caption":"Λεζάντα χωρίς hashtags"}]}', 1 );
+assert_equals( "Λεζάντα χωρίς hashtags\n\n#κύπρος #cyprus #ειδήσεις", $tagless_short[0]['caption'] ?? '', 'A short caption without hashtags gets #κύπρος #cyprus #ειδήσεις' );
+
 // A speech/image model picked as the social copy provider falls back to a text provider
 assert_true( ! PressHub_Social_AI_Copywriter::is_text_model( 'gemini-3.8-flash-tts' ), 'is_text_model: TTS model is not a text model' );
 assert_true( ! PressHub_Social_AI_Copywriter::is_text_model( 'gemini-3.1-flash-lite-image' ), 'is_text_model: image model is not a text model' );

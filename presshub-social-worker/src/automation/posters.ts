@@ -1150,6 +1150,141 @@ export async function resolveTikTokPostUrl(page: Page, caption: string, waitMs: 
   return { kind: 'studio', url: TIKTOK_STUDIO_CONTENT_URL };
 }
 
+/** A hashtag token in a caption: '#' followed by letters, digits or underscores (any script). */
+const TIKTOK_HASHTAG_RE = /#[\p{L}\p{M}\p{N}_]+/gu;
+
+/** The hashtag suggestion list TikTok Studio opens under the caption while a '#tag' is typed. */
+export const TIKTOK_HASHTAG_POPOVER_SELECTOR = [
+  '[class*="mention-list-popover"]',
+  '[class*="hashtag-suggestion"]',
+  '[class*="HashtagSuggestion"]',
+  '[class*="mentionSuggestions"]',
+  '[data-e2e*="hashtag"][role="listbox"]',
+  '[data-e2e*="hashtag-suggestion"]',
+].join(', ');
+
+/** Split a caption into plain text, line breaks and hashtags, in order. */
+export function splitTikTokCaption(copy: string): Array<{ kind: 'text' | 'newline' | 'hashtag'; value: string }> {
+  const out: Array<{ kind: 'text' | 'newline' | 'hashtag'; value: string }> = [];
+  const lines = (copy || '').replace(/\r\n?/g, '\n').split('\n');
+  lines.forEach((line, i) => {
+    if (i > 0) out.push({ kind: 'newline', value: '\n' });
+    let last = 0;
+    for (const m of line.matchAll(TIKTOK_HASHTAG_RE)) {
+      const at = m.index ?? 0;
+      // '#' inside a word (e.g. "C#") is not a hashtag.
+      if (at > 0 && /[\p{L}\p{N}_]/u.test(line[at - 1])) continue;
+      if (at > last) out.push({ kind: 'text', value: line.slice(last, at) });
+      out.push({ kind: 'hashtag', value: m[0] });
+      last = at + m[0].length;
+    }
+    if (last < line.length) out.push({ kind: 'text', value: line.slice(last) });
+  });
+  return out;
+}
+
+/** Lower case, no accents, no '#': "#Κύπρος" and "κυπρος" compare equal. */
+function normalizeTikTokTag(text: string): string {
+  return (text || '').replace(/^#/, '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+}
+
+/**
+ * Type a caption into TikTok Studio's caption editor so its hashtags become real hashtags.
+ *
+ * TikTok only links a hashtag (and lists the video under it) when the tag is picked from
+ * the suggestion list the editor opens while '#tag' is typed. Text pasted in one go keeps
+ * '#tag' as plain words, so the tags show in the caption but are not hashtags.
+ * Plain text is inserted at once; each hashtag is typed key by key and its own entry in
+ * the suggestion list is picked. When the list does not offer that exact tag, the tag
+ * stays as typed instead of taking another one.
+ *
+ * @returns How many hashtags the caption has and how many were picked from the list.
+ */
+export async function typeTikTokCaption(
+  page: any,
+  copy: string,
+  popoverWaitMs: number = 4000
+): Promise<{ hashtags: number; linked: number }> {
+  const parts = splitTikTokCaption(copy);
+  let hashtags = 0;
+  let linked = 0;
+  let afterPick = false;
+  let newlines = 0;
+
+  for (const part of parts) {
+    if (part.kind === 'newline') {
+      // Shift+Enter is a line break inside the same paragraph; at most one blank line.
+      if (++newlines <= 2) {
+        await page.keyboard.press('Shift+Enter').catch(() => {});
+      }
+      afterPick = false;
+      continue;
+    }
+    newlines = 0;
+
+    if (part.kind === 'text') {
+      let text = part.value;
+      // A picked suggestion already ends with a space.
+      if (afterPick) text = text.replace(/^[  ]+/, '');
+      afterPick = false;
+      if (text) await page.keyboard.insertText(text);
+      continue;
+    }
+
+    hashtags++;
+    await page.keyboard.type(part.value, { delay: 60 });
+    const popover = page.locator(TIKTOK_HASHTAG_POPOVER_SELECTOR).first();
+    const shown = await popover.waitFor({ state: 'visible', timeout: popoverWaitMs }).then(() => true).catch(() => false);
+    if (!shown) {
+      WorkerLogger.debug('TikTok Automation', `No hashtag suggestions for ${part.value}; left as typed.`);
+      afterPick = false;
+      continue;
+    }
+    // The list updates as keys arrive; give it a moment to settle on the full tag.
+    await page.waitForTimeout(800);
+
+    const want = normalizeTikTokTag(part.value);
+    const items = popover.locator('[class*="item"], [role="option"], li');
+    const count = await items.count().catch(() => 0);
+    let pick = -1;
+    for (let i = 0; i < Math.min(count, 12); i++) {
+      const text = ((await items.nth(i).innerText().catch(() => '')) || '').trim();
+      const first = normalizeTikTokTag(text.split(/\s+/)[0] || '');
+      if (first === want) {
+        pick = i;
+        break;
+      }
+    }
+
+    if (pick < 0 && count === 0) {
+      // No entries we can read: trust the list only when its first word is the typed tag.
+      const listText = ((await popover.innerText().catch(() => '')) || '').trim();
+      if (normalizeTikTokTag(listText.split(/\s+/)[0] || '') === want) pick = 0;
+    }
+
+    if (pick === 0) {
+      // The typed tag is the top suggestion: Enter picks it.
+      await page.keyboard.press('Enter').catch(() => {});
+      linked++;
+      afterPick = true;
+    } else if (pick > 0) {
+      await items.nth(pick).click({ timeout: 3000 }).then(() => { linked++; afterPick = true; }).catch(async () => {
+        await page.keyboard.press('Escape').catch(() => {});
+        afterPick = false;
+      });
+    } else {
+      WorkerLogger.debug('TikTok Automation', `Hashtag suggestions do not offer ${part.value}; left as typed.`);
+      await page.keyboard.press('Escape').catch(() => {});
+      afterPick = false;
+    }
+    await page.waitForTimeout(300);
+  }
+
+  // The caption may end on a hashtag still showing suggestions: close the list.
+  await page.keyboard.press('Escape').catch(() => {});
+  return { hashtags, linked };
+}
+
 export async function postTikTok(options: PostOptions): Promise<PostResult> {
   if (!options.mediaPath || !fs.existsSync(options.mediaPath)) {
     throw new Error('TikTok automation requires a valid video file path in mediaPath');
@@ -1284,9 +1419,11 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
       await page.keyboard.press('Control+A').catch(() => {});
       await page.keyboard.press('Backspace').catch(() => {});
       await page.waitForTimeout(200);
-      await page.keyboard.insertText(options.copy);
-      await page.waitForTimeout(500);
-      await page.keyboard.press('Escape').catch(() => {});
+      const typed = await typeTikTokCaption(page, options.copy);
+      if (typed.hashtags > 0) {
+        const level = typed.linked < typed.hashtags ? 'warn' : 'info';
+        WorkerLogger[level]('TikTok Automation', `Caption hashtags picked from TikTok's suggestions: ${typed.linked}/${typed.hashtags}.`);
+      }
       await page.waitForTimeout(500);
     }
 

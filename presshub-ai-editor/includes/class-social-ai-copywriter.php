@@ -284,12 +284,44 @@ class PressHub_Social_AI_Copywriter {
             $copy = trim( mb_substr( $copy, 1, -1, 'UTF-8' ) );
         }
 
+        // Every post carries hashtags: when the model left them out, add the post's own.
+        $copy = self::ensure_hashtags( $copy, (string) ( $article_data['hashtags'] ?? '' ), $platform );
+
         // For Twitter, enforce single URL rule and character cap cleanly while preserving article URL.
         if ( 'twitter' === $platform ) {
             $copy = self::sanitize_twitter_copy( $copy, $url, true );
         }
 
         return $copy;
+    }
+
+    /** Whether a text has at least one hashtag ("#" + letters/digits, not inside a word or URL). */
+    public static function has_hashtag( string $text ): bool {
+        return (bool) preg_match( '/(?<![\p{L}\p{N}_\/&])#[\p{L}\p{M}\p{N}_]*\p{L}/u', $text );
+    }
+
+    /**
+     * Append hashtags to a copy that has none, on a new paragraph.
+     * X/Twitter gets the first 2 (its copy is short), the other platforms up to 5.
+     *
+     * @param string $copy     Post copy.
+     * @param string $hashtags Space-separated hashtags, e.g. from build_hashtags_for_post().
+     * @param string $platform Target platform.
+     */
+    public static function ensure_hashtags( string $copy, string $hashtags, string $platform = '' ): string {
+        $copy = trim( $copy );
+        if ( '' === $copy || self::has_hashtag( $copy ) ) {
+            return $copy;
+        }
+        $tags = array_values( array_unique( array_filter(
+            preg_split( '/\s+/u', trim( $hashtags ) ) ?: [],
+            static function ( $t ) { return (bool) preg_match( '/^#[\p{L}\p{M}\p{N}_]*\p{L}[\p{L}\p{M}\p{N}_]*$/u', $t ); }
+        ) ) );
+        if ( empty( $tags ) ) {
+            return $copy;
+        }
+        $tags = array_slice( $tags, 0, 'twitter' === $platform ? 2 : 5 );
+        return $copy . "\n\n" . implode( ' ', $tags );
     }
 
     /**
