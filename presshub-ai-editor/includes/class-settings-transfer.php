@@ -170,6 +170,10 @@ class PressHub_Settings_Transfer {
         }
         if ( $written && function_exists( 'wp_cache_delete' ) ) {
             wp_cache_delete( 'alloptions', 'options' );
+            wp_cache_delete( 'notoptions', 'options' );
+            foreach ( $written as $key ) {
+                wp_cache_delete( $key, 'options' );
+            }
         }
         if ( $written && class_exists( 'PressHub_AI_Audit_Logger' ) && method_exists( 'PressHub_AI_Audit_Logger', 'log' ) ) {
             try {
