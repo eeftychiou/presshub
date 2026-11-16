@@ -406,6 +406,23 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     await page.close();
   });
 
+  test('splitTikTokCaption keeps a bare number like #2026 as text', () => {
+    expect(splitTikTokCaption('Έτος #2026 #κύπρος')).toEqual([
+      { kind: 'text', value: 'Έτος #2026 ' },
+      { kind: 'hashtag', value: '#κύπρος' },
+    ]);
+  });
+
+  test('typeTikTokCaption keeps the space between tags when a pick adds none', async () => {
+    const page = await context.newPage();
+    await page.setContent(TIKTOK_EDITOR_MOCK.replace("'</span>&nbsp;'", "'</span>'"));
+    await page.click('#ed');
+    const res = await typeTikTokCaption(page, '#κύπρος #cyprus', 1500);
+    expect(res).toEqual({ hashtags: 2, linked: 2 });
+    expect((await page.innerText('#ed')).trim()).toBe('#κύπρος #cyprus');
+    await page.close();
+  });
+
   test('typeTikTokCaption leaves a tag as typed when the list does not offer it', async () => {
     const page = await context.newPage();
     await page.setContent(TIKTOK_EDITOR_MOCK);
