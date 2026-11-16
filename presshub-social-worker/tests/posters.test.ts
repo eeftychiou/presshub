@@ -10,6 +10,8 @@ import {
   dismissInstagramInterstitials,
   findInstagramComposerButton,
   resolveInstagramPermalink,
+  resolveFacebookPermalink,
+  parseFacebookPermalink,
   markTikTokAiGenerated,
   getTwitterWeightedLength,
   sanitizeTwitterCopy,
@@ -236,8 +238,17 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
             </div>
             <div role="button" aria-label="Post">Post In Timeline</div>
           </body></html>`;
-          page.goto = async () => {
-            await page.setContent(html);
+          page.goto = async (url: string) => {
+            if (url.includes('/me/')) {
+              await page.setContent(`<html><body>
+                <div role="article"><span>Older post</span><a href="https://www.facebook.com/PressHub.cy/posts/pfbid0OLD?__cft__[0]=x">1d</a></div>
+                <div role="article"><span>Facebook post with strict mode prevention</span>
+                  <a href="/PressHub.cy">PressHub.cy</a>
+                  <a href="https://www.facebook.com/PressHub.cy/posts/pfbid02NEW123?__cft__[0]=AZ&amp;__tn__=%2CO">Just now</a></div>
+              </body></html>`);
+            } else {
+              await page.setContent(html);
+            }
             return null as any;
           };
           return page;
@@ -254,8 +265,53 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
 
     expect(res.success).toBe(true);
     expect(res.platform).toBe('facebook');
-    expect(res.externalPostUrl).toMatch(/https:\/\/facebook\.com\/fb-\d+/);
+    expect(res.externalPostUrl).toBe('https://www.facebook.com/PressHub.cy/posts/pfbid02NEW123');
+    expect(res.externalPostId).toBe('pfbid02NEW123');
+  }, 60000);
+
+  test('postFacebook fails instead of reporting success when there is no Post button', async () => {
+    const page = await context.newPage();
+    page.goto = async () => {
+      await page.setContent('<html><body><div role="textbox" contenteditable="true"></div></body></html>');
+      return null as any;
+    };
+    const mockSession = { browser, isExternalCdp: false, context: { newPage: async () => page } as any, close: async () => {} } as ChromeConnection;
+    await expect(postFacebook({ platform: 'facebook', copy: 'No button here', browserSession: mockSession, timeoutMs: 3000 }))
+      .rejects.toThrow(/"Post" button not found/);
+  }, 30000);
+
+  test('parseFacebookPermalink keeps the post id and drops tracking parameters', () => {
+    expect(parseFacebookPermalink('/PressHub.cy/posts/pfbid0abc?__cft__[0]=x&__tn__=R')).toEqual({
+      url: 'https://www.facebook.com/PressHub.cy/posts/pfbid0abc',
+      id: 'pfbid0abc'
+    });
+    expect(parseFacebookPermalink('https://www.facebook.com/permalink.php?story_fbid=123456789&id=61596712436152&__cft__=1')).toEqual({
+      url: 'https://www.facebook.com/permalink.php?story_fbid=123456789&id=61596712436152',
+      id: '123456789'
+    });
+    expect(parseFacebookPermalink('https://www.facebook.com/photo/?fbid=987654321&set=a.1')?.id).toBe('987654321');
+    expect(parseFacebookPermalink('/PressHub.cy')).toBeNull();
+    expect(parseFacebookPermalink('#')).toBeNull();
+    expect(parseFacebookPermalink('https://evil.example.com/posts/123')).toBeNull();
   });
+
+  test('resolveFacebookPermalink hovers the timestamp when its link is filled in on hover', async () => {
+    const page = await context.newPage();
+    try {
+      page.goto = async () => {
+        await page.setContent(`<html><body><div role="article"><span>Hover caption post text here</span>
+          <a role="link" href="#" onmouseover="this.href='https://www.facebook.com/PressHub.cy/posts/pfbid0HOVER?__cft__=1'">2m</a></div></body></html>`);
+        return null as any;
+      };
+      expect(await resolveFacebookPermalink(page, 'Hover caption post text here', 'https://www.facebook.com/me/', 5000)).toEqual({
+        url: 'https://www.facebook.com/PressHub.cy/posts/pfbid0HOVER',
+        id: 'pfbid0HOVER'
+      });
+      expect(await resolveFacebookPermalink(page, 'A caption nobody posted', 'https://www.facebook.com/me/', 2000)).toBeNull();
+    } finally {
+      await page.close();
+    }
+  }, 30000);
 
   test('postTikTok handles multiple file inputs and caption boxes without strict mode violation', async () => {
     const mockSession: ChromeConnection = {

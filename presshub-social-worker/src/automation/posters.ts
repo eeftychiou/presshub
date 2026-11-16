@@ -1712,6 +1712,92 @@ export async function postTikTok(options: PostOptions): Promise<PostResult> {
 /**
  * Facebook automation poster using saved browser session or running Chrome.
  */
+export interface FacebookPermalink {
+  url: string;
+  id: string;
+}
+
+/** Hrefs that are a post's own page: /posts/<id>, permalink.php?story_fbid=, /permalink/, a photo or video. */
+const FACEBOOK_PERMALINK_RE = /\/posts\/[A-Za-z0-9]+|[?&]story_fbid=[A-Za-z0-9]+|\/permalink\/[0-9]+|\/(?:photos|videos)\/[^?#]*[0-9]{6,}|\/(?:photo|watch)\/?\?[^#]*\b(?:fbid|v)=[0-9]+/;
+
+/**
+ * Clean a Facebook post href into an absolute permalink and its id, or null when it is not one.
+ * Tracking parameters (__cft__, __tn__, ...) are dropped; story_fbid/id, fbid and v are kept.
+ */
+export function parseFacebookPermalink(href: string): FacebookPermalink | null {
+  if (!href || !FACEBOOK_PERMALINK_RE.test(href)) return null;
+  let url: URL;
+  try {
+    url = new URL(href, 'https://www.facebook.com/');
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)facebook\.com$/i.test(url.hostname)) return null;
+  const keep = new URLSearchParams();
+  for (const key of ['story_fbid', 'id', 'fbid', 'v']) {
+    const value = url.searchParams.get(key);
+    if (value) keep.set(key, value);
+  }
+  const query = keep.toString();
+  const clean = `https://www.facebook.com${url.pathname}${query ? `?${query}` : ''}`;
+  const id =
+    (/\/posts\/([A-Za-z0-9]+)/.exec(url.pathname) || [])[1] ||
+    url.searchParams.get('story_fbid') ||
+    (/\/permalink\/([0-9]+)/.exec(url.pathname) || [])[1] ||
+    url.searchParams.get('fbid') ||
+    url.searchParams.get('v') ||
+    (/([0-9]{6,})\/?$/.exec(url.pathname) || [])[1] ||
+    '';
+  return id ? { url: clean, id } : null;
+}
+
+/**
+ * Find the link of a post just made, on the profile or Page the session posts as
+ * (facebook.com/me follows a session switched into a Page). The newest feed unit whose text
+ * starts with the post's copy gives its timestamp link; Facebook fills those hrefs in only on
+ * hover, so its links are hovered when none is a permalink yet. Returns null when not found.
+ */
+export async function resolveFacebookPermalink(
+  page: Page,
+  copy: string,
+  profileUrl: string = 'https://www.facebook.com/me/',
+  waitMs: number = 20000
+): Promise<FacebookPermalink | null> {
+  const prefix = normalizeInstagramText(copy).slice(0, 40);
+  if (!prefix) return null;
+  WorkerLogger.debug('Facebook Automation', `Looking up the new post's link on ${profileUrl}...`);
+  await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
+
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    const units = page.locator('div[role="article"], div[aria-posinset]').filter({ hasText: prefix });
+    if ((await units.count().catch(() => 0)) > 0) {
+      const unit = units.first();
+      const read = async () =>
+        (await unit
+          .locator('a[href]')
+          .evaluateAll((as) => as.map((a) => a.getAttribute('href') || ''))
+          .catch(() => [] as string[]))
+          .map(parseFacebookPermalink)
+          .find((p): p is FacebookPermalink => !!p) || null;
+      let found = await read();
+      if (!found) {
+        const links = unit.locator('a[role="link"], a[href="#"], a:not([href*="/"])');
+        const n = Math.min(await links.count().catch(() => 0), 8);
+        for (let i = 0; i < n && !found; i++) {
+          await links.nth(i).hover({ timeout: 1500 }).catch(() => {});
+          await page.waitForTimeout(300);
+          found = await read();
+        }
+      }
+      if (found) return found;
+    }
+    await page.mouse.wheel(0, 600).catch(() => {});
+    await page.waitForTimeout(1500);
+  }
+  return null;
+}
+
 export async function postFacebook(options: PostOptions): Promise<PostResult> {
   const sessionPath = getSessionPath('facebook', options.sessionsDir);
   const timeout = options.timeoutMs || 30000;
@@ -1773,21 +1859,32 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
     const postButton = (await modalPostBtn.count()) > 0
       ? modalPostBtn
       : page.locator('div[aria-label="Post"][role="button"]').first();
-    if ((await postButton.count()) > 0) {
-      await postButton.click();
-      await page.waitForTimeout(3000);
+    if ((await postButton.count()) === 0) {
+      throw new Error('Facebook composer "Post" button not found (the composer may have closed or changed).');
     }
+    await postButton.click();
+    await page.waitForTimeout(3000);
 
-    const generatedId = `fb-${Date.now()}`;
-    const postUrl = `https://facebook.com/${generatedId}`;
-    WorkerLogger.info('Facebook Automation', `Post completed! URL: ${postUrl}, ID: ${generatedId}`);
+    // Facebook's composer does not show the new post's link, so find it on the profile or
+    // Page the session posts as (never a made-up URL: WordPress shows it as the post's link).
+    const permalink = await resolveFacebookPermalink(page, options.copy).catch((err: any) => {
+      WorkerLogger.warn('Facebook Automation', `Could not look up the new post's link: ${String(err?.message || err).split('\n')[0]}`);
+      return null;
+    });
+    const postUrl = permalink?.url || '';
+    const postId = permalink?.id || '';
+    if (permalink) {
+      WorkerLogger.info('Facebook Automation', `Post completed! URL: ${postUrl}, ID: ${postId}`);
+    } else {
+      WorkerLogger.warn('Facebook Automation', 'Post completed, but its link could not be confirmed on the profile; reporting it without a URL.');
+    }
 
     return {
       success: true,
       platform: 'facebook',
-      externalPostId: generatedId,
+      externalPostId: postId,
       externalPostUrl: postUrl,
-      external_id: generatedId,
+      external_id: postId,
       external_url: postUrl,
       mediaPath: options.mediaPath
     };
