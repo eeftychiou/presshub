@@ -8,7 +8,7 @@
 
 | Page | Options | Not shown on screen | Secrets |
 |---|---|---|---|
-| Settings → PressHub AI | 203 | 33 | 5 |
+| Settings → PressHub AI | 203 | 27 | 5 |
 | PressHub Social → Settings | 82 | 4 | 9 |
 | **Total** | **285** | | |
 
@@ -61,7 +61,7 @@
 
 | Option | Label | Type | Notes |
 |---|---|---|---|
-| `presshub_ai_debug_prompts` | Raw debug dump (developer use) | boolean | checkbox |
+| `presshub_ai_debug_prompts` | Raw debug dump: prompts | boolean | checkbox |
 | `presshub_ai_remove_google_cloud_api_key` | Remove google cloud api key | boolean | not shown on screen, removes `presshub_ai_google_cloud_api_key` |
 | `presshub_ai_remove_github_token` | Remove github token | boolean | not shown on screen, removes `presshub_ai_github_token` |
 | `presshub_ai_github_token` | GitHub Token (optional) | string | secret, masked |
@@ -73,7 +73,7 @@
 | `presshub_ai_rate_limit_window_seconds` | Window Length (seconds) | integer |  |
 | `presshub_ai_research_retention_days` | Research Log Retention (days) | integer |  |
 | `presshub_ai_log_level` | Diagnostic Log Level | string |  |
-| `presshub_ai_log_tts_payloads` | Raw debug dump (developer use) | boolean | checkbox |
+| `presshub_ai_log_tts_payloads` | Raw debug dump: TTS payloads | boolean | checkbox |
 | `presshub_ai_generation_record_retention_days` | Generation Record Retention (days) | integer |  |
 | `presshub_ai_log_file_retention_days` | Log File Retention (days) | integer |  |
 | `presshub_ai_token_log_retention_days` | Token Log Retention (days) | integer |  |
@@ -87,7 +87,7 @@
 |---|---|---|---|
 | `presshub_ai_briefing_tts_api_key` | Speech Generation API Key (Google AI Studio / Gemini) | string | not shown on screen, secret, masked |
 | `presshub_ai_remove_briefing_tts_api_key` | Remove briefing tts api key | boolean | not shown on screen, removes `presshub_ai_briefing_tts_api_key` |
-| `presshub_ai_briefing_tts_engine` | Voice Synthesis Engine | string | not shown on screen |
+| `presshub_ai_briefing_tts_engine` | Speech engine | string |  |
 | `presshub_ai_briefing_tts_model` | Voice Generation AI Model | string |  |
 | `presshub_ai_briefing_tts_timeout` | Speech AI Timeout (seconds) | integer |  |
 | `presshub_ai_briefing_sources` | News Source URLs | array |  |
@@ -146,7 +146,7 @@
 | `presshub_ai_curation_max_articles` | Maximum Articles Sent to Curation LLM | integer |  |
 | `presshub_ai_curation_max_chars_per_article` | Maximum Characters per Article (Curation) | integer |  |
 | `presshub_ai_briefing_text_preset` | Text Instruction Preset | string |  |
-| `presshub_ai_briefing_podcast_preset` | Podcast Dialogue Preset | string | not shown on screen |
+| `presshub_ai_briefing_podcast_preset` | Podcast dialogue preset | string |  |
 | `presshub_ai_briefing_target_duration` | Target Podcast Duration | string |  |
 | `presshub_ai_briefing_host_count` | Podcast Presenters Count | integer |  |
 | `presshub_ai_briefing_host_female` | Presenter 1 Name | string |  |
@@ -195,14 +195,14 @@
 | `presshub_ai_briefing_podcast_prompt_3` | Podcast Dialogue System Prompt (3 Hosts) | string | not shown on screen |
 | `presshub_ai_briefing_text_provider` | Curator AI Provider | string |  |
 | `presshub_ai_briefing_text_model` | Curator Model Override | string |  |
-| `presshub_ai_briefing_text_temperature` | Briefing text temperature | number | not shown on screen |
+| `presshub_ai_briefing_text_temperature` | Curator temperature | number |  |
 | `presshub_ai_briefing_text_max_tokens` | Curator Maximum Output Tokens | integer |  |
-| `presshub_ai_briefing_text_timeout` | Briefing text timeout | integer | not shown on screen |
+| `presshub_ai_briefing_text_timeout` | Curator timeout (s) | integer |  |
 | `presshub_ai_briefing_podcast_provider` | Scriptwriter AI Provider | string |  |
 | `presshub_ai_briefing_podcast_model` | Scriptwriter Model Override | string |  |
-| `presshub_ai_briefing_podcast_temperature` | Briefing podcast temperature | number | not shown on screen |
+| `presshub_ai_briefing_podcast_temperature` | Scriptwriter temperature | number |  |
 | `presshub_ai_briefing_podcast_max_tokens` | Scriptwriter Maximum Output Tokens | integer |  |
-| `presshub_ai_briefing_podcast_timeout` | Briefing podcast timeout | integer | not shown on screen |
+| `presshub_ai_briefing_podcast_timeout` | Scriptwriter timeout (s) | integer |  |
 | `presshub_ai_briefing_podcast_tts_provider` | Speech AI Provider (logosAI) | string |  |
 | `presshub_ai_memory_enabled` | Enable Editorial Memory | integer | checkbox |
 | `presshub_ai_memory_daily_days` | Recent Memory Window (days) | integer |  |

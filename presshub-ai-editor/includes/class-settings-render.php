@@ -254,6 +254,7 @@ class PressHub_AI_Settings_Render {
                                     <p class="description"><?php echo __( 'Maximum output tokens for news story curation (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
+                            <?php $this->render_module_tuning_rows( 'briefing_text', __( 'Curator', 'presshub-ai-editor' ) ); ?>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_sources"><?php echo __( 'News Source URLs', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
@@ -397,6 +398,7 @@ class PressHub_AI_Settings_Render {
                                     <p class="description"><?php echo __( 'Maximum output tokens for podcast script generation (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
                                 </td>
                             </tr>
+                            <?php $this->render_module_tuning_rows( 'briefing_podcast', __( 'Scriptwriter', 'presshub-ai-editor' ) ); ?>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_target_duration"><?php echo __( 'Target Podcast Duration', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
@@ -407,6 +409,18 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_briefing_host_count"><?php echo __( 'Podcast Presenters Count', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_host_count_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_preset"><?php echo __( 'Podcast dialogue preset', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_preset_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_engine"><?php echo __( 'Speech engine', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_engine_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1726,7 +1740,7 @@ class PressHub_AI_Settings_Render {
     }
 
     /**
-     * 1.2.5: prompt inspection toggle ("Raw debug dump (developer use)" since #140; generation
+     * 1.2.5: prompt inspection toggle ("Raw debug dump: prompts" since #233, "Raw debug dump (developer use)" since #140; generation
      * records already keep this information for editors). Writes the exact SYSTEM and USER
      * prompts to the protected log folder (prompts channel) in JSONL format.
      */
@@ -2484,6 +2498,36 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    /**
+     * Temperature and timeout rows for one Daily Briefing model block (#233).
+     * Both may be left empty, which keeps the provider's own value.
+     *
+     * @param string $module Option infix, e.g. "briefing_text".
+     * @param string $role   Role label shown to editors, e.g. "Curator".
+     */
+    public function render_module_tuning_rows( string $module, string $role ) {
+        $t_opt = 'presshub_ai_' . $module . '_temperature';
+        $s_opt = 'presshub_ai_' . $module . '_timeout';
+        $t_val = get_option( $t_opt, '' );
+        $s_val = get_option( $s_opt, '' );
+        ?>
+        <tr>
+            <th scope="row"><label for="<?php echo self::esc_attr_safe( $t_opt ); ?>"><?php echo self::esc_html_safe( sprintf( __( '%s temperature', 'presshub-ai-editor' ), $role ) ); ?></label></th>
+            <td>
+                <input type="number" min="0" max="2" step="0.05" name="<?php echo self::esc_attr_safe( $t_opt ); ?>" id="<?php echo self::esc_attr_safe( $t_opt ); ?>" value="<?php echo self::esc_attr_safe( is_scalar( $t_val ) ? (string) $t_val : '' ); ?>" class="small-text" placeholder="<?php echo esc_attr__( 'provider', 'presshub-ai-editor' ); ?>" />
+                <p class="description"><?php echo __( 'How freely the model words its output, from 0 (most predictable) to 2. Leave empty to use the provider\'s temperature.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="<?php echo self::esc_attr_safe( $s_opt ); ?>"><?php echo self::esc_html_safe( sprintf( __( '%s timeout (s)', 'presshub-ai-editor' ), $role ) ); ?></label></th>
+            <td>
+                <input type="number" min="10" max="600" name="<?php echo self::esc_attr_safe( $s_opt ); ?>" id="<?php echo self::esc_attr_safe( $s_opt ); ?>" value="<?php echo self::esc_attr_safe( is_scalar( $s_val ) ? (string) $s_val : '' ); ?>" class="small-text" placeholder="<?php echo esc_attr__( 'provider', 'presshub-ai-editor' ); ?>" />
+                <p class="description"><?php echo __( 'Seconds to wait for the model before giving up (10 to 600). Leave empty to use the provider\'s timeout. Raise it if long runs time out.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <?php
+    }
+
     public function render_briefing_podcast_preset_field() {
         $option   = 'presshub_ai_briefing_podcast_preset';
         $selected = (string) get_option( $option, '' );
@@ -2499,7 +2543,7 @@ class PressHub_AI_Settings_Render {
                 <?php endif; ?>
             <?php endforeach; ?>
         </select>
-        <p class="description"><?php echo __( 'Instruction preset applied to the podcast producer dialogue agent.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'Instruction preset the podcast scriptwriter follows when it writes the dialogue. Default: Standard Conversational.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2529,7 +2573,7 @@ class PressHub_AI_Settings_Render {
             </option>
         </select>
         <p class="description">
-            <?php echo esc_html__( 'Google AI Studio produces natural, expressive Greek conversational speech using your existing Gemini API key. No separate TTS configuration needed.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Which speech service reads the podcast aloud. It also decides which voices the Shorts & Reels narrator can use. Google AI Studio uses your existing Gemini API key and needs no separate setup. Default: Google AI Studio.', 'presshub-ai-editor' ); ?>
         </p>
         <?php
     }

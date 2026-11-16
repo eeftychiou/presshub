@@ -18,7 +18,7 @@
  *   5. 500-entry cap, truncated marker and the single WARNING.
  *   6. Inspector access rule: author vs other non-editor vs editor.
  *   7. Retention prunes copilot_chat records.
- *   8. Settings wording "Raw debug dump (developer use)".
+ *   8. Settings wording "Raw debug dump: prompts" / "Raw debug dump: TTS payloads".
  */
 
 if ( ! function_exists( 'plugin_dir_path' ) ) {
@@ -593,7 +593,7 @@ if ( ! function_exists( 'add_settings_field_titles_probe' ) ) {
     function add_settings_field_titles_probe() {}
 }
 $src_storage = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-settings-storage.php' );
-gre_check( 'settings: both fields are titled "Raw debug dump (developer use)"', 2 === preg_match_all( "/add_settings_field\\( 'presshub_ai_(debug_prompts|log_tts_payloads)', __\\( 'Raw debug dump \\(developer use\\)'/", $src_storage ) && false === strpos( $src_storage, 'Log AI Prompts & Responses' ) && false === strpos( $src_storage, "'Log TTS Payload Details'" ) );
+gre_check( 'settings: both fields are titled "Raw debug dump: …" with distinct labels (#233)', 1 === preg_match( "/add_settings_field\\( 'presshub_ai_debug_prompts', __\\( 'Raw debug dump: prompts'/", $src_storage ) && 1 === preg_match( "/add_settings_field\\( 'presshub_ai_log_tts_payloads', __\\( 'Raw debug dump: TTS payloads'/", $src_storage ) && false === strpos( $src_storage, 'Log AI Prompts & Responses' ) && false === strpos( $src_storage, "'Log TTS Payload Details'" ) );
 $render = new PressHub_AI_Settings_Render();
 ob_start();
 $render->render_debug_prompts_field();

@@ -630,7 +630,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_text_temperature', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_temperature' ],
             'type'              => 'number',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_text_max_tokens', [
@@ -638,7 +638,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_text_timeout', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_timeout' ],
             'type'              => 'integer',
         ] );
 
@@ -651,7 +651,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_temperature', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_temperature' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_temperature' ],
             'type'              => 'number',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_max_tokens', [
@@ -659,7 +659,7 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_timeout', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_timeout' ],
+            'sanitize_callback' => [ __CLASS__, 'sanitize_optional_timeout' ],
             'type'              => 'integer',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_tts_provider', [
@@ -755,8 +755,8 @@ class PressHub_AI_Settings_Storage {
 
         // Diagnostic Logging fields unified under presshub_ai_logging section
         add_settings_field( 'presshub_ai_log_level', __( 'Diagnostic Log Level', 'presshub-ai-editor' ), [ $render, 'render_log_level_field' ], 'presshub-ai', 'presshub_ai_logging' );
-        add_settings_field( 'presshub_ai_debug_prompts', __( 'Raw debug dump (developer use)', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_logging' );
-        add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Raw debug dump (developer use)', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_debug_prompts', __( 'Raw debug dump: prompts', 'presshub-ai-editor' ), [ $render, 'render_debug_prompts_field' ], 'presshub-ai', 'presshub_ai_logging' );
+        add_settings_field( 'presshub_ai_log_tts_payloads', __( 'Raw debug dump: TTS payloads', 'presshub-ai-editor' ), [ $render, 'render_log_tts_payloads_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_generation_record_retention_days', __( 'Generation Record Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_generation_record_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_log_file_retention_days', __( 'Log File Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_log_file_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
         add_settings_field( 'presshub_ai_token_log_retention_days', __( 'Token Log Retention (days)', 'presshub-ai-editor' ), [ $render, 'render_token_log_retention_days_field' ], 'presshub-ai', 'presshub_ai_logging' );
@@ -767,7 +767,7 @@ class PressHub_AI_Settings_Storage {
         add_settings_field( 'presshub_ai_social_meta_all_posts', __( 'Enable for All Published Posts', 'presshub-ai-editor' ), [ $render, 'render_social_meta_all_posts_field' ], 'presshub-ai', 'presshub_ai_social' );
 
         add_settings_field( 'presshub_ai_briefing_sources', __( 'News Source URLs', 'presshub-ai-editor' ), [ $render, 'render_briefing_sources_field' ], 'presshub-ai', 'presshub_ai_briefing' );
-        add_settings_field( 'presshub_ai_briefing_tts_engine', __( 'Voice Synthesis Engine', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_engine_field' ], 'presshub-ai', 'presshub_ai_briefing' );
+        add_settings_field( 'presshub_ai_briefing_tts_engine', __( 'Speech engine', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_engine_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_api_key', __( 'Speech Generation API Key (Google AI Studio / Gemini)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_api_key_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_model', __( 'Voice Generation AI Model', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_model_field' ], 'presshub-ai', 'presshub_ai_briefing' );
         add_settings_field( 'presshub_ai_briefing_tts_timeout', __( 'Speech Generation Request Timeout (seconds)', 'presshub-ai-editor' ), [ $render, 'render_briefing_tts_timeout_field' ], 'presshub-ai', 'presshub_ai_briefing' );
@@ -1130,6 +1130,35 @@ class PressHub_AI_Settings_Storage {
             return self::default_temperature();
         }
         return round( $temp, 2 );
+    }
+
+    /**
+     * Per-module temperature that may be left empty (#233). Empty stores ''
+     * so the API client keeps falling back to the provider's temperature.
+     *
+     * @return float|string
+     */
+    public static function sanitize_optional_temperature( $value ) {
+        $value = is_string( $value ) ? trim( wp_unslash( $value ) ) : $value;
+        if ( null === $value || '' === $value || ! is_numeric( $value ) ) {
+            return '';
+        }
+        return round( max( 0.0, min( 2.0, (float) $value ) ), 2 );
+    }
+
+    /**
+     * Per-module timeout in seconds that may be left empty (#233). Empty
+     * stores '' so the provider's timeout applies; otherwise 10–600 s, the
+     * range the API client accepts.
+     *
+     * @return int|string
+     */
+    public static function sanitize_optional_timeout( $value ) {
+        $value = is_string( $value ) ? trim( wp_unslash( $value ) ) : $value;
+        if ( null === $value || '' === $value || ! is_numeric( $value ) ) {
+            return '';
+        }
+        return max( 10, min( 600, (int) $value ) );
     }
 
     public static function sanitize_max_tokens( $value ) {
@@ -2967,7 +2996,7 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
-     * Helper to retrieve the operator-configurable "Raw debug dump (developer use)" TTS
+     * Helper to retrieve the operator-configurable "Raw debug dump: TTS payloads" TTS
      * toggle. Issue #80 — Settings-First: when enabled, every Gemini TTS API
      * call appends a detailed JSON entry (endpoint URL, masked headers,
      * speaker-voice mapping, prompt text, full request body, response
