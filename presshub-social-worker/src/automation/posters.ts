@@ -973,11 +973,12 @@ export async function markTikTokAiGenerated(page: any): Promise<boolean> {
     if ((await sw.getAttribute('data-state').catch(() => null)) === 'checked') return true;
     if (await sw.isChecked().catch(() => false)) return true;
     return await sw.evaluate((el: any) => {
-      const root = el.closest('[data-layout="switch-root"], .Switch__root') || el.parentElement;
-      if (!root) return false;
-      const checkedEl = root.querySelector('[aria-checked="true"], [data-state="checked"]');
+      const switchRoot = el.closest('[data-layout="switch-root"], .Switch__root');
+      const scope = switchRoot || el;
+      if (scope.matches?.('[aria-checked="true"], [data-state="checked"]')) return true;
+      const checkedEl = scope.querySelector('[aria-checked="true"], [data-state="checked"]');
       if (checkedEl) return true;
-      const input = root.querySelector('input[type="checkbox"]');
+      const input = scope.matches?.('input[type="checkbox"]') ? scope : scope.querySelector('input[type="checkbox"]');
       return Boolean(input && input.checked);
     }).catch(() => false);
   };
@@ -986,21 +987,35 @@ export async function markTikTokAiGenerated(page: any): Promise<boolean> {
     let sw = await findVisibleSwitch();
     // The switch sits under "Show more" and may be in a display:none container until expanded.
     if (!sw) {
-      const more = page.locator(
-        '[data-e2e="advanced_settings_container"] .more-btn, ' +
-        'button:has-text("Show more"), ' +
-        'div[role="button"]:has-text("Show more"), ' +
-        'div.more-btn:has-text("Show more"), ' +
-        'span:text-is("Show more"), ' +
-        'button:has-text("More options"), ' +
-        'div[role="button"]:has-text("More options")'
-      ).first();
-      if ((await more.count().catch(() => 0)) > 0) {
-        await more.scrollIntoViewIfNeeded().catch(() => {});
-        await more.click({ timeout: 5000 }).catch(() => more.click({ force: true }).catch(() => {}));
-        await page.waitForTimeout(600);
+      // Priority-ordered selectors: Playwright evaluates comma-joined selectors in document order,
+      // so we iterate individually to prevent an earlier decoy "Show more" from winning.
+      const moreSelectors = [
+        '[data-e2e="advanced_settings_container"].collapsed .more-btn',
+        '[data-e2e="advanced_settings_container"] .more-btn:has-text("Show more")',
+        'div.more-btn:has-text("Show more")',
+        'button:has-text("Show more")',
+        'div[role="button"]:has-text("Show more")',
+        'button:has-text("More options")',
+        'div[role="button"]:has-text("More options")',
+        'span:text-is("Show more")',
+      ];
+      let clickedMore = false;
+      for (const sel of moreSelectors) {
+        const m = page.locator(sel).first();
+        if (await m.isVisible().catch(() => false)) {
+          await m.scrollIntoViewIfNeeded().catch(() => {});
+          await m.click({ timeout: 5000 }).catch(() => m.click({ force: true }).catch(() => {}));
+          clickedMore = true;
+          break;
+        }
       }
-      sw = await findVisibleSwitch();
+      // Poll briefly for slow/lazy renders after expanding (or if already expanded).
+      const maxAttempts = clickedMore ? 6 : 2;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await page.waitForTimeout(400);
+        sw = await findVisibleSwitch();
+        if (sw) break;
+      }
     }
     if (!sw) {
       WorkerLogger.warn('TikTok Automation', 'Could not find the "AI-generated content" switch; the short is posted without the AI label. Turn it on by hand in TikTok and report the page change.');

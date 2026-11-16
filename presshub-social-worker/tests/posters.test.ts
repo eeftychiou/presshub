@@ -471,6 +471,88 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     await page.close();
   });
 
+  test('markTikTokAiGenerated ignores an earlier decoy "Show more" and clicks advanced_settings_container .more-btn', async () => {
+    const page = await context.newPage();
+    await page.setContent(`<html><body>
+      <div class="caption-help">
+        <span id="decoy">Show more</span>
+        <button id="decoy-btn">Show more</button>
+      </div>
+      <div class="options-form" style="display:none">
+        <div data-e2e="aigc_container">
+          <span>AI-generated content</span>
+          <div class="Switch__root">
+            <div id="ai-sw" class="Switch__content" aria-checked="false" style="width:28px;height:16px"></div>
+          </div>
+        </div>
+      </div>
+      <div data-e2e="advanced_settings_container" class="more-collapse collapsed">
+        <div id="real-more" class="more-btn"><span>Show more</span></div>
+      </div>
+      <script>
+        window.__decoyClicked = false;
+        document.getElementById('decoy').onclick = () => { window.__decoyClicked = true; };
+        document.getElementById('decoy-btn').onclick = () => { window.__decoyClicked = true; };
+        document.getElementById('real-more').onclick = () => {
+          document.querySelector('.options-form').style.display = 'block';
+          document.querySelector('.more-collapse').classList.remove('collapsed');
+        };
+        document.getElementById('ai-sw').onclick = () => {
+          document.getElementById('ai-sw').setAttribute('aria-checked', 'true');
+        };
+      </script>
+    </body></html>`);
+    expect(await markTikTokAiGenerated(page)).toBe(true);
+    expect(await page.evaluate(() => (globalThis as any).__decoyClicked)).toBe(false);
+    expect(await page.getAttribute('#ai-sw', 'aria-checked')).toBe('true');
+    await page.close();
+  });
+
+  test('markTikTokAiGenerated does not collapse an already-expanded section and waits for lazy switch mount', async () => {
+    const page = await context.newPage();
+    await page.setContent(`<html><body>
+      <div id="form" class="options-form"></div>
+      <div data-e2e="advanced_settings_container" class="more-collapse">
+        <div id="less-btn" class="more-btn"><span>Show less</span></div>
+      </div>
+      <script>
+        window.__lessClicked = false;
+        document.getElementById('less-btn').onclick = () => { window.__lessClicked = true; };
+        setTimeout(() => {
+          document.getElementById('form').innerHTML =
+            '<div data-e2e="aigc_container"><span>AI-generated content</span>' +
+            '<div id="lazy-sw" role="switch" aria-checked="false" style="width:28px;height:16px"></div></div>';
+          document.getElementById('lazy-sw').onclick = () => {
+            document.getElementById('lazy-sw').setAttribute('aria-checked', 'true');
+          };
+        }, 300);
+      </script>
+    </body></html>`);
+    expect(await markTikTokAiGenerated(page)).toBe(true);
+    expect(await page.evaluate(() => (globalThis as any).__lessClicked)).toBe(false);
+    expect(await page.getAttribute('#lazy-sw', 'aria-checked')).toBe('true');
+    await page.close();
+  });
+
+  test('markTikTokAiGenerated isOn() does not false-positive on a neighbouring checked control in the same row', async () => {
+    const page = await context.newPage();
+    await page.setContent(`<html><body>
+      <div class="row">
+        <span>AI-generated content</span>
+        <div id="neighbour" role="switch" aria-checked="true" style="width:28px;height:16px;display:none"></div>
+        <div id="target-sw" role="switch" aria-checked="false" style="width:28px;height:16px"></div>
+      </div>
+      <script>
+        document.getElementById('target-sw').onclick = () => {
+          document.getElementById('target-sw').setAttribute('aria-checked', 'true');
+        };
+      </script>
+    </body></html>`);
+    expect(await markTikTokAiGenerated(page)).toBe(true);
+    expect(await page.getAttribute('#target-sw', 'aria-checked')).toBe('true');
+    await page.close();
+  });
+
   test('postInstagram handles multiple buttons and media upload without strict mode violation', async () => {
     const mockSession: ChromeConnection = {
       browser,
