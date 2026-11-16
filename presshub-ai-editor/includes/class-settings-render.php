@@ -2561,7 +2561,7 @@ class PressHub_AI_Settings_Render {
         <h2 id="presshub-diagnostics"><?php echo esc_html__( 'Diagnostics', 'presshub-ai-editor' ); ?></h2>
 
         <h3><?php echo esc_html__( 'Export and import settings', 'presshub-ai-editor' ); ?></h3>
-        <p class="description"><?php echo esc_html__( 'Download every PressHub AI and PressHub Social setting as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Download every PressHub AI and PressHub Social setting as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them. The AI providers you set up (with their keys) are not in the file either, so add them again on a new site.', 'presshub-ai-editor' ); ?></p>
         <?php if ( 'done' === $state ) : ?>
             <div class="notice notice-success inline"><p><?php echo self::esc_html_safe( sprintf( __( 'Import finished: %d settings changed.', 'presshub-ai-editor' ), isset( $_GET['presshub_import_count'] ) ? (int) $_GET['presshub_import_count'] : 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification ?></p></div>
         <?php elseif ( 'expired' === $state ) : ?>

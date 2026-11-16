@@ -79,7 +79,9 @@ class PressHub_Settings_Transfer {
             'exported_at'      => gmdate( 'c' ),
             'site'             => function_exists( 'home_url' ) ? (string) home_url() : '',
             'options'          => $options,
-            'secrets_left_out' => $secrets,
+            // The AI provider records (models, endpoints and their API keys)
+            // are stored outside the registry; they are not exported either.
+            'secrets_left_out' => array_merge( $secrets, [ 'presshub_ai_configured_providers' ] ),
         ];
     }
 
