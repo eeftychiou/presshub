@@ -7,6 +7,7 @@ import {
   postFacebook,
   postInstagram,
   selectInstagramCrop,
+  dismissInstagramInterstitials,
   markTikTokAiGenerated,
   getTwitterWeightedLength,
   sanitizeTwitterCopy,
@@ -583,6 +584,106 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
 
     expect(res.success).toBe(true);
   });
+
+  test('postInstagram dismisses the "Turn on notifications" dialog that blocks the Post entry', async () => {
+    const page = await context.newPage();
+    try {
+      // Live DOM from 16/11/2026: a full-screen modal covers the sidebar, so a click on
+      // "Post" is intercepted until "Not Now" is chosen.
+      const html = `<html><body style="margin:0">
+        <a href="#" role="link" id="post-entry" onclick="window.__postClicked = true; document.getElementById('composer').innerHTML = '<input type=file accept=image/jpeg>'; return false;"><svg aria-label="Post" width="24" height="24"></svg><span>Post</span></a>
+        <div id="composer"></div>
+        <div id="overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10">
+          <div role="dialog" style="background:#fff;margin:100px auto;width:400px;padding:20px">
+            <h2>Turn on notifications</h2>
+            <button onclick="window.__turnedOn = true">Turn On</button>
+            <button onclick="document.getElementById('overlay').remove(); window.__notNow = true;">Not Now</button>
+          </div>
+        </div>
+        <button>Next</button>
+        <div aria-label="Write a caption" contenteditable="true"></div>
+        <button>Share</button>
+      </body></html>`;
+      const mockSession: ChromeConnection = {
+        browser,
+        isExternalCdp: false,
+        context: {
+          newPage: async () => {
+            page.goto = async () => {
+              await page.setContent(html);
+              return null as any;
+            };
+            page.close = async () => {};
+            return page;
+          }
+        } as any,
+        close: async () => {}
+      };
+
+      const res = await postInstagram({
+        platform: 'instagram',
+        copy: 'Caption behind a notifications prompt',
+        mediaPath: dummyImagePath,
+        browserSession: mockSession
+      });
+
+      expect(res.success).toBe(true);
+      expect(await page.evaluate('window.__notNow')).toBe(true);
+      expect(await page.evaluate('window.__turnedOn')).toBeUndefined();
+      expect(await page.evaluate('window.__postClicked')).toBe(true);
+    } finally {
+      await page.close();
+    }
+  }, 60000);
+
+  test('dismissInstagramInterstitials clicks "Not now" on the save-login dialog and nothing else', async () => {
+    const page = await context.newPage();
+    try {
+      await page.setContent(`<html><body>
+        <div role="dialog" id="d"><h2>Save your login info?</h2>
+          <button onclick="window.__saved = true">Save info</button>
+          <button onclick="document.getElementById('d').remove()">Not now</button>
+        </div></body></html>`);
+      const clicked = await dismissInstagramInterstitials(page);
+      expect(clicked).toEqual(['Not now']);
+      expect(await page.evaluate('window.__saved')).toBeUndefined();
+      expect(await dismissInstagramInterstitials(page)).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('postInstagram names the blocking dialog when the composer still cannot open', async () => {
+    const mockSession: ChromeConnection = {
+      browser,
+      isExternalCdp: false,
+      context: {
+        newPage: async () => {
+          const page = await context.newPage();
+          const html = `<html><body>
+            <a href="#" role="link"><svg aria-label="Post" width="24" height="24"></svg>Post</a>
+            <div style="position:fixed;inset:0;z-index:10;background:#000a"><div role="dialog" style="background:#fff;margin:80px auto;width:300px">Confirm it's you<button>Continue</button></div></div>
+          </body></html>`;
+          page.goto = async () => {
+            await page.setContent(html);
+            return null as any;
+          };
+          return page;
+        }
+      } as any,
+      close: async () => {}
+    };
+
+    await expect(
+      postInstagram({
+        platform: 'instagram',
+        copy: 'Blocked',
+        mediaPath: dummyImagePath,
+        timeoutMs: 2000,
+        browserSession: mockSession
+      })
+    ).rejects.toThrow(/composer did not open.*dialog is still open: "Confirm it's you/);
+  }, 60000);
 
   test('postInstagram fails clearly when the composer never opens', async () => {
     const mockSession: ChromeConnection = {

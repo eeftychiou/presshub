@@ -1610,6 +1610,29 @@ export async function selectInstagramCrop(page: Page, preferred: string[]): Prom
 }
 
 /**
+ * Dismiss Instagram's interstitial dialogs that cover the feed and block clicks, such as
+ * "Turn on notifications", "Save your login info?" or "Add Instagram to your home screen",
+ * by choosing their decline option. Returns the button labels it clicked.
+ */
+export async function dismissInstagramInterstitials(page: Page): Promise<string[]> {
+  const clicked: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const decline = page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^(Not now|Decline optional cookies)$/i })
+      .first();
+    const visible = await decline.isVisible().catch(() => false);
+    if (!visible) break;
+    const label = ((await decline.innerText().catch(() => '')) || 'Not Now').trim();
+    WorkerLogger.debug('Instagram Automation', `Dismissing interstitial dialog via "${label}"...`);
+    await decline.click({ timeout: 5000 }).catch(() => {});
+    clicked.push(label);
+    await page.waitForTimeout(800);
+  }
+  return clicked;
+}
+
+/**
  * Instagram automation poster using saved browser session or running Chrome.
  */
 export async function postInstagram(options: PostOptions): Promise<PostResult> {
@@ -1652,22 +1675,37 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     const createNav = page.locator(
       'svg[aria-label="New post"], svg[aria-label="Create"], a[role="link"]:has-text("Create")'
     ).first();
-    if (!(await composerOpen(500)) && (await createNav.count()) > 0) {
-      await createNav.click().catch(() => {});
+    const postEntry = page.locator(
+      'a:has(svg[aria-label="Post"]), [role="link"]:has(svg[aria-label="Post"]), [role="button"]:has(svg[aria-label="Post"]), [role="menuitem"]:has(svg[aria-label="Post"]), svg[aria-label="Post"]'
+    ).first();
+    // Instagram overlays interstitial dialogs on the feed ("Turn on notifications", "Save your
+    // login info?"). They intercept clicks, so a blocked click must fail fast and be retried
+    // after dismissing them instead of hanging for the full default timeout.
+    const clickQuick = async (target: typeof createNav): Promise<void> => {
+      await target.click({ timeout: 5000 }).catch(() => {});
       await page.waitForTimeout(1000);
-    }
-    if (!(await composerOpen(1500))) {
-      const postEntry = page.locator(
-        'a:has(svg[aria-label="Post"]), [role="link"]:has(svg[aria-label="Post"]), [role="button"]:has(svg[aria-label="Post"]), [role="menuitem"]:has(svg[aria-label="Post"]), svg[aria-label="Post"]'
-      ).first();
-      if ((await postEntry.count()) > 0) {
-        WorkerLogger.debug('Instagram Automation', 'Clicking the "Post" entry to open the composer...');
-        await postEntry.click().catch(() => {});
-        await page.waitForTimeout(1000);
+    };
+    // Give an interstitial that renders after load a moment to appear before the first attempt.
+    await page.getByRole('dialog').first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+    let opened = await composerOpen(500);
+    for (let attempt = 1; attempt <= 2 && !opened; attempt++) {
+      await dismissInstagramInterstitials(page);
+      if (!(await composerOpen(300)) && (await createNav.count()) > 0) {
+        await clickQuick(createNav);
       }
+      if (!(await composerOpen(1500)) && (await postEntry.count()) > 0) {
+        WorkerLogger.debug('Instagram Automation', `Clicking the "Post" entry to open the composer (attempt ${attempt})...`);
+        await clickQuick(postEntry);
+      }
+      opened = await composerOpen(attempt === 2 ? Math.min(timeout, 15000) : 5000);
     }
-    if (!(await composerOpen(Math.min(timeout, 15000)))) {
-      throw new Error('Instagram composer did not open: no "New post", "Create" or "Post" entry led to an upload field (Instagram layout may have changed).');
+    if (!opened) {
+      const blocking = await page.getByRole('dialog').first().innerText({ timeout: 1000 }).catch(() => '');
+      throw new Error(
+        'Instagram composer did not open: no "New post", "Create" or "Post" entry led to an upload field' +
+          (blocking ? ` (a dialog is still open: "${blocking.replace(/\s+/g, ' ').trim().slice(0, 120)}")` : ' (Instagram layout may have changed)') +
+          '.'
+      );
     }
 
     const mediaSize = fs.statSync(options.mediaPath).size;
