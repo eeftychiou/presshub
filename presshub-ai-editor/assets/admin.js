@@ -3467,6 +3467,77 @@ jQuery(document).ready(function($) {
     // ------------------------------------------------------------------
     // Per-Tab AJAX Settings Save Handler & Sticky Save Bar Integration.
     // ------------------------------------------------------------------
+    /**
+     * Checks the browser validity rules (min, max, step, required, pattern)
+     * of every named field inside $scope (#257). On failure it shows one
+     * error notice in $noticeTarget naming each invalid field, reveals the
+     * first one (switching its sub-tab if needed) and lets the browser
+     * point at it. Returns true when every field is valid.
+     */
+    function presshubCheckFieldsValid($scope, $noticeTarget) {
+        var invalid = [];
+        $scope.find('input[name], select[name], textarea[name]').each(function() {
+            if (typeof this.checkValidity !== 'function' || this.disabled || this.checkValidity()) {
+                return;
+            }
+            // A value off the step grid alone is not worth blocking a save:
+            // the server rounds or clamps it, and some stored defaults sit
+            // off their field's step.
+            var v = this.validity;
+            if (v && v.stepMismatch && !v.rangeOverflow && !v.rangeUnderflow && !v.valueMissing &&
+                !v.badInput && !v.patternMismatch && !v.typeMismatch && !v.tooLong && !v.tooShort && !v.customError) {
+                return;
+            }
+            invalid.push(this);
+        });
+        if (!invalid.length) {
+            return true;
+        }
+
+        var $list = $('<ul style="margin: 4px 0 0 18px; list-style: disc;"></ul>');
+        $.each(invalid, function(i, el) {
+            var $el = $(el);
+            var label = '';
+            if (el.id) {
+                label = $.trim($('label[for="' + el.id + '"]').first().text());
+            }
+            if (!label) {
+                var $wrap = $el.closest('label');
+                if ($wrap.length) {
+                    label = $.trim($wrap.clone().children().remove().end().text());
+                }
+            }
+            if (!label) {
+                label = $.trim($el.closest('tr').find('th').first().text()) || el.name;
+            }
+            $('<li></li>').text(label + ': ' + (el.validationMessage || __('Invalid value', 'presshub-ai-editor'))).appendTo($list);
+        });
+        var $notice = $('<div class="notice notice-error presshub-settings-notice"></div>');
+        $('<p></p>').append($('<strong></strong>').text(__('Not saved. Please fix these fields first:', 'presshub-ai-editor'))).append($list).appendTo($notice);
+        $noticeTarget.prepend($notice);
+
+        // Reveal the first invalid field: its main tab, sub-pane and any
+        // collapsed <details> around it.
+        var $first = $(invalid[0]);
+        var $pane = $first.closest('.presshub-tab-pane');
+        if ($pane.length && !$pane.is(':visible') && $pane.attr('id')) {
+            var paneKey = $pane.attr('id').replace('presshub-tab-pane-', '');
+            $('#presshub-ai-settings-tabs .nav-tab[data-tab="' + paneKey + '"]').first().trigger('click');
+        }
+        $first.parents('details').attr('open', 'open');
+        var $subpane = $first.closest('[id^="presshub-subpane-"]');
+        if ($subpane.length && !$subpane.is(':visible')) {
+            var sub = $subpane.attr('id').replace(/^presshub-subpane-[^-]+-/, '');
+            $('a[data-subtab="' + sub + '"]').first().trigger('click');
+        }
+        if ($first.is(':visible') && typeof invalid[0].reportValidity === 'function') {
+            invalid[0].reportValidity();
+        } else {
+            $notice[0].scrollIntoView({ block: 'center' });
+        }
+        return false;
+    }
+
     function saveSettingsTab(tabKey) {
         if (!tabKey) {
             return;
@@ -3486,6 +3557,16 @@ jQuery(document).ready(function($) {
 
         $tabPane.find('.presshub-settings-notice').remove();
         $('.presshub-settings-notice').remove();
+
+        // #257: never send values the browser already flags as invalid
+        // (e.g. temperature 5 with max 2); the server would clamp them and
+        // the tab would still report success.
+        if (!presshubCheckFieldsValid($tabPane, $tabPane)) {
+            if ($stickyStatus.length) {
+                $stickyStatus.addClass('is-error').removeClass('is-success').text(__('Fix the highlighted fields', 'presshub-ai-editor')).show();
+            }
+            return;
+        }
 
         if ($tabBtn.length) {
             $tabBtn.prop('disabled', true);
@@ -3699,6 +3780,9 @@ jQuery(document).ready(function($) {
         var $spinner = $('#presshub-ai-save-spinner');
 
         $('.presshub-settings-notice').remove();
+        if (!presshubCheckFieldsValid($form, $form)) {
+            return;
+        }
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
 
