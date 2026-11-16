@@ -2017,7 +2017,7 @@ class PressHub_AI_Settings_Render {
         $active_count = count( array_filter( $sources, function( $s ) { return ! empty( $s['enabled'] ); } ) );
         ?>
         <div class="presshub-sources-manager-wrap" id="presshub-sources-manager-wrap">
-            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo esc_attr( wp_json_encode( $sources ) ); ?>" />
+            <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo esc_attr( wp_json_encode( $sources, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) ); ?>" />
             
             <div class="presshub-sources-toolbar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 8px;">

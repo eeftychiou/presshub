@@ -1410,25 +1410,53 @@ class PressHub_AI_Settings_Storage {
         return $map;
     }
 
+    /**
+     * #263: turns "uXXXX" text left behind by unslashed JSON escapes back
+     * into characters. Only non-ASCII, non-surrogate code points are
+     * replaced, so ordinary Latin text is never touched.
+     */
+    public static function repair_unslashed_unicode( string $text ): string {
+        if ( false === stripos( $text, 'u' ) ) {
+            return $text;
+        }
+        return (string) preg_replace_callback(
+            '/u([0-9a-fA-F]{4})/',
+            function ( $m ) {
+                $cp = hexdec( $m[1] );
+                if ( $cp < 0x80 || ( $cp >= 0xD800 && $cp <= 0xDFFF ) ) {
+                    return $m[0];
+                }
+                return function_exists( 'mb_chr' ) ? (string) mb_chr( $cp, 'UTF-8' ) : html_entity_decode( '&#' . $cp . ';', ENT_QUOTES, 'UTF-8' );
+            },
+            $text
+        );
+    }
+
     public static function normalize_sources( $value ): array {
         if ( empty( $value ) ) {
             return PressHub_AI_Settings_Migration::default_structured_sources();
         }
 
-        $value = wp_unslash( $value );
-
-        // If JSON string, decode it
+        // If JSON string, decode it. Decode before unslashing (#263):
+        // wp_unslash() on JSON strips the backslash of every \uXXXX escape,
+        // so Greek names were stored as "u0397u03bb...". options.php has
+        // already unslashed the value; a still-slashed AJAX value is not
+        // valid JSON, so the unslashed form is tried only then.
         if ( is_string( $value ) ) {
             $trimmed = trim( $value );
             if ( '' === $trimmed ) {
                 return PressHub_AI_Settings_Migration::default_structured_sources();
             }
+            $decoded = null;
             if ( ( '[' === $trimmed[0] && ']' === substr( $trimmed, -1 ) ) || ( '{' === $trimmed[0] && '}' === substr( $trimmed, -1 ) ) ) {
                 $decoded = json_decode( $trimmed, true );
-                if ( is_array( $decoded ) ) {
-                    $value = $decoded;
+                if ( ! is_array( $decoded ) ) {
+                    $decoded = json_decode( wp_unslash( $trimmed ), true );
                 }
             }
+            $value = is_array( $decoded ) ? $decoded : wp_unslash( $trimmed );
+        } else {
+            $value = wp_unslash( $value );
         }
 
         $supported_types = array_keys( self::get_supported_media_types() );
