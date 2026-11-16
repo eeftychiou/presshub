@@ -22,6 +22,7 @@ import {
   STEALTH_ARGS,
   STEALTH_INIT_SCRIPT
 } from '../automation/browser-helper';
+import { checkSessionSave, modeBanner, sessionSlots, LoginMode, SessionSlots } from './login-guard';
 
 const LOGIN_URLS: Record<Platform, string> = {
   twitter: 'https://x.com/i/flow/login',
@@ -29,6 +30,30 @@ const LOGIN_URLS: Record<Platform, string> = {
   facebook: 'https://www.facebook.com/login',
   instagram: 'https://www.instagram.com/accounts/login/'
 };
+
+/** Which slot this run saves to and where both slots are (set by runLogin). */
+let loginMode: LoginMode = 'posting';
+let slotDirs: { posting: string; reader: string } | null = null;
+let forceSave = false;
+
+function currentSlots(platform: Platform): SessionSlots | null {
+  return slotDirs ? sessionSlots(platform, slotDirs.posting, slotDirs.reader) : null;
+}
+
+/**
+ * Save a new session after checking it is the right account for this slot (login-guard.ts).
+ * Returns false, saving nothing, when it is refused.
+ */
+export function guardedSaveSession(platform: Platform, state: object | string): boolean {
+  const slots = currentSlots(platform);
+  const reason = slots && !forceSave ? checkSessionSave(platform, state, loginMode, slots) : null;
+  if (reason) {
+    console.error(`\n❌ Session NOT saved: ${reason}\n`);
+    return false;
+  }
+  saveSession(platform, state);
+  return true;
+}
 
 export function promptQuestion(query: string): Promise<string> {
   const rl = readline.createInterface({
@@ -77,7 +102,7 @@ export async function handleCookiePaste(platform: Platform, sessionPath: string)
       state = buildTwitterStorageState(inputOrToken, ct0 || undefined);
     }
 
-    saveSession(platform, state);
+    if (!guardedSaveSession(platform, state)) return false;
     const verification = verifySession(platform);
     if (verification.valid) {
       console.log(
@@ -111,7 +136,7 @@ export async function handleCookiePaste(platform: Platform, sessionPath: string)
       state = buildTikTokStorageState(inputOrSessionId);
     }
 
-    saveSession(platform, state);
+    if (!guardedSaveSession(platform, state)) return false;
     const verification = verifySession(platform);
     if (verification.valid) {
       console.log(
@@ -131,7 +156,7 @@ export async function handleCookiePaste(platform: Platform, sessionPath: string)
       return false;
     }
     const state = parseCookieExport(jsonStr);
-    saveSession(platform, state);
+    if (!guardedSaveSession(platform, state)) return false;
     const verification = verifySession(platform);
     if (verification.valid) {
       console.log(
@@ -194,12 +219,16 @@ export async function handleBrowserLogin(
     console.log(
       `\n👉 Please complete your login and any 2FA/verification in the opened Chrome window.`
     );
+    console.log(`\n${modeBanner(loginMode, platform, sessionPath)}`);
     await promptQuestion(
-      `\nOnce you are successfully logged in on ${platform}, press [ENTER] here to save your session... `
+      `\nOnce you are logged in on ${platform} with the ${loginMode.toUpperCase()} account, press [ENTER] here to save your session... `
     );
 
     console.log(`Saving browser cookies and storage state to: ${sessionPath}...`);
-    await context.storageState({ path: sessionPath });
+    const state = await context.storageState();
+    if (!guardedSaveSession(platform, state)) {
+      return false;
+    }
 
     const verification = verifySession(platform);
     if (verification.valid) {
@@ -222,6 +251,9 @@ export async function handleBrowserLogin(
 export async function runLogin(platformArg?: string): Promise<void> {
   const args = process.argv.slice(2);
   const target = platformArg || args.find((a) => !a.startsWith('-'));
+  forceSave = args.includes('--force');
+  slotDirs = { posting: getSessionsDir(), reader: getReaderSessionsDir() };
+  loginMode = args.includes('--reader') ? 'reader' : 'posting';
 
   // --reader: save the session of the Social Monitor's reader account instead
   // of the posting account (separate folder and separate Chrome profile).
@@ -251,7 +283,8 @@ async function runLoginFlow(target: string | undefined, args: string[]): Promise
     console.log(`  --cookies, -c    Direct cookie paste mode (paste auth_token or JSON export)`);
     console.log(`  --cdp            Auto-extract session from running Chrome (port 9222)`);
     console.log(`  --browser, -b    Open Real Google Chrome window with persistent profile`);
-    console.log(`  --reader         Save the Social Monitor reader account (not the posting account)\n`);
+    console.log(`  --reader         Save the Social Monitor reader account (not the posting account)`);
+    console.log(`  --force          Save even when the signed-in account differs from the saved one\n`);
     process.exit(1);
   }
 
@@ -275,6 +308,11 @@ async function runLoginFlow(target: string | undefined, args: string[]): Promise
   console.log(`Target URL:          ${loginUrl}`);
   console.log(`Session Destination: ${sessionPath}`);
   console.log(`======================================================`);
+  console.log(`\n${modeBanner(loginMode, platform, sessionPath)}`);
+  if (loginMode === 'posting' && !args.includes('--reader')) {
+    console.log(`(For the Social Monitor's reader account, run: npm run login -- ${platform} --reader`);
+    console.log(` In PowerShell use npm.cmd, or the "--" is dropped and this runs in posting mode.)`);
+  }
 
   // Explicit flag: Direct cookie paste
   if (isCookiesMode) {
@@ -298,7 +336,7 @@ async function runLoginFlow(target: string | undefined, args: string[]): Promise
 
     const result = await extractSessionFromCdp(platform, 'http://127.0.0.1:9222');
     if (result.success && result.state) {
-      saveSession(platform, result.state);
+      if (!guardedSaveSession(platform, result.state)) process.exit(1);
       const verification = verifySession(platform);
       console.log(`\n✅ Mode 1 Success: Extracted ${platform} session from running Chrome!`);
       console.log(`Active cookies: ${verification.cookieCount}`);
@@ -332,7 +370,7 @@ async function runLoginFlow(target: string | undefined, args: string[]): Promise
   if (choice.toLowerCase() === 'r' && cdpAvailable) {
     const result = await extractSessionFromCdp(platform, 'http://127.0.0.1:9222');
     if (result.success && result.state) {
-      saveSession(platform, result.state);
+      if (!guardedSaveSession(platform, result.state)) process.exit(1);
       const verification = verifySession(platform);
       console.log(`\n✅ Mode 1 Success: Extracted ${platform} session from running Chrome!`);
       console.log(`Active cookies: ${verification.cookieCount}`);

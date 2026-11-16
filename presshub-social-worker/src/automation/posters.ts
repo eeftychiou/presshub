@@ -1879,6 +1879,85 @@ export function normalizeInstagramText(text: string): string {
 }
 
 /**
+ * Instagram's Reel composer cuts a caption at 2,200 UTF-8 bytes, not 2,200 characters, so a
+ * Greek caption (2 bytes a letter) loses its end, the article link and the hashtags, around
+ * 1,200 characters in. The image composer takes the full text. Keep a Reel's caption under a
+ * little less than that, with a margin for how Instagram counts line breaks and emoji.
+ */
+export const INSTAGRAM_REEL_CAPTION_MAX_BYTES = 2150;
+
+function utf8Bytes(text: string): number {
+  return Buffer.byteLength(text, 'utf8');
+}
+
+/** A trailing paragraph that has to survive the trim: the article link or the hashtags. */
+function isInstagramCaptionTail(paragraph: string): boolean {
+  const p = paragraph.trim();
+  return /https?:\/\//i.test(p) || /^(#[^\s#]+\s*)+$/u.test(p);
+}
+
+/**
+ * Fit a caption into `maxBytes` UTF-8 bytes, keeping its trailing link and hashtag paragraphs
+ * whole: the body is shortened instead, first by dropping its last lines (kept are the first
+ * ones, which carry the story), then by cutting the remaining text at a word with "…".
+ * A caption that already fits is returned unchanged.
+ */
+export function fitInstagramCaption(copy: string, maxBytes: number = INSTAGRAM_REEL_CAPTION_MAX_BYTES): string {
+  const text = String(copy || '').trim();
+  if (utf8Bytes(text) <= maxBytes) {
+    return text;
+  }
+
+  const paragraphs = text.split(/\n\s*\n/);
+  let tailStart = paragraphs.length;
+  while (tailStart > 1 && isInstagramCaptionTail(paragraphs[tailStart - 1])) {
+    tailStart--;
+  }
+  const tail = paragraphs.slice(tailStart).map((p) => p.trim()).join('\n\n');
+  // Lines, not paragraphs: a list of bullet points is one paragraph, and only its last bullets
+  // should go.
+  const lines = paragraphs.slice(0, tailStart).map((p) => p.trim()).join('\n\n').split('\n');
+  const join = (parts: string[]) => [parts.join('\n').trim(), tail].filter(Boolean).join('\n\n');
+
+  // The tail alone is too long: keep as much of the whole caption as fits.
+  if (utf8Bytes(tail) > maxBytes - 50) {
+    return cutAtWord(text, maxBytes);
+  }
+
+  while (lines.length > 1 && utf8Bytes(join(lines)) > maxBytes) {
+    lines.pop();
+    while (lines.length > 1 && lines[lines.length - 1].trim() === '') {
+      lines.pop();
+    }
+  }
+  if (utf8Bytes(join(lines)) <= maxBytes) {
+    return join(lines);
+  }
+  const room = maxBytes - utf8Bytes(tail) - (tail ? 2 : 0);
+  return [cutAtWord(lines[0] || '', room), tail].filter(Boolean).join('\n\n');
+}
+
+/** The longest start of `text` within `maxBytes` that ends at a word, followed by "…". */
+function cutAtWord(text: string, maxBytes: number): string {
+  const ellipsis = '…';
+  const budget = maxBytes - utf8Bytes(ellipsis);
+  const chars = Array.from(text);
+  let out = '';
+  let bytes = 0;
+  for (const ch of chars) {
+    const b = utf8Bytes(ch);
+    if (bytes + b > budget) break;
+    out += ch;
+    bytes += b;
+  }
+  const lastSpace = out.search(/\s\S*$/u);
+  if (lastSpace > out.length / 2) {
+    out = out.slice(0, lastSpace);
+  }
+  return out.replace(/[\s,;:.\-–—]+$/u, '') + ellipsis;
+}
+
+/**
  * Read the posting account's username from the open composer ("<name>'s profile picture").
  * Returns null when it is not shown.
  */
@@ -2086,13 +2165,22 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       await page.waitForTimeout(1000);
     }
 
-    WorkerLogger.info('Instagram Automation', `Typing caption (${options.copy.length} chars)...`);
+    // A Reel's caption is cut by bytes (see fitInstagramCaption); shorten its body so the link
+    // and hashtags at the end are kept.
+    const caption = isVideo ? fitInstagramCaption(options.copy) : options.copy;
+    if (caption !== options.copy) {
+      WorkerLogger.info(
+        'Instagram Automation',
+        `Reel caption shortened from ${options.copy.length} to ${caption.length} chars (${utf8Bytes(options.copy)} → ${utf8Bytes(caption)} bytes) to keep its link and hashtags under Instagram's limit.`
+      );
+    }
+    WorkerLogger.info('Instagram Automation', `Typing caption (${caption.length} chars)...`);
     const captionBox = page.locator(
       'div[aria-label*="Write a caption"], div[contenteditable="true"]'
     ).first();
     await captionBox.waitFor({ state: 'visible', timeout: 15000 });
     await captionBox.click();
-    await captionBox.fill(options.copy);
+    await captionBox.fill(caption);
 
     // The caption step shows the posting account ("<name>'s profile picture"); remember it
     // to look up the new post's link on the profile afterwards.
@@ -2121,7 +2209,7 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     }
 
     // Instagram's web composer does not show the new post's link, so find it on the profile.
-    const permalink = await resolveInstagramPermalink(page, options.copy, sharedAt, accountName).catch((err: any) => {
+    const permalink = await resolveInstagramPermalink(page, caption, sharedAt, accountName).catch((err: any) => {
       WorkerLogger.warn('Instagram Automation', `Could not look up the new post's link: ${String(err?.message || err).split('\n')[0]}`);
       return null;
     });

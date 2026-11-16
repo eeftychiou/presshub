@@ -22,7 +22,9 @@ import {
   resolveTikTokPostUrl,
   TIKTOK_STUDIO_CONTENT_URL,
   splitTikTokCaption,
-  typeTikTokCaption
+  typeTikTokCaption,
+  fitInstagramCaption,
+  INSTAGRAM_REEL_CAPTION_MAX_BYTES
 } from '../src/automation/posters';
 import { ChromeConnection } from '../src/automation/browser-helper';
 import { markSessionInvalid, clearSessionInvalid, verifySession } from '../src/automation/session-manager';
@@ -1804,5 +1806,49 @@ describe('postMediaFiles', () => {
   test('falls back to mediaPath, or nothing', () => {
     expect(postMediaFiles({ mediaPath: a }, 4)).toEqual([path.resolve(a)]);
     expect(postMediaFiles({}, 4)).toEqual([]);
+  });
+});
+
+
+describe('fitInstagramCaption', () => {
+  const bytes = (t: string) => Buffer.byteLength(t, 'utf8');
+  const bullet = (n: number) => `• Σημείο ${n}: ` + 'Πολιτικοί αναλυτές επισημαίνουν ότι τα αθλητικά μέτρα παραμένουν περιορισμένης εμβέλειας. '.repeat(3).trim();
+  const link = 'Link in bio / read more at PressHub (https://presshub.cy/distaktika-vimata/)';
+  const tags = '#Κυπριακό #Cyprus #CyprusProblem #PressHub #Ειδήσεις';
+  const greek = [
+    '⚽ Βήματα προσέγγισης μέσω αθλητισμού στο Κυπριακό.',
+    '📌 Τα βασικά σημεία:\n\n' + [1, 2, 3, 4, 5].map(bullet).join('\n'),
+    'Μπορούν τέτοιες κινήσεις να ανοίξουν τον δρόμο; Πείτε μας στα σχόλια. 👇',
+    link,
+    tags,
+  ].join('\n\n');
+
+  it('returns a caption that fits unchanged', () => {
+    const short = 'Σύντομη λεζάντα\n\n' + link + '\n\n' + tags;
+    expect(fitInstagramCaption(short)).toBe(short);
+  });
+
+  it('keeps the link and hashtags of a long Greek caption and stays under the byte limit', () => {
+    expect(bytes(greek)).toBeGreaterThan(INSTAGRAM_REEL_CAPTION_MAX_BYTES);
+    expect(greek.length).toBeLessThan(2200); // under Instagram's character limit, over its byte limit
+    const fitted = fitInstagramCaption(greek);
+    expect(bytes(fitted)).toBeLessThanOrEqual(INSTAGRAM_REEL_CAPTION_MAX_BYTES);
+    expect(fitted.startsWith('⚽ Βήματα προσέγγισης')).toBe(true);
+    expect(fitted.endsWith(link + '\n\n' + tags)).toBe(true);
+    expect(fitted).toContain('• Σημείο 1:');
+  });
+
+  it('cuts one very long paragraph at a word and keeps the tail', () => {
+    const body = 'Λέξη '.repeat(800).trim();
+    const fitted = fitInstagramCaption(body + '\n\n' + link + '\n\n' + tags, 1000);
+    expect(bytes(fitted)).toBeLessThanOrEqual(1000);
+    expect(fitted).toMatch(/Λέξη…\n\nLink in bio/);
+    expect(fitted.endsWith(tags)).toBe(true);
+  });
+
+  it('cuts a caption without a link or hashtags within the limit', () => {
+    const fitted = fitInstagramCaption('Λέξη '.repeat(800), 500);
+    expect(bytes(fitted)).toBeLessThanOrEqual(500);
+    expect(fitted.endsWith('…')).toBe(true);
   });
 });
