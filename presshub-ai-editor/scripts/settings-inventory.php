@@ -83,6 +83,12 @@ function presshub_settings_inventory_markdown(): string {
                 if ( PressHub_Settings_Registry::STATUS_UNUSED === ( $e['status'] ?? '' ) ) {
                     $notes[] = '**unused**';
                 }
+                if ( ! empty( $e['depends_on'] ) ) {
+                    $notes[] = 'needs `' . $e['depends_on'] . '` on';
+                }
+                if ( ! empty( $e['aliases'] ) && is_array( $e['aliases'] ) ) {
+                    $notes[] = 'was: ' . str_replace( [ '|', "\n" ], [ '\\|', ' ' ], implode( '; ', $e['aliases'] ) );
+                }
                 $label_txt = str_replace( [ '|', "\n" ], [ '\\|', ' ' ], (string) $e['label'] );
                 if ( function_exists( 'mb_strlen' ) && mb_strlen( $label_txt ) > 90 ) {
                     $label_txt = mb_substr( $label_txt, 0, 87 ) . '…';

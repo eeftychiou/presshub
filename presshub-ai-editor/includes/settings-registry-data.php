@@ -9,6 +9,8 @@
  * Keys per entry: page (ai|social), tab, section, label, help, type, checkbox,
  * secret, removes (remove-key flags), rendered, status (active|unused),
  * unused_reason, was_shown_on and last_read (unused options), unit,
+ * aliases (earlier labels, for search), depends_on (the switch that turns
+ * this setting on),
  * default or default_callback.
  *
  * @package presshub-ai-editor
@@ -30,6 +32,9 @@ return [
     'type' => 'string',
     'rendered' => false,
     'status' => 'active',
+    'aliases' => [
+      0 => 'AI Provider',
+    ],
   ],
   'presshub_ai_fetch_urls' => [
     'page' => 'ai',
@@ -42,6 +47,9 @@ return [
     'type' => 'boolean',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Fetch and extract source URLs server-side before prompting (recommended — models cannot browse web pages).',
+    ],
   ],
   'presshub_ai_debug_prompts' => [
     'page' => 'ai',
@@ -54,6 +62,9 @@ return [
     'type' => 'boolean',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Raw debug dump (developer use)',
+    ],
   ],
   'presshub_ai_api_key' => [
     'page' => 'ai',
@@ -66,6 +77,9 @@ return [
     'type' => 'string',
     'rendered' => false,
     'status' => 'active',
+    'aliases' => [
+      0 => 'API Key',
+    ],
   ],
   'presshub_ai_remove_api_key' => [
     'page' => 'ai',
@@ -117,6 +131,9 @@ return [
     'type' => 'string',
     'rendered' => false,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Model (Openai)',
+    ],
   ],
   'presshub_ai_temperature_openai' => [
     'page' => 'ai',
@@ -130,6 +147,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 'ratio',
+    'aliases' => [
+      0 => 'Temperature (Openai)',
+    ],
   ],
   'presshub_ai_max_tokens_openai' => [
     'page' => 'ai',
@@ -143,6 +163,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 'tokens',
+    'aliases' => [
+      0 => 'Max Tokens (Openai)',
+    ],
   ],
   'presshub_ai_timeout_openai' => [
     'page' => 'ai',
@@ -156,6 +179,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Timeout (Openai)',
+    ],
   ],
   'presshub_ai_model_anthropic' => [
     'page' => 'ai',
@@ -168,6 +194,9 @@ return [
     'type' => 'string',
     'rendered' => false,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Model (Anthropic)',
+    ],
   ],
   'presshub_ai_temperature_anthropic' => [
     'page' => 'ai',
@@ -181,6 +210,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 'ratio',
+    'aliases' => [
+      0 => 'Temperature (Anthropic)',
+    ],
   ],
   'presshub_ai_max_tokens_anthropic' => [
     'page' => 'ai',
@@ -194,6 +226,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 'tokens',
+    'aliases' => [
+      0 => 'Max Tokens (Anthropic)',
+    ],
   ],
   'presshub_ai_timeout_anthropic' => [
     'page' => 'ai',
@@ -207,6 +242,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Timeout (Anthropic)',
+    ],
   ],
   'presshub_ai_model_gemini' => [
     'page' => 'ai',
@@ -219,6 +257,9 @@ return [
     'type' => 'string',
     'rendered' => false,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Model (Gemini)',
+    ],
   ],
   'presshub_ai_temperature_gemini' => [
     'page' => 'ai',
@@ -232,6 +273,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 'ratio',
+    'aliases' => [
+      0 => 'Temperature (Gemini)',
+    ],
   ],
   'presshub_ai_max_tokens_gemini' => [
     'page' => 'ai',
@@ -245,6 +289,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 'tokens',
+    'aliases' => [
+      0 => 'Max Tokens (Gemini)',
+    ],
   ],
   'presshub_ai_timeout_gemini' => [
     'page' => 'ai',
@@ -258,6 +305,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Timeout (Gemini)',
+    ],
   ],
   'presshub_ai_openai_org' => [
     'page' => 'ai',
@@ -355,6 +405,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'requests',
+    'aliases' => [
+      0 => 'Requests per Window',
+    ],
   ],
   'presshub_ai_rate_limit_window_seconds' => [
     'page' => 'ai',
@@ -368,6 +421,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Window Length (seconds)',
+    ],
   ],
   'presshub_ai_research_retention_days' => [
     'page' => 'ai',
@@ -434,6 +490,9 @@ return [
       0 => 'PressHub_AI_Settings_Storage',
       1 => 'default_briefing_tts_engine',
     ],
+    'aliases' => [
+      0 => 'Voice Synthesis Engine',
+    ],
   ],
   'presshub_ai_briefing_tts_model' => [
     'page' => 'ai',
@@ -463,6 +522,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Speech AI Timeout (seconds)',
+    ],
   ],
   'presshub_ai_log_tts_payloads' => [
     'page' => 'ai',
@@ -475,6 +537,9 @@ return [
     'type' => 'boolean',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Raw debug dump (developer use)',
+    ],
   ],
   'presshub_ai_generation_record_retention_days' => [
     'page' => 'ai',
@@ -595,6 +660,7 @@ return [
       0 => 'PressHub_AI_Settings_Storage',
       1 => 'default_briefing_harvest_time',
     ],
+    'depends_on' => 'presshub_ai_briefing_schedule_enabled',
   ],
   'presshub_ai_briefing_generation_time' => [
     'page' => 'ai',
@@ -611,6 +677,7 @@ return [
       0 => 'PressHub_AI_Settings_Storage',
       1 => 'default_briefing_generation_time',
     ],
+    'depends_on' => 'presshub_ai_briefing_schedule_enabled',
   ],
   'presshub_ai_briefing_noon_schedule_enabled' => [
     'page' => 'ai',
@@ -643,6 +710,7 @@ return [
       0 => 'PressHub_AI_Settings_Storage',
       1 => 'default_briefing_noon_harvest_time',
     ],
+    'depends_on' => 'presshub_ai_briefing_noon_schedule_enabled',
   ],
   'presshub_ai_briefing_noon_generation_time' => [
     'page' => 'ai',
@@ -659,6 +727,7 @@ return [
       0 => 'PressHub_AI_Settings_Storage',
       1 => 'default_briefing_noon_generation_time',
     ],
+    'depends_on' => 'presshub_ai_briefing_noon_schedule_enabled',
   ],
   'presshub_ai_social_monitor_enabled' => [
     'page' => 'ai',
@@ -684,6 +753,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'min',
+    'aliases' => [
+      0 => 'Scan Schedule',
+    ],
+    'depends_on' => 'presshub_ai_social_monitor_enabled',
   ],
   'presshub_ai_social_monitor_max_age_hours' => [
     'page' => 'ai',
@@ -697,6 +770,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'h',
+    'aliases' => [
+      0 => 'Scan Schedule',
+    ],
+    'depends_on' => 'presshub_ai_social_monitor_enabled',
   ],
   'presshub_ai_social_monitor_max_posts_per_account' => [
     'page' => 'ai',
@@ -710,6 +787,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'posts',
+    'aliases' => [
+      0 => 'Post Limits',
+    ],
+    'depends_on' => 'presshub_ai_social_monitor_enabled',
   ],
   'presshub_ai_social_monitor_max_posts_per_harvest' => [
     'page' => 'ai',
@@ -723,6 +804,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'posts',
+    'aliases' => [
+      0 => 'Post Limits',
+    ],
+    'depends_on' => 'presshub_ai_social_monitor_enabled',
   ],
   'presshub_ai_social_monitor_x_list_url' => [
     'page' => 'ai',
@@ -735,6 +820,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_social_monitor_enabled',
   ],
   'presshub_ai_social_monitor_transcribe_videos' => [
     'page' => 'ai',
@@ -747,6 +833,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Videos',
+    ],
+    'depends_on' => 'presshub_ai_social_monitor_enabled',
   ],
   'presshub_ai_social_monitor_max_video_seconds' => [
     'page' => 'ai',
@@ -760,6 +850,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Videos',
+    ],
+    'depends_on' => 'presshub_ai_social_monitor_enabled',
   ],
   'presshub_ai_social_monitor_max_video_mb' => [
     'page' => 'ai',
@@ -773,6 +867,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'MB',
+    'aliases' => [
+      0 => 'Videos',
+    ],
+    'depends_on' => 'presshub_ai_social_monitor_enabled',
   ],
   'presshub_ai_social_trending_enabled' => [
     'page' => 'ai',
@@ -785,6 +883,9 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Publish Trending Roundup',
+    ],
   ],
   'presshub_ai_social_trending_interval_hours' => [
     'page' => 'ai',
@@ -798,6 +899,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'h',
+    'aliases' => [
+      0 => 'Publish Trending Roundup',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_platform_x' => [
     'page' => 'ai',
@@ -810,6 +915,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Platforms',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_platform_tiktok' => [
     'page' => 'ai',
@@ -822,6 +931,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Platforms',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_platform_instagram' => [
     'page' => 'ai',
@@ -834,6 +947,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Platforms',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_platform_facebook' => [
     'page' => 'ai',
@@ -846,6 +963,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Platforms',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_keywords' => [
     'page' => 'ai',
@@ -858,6 +979,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_hashtags' => [
     'page' => 'ai',
@@ -870,6 +992,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_facebook_pages' => [
     'page' => 'ai',
@@ -882,6 +1005,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_category' => [
     'page' => 'ai',
@@ -894,6 +1018,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Roundup Post',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_post_mode' => [
     'page' => 'ai',
@@ -906,6 +1034,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Roundup Post',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_post_status' => [
     'page' => 'ai',
@@ -918,6 +1050,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Roundup Post',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_title' => [
     'page' => 'ai',
@@ -930,6 +1066,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Roundup Post',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_max_items' => [
     'page' => 'ai',
@@ -943,6 +1083,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'posts',
+    'aliases' => [
+      0 => 'Selection',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_max_per_platform' => [
     'page' => 'ai',
@@ -956,6 +1100,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'posts',
+    'aliases' => [
+      0 => 'Selection',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_max_age_hours' => [
     'page' => 'ai',
@@ -969,6 +1117,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'h',
+    'aliases' => [
+      0 => 'Selection',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_min_engagement' => [
     'page' => 'ai',
@@ -982,6 +1134,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'engagement points',
+    'aliases' => [
+      0 => 'Selection',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_excluded_words' => [
     'page' => 'ai',
@@ -994,6 +1150,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_briefing_enabled' => [
     'page' => 'ai',
@@ -1006,6 +1163,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Use in the Briefing',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_briefing_count' => [
     'page' => 'ai',
@@ -1019,6 +1180,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'posts',
+    'aliases' => [
+      0 => 'Use in the Briefing',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_press_inbox_enabled' => [
     'page' => 'ai',
@@ -1043,6 +1208,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Incoming Mail Server (IMAP)',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_port' => [
     'page' => 'ai',
@@ -1056,6 +1225,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'port',
+    'aliases' => [
+      0 => 'Port',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_encryption' => [
     'page' => 'ai',
@@ -1068,6 +1241,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Incoming Mail Server (IMAP)',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_verify_ssl' => [
     'page' => 'ai',
@@ -1080,6 +1257,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Incoming Mail Server (IMAP)',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_username' => [
     'page' => 'ai',
@@ -1092,6 +1273,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_password' => [
     'page' => 'ai',
@@ -1104,6 +1286,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_remove_press_inbox_password' => [
     'page' => 'ai',
@@ -1129,6 +1312,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_processed_folder' => [
     'page' => 'ai',
@@ -1141,6 +1325,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_allowed_senders' => [
     'page' => 'ai',
@@ -1153,6 +1338,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_max_messages' => [
     'page' => 'ai',
@@ -1166,6 +1352,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'messages',
+    'aliases' => [
+      0 => 'Inbox Limits',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_max_age_hours' => [
     'page' => 'ai',
@@ -1179,6 +1369,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'h',
+    'aliases' => [
+      0 => 'Inbox Limits',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_max_attachment_mb' => [
     'page' => 'ai',
@@ -1192,6 +1386,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'MB',
+    'aliases' => [
+      0 => 'Inbox Limits',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_timeout' => [
     'page' => 'ai',
@@ -1205,6 +1403,10 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Inbox Limits',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_press_inbox_extract_attachments' => [
     'page' => 'ai',
@@ -1217,6 +1419,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Inbox Limits',
+    ],
+    'depends_on' => 'presshub_ai_press_inbox_enabled',
   ],
   'presshub_ai_harvest_time_budget' => [
     'page' => 'ai',
@@ -1230,6 +1436,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Harvest Execution Time Budget (seconds)',
+    ],
   ],
   'presshub_ai_curation_max_articles' => [
     'page' => 'ai',
@@ -1243,6 +1452,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'articles',
+    'aliases' => [
+      0 => 'Maximum Articles Sent to Curation LLM',
+    ],
   ],
   'presshub_ai_curation_max_chars_per_article' => [
     'page' => 'ai',
@@ -1256,6 +1468,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'characters',
+    'aliases' => [
+      0 => 'Maximum Characters per Article (Curation)',
+    ],
   ],
   'presshub_ai_briefing_text_preset' => [
     'page' => 'ai',
@@ -1280,6 +1495,9 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Podcast Dialogue Preset',
+    ],
   ],
   'presshub_ai_briefing_target_duration' => [
     'page' => 'ai',
@@ -1309,6 +1527,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'presenters',
+    'aliases' => [
+      0 => 'Podcast Presenters Count',
+    ],
   ],
   'presshub_ai_briefing_host_female' => [
     'page' => 'ai',
@@ -1458,6 +1679,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => '×',
+    'aliases' => [
+      0 => 'Speaking Rate / Speed',
+    ],
   ],
   'presshub_ai_briefing_voice_pitch' => [
     'page' => 'ai',
@@ -1471,6 +1695,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'semitones',
+    'aliases' => [
+      0 => 'Voice Pitch Tuning',
+    ],
   ],
   'presshub_ai_briefing_tts_style' => [
     'page' => 'ai',
@@ -1785,6 +2012,9 @@ return [
     'type' => 'string',
     'rendered' => false,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Briefing morning podcast title prefix',
+    ],
   ],
   'presshub_ai_briefing_noon_podcast_title_prefix' => [
     'page' => 'ai',
@@ -1880,6 +2110,9 @@ return [
     'default_callback' => [
       0 => 'PressHub_AI_Settings_Storage',
       1 => 'default_image_feature_enabled',
+    ],
+    'aliases' => [
+      0 => 'Enable Feature',
     ],
   ],
   'presshub_ai_image_prompt_provider' => [
@@ -2010,6 +2243,9 @@ return [
       1 => 'default_seo_max_tags',
     ],
     'unit' => 'tags',
+    'aliases' => [
+      0 => 'Maximum Tags per Post',
+    ],
   ],
   'presshub_ai_seo_review_enabled' => [
     'page' => 'ai',
@@ -2034,6 +2270,9 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Include Transcript in Podcast Post',
+    ],
   ],
   'presshub_ai_briefing_podcast_status' => [
     'page' => 'ai',
@@ -2118,6 +2357,9 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Custom Model Override',
+    ],
   ],
   'presshub_ai_coauthor_temperature' => [
     'page' => 'ai',
@@ -2131,6 +2373,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'ratio',
+    'aliases' => [
+      0 => 'Sampling Temperature',
+    ],
   ],
   'presshub_ai_coauthor_max_tokens' => [
     'page' => 'ai',
@@ -2144,6 +2389,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'tokens',
+    'aliases' => [
+      0 => 'Maximum Output Tokens',
+    ],
   ],
   'presshub_ai_coauthor_timeout' => [
     'page' => 'ai',
@@ -2157,6 +2405,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Request Timeout (seconds)',
+    ],
   ],
   'presshub_ai_coauthor_max_source_chars' => [
     'page' => 'ai',
@@ -2207,6 +2458,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'points',
+    'aliases' => [
+      0 => 'Minimum Passing Score',
+    ],
   ],
   'presshub_ai_qa_notify_editor' => [
     'page' => 'ai',
@@ -2279,6 +2533,9 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Custom Model Override',
+    ],
   ],
   'presshub_ai_copilot_temperature' => [
     'page' => 'ai',
@@ -2292,6 +2549,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'ratio',
+    'aliases' => [
+      0 => 'Sampling Temperature',
+    ],
   ],
   'presshub_ai_copilot_max_tokens' => [
     'page' => 'ai',
@@ -2305,6 +2565,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'tokens',
+    'aliases' => [
+      0 => 'Maximum Output Tokens',
+    ],
   ],
   'presshub_ai_copilot_timeout' => [
     'page' => 'ai',
@@ -2318,6 +2581,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Request Timeout (seconds)',
+    ],
   ],
   'presshub_ai_briefing_text_provider' => [
     'page' => 'ai',
@@ -2356,6 +2622,9 @@ return [
     'status' => 'active',
     'default' => '',
     'unit' => 'ratio',
+    'aliases' => [
+      0 => 'Briefing text temperature',
+    ],
   ],
   'presshub_ai_briefing_text_max_tokens' => [
     'page' => 'ai',
@@ -2383,6 +2652,9 @@ return [
     'status' => 'active',
     'default' => '',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Briefing text timeout',
+    ],
   ],
   'presshub_ai_briefing_podcast_provider' => [
     'page' => 'ai',
@@ -2421,6 +2693,9 @@ return [
     'status' => 'active',
     'default' => '',
     'unit' => 'ratio',
+    'aliases' => [
+      0 => 'Briefing podcast temperature',
+    ],
   ],
   'presshub_ai_briefing_podcast_max_tokens' => [
     'page' => 'ai',
@@ -2448,6 +2723,9 @@ return [
     'status' => 'active',
     'default' => '',
     'unit' => 's',
+    'aliases' => [
+      0 => 'Briefing podcast timeout',
+    ],
   ],
   'presshub_ai_briefing_podcast_tts_provider' => [
     'page' => 'ai',
@@ -2485,6 +2763,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'days',
+    'depends_on' => 'presshub_ai_memory_enabled',
   ],
   'presshub_ai_memory_background_days' => [
     'page' => 'ai',
@@ -2498,6 +2777,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'days',
+    'depends_on' => 'presshub_ai_memory_enabled',
   ],
   'presshub_ai_memory_briefing_budget_chars' => [
     'page' => 'ai',
@@ -2511,6 +2791,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'characters',
+    'depends_on' => 'presshub_ai_memory_enabled',
   ],
   'presshub_ai_memory_podcast_budget_chars' => [
     'page' => 'ai',
@@ -2524,6 +2805,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'characters',
+    'depends_on' => 'presshub_ai_memory_enabled',
   ],
   'presshub_ai_memory_retention_days' => [
     'page' => 'ai',
@@ -2537,6 +2819,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'days',
+    'depends_on' => 'presshub_ai_memory_enabled',
   ],
   'presshub_ai_briefing_memory_provider' => [
     'page' => 'ai',
@@ -2725,6 +3008,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'default' => true,
+    'aliases' => [
+      0 => 'Enabled twitter',
+    ],
   ],
   'presshub_social_enabled_facebook' => [
     'page' => 'social',
@@ -2738,6 +3024,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'default' => true,
+    'aliases' => [
+      0 => 'Enabled facebook',
+    ],
   ],
   'presshub_social_enabled_instagram' => [
     'page' => 'social',
@@ -2751,6 +3040,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'default' => true,
+    'aliases' => [
+      0 => 'Enabled instagram',
+    ],
   ],
   'presshub_social_enabled_tiktok' => [
     'page' => 'social',
@@ -2764,6 +3056,9 @@ return [
     'rendered' => false,
     'status' => 'active',
     'default' => true,
+    'aliases' => [
+      0 => 'Enabled tiktok',
+    ],
   ],
   'presshub_social_copy_mode' => [
     'page' => 'social',
@@ -2894,6 +3189,9 @@ return [
     'status' => 'active',
     'default' => 0,
     'unit' => 'tokens',
+    'aliases' => [
+      0 => 'Max Tokens',
+    ],
   ],
   'presshub_social_ai_timeout' => [
     'page' => 'social',
@@ -2908,6 +3206,9 @@ return [
     'status' => 'active',
     'default' => 0,
     'unit' => 's',
+    'aliases' => [
+      0 => 'Request Timeout',
+    ],
   ],
   'presshub_social_max_attempts' => [
     'page' => 'social',
@@ -2936,6 +3237,9 @@ return [
     'status' => 'active',
     'default' => 60,
     'unit' => 's',
+    'aliases' => [
+      0 => 'Dispatch Interval',
+    ],
   ],
   'presshub_social_batch_size' => [
     'page' => 'social',
@@ -2964,6 +3268,9 @@ return [
     'status' => 'active',
     'default' => 120,
     'unit' => 's',
+    'aliases' => [
+      0 => 'Retry Base Delay',
+    ],
   ],
   'presshub_social_worker_mode' => [
     'page' => 'social',
@@ -3017,6 +3324,9 @@ return [
     'status' => 'active',
     'default' => 120,
     'unit' => 's',
+    'aliases' => [
+      0 => 'Worker Timeout',
+    ],
   ],
   'presshub_social_twitter_max_chars' => [
     'page' => 'social',
@@ -3045,6 +3355,9 @@ return [
     'status' => 'active',
     'default' => 1080,
     'unit' => 'px',
+    'aliases' => [
+      0 => 'Instagram Card Width',
+    ],
   ],
   'presshub_social_instagram_card_height' => [
     'page' => 'social',
@@ -3059,6 +3372,9 @@ return [
     'status' => 'active',
     'default' => 1080,
     'unit' => 'px',
+    'aliases' => [
+      0 => 'Instagram Card Height',
+    ],
   ],
   'presshub_social_tiktok_video_width' => [
     'page' => 'social',
@@ -3073,6 +3389,9 @@ return [
     'status' => 'active',
     'default' => 1080,
     'unit' => 'px',
+    'aliases' => [
+      0 => 'TikTok Video Width',
+    ],
   ],
   'presshub_social_tiktok_video_height' => [
     'page' => 'social',
@@ -3087,6 +3406,9 @@ return [
     'status' => 'active',
     'default' => 1920,
     'unit' => 'px',
+    'aliases' => [
+      0 => 'TikTok Video Height',
+    ],
   ],
   'presshub_social_tiktok_video_duration' => [
     'page' => 'social',
@@ -3101,6 +3423,9 @@ return [
     'status' => 'active',
     'default' => 10,
     'unit' => 's',
+    'aliases' => [
+      0 => 'TikTok Video Duration',
+    ],
   ],
   'presshub_social_tiktok_narration_enabled' => [
     'page' => 'social',
@@ -3127,6 +3452,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => 'Για το πλήρες άρθρο, επισκεφθείτε το presshub.cy',
+    'depends_on' => 'presshub_social_tiktok_narration_enabled',
   ],
   'presshub_social_tiktok_narration_voice' => [
     'page' => 'social',
@@ -3140,6 +3466,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => '',
+    'depends_on' => 'presshub_social_tiktok_narration_enabled',
   ],
   'presshub_social_post_images_enabled' => [
     'page' => 'social',
@@ -3167,6 +3494,7 @@ return [
     'status' => 'active',
     'default' => 1,
     'unit' => 'images',
+    'depends_on' => 'presshub_social_post_images_enabled',
   ],
   'presshub_social_post_images_facebook' => [
     'page' => 'social',
@@ -3181,6 +3509,7 @@ return [
     'status' => 'active',
     'default' => 1,
     'unit' => 'images',
+    'depends_on' => 'presshub_social_post_images_enabled',
   ],
   'presshub_social_post_images_instagram' => [
     'page' => 'social',
@@ -3195,6 +3524,7 @@ return [
     'status' => 'active',
     'default' => 1,
     'unit' => 'images',
+    'depends_on' => 'presshub_social_post_images_enabled',
   ],
   'presshub_social_post_images_tiktok' => [
     'page' => 'social',
@@ -3209,6 +3539,7 @@ return [
     'status' => 'active',
     'default' => 1,
     'unit' => 'images',
+    'depends_on' => 'presshub_social_post_images_enabled',
   ],
   'presshub_social_tiktok_shorts_enabled' => [
     'page' => 'social',
@@ -3249,6 +3580,7 @@ return [
     'status' => 'active',
     'default' => 3,
     'unit' => 'shorts',
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_spacing_minutes' => [
     'page' => 'social',
@@ -3263,6 +3595,10 @@ return [
     'status' => 'active',
     'default' => 90,
     'unit' => 'min',
+    'aliases' => [
+      0 => 'Time Between Shorts',
+    ],
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_max_words' => [
     'page' => 'social',
@@ -3277,6 +3613,7 @@ return [
     'status' => 'active',
     'default' => 130,
     'unit' => 'words',
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_images' => [
     'page' => 'social',
@@ -3291,6 +3628,7 @@ return [
     'status' => 'active',
     'default' => 3,
     'unit' => 'images',
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_caption_words' => [
     'page' => 'social',
@@ -3305,6 +3643,7 @@ return [
     'status' => 'active',
     'default' => 120,
     'unit' => 'words',
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_narrators' => [
     'page' => 'social',
@@ -3319,6 +3658,7 @@ return [
     'status' => 'active',
     'default' => 1,
     'unit' => 'narrators',
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_voice_1' => [
     'page' => 'social',
@@ -3332,6 +3672,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => 'Puck',
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_voice_2' => [
     'page' => 'social',
@@ -3345,6 +3686,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => '',
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_voice_speed' => [
     'page' => 'social',
@@ -3359,6 +3701,10 @@ return [
     'status' => 'active',
     'default' => 110,
     'unit' => '%',
+    'aliases' => [
+      0 => 'Short Voice Speed',
+    ],
+    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
   ],
   'presshub_social_tiktok_shorts_music_enabled' => [
     'page' => 'social',
@@ -3386,6 +3732,10 @@ return [
     'status' => 'active',
     'default' => 15,
     'unit' => '%',
+    'aliases' => [
+      0 => 'Music Volume',
+    ],
+    'depends_on' => 'presshub_social_tiktok_shorts_music_enabled',
   ],
   'presshub_social_tiktok_shorts_music_tracks' => [
     'page' => 'social',
@@ -3400,6 +3750,7 @@ return [
     'status' => 'active',
     'default' => 2,
     'unit' => 'tracks',
+    'depends_on' => 'presshub_social_tiktok_shorts_music_enabled',
   ],
   'presshub_social_tiktok_shorts_music_model' => [
     'page' => 'social',
@@ -3413,6 +3764,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => 'lyria-3-clip-preview',
+    'depends_on' => 'presshub_social_tiktok_shorts_music_enabled',
   ],
   'presshub_social_alert_email_enabled' => [
     'page' => 'social',
@@ -3487,6 +3839,9 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Twitter Bearer Token',
+    ],
   ],
   'presshub_social_twitter_api_key' => [
     'page' => 'social',
@@ -3502,6 +3857,9 @@ return [
     'unused_reason' => 'X OAuth1 consumer key: no code reads it. Posting to X uses the bearer token or the worker.',
     'was_shown_on' => 'PressHub Social → Settings → API Credentials',
     'last_read' => 'Never',
+    'aliases' => [
+      0 => 'Twitter API Key',
+    ],
   ],
   'presshub_social_twitter_api_secret' => [
     'page' => 'social',
@@ -3517,6 +3875,9 @@ return [
     'unused_reason' => 'X OAuth1 consumer secret: no code reads it.',
     'was_shown_on' => 'PressHub Social → Settings → API Credentials',
     'last_read' => 'Never',
+    'aliases' => [
+      0 => 'Twitter API Secret',
+    ],
   ],
   'presshub_social_twitter_access_token' => [
     'page' => 'social',
@@ -3529,6 +3890,9 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'aliases' => [
+      0 => 'Twitter Access Token',
+    ],
   ],
   'presshub_social_twitter_access_secret' => [
     'page' => 'social',
@@ -3544,6 +3908,9 @@ return [
     'unused_reason' => 'X OAuth1 access token secret: no code reads it.',
     'was_shown_on' => 'PressHub Social → Settings → API Credentials',
     'last_read' => 'Never',
+    'aliases' => [
+      0 => 'Twitter Access Secret',
+    ],
   ],
   'presshub_social_tiktok_access_token' => [
     'page' => 'social',
@@ -3774,6 +4141,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => 1,
+    'depends_on' => 'presshub_ai_memory_enabled',
   ],
   'presshub_ai_stakeholders_enabled' => [
     'page' => 'ai',
@@ -3787,6 +4155,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => 1,
+    'depends_on' => 'presshub_ai_memory_enabled',
   ],
   'presshub_ai_claim_check_enabled' => [
     'page' => 'ai',
@@ -3827,6 +4196,7 @@ return [
     'status' => 'active',
     'unit' => 'h',
     'default' => 48,
+    'depends_on' => 'presshub_ai_pool_cleanup_enabled',
   ],
   'presshub_ai_pool_duplicate_similarity' => [
     'page' => 'ai',
@@ -3841,6 +4211,7 @@ return [
     'status' => 'active',
     'unit' => 'ratio',
     'default' => 0.6,
+    'depends_on' => 'presshub_ai_pool_cleanup_enabled',
   ],
   'presshub_ai_policy_fiches_budgets' => [
     'page' => 'ai',
@@ -3919,6 +4290,7 @@ return [
     'status' => 'active',
     'unit' => 'posts',
     'default' => 1,
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
   'presshub_ai_social_trending_share_after_hour' => [
     'page' => 'ai',
@@ -3933,5 +4305,6 @@ return [
     'status' => 'active',
     'unit' => 'hour',
     'default' => 8,
+    'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
 ];
