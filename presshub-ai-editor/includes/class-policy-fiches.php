@@ -52,6 +52,7 @@ class PressHub_AI_Policy_Fiches {
     const POST_SUGGESTION = 'presshub_ai_policy_suggestion';
     const POST_DELETE     = 'presshub_ai_policy_delete';
     const POST_DRAFT      = 'presshub_ai_policy_draft';
+    const POST_EXAMPLE    = 'presshub_ai_policy_example';
 
     const MAX_FICHES       = 60;
     const MAX_ALIASES      = 12;
@@ -103,7 +104,7 @@ class PressHub_AI_Policy_Fiches {
         add_action( 'presshub_ai_memory_digest_built', [ __CLASS__, 'schedule_update' ], 20, 1 );
         add_action( self::CRON_HOOK, [ __CLASS__, 'handle_update_cron' ], 10, 1 );
         add_action( self::DRAFT_HOOK, [ __CLASS__, 'handle_draft_cron' ], 10, 0 );
-        foreach ( [ self::POST_CREATE, self::POST_SAVE, self::POST_RECORD, self::POST_SUGGESTION, self::POST_DELETE, self::POST_DRAFT ] as $action ) {
+        foreach ( [ self::POST_CREATE, self::POST_SAVE, self::POST_RECORD, self::POST_SUGGESTION, self::POST_DELETE, self::POST_DRAFT, self::POST_EXAMPLE ] as $action ) {
             add_action( 'admin_post_' . $action, [ __CLASS__, 'handle_' . substr( $action, strlen( 'presshub_ai_policy_' ) ) ] );
         }
     }
@@ -1413,6 +1414,12 @@ class PressHub_AI_Policy_Fiches {
         self::back( [ 'notice' => 'deleted' ] );
     }
 
+    public static function handle_example(): void {
+        self::guard();
+        $res = self::create_example( (int) get_current_user_id() );
+        is_wp_error( $res ) ? self::back( [ 'notice' => $res->get_error_code() ] ) : self::back( [ 'fiche' => $res, 'notice' => 'example' ] );
+    }
+
     public static function handle_draft(): void {
         self::guard();
         self::back( [ 'notice' => self::schedule_drafts() ? 'drafting' : 'draft_failed' ] );
@@ -1432,6 +1439,7 @@ class PressHub_AI_Policy_Fiches {
             'accepted'                    => [ true, __( 'Suggestion accepted and added to the core.', 'presshub-ai-editor' ) ],
             'dismissed'                   => [ true, __( 'Suggestion dismissed.', 'presshub-ai-editor' ) ],
             'deleted'                     => [ true, __( 'Fiche deleted.', 'presshub-ai-editor' ) ],
+            'example'                     => [ true, __( 'Example fiche created as a locked draft. It is never sent to the AI: read it, then copy what helps into your own fiches or delete it.', 'presshub-ai-editor' ) ],
             'drafting'                    => [ true, __( 'Drafting started. Draft fiches appear here in a minute or two; refresh the page.', 'presshub-ai-editor' ) ],
             'draft_failed'                => [ false, __( 'Could not start drafting (WP-Cron is not available).', 'presshub-ai-editor' ) ],
             'policy_title_required'       => [ false, __( 'A policy fiche needs a title.', 'presshub-ai-editor' ) ],
@@ -1452,6 +1460,151 @@ class PressHub_AI_Policy_Fiches {
             'published' => __( 'Published', 'presshub-ai-editor' ),
         ];
         return $labels[ $status ] ?? $status;
+    }
+
+    // ---------------------------------------------------------------------
+    // Writing guide, example and warnings
+    // ---------------------------------------------------------------------
+
+    /** Short examples shown inside the empty core fields. */
+    const PLACEHOLDERS = [
+        'aliases'    => 'συντάξεις, συνταξιούχοι, αύξηση συντάξεων, Ταμείο Κοινωνικών Ασφαλίσεων',
+        'principles' => "Η κάλυψη ρωτά πάντα: ποιος αποφασίζει και σε ποιο στάδιο βρίσκεται η απόφαση· πόσο κοστίζει και ποιος πληρώνει· ποιοι ωφελούνται και ποιοι όχι.",
+        'framing'    => "Οι κατηγορίες της κυβέρνησης ότι η Βουλή μπλοκάρει την αύξηση αποδίδονται («σύμφωνα με την κυβέρνηση»), δεν γράφονται ως γεγονός.\nΤο «έως 100 ευρώ» γράφεται πάντα με το «έως» και με το ποιους αφορά.",
+        'facts'      => 'Η πρόταση αφορά συνταξιούχους κάτω από το όριο φτώχειας | https://… (σύνδεσμος στην πηγή)',
+        'actors'     => 'Υπουργείο Εργασίας, Βουλή, ΠΕΟ, ΣΕΚ, Ομοσπονδία Εργοδοτών',
+    ];
+
+    /**
+     * The worked example (pension reform). Illustrative only: the facts and the
+     * claim are placeholders in brackets for the editor to replace.
+     */
+    public static function example_fiche(): array {
+        return [
+            'aliases'    => [ 'συντάξεις', 'συνταξιούχοι', 'αύξηση συντάξεων', 'χαμηλοσυνταξιούχοι', 'Ταμείο Κοινωνικών Ασφαλίσεων', 'pension reform' ],
+            'principles' => "Η κάλυψη ρωτά πάντα: ποιος αποφασίζει (Υπουργικό, Βουλή, κοινωνικοί εταίροι) και σε ποιο στάδιο βρίσκεται η απόφαση· πόσο κοστίζει και ποιος πληρώνει· ποιοι συνταξιούχοι ωφελούνται και ποιοι όχι.\n"
+                . 'Η αύξηση των σημερινών χαμηλών συντάξεων και οι αλλαγές στις παροχές του σημερινού εργατικού δυναμικού είναι διαφορετικά ζητήματα. Όταν παρουσιάζονται ως ένα πακέτο, το επισημαίνουμε.',
+            'framing'    => "Οι κατηγορίες της κυβέρνησης ότι η Βουλή ή οι κοινωνικοί εταίροι εμποδίζουν την αύξηση αποδίδονται («σύμφωνα με την κυβέρνηση») και δεν γράφονται ως γεγονός· δίνεται η απάντηση της άλλης πλευράς αν υπάρχει.\n"
+                . "Το «έως 100 ευρώ» γράφεται πάντα με το «έως» και με το ποιους αφορά.\n"
+                . 'Δεν χρησιμοποιούμε στη δική μας φωνή τις λέξεις «μπλόκο» και «εμπόδια».',
+            'facts'      => [
+                [ 'text' => 'Η πρόταση για αύξηση έως 100 ευρώ αφορά συνταξιούχους με εισόδημα κάτω από [όριο] (αντικαταστήστε και βάλτε σύνδεσμο)', 'url' => '' ],
+                [ 'text' => 'Μέχρι [ημερομηνία] δεν είχε κατατεθεί νομοσχέδιο στη Βουλή (αντικαταστήστε και βάλτε σύνδεσμο)', 'url' => '' ],
+            ],
+            'claims'     => [
+                [ 'claim' => 'Η Βουλή και οι κοινωνικοί εταίροι εμποδίζουν την αύξηση των συντάξεων', 'by' => 'Κυβέρνηση', 'status' => 'contested', 'counter' => '[Η απάντηση της Βουλής ή των συντεχνιών, π.χ. ότι δεν έχει κατατεθεί νομοσχέδιο]', 'origin' => 'editor' ],
+            ],
+            'questions'  => [ 'Ποιο είναι το ετήσιο κόστος της αύξησης και από πού χρηματοδοτείται;', 'Τι αλλάζει για όσους εργάζονται σήμερα και πώς συνδέεται με την αύξηση;' ],
+            'actors'     => [ 'Υπουργείο Εργασίας', 'Βουλή', 'ΠΕΟ', 'ΣΕΚ', 'Ομοσπονδία Εργοδοτών' ],
+        ];
+    }
+
+    /**
+     * Create the example as a locked draft (never injected, never updated).
+     * When a real fiche already uses its aliases, it is made without them.
+     *
+     * @return string|WP_Error Slug.
+     */
+    public static function create_example( int $user_id = 0 ) {
+        $title = 'Παράδειγμα: συνταξιοδοτική μεταρρύθμιση';
+        $slug  = self::slug( $title );
+        if ( null !== self::get( $slug ) ) {
+            return $slug;
+        }
+        $data = array_merge( self::example_fiche(), [ 'status' => 'draft', 'locked' => true, 'origin' => 'edited' ] );
+        $res  = self::create( $title, $data, $user_id );
+        if ( is_wp_error( $res ) && 'policy_exists' === $res->get_error_code() ) {
+            $data['aliases'] = [];
+            $res             = self::create( $title, $data, $user_id );
+        }
+        return $res;
+    }
+
+    /** The "how to write a fiche" panel (open when $open). */
+    public static function guide_html( bool $open = false ): string {
+        $li = static function ( array $items ): string {
+            return '<ul style="margin: 4px 0 8px 20px; list-style: disc;"><li>' . implode( '</li><li>', array_map( 'esc_html', $items ) ) . '</li></ul>';
+        };
+        $ex   = self::example_fiche();
+        $pre  = static function ( string $label, string $text ): string {
+            return '<p style="margin: 8px 0 2px;"><strong>' . esc_html( $label ) . '</strong></p><pre class="presshub-memory-preview-text" style="white-space: pre-wrap;">' . esc_html( $text ) . '</pre>';
+        };
+        $html  = '<details class="presshub-policy-guide"' . ( $open ? ' open' : '' ) . ' style="margin: 12px 0; padding: 8px 12px; background: #fff; border: 1px solid #dcdcde;"><summary><strong>' . esc_html__( 'How to write a policy fiche (with an example)', 'presshub-ai-editor' ) . '</strong></summary>';
+        $html .= '<p>' . esc_html__( 'A published fiche goes to the AI as instructions, ahead of the articles. The articles still decide what happened; the fiche decides how it is told: what must be attributed, which questions to ask, which words to use. Write it in Greek, like the prompts, in short sentences the AI can follow in one reading.', 'presshub-ai-editor' ) . '</p>';
+        $html .= '<h4 style="margin: 10px 0 4px;">' . esc_html__( 'What each field is for', 'presshub-ai-editor' ) . '</h4>' . $li( [
+            __( 'Aliases: the words the news actually uses for this file, in Greek (and English if used). The fiche is used only when one of them, or the title, appears in the material. Word endings are tolerated (συντάξεις matches συντάξεων).', 'presshub-ai-editor' ),
+            __( 'Principles: the questions coverage must always ask and the newsroom\'s stance, in neutral terms. They should still hold in a month.', 'presshub-ai-editor' ),
+            __( 'Framing rules: concrete wording rules, one per line: what is always attributed, words to use or avoid, what must always come with what.', 'presshub-ai-editor' ),
+            __( 'Confirmed facts: only what you have checked, one per line as "text | link". The AI may use them as background.', 'presshub-ai-editor' ),
+            __( 'Claims register (below the core): what someone says that is disputed or unchecked, who says it and the counter-point. Mark a claim False only when you can show it is false.', 'presshub-ai-editor' ),
+            __( 'Open questions: what coverage has not answered yet. The AI may raise them, and the system marks them answered when a brief answers them.', 'presshub-ai-editor' ),
+        ] );
+        $html .= '<h4 style="margin: 10px 0 4px;">' . esc_html__( 'Do', 'presshub-ai-editor' ) . '</h4>' . $li( [
+            __( 'Put the most important rule first: when there is little room (podcast, social copy) the AI gets the principles and framing first, and social copy gets the framing only.', 'presshub-ai-editor' ),
+            __( 'Ask for attribution and the other side, not for a conclusion: «αποδίδεται στην κυβέρνηση και δίνεται η απάντηση της αντιπολίτευσης».', 'presshub-ai-editor' ),
+            __( 'Give numbers with their limits: «έως 100 ευρώ, για όσους…», «σύμφωνα με το υπουργείο».', 'presshub-ai-editor' ),
+            __( 'Use phrases for acronyms: «Ταμείο Κοινωνικών Ασφαλίσεων» rather than «ΤΚΑ»; one word under 6 letters never matches on its own.', 'presshub-ai-editor' ),
+            __( 'Keep it a draft until it is checked, and lock it when nothing should be added automatically.', 'presshub-ai-editor' ),
+        ] );
+        $html .= '<h4 style="margin: 10px 0 4px;">' . esc_html__( 'Do not', 'presshub-ai-editor' ) . '</h4>' . $li( [
+            __( 'Do not write today\'s news in the core (dates, the latest statement): it goes stale and the AI may present it as new. It belongs in the timeline and the claims register.', 'presshub-ai-editor' ),
+            __( 'Do not ask the AI to take a side, praise or attack anyone, or leave facts out («πάντα να επικρίνεις την κυβέρνηση»). That makes the briefing biased and less credible; ask for attribution and balance instead.', 'presshub-ai-editor' ),
+            __( 'Do not put format or length instructions here («γράψε 300 λέξεις», «βάλε τίτλο»). Each call has its own; they would conflict.', 'presshub-ai-editor' ),
+            __( 'Do not put unverified numbers in the facts. Record them as a claim with who said them.', 'presshub-ai-editor' ),
+            __( 'Do not paste whole articles, press releases or text addressed to the AI («αγνόησε τις άλλες οδηγίες»).', 'presshub-ai-editor' ),
+        ] );
+        $html .= '<h4 style="margin: 10px 0 4px;">' . esc_html__( 'Example: pension reform (the parts in brackets are placeholders)', 'presshub-ai-editor' ) . '</h4>';
+        $html .= $pre( __( 'Aliases', 'presshub-ai-editor' ), implode( ', ', $ex['aliases'] ) );
+        $html .= $pre( __( 'Principles', 'presshub-ai-editor' ), $ex['principles'] );
+        $html .= $pre( __( 'Framing rules', 'presshub-ai-editor' ), $ex['framing'] );
+        $html .= $pre( __( 'Confirmed facts', 'presshub-ai-editor' ), self::facts_text( $ex['facts'] ) );
+        $c     = $ex['claims'][0];
+        $html .= $pre( __( 'A claim in the register', 'presshub-ai-editor' ), '«' . $c['claim'] . '» — ' . $c['by'] . "\n" . __( 'Status', 'presshub-ai-editor' ) . ': ' . self::status_label( $c['status'] ) . "\n" . __( 'Counter-point', 'presshub-ai-editor' ) . ': ' . $c['counter'] );
+        $html .= $pre( __( 'Open questions', 'presshub-ai-editor' ), implode( "\n", $ex['questions'] ) );
+        $html .= $pre( __( 'Not like this', 'presshub-ai-editor' ), "✗ Η κυβέρνηση λέει ψέματα για τις συντάξεις.\n✗ Χθες ο υπουργός δήλωσε ότι η Βουλή φταίει.\n✗ Γράψε σύντομα και με τίτλο.\n✗ Η αύξηση κοστίζει 40 εκατ. (χωρίς πηγή)" );
+        $html .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top: 8px;">' . self::hidden( self::POST_EXAMPLE ) . '<button class="button">' . esc_html__( 'Create this example as a locked draft', 'presshub-ai-editor' ) . '</button> <span class="description">' . esc_html__( 'It is never sent to the AI.', 'presshub-ai-editor' ) . '</span></form>';
+        return $html . '</details>';
+    }
+
+    /**
+     * Common mistakes in a fiche, as plain sentences ([] when none).
+     */
+    public static function core_warnings( array $f ): array {
+        $out   = [];
+        $short = [];
+        foreach ( array_merge( [ $f['title'] ], $f['aliases'] ) as $n ) {
+            if ( '' === self::topic_pattern( (string) $n ) && '' !== trim( (string) $n ) ) {
+                $short[] = (string) $n;
+            }
+        }
+        if ( empty( self::patterns( $f ) ) ) {
+            $out[] = __( 'Neither the title nor any alias can match the news, so this fiche is never used. Add aliases of two words or more, or single words of 6 letters or more.', 'presshub-ai-editor' );
+        } elseif ( ! empty( $short ) ) {
+            /* translators: %s: list of aliases */
+            $out[] = sprintf( __( 'These never match on their own (one word under 6 letters): %s. Use a longer phrase, e.g. the full name.', 'presshub-ai-editor' ), implode( ', ', $short ) );
+        }
+        if ( 'published' === $f['status'] && '' === trim( $f['principles'] . $f['framing'] ) ) {
+            $out[] = __( 'Published without principles or framing rules: the AI only gets the facts and claims.', 'presshub-ai-editor' );
+        }
+        $no_link = count( array_filter( $f['facts'], static function ( $x ) { return '' === $x['url']; } ) );
+        if ( $no_link > 0 ) {
+            /* translators: %d: number of facts */
+            $out[] = sprintf( _n( '%d confirmed fact has no link to its source.', '%d confirmed facts have no link to their source.', $no_link, 'presshub-ai-editor' ), $no_link );
+        }
+        if ( preg_match( '/\b(?:\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|20\d\d-\d\d-\d\d)\b|(?<!\p{L})(?:χθες|σήμερα|αύριο)(?!\p{L})/iu', $f['principles'] . ' ' . $f['framing'] ) ) {
+            $out[] = __( 'The principles or framing mention a date or "today/yesterday". News of the day belongs in the timeline and claims; the core should hold for weeks.', 'presshub-ai-editor' );
+        }
+        if ( preg_match( '/αγνόησε|ignore (?:all |the )?(?:previous|other) instructions/iu', $f['principles'] . ' ' . $f['framing'] ) ) {
+            $out[] = __( 'The core tells the AI to ignore other instructions. Remove that: it can break the call\'s own rules.', 'presshub-ai-editor' );
+        }
+        foreach ( [ 'podcast_script' => __( 'podcast', 'presshub-ai-editor' ), 'social_copy_' => __( 'social copy', 'presshub-ai-editor' ) ] as $action => $label ) {
+            $hit = [ $f['slug'] => [ 'count' => 1, 'fiche' => $f ] ];
+            if ( '' !== trim( $f['principles'] . $f['framing'] ) && '' === self::render( $hit, $action, self::budget_for( $action ) )['text'] ) {
+                /* translators: 1: call name, 2: character budget */
+                $out[] = sprintf( __( 'Too long for the %1$s calls (room for %2$d characters): they skip this fiche. Shorten the principles and framing.', 'presshub-ai-editor' ), $label, self::budget_for( $action ) );
+            }
+        }
+        return $out;
     }
 
     public static function build_page( array $query = [] ): string {
@@ -1482,6 +1635,7 @@ class PressHub_AI_Policy_Fiches {
         $html .= '<form method="post" action="' . $url . '">' . self::hidden( self::POST_CREATE ) . '<label>' . esc_html__( 'New fiche title', 'presshub-ai-editor' ) . ' <input type="text" name="title" class="regular-text" required></label> <button class="button button-primary">' . esc_html__( 'Create fiche', 'presshub-ai-editor' ) . '</button></form>';
         $html .= '<form method="post" action="' . $url . '">' . self::hidden( self::POST_DRAFT ) . '<button class="button">' . esc_html__( 'Draft fiches from the agenda and memory', 'presshub-ai-editor' ) . '</button></form>';
         $html .= '</div>';
+        $html .= self::guide_html( empty( $fiches ) );
         if ( empty( $fiches ) ) {
             return $html . '<p>' . esc_html__( 'No policy fiches yet.', 'presshub-ai-editor' ) . '</p>';
         }
@@ -1517,6 +1671,12 @@ class PressHub_AI_Policy_Fiches {
             $html .= '<div class="notice notice-warning inline"><p>' . esc_html__( 'Draft: not used in prompts. Check the core and set it to Published.', 'presshub-ai-editor' ) . '</p></div>';
         }
 
+        $warnings = self::core_warnings( $f );
+        if ( ! empty( $warnings ) ) {
+            $html .= '<div class="notice notice-warning inline presshub-policy-warnings"><p><strong>' . esc_html__( 'Check before publishing:', 'presshub-ai-editor' ) . '</strong></p><ul style="margin: 0 0 8px 20px; list-style: disc;"><li>' . implode( '</li><li>', array_map( 'esc_html', $warnings ) ) . '</li></ul></div>';
+        }
+        $html .= self::guide_html( '' === trim( $f['principles'] . $f['framing'] ) );
+
         // Suggestions first: they wait for a decision.
         if ( ! empty( $f['suggestions'] ) ) {
             $html .= '<h3>' . esc_html__( 'Suggested changes to the core', 'presshub-ai-editor' ) . '</h3><table class="widefat striped"><tbody>';
@@ -1535,11 +1695,11 @@ class PressHub_AI_Policy_Fiches {
         // Core.
         $html .= '<h3>' . esc_html__( 'Core (editor-owned)', 'presshub-ai-editor' ) . '</h3><form method="post" action="' . $url . '">' . self::hidden( self::POST_SAVE, $slug ) . '<table class="form-table"><tbody>';
         $html .= $row( __( 'Title', 'presshub-ai-editor' ), '<input type="text" class="regular-text" name="title" value="' . esc_attr( $f['title'] ) . '" required>' );
-        $html .= $row( __( 'Aliases (comma separated, used for matching)', 'presshub-ai-editor' ), '<input type="text" class="large-text" name="aliases" value="' . esc_attr( implode( ', ', $f['aliases'] ) ) . '">' );
-        $html .= $row( __( 'Principles', 'presshub-ai-editor' ), '<textarea name="principles" rows="4" class="large-text">' . esc_textarea( $f['principles'] ) . '</textarea><p class="description">' . esc_html__( 'The newsroom\'s stance and the questions coverage always asks.', 'presshub-ai-editor' ) . '</p>' );
-        $html .= $row( __( 'Framing rules', 'presshub-ai-editor' ), '<textarea name="framing" rows="4" class="large-text">' . esc_textarea( $f['framing'] ) . '</textarea><p class="description">' . esc_html__( 'Terms to use or avoid, what must be attributed, balance rules.', 'presshub-ai-editor' ) . '</p>' );
-        $html .= $row( __( 'Confirmed facts (text | link, one per line)', 'presshub-ai-editor' ), '<textarea name="facts" rows="5" class="large-text code">' . esc_textarea( self::facts_text( $f['facts'] ) ) . '</textarea>' );
-        $html .= $row( __( 'Actors (comma separated)', 'presshub-ai-editor' ), '<input type="text" class="large-text" name="actors" value="' . esc_attr( implode( ', ', $f['actors'] ) ) . '">' );
+        $html .= $row( __( 'Aliases (comma separated, used for matching)', 'presshub-ai-editor' ), '<input type="text" class="large-text" name="aliases" value="' . esc_attr( implode( ', ', $f['aliases'] ) ) . '" placeholder="' . esc_attr( self::PLACEHOLDERS['aliases'] ) . '">' );
+        $html .= $row( __( 'Principles', 'presshub-ai-editor' ), '<textarea name="principles" rows="4" class="large-text" placeholder="' . esc_attr( self::PLACEHOLDERS['principles'] ) . '">' . esc_textarea( $f['principles'] ) . '</textarea><p class="description">' . esc_html__( 'The questions coverage always asks and the newsroom\'s stance, in neutral terms. Most important first. No news of the day.', 'presshub-ai-editor' ) . '</p>' );
+        $html .= $row( __( 'Framing rules', 'presshub-ai-editor' ), '<textarea name="framing" rows="4" class="large-text" placeholder="' . esc_attr( self::PLACEHOLDERS['framing'] ) . '">' . esc_textarea( $f['framing'] ) . '</textarea><p class="description">' . esc_html__( 'One rule per line: what is always attributed, words to use or avoid, what must always come with what. Social copy gets only these.', 'presshub-ai-editor' ) . '</p>' );
+        $html .= $row( __( 'Confirmed facts (text | link, one per line)', 'presshub-ai-editor' ), '<textarea name="facts" rows="5" class="large-text code" placeholder="' . esc_attr( self::PLACEHOLDERS['facts'] ) . '">' . esc_textarea( self::facts_text( $f['facts'] ) ) . '</textarea>' );
+        $html .= $row( __( 'Actors (comma separated)', 'presshub-ai-editor' ), '<input type="text" class="large-text" name="actors" value="' . esc_attr( implode( ', ', $f['actors'] ) ) . '" placeholder="' . esc_attr( self::PLACEHOLDERS['actors'] ) . '">' );
         $status_opts = '';
         foreach ( self::STATUSES as $st ) {
             $status_opts .= '<option value="' . esc_attr( $st ) . '"' . ( $st === $f['status'] ? ' selected' : '' ) . '>' . esc_html( self::status_label( $st ) ) . '</option>';
