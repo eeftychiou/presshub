@@ -278,7 +278,7 @@ graph TD
   - **Sanitizer Protection**: `PressHub_AI_Settings_Storage::sanitize_max_tokens()` returns `0` (indicating no module-level override) for `null` or empty string inputs instead of clamping to 1.
   - **Settings-First Accessors**: Added dedicated storage helpers (`get_briefing_podcast_max_tokens()`, `get_briefing_text_max_tokens()`, `get_coauthor_max_tokens()`, `get_copilot_max_tokens()`) returning `0` when unset or `< 64`.
   - **Exposed Settings Inputs**: Exposed explicit "Maximum Output Tokens" inputs across all pipeline modules in `PressHub AI → Settings` with safe bounds (`min="64" max="65536"`).
-  - **Auto-Purge Migration**: `presshub_ai_migrate_fix_corrupted_tuning_options()` cleanses corrupted database rows (`max_tokens < 64`, `timeout < 10`) on initialization.
+  - **Sanitizer bounds**: per-module timeouts clamp to 10–300 s and temperatures to 0–2 when saved; the API client ignores stored values below its thresholds (`max_tokens < 64`, `timeout < 10`). The old 2.5.3 per-request purge was removed (#259).
 
 ### 4.14 AI Featured Image Generation & Studio Engine
 - **Dedicated Settings Tab ("AI Featured Images")**:
