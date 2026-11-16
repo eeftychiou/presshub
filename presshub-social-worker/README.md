@@ -120,15 +120,16 @@ npm run login -- instagram
 This launches a visible browser window, waits for you to sign in and complete 2FA, and saves session cookies to `sessions/<platform>-session.json`.
 
 
-### Social Monitor (X and TikTok)
-WordPress can feed the latest posts of selected X and TikTok accounts into the Daily Briefing. Add each account as a News Source with the media type **X (Twitter) Account** or **TikTok Account**, then turn on **Social media monitoring** under Settings → Daily Briefing. The Pull Mode poller asks WordPress whether a scan is due; when it is, the worker opens each profile in its own browser, reads the posts, and sends them back. Videos are sent to WordPress for a Gemini transcript.
+### Social Monitor (X, TikTok and Facebook)
+WordPress can feed the latest posts of selected X and TikTok accounts and Facebook Pages into the Daily Briefing. Add each account as a News Source with the media type **X (Twitter) Account**, **TikTok Account** or **Facebook Page** (`https://www.facebook.com/pagename`, or `https://www.facebook.com/profile.php?id=…` for a Page without a username), then turn on **Social media monitoring** under Settings → Daily Briefing. The Pull Mode poller asks WordPress whether a scan is due; when it is, the worker opens each profile in its own browser, reads the posts, and sends them back. X and TikTok videos are sent to WordPress for a Gemini transcript; Facebook posts are read as text (a video is noted, not transcribed). On a Facebook Page the worker keeps the Page's own posts and drops the stories it shares; it reads the first posts from the page HTML and scrolls at most three times, and after a Facebook security check it skips Facebook with the same back-off as TikTok.
 
 Use separate **reader accounts** for this, not the accounts PressHub posts from, so a block or a captcha never affects posting:
 ```bash
 npm run login -- twitter --reader
 npm run login -- tiktok --reader
+npm run login -- facebook --reader
 ```
-Sessions are saved in `sessions-reader/` (or `PRESSHUB_MONITOR_SESSIONS_DIR`). For many X accounts, create a private List on the reader account with all of them and paste its URL into the **X List** setting: the worker then reads one page instead of one per account. `PRESSHUB_MONITOR_DISABLED=true` turns the monitor off on this worker.
+The Facebook reader session is the same one the Trending roundup uses. Sessions are saved in `sessions-reader/` (or `PRESSHUB_MONITOR_SESSIONS_DIR`). For many X accounts, create a private List on the reader account with all of them and paste its URL into the **X List** setting: the worker then reads one page instead of one per account. `PRESSHUB_MONITOR_DISABLED=true` turns the monitor off on this worker.
 
 #### Long videos: local transcription with whisper.cpp
 Gemini only gets videos up to the "Skip videos longer than" setting (at most 10 minutes / 20 MB). For longer ones the worker can make the transcript itself, offline, with [whisper.cpp](https://github.com/ggml-org/whisper.cpp):

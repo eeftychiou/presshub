@@ -111,7 +111,7 @@ $posts = [
     [ 'platform' => 'x', 'id' => '2001', 'handle' => 'randomaccount', 'text' => 'Not monitored', 'created_at' => $now - 100 ],
     [ 'platform' => 'x', 'id' => '3001', 'handle' => 'disabledone', 'text' => 'Disabled source', 'created_at' => $now - 100 ],
     [ 'platform' => 'tiktok', 'id' => '7400000000000000001', 'handle' => 'cypruspolice', 'author_name' => 'Αστυνομία Κύπρου', 'url' => 'https://www.tiktok.com/@cypruspolice/video/7400000000000000001', 'text' => 'Συμβουλές για ασφαλή οδήγηση', 'created_at' => $now - 7200, 'media' => [ 'type' => 'video', 'duration_sec' => 30 ] ],
-    [ 'platform' => 'facebook', 'id' => '1', 'handle' => 'x', 'text' => 'x', 'created_at' => $now ],
+    [ 'platform' => 'instagram', 'id' => '1', 'handle' => 'x', 'text' => 'x', 'created_at' => $now ],
     [ 'platform' => 'x', 'id' => 'abc', 'handle' => 'christodulides', 'text' => 'bad id', 'created_at' => $now ],
 ];
 $res = PressHub_AI_Social_Monitor::ingest_posts( $posts, $now );
@@ -307,6 +307,45 @@ ob_start();
 $html = ob_get_clean();
 sm_check( 'render: fields present', false !== strpos( $html, 'name="presshub_ai_social_monitor_enabled"' ) && false !== strpos( $html, 'name="presshub_ai_social_monitor_x_list_url"' ) );
 sm_check( 'render: status line', false !== strpos( $html, 'Monitored accounts: 2' ) );
+
+// =========================================================================
+// 8. Facebook Pages
+// =========================================================================
+sm_check( 'fb handle: vanity', 'philenews' === PressHub_AI_Social_Monitor::parse_handle( 'https://www.facebook.com/Philenews/', 'facebook' ) );
+sm_check( 'fb handle: dotted vanity on m.', 'dimos.lefkosias' === PressHub_AI_Social_Monitor::parse_handle( 'https://m.facebook.com/dimos.lefkosias?ref=page', 'facebook' ) );
+sm_check( 'fb handle: profile.php id', 'id-100064123456789' === PressHub_AI_Social_Monitor::parse_handle( 'https://www.facebook.com/profile.php?id=100064123456789&sk=posts', 'facebook' ) );
+sm_check( 'fb handle: people/Name/id', 'id-100064123456789' === PressHub_AI_Social_Monitor::parse_handle( 'https://www.facebook.com/people/Some-Page/100064123456789/', 'facebook' ) );
+sm_check( 'fb handle: groups rejected', '' === PressHub_AI_Social_Monitor::parse_handle( 'https://www.facebook.com/groups/12345', 'facebook' ) );
+sm_check( 'fb handle: other host rejected', '' === PressHub_AI_Social_Monitor::parse_handle( 'https://facebook.com.evil.cy/philenews', 'facebook' ) );
+$types = PressHub_AI_Settings_Storage::get_supported_media_types();
+sm_check( 'fb types: social_facebook active', ! empty( $types['social_facebook']['active'] ) );
+$norm = PressHub_AI_Settings_Storage::normalize_sources( [ [ 'url' => 'https://www.facebook.com/philenews', 'type' => 'social_facebook', 'name' => 'Phile' ] ] );
+sm_check( 'fb types: source manager keeps social_facebook', 'social_facebook' === ( $norm[0]['type'] ?? '' ) );
+
+sm_reset( [ 'presshub_ai_social_monitor_transcribe_videos' => 1, 'presshub_ai_briefing_sources' => [
+    [ 'id' => 'src_fb', 'name' => 'ΑΚΕΛ', 'url' => 'https://www.facebook.com/akelcy', 'type' => 'social_facebook', 'enabled' => true, 'category' => 'Politics', 'notes' => '', 'max_articles' => 5, 'alignment' => 'opposition' ],
+    [ 'id' => 'src_fb2', 'name' => 'Δήμος', 'url' => 'https://www.facebook.com/profile.php?id=100064123456789', 'type' => 'social_facebook', 'enabled' => true, 'category' => 'Local', 'notes' => '', 'max_articles' => 5 ],
+] ] );
+$plan = PressHub_AI_Social_Monitor::get_scan_plan( true, $now );
+sm_check( 'fb plan: both Pages targeted', 2 === count( $plan['targets'] ) && 'facebook' === $plan['targets'][0]['platform'] );
+sm_check( 'fb plan: canonical urls', 'https://www.facebook.com/akelcy' === $plan['targets'][0]['url'] && 'https://www.facebook.com/profile.php?id=100064123456789' === $plan['targets'][1]['url'] );
+$fb = [
+    [ 'platform' => 'facebook', 'id' => '1234567890123', 'handle' => 'akelcy', 'author_name' => 'ΑΚΕΛ', 'url' => 'https://www.facebook.com/akelcy/posts/pfbid0abc?__cft__[0]=zzz&__tn__=R', 'text' => 'Δήλωση για τον προϋπολογισμό', 'created_at' => gmdate( 'c', $now - 600 ), 'media' => [ 'type' => 'video', 'duration_sec' => 0 ] ],
+    [ 'platform' => 'facebook', 'id' => '9876543210987', 'handle' => 'id-100064123456789', 'author_name' => 'Δήμος', 'url' => 'https://evil.example/x', 'text' => 'Διακοπή νερού', 'created_at' => gmdate( 'c', $now - 1200 ), 'media' => [ 'type' => 'none', 'duration_sec' => 0 ] ],
+];
+$res = PressHub_AI_Social_Monitor::ingest_posts( $fb, $now );
+sm_check( 'fb ingest: both accepted', 2 === $res['accepted'] );
+sm_check( 'fb ingest: no video requested from Facebook', [] === $res['wants_media'] && [] === $res['wants_transcript'] );
+$store = PressHub_AI_Social_Monitor::load();
+sm_check( 'fb ingest: tracking params dropped', 'https://www.facebook.com/akelcy/posts/pfbid0abc' === $store['facebook_1234567890123']['url'] );
+sm_check( 'fb ingest: foreign url replaced', 'https://www.facebook.com/9876543210987' === $store['facebook_9876543210987']['url'] );
+$arts = PressHub_AI_Social_Monitor::take_for_harvest( '2026-11-16', 'morning', $now + 60 );
+$by   = array_column( $arts, null, 'id' );
+sm_check( 'fb harvest: video post not held back waiting for a transcript', isset( $by['sm_facebook_1234567890123'] ) );
+sm_check( 'fb harvest: alignment carried from the source', 'opposition' === ( $by['sm_facebook_1234567890123']['source_alignment'] ?? '' ) && 'opposition' === PressHub_AI_News_Curator::article_alignment( $by['sm_facebook_1234567890123'] ) );
+sm_check( 'fb harvest: untagged source has no alignment', ! isset( $by['sm_facebook_9876543210987']['source_alignment'] ) );
+sm_check( 'fb harvest: source label names the Page', 'Facebook · ΑΚΕΛ (facebook.com/akelcy)' === $by['sm_facebook_1234567890123']['source'] );
+sm_check( 'fb harvest: numeric Page referenced by id', false !== strpos( $by['sm_facebook_9876543210987']['content'], 'facebook.com/profile.php?id=100064123456789' ) );
 
 if ( $failures > 0 ) {
     fwrite( STDERR, "SocialMonitorTest: {$failures} failure(s)\n" );

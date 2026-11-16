@@ -2523,6 +2523,7 @@ jQuery(document).ready(function($) {
             'rss_feed': { label: 'RSS / Atom Feed', badgeClass: 'badge-active', icon: 'dashicons-rss' },
             'social_x': { label: 'X (Twitter) Account', badgeClass: 'badge-active', icon: 'dashicons-twitter' },
             'social_tiktok': { label: 'TikTok Account', badgeClass: 'badge-active', icon: 'dashicons-video-alt2' },
+            'social_facebook': { label: 'Facebook Page', badgeClass: 'badge-active', icon: 'dashicons-facebook' },
             'youtube': { label: 'YouTube Channel / Playlist', badgeClass: 'badge-planned', icon: 'dashicons-video-alt3' },
             'vlog': { label: 'Video / Vlog Feed', badgeClass: 'badge-planned', icon: 'dashicons-video-alt' },
             'podcast_audio': { label: 'Audio Podcast / RSS', badgeClass: 'badge-planned', icon: 'dashicons-format-audio' }
