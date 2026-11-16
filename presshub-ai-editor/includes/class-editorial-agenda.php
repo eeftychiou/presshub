@@ -43,7 +43,7 @@ class PressHub_AI_Editorial_Agenda {
     const NOTES_MAX         = 600;
     const GUIDANCE_MAX      = 2000;
 
-    /** Admin-post actions (Memory → Agenda tab). */
+    /** Admin-post actions (Policy Fiches → Editorial agenda). */
     const POST_SAVE    = 'presshub_ai_agenda_save';
     const POST_SUGGEST = 'presshub_ai_agenda_suggest';
     const POST_ACCEPT  = 'presshub_ai_agenda_accept';
@@ -487,7 +487,7 @@ class PressHub_AI_Editorial_Agenda {
     }
 
     // ---------------------------------------------------------------------
-    // Admin-post handlers (Memory → Agenda tab)
+    // Admin-post handlers (Policy Fiches → Editorial agenda)
     // ---------------------------------------------------------------------
 
     private static function guard(): void {
@@ -498,9 +498,13 @@ class PressHub_AI_Editorial_Agenda {
         check_admin_referer( self::NONCE );
     }
 
+    /** Admin page of the agenda (Policy Fiches → Editorial agenda). */
+    public static function page_slug(): string {
+        return class_exists( 'PressHub_AI_Fiches_Admin' ) ? PressHub_AI_Fiches_Admin::AGENDA_SLUG : 'presshub-ai-agenda';
+    }
+
     private static function back( string $notice ): void {
-        $slug = class_exists( 'PressHub_AI_Memory_Editor' ) ? PressHub_AI_Memory_Editor::PAGE_SLUG : 'presshub-ai-memory';
-        wp_safe_redirect( add_query_arg( [ 'page' => $slug, 'tab' => 'agenda', 'agenda_notice' => $notice ], admin_url( 'admin.php' ) ) );
+        wp_safe_redirect( add_query_arg( [ 'page' => self::page_slug(), 'agenda_notice' => $notice ], admin_url( 'admin.php' ) ) );
         exit;
     }
 
@@ -601,7 +605,7 @@ class PressHub_AI_Editorial_Agenda {
         return $html . '</tbody></table>';
     }
 
-    /** The Agenda tab body. */
+    /** The Editorial agenda page body (Policy Fiches menu). */
     public static function build_tab( array $query = [] ): string {
         $agenda  = self::get();
         $today   = self::today();
