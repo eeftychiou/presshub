@@ -47,6 +47,7 @@ class PressHub_Settings_Registry {
         'social_meta'     => 'advanced',
         'opengraph'       => 'advanced',
         'general'         => 'providers',
+        'editorial_knowledge' => 'knowledge',
     ];
     const QA_TAB_ALIASES = [ 'qa', 'scorecard', 'scorecards', 'editorial_qa' ];
 
@@ -254,6 +255,28 @@ class PressHub_Settings_Registry {
         return $map;
     }
 
+    /**
+     * The settings screen posts its fields as a flat JSON object, so an array
+     * field such as "presshub_ai_policy_fiches_budgets[podcast_script]" arrives
+     * as that literal key. Folds such keys into nested arrays (one level).
+     */
+    public static function expand_bracket_keys( array $post_data ): array {
+        foreach ( $post_data as $key => $value ) {
+            if ( is_string( $key ) && preg_match( '/^([a-z0-9_]+)\[([a-z0-9_]*)\]$/', $key, $m ) ) {
+                if ( ! isset( $post_data[ $m[1] ] ) || ! is_array( $post_data[ $m[1] ] ) ) {
+                    $post_data[ $m[1] ] = [];
+                }
+                if ( '' === $m[2] ) {
+                    $post_data[ $m[1] ][] = $value;
+                } else {
+                    $post_data[ $m[1] ][ $m[2] ] = $value;
+                }
+                unset( $post_data[ $key ] );
+            }
+        }
+        return $post_data;
+    }
+
     // ------------------------------------------------------------------
     // The one save routine used by both AJAX save handlers.
     // ------------------------------------------------------------------
@@ -277,6 +300,7 @@ class PressHub_Settings_Registry {
     public static function save_posted( string $page, string $tab, array $post_data ): array {
         $map        = self::options_map( $page, $tab );
         $saved_keys = [];
+        $post_data  = self::expand_bracket_keys( $post_data );
 
         foreach ( $map as $option => $sanitizer ) {
             $entry = self::get( $option ) ?? [];

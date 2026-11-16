@@ -71,7 +71,8 @@ class PressHub_AI_Pool_Cleaner {
     public static function clean( array &$payload, string $date, int $now = 0 ): array {
         $now      = $now > 0 ? $now : time();
         $articles = isset( $payload['articles'] ) && is_array( $payload['articles'] ) ? array_values( $payload['articles'] ) : [];
-        $enabled  = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_pool_cleanup_enabled', true ) : true;
+        $enabled  = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_cleanup_enabled() : true;
+        $enabled  = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_pool_cleanup_enabled', $enabled ) : $enabled;
 
         $summary = [
             'enabled'      => $enabled,
@@ -212,7 +213,8 @@ class PressHub_AI_Pool_Cleaner {
         $published = (string) ( $art['published_at'] ?? '' );
         if ( '' !== $published ) {
             $ts      = strtotime( $published );
-            $max_age = (int) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_pool_max_age_hours', self::MAX_AGE_HOURS ) : self::MAX_AGE_HOURS );
+            $max_age = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_max_age_hours() : self::MAX_AGE_HOURS;
+            $max_age = (int) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_pool_max_age_hours', $max_age ) : $max_age );
             if ( false !== $ts && $max_age > 0 && $ts < $now - $max_age * 3600 ) {
                 return 'stale';
             }
@@ -349,7 +351,8 @@ class PressHub_AI_Pool_Cleaner {
     }
 
     public static function dedupe( array $articles, array &$summary ): array {
-        $threshold = (float) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_pool_duplicate_similarity', self::DUPLICATE_SIMILAR ) : self::DUPLICATE_SIMILAR );
+        $threshold = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_pool_duplicate_similarity() : self::DUPLICATE_SIMILAR;
+        $threshold = (float) ( function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_pool_duplicate_similarity', $threshold ) : $threshold );
         if ( $threshold <= 0 || $threshold > 1 || count( $articles ) < 2 ) {
             return $articles;
         }

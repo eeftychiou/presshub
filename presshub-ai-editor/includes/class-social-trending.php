@@ -659,7 +659,8 @@ class PressHub_AI_Social_Trending {
      * Filter: `presshub_social_trending_max_per_account` (default 1).
      */
     public static function max_per_account(): int {
-        $n = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_social_trending_max_per_account', 1 ) : 1;
+        $n = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_trending_max_per_account() : 1;
+        $n = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_social_trending_max_per_account', $n ) : $n;
         return max( 1, $n );
     }
 
@@ -669,7 +670,8 @@ class PressHub_AI_Social_Trending {
      * Filter: `presshub_social_trending_share_after_hour` (default 8, 0 turns it off).
      */
     public static function share_after_hour(): int {
-        $h = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_social_trending_share_after_hour', 8 ) : 8;
+        $h = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_trending_share_after_hour() : 8;
+        $h = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_social_trending_share_after_hour', $h ) : $h;
         return max( 0, min( 23, $h ) );
     }
 

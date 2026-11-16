@@ -110,7 +110,8 @@ class PressHub_AI_Policy_Fiches {
     }
 
     public static function is_enabled(): bool {
-        $on = class_exists( 'PressHub_AI_Settings_Storage' ) ? (bool) PressHub_AI_Settings_Storage::get_memory_enabled() : true;
+        // #233: the Editorial knowledge switch (default on) sits under Editorial memory.
+        $on = class_exists( 'PressHub_AI_Settings_Storage' ) ? ( PressHub_AI_Settings_Storage::get_memory_enabled() && PressHub_AI_Settings_Storage::get_policy_fiches_enabled() ) : true;
         return function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_policy_fiches_enabled', $on ) : $on;
     }
 
@@ -572,7 +573,7 @@ class PressHub_AI_Policy_Fiches {
     // ---------------------------------------------------------------------
 
     public static function budget_for( string $action ): int {
-        $budgets = self::BUDGETS;
+        $budgets = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_context_budgets( 'presshub_ai_policy_fiches_budgets', self::BUDGETS ) : self::BUDGETS;
         if ( function_exists( 'apply_filters' ) ) {
             $filtered = apply_filters( 'presshub_ai_policy_fiches_budgets', $budgets );
             $budgets  = is_array( $filtered ) ? $filtered : $budgets;

@@ -61,7 +61,8 @@ class PressHub_AI_Stakeholders {
     }
 
     public static function is_enabled(): bool {
-        $on = class_exists( 'PressHub_AI_Settings_Storage' ) ? (bool) PressHub_AI_Settings_Storage::get_memory_enabled() : true;
+        // #233: the Editorial knowledge switch (default on) sits under Editorial memory.
+        $on = class_exists( 'PressHub_AI_Settings_Storage' ) ? ( PressHub_AI_Settings_Storage::get_memory_enabled() && PressHub_AI_Settings_Storage::get_stakeholders_enabled() ) : true;
         return function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_stakeholders_enabled', $on ) : $on;
     }
 
@@ -496,8 +497,9 @@ class PressHub_AI_Stakeholders {
     // ---------------------------------------------------------------------
 
     public static function budget_for( string $action ): int {
-        $budgets = function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_stakeholders_budgets', self::BUDGETS ) : self::BUDGETS;
-        return max( 0, (int) ( ( is_array( $budgets ) ? $budgets : self::BUDGETS )[ $action ] ?? 0 ) );
+        $base    = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_context_budgets( 'presshub_ai_stakeholders_budgets', self::BUDGETS ) : self::BUDGETS;
+        $budgets = function_exists( 'apply_filters' ) ? apply_filters( 'presshub_ai_stakeholders_budgets', $base ) : $base;
+        return max( 0, (int) ( ( is_array( $budgets ) ? $budgets : $base )[ $action ] ?? 0 ) );
     }
 
     /** Fiches of the people that appear in $text, most mentioned in the text first. */

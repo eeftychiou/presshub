@@ -500,7 +500,8 @@ class PressHub_AI_News_Curator {
      * `presshub_ai_briefing_claim_check` to switch them off.
      */
     public static function claim_check_rules(): string {
-        $on = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_briefing_claim_check', true ) : true;
+        $on = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_claim_check_enabled() : true;
+        $on = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_briefing_claim_check', $on ) : $on;
         if ( ! $on ) {
             return '';
         }

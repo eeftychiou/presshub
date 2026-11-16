@@ -68,6 +68,7 @@ class PressHub_AI_Settings_Render {
                         <option value="briefing"><?php echo esc_html__( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></option>
                         <option value="images"><?php echo esc_html__( 'AI Featured Images', 'presshub-ai-editor' ); ?></option>
                         <option value="copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></option>
+                        <option value="knowledge"><?php echo esc_html__( 'Editorial knowledge', 'presshub-ai-editor' ); ?></option>
                         <option value="token_logs"><?php echo esc_html__( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></option>
                         <option value="advanced"><?php echo esc_html__( 'Advanced & System', 'presshub-ai-editor' ); ?></option>
                     </select>
@@ -79,6 +80,7 @@ class PressHub_AI_Settings_Render {
                     <a href="#briefing" id="presshub-tab-briefing" class="nav-tab" data-tab="briefing" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-briefing"><?php echo esc_html__( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></a>
                     <a href="#images" id="presshub-tab-images" class="nav-tab" data-tab="images" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-images"><?php echo esc_html__( 'AI Featured Images', 'presshub-ai-editor' ); ?></a>
                     <a href="#copilot" id="presshub-tab-copilot" class="nav-tab" data-tab="copilot" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></a>
+                    <a href="#knowledge" id="presshub-tab-knowledge" class="nav-tab" data-tab="knowledge" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-knowledge"><?php echo esc_html__( 'Editorial knowledge', 'presshub-ai-editor' ); ?></a>
                     <a href="#token_logs" id="presshub-tab-token_logs" class="nav-tab" data-tab="token_logs" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-token_logs"><?php echo esc_html__( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></a>
                     <a href="#advanced" id="presshub-tab-advanced" class="nav-tab" data-tab="advanced" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-advanced"><?php echo esc_html__( 'Advanced & System', 'presshub-ai-editor' ); ?></a>
                 </nav>
@@ -622,6 +624,12 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_podcast_show_notes_enabled"><?php echo __( 'Podcast show notes', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_switch_field( 'presshub_ai_podcast_show_notes_enabled', __( 'Add show notes under each podcast post', 'presshub-ai-editor' ), __( 'Chapter times, a link to the written brief and its sources. Default: on.', 'presshub-ai-editor' ) ); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_title_prefix"><?php echo __( 'Morning Podcast Title Prefix', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_title_prefix_field(); ?>
@@ -889,6 +897,15 @@ class PressHub_AI_Settings_Render {
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="copilot"><?php echo esc_html__( 'Save AI Copilot Settings', 'presshub-ai-editor' ); ?></button>
+                        <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                    </div>
+                </div>
+
+                <!-- TAB: Editorial knowledge (#233) -->
+                <div id="presshub-tab-pane-knowledge" class="presshub-tab-pane" style="display: none;">
+                    <?php $this->render_knowledge_tab(); ?>
+                    <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
+                        <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="knowledge"><?php echo esc_html__( 'Save Editorial Knowledge Settings', 'presshub-ai-editor' ); ?></button>
                         <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
                     </div>
                 </div>
@@ -2505,6 +2522,108 @@ class PressHub_AI_Settings_Render {
      * @param string $module Option infix, e.g. "briefing_text".
      * @param string $role   Role label shown to editors, e.g. "Curator".
      */
+    /** A 0/1 switch whose default is on (#233). */
+    public function render_switch_field( string $option, string $label, string $help = '' ) {
+        $on = PressHub_AI_Settings_Storage::get_switch( $option );
+        ?>
+        <label for="<?php echo self::esc_attr_safe( $option ); ?>">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( true, $on ); ?> />
+            <?php echo self::esc_html_safe( $label ); ?>
+        </label>
+        <?php if ( '' !== $help ) : ?>
+            <p class="description"><?php echo self::esc_html_safe( $help ); ?></p>
+        <?php endif; ?>
+        <?php
+    }
+
+    /**
+     * Editorial knowledge tab (#233): switches for the context PressHub adds to
+     * every AI call, which used to exist only as code filters.
+     */
+    public function render_knowledge_tab() {
+        $S            = 'PressHub_AI_Settings_Storage';
+        $memory_on    = $S::get_memory_enabled();
+        $budget_names = [
+            'presshub_ai_policy_fiches_budgets'    => __( 'Policy fiches', 'presshub-ai-editor' ),
+            'presshub_ai_stakeholders_budgets'     => __( 'People fiches', 'presshub-ai-editor' ),
+            'presshub_ai_editorial_agenda_budgets' => __( 'Editorial agenda', 'presshub-ai-editor' ),
+        ];
+        $task_names = [
+            'briefing_curation'     => __( 'Briefing curation', 'presshub-ai-editor' ),
+            'podcast_script'        => __( 'Podcast script', 'presshub-ai-editor' ),
+            'coauthor_draft'        => __( 'Co-Author draft', 'presshub-ai-editor' ),
+            'copilot_chat'          => __( 'Copilot chat', 'presshub-ai-editor' ),
+            'coauthor_scorecard'    => __( 'QA scorecard', 'presshub-ai-editor' ),
+            'social_tiktok_shorts'  => __( 'Shorts script', 'presshub-ai-editor' ),
+            'generate_image_prompt' => __( 'Image prompt', 'presshub-ai-editor' ),
+            'social_copy_'          => __( 'Social copy', 'presshub-ai-editor' ),
+            'seo_'                  => __( 'SEO', 'presshub-ai-editor' ),
+        ];
+        ?>
+        <h2><?php echo esc_html__( 'Editorial knowledge', 'presshub-ai-editor' ); ?></h2>
+        <p><?php echo esc_html__( 'What PressHub adds to every AI call on top of the prompt: policy fiches, people fiches, claim checks and the article pool the curator reads.', 'presshub-ai-editor' ); ?></p>
+        <?php if ( ! $memory_on ) : ?>
+            <div class="notice notice-warning inline"><p><?php echo esc_html__( 'Editorial memory is off (Daily Briefing Hub), so policy and people fiches are not added whatever the switches below say.', 'presshub-ai-editor' ); ?></p></div>
+        <?php endif; ?>
+        <table class="form-table" role="presentation">
+            <tbody>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_policy_fiches_enabled"><?php echo esc_html__( 'Policy fiches in AI calls', 'presshub-ai-editor' ); ?></label></th>
+                    <td><?php $this->render_switch_field( 'presshub_ai_policy_fiches_enabled', __( 'Add the matching policy fiches', 'presshub-ai-editor' ), __( 'Drafts, briefings, the podcast and social copy get the fiches of the policies a story touches, so the AI keeps every side in view. Default: on.', 'presshub-ai-editor' ) ); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_stakeholders_enabled"><?php echo esc_html__( 'People fiches in AI calls', 'presshub-ai-editor' ); ?></label></th>
+                    <td><?php $this->render_switch_field( 'presshub_ai_stakeholders_enabled', __( 'Add the fiches of the people named in a story', 'presshub-ai-editor' ), __( 'Briefings and the podcast use their current role and positions. Default: on.', 'presshub-ai-editor' ) ); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_claim_check_enabled"><?php echo esc_html__( 'Claim checks in curation', 'presshub-ai-editor' ); ?></label></th>
+                    <td><?php $this->render_switch_field( 'presshub_ai_claim_check_enabled', __( 'Ask the curator to check claims', 'presshub-ai-editor' ), __( 'Disputed claims are attributed and one-sided coverage is flagged in the briefing. Default: on.', 'presshub-ai-editor' ) ); ?></td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_pool_cleanup_enabled"><?php echo esc_html__( 'Clean the article pool', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_switch_field( 'presshub_ai_pool_cleanup_enabled', __( 'Drop old and duplicate articles before curation', 'presshub-ai-editor' ), __( 'The curator reads fewer, fresher articles. Default: on.', 'presshub-ai-editor' ) ); ?>
+                        <p><label for="presshub_ai_pool_max_age_hours"><?php echo esc_html__( 'Oldest article kept (h)', 'presshub-ai-editor' ); ?></label>
+                            <input type="number" min="1" max="720" name="presshub_ai_pool_max_age_hours" id="presshub_ai_pool_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $S::get_pool_max_age_hours() ); ?>" class="small-text" />
+                            <span class="description"><?php echo esc_html__( '1 to 720 hours. Default: 48.', 'presshub-ai-editor' ); ?></span></p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <details class="presshub-knowledge-advanced">
+            <summary><strong><?php echo esc_html__( 'Advanced: context budgets and duplicate detection', 'presshub-ai-editor' ); ?></strong></summary>
+            <table class="form-table" role="presentation">
+                <tbody>
+                    <tr>
+                        <th scope="row"><label for="presshub_ai_pool_duplicate_similarity"><?php echo esc_html__( 'Duplicate similarity (0.1–1)', 'presshub-ai-editor' ); ?></label></th>
+                        <td>
+                            <input type="number" min="0.1" max="1" step="0.05" name="presshub_ai_pool_duplicate_similarity" id="presshub_ai_pool_duplicate_similarity" value="<?php echo self::esc_attr_safe( (string) $S::get_pool_duplicate_similarity() ); ?>" class="small-text" />
+                            <p class="description"><?php echo esc_html__( 'How alike two articles must be to count as the same story. Lower drops more articles. Default: 0.6.', 'presshub-ai-editor' ); ?></p>
+                        </td>
+                    </tr>
+                    <?php foreach ( $S::context_budget_options() as $option => $defaults ) : ?>
+                        <?php $current = $S::get_context_budgets( $option, $defaults ); ?>
+                        <tr>
+                            <th scope="row"><?php echo self::esc_html_safe( sprintf( __( '%s context per AI task (characters)', 'presshub-ai-editor' ), $budget_names[ $option ] ?? $option ) ); ?></th>
+                            <td>
+                                <?php foreach ( $defaults as $task => $default ) : ?>
+                                    <?php $field_id = $option . '_' . trim( $task, '_' ); ?>
+                                    <label for="<?php echo self::esc_attr_safe( $field_id ); ?>" style="display:inline-block;min-width:12em;margin:0 12px 6px 0;">
+                                        <?php echo self::esc_html_safe( $task_names[ $task ] ?? $task ); ?>
+                                        <input type="number" min="0" max="20000" step="100" name="<?php echo self::esc_attr_safe( $option . '[' . $task . ']' ); ?>" id="<?php echo self::esc_attr_safe( $field_id ); ?>" value="<?php echo self::esc_attr_safe( (string) ( $current[ $task ] ?? $default ) ); ?>" class="small-text" style="width:6em;" />
+                                    </label>
+                                <?php endforeach; ?>
+                                <p class="description"><?php echo self::esc_html_safe( sprintf( __( 'Most characters of %s added to each kind of AI call. 0 leaves that task without them.', 'presshub-ai-editor' ), strtolower( $budget_names[ $option ] ?? $option ) ) ); ?></p>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </details>
+        <p class="description"><?php echo esc_html__( 'Developers can still adjust each of these with its code filter, which runs on top of the value saved here.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
     public function render_module_tuning_rows( string $module, string $role ) {
         $t_opt = 'presshub_ai_' . $module . '_temperature';
         $s_opt = 'presshub_ai_' . $module . '_timeout';
@@ -2791,6 +2910,8 @@ class PressHub_AI_Settings_Render {
         $excluded  = implode( "\n", $S::get_social_trending_excluded_words() );
         $brief_on  = $S::get_social_trending_briefing_enabled();
         $brief_n   = $S::get_social_trending_briefing_count();
+        $per_acct  = $S::get_trending_max_per_account();
+        $after_h   = $S::get_trending_share_after_hour();
 
         $state    = class_exists( 'PressHub_AI_Social_Trending' ) ? PressHub_AI_Social_Trending::get_state() : [];
         $fmt      = static function ( $ts ) {
@@ -2883,7 +3004,15 @@ class PressHub_AI_Settings_Render {
                 &nbsp; <label><?php echo esc_html__( 'Max per platform', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="20" name="presshub_ai_social_trending_max_per_platform" id="presshub_ai_social_trending_max_per_platform" value="<?php echo self::esc_attr_safe( (string) $per_plat ); ?>" class="small-text" /></label>
                 <br /><label><?php echo esc_html__( 'Only posts from the last (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="72" name="presshub_ai_social_trending_max_age_hours" id="presshub_ai_social_trending_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
                 &nbsp; <label><?php echo esc_html__( 'Minimum engagement', 'presshub-ai-editor' ); ?> <input type="number" min="0" max="100000" name="presshub_ai_social_trending_min_engagement" id="presshub_ai_social_trending_min_engagement" value="<?php echo self::esc_attr_safe( (string) $min_eng ); ?>" class="small-text" /></label>
-                <p class="description"><?php echo esc_html__( 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. At most two posts per account, and a story that several posts share (same link or same opening text) is shown once.', 'presshub-ai-editor' ); ?></p>
+                <br /><label for="presshub_ai_social_trending_max_per_account"><?php echo esc_html__( 'Trending posts per account', 'presshub-ai-editor' ); ?></label> <input type="number" min="1" max="10" name="presshub_ai_social_trending_max_per_account" id="presshub_ai_social_trending_max_per_account" value="<?php echo self::esc_attr_safe( (string) $per_acct ); ?>" class="small-text" />
+                <p class="description"><?php echo esc_html__( 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. "Trending posts per account" caps how many posts one account gets on each platform (default 1), and a story that several posts share (same link or same opening text) is shown once.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_share_after_hour"><?php echo esc_html__( 'Publish trending roundups from (hour)', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <input type="number" min="0" max="23" name="presshub_ai_social_trending_share_after_hour" id="presshub_ai_social_trending_share_after_hour" value="<?php echo self::esc_attr_safe( (string) $after_h ); ?>" class="small-text" />
+                <p class="description"><?php echo esc_html__( 'A roundup made before this local hour is scheduled for that hour, so its social posts go out when people read. 0 publishes at once. Default: 8.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>

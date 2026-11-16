@@ -8,9 +8,9 @@
 
 | Page | Options | Not shown on screen | Secrets |
 |---|---|---|---|
-| Settings → PressHub AI | 203 | 27 | 5 |
+| Settings → PressHub AI | 215 | 27 | 5 |
 | PressHub Social → Settings | 82 | 4 | 9 |
-| **Total** | **285** | | |
+| **Total** | **297** | | |
 
 **Scheduled for removal:** 4 option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).
 
@@ -81,7 +81,7 @@
 | `presshub_ai_social_meta_enabled` | Enable Social Metadata (OpenGraph & Twitter Cards) | boolean | checkbox |
 | `presshub_ai_social_meta_all_posts` | Enable for All Published Posts | boolean | checkbox |
 
-### Tab `briefing` (137)
+### Tab `briefing` (140)
 
 | Option | Label | Type | Notes |
 |---|---|---|---|
@@ -222,6 +222,9 @@
 | `presshub_ai_briefing_podcast_prompt_1_conversational_news_reporting` | Briefing podcast prompt 1 conversational news reporting | string |  |
 | `presshub_ai_briefing_podcast_prompt_2_conversational_news_reporting` | Briefing podcast prompt 2 conversational news reporting | string |  |
 | `presshub_ai_briefing_podcast_prompt_3_conversational_news_reporting` | Briefing podcast prompt 3 conversational news reporting | string |  |
+| `presshub_ai_podcast_show_notes_enabled` | Podcast show notes | integer | checkbox |
+| `presshub_ai_social_trending_max_per_account` | Trending posts per account | integer |  |
+| `presshub_ai_social_trending_share_after_hour` | Publish trending roundups from (hour) | integer |  |
 
 ### Tab `images` (11)
 
@@ -248,6 +251,20 @@
 | `presshub_ai_copilot_temperature` | Sampling Temperature | number |  |
 | `presshub_ai_copilot_max_tokens` | Maximum Output Tokens | integer |  |
 | `presshub_ai_copilot_timeout` | Request Timeout (seconds) | integer |  |
+
+### Tab `knowledge` (9)
+
+| Option | Label | Type | Notes |
+|---|---|---|---|
+| `presshub_ai_policy_fiches_enabled` | Policy fiches in AI calls | integer | checkbox |
+| `presshub_ai_stakeholders_enabled` | People fiches in AI calls | integer | checkbox |
+| `presshub_ai_claim_check_enabled` | Claim checks in curation | integer | checkbox |
+| `presshub_ai_pool_cleanup_enabled` | Clean the article pool | integer | checkbox |
+| `presshub_ai_pool_max_age_hours` | Oldest article kept (h) | integer |  |
+| `presshub_ai_pool_duplicate_similarity` | Duplicate similarity (0.1–1) | number |  |
+| `presshub_ai_policy_fiches_budgets` | Policy fiche context per AI task (characters) | array |  |
+| `presshub_ai_stakeholders_budgets` | People fiche context per AI task (characters) | array |  |
+| `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array |  |
 
 ## PressHub Social → Settings
 
