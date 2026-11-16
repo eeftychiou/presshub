@@ -530,6 +530,20 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     }
   }, 20000);
 
+  test('selectInstagramCrop returns null and does not throw when an overlay blocks the crop button', async () => {
+    const page = await context.newPage();
+    try {
+      await page.setContent(`<html><body><div role="dialog">
+        <div role="button" style="position:absolute;top:10px;left:10px;width:40px;height:40px"><svg aria-label="Select crop" width="40" height="40"></svg></div>
+        <div style="position:fixed;inset:0;z-index:10;background:transparent"></div>
+      </div></body></html>`);
+      const picked = await selectInstagramCrop(page, ['9:16', 'Original']);
+      expect(picked).toBeNull();
+    } finally {
+      await page.close();
+    }
+  }, 30000);
+
   test('postInstagram opens the composer through the "Post" entry of the current Create menu', async () => {
     const mockSession: ChromeConnection = {
       browser,
