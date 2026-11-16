@@ -40,6 +40,16 @@
  * claim time music_for() adds one of that mood's generated tracks (`music_url`,
  * `music_volume`) when music is on. `none` and a mood without tracks get no music.
  *
+ * Article shorts (`presshub_social_tiktok_article_shorts_enabled`, default on): a post that
+ * is not a podcast (an article, an opinion piece) gets ONE short job per platform whose
+ * shorts are on, marked `metadata.tiktok_short.source = article`. Its plan is written from
+ * the article text with its own prompt (`presshub_social_prompt_tiktok_article_short`),
+ * then voiced, illustrated and scored like a podcast short. The post text stays the usual
+ * AI caption of that platform (the plan's caption is used only when that failed). If the
+ * short still cannot be prepared after the retry budget, the job falls back to the classic
+ * article post (fallback_to_classic()) instead of failing, so the article is still posted.
+ * A new podcast never cancels article shorts.
+ *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
  *
@@ -60,6 +70,12 @@ class PressHub_Social_TikTok_Shorts {
 
     /** Job metadata key marking a short job and holding its prepared short. */
     public const JOB_META_KEY = 'tiktok_short';
+
+    /** `metadata.tiktok_short.source` of a short made from an article (not a podcast). */
+    public const SOURCE_ARTICLE = 'article';
+
+    /** Most characters of article text sent to the article short prompt. */
+    public const ARTICLE_TEXT_MAX_CHARS = 15000;
 
     /** Prefix of the placeholder copy set at enqueue time. */
     public const PLACEHOLDER_PREFIX = '[TikTok short ';
@@ -124,6 +140,56 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
+     * What a post's shorts are cut from: 'podcast' (a Daily Briefing podcast with its
+     * script), 'article' (any other post with text), or '' (nothing to cut from).
+     */
+    public static function source_type( int $post_id ): string {
+        if ( self::is_podcast_post( $post_id ) ) {
+            return 'podcast';
+        }
+        if ( $post_id <= 0 || ! function_exists( 'get_post' ) ) {
+            return '';
+        }
+        // A podcast post without its script keeps going out as the full podcast.
+        if ( 'podcast' === (string) get_post_meta( $post_id, '_presshub_briefing_type', true ) ) {
+            return '';
+        }
+        return '' !== self::article_text( $post_id ) ? self::SOURCE_ARTICLE : '';
+    }
+
+    /**
+     * The article's text for its short: the post content without markup, shortcodes or
+     * audio players, cut to ARTICLE_TEXT_MAX_CHARS.
+     */
+    public static function article_text( int $post_id ): string {
+        $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+        if ( ! $post ) {
+            return '';
+        }
+        $content = (string) ( is_object( $post ) ? ( $post->post_content ?? '' ) : ( $post['post_content'] ?? '' ) );
+        if ( function_exists( 'strip_shortcodes' ) ) {
+            $content = strip_shortcodes( $content );
+        }
+        $content = (string) preg_replace( '/<(script|style|audio|video|figure)\b[^>]*>.*?<\/\1>/isu', ' ', $content );
+        $content = (string) preg_replace( '/<\/(p|h[1-6]|li|blockquote|div)>|<br\s*\/?>/iu', "\n", $content );
+        $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
+        $content = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+        $content = (string) preg_replace( '/[ \t]+/u', ' ', $content );
+        $content = trim( (string) preg_replace( '/\s*\n\s*/u', "\n", $content ) );
+        return mb_substr( $content, 0, self::ARTICLE_TEXT_MAX_CHARS );
+    }
+
+    /**
+     * Whether a job is a short made from an article (one short, falls back to the classic post).
+     */
+    public static function is_article_job( array $job ): bool {
+        if ( ! self::is_short_job( $job ) ) {
+            return false;
+        }
+        return self::SOURCE_ARTICLE === ( self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ]['source'] ?? '' );
+    }
+
+    /**
      * Whether shorts can be made with this engine: they are claimed by the local worker,
      * so they need the automation engine in Pull Mode.
      */
@@ -139,8 +205,32 @@ class PressHub_Social_TikTok_Shorts {
         $enabled = 'instagram' === $platform
             ? PressHub_Social_Settings_Storage::get_instagram_shorts_enabled()
             : PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
-        if ( ! $enabled || ! self::is_podcast_post( $post_id ) ) {
+        if ( ! $enabled ) {
             return false;
+        }
+        $source = self::source_type( $post_id );
+        if ( '' === $source ) {
+            return false;
+        }
+        if ( self::SOURCE_ARTICLE === $source ) {
+            if ( ! PressHub_Social_Settings_Storage::get_tiktok_article_shorts_enabled() ) {
+                return false;
+            }
+            if ( '' === PressHub_Social_Settings_Storage::get_tiktok_article_short_prompt() ) {
+                PressHub_Social_Logger::warning( sprintf( 'Article Shorts are on but post #%d is posted the classic way: the Article Shorts Script Prompt (presshub_social_prompt_tiktok_article_short) is empty.', $post_id ) );
+                return false;
+            }
+            if ( ! self::engine_supported( $engine ) ) {
+                PressHub_Social_Logger::warning( sprintf(
+                    'Article Shorts are on but post #%d goes to %s the classic way: shorts need the automation engine in Pull Mode (engine: %s, worker mode: %s).',
+                    $post_id,
+                    'instagram' === $platform ? 'Instagram' : 'TikTok',
+                    $engine,
+                    PressHub_Social_Settings_Storage::get_worker_mode()
+                ) );
+                return false;
+            }
+            return true;
         }
         if ( ! self::engine_supported( $engine ) ) {
             PressHub_Social_Logger::warning( sprintf(
@@ -186,7 +276,8 @@ class PressHub_Social_TikTok_Shorts {
                 continue;
             }
             $short = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ] ?? null;
-            if ( ! is_array( $short ) || ! empty( $short['test'] ) ) {
+            // Test renders and article shorts are never superseded by a podcast.
+            if ( ! is_array( $short ) || ! empty( $short['test'] ) || self::SOURCE_ARTICLE === ( $short['source'] ?? '' ) ) {
                 continue;
             }
             if ( PressHub_Social_Queue::cancel_job( (int) $job['id'] ) ) {
@@ -206,39 +297,51 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
-     * Build the job rows for the shorts of a podcast post.
+     * Build the job rows for the shorts of a post: Shorts per Podcast jobs for a podcast
+     * post, one job for an article.
      *
+     * @param string|null $copy Post text of an article short (its usual AI caption); null
+     *                          or '' uses the placeholder, filled with the plan's caption.
      * @return array<int, array> Job data arrays for PressHub_Social_Queue::enqueue().
      */
-    public static function build_jobs( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time, bool $test = false, string $platform = 'tiktok' ): array {
-        $count   = PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
+    public static function build_jobs( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time, bool $test = false, string $platform = 'tiktok', ?string $copy = null ): array {
+        $article = self::SOURCE_ARTICLE === self::source_type( $post_id );
+        $count   = $article ? 1 : PressHub_Social_Settings_Storage::get_tiktok_shorts_count();
         $spacing = $test ? 0 : PressHub_Social_Settings_Storage::get_tiktok_shorts_spacing_minutes() * 60;
         $jobs    = [];
         for ( $i = 0; $i < $count; $i++ ) {
+            $meta = [ 'index' => $i, 'count' => $count ];
+            if ( $article ) {
+                $meta['source'] = self::SOURCE_ARTICLE;
+            }
+            if ( $test ) {
+                $meta['test'] = true;
+            }
             $jobs[] = [
                 'post_id'      => $post_id,
                 'platform'     => $platform,
                 'engine'       => $engine,
-                'post_copy'    => self::placeholder_copy( $i, $count ),
+                'post_copy'    => ( $article && null !== $copy && '' !== trim( $copy ) ) ? $copy : self::placeholder_copy( $i, $count ),
                 'media_url'    => $media_url,
                 'media_type'   => $media_type,
                 'scheduled_at' => gmdate( 'Y-m-d H:i:s', $start_time + ( $i * $spacing ) ),
                 'status'       => 'pending',
-                'metadata'     => [ self::JOB_META_KEY => array_merge( [ 'index' => $i, 'count' => $count ], $test ? [ 'test' => true ] : [] ) ],
+                'metadata'     => [ self::JOB_META_KEY => $meta ],
             ];
         }
         return $jobs;
     }
 
     /**
-     * Queue a test render of a podcast post's shorts: the real prompts, voices and images,
-     * rendered by the worker into its output folder and never posted.
+     * Queue a test render of a post's shorts (a podcast's, or an article's one short): the
+     * real prompts, voices and images, rendered by the worker into its output folder and
+     * never posted.
      *
      * @return int[]|WP_Error IDs of the queued test jobs.
      */
     public static function enqueue_test_render( int $post_id ) {
-        if ( ! self::is_podcast_post( $post_id ) ) {
-            return new WP_Error( 'tiktok_short_no_script', sprintf( 'post #%d is not a Daily Briefing podcast post with a script.', $post_id ) );
+        if ( '' === self::source_type( $post_id ) ) {
+            return new WP_Error( 'tiktok_short_no_script', sprintf( 'post #%d is neither a Daily Briefing podcast post with a script nor an article with text.', $post_id ) );
         }
         if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() ) {
             return new WP_Error( 'tiktok_short_needs_pull', 'test renders are made by the local worker, so the worker must be in Pull Mode.' );
@@ -354,8 +457,36 @@ class PressHub_Social_TikTok_Shorts {
             'images'   => array_values( array_filter( array_map( fn( $img ) => is_array( $img ) ? (string) ( $img['url'] ?? '' ) : '', (array) ( $short['images'] ?? [] ) ) ) ),
             'segments' => array_values( (array) ( $short['audio']['segments'] ?? [] ) ),
         ];
+        if ( self::SOURCE_ARTICLE === ( $short['source'] ?? '' ) ) {
+            $job['tiktok_short']['source'] = self::SOURCE_ARTICLE;
+            $job['tiktok_short']['badge']  = self::article_badge( (int) ( $job['post_id'] ?? 0 ) );
+        }
         $job['tiktok_short'] = array_merge( $job['tiktok_short'], self::music_for( $short, $job_id ) );
         return $job;
+    }
+
+    /**
+     * On-screen badge of an article short: the post's first category in capitals without
+     * accents (e.g. ΑΠΟΨΗ), or ΑΡΘΡΟ.
+     */
+    public static function article_badge( int $post_id ): string {
+        $name = '';
+        if ( $post_id > 0 && function_exists( 'get_the_category' ) ) {
+            $cats = get_the_category( $post_id );
+            foreach ( is_array( $cats ) ? $cats : [] as $cat ) {
+                $cat_name = is_object( $cat ) ? (string) ( $cat->name ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['name'] ?? '' ) : '' );
+                $slug     = is_object( $cat ) ? (string) ( $cat->slug ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['slug'] ?? '' ) : '' );
+                if ( '' !== trim( $cat_name ) && 'uncategorized' !== $slug ) {
+                    $name = trim( $cat_name );
+                    break;
+                }
+            }
+        }
+        if ( '' === $name ) {
+            $name = 'Άρθρο';
+        }
+        $name = mb_strtoupper( $name, 'UTF-8' );
+        return strtr( $name, [ 'Ά' => 'Α', 'Έ' => 'Ε', 'Ή' => 'Η', 'Ί' => 'Ι', 'Ό' => 'Ο', 'Ύ' => 'Υ', 'Ώ' => 'Ω', 'Ϊ' => 'Ι', 'Ϋ' => 'Υ' ] );
     }
 
     /**
@@ -434,6 +565,9 @@ class PressHub_Social_TikTok_Shorts {
         }
 
         $date = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
+        if ( '' === $date ) {
+            $date = function_exists( 'get_the_date' ) ? (string) get_the_date( 'Y-m-d', $post_id ) : '';
+        }
         if ( '' === $date ) {
             $date = gmdate( 'Y-m-d' );
         }
@@ -529,6 +663,10 @@ class PressHub_Social_TikTok_Shorts {
             delete_post_meta( $post_id, self::PREP_ATTEMPTS_META );
             foreach ( $failures as [ $job, $error ] ) {
                 $job_id = (int) ( $job['id'] ?? 0 );
+                // An article is still posted, the classic way, when its short cannot be made.
+                if ( self::is_article_job( $job ) && ! self::is_test_job( $job ) && self::fallback_to_classic( $job, $error, $attempts ) ) {
+                    continue;
+                }
                 $err    = self::fail( $job_id, $error );
                 if ( $job_id > 0 && PressHub_Social_Queue::claim_for_processing( $job_id ) ) {
                     PressHub_Social_Queue::update_job( $job_id, [ 'attempts' => max( $max_attempts, (int) ( $job['max_attempts'] ?? $max_attempts ) ) ] );
@@ -552,6 +690,63 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
+     * Turn an article short whose preparation failed into the classic article post: the
+     * short's metadata is removed (the failure is kept under `tiktok_short_fallback`), the
+     * placeholder copy becomes the platform's usual AI caption, and the job stays pending,
+     * so the next claim posts it with the narrated slideshow (TikTok) or the image post
+     * (Instagram), with AI post images when those are on.
+     */
+    public static function fallback_to_classic( array $job, WP_Error $error, int $attempts = 0 ): bool {
+        $job_id  = (int) ( $job['id'] ?? 0 );
+        $post_id = (int) ( $job['post_id'] ?? 0 );
+        if ( $job_id <= 0 ) {
+            return false;
+        }
+        $platform = (string) ( $job['platform'] ?? 'tiktok' );
+        $metadata = self::decode_metadata( $job['metadata'] ?? null );
+        unset( $metadata[ self::JOB_META_KEY ] );
+        $metadata['tiktok_short_fallback'] = [
+            'error'      => $error->get_error_message(),
+            'error_code' => $error->get_error_code(),
+            'attempts'   => $attempts,
+            'at'         => gmdate( 'c' ),
+        ];
+
+        $with_images = class_exists( 'PressHub_Social_Post_Images' ) && PressHub_Social_Post_Images::applies( $post_id, $platform );
+        if ( $with_images ) {
+            $metadata = array_merge( $metadata, PressHub_Social_Post_Images::job_metadata( $platform ) );
+        }
+
+        $copy = (string) ( $job['post_copy'] ?? '' );
+        if ( self::is_placeholder_copy( $copy ) ) {
+            $generated = class_exists( 'PressHub_Social_AI_Copywriter' ) ? PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform ) : new WP_Error( 'missing_copywriter', 'PressHub_Social_AI_Copywriter is not loaded.' );
+            // A failed caption gets the usual placeholder, which the claim regenerates.
+            $copy = is_wp_error( $generated ) ? sprintf( '[AI Copy Generation Failed: %s]', $generated->get_error_message() ) : (string) $generated;
+        }
+
+        $updated = PressHub_Social_Queue::update_job( $job_id, [
+            'metadata'   => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
+            'post_copy'  => $copy,
+            'last_error' => sprintf( 'Article short could not be made (%s); posted the classic way.', $error->get_error_message() ),
+        ] );
+        if ( ! $updated ) {
+            return false;
+        }
+        if ( $with_images ) {
+            PressHub_Social_Post_Images::schedule_prepare( $post_id );
+        }
+        PressHub_Social_Logger::warning( sprintf(
+            '%s article short job #%d (post #%d) could not be prepared after %d runs (%s); it falls back to the classic article post.',
+            'instagram' === $platform ? 'Instagram' : 'TikTok',
+            $job_id,
+            $post_id,
+            $attempts,
+            $error->get_error_message()
+        ), [ 'job_id' => $job_id, 'error_code' => $error->get_error_code() ] );
+        return true;
+    }
+
+    /**
      * Get the plan of shorts for a podcast post, generating it when missing or stale.
      *
      * Keyed by a hash of the podcast script, the prompt, the requested count, the word
@@ -560,18 +755,21 @@ class PressHub_Social_TikTok_Shorts {
      * @return array{hash:string,shorts:array}|WP_Error
      */
     public static function get_plan( int $post_id, int $count ) {
-        if ( ! self::is_podcast_post( $post_id ) ) {
-            return new WP_Error( 'tiktok_short_no_script', sprintf( 'post #%d is not a podcast post with a script.', $post_id ) );
+        $source = self::source_type( $post_id );
+        if ( '' === $source ) {
+            return new WP_Error( 'tiktok_short_no_script', sprintf( 'post #%d is neither a podcast post with a script nor an article with text.', $post_id ) );
         }
+        $article = self::SOURCE_ARTICLE === $source;
 
-        $prompt = PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt();
+        $prompt = $article ? PressHub_Social_Settings_Storage::get_tiktok_article_short_prompt() : PressHub_Social_Settings_Storage::get_tiktok_shorts_prompt();
         if ( '' === $prompt ) {
-            PressHub_Social_Logger::error( 'TikTok shorts prompt is empty (presshub_social_prompt_tiktok_shorts).' );
-            return new WP_Error( 'missing_tiktok_shorts_prompt', 'the TikTok shorts prompt (presshub_social_prompt_tiktok_shorts) is empty. Restore it in PressHub Social → Settings → Prompts.' );
+            $option = $article ? 'presshub_social_prompt_tiktok_article_short' : 'presshub_social_prompt_tiktok_shorts';
+            PressHub_Social_Logger::error( sprintf( 'TikTok shorts prompt is empty (%s).', $option ) );
+            return new WP_Error( 'missing_tiktok_shorts_prompt', sprintf( 'the TikTok shorts prompt (%s) is empty. Restore it in PressHub Social → Settings → Prompts.', $option ) );
         }
 
-        $count     = max( 1, $count );
-        $script    = (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
+        $count     = $article ? 1 : max( 1, $count );
+        $script    = $article ? self::article_text( $post_id ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
         $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() );
@@ -581,10 +779,14 @@ class PressHub_Social_TikTok_Shorts {
             return $stored;
         }
 
-        $user_prompt = self::build_prompt( $post_id, $prompt, $script, $count, $max_words, $images );
+        $user_prompt = $article
+            ? self::build_prompt( $post_id, $prompt, '', $count, $max_words, $images, $script )
+            : self::build_prompt( $post_id, $prompt, $script, $count, $max_words, $images );
         $sys_prompt  = PressHub_Social_Settings_Storage::get_system_prompt();
 
-        PressHub_Social_Logger::info( sprintf( 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
+        PressHub_Social_Logger::info( $article
+            ? sprintf( 'Generating the short of article post #%d.', $post_id )
+            : sprintf( 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
         $raw = self::call_ai( $post_id, $sys_prompt, $user_prompt );
         if ( is_wp_error( $raw ) ) {
             return $raw;
@@ -608,9 +810,21 @@ class PressHub_Social_TikTok_Shorts {
     /**
      * Fill the shorts prompt placeholders in one pass (a value is never re-expanded).
      */
-    public static function build_prompt( int $post_id, string $template, string $script, int $count, int $max_words, int $image_count = 3 ): string {
+    public static function build_prompt( int $post_id, string $template, string $script, int $count, int $max_words, int $image_count = 3, string $content = '' ): string {
         $post      = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         $title     = $post ? (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) ) : '';
+        $excerpt   = $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '';
+        $excerpt   = trim( function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $excerpt ) : strip_tags( $excerpt ) );
+        $category  = '';
+        if ( function_exists( 'get_the_category' ) ) {
+            $cats     = get_the_category( $post_id );
+            $first    = is_array( $cats ) ? reset( $cats ) : null;
+            $category = is_object( $first ) ? (string) ( $first->name ?? '' ) : ( is_array( $first ) ? (string) ( $first['name'] ?? '' ) : '' );
+        }
+        $date      = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
+        if ( '' === $date && function_exists( 'get_the_date' ) ) {
+            $date = (string) get_the_date( 'Y-m-d', $post_id );
+        }
         $site_name = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'name' ) : '';
         $speakers  = 1 === self::narrators()
             ? '[SPEAKER_1] μόνο: ένας αφηγητής που μιλά απευθείας στον θεατή, σε β\' ενικό, με ρυθμό και ζωντάνια'
@@ -625,8 +839,11 @@ class PressHub_Social_TikTok_Shorts {
             '{speakers}'  => $speakers,
             '{title}'     => $title,
             '{site_name}' => '' !== $site_name ? $site_name : 'PressHub',
-            '{date}'      => (string) get_post_meta( $post_id, '_presshub_briefing_date', true ),
+            '{date}'      => $date,
             '{script}'    => $script,
+            '{content}'   => $content,
+            '{excerpt}'   => $excerpt,
+            '{category}'  => $category,
         ] );
     }
 

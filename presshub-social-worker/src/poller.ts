@@ -36,6 +36,10 @@ export interface ClaimedJob {
     music_volume?: number;
     /** Mood the plan chose for the story, for the logs. */
     mood?: string;
+    /** 'article' for the one short of an article (not a podcast story). */
+    source?: string;
+    /** On-screen badge set by the site (e.g. the article's category); replaces ΕΙΔΗΣΗ n/N. */
+    badge?: string;
   };
   /** AI post images for X and Facebook (all of them; media_url is the first). */
   media_urls?: string[];
@@ -385,7 +389,7 @@ export class PressHubPoller {
               imageUrls: images,
               hook: String(job.video_title || short.hook || title),
               topic: String(short.topic || ''),
-              badge: Number(short.count) > 0 ? `ΕΙΔΗΣΗ ${short.index + 1}/${short.count}` : `ΕΙΔΗΣΗ ${short.index + 1}`,
+              badge: shortBadge(short),
               siteName: job.site_name || 'PressHub.Cy',
               segments: Array.isArray(short.segments) ? short.segments : [],
               musicUrl: typeof short.music_url === 'string' && short.music_url !== '' ? short.music_url : undefined,
@@ -600,4 +604,12 @@ export class PressHubPoller {
   public getRunningStatus(): boolean {
     return this.isRunning;
   }
+}
+
+/** Badge of a short: the site's own badge (an article's category), else ΕΙΔΗΣΗ n/N. */
+export function shortBadge(short: { index: number; count: number; badge?: string }): string {
+  if (typeof short.badge === 'string' && short.badge.trim() !== '') {
+    return short.badge.trim();
+  }
+  return Number(short.count) > 0 ? `ΕΙΔΗΣΗ ${short.index + 1}/${short.count}` : `ΕΙΔΗΣΗ ${short.index + 1}`;
 }

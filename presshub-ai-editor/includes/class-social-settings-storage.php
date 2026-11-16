@@ -271,6 +271,13 @@ class PressHub_Social_Settings_Storage {
             'default'           => false,
         ] );
 
+        // Article shorts: every other post (articles, opinion pieces) also becomes one short.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_article_shorts_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_article_shorts_enabled' ],
+            'default'           => true,
+        ] );
+
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_count', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_count' ],
@@ -464,6 +471,13 @@ class PressHub_Social_Settings_Storage {
             },
         ] );
 
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_article_short', [
+            'type'              => 'string',
+            'sanitize_callback' => function( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_article_short' );
+            },
+        ] );
+
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts', [
             'type'              => 'string',
             'sanitize_callback' => function( $val ) {
@@ -538,6 +552,15 @@ class PressHub_Social_Settings_Storage {
                 update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
             } catch ( Exception $e ) {
                 PressHub_Social_Logger::error( 'Failed to seed TikTok shorts prompt: ' . $e->getMessage() );
+            }
+        }
+
+        $article_short_prompt = get_option( 'presshub_social_prompt_tiktok_article_short', false );
+        if ( false === $article_short_prompt || '' === trim( (string) $article_short_prompt ) ) {
+            try {
+                update_option( 'presshub_social_prompt_tiktok_article_short', PressHub_Social_Prompt_Loader::load( 'social_tiktok_article_short.txt' ) );
+            } catch ( Exception $e ) {
+                PressHub_Social_Logger::error( 'Failed to seed TikTok article short prompt: ' . $e->getMessage() );
             }
         }
 
@@ -717,6 +740,7 @@ class PressHub_Social_Settings_Storage {
             update_option( 'presshub_social_template_' . $platform, PressHub_Social_Prompt_Loader::load( 'template_' . $platform . '.txt' ) );
         }
         update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
+        update_option( 'presshub_social_prompt_tiktok_article_short', PressHub_Social_Prompt_Loader::load( 'social_tiktok_article_short.txt' ) );
         update_option( 'presshub_social_prompt_post_images', PressHub_Social_Prompt_Loader::load( 'social_post_images.txt' ) );
         update_option( 'presshub_social_prompt_post_image_style', PressHub_Social_Prompt_Loader::load( 'social_post_image_style.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
@@ -1253,6 +1277,21 @@ class PressHub_Social_Settings_Storage {
         return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
     }
 
+    /**
+     * Whether posts that are not podcasts (articles, opinion pieces) also go out as one
+     * short each, on every platform whose shorts are on (default on).
+     */
+    public static function get_tiktok_article_shorts_enabled(): bool {
+        return in_array( get_option( 'presshub_social_tiktok_article_shorts_enabled', true ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_tiktok_article_shorts_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_tiktok_article_shorts_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_tiktok_article_shorts_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
     /** Whether podcast posts also go to Instagram as Reels (one short per top story, default off). */
     public static function get_instagram_shorts_enabled(): bool {
         return in_array( get_option( 'presshub_social_instagram_shorts_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
@@ -1545,6 +1584,24 @@ class PressHub_Social_Settings_Storage {
             try {
                 $val = PressHub_Social_Prompt_Loader::load( $file );
                 update_option( $option, $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
+        return is_string( $val ) ? trim( $val ) : '';
+    }
+
+    /**
+     * Prompt that writes the one short of an article. Seeds from
+     * social_tiktok_article_short.txt if the option does not exist yet; an emptied
+     * prompt is kept (the article is then posted the classic way).
+     */
+    public static function get_tiktok_article_short_prompt(): string {
+        $val = get_option( 'presshub_social_prompt_tiktok_article_short', false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( 'social_tiktok_article_short.txt' );
+                update_option( 'presshub_social_prompt_tiktok_article_short', $val );
             } catch ( Exception $e ) {
                 $val = '';
             }
