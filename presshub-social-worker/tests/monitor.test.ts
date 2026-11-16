@@ -3,7 +3,8 @@ import os from 'os';
 import path from 'path';
 import { parseXGraphql, parseXTweet, parseTikTokItemList, rankXVideoVariants, toWirePost, ScannedPost } from '../src/monitor/parsers';
 import { SocialMonitor } from '../src/monitor/monitor-client';
-import { buildScrollStop, resolveReaderSession, ScanPlan, ScanSession, ScanTarget } from '../src/monitor/scanner';
+import { attributeFacebookPosts, buildScrollStop, facebookReachedSince, fromFacebookPost, resolveReaderSession, ScanPlan, ScanSession, ScanTarget } from '../src/monitor/scanner';
+import { parseFacebookStories } from '../src/trending/facebook-parser';
 
 const MB = 1024 * 1024;
 
@@ -348,5 +349,72 @@ describe('SocialMonitor client', () => {
     expect(calls.some((c) => c.url.includes('failed='))).toBe(false);
     expect(calls.some((c) => c.url.includes('/monitor/media'))).toBe(false);
     expect(closed).toHaveBeenCalled();
+  });
+});
+
+
+describe('Facebook Pages', () => {
+  const nowSec = Math.floor(Date.now() / 1000);
+  function story(id: string, actor: { name: string; url: string }, created = nowSec - 3600, text = 'Ανακοίνωση του Δήμου') {
+    return {
+      __typename: 'Story',
+      post_id: id,
+      comet_sections: {
+        content: { story: { message: { text }, actors: [{ __typename: 'Page', name: actor.name, url: actor.url }] } },
+        context_layout: { story: { comet_sections: { metadata: [{ story: { creation_time: created, url: `https://www.facebook.com/x/posts/pfbid0${id}?__cft__[0]=abc` } }] } } }
+      }
+    };
+  }
+  const page = { name: 'Δήμος Λευκωσίας', url: 'https://www.facebook.com/nicosiamunicipality' };
+  const other = { name: 'Philenews', url: 'https://www.facebook.com/philenews' };
+
+  it('turns parsed stories into monitor posts without video sources', () => {
+    const [fb] = parseFacebookStories([story('1234567890', page)]);
+    const p = fromFacebookPost(fb);
+    expect(p.platform).toBe('facebook');
+    expect(p.handle).toBe('nicosiamunicipality');
+    expect(p.video).toBeUndefined();
+    expect(toWirePost(p)).not.toHaveProperty('metrics');
+  });
+
+  it("keeps only the Page's own posts and drops shared or visitor posts", () => {
+    const posts = parseFacebookStories([story('1111111111', page), story('2222222222', other), story('3333333333', page)]).map(fromFacebookPost);
+    const own = attributeFacebookPosts(posts, 'NicosiaMunicipality');
+    expect(own.map((p) => p.id).sort()).toEqual(['1111111111', '3333333333']);
+    expect(own.every((p) => p.handle === 'nicosiamunicipality')).toBe(true);
+  });
+
+  it('falls back to the most frequent author when the handle form differs', () => {
+    const byId = { name: 'Δήμος', url: 'https://www.facebook.com/profile.php?id=100064123456789' };
+    const posts = parseFacebookStories([story('1111111111', byId), story('2222222222', other), story('3333333333', byId)]).map(fromFacebookPost);
+    const own = attributeFacebookPosts(posts, 'dimos.page');
+    expect(own.map((p) => p.id).sort()).toEqual(['1111111111', '3333333333']);
+    expect(own[0].handle).toBe('dimos.page');
+    expect(attributeFacebookPosts([], 'dimos.page')).toEqual([]);
+  });
+
+  it('needs two old posts before it stops scrolling (a featured post is often old)', () => {
+    const since = new Date((nowSec - 7200) * 1000).toISOString();
+    const mk = (id: string, ageSec: number) => fromFacebookPost(parseFacebookStories([story(id, page, nowSec - ageSec)])[0]);
+    expect(facebookReachedSince([mk('1000000001', 86400 * 30), mk('1000000002', 600)], since)).toBe(false);
+    expect(facebookReachedSince([mk('1000000001', 86400 * 30), mk('1000000002', 600), mk('1000000003', 9000)], since)).toBe(true);
+  });
+
+  it('uses the Facebook reader session', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fb-reader-'));
+    const posting = path.join(dir, 'sessions');
+    const reader = path.join(dir, 'sessions-reader');
+    fs.mkdirSync(posting);
+    fs.mkdirSync(reader);
+    const prev = process.env.PRESSHUB_MONITOR_SESSIONS_DIR;
+    process.env.PRESSHUB_MONITOR_SESSIONS_DIR = reader;
+    try {
+      fs.writeFileSync(path.join(reader, 'facebook-session.json'), '{}');
+      expect(resolveReaderSession('facebook', posting)).toBe(path.join(reader, 'facebook-session.json'));
+    } finally {
+      if (prev === undefined) delete process.env.PRESSHUB_MONITOR_SESSIONS_DIR;
+      else process.env.PRESSHUB_MONITOR_SESSIONS_DIR = prev;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

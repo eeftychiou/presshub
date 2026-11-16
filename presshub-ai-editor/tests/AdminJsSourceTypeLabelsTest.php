@@ -17,6 +17,7 @@ class AdminJsSourceTypeLabelsTest
                 'rss_feed'      => 'RSS / Atom Feed',
                 'social_x'      => 'X (Twitter) Account',
                 'social_tiktok' => 'TikTok Account',
+                'social_facebook' => 'Facebook Page',
                 'youtube'       => 'YouTube Channel / Playlist',
                 'vlog'          => 'Video / Vlog Feed',
                 'podcast_audio' => 'Audio Podcast / RSS',
@@ -31,7 +32,7 @@ class AdminJsSourceTypeLabelsTest
             fwrite( STDERR, "FAIL\n  - " . implode( "\n  - ", $failures ) . "\n" );
             exit( 1 );
         }
-        echo "PASS: AdminJsSourceTypeLabelsTest\n";
+        echo "OK - AdminJsSourceTypeLabelsTest: all checks passed\n";
     }
 }
 

@@ -1,7 +1,7 @@
 /**
- * Browser scanner for monitored X and TikTok accounts.
+ * Browser scanner for monitored X, TikTok and Facebook accounts.
  *
- * Opens each profile (or one private X List) in an isolated browser that uses
+ * Opens each profile / Page (or one private X List) in an isolated browser that uses
  * the *reader* session, captures the JSON the page loads, and keeps posts
  * newer than the account's `since`. Pages are visited slowly, one at a time.
  */
@@ -11,11 +11,12 @@ import { connectOrLaunchChrome, ChromeConnection } from '../automation/browser-h
 import { getReaderSessionsDir, getSessionsDir } from '../automation/session-manager';
 import { WorkerLogger } from '../logger';
 import { challengeBackoffUntil, clearChallenge, isChallengeError, recordChallenge } from '../automation/challenge-backoff';
-import { parseTikTokItemList, parseXGraphql, ScannedPost } from './parsers';
+import { MonitorPlatform, parseTikTokItemList, parseXGraphql, ScannedPost } from './parsers';
+import { FacebookPost, parseFacebookStories, splitFacebookPayload } from '../trending/facebook-parser';
 
 export interface ScanTarget {
   source_id?: string;
-  platform: 'x' | 'tiktok';
+  platform: MonitorPlatform;
   handle: string;
   name?: string;
   url: string;
@@ -106,6 +107,118 @@ function jitter(minMs: number, maxMs: number): number {
 
 const X_TIMELINE_RE = /\/i\/api\/graphql\/[^/]+\/(UserTweets|UserTweetsAndReplies|UserMedia|ListLatestTweetsTimeline)/;
 const TIKTOK_LIST_RE = /\/api\/post\/item_list\//;
+const FACEBOOK_GRAPHQL_RE = /facebook\.com\/api\/graphql\/?/;
+const FACEBOOK_LOGIN_RE = /\/login(\.php)?(\/|\?|$)|\/checkpoint\//;
+
+/** Facebook parser post → monitor post (no video sources: Facebook videos are not downloaded). */
+export function fromFacebookPost(p: FacebookPost): ScannedPost {
+  return {
+    platform: 'facebook',
+    id: p.id,
+    handle: p.handle,
+    author_name: p.author_name,
+    url: p.url,
+    text: p.text,
+    created_at: p.created_at,
+    media: p.media,
+    metrics: p.metrics,
+    ...(p.thumbnail ? { thumbnail: p.thumbnail } : {})
+  };
+}
+
+/**
+ * Keep the Page's own posts from what its feed loaded, labelled with the
+ * target's handle. A Page feed also contains the stories it shares and
+ * visitor posts: when some posts carry the target's handle, only those are
+ * kept; when none do (the Page is listed by vanity name but Facebook gives
+ * its numeric id, or the other way round), the posts of the most frequent
+ * author are taken as the Page's own.
+ */
+export function attributeFacebookPosts(posts: ScannedPost[], handle: string): ScannedPost[] {
+  const target = handle.toLowerCase();
+  let own = posts.filter((p) => p.handle === target);
+  if (own.length === 0 && posts.length > 0) {
+    const counts = new Map<string, number>();
+    for (const p of posts) {
+      const key = p.handle || p.author_name;
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    let best = '';
+    let bestCount = 0;
+    for (const [k, n] of counts) {
+      if (n > bestCount) {
+        best = k;
+        bestCount = n;
+      }
+    }
+    own = best ? posts.filter((p) => (p.handle || p.author_name) === best) : [];
+  }
+  return own.map((p) => ({ ...p, handle: target }));
+}
+
+/**
+ * Facebook has no pinned flag in its JSON, and a featured post at the top of a
+ * Page is often old, so one old post never stops the scroll: two do.
+ */
+export function facebookReachedSince(posts: ScannedPost[], since: string): boolean {
+  const floor = Date.parse(since) || 0;
+  return posts.filter((p) => Date.parse(p.created_at) <= floor).length >= 2;
+}
+
+/**
+ * Visit one Facebook Page, read the posts embedded in the first HTML and the
+ * GraphQL answers loaded while scrolling, and return the Page's own posts.
+ */
+async function scanFacebookPage(conn: ChromeConnection, target: ScanTarget, scrolls: number): Promise<ScannedPost[]> {
+  const page = await conn.context.newPage();
+  const found = new Map<string, ScannedPost>();
+  const pending: Promise<void>[] = [];
+  const add = (body: string) => {
+    for (const p of parseFacebookStories(splitFacebookPayload(body))) {
+      if (!found.has(p.id)) found.set(p.id, fromFacebookPost(p));
+    }
+  };
+  page.on('response', (res) => {
+    if (!FACEBOOK_GRAPHQL_RE.test(res.url())) return;
+    pending.push(
+      res
+        .text()
+        .then(add)
+        .catch(() => {})
+    );
+  });
+  const own = () => attributeFacebookPosts(Array.from(found.values()), target.handle);
+  try {
+    await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    if (FACEBOOK_LOGIN_RE.test(page.url())) {
+      throw new Error('Facebook asked for a login (reader session missing or expired)');
+    }
+    await sleep(jitter(4000, 7000));
+    // The first posts of a Page come inside the HTML, not from GraphQL.
+    const blobs: string[] = await page
+      .$$eval('script[type="application/json"]', (els) => els.map((e) => e.textContent || ''))
+      .catch(() => [] as string[]);
+    for (const b of blobs) {
+      if (b.includes('"post_id"')) add(b);
+    }
+    for (let i = 0; i < scrolls; i++) {
+      await Promise.all(pending.splice(0));
+      if (facebookReachedSince(own(), target.since)) break;
+      await page.mouse.wheel(0, jitter(1800, 3200)).catch(() => {});
+      await sleep(jitter(2500, 4500));
+    }
+    await Promise.all(pending.splice(0));
+    if (found.size === 0) {
+      const body = (await page.textContent('body').catch(() => '')) || '';
+      if (/security check|captcha|confirm (that )?you.?re human/i.test(body)) {
+        throw new Error('Facebook showed a verification challenge');
+      }
+    }
+  } finally {
+    await page.close().catch(() => {});
+  }
+  return own().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}
 
 /**
  * Visit one page, scroll a few times and return the posts parsed from its responses.
@@ -183,6 +296,8 @@ export function buildScrollStop(targets: ScanTarget[]): (list: ScannedPost[], ha
 
 /** Where the next TikTok pass starts (the account that was challenged last time). */
 let tiktokCursor = 0;
+/** Same for Facebook Pages. */
+let facebookCursor = 0;
 
 /** `list` starting at index `start` and wrapping around. */
 export function rotate<T>(list: T[], start: number): T[] {
@@ -200,9 +315,9 @@ export const browserScan: ScanFn = async (plan: ScanPlan) => {
   const maxVideoBytes = Math.max(geminiMaxBytes, (plan.local_max_mb || 0) * 1024 * 1024);
   const posts: ScannedPost[] = [];
   const errors: ScanError[] = [];
-  const connections: Partial<Record<'x' | 'tiktok', ChromeConnection>> = {};
+  const connections: Partial<Record<MonitorPlatform, ChromeConnection>> = {};
 
-  const getConn = async (platform: 'x' | 'tiktok'): Promise<ChromeConnection> => {
+  const getConn = async (platform: MonitorPlatform): Promise<ChromeConnection> => {
     if (!connections[platform]) {
       connections[platform] = await connectOrLaunchChrome({
         skipCdp: true,
@@ -222,6 +337,7 @@ export const browserScan: ScanFn = async (plan: ScanPlan) => {
 
   const xTargets = plan.targets.filter((t) => t.platform === 'x');
   const tiktokTargets = plan.targets.filter((t) => t.platform === 'tiktok');
+  const facebookTargets = plan.targets.filter((t) => t.platform === 'facebook');
 
   // X: one List page when configured, else each profile.
   if (xTargets.length) {
@@ -263,6 +379,31 @@ export const browserScan: ScanFn = async (plan: ScanPlan) => {
       WorkerLogger.warn('Social Monitor', `TikTok scan failed for @${t.handle}: ${err.message}`);
     }
     await sleep(jitter(5000, 12000));
+  }
+
+  // Facebook: one Page at a time, with the same back-off as TikTok after a security check.
+  const facebookPaused = facebookTargets.length ? challengeBackoffUntil('facebook') : 0;
+  if (facebookPaused) {
+    WorkerLogger.info('Social Monitor', `Facebook skipped until ${new Date(facebookPaused).toISOString()} after a verification challenge (${facebookTargets.length} Page(s)).`);
+  }
+  for (const t of facebookPaused ? [] : rotate(facebookTargets, facebookCursor)) {
+    try {
+      const conn = await getConn('facebook');
+      const got = await scanFacebookPage(conn, t, 3);
+      posts.push(...got.filter(keep));
+      clearChallenge('facebook');
+      WorkerLogger.info('Social Monitor', `Facebook ${t.handle}: ${got.filter(keep).length} new post(s).`);
+    } catch (err: any) {
+      errors.push({ platform: 'facebook', handle: t.handle, url: t.url, error: err.message });
+      if (isChallengeError(err.message)) {
+        facebookCursor = facebookTargets.indexOf(t);
+        recordChallenge('facebook', 'Social Monitor');
+        break;
+      }
+      WorkerLogger.warn('Social Monitor', `Facebook scan failed for ${t.handle}: ${err.message}`);
+      if (/login/i.test(err.message)) break;
+    }
+    await sleep(jitter(6000, 14000));
   }
 
   const download = async (post: ScannedPost, opts: DownloadOptions = {}) => {

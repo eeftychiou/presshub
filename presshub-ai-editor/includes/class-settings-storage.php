@@ -1303,6 +1303,14 @@ class PressHub_AI_Settings_Storage {
                 'badge_class' => 'badge-active',
                 'icon'        => 'dashicons-video-alt2',
             ],
+            'social_facebook' => [
+                'label'       => __( 'Facebook Page', 'presshub-ai-editor' ),
+                'description' => __( 'Posts from one public Facebook Page or profile (e.g. https://www.facebook.com/pagename or https://www.facebook.com/profile.php?id=123), read by the social worker with its Facebook reader session.', 'presshub-ai-editor' ),
+                'active'      => true,
+                'badge_label' => __( 'Social Monitor', 'presshub-ai-editor' ),
+                'badge_class' => 'badge-active',
+                'icon'        => 'dashicons-facebook',
+            ],
             'youtube'       => [
                 'label'       => __( 'YouTube Channel / Playlist', 'presshub-ai-editor' ),
                 'description' => __( 'YouTube video channels, video playlists, and vlogs (planned multi-modal pipeline).', 'presshub-ai-editor' ),
@@ -2685,9 +2693,10 @@ class PressHub_AI_Settings_Storage {
     }
 
     /* ---------------------------------------------------------------------
-     * Social media monitoring (X / TikTok)
+     * Social media monitoring (X / TikTok / Facebook)
      *
-     * Accounts are News Sources of type social_x / social_tiktok; the
+     * Accounts are News Sources of type social_x / social_tiktok /
+     * social_facebook; the
      * social worker scans them and posts what it finds to WordPress.
      * ------------------------------------------------------------------- */
 

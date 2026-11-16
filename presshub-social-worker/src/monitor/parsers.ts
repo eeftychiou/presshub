@@ -6,7 +6,7 @@
  * it does not depend on the exact timeline nesting.
  */
 
-export type MonitorPlatform = 'x' | 'tiktok';
+export type MonitorPlatform = 'x' | 'tiktok' | 'facebook';
 
 export interface VideoSource {
   /** Direct media URL to download. */

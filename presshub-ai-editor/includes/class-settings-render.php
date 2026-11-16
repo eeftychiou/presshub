@@ -2952,8 +2952,8 @@ class PressHub_AI_Settings_Render {
             : __( 'never', 'presshub-ai-editor' );
         ?>
         <tr class="presshub-social-monitor-heading">
-            <th scope="row" colspan="2"><h3 style="margin:1em 0 0;"><?php echo esc_html__( 'Social Media Monitoring (X and TikTok)', 'presshub-ai-editor' ); ?></h3>
-                <p class="description" style="font-weight:normal;"><?php echo esc_html__( 'Add accounts as News Sources of type "X (Twitter) Account" or "TikTok Account". The social worker (Pull Mode) reads them with its browser and sends new posts here; videos are transcribed by Gemini. Each post is used in one edition.', 'presshub-ai-editor' ); ?></p>
+            <th scope="row" colspan="2"><h3 style="margin:1em 0 0;"><?php echo esc_html__( 'Social Media Monitoring (X, TikTok and Facebook)', 'presshub-ai-editor' ); ?></h3>
+                <p class="description" style="font-weight:normal;"><?php echo esc_html__( 'Add accounts as News Sources of type "X (Twitter) Account", "TikTok Account" or "Facebook Page". The social worker (Pull Mode) reads them with its browser and sends new posts here; X and TikTok videos are transcribed by Gemini, Facebook posts are read as text. Each post is used in one edition. Facebook Pages need a Facebook reader session on the worker (npm run login -- facebook --reader).', 'presshub-ai-editor' ); ?></p>
                 <p class="description" style="font-weight:normal;"><?php echo esc_html( sprintf(
                     /* translators: 1: number of accounts, 2: posts waiting, 3: last scan time */
                     __( 'Monitored accounts: %1$d. Posts waiting for the next harvest: %2$d. Last scan handed to the worker: %3$s.', 'presshub-ai-editor' ),
