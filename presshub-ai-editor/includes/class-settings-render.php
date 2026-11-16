@@ -1305,7 +1305,7 @@ class PressHub_AI_Settings_Render {
                             </div>
                             <div class="presshub-form-group" style="flex: 1;">
                                 <label for="provider-form-timeout"><strong><?php echo __( 'Timeout (seconds):', 'presshub-ai-editor' ); ?></strong></label>
-                                <input type="number" id="provider-form-timeout" name="timeout" class="widefat" min="5" max="300" value="300" style="margin-top: 4px;" />
+                                <input type="number" id="provider-form-timeout" name="timeout" class="widefat" min="10" max="300" value="300" style="margin-top: 4px;" />
                             </div>
                         </div>
 
