@@ -6,6 +6,7 @@ import {
   postTikTok,
   postFacebook,
   postInstagram,
+  selectInstagramCrop,
   markTikTokAiGenerated,
   getTwitterWeightedLength,
   sanitizeTwitterCopy,
@@ -466,6 +467,68 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
       if (fsMod.existsSync(dummyVideo)) fsMod.unlinkSync(dummyVideo);
     }
   });
+
+  test('postInstagram picks the 9:16 crop for a Reel before Next', async () => {
+    const page = await context.newPage();
+    try {
+      const mockSession: ChromeConnection = {
+        browser,
+        isExternalCdp: false,
+        context: {
+          newPage: async () => {
+            const html = `<html><body>
+              <a href="#" role="link"><svg aria-label="Post"></svg><span>Post</span></a>
+              <input type="file" accept="video/mp4" />
+              <div role="dialog">
+                <div role="button" id="crop" onclick="document.getElementById('crop-menu').style.display='block'"><svg aria-label="Select crop"></svg></div>
+                <div id="crop-menu" style="display:none">
+                  <div role="button" onclick="window.__crop='Original'"><span>Original</span></div>
+                  <div role="button" onclick="window.__crop='1:1'"><span>1:1</span></div>
+                  <div role="button" onclick="window.__crop='9:16'"><span>9:16</span></div>
+                  <div role="button" onclick="window.__crop='16:9'"><span>16:9</span></div>
+                </div>
+                <button onclick="window.__nextCropAtClick = window.__nextCropAtClick || window.__crop || 'none'">Next</button>
+              </div>
+              <div aria-label="Write a caption" contenteditable="true"></div>
+              <button onclick="document.getElementById('confirm').style.display='block'">Share</button>
+              <div id="confirm" style="display:none">Your reel has been shared.</div>
+            </body></html>`;
+            page.goto = async () => {
+              await page.setContent(html);
+              return null as any;
+            };
+            page.close = async () => {};
+            return page;
+          }
+        } as any,
+        close: async () => {}
+      };
+
+      const res = await postInstagram({
+        platform: 'instagram',
+        copy: 'Reel with vertical crop',
+        mediaPath: dummyVideoPath,
+        browserSession: mockSession
+      });
+
+      expect(res.success).toBe(true);
+      expect(await page.evaluate('window.__crop')).toBe('9:16');
+      expect(await page.evaluate('window.__nextCropAtClick')).toBe('9:16');
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('selectInstagramCrop returns null and does not throw when the crop menu is missing', async () => {
+    const page = await context.newPage();
+    try {
+      await page.setContent('<html><body><div role="dialog"><button>Next</button></div></body></html>');
+      const picked = await selectInstagramCrop(page, ['9:16', 'Original']);
+      expect(picked).toBeNull();
+    } finally {
+      await page.close();
+    }
+  }, 20000);
 
   test('postInstagram opens the composer through the "Post" entry of the current Create menu', async () => {
     const mockSession: ChromeConnection = {

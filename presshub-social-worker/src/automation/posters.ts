@@ -1566,6 +1566,38 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
 }
 
 /**
+ * In Instagram's "Crop" step, open the "Select crop" menu and pick the first available
+ * aspect ratio from `preferred` (e.g. ['9:16', 'Original']). Returns the ratio picked, or
+ * null when the menu or every option is missing; that is logged as a warning and the post
+ * goes on with Instagram's default crop.
+ */
+export async function selectInstagramCrop(page: Page, preferred: string[]): Promise<string | null> {
+  const cropButton = page.locator(
+    '[role="button"]:has(svg[aria-label="Select crop"]), button:has(svg[aria-label="Select crop"]), svg[aria-label="Select crop"]'
+  ).first();
+  const hasCrop = await cropButton.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+  if (!hasCrop) {
+    WorkerLogger.warn('Instagram Automation', 'Crop menu ("Select crop") not found; posting with Instagram\'s default crop.');
+    return null;
+  }
+  await cropButton.click();
+  await page.waitForTimeout(800);
+  for (const ratio of preferred) {
+    const option = page.locator(
+      `[role="dialog"] [role="button"]:has(span:text-is("${ratio}")), [role="dialog"] span:text-is("${ratio}"), [role="dialog"] div:text-is("${ratio}")`
+    ).first();
+    if ((await option.count()) > 0 && (await option.isVisible().catch(() => false))) {
+      await option.click();
+      await page.waitForTimeout(800);
+      WorkerLogger.debug('Instagram Automation', `Selected the ${ratio} crop.`);
+      return ratio;
+    }
+  }
+  WorkerLogger.warn('Instagram Automation', `None of the crop options ${preferred.join(', ')} were found; posting with Instagram's default crop.`);
+  return null;
+}
+
+/**
  * Instagram automation poster using saved browser session or running Chrome.
  */
 export async function postInstagram(options: PostOptions): Promise<PostResult> {
@@ -1641,6 +1673,12 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
         await reelsOk.click();
         await page.waitForTimeout(1000);
       }
+    }
+
+    // The web composer crops every upload to 1:1 by default, which cuts the top and bottom
+    // (and the burned-in captions) off our vertical 1080x1920 Reels. Pick 9:16 for videos.
+    if (isVideo) {
+      await selectInstagramCrop(page, ['9:16', 'Original']);
     }
 
     WorkerLogger.debug('Instagram Automation', 'Advancing Next buttons...');
