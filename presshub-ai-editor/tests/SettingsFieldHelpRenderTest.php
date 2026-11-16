@@ -52,6 +52,16 @@ class SettingsFieldHelpRenderTest {
         if ( false === strpos( $js, 'checkValidity()' ) ) {
             $failures[] = 'The validity check must use checkValidity() (#257).';
         }
+        // Defaults such as the 60 s harvest budget sit off their field's step
+        // (min 10, step 15), so a step mismatch alone must not block a save.
+        if ( false === strpos( $js, 'v.stepMismatch && !v.rangeOverflow' ) ) {
+            $failures[] = 'A step mismatch alone must not block the save (#257 review).';
+        }
+        // The browser's own validation would abort the submit before the JS
+        // check runs, with no notice, when the field is in a hidden tab.
+        if ( false === strpos( $src, 'id="presshub-ai-settings-form" novalidate' ) ) {
+            $failures[] = 'The settings form must be novalidate so the JS check reports errors (#257 review).';
+        }
 
         if ( $failures ) {
             echo "FAIL\n";
