@@ -559,7 +559,7 @@ class PressHub_AI_Policy_Fiches {
     private static function audit( string $event, string $slug, int $user_id ): void {
         if ( class_exists( 'PressHub_AI_Audit_Logger' ) && method_exists( 'PressHub_AI_Audit_Logger', 'log' ) ) {
             try {
-                PressHub_AI_Audit_Logger::log( $event, [ 'fiche' => $slug, 'user_id' => $user_id ] );
+                PressHub_AI_Audit_Logger::log( $event, 'policy_fiche', $slug, [ 'user_id' => $user_id ] );
             } catch ( \Throwable $e ) {
                 // Auditing never blocks an edit.
             }

@@ -110,6 +110,7 @@ $wpdb->tables          = [];
 $wpdb->queries         = [];
 $wpdb->auto_increments = [];
 PressHub_AI_Generation_Recorder::create_table();
+PressHub_AI_Audit_Logger::create_table();
 
 $A = 'PressHub_AI_Editorial_Agenda';
 $A::save( [ [ 'title' => 'Κυπριακό', 'priority' => 5 ] ], '', 1, '' );
@@ -263,6 +264,9 @@ pf_check( 'page: pending suggestion with accept and dismiss', false !== strpos( 
 $admin = PressHub_AI_Fiches_Admin::build_policy_page( [] );
 pf_check( 'page: under Policy Fiches with its title', false !== strpos( $admin, '<h1>Policies</h1>' ) && false !== strpos( $admin, 'presshub-fiches-page' ) );
 pf_check( 'delete', $P::delete( 'δημοσια-υγεια' ) && null === $P::get( 'δημοσια-υγεια' ) && ! $P::delete( 'δημοσια-υγεια' ) );
+$logs = PressHub_AI_Audit_Logger::get_logs( [ 'entity_type' => 'policy_fiche', 'per_page' => 100 ] );
+$events = array_column( (array) ( $logs['items'] ?? [] ), 'event_type' );
+pf_check( 'audit: saves, record edits and deletes are logged', in_array( 'policy_fiche_saved', $events, true ) && in_array( 'policy_record_saved', $events, true ) && in_array( 'policy_fiche_deleted', $events, true ) );
 
 $api_src = file_get_contents( dirname( __DIR__ ) . '/includes/class-api-client.php' );
 $cp      = substr( $api_src, strpos( $api_src, 'public function call_provider(' ) );
