@@ -1580,14 +1580,26 @@ export async function selectInstagramCrop(page: Page, preferred: string[]): Prom
     WorkerLogger.warn('Instagram Automation', 'Crop menu ("Select crop") not found; posting with Instagram\'s default crop.');
     return null;
   }
-  await cropButton.click();
+  const opened = await cropButton.click({ timeout: 5000 }).then(() => true).catch((err: any) => {
+    WorkerLogger.warn('Instagram Automation', `Could not open the crop menu (${err?.message || err}); posting with Instagram's default crop.`);
+    return false;
+  });
+  if (!opened) {
+    return null;
+  }
   await page.waitForTimeout(800);
   for (const ratio of preferred) {
     const option = page.locator(
       `[role="dialog"] [role="button"]:has(span:text-is("${ratio}")), [role="dialog"] span:text-is("${ratio}"), [role="dialog"] div:text-is("${ratio}")`
     ).first();
     if ((await option.count()) > 0 && (await option.isVisible().catch(() => false))) {
-      await option.click();
+      const picked = await option.click({ timeout: 5000 }).then(() => true).catch((err: any) => {
+        WorkerLogger.warn('Instagram Automation', `Could not click the ${ratio} crop (${err?.message || err}).`);
+        return false;
+      });
+      if (!picked) {
+        continue;
+      }
       await page.waitForTimeout(800);
       WorkerLogger.debug('Instagram Automation', `Selected the ${ratio} crop.`);
       return ratio;
