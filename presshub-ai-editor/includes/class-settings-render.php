@@ -1307,6 +1307,38 @@ class PressHub_AI_Settings_Render {
     /**
      * Render the Token & Activity Usage Analytics Dashboard.
      */
+    /**
+     * Translated alignment labels, short (badges) or long (the source form).
+     *
+     * @return array<string,string>
+     */
+    public static function alignment_labels( bool $long = false ): array {
+        return $long ? [
+            'government'     => __( 'Government / pro-government', 'presshub-ai-editor' ),
+            'opposition'     => __( 'Opposition-aligned', 'presshub-ai-editor' ),
+            'independent'    => __( 'Independent', 'presshub-ai-editor' ),
+            'institutional'  => __( 'Institutional (Parliament, Audit Office, courts)', 'presshub-ai-editor' ),
+            'social_partner' => __( 'Social partner (unions, employers)', 'presshub-ai-editor' ),
+        ] : [
+            'government'     => __( 'Pro-government', 'presshub-ai-editor' ),
+            'opposition'     => __( 'Opposition', 'presshub-ai-editor' ),
+            'independent'    => __( 'Independent', 'presshub-ai-editor' ),
+            'institutional'  => __( 'Institutional', 'presshub-ai-editor' ),
+            'social_partner' => __( 'Social partner', 'presshub-ai-editor' ),
+        ];
+    }
+
+    /** Small "Alignment: …" badge for the sources table ('' when not set). */
+    public static function alignment_badge_html( string $alignment ): string {
+        $alignment = PressHub_AI_Settings_Storage::sanitize_source_alignment( $alignment );
+        if ( '' === $alignment ) {
+            return '';
+        }
+        $labels = self::alignment_labels();
+        return ' <span class="presshub-source-alignment presshub-source-alignment-' . esc_attr( $alignment ) . '" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">'
+            . esc_html( sprintf( /* translators: %s: alignment */ __( 'Alignment: %s', 'presshub-ai-editor' ), $labels[ $alignment ] ) ) . '</span>';
+    }
+
     public function render_token_logs_tab(): void {
         require_once __DIR__ . '/class-token-logger.php';
         ?>
@@ -2062,7 +2094,8 @@ class PressHub_AI_Settings_Render {
         $html .= '<span class="presshub-category-pill">' . $category . '</span>';
         $priority = PressHub_AI_Settings_Storage::sanitize_source_priority( $source['priority'] ?? PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT );
         $html .= '<div style="margin-top: 4px;"><span class="presshub-source-quota" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">' . sprintf( esc_html__( 'Quota: %d articles', 'presshub-ai-editor' ), $max_articles ) . '</span>'
-            . ' <span class="presshub-source-priority" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">' . sprintf( esc_html__( 'Priority: %d/5', 'presshub-ai-editor' ), $priority ) . '</span></div>';
+            . ' <span class="presshub-source-priority" style="font-size: 11px; color: #50575e; background: #f0f0f1; padding: 2px 6px; border-radius: 3px; display: inline-block;">' . sprintf( esc_html__( 'Priority: %d/5', 'presshub-ai-editor' ), $priority ) . '</span>'
+            . self::alignment_badge_html( (string) ( $source['alignment'] ?? '' ) ) . '</div>';
         $html .= '</td>';
 
         $html .= '<td style="text-align: right; vertical-align: middle;">';
@@ -2142,6 +2175,16 @@ class PressHub_AI_Settings_Render {
                                     <option value="1"><?php esc_html_e( '1 – Lowest', 'presshub-ai-editor' ); ?></option>
                                 </select>
                                 <p class="description"><?php esc_html_e( 'Higher-priority sources are kept first when the pool is larger than the curation limit, and the AI prefers them for lead stories.', 'presshub-ai-editor' ); ?></p>
+                            </div>
+                            <div class="presshub-form-group" style="flex: 1;">
+                                <label for="source-form-alignment"><strong><?php esc_html_e( 'Alignment', 'presshub-ai-editor' ); ?></strong></label>
+                                <select id="source-form-alignment" name="alignment" class="widefat" style="margin-top: 4px;">
+                                    <option value=""><?php esc_html_e( 'Not set', 'presshub-ai-editor' ); ?></option>
+                                    <?php foreach ( self::alignment_labels( true ) as $alignment_key => $alignment_label ) : ?>
+                                        <option value="<?php echo esc_attr( $alignment_key ); ?>"><?php echo esc_html( $alignment_label ); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <p class="description"><?php esc_html_e( 'Whose side this source usually reflects. The AI attributes claims from aligned sources and looks for the other side; the Hub warns when the pool has only one side.', 'presshub-ai-editor' ); ?></p>
                             </div>
                         </div>
 
