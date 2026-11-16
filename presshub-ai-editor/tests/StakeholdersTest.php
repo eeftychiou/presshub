@@ -9,7 +9,7 @@
  *  4. parse_response and extraction with a mock client (recorded as memory_stakeholders).
  *  5. Injection: only for budgeted actions, within budget, excluded fiches left out,
  *     and the generation record stores the prompt as sent.
- *  6. Wiring and the Memory → People tab.
+ *  6. Wiring and the Policy Fiches → People page.
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
@@ -226,8 +226,8 @@ $list = $S::build_tab( [] );
 sh_check( 'tab: list shows fiches with status', false !== strpos( $list, 'Νίκος Χριστοδουλίδης' ) && false !== strpos( $list, 'excluded' ) && false !== strpos( $list, 'locked' ) );
 $form = $S::build_tab( [ 'fiche' => 'μακησ-κεραυνοσ', 'sh_notice' => 'saved' ] );
 sh_check( 'tab: edit form with merge select and notice', false !== strpos( $form, 'name="positions"' ) && false !== strpos( $form, 'name="merge_from"' ) && false !== strpos( $form, 'notice-success' ) && false !== strpos( $form, $S::POST_SAVE ) );
-$html = PressHub_AI_Memory_Editor::build_page( [ 'tab' => 'stakeholders' ] );
-sh_check( 'memory page: People tab active and rendered', false !== strpos( $html, 'tab=stakeholders' ) && false !== strpos( $html, 'presshub-stakeholders' ) && false !== strpos( $html, 'nav-tab-active' ) );
+$html = PressHub_AI_Fiches_Admin::build_people_page( [] );
+sh_check( 'policy fiches page: People rendered with links to the People page', false !== strpos( $html, '<h1>People</h1>' ) && false !== strpos( $html, 'presshub-stakeholders' ) && false !== strpos( $html, 'page=presshub-ai-people' ) && false === strpos( $html, 'tab=stakeholders' ) );
 
 if ( $failures > 0 ) {
     echo "StakeholdersTest: {$failures} of {$checks} checks failed\n";
