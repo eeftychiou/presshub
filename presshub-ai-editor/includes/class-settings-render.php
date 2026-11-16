@@ -246,6 +246,7 @@ class PressHub_AI_Settings_Render {
                                 <td>
                                     <?php $cur_text_model = (string) get_option( 'presshub_ai_briefing_text_model', '' ); ?>
                                     <input type="text" name="presshub_ai_briefing_text_model" id="presshub_ai_briefing_text_model" value="<?php echo self::esc_attr_safe( $cur_text_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default', 'presshub-ai-editor' ); ?>" />
+                                    <?php self::registry_help( 'presshub_ai_briefing_text_model' ); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -390,6 +391,7 @@ class PressHub_AI_Settings_Render {
                                 <td>
                                     <?php $cur_pod_model = (string) get_option( 'presshub_ai_briefing_podcast_model', '' ); ?>
                                     <input type="text" name="presshub_ai_briefing_podcast_model" id="presshub_ai_briefing_podcast_model" value="<?php echo self::esc_attr_safe( $cur_pod_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default', 'presshub-ai-editor' ); ?>" />
+                                    <?php self::registry_help( 'presshub_ai_briefing_podcast_model' ); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1050,6 +1052,19 @@ class PressHub_AI_Settings_Render {
             <?php $this->render_bulk_sources_modal(); ?>
         </div>
         <?php
+    }
+
+    /**
+     * Prints the settings registry's help text for $key as the field's
+     * description line (#260). Prints nothing when the key has no help.
+     */
+    public static function registry_help( string $key ): void {
+        $entry = class_exists( 'PressHub_Settings_Registry' ) ? PressHub_Settings_Registry::get( $key ) : null;
+        $help  = is_array( $entry ) ? (string) ( $entry['help'] ?? '' ) : '';
+        if ( '' === $help ) {
+            return;
+        }
+        echo '<p class="description">' . esc_html( $help ) . '</p>';
     }
 
     /**
@@ -2872,7 +2887,9 @@ class PressHub_AI_Settings_Render {
         </tr>
         <tr>
             <th scope="row"><label for="presshub_ai_press_inbox_username"><?php echo esc_html__( 'Mailbox Username', 'presshub-ai-editor' ); ?></label></th>
-            <td><input type="text" name="presshub_ai_press_inbox_username" id="presshub_ai_press_inbox_username" value="<?php echo self::esc_attr_safe( $username ); ?>" class="regular-text" autocomplete="off" placeholder="press@presshub.cy" /></td>
+            <td><input type="text" name="presshub_ai_press_inbox_username" id="presshub_ai_press_inbox_username" value="<?php echo self::esc_attr_safe( $username ); ?>" class="regular-text" autocomplete="off" placeholder="press@presshub.cy" />
+                <?php self::registry_help( 'presshub_ai_press_inbox_username' ); ?>
+            </td>
         </tr>
         <tr>
             <th scope="row"><label for="presshub_ai_press_inbox_password"><?php echo esc_html__( 'Mailbox Password', 'presshub-ai-editor' ); ?></label></th>
