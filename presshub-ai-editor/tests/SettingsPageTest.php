@@ -376,6 +376,19 @@ class SettingsPageTest
             'presshub_ai_qa_editor_email',
             'presshub_ai_qa_article_prompt',
             'presshub_ai_qa_briefing_prompt',
+            // #233 — switches that were filter-only (Editorial knowledge tab, Briefing)
+            'presshub_ai_policy_fiches_enabled',
+            'presshub_ai_stakeholders_enabled',
+            'presshub_ai_claim_check_enabled',
+            'presshub_ai_pool_cleanup_enabled',
+            'presshub_ai_podcast_show_notes_enabled',
+            'presshub_ai_pool_max_age_hours',
+            'presshub_ai_pool_duplicate_similarity',
+            'presshub_ai_policy_fiches_budgets',
+            'presshub_ai_stakeholders_budgets',
+            'presshub_ai_editorial_agenda_budgets',
+            'presshub_ai_social_trending_max_per_account',
+            'presshub_ai_social_trending_share_after_hour',
         ];
 
         $missing = array_diff( $expected_options, $registered );

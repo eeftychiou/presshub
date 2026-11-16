@@ -994,7 +994,8 @@ class PressHub_AI_Audio_Synthesizer {
      * audio length (attachment metadata), else to an assumed speaking rate.
      */
     public function build_show_notes_html( string $script, string $date, string $edition, int $attachment_id = 0 ): string {
-        if ( function_exists( 'apply_filters' ) && ! apply_filters( 'presshub_ai_podcast_show_notes_enabled', true, $date, $edition ) ) {
+        $show_notes = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_podcast_show_notes_enabled() : true;
+        if ( function_exists( 'apply_filters' ) ? ! apply_filters( 'presshub_ai_podcast_show_notes_enabled', $show_notes, $date, $edition ) : ! $show_notes ) {
             return '';
         }
 

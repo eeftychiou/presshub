@@ -717,8 +717,10 @@ class DailyBriefingSettingsTest
         if ( false === strpos( $page_html, 'name="presshub_ai_briefing_host_tertiary"' ) ) {
             $failures[] = 'render_settings_page should render host tertiary input.';
         }
-        if ( false !== strpos( $page_html, 'name="presshub_ai_briefing_podcast_preset"' ) ) {
-            $failures[] = 'render_settings_page must not render obsolete podcast preset dropdown.';
+        // #233: the podcast preset is still read by the podcast producer, so it is
+        // shown again (in the podcast block) instead of being a hidden setting.
+        if ( false === strpos( $page_html, 'name="presshub_ai_briefing_podcast_preset"' ) ) {
+            $failures[] = 'render_settings_page must render the podcast dialogue preset (#233).';
         }
         if ( false !== strpos( $page_html, 'presshub-podcast-preview' ) ) {
             $failures[] = 'render_settings_page must not render obsolete Effective Prompt Preview.';

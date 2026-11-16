@@ -1431,7 +1431,7 @@ jQuery(document).ready(function($) {
      * Initialize baseline snapshots for all savable tab panes.
      */
     function initTabBaselines() {
-        var savableTabs = ['coauthor', 'briefing', 'copilot', 'advanced'];
+        var savableTabs = ['coauthor', 'briefing', 'copilot', 'knowledge', 'advanced'];
         savableTabs.forEach(function(key) {
             tabBaselines[key] = getTabFormSnapshot(key);
         });

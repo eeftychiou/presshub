@@ -225,7 +225,7 @@ class PressHub_AI_Editorial_Agenda {
 
     /** Budget in characters for an action; 0 = the action gets no agenda. */
     public static function budget_for( string $action ): int {
-        $budgets = self::BUDGETS;
+        $budgets = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_context_budgets( 'presshub_ai_editorial_agenda_budgets', self::BUDGETS ) : self::BUDGETS;
         if ( function_exists( 'apply_filters' ) ) {
             $filtered = apply_filters( 'presshub_ai_editorial_agenda_budgets', $budgets );
             if ( is_array( $filtered ) ) {

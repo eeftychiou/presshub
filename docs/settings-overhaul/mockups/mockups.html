@@ -92,7 +92,6 @@ tr.erow td{background:#fcf0f1}.errtxt{color:#b32d2e;font-weight:600;font-size:12
  <table><tr><th>Setting</th><th>Was shown on</th><th>Saved value</th><th>Why it's unused</th><th>Last read</th></tr>
  <tr><td><b>Second GitHub token</b></td><td>Social → General &amp; Engines</td><td class="mono">ghp_••••91</td><td>Plugin updates use the AI GitHub token</td><td>Never</td></tr>
  <tr><td><b>X OAuth1 keys</b> (3)</td><td>Social → API Credentials</td><td class="mono">set</td><td>Posting to X uses the bearer token or the worker</td><td>Never</td></tr>
- <tr><td><b>Podcast prompts 1–3</b></td><td>Daily Briefing §2</td><td>3 prompts</td><td>Replaced by the per-style prompt studio</td><td>Before 2.20</td></tr>
  </table>
  <div class="save"><span class="btn">Download as JSON</span><span class="hint">Approve the list on the clean-up pull request (#237).</span></div></div>
  </div></div>
@@ -227,14 +226,13 @@ tr.erow td{background:#fcf0f1}.errtxt{color:#b32d2e;font-weight:600;font-size:12
 <div class="screen" id="p5-migration">
  <div class="side"><div>Dashboard</div><div class="gap"></div><div class="top cur">PressHub</div><div class="sub cur">Usage &amp; logs</div><div class="sub">Settings</div></div>
  <div class="main"><h1>PressHub — Usage &amp; logs</h1><div class="crumb">Phase 5: clean-up once every setting has its place. Stored names stay as they are; only unused settings and old key fallbacks go.</div>
- <div class="notice ok"><b>PressHub cleaned up its settings.</b> 5 unused settings were removed after your sign-off. A copy of all settings was saved first. Nothing you use changed. <a href="#">See the report</a> · <a href="#">Dismiss</a></div>
+ <div class="notice ok"><b>PressHub cleaned up its settings.</b> 4 unused settings were removed after your sign-off. A copy of all settings was saved first. Nothing you use changed. <a href="#">See the report</a> · <a href="#">Dismiss</a></div>
  <div class="card"><h2>Clean-up report <span class="pill ok">Done 2 Dec 2026, 06:01</span></h2>
  <table><tr><th>Setting</th><th>What happened</th><th>Why</th><th></th></tr>
  <tr><td><b>Second GitHub token</b></td><td>Removed</td><td>Plugin updates use the AI GitHub token</td><td><a href="#">Details</a></td></tr>
  <tr><td><b>X OAuth1 keys</b> (3)</td><td>Removed</td><td>Never read</td><td><a href="#">Details</a></td></tr>
- <tr><td><b>Podcast prompts 1–3</b></td><td>Removed</td><td>Replaced by the prompt studio</td><td><a href="#">Details</a></td></tr>
  <tr><td><b>Old Gemini key</b></td><td>Copied to Connections → Gemini, old copy no longer read</td><td>Same key in two places</td><td><a href="#">Details</a></td></tr>
- <tr class="adv"><td colspan="4" class="mono">Details: presshub_social_twitter_api_key, presshub_social_twitter_api_secret, presshub_social_twitter_access_token_secret · deleted on upgrade</td></tr>
+ <tr class="adv"><td colspan="4" class="mono">Details: presshub_social_github_token, presshub_social_twitter_api_key, presshub_social_twitter_api_secret, presshub_social_twitter_access_secret · deleted on upgrade</td></tr>
  </table>
  <div class="save"><span class="btn">Download the pre-clean-up copy (JSON, no keys)</span><span class="hint">The worker receives the same fields as before, so it doesn't need an update.</span></div></div>
  </div></div>

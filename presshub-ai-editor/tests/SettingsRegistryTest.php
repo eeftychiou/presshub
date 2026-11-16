@@ -97,7 +97,7 @@ class SettingsRegistryTest {
 
         // 4. Every AI tab map comes from the registry, and each option is on exactly one tab.
         $seen = [];
-        foreach ( [ 'providers', 'coauthor', 'briefing', 'images', 'copilot', 'advanced' ] as $tab ) {
+        foreach ( [ 'providers', 'coauthor', 'briefing', 'images', 'copilot', 'knowledge', 'advanced' ] as $tab ) {
             foreach ( array_keys( PressHub_AI_Settings_Storage::get_section_options_map( $tab ) ) as $key ) {
                 if ( isset( $seen[ $key ] ) ) {
                     $failures[] = "Option {$key} is in both the {$seen[ $key ]} and {$tab} tab maps.";
