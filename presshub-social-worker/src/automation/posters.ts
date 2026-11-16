@@ -1174,6 +1174,8 @@ export function splitTikTokCaption(copy: string): Array<{ kind: 'text' | 'newlin
       const at = m.index ?? 0;
       // '#' inside a word (e.g. "C#") is not a hashtag.
       if (at > 0 && /[\p{L}\p{N}_]/u.test(line[at - 1])) continue;
+      // "#2026" has no letter: not a hashtag, so no suggestion list to wait for.
+      if (!/\p{L}/u.test(m[0])) continue;
       if (at > last) out.push({ kind: 'text', value: line.slice(last, at) });
       out.push({ kind: 'hashtag', value: m[0] });
       last = at + m[0].length;
@@ -1224,8 +1226,16 @@ export async function typeTikTokCaption(
 
     if (part.kind === 'text') {
       let text = part.value;
-      // A picked suggestion already ends with a space.
-      if (afterPick) text = text.replace(/^[  ]+/, '');
+      // A picked suggestion may already end with a space: do not double it, and do not drop
+      // the only one (tags would run together as "#tag1#tag2").
+      if (afterPick && /^[ \u00a0]/.test(text)) {
+        const endsWithSpace = await page.evaluate(() => {
+          const el: any = (globalThis as any).document?.activeElement;
+          const t: string = (el && (el.innerText ?? el.textContent)) || '';
+          return /[ \u00a0]$/.test(t);
+        }).catch(() => false);
+        if (endsWithSpace) text = text.replace(/^[ \u00a0]+/, '');
+      }
       afterPick = false;
       if (text) await page.keyboard.insertText(text);
       continue;
