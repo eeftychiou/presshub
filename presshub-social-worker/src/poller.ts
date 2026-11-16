@@ -240,7 +240,12 @@ export class PressHubPoller {
         const type = String(res.headers?.get?.('content-type') || '');
         const ext = /png/i.test(type) || /\.png(\?|$)/i.test(urls[i]) ? 'png' : /webp/i.test(type) ? 'webp' : 'jpg';
         const file = path.join(dir, `job-${job.id}-${i + 1}.${ext}`);
-        fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length === 0) {
+          WorkerLogger.warn('Poller', `Job #${job.id}: AI image ${i + 1}/${urls.length} download was empty; skipped.`);
+          continue;
+        }
+        fs.writeFileSync(file, buf);
         files.push(file);
       } catch (err: any) {
         WorkerLogger.warn('Poller', `Job #${job.id}: AI image ${i + 1}/${urls.length} download failed: ${err.message}`);

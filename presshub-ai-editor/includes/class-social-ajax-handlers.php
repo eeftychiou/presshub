@@ -299,7 +299,7 @@ class PressHub_Social_Ajax_Handlers {
                         'job_id'  => $job_id,
                     ] );
                 }
-                if ( PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $dispatch_result->get_error_code() ) {
+                if ( in_array( $dispatch_result->get_error_code(), [ PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE, 'social_post_images_pending' ], true ) ) {
                     wp_send_json_success( [
                         'message' => $dispatch_result->get_error_message(),
                         'job_id'  => $job_id,
@@ -375,7 +375,7 @@ class PressHub_Social_Ajax_Handlers {
                         'job_id'  => $job_id,
                     ] );
                 }
-                if ( PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $result->get_error_code() ) {
+                if ( in_array( $result->get_error_code(), [ PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE, 'social_post_images_pending' ], true ) ) {
                     wp_send_json_success( [
                         'message' => $result->get_error_message(),
                         'job_id'  => $job_id,
