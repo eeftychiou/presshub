@@ -98,12 +98,13 @@ plt_check( 'settings_storage get_curation_prompt returns custom override', 'CUST
 require_once __DIR__ . '/../includes/class-ajax-handlers.php';
 $reflector = new ReflectionClass( 'PressHub_AI_AJAX_Handlers' );
 $method = $reflector->getMethod( 'save_settings' );
-$source = file_get_contents( __DIR__ . '/../includes/class-ajax-handlers.php' );
-plt_check( 'ajax_save_settings contains podcast_style in options_map', false !== strpos( $source, "'presshub_ai_briefing_podcast_style'" ) );
+// #233: the AJAX save handlers read their options from the settings registry.
+$ajax_map = PressHub_Settings_Registry::options_map( 'ai' );
+plt_check( 'ajax_save_settings contains podcast_style in options_map', isset( $ajax_map['presshub_ai_briefing_podcast_style'] ) );
 foreach ( $styles as $style ) {
     foreach ( [ 1, 2, 3 ] as $hosts ) {
-        $opt = "'presshub_ai_briefing_podcast_prompt_{$hosts}_{$style}'";
-        plt_check( "ajax_save_settings contains {$opt} in options_map", false !== strpos( $source, $opt ) );
+        $opt = "presshub_ai_briefing_podcast_prompt_{$hosts}_{$style}";
+        plt_check( "ajax_save_settings contains '{$opt}' in options_map", isset( $ajax_map[ $opt ] ) );
     }
 }
 
@@ -125,8 +126,8 @@ plt_check( 'settings_storage get_qa_article_prompt returns custom override', 'CU
 plt_check( 'settings_storage get_qa_briefing_prompt returns custom override', 'CUSTOM_BRIEFING_QA_PROMPT' === PressHub_AI_Settings_Storage::get_qa_briefing_prompt() );
 
 // 10. Verify ajax_save_settings contains QA prompt options in options_map
-plt_check( 'ajax_save_settings contains presshub_ai_qa_article_prompt', false !== strpos( $source, "'presshub_ai_qa_article_prompt'" ) );
-plt_check( 'ajax_save_settings contains presshub_ai_qa_briefing_prompt', false !== strpos( $source, "'presshub_ai_qa_briefing_prompt'" ) );
+plt_check( 'ajax_save_settings contains presshub_ai_qa_article_prompt', isset( $ajax_map['presshub_ai_qa_article_prompt'] ) );
+plt_check( 'ajax_save_settings contains presshub_ai_qa_briefing_prompt', isset( $ajax_map['presshub_ai_qa_briefing_prompt'] ) );
 
 // 11. Verify daily memory digest prompt loads
 $daily_prompt = PressHub_AI_Prompt_Loader::get_daily_digest_prompt();

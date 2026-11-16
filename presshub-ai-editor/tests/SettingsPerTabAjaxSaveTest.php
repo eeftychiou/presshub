@@ -361,8 +361,10 @@ class SettingsPerTabAjaxSaveTest
         if ( (float) get_option( 'presshub_ai_briefing_voice_pitch' ) !== 1.5 ) {
             $failures[] = 'presshub_ai_briefing_voice_pitch not saved correctly; got: ' . var_export( get_option( 'presshub_ai_briefing_voice_pitch' ), true );
         }
-        if ( get_option( 'presshub_ai_qa_briefing_prompt' ) !== 'Custom Daily Briefing QA prompt template test with {content}' ) {
-            $failures[] = 'presshub_ai_qa_briefing_prompt not saved correctly; got: ' . var_export( get_option( 'presshub_ai_qa_briefing_prompt' ), true );
+        // #233 save isolation: the briefing QA prompt is rendered on the
+        // Co-Author tab, so the Daily Briefing tab's Save must not write it.
+        if ( false !== get_option( 'presshub_ai_qa_briefing_prompt' ) ) {
+            $failures[] = 'presshub_ai_qa_briefing_prompt (Co-Author tab) must not be written by the briefing tab save; got: ' . var_export( get_option( 'presshub_ai_qa_briefing_prompt' ), true );
         }
 
         // -------------------------------------------------------------

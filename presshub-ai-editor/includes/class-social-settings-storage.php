@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/class-social-logger.php';
+require_once __DIR__ . '/class-settings-registry.php';
 require_once __DIR__ . '/class-social-prompt-loader.php';
 
 class PressHub_Social_Settings_Storage {
@@ -59,20 +60,20 @@ class PressHub_Social_Settings_Storage {
         self::seed_defaults();
 
         // 1. General & Mode
-        register_setting( self::OPTION_GROUP, 'presshub_social_auto_publish_enabled', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_auto_publish_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_auto_publish_enabled' ],
             'default'           => true,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_enabled_platforms', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_enabled_platforms', [
             'type'              => 'array',
             'sanitize_callback' => [ __CLASS__, 'sanitize_enabled_platforms' ],
             'default'           => self::PLATFORMS,
         ] );
 
         foreach ( self::PLATFORMS as $platform ) {
-            register_setting( self::OPTION_GROUP, 'presshub_social_enabled_' . $platform, [
+            PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_enabled_' . $platform, [
                 'type'              => 'boolean',
                 'sanitize_callback' => function( $val ) use ( $platform ) {
                     return self::sanitize_platform_enabled( $val, $platform );
@@ -81,13 +82,13 @@ class PressHub_Social_Settings_Storage {
             ] );
         }
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_copy_mode', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_copy_mode', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_copy_mode' ],
             'default'           => 'ai',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_github_token', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_github_token', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_github_token' ],
             'default'           => '',
@@ -95,7 +96,7 @@ class PressHub_Social_Settings_Storage {
 
         // 2. Platform Engines
         foreach ( self::PLATFORMS as $platform ) {
-            register_setting( self::OPTION_GROUP, 'presshub_social_engine_' . $platform, [
+            PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_engine_' . $platform, [
                 'type'              => 'string',
                 'sanitize_callback' => function( $val ) use ( $platform ) {
                     $default = in_array( $platform, [ 'twitter', 'tiktok' ], true ) ? 'automation' : 'api';
@@ -105,149 +106,149 @@ class PressHub_Social_Settings_Storage {
         }
 
         // 3. AI Module Tuning
-        register_setting( self::OPTION_GROUP, 'presshub_social_ai_provider', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_ai_provider', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_ai_provider' ],
             'default'           => '',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_ai_model', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_ai_model', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_ai_model' ],
             'default'           => '',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_ai_temperature', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_ai_temperature', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_ai_temperature' ],
             'default'           => '0.7',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_ai_max_tokens', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_ai_max_tokens', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_ai_max_tokens' ],
             'default'           => 0,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_ai_timeout', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_ai_timeout', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_ai_timeout' ],
             'default'           => 0,
         ] );
 
         // 4. Queue & Dispatch Limits
-        register_setting( self::OPTION_GROUP, 'presshub_social_max_attempts', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_max_attempts', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_max_attempts' ],
             'default'           => 3,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_dispatch_interval', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_dispatch_interval', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_dispatch_interval' ],
             'default'           => 60,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_batch_size', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_batch_size', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_batch_size' ],
             'default'           => 5,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_retry_base_delay', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_retry_base_delay', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_retry_base_delay' ],
             'default'           => 120,
         ] );
 
         // 5. Worker & Media Specifications
-        register_setting( self::OPTION_GROUP, 'presshub_social_worker_mode', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_worker_mode', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_worker_mode' ],
             'default'           => 'pull',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_worker_url', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_worker_url', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_worker_url' ],
             'default'           => 'http://127.0.0.1:3456',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_worker_secret', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_worker_secret', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_worker_secret' ],
             'default'           => '',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_worker_timeout', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_worker_timeout', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_worker_timeout' ],
             'default'           => 120,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_twitter_max_chars', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_max_chars', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_max_chars' ],
             'default'           => 280,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_instagram_card_width', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_instagram_card_width', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_instagram_card_width' ],
             'default'           => 1080,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_instagram_card_height', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_instagram_card_height', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_instagram_card_height' ],
             'default'           => 1080,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_video_width', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_video_width', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_video_width' ],
             'default'           => 1080,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_video_height', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_video_height', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_video_height' ],
             'default'           => 1920,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_video_duration', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_video_duration', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_video_duration' ],
             'default'           => 10,
         ] );
 
         // TikTok narration (Gemini TTS voice-over for articles without audio)
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_narration_enabled', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_narration_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_narration_enabled' ],
             'default'           => true,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_narration_outro', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_narration_outro', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_narration_outro' ],
             'default'           => PressHub_Social_TikTok_Narrator::DEFAULT_OUTRO,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_narration_voice', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_narration_voice', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_narration_voice' ],
             'default'           => '',
         ] );
 
         // AI post images (generated images for X, Facebook, Instagram and TikTok article posts)
-        register_setting( self::OPTION_GROUP, 'presshub_social_post_images_enabled', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_post_images_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_post_images_enabled' ],
             'default'           => false,
         ] );
         foreach ( self::PLATFORMS as $images_platform ) {
-            register_setting( self::OPTION_GROUP, 'presshub_social_post_images_' . $images_platform, [
+            PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_post_images_' . $images_platform, [
                 'type'              => 'integer',
                 'sanitize_callback' => function ( $val ) use ( $images_platform ) {
                     return self::sanitize_post_images_count( $val, $images_platform );
@@ -257,184 +258,184 @@ class PressHub_Social_Settings_Storage {
         }
 
         // TikTok shorts (one 30-60 s video per top story of a podcast post)
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_enabled', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_enabled' ],
             'default'           => false,
         ] );
 
         // Instagram Reels shorts (reuse the same generated shorts for Instagram)
-        register_setting( self::OPTION_GROUP, 'presshub_social_instagram_shorts_enabled', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_instagram_shorts_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_instagram_shorts_enabled' ],
             'default'           => false,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_count', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_count', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_count' ],
             'default'           => 3,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_spacing_minutes', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_spacing_minutes', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_spacing_minutes' ],
             'default'           => 90,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_max_words', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_max_words', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_max_words' ],
             'default'           => 130,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_images', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_images', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_images' ],
             'default'           => 3,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_caption_words', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_caption_words', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_caption_words' ],
             'default'           => 120,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_narrators', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_narrators', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_narrators' ],
             'default'           => 1,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_1', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_1', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_voice' ],
             'default'           => self::DEFAULT_TIKTOK_SHORTS_VOICE_1,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_2', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_2', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_voice' ],
             'default'           => '',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_speed', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_voice_speed', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_voice_speed' ],
             'default'           => 110,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_enabled', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_enabled' ],
             'default'           => false,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_volume', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_volume', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_volume' ],
             'default'           => 15,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_tracks', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_tracks', [
             'type'              => 'integer',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_tracks' ],
             'default'           => 2,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_model', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_music_model', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_shorts_music_model' ],
             'default'           => self::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL,
         ] );
 
         // 6. Alerts
-        register_setting( self::OPTION_GROUP, 'presshub_social_alert_email_enabled', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_alert_email_enabled', [
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_alert_email_enabled' ],
             'default'           => false,
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_alert_email_address', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_alert_email_address', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_alert_email_address' ],
             'default'           => '',
         ] );
 
         // 7. Platform API Credentials
-        register_setting( self::OPTION_GROUP, 'presshub_social_meta_page_id', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_meta_page_id', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_meta_page_id' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_meta_access_token', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_meta_access_token', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_meta_access_token' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_instagram_account_id', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_instagram_account_id', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_instagram_account_id' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_twitter_bearer_token', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_bearer_token', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_bearer_token' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_twitter_api_key', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_api_key', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_api_key' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_twitter_api_secret', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_api_secret', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_api_secret' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_twitter_access_token', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_access_token', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_access_token' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_twitter_access_secret', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_access_secret', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_access_secret' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_access_token', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_access_token', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_access_token' ],
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_open_id', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_open_id', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_open_id' ],
         ] );
 
         // 8. Prompts & Templates
-        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_system', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_system', [
             'type'              => 'string',
             'sanitize_callback' => function( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_system' );
             },
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_post_images', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_post_images', [
             'type'              => 'string',
             'sanitize_callback' => function ( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_post_images' );
             },
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_post_image_style', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_post_image_style', [
             'type'              => 'string',
             'sanitize_callback' => function ( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_post_image_style' );
             },
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_image_style', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_image_style', [
             'type'              => 'string',
             'sanitize_callback' => function ( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_image_style' );
@@ -442,28 +443,28 @@ class PressHub_Social_Settings_Storage {
             'default'           => '',
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_image_moods', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_image_moods', [
             'type'              => 'string',
             'sanitize_callback' => function ( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_image_moods' );
             },
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_tts_style', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_tts_style', [
             'type'              => 'string',
             'sanitize_callback' => function ( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_tts_style' );
             },
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_music', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts_music', [
             'type'              => 'string',
             'sanitize_callback' => function ( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts_music' );
             },
         ] );
 
-        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts', [
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_tiktok_shorts', [
             'type'              => 'string',
             'sanitize_callback' => function( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_tiktok_shorts' );
@@ -471,13 +472,13 @@ class PressHub_Social_Settings_Storage {
         ] );
 
         foreach ( self::PLATFORMS as $platform ) {
-            register_setting( self::OPTION_GROUP, 'presshub_social_prompt_' . $platform, [
+            PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_prompt_' . $platform, [
                 'type'              => 'string',
                 'sanitize_callback' => function( $val ) use ( $platform ) {
                     return self::sanitize_prompt( $val, 'presshub_social_prompt_' . $platform );
                 },
             ] );
-            register_setting( self::OPTION_GROUP, 'presshub_social_template_' . $platform, [
+            PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_template_' . $platform, [
                 'type'              => 'string',
                 'sanitize_callback' => function( $val ) use ( $platform ) {
                     return self::sanitize_template( $val, 'presshub_social_template_' . $platform );
