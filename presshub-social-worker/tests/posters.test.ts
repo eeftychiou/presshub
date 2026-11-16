@@ -9,6 +9,7 @@ import {
   selectInstagramCrop,
   dismissInstagramInterstitials,
   findInstagramComposerButton,
+  resolveInstagramPermalink,
   markTikTokAiGenerated,
   getTwitterWeightedLength,
   sanitizeTwitterCopy,
@@ -591,7 +592,103 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
 
     expect(res.success).toBe(true);
     expect(res.platform).toBe('instagram');
-    expect(res.externalPostUrl).toMatch(/https:\/\/instagram\.com\/p\/ig-\d+/);
+    // No account name in this composer, so the link can't be looked up: no made-up URL.
+    expect(res.externalPostUrl).toBe('');
+    expect(res.externalPostId).toBe('');
+  });
+
+  test('postInstagram reports the real permalink of the new post from the profile', async () => {
+    const page = await context.newPage();
+    try {
+      const now = Date.now();
+      const iso = (ms: number) => new Date(ms).toISOString();
+      const copy = 'Πρωινή Ενημέρωση:   Συνταξιοδοτικό\nκαι αναμονή ΟΗΕ #PressHub';
+      const composer = `<html><body>
+        <a href="#" role="link" onclick="document.getElementById('c').style.display='block'; document.getElementById('up').innerHTML='<input type=file>'; return false;"><svg aria-label="Post" width="24" height="24"></svg>Post</a>
+        <div id="c" style="display:none"><div role="dialog" aria-label="Create new post">
+          <div id="up"></div>
+          <img alt="presshub.cy's profile picture" src="data:," /><span>presshub.cy</span>
+          <div aria-label="Write a caption..." contenteditable="true"></div>
+          <div role="button" onclick="document.getElementById('ok').style.display='block'">Share</div>
+          <div id="ok" style="display:none">Your post has been shared.</div>
+        </div></div></body></html>`;
+      const profile = `<html><body>
+        <a href="/presshub.cy/p/PINNED1/"><svg aria-label="Pinned post icon"></svg></a>
+        <a href="/presshub.cy/reel/OTHERNEW/"><svg aria-label="Clip"></svg></a>
+        <a href="/presshub.cy/p/MINE123/"></a>
+        <a href="/presshub.cy/p/OLD999/"></a></body></html>`;
+      const post = (caption: string, ms: number) =>
+        `<html><head><meta property="og:title" content="Presshub.cy on Instagram: &quot;${caption}&quot;"></head><body><time datetime="${iso(ms)}">now</time></body></html>`;
+      const pages: Record<string, string> = {
+        'https://www.instagram.com/presshub.cy/': profile,
+        'https://www.instagram.com/presshub.cy/p/PINNED1/': post('Pinned welcome post', now - 86400000 * 30),
+        'https://www.instagram.com/presshub.cy/reel/OTHERNEW/': post('A different reel that posted moments ago', now + 1000),
+        'https://www.instagram.com/presshub.cy/p/MINE123/': post('Πρωινή Ενημέρωση: Συνταξιοδοτικό και αναμονή ΟΗΕ #PressHub', now + 2000),
+        'https://www.instagram.com/presshub.cy/p/OLD999/': post('Old post', now - 86400000)
+      };
+      const visited: string[] = [];
+      const mockSession: ChromeConnection = {
+        browser,
+        isExternalCdp: false,
+        context: {
+          newPage: async () => {
+            page.goto = async (url: string) => {
+              visited.push(url);
+              await page.setContent(pages[url] || composer);
+              return null as any;
+            };
+            page.close = async () => {};
+            return page;
+          }
+        } as any,
+        close: async () => {}
+      };
+
+      const res = await postInstagram({ platform: 'instagram', copy, mediaPath: dummyImagePath, browserSession: mockSession });
+
+      expect(res.success).toBe(true);
+      expect(res.externalPostUrl).toBe('https://www.instagram.com/presshub.cy/p/MINE123/');
+      expect(res.externalPostId).toBe('MINE123');
+      expect(visited).not.toContain('https://www.instagram.com/presshub.cy/p/PINNED1/');
+      expect(visited).not.toContain('https://www.instagram.com/presshub.cy/p/OLD999/');
+    } finally {
+      await page.close();
+    }
+  }, 90000);
+
+  test('resolveInstagramPermalink returns null when no recent post has the caption', async () => {
+    const page = await context.newPage();
+    try {
+      const now = Date.now();
+      page.goto = async (url: string) => {
+        if (url.endsWith('/presshub.cy/')) {
+          await page.setContent('<html><body><a href="/presshub.cy/p/AAA/"></a></body></html>');
+        } else {
+          await page.setContent(`<html><head><meta property="og:title" content="Someone else's text"></head><body><time datetime="${new Date(now).toISOString()}"></time></body></html>`);
+        }
+        return null as any;
+      };
+      expect(await resolveInstagramPermalink(page, 'My caption that was shared', now, 'presshub.cy')).toBeNull();
+      expect(await resolveInstagramPermalink(page, 'My caption', now, null)).toBeNull();
+    } finally {
+      await page.close();
+    }
+  }, 60000);
+
+  test('selectInstagramCrop finds the "Select Crop" label used by Google Chrome', async () => {
+    const page = await context.newPage();
+    try {
+      await page.setContent(`<html><body><div role="dialog" aria-label="Crop">
+        <div role="button" onclick="document.getElementById('m').style.display='block'"><svg aria-label="Select Crop" width="24" height="24"></svg></div>
+        <div id="m" style="display:none">
+          <div role="button" onclick="window.__crop='1:1'"><span>1:1</span></div>
+          <div role="button" onclick="window.__crop='9:16'"><span>9:16</span></div>
+        </div></div></body></html>`);
+      expect(await selectInstagramCrop(page, ['9:16', 'Original'])).toBe('9:16');
+      expect(await page.evaluate('window.__crop')).toBe('9:16');
+    } finally {
+      await page.close();
+    }
   });
 
   test('postInstagram for video dismisses exact dialog OK button and requires share confirmation', async () => {
