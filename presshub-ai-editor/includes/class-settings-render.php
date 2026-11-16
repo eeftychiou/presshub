@@ -86,7 +86,7 @@ class PressHub_AI_Settings_Render {
                 </nav>
             </div>
 
-            <form method="post" action="options.php" id="presshub-ai-settings-form">
+            <form method="post" action="options.php" id="presshub-ai-settings-form" novalidate>
                 <?php
                 settings_fields( 'presshub_ai_options' );
                 $GLOBALS['RENDERED_SECTIONS']['presshub-ai'] = true;

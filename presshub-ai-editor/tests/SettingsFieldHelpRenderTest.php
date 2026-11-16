@@ -4,9 +4,6 @@
  * registry's help text; #257: the tab save checks browser validity first.
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
-    define( 'ABSPATH', __DIR__ . '/' );
-}
 require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/../includes/class-settings-registry.php';
 require_once __DIR__ . '/../includes/class-provider-defaults.php';

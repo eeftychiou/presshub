@@ -3477,9 +3477,18 @@ jQuery(document).ready(function($) {
     function presshubCheckFieldsValid($scope, $noticeTarget) {
         var invalid = [];
         $scope.find('input[name], select[name], textarea[name]').each(function() {
-            if (typeof this.checkValidity === 'function' && !this.disabled && !this.checkValidity()) {
-                invalid.push(this);
+            if (typeof this.checkValidity !== 'function' || this.disabled || this.checkValidity()) {
+                return;
             }
+            // A value off the step grid alone is not worth blocking a save:
+            // the server rounds or clamps it, and some stored defaults sit
+            // off their field's step.
+            var v = this.validity;
+            if (v && v.stepMismatch && !v.rangeOverflow && !v.rangeUnderflow && !v.valueMissing &&
+                !v.badInput && !v.patternMismatch && !v.typeMismatch && !v.tooLong && !v.tooShort && !v.customError) {
+                return;
+            }
+            invalid.push(this);
         });
         if (!invalid.length) {
             return true;
@@ -3493,6 +3502,12 @@ jQuery(document).ready(function($) {
                 label = $.trim($('label[for="' + el.id + '"]').first().text());
             }
             if (!label) {
+                var $wrap = $el.closest('label');
+                if ($wrap.length) {
+                    label = $.trim($wrap.clone().children().remove().end().text());
+                }
+            }
+            if (!label) {
                 label = $.trim($el.closest('tr').find('th').first().text()) || el.name;
             }
             $('<li></li>').text(label + ': ' + (el.validationMessage || __('Invalid value', 'presshub-ai-editor'))).appendTo($list);
@@ -3501,8 +3516,15 @@ jQuery(document).ready(function($) {
         $('<p></p>').append($('<strong></strong>').text(__('Not saved. Please fix these fields first:', 'presshub-ai-editor'))).append($list).appendTo($notice);
         $noticeTarget.prepend($notice);
 
-        // Reveal the first invalid field if it sits in a hidden sub-pane.
+        // Reveal the first invalid field: its main tab, sub-pane and any
+        // collapsed <details> around it.
         var $first = $(invalid[0]);
+        var $pane = $first.closest('.presshub-tab-pane');
+        if ($pane.length && !$pane.is(':visible') && $pane.attr('id')) {
+            var paneKey = $pane.attr('id').replace('presshub-tab-pane-', '');
+            $('#presshub-ai-settings-tabs .nav-tab[data-tab="' + paneKey + '"]').first().trigger('click');
+        }
+        $first.parents('details').attr('open', 'open');
         var $subpane = $first.closest('[id^="presshub-subpane-"]');
         if ($subpane.length && !$subpane.is(':visible')) {
             var sub = $subpane.attr('id').replace(/^presshub-subpane-[^-]+-/, '');
