@@ -103,7 +103,7 @@ st_check( 'sanitize: interval clamp', 1 === $S::sanitize_social_trending_interva
 st_check( 'sanitize: empty category falls back', $S::SOCIAL_TRENDING_DEFAULT_CATEGORY === $S::sanitize_social_trending_category( '  ' ) );
 $map = $S::get_social_trending_options_map();
 st_check( 'map: every boolean is in the map', [] === array_diff( $S::get_social_trending_boolean_options(), array_keys( $map ) ) );
-st_check( 'map: merged into the briefing section map', isset( $S::get_section_options_map( 'briefing' )['presshub_ai_social_trending_interval_hours'] ) );
+st_check( 'map: merged into the social listening section map (#234)', isset( $S::get_section_options_map( 'social_listening' )['presshub_ai_social_trending_interval_hours'] ) );
 st_reset( [ 'presshub_ai_social_trending_keywords' => '' ] );
 st_check( 'defaults: empty keywords use the defaults', in_array( 'Cyprus', $S::get_social_trending_keywords(), true ) );
 unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_facebook_pages'] );

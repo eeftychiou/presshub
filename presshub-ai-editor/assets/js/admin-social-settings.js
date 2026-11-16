@@ -18,8 +18,8 @@
             }
 
             e.preventDefault();
-            $('.presshub-social-tab-link').removeClass('nav-tab-active');
-            $tab.addClass('nav-tab-active');
+            $('.presshub-social-tab-link').removeClass('nav-tab-active').removeAttr('aria-current');
+            $tab.addClass('nav-tab-active').attr('aria-current', 'page');
 
             $('.presshub-social-tab-pane').hide();
             $pane.show();
@@ -30,6 +30,48 @@
                     window.history.replaceState(null, '', href);
                 }
             }
+        });
+
+        // #234: show the tab that holds a field named in the URL hash, so old
+        // links such as ?tab=worker#presshub_social_tiktok_shorts_enabled land
+        // on the field's new tab.
+        function revealSocialAnchor(id) {
+            var el = id ? document.getElementById(id) : null;
+            if (!el) {
+                return;
+            }
+            var $pane = $(el).closest('.presshub-social-tab-pane');
+            if ($pane.length && !$pane.is(':visible')) {
+                var paneTab = ($pane.attr('id') || '').replace('presshub-social-tab-pane-', '');
+                $('.presshub-social-tab-link[data-tab="' + paneTab + '"]').trigger('click');
+            }
+            $(el).parents('details').attr('open', 'open');
+            el.scrollIntoView({ block: 'center' });
+        }
+        revealSocialAnchor((window.location.hash || '').replace('#', ''));
+
+        // #234: fields used only in Push mode are read-only, with a reason, in
+        // Pull mode. readonly keeps their values posting unchanged.
+        $(document).on('change', '#presshub_social_worker_mode', function () {
+            var pull = $(this).val() === 'pull';
+            $('.presshub-push-only').prop('readonly', pull);
+            $('.presshub-push-only-reason').toggle(pull);
+        });
+
+        // #234: unsaved-changes guard. Tabs switch in place inside one form, so
+        // edits survive a tab switch; leaving or reloading the page asks first.
+        var $settingsForm = $('#presshub-social-settings-form');
+        var socialBaseline = $settingsForm.length ? $settingsForm.serialize() : '';
+        var socialSubmitting = false;
+        $settingsForm.on('submit', function () {
+            socialSubmitting = true;
+        });
+        window.addEventListener('beforeunload', function (e) {
+            if (socialSubmitting || !$settingsForm.length || $settingsForm.serialize() === socialBaseline) {
+                return;
+            }
+            e.preventDefault();
+            e.returnValue = '';
         });
 
         // All tabs share one form and inactive tabs are hidden. When a field in a

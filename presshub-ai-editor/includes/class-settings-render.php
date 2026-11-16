@@ -66,6 +66,7 @@ class PressHub_AI_Settings_Render {
                         <option value="providers" selected="selected"><?php echo esc_html__( 'AI Providers', 'presshub-ai-editor' ); ?></option>
                         <option value="coauthor"><?php echo esc_html__( 'AI Co-Author & Review', 'presshub-ai-editor' ); ?></option>
                         <option value="briefing"><?php echo esc_html__( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></option>
+                        <option value="social_listening"><?php echo esc_html__( 'Social listening', 'presshub-ai-editor' ); ?></option>
                         <option value="images"><?php echo esc_html__( 'AI Featured Images', 'presshub-ai-editor' ); ?></option>
                         <option value="copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></option>
                         <option value="knowledge"><?php echo esc_html__( 'Editorial knowledge', 'presshub-ai-editor' ); ?></option>
@@ -78,6 +79,7 @@ class PressHub_AI_Settings_Render {
                     <a href="#providers" id="presshub-tab-providers" class="nav-tab nav-tab-active" data-tab="providers" role="tab" aria-selected="true" aria-controls="presshub-tab-pane-providers"><?php echo esc_html__( 'AI Providers', 'presshub-ai-editor' ); ?></a>
                     <a href="#coauthor" id="presshub-tab-coauthor" class="nav-tab" data-tab="coauthor" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-coauthor"><?php echo esc_html__( 'AI Co-Author & Review', 'presshub-ai-editor' ); ?></a>
                     <a href="#briefing" id="presshub-tab-briefing" class="nav-tab" data-tab="briefing" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-briefing"><?php echo esc_html__( 'Daily Briefing Hub', 'presshub-ai-editor' ); ?></a>
+                    <a href="#social_listening" id="presshub-tab-social_listening" class="nav-tab" data-tab="social_listening" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-social_listening"><?php echo esc_html__( 'Social listening', 'presshub-ai-editor' ); ?></a>
                     <a href="#images" id="presshub-tab-images" class="nav-tab" data-tab="images" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-images"><?php echo esc_html__( 'AI Featured Images', 'presshub-ai-editor' ); ?></a>
                     <a href="#copilot" id="presshub-tab-copilot" class="nav-tab" data-tab="copilot" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></a>
                     <a href="#knowledge" id="presshub-tab-knowledge" class="nav-tab" data-tab="knowledge" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-knowledge"><?php echo esc_html__( 'Editorial knowledge', 'presshub-ai-editor' ); ?></a>
@@ -106,6 +108,7 @@ class PressHub_AI_Settings_Render {
                     <div class="presshub-subtab-wrapper nav-tab-wrapper presshub-coauthor-subtabs" style="margin-top: 15px; margin-bottom: 20px;">
                         <a href="#coauthor-drafting" class="nav-tab presshub-coauthor-subtab nav-tab-active" data-subtab="drafting" role="tab" aria-selected="true"><?php echo esc_html__( 'Co-Author Story Drafting', 'presshub-ai-editor' ); ?></a>
                         <a href="#coauthor-qa" class="nav-tab presshub-coauthor-subtab" data-subtab="qa" role="tab" aria-selected="false"><?php echo esc_html__( 'Editorial QA & Pre-Publication Gate', 'presshub-ai-editor' ); ?></a>
+                        <a href="#coauthor-seo" class="nav-tab presshub-coauthor-subtab" data-subtab="seo" role="tab" aria-selected="false"><?php echo esc_html__( 'SEO & tags', 'presshub-ai-editor' ); ?></a>
                     </div>
 
                     <!-- SUBPANE 1: Drafting Settings -->
@@ -213,8 +216,48 @@ class PressHub_AI_Settings_Render {
 
                         <hr style="margin: 25px 0;">
                         <h3><?php echo esc_html__( 'Editorial QA Review Prompt Studio', 'presshub-ai-editor' ); ?></h3>
-                        <p><?php echo esc_html__( 'Customize the prompt templates used by the QA Review model. Switch between tabs below to inspect and customize prompts for author articles or automated Daily Briefing roundups.', 'presshub-ai-editor' ); ?></p>
+                        <p><?php echo esc_html__( 'Customize the prompt template the QA Review model uses for author articles.', 'presshub-ai-editor' ); ?></p>
                         <?php $this->render_qa_prompt_studio(); ?>
+                    </div>
+
+                    <!-- SUBPANE 3: SEO & tags (#234: moved from AI Featured Images) -->
+                    <div id="presshub-subpane-coauthor-seo" class="presshub-coauthor-subpane" style="display: none;">
+                        <h3><?php echo esc_html__( 'SEO, Tags & Media Metadata', 'presshub-ai-editor' ); ?></h3>
+                        <p><?php echo esc_html__( 'Help search engines and readers find your content: describe generated images properly in the Media Library, tag automated posts, and score SEO during the AI editorial review.', 'presshub-ai-editor' ); ?></p>
+                        <table class="form-table" role="presentation">
+                            <tbody>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'AI Image Metadata', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_image_metadata_enabled_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'Automatic Tags & SEO', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_seo_auto_enabled_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'Daily Briefing SEO Structure', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_briefing_seo_enhance_enabled_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_seo_max_tags"><?php echo esc_html__( 'Maximum Tags per Post', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_seo_max_tags_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'SEO Score in Editorial Review', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_seo_review_enabled_field(); ?>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
@@ -223,14 +266,132 @@ class PressHub_AI_Settings_Render {
                     </div>
                 </div>
 
-                <!-- TAB 3: Daily Briefing Hub -->
+                <!-- TAB 3: Daily Briefing Hub: six named groups on one page (#234) -->
                 <div id="presshub-tab-pane-briefing" class="presshub-tab-pane" style="display: none;">
                     <h2><?php echo __( 'Daily Briefing & AI Podcast Hub', 'presshub-ai-editor' ); ?></h2>
                     <p><?php echo __( 'Configure automated morning Greek news scraping, AI text story curation, and multi-host conversational podcast production.', 'presshub-ai-editor' ); ?></p>
+                    <?php $this->render_briefing_on_this_page_nav(); ?>
 
-                    <h3><?php echo __( '1. Text Story Curator Settings', 'presshub-ai-editor' ); ?></h3>
+                    <section id="briefing-schedule" class="presshub-settings-group" aria-labelledby="briefing-schedule-title">
+                    <h3 id="briefing-schedule-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Schedule', 'presshub-ai-editor' ); ?></h3>
+                    <p class="description"><?php echo esc_html__( 'The morning and noon editions run on their own schedules. Each one harvests first, then generates.', 'presshub-ai-editor' ); ?></p>
+                    <div class="presshub-schedule-grid">
+                    <div class="presshub-schedule-card">
+                    <h4><?php echo esc_html__( 'Morning edition', 'presshub-ai-editor' ); ?></h4>
                     <table class="form-table" role="presentation">
                         <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_schedule_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_harvest_time"><?php echo __( 'Morning Harvest Time', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_harvest_time_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_generation_time"><?php echo __( 'Generation Trigger Time', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_generation_time_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
+                    <div class="presshub-schedule-card">
+                    <h4><?php echo esc_html__( 'Noon edition', 'presshub-ai-editor' ); ?></h4>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_schedule_enabled"><?php echo __( 'Enable Noon Briefing Schedule', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_schedule_enabled_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_harvest_time"><?php echo __( 'Noon Harvest Time', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_harvest_time_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_generation_time"><?php echo __( 'Noon Generation Time', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_generation_time_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
+                    </div>
+                    </section>
+
+                    <section id="briefing-sources" class="presshub-settings-group" aria-labelledby="briefing-sources-title">
+                    <h3 id="briefing-sources-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Sources & harvesting', 'presshub-ai-editor' ); ?></h3>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_sources"><?php echo __( 'News Source URLs', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_sources_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_harvest_time_budget"><?php echo __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_harvest_time_budget_field(); ?>
+                                </td>
+                            </tr>
+                            <?php $this->render_social_sources_summary_row(); ?>
+                            <?php $this->render_press_inbox_rows(); ?>
+                        </tbody>
+                    </table>
+                    </section>
+
+                    <section id="briefing-text" class="presshub-settings-group" aria-labelledby="briefing-text-title">
+                    <h3 id="briefing-text-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Text story', 'presshub-ai-editor' ); ?></h3>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_curation_max_articles"><?php echo __( 'Maximum Articles Sent to Curation LLM', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_curation_max_articles_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_curation_max_chars_per_article"><?php echo __( 'Maximum Characters per Article (Curation)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_curation_max_chars_per_article_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_preset"><?php echo __( 'Text Instruction Preset', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_text_preset_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_prompt"><?php echo __( 'Curator System Prompt', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_text_prompt_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_qa_briefing_prompt"><?php echo esc_html__( 'Briefing QA review prompt', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_qa_briefing_prompt_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo __( 'AI QA Review Gate', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_qa_gate_notice(); ?>
+                                </td>
+                            </tr>
+                            <tr class="presshub-subgroup-row"><th scope="row" colspan="2"><h4 style="margin:1em 0 0;"><?php echo esc_html__( 'Curator model', 'presshub-ai-editor' ); ?></h4></th></tr>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_text_provider"><?php echo __( 'Curator AI Provider', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
@@ -258,124 +419,39 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <?php $this->render_module_tuning_rows( 'briefing_text', __( 'Curator', 'presshub-ai-editor' ) ); ?>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_sources"><?php echo __( 'News Source URLs', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_sources_field(); ?>
-                                </td>
-                            </tr>
-                            <?php $this->render_press_inbox_rows(); ?>
-                            <?php $this->render_social_monitor_rows(); ?>
-                            <?php $this->render_social_trending_rows(); ?>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_schedule_enabled"><?php echo __( 'Enable Scheduled Briefing Hub', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_schedule_enabled_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_harvest_time"><?php echo __( 'Morning Harvest Time', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_harvest_time_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_generation_time"><?php echo __( 'Generation Trigger Time', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_generation_time_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_schedule_enabled"><?php echo __( 'Enable Noon Briefing Schedule', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_noon_schedule_enabled_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_harvest_time"><?php echo __( 'Noon Harvest Time', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_noon_harvest_time_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_generation_time"><?php echo __( 'Noon Generation Time', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_noon_generation_time_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_harvest_time_budget"><?php echo __( 'Harvest Execution Time Budget (seconds)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_harvest_time_budget_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_curation_max_articles"><?php echo __( 'Maximum Articles Sent to Curation LLM', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_curation_max_articles_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_curation_max_chars_per_article"><?php echo __( 'Maximum Characters per Article (Curation)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_curation_max_chars_per_article_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_category"><?php echo __( 'Text Briefing Category', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_text_category_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_status"><?php echo __( 'Text Post Status', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_text_status_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo __( 'AI QA Review Gate', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_briefing_qa_gate_notice(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_title_prefix"><?php echo __( 'Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_text_title_prefix_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_title_date_format"><?php echo __( 'Text Story Title Date Format', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_text_title_date_format_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_noon_text_title_prefix"><?php echo __( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_noon_text_title_prefix_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_preset"><?php echo __( 'Text Instruction Preset', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_text_preset_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_prompt"><?php echo __( 'Curator System Prompt', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_text_prompt_field(); ?>
-                                </td>
-                            </tr>
                         </tbody>
                     </table>
+                    </section>
 
-                    <hr style="margin: 25px 0;">
-                    <h3><?php echo __( '2. AI Podcast Producer & Audio Synthesis Settings', 'presshub-ai-editor' ); ?></h3>
+                    <section id="briefing-podcast" class="presshub-settings-group" aria-labelledby="briefing-podcast-title">
+                    <h3 id="briefing-podcast-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Podcast script', 'presshub-ai-editor' ); ?></h3>
                     <table class="form-table" role="presentation">
                         <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_target_duration"><?php echo __( 'Target Podcast Duration', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_target_duration_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_host_count"><?php echo __( 'Podcast Presenters Count', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_host_count_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_preset"><?php echo __( 'Podcast dialogue preset', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_preset_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_style"><?php echo esc_html__( 'Active Dialogue Style', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_style_field(); ?>
+                                </td>
+                            </tr>
+                            <tr class="presshub-subgroup-row"><th scope="row" colspan="2"><h4 style="margin:1em 0 0;"><?php echo esc_html__( 'Scriptwriter model', 'presshub-ai-editor' ); ?></h4></th></tr>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_provider"><?php echo __( 'Scriptwriter AI Provider', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
@@ -403,24 +479,21 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <?php $this->render_module_tuning_rows( 'briefing_podcast', __( 'Scriptwriter', 'presshub-ai-editor' ) ); ?>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_target_duration"><?php echo __( 'Target Podcast Duration', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_target_duration_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_host_count"><?php echo __( 'Podcast Presenters Count', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_host_count_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_preset"><?php echo __( 'Podcast dialogue preset', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_podcast_preset_field(); ?>
-                                </td>
-                            </tr>
+                        </tbody>
+                    </table>
+                    <?php $this->render_briefing_prompt_studio(); ?>
+                    </section>
+
+                    <section id="briefing-voices" class="presshub-settings-group" aria-labelledby="briefing-voices-title">
+                    <h3 id="briefing-voices-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Voices & audio', 'presshub-ai-editor' ); ?></h3>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <?php
+                            $cur_payload_mode = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured';
+                            $sys_inactive     = in_array( $cur_payload_mode, [ 'structured', 'legacy' ], true );
+                            $speed_inactive   = ( 'legacy' === $cur_payload_mode );
+                            $pitch_inactive   = ( 'legacy' === $cur_payload_mode );
+                            ?>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_tts_engine"><?php echo __( 'Speech engine', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
@@ -444,68 +517,9 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_audio_split_by_topic"><?php echo __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_audio_split_by_topic_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_audio_intro_sfx"><?php echo __( 'Podcast Intro SFX', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_audio_intro_sfx_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_audio_transition_sfx"><?php echo __( 'Topic Transition SFX', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_audio_transition_sfx_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_audio_outro_sfx"><?php echo __( 'Podcast Outro SFX', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_audio_outro_sfx_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
                                  <th scope="row"><label for="presshub_ai_briefing_tts_timeout"><?php echo __( 'Speech AI Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_timeout_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo __( 'Speaking Delivery Style (logosAI)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_tts_style_field(); ?>
-                                </td>
-                            </tr>
-                            <tr id="presshub-custom-tts-style-row" style="<?php echo ( get_option( 'presshub_ai_briefing_tts_style', 'formal' ) === 'custom' ) ? '' : 'display: none;'; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_tts_custom_style"><?php echo __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_tts_custom_style_field(); ?>
-                                </td>
-                            </tr>
-                            <?php
-                            $cur_payload_mode = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_payload_mode() : 'structured';
-                            $sys_inactive     = in_array( $cur_payload_mode, [ 'structured', 'legacy' ], true );
-                            $speed_inactive   = ( 'legacy' === $cur_payload_mode );
-                            $pitch_inactive   = ( 'legacy' === $cur_payload_mode );
-                            ?>
-                            <tr id="presshub-tts-payload-mode-row">
-                                <th scope="row"><label for="presshub_ai_briefing_tts_payload_mode"><?php echo __( 'Gemini Speech Payload Structure', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_tts_payload_mode_field(); ?>
-                                </td>
-                            </tr>
-                            <tr id="presshub-tts-system-instruction-row" class="<?php echo $sys_inactive ? 'presshub-setting-inactive' : ''; ?>">
-                                <th scope="row"><label for="presshub_ai_briefing_tts_system_instruction"><?php echo __( 'Gemini Speech System Instruction', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <div class="presshub-inactive-mode-badge" style="<?php echo $sys_inactive ? '' : 'display: none;'; ?>">
-                                        <span class="dashicons dashicons-info" style="color: #646970; font-size: 16px; width: 16px; height: 16px; vertical-align: text-bottom;"></span>
-                                        <strong><?php echo esc_html__( 'Not used by Official Gemini 3.8 TTS REST Standard:', 'presshub-ai-editor' ); ?></strong>
-                                        <?php echo esc_html__( 'Google\'s official Gemini 3.8 TTS specification controls tone, speed, and pitch directly via turn-level speech_metadata.style without top-level system instructions. To pass a top-level system instruction directive, select "Hybrid / System Instruction Override" above.', 'presshub-ai-editor' ); ?>
-                                    </div>
-                                    <?php $this->render_briefing_tts_system_instruction_field(); ?>
                                 </td>
                             </tr>
                             <?php $cur_host_count = PressHub_AI_Settings_Storage::get_briefing_host_count(); ?>
@@ -566,6 +580,18 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_tts_style"><?php echo __( 'Speaking Delivery Style (logosAI)', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_style_field(); ?>
+                                </td>
+                            </tr>
+                            <tr id="presshub-custom-tts-style-row" style="<?php echo ( get_option( 'presshub_ai_briefing_tts_style', 'formal' ) === 'custom' ) ? '' : 'display: none;'; ?>">
+                                <th scope="row"><label for="presshub_ai_briefing_tts_custom_style"><?php echo __( 'Custom Speaking Style Prompt', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_custom_style_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_tts_turn_pause_ms"><?php echo __( 'Turn Pause Duration (ms)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_turn_pause_ms_field(); ?>
@@ -575,6 +601,53 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_briefing_tts_topic_pause_ms"><?php echo __( 'Topic Transition Pause (ms)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_topic_pause_ms_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_split_by_topic"><?php echo __( 'Split Audio Synthesis by Topic', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_split_by_topic_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_intro_sfx"><?php echo __( 'Podcast Intro SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_intro_sfx_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_transition_sfx"><?php echo __( 'Topic Transition SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_transition_sfx_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_audio_outro_sfx"><?php echo __( 'Podcast Outro SFX', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_audio_outro_sfx_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <details class="presshub-group-advanced" id="briefing-voices-advanced">
+                    <summary><?php echo esc_html__( 'Advanced: speech payload, throttling and retries', 'presshub-ai-editor' ); ?></summary>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr id="presshub-tts-payload-mode-row">
+                                <th scope="row"><label for="presshub_ai_briefing_tts_payload_mode"><?php echo __( 'Gemini Speech Payload Structure', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_tts_payload_mode_field(); ?>
+                                </td>
+                            </tr>
+                            <tr id="presshub-tts-system-instruction-row" class="<?php echo $sys_inactive ? 'presshub-setting-inactive' : ''; ?>">
+                                <th scope="row"><label for="presshub_ai_briefing_tts_system_instruction"><?php echo __( 'Gemini Speech System Instruction', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <div class="presshub-inactive-mode-badge" style="<?php echo $sys_inactive ? '' : 'display: none;'; ?>">
+                                        <span class="dashicons dashicons-info" style="color: #646970; font-size: 16px; width: 16px; height: 16px; vertical-align: text-bottom;"></span>
+                                        <strong><?php echo esc_html__( 'Not used by Official Gemini 3.8 TTS REST Standard:', 'presshub-ai-editor' ); ?></strong>
+                                        <?php echo esc_html__( 'Google\'s official Gemini 3.8 TTS specification controls tone, speed, and pitch directly via turn-level speech_metadata.style without top-level system instructions. To pass a top-level system instruction directive, select "Hybrid / System Instruction Override" above.', 'presshub-ai-editor' ); ?>
+                                    </div>
+                                    <?php $this->render_briefing_tts_system_instruction_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -611,6 +684,46 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_briefing_tts_cron_retry_delay_min"><?php echo __( 'Scheduled Synthesis Retry Delay (min)', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_tts_cron_retry_delay_min_field(); ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <?php $this->render_gemini_tts_tester(); ?>
+                    </details>
+                    </section>
+
+                    <section id="briefing-publishing" class="presshub-settings-group" aria-labelledby="briefing-publishing-title">
+                    <h3 id="briefing-publishing-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Publishing', 'presshub-ai-editor' ); ?></h3>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_category"><?php echo __( 'Text Briefing Category', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_text_category_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_status"><?php echo __( 'Text Post Status', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_text_status_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_title_prefix"><?php echo __( 'Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_text_title_prefix_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_text_title_date_format"><?php echo __( 'Text Story Title Date Format', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_text_title_date_format_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_noon_text_title_prefix"><?php echo __( 'Noon Text Story Title Prefix', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_noon_text_title_prefix_field(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -675,79 +788,7 @@ class PressHub_AI_Settings_Render {
                             </tr>
                         </tbody>
                     </table>
-
-                    <?php $this->render_gemini_tts_tester(); ?>
-
-                    <hr style="margin: 25px 0;">
-                    <h3><?php echo esc_html__( '3. Podcast Dialogue Styles & Prompt Studio', 'presshub-ai-editor' ); ?></h3>
-                    <p class="description"><?php echo esc_html__( 'Select the dialogue style template that powers the podcast scriptwriter and fine-tune prompt templates for each style and presenter count (e.g. enforcing acronym pronunciation guidelines or editorial pacing).', 'presshub-ai-editor' ); ?></p>
-                    <table class="form-table" role="presentation">
-                        <tbody>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_style"><?php echo esc_html__( 'Active Dialogue Style', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_podcast_style_field(); ?>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <?php $this->render_briefing_prompt_studio(); ?>
-                    <hr style="margin: 25px 0;">
-                    <h3><?php echo esc_html__( '4. Editorial Memory Settings', 'presshub-ai-editor' ); ?></h3>
-                    <p class="description"><?php echo esc_html__( 'Configure tiered editorial memory stream to maintain long-term story continuity across briefings and podcast episodes.', 'presshub-ai-editor' ); ?></p>
-                    <table class="form-table" role="presentation">
-                        <tbody>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_memory_enabled"><?php echo esc_html__( 'Enable Editorial Memory', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_memory_enabled_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_memory_daily_days"><?php echo esc_html__( 'Recent Memory Window (days)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_memory_daily_days_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_memory_background_days"><?php echo esc_html__( 'Background Memory Window (days)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_memory_background_days_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_memory_briefing_budget_chars"><?php echo esc_html__( 'Briefing Memory Budget (chars)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_memory_briefing_budget_chars_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_memory_podcast_budget_chars"><?php echo esc_html__( 'Podcast Memory Budget (chars)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_memory_podcast_budget_chars_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_memory_retention_days"><?php echo esc_html__( 'Memory Retention Window (days)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_memory_retention_days_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_memory_provider"><?php echo esc_html__( 'Memory Model Provider', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_memory_provider_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_memory_model"><?php echo esc_html__( 'Memory Model Override', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_memory_model_field(); ?>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    </section>
 
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
@@ -755,6 +796,32 @@ class PressHub_AI_Settings_Render {
                         <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
                     </div>
                 </div>
+
+                <!-- TAB: Social listening (#234) -->
+                <div id="presshub-tab-pane-social_listening" class="presshub-tab-pane" style="display: none;">
+                    <h2><?php echo esc_html__( 'Social listening', 'presshub-ai-editor' ); ?></h2>
+                    <p><?php echo esc_html__( 'Read posts from monitored social accounts into the briefing, and publish the Trending in Cyprus roundup.', 'presshub-ai-editor' ); ?></p>
+                    <section id="social-listening-monitoring" class="presshub-settings-group">
+                    <?php $this->render_monitored_accounts_list(); ?>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <?php $this->render_social_monitor_rows(); ?>
+                        </tbody>
+                    </table>
+                    </section>
+                    <section id="social-listening-trending" class="presshub-settings-group">
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <?php $this->render_social_trending_rows(); ?>
+                        </tbody>
+                    </table>
+                    </section>
+                    <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
+                        <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="social_listening"><?php echo esc_html__( 'Save Social Listening Settings', 'presshub-ai-editor' ); ?></button>
+                        <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
+                    </div>
+                </div>
+
 
                 <!-- TAB: AI Featured Images -->
                 <div id="presshub-tab-pane-images" class="presshub-tab-pane" style="display: none;">
@@ -802,42 +869,6 @@ class PressHub_AI_Settings_Render {
                         </tbody>
                     </table>
 
-                    <h3><?php echo esc_html__( 'SEO, Tags & Media Metadata', 'presshub-ai-editor' ); ?></h3>
-                    <p><?php echo esc_html__( 'Help search engines and readers find your content: describe generated images properly in the Media Library, tag automated posts, and score SEO during the AI editorial review.', 'presshub-ai-editor' ); ?></p>
-                    <table class="form-table" role="presentation">
-                        <tbody>
-                            <tr>
-                                <th scope="row"><?php echo esc_html__( 'AI Image Metadata', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_image_metadata_enabled_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo esc_html__( 'Automatic Tags & SEO', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_seo_auto_enabled_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo esc_html__( 'Daily Briefing SEO Structure', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_briefing_seo_enhance_enabled_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_seo_max_tags"><?php echo esc_html__( 'Maximum Tags per Post', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_seo_max_tags_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><?php echo esc_html__( 'SEO Score in Editorial Review', 'presshub-ai-editor' ); ?></th>
-                                <td>
-                                    <?php $this->render_seo_review_enabled_field(); ?>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
 
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="images"><?php echo esc_html__( 'Save Image Settings', 'presshub-ai-editor' ); ?></button>
@@ -906,6 +937,7 @@ class PressHub_AI_Settings_Render {
                 <!-- TAB: Editorial knowledge (#233) -->
                 <div id="presshub-tab-pane-knowledge" class="presshub-tab-pane" style="display: none;">
                     <?php $this->render_knowledge_tab(); ?>
+                    <?php $this->render_editorial_memory_section(); ?>
                     <div class="presshub-tab-submit-wrap" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="knowledge"><?php echo esc_html__( 'Save Editorial Knowledge Settings', 'presshub-ai-editor' ); ?></button>
                         <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
@@ -2670,6 +2702,189 @@ class PressHub_AI_Settings_Render {
      * Editorial knowledge tab (#233): switches for the context PressHub adds to
      * every AI call, which used to exist only as code filters.
      */
+    // ------------------------------------------------------------------
+    // Phase 2 layout helpers (#234).
+    // ------------------------------------------------------------------
+
+    /** The six Daily Briefing groups, in page order: anchor id => label. */
+    public static function briefing_groups(): array {
+        return [
+            'briefing-schedule'   => __( 'Schedule', 'presshub-ai-editor' ),
+            'briefing-sources'    => __( 'Sources & harvesting', 'presshub-ai-editor' ),
+            'briefing-text'       => __( 'Text story', 'presshub-ai-editor' ),
+            'briefing-podcast'    => __( 'Podcast script', 'presshub-ai-editor' ),
+            'briefing-voices'     => __( 'Voices & audio', 'presshub-ai-editor' ),
+            'briefing-publishing' => __( 'Publishing', 'presshub-ai-editor' ),
+        ];
+    }
+
+    /** "On this page" bar of anchor links to the Daily Briefing groups. */
+    public function render_briefing_on_this_page_nav() {
+        ?>
+        <nav class="presshub-on-this-page" aria-label="<?php echo esc_attr__( 'On this page', 'presshub-ai-editor' ); ?>">
+            <span class="presshub-on-this-page-label"><?php echo esc_html__( 'On this page:', 'presshub-ai-editor' ); ?></span>
+            <?php foreach ( self::briefing_groups() as $anchor => $label ) : ?>
+                <a href="#<?php echo esc_attr( $anchor ); ?>" class="presshub-group-link"><?php echo esc_html( $label ); ?></a>
+            <?php endforeach; ?>
+        </nav>
+        <?php
+    }
+
+    /** Enabled social accounts in the sources list (types the monitor reads). */
+    public static function monitored_accounts(): array {
+        $types    = class_exists( 'PressHub_AI_Social_Monitor' ) ? PressHub_AI_Social_Monitor::SOURCE_TYPES : [ 'social_x' => 'x', 'social_tiktok' => 'tiktok', 'social_facebook' => 'facebook' ];
+        $accounts = [];
+        foreach ( PressHub_AI_Settings_Storage::get_briefing_sources() as $src ) {
+            if ( isset( $types[ (string) ( $src['type'] ?? '' ) ] ) ) {
+                $accounts[] = $src;
+            }
+        }
+        return $accounts;
+    }
+
+    /**
+     * Sources & harvesting row that points to Social listening, so the
+     * monitor switch has one home (#234).
+     */
+    public function render_social_sources_summary_row() {
+        $enabled  = PressHub_AI_Settings_Storage::get_social_monitor_enabled();
+        $accounts = self::monitored_accounts();
+        $active   = count( array_filter( $accounts, static function ( $s ) { return ! empty( $s['enabled'] ); } ) );
+        ?>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Social posts as sources', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <p class="presshub-status-line">
+                    <strong><?php echo $enabled ? esc_html__( 'On', 'presshub-ai-editor' ) : esc_html__( 'Off', 'presshub-ai-editor' ); ?></strong>
+                    &mdash;
+                    <?php
+                    /* translators: 1: enabled accounts, 2: all social accounts */
+                    echo esc_html( sprintf( __( '%1$d of %2$d social accounts enabled.', 'presshub-ai-editor' ), $active, count( $accounts ) ) );
+                    ?>
+                    <a href="#social_listening"><?php echo esc_html__( 'Configure in Social listening', 'presshub-ai-editor' ); ?></a>
+                </p>
+                <p class="description"><?php echo esc_html__( 'Social accounts are added in the source list above with the X, TikTok or Facebook type.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <?php
+    }
+
+    /** Read-only list of monitored accounts at the top of Social listening. */
+    public function render_monitored_accounts_list() {
+        $accounts = self::monitored_accounts();
+        ?>
+        <h3><?php echo esc_html__( 'Account monitoring', 'presshub-ai-editor' ); ?></h3>
+        <h4><?php echo esc_html__( 'Monitored accounts', 'presshub-ai-editor' ); ?></h4>
+        <?php if ( empty( $accounts ) ) : ?>
+            <p class="description"><?php echo esc_html__( 'No social accounts yet.', 'presshub-ai-editor' ); ?></p>
+        <?php else : ?>
+            <table class="widefat striped presshub-monitored-accounts" style="max-width: 900px;">
+                <thead>
+                    <tr>
+                        <th scope="col"><?php echo esc_html__( 'Account', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Platform', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Priority', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Alignment', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Status', 'presshub-ai-editor' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $accounts as $src ) : ?>
+                        <tr>
+                            <td><a href="<?php echo esc_url( (string) ( $src['url'] ?? '' ) ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( (string) ( $src['name'] ?? $src['url'] ?? '' ) ); ?></a></td>
+                            <td><?php echo esc_html( ucfirst( str_replace( 'social_', '', (string) ( $src['type'] ?? '' ) ) ) ); ?></td>
+                            <td><?php echo esc_html( (string) ( $src['priority'] ?? '' ) ); ?></td>
+                            <td><?php echo esc_html( '' !== (string) ( $src['alignment'] ?? '' ) ? (string) $src['alignment'] : '—' ); ?></td>
+                            <td><?php echo ! empty( $src['enabled'] ) ? esc_html__( 'Enabled', 'presshub-ai-editor' ) : esc_html__( 'Disabled', 'presshub-ai-editor' ); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+        <p>
+            <a href="#briefing-sources" class="button button-secondary"><?php echo esc_html__( 'Add or edit accounts in Sources & harvesting', 'presshub-ai-editor' ); ?></a>
+        </p>
+        <?php
+    }
+
+    /**
+     * Editorial memory settings, shown on the Editorial knowledge tab
+     * (#234; they used to be section 4 of Daily Briefing).
+     */
+    public function render_editorial_memory_section() {
+        $links = [];
+        if ( class_exists( 'PressHub_AI_Fiches_Admin' ) ) {
+            $links[] = [ PressHub_AI_Fiches_Admin::agenda_url(), __( 'Editorial agenda', 'presshub-ai-editor' ) ];
+            $links[] = [ admin_url( 'admin.php?page=' . PressHub_AI_Fiches_Admin::POLICY_SLUG ), __( 'Policies', 'presshub-ai-editor' ) ];
+            $links[] = [ PressHub_AI_Fiches_Admin::people_url(), __( 'People', 'presshub-ai-editor' ) ];
+        }
+        ?>
+        <hr style="margin: 25px 0;">
+        <h3 id="knowledge-memory"><?php echo esc_html__( 'Editorial memory', 'presshub-ai-editor' ); ?></h3>
+        <p class="description"><?php echo esc_html__( 'Configure tiered editorial memory stream to maintain long-term story continuity across briefings and podcast episodes.', 'presshub-ai-editor' ); ?></p>
+        <table class="form-table" role="presentation">
+            <tbody>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_memory_enabled"><?php echo esc_html__( 'Enable Editorial Memory', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_memory_enabled_field(); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_memory_daily_days"><?php echo esc_html__( 'Recent Memory Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_memory_daily_days_field(); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_memory_background_days"><?php echo esc_html__( 'Background Memory Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_memory_background_days_field(); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_memory_briefing_budget_chars"><?php echo esc_html__( 'Briefing Memory Budget (chars)', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_memory_briefing_budget_chars_field(); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_memory_podcast_budget_chars"><?php echo esc_html__( 'Podcast Memory Budget (chars)', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_memory_podcast_budget_chars_field(); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_memory_retention_days"><?php echo esc_html__( 'Memory Retention Window (days)', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_memory_retention_days_field(); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_briefing_memory_provider"><?php echo esc_html__( 'Memory Model Provider', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_briefing_memory_provider_field(); ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_briefing_memory_model"><?php echo esc_html__( 'Memory Model Override', 'presshub-ai-editor' ); ?></label></th>
+                    <td>
+                        <?php $this->render_briefing_memory_model_field(); ?>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <?php if ( $links ) : ?>
+            <p>
+                <?php echo esc_html__( 'Related pages:', 'presshub-ai-editor' ); ?>
+                <?php foreach ( $links as $i => $link ) : ?>
+                    <?php echo $i ? ' · ' : ''; ?><a href="<?php echo esc_url( $link[0] ); ?>"><?php echo esc_html( $link[1] ); ?></a>
+                <?php endforeach; ?>
+            </p>
+        <?php endif; ?>
+        <?php
+    }
+
     public function render_knowledge_tab() {
         $S            = 'PressHub_AI_Settings_Storage';
         $memory_on    = $S::get_memory_enabled();
@@ -4564,16 +4779,10 @@ class PressHub_AI_Settings_Render {
             require_once __DIR__ . '/class-prompt-loader.php';
         }
 
-        $default_article_prompt  = PressHub_AI_Prompt_Loader::get_article_qa_prompt();
-        $default_briefing_prompt = PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
-
-        $article_val  = (string) get_option( 'presshub_ai_qa_article_prompt', '' );
-        $briefing_val = (string) get_option( 'presshub_ai_qa_briefing_prompt', '' );
+        $default_article_prompt = PressHub_AI_Prompt_Loader::get_article_qa_prompt();
+        $article_val            = (string) get_option( 'presshub_ai_qa_article_prompt', '' );
         ?>
-        <div class="presshub-qa-prompt-tabs nav-tab-wrapper" style="margin-top:15px;margin-bottom:15px;">
-            <a href="#presshub-qa-pane-article" class="nav-tab presshub-qa-tab nav-tab-active" data-qa-target="presshub-qa-pane-article"><?php echo esc_html__( 'Article QA Review Prompt', 'presshub-ai-editor' ); ?></a>
-            <a href="#presshub-qa-pane-briefing" class="nav-tab presshub-qa-tab" data-qa-target="presshub-qa-pane-briefing"><?php echo esc_html__( 'Daily Briefing QA Review Prompt', 'presshub-ai-editor' ); ?></a>
-        </div>
+        <p class="description"><?php echo esc_html__( 'The Daily Briefing QA prompt now sits with the briefing:', 'presshub-ai-editor' ); ?> <a href="#briefing-text"><?php echo esc_html__( 'Daily Briefing Hub → Text story', 'presshub-ai-editor' ); ?></a></p>
 
         <!-- PANE 1: Article QA Prompt -->
         <div id="presshub-qa-pane-article" class="presshub-qa-pane">
@@ -4597,27 +4806,6 @@ class PressHub_AI_Settings_Render {
             </p>
         </div>
 
-        <!-- PANE 2: Daily Briefing QA Prompt -->
-        <div id="presshub-qa-pane-briefing" class="presshub-qa-pane" style="display:none;">
-            <textarea name="presshub_ai_qa_briefing_prompt" id="presshub_ai_qa_briefing_prompt" rows="9" class="large-text code presshub-qa-prompt-textarea" placeholder="<?php echo esc_attr__( 'Leave empty to use the built-in default Daily Briefing QA review prompt...', 'presshub-ai-editor' ); ?>"><?php echo esc_textarea( $briefing_val ); ?></textarea>
-
-            <p style="margin-top:8px;">
-                <button type="button" class="button button-secondary presshub-show-default-prompt" data-target="presshub_ai_qa_briefing_prompt" data-default="<?php echo self::esc_attr_safe( $default_briefing_prompt ); ?>">
-                    <?php echo esc_html__( 'Load Default Template for Editing', 'presshub-ai-editor' ); ?>
-                </button>
-                <button type="button" class="button button-secondary presshub-reset-prompt" data-target="presshub_ai_qa_briefing_prompt" data-default="">
-                    <?php echo esc_html__( 'Clear / Reset Custom Prompt', 'presshub-ai-editor' ); ?>
-                </button>
-            </p>
-
-            <div class="presshub-empty-prompt-warning notice notice-warning inline" style="margin-top:8px;<?php echo empty( trim( $briefing_val ) ) ? 'display:block;' : 'display:none;'; ?>">
-                <p>⚠️ <strong><?php echo esc_html__( 'Note:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'When left empty, PressHub AI automatically uses the built-in default prompt asset from assets/prompts/scorecard/briefing_qa_user_prompt.txt.', 'presshub-ai-editor' ); ?></p>
-            </div>
-
-            <p class="description" style="margin-top:8px;">
-                <?php echo __( 'User prompt template sent to the QA model when evaluating automated Daily Briefing roundups. Evaluates multi-source synthesis, briefing flow, readability, and brevity. Supports <code>{content}</code> placeholder.', 'presshub-ai-editor' ); ?>
-            </p>
-        </div>
         <?php
     }
 
@@ -4641,8 +4829,8 @@ class PressHub_AI_Settings_Render {
             ?>
         </p>
         <p>
-            <a href="#coauthor-qa" class="button button-secondary presshub-switch-to-qa-studio" data-target-tab="coauthor" data-subtab="qa" data-prompt-target="briefing">
-                <?php echo esc_html__( 'Configure QA Review Gate & Edit Briefing Prompt Template →', 'presshub-ai-editor' ); ?>
+            <a href="#coauthor-qa" class="button button-secondary presshub-switch-to-qa-studio" data-target-tab="coauthor" data-subtab="qa" data-prompt-target="article">
+                <?php echo esc_html__( 'Configure the QA review gate →', 'presshub-ai-editor' ); ?>
             </a>
         </p>
         <?php

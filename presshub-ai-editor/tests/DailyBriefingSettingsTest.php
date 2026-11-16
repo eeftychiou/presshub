@@ -703,8 +703,14 @@ class DailyBriefingSettingsTest
         if ( false !== strpos( $page_html, 'id="presshub-prompt-3-row"' ) ) {
             $failures[] = 'render_settings_page must not render obsolete id="presshub-prompt-3-row".';
         }
-        if ( false === strpos( $page_html, '3. Podcast Dialogue Styles' ) ) {
-            $failures[] = 'render_settings_page should render Section 3: Podcast Dialogue Styles & Prompt Studio.';
+        // #234: one page of six named groups with an "On this page" bar.
+        foreach ( [ 'briefing-schedule', 'briefing-sources', 'briefing-text', 'briefing-podcast', 'briefing-voices', 'briefing-publishing' ] as $group_id ) {
+            if ( false === strpos( $page_html, 'id="' . $group_id . '"' ) || false === strpos( $page_html, 'href="#' . $group_id . '"' ) ) {
+                $failures[] = "render_settings_page should render group {$group_id} with an On this page link.";
+            }
+        }
+        if ( false !== strpos( $page_html, '3. Podcast Dialogue Styles' ) ) {
+            $failures[] = 'The numbered briefing sections should be gone (#234).';
         }
 
         // Assert host name inputs are rendered (Component 3)
