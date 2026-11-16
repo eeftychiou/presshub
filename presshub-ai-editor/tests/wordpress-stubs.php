@@ -1634,3 +1634,15 @@ if ( ! function_exists( 'wp_nonce_field' ) ) {
         return $html;
     }
 }
+
+if ( ! function_exists( 'wp_rand' ) ) {
+    function wp_rand( $min = 0, $max = 0 ) {
+        return $max > $min ? mt_rand( (int) $min, (int) $max ) : mt_rand();
+    }
+}
+
+if ( ! function_exists( 'esc_js' ) ) {
+    function esc_js( $text ) {
+        return addslashes( htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ) );
+    }
+}

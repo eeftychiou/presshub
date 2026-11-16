@@ -8,6 +8,7 @@
  *
  *   Policy Fiches                 ← top-level entry (dashicons-id-alt)
  *     ├─ Editorial agenda         admin.php?page=presshub-ai-agenda
+ *     ├─ Policies                 admin.php?page=presshub-ai-policies
  *     └─ People                   admin.php?page=presshub-ai-people
  *
  * The page slugs belong to the pages, not to the menu, so when the settings
@@ -34,6 +35,7 @@ class PressHub_AI_Fiches_Admin {
     const MENU_SLUG   = 'presshub-ai-agenda';
     const AGENDA_SLUG = 'presshub-ai-agenda';
     const PEOPLE_SLUG = 'presshub-ai-people';
+    const POLICY_SLUG = 'presshub-ai-policies';
 
     /** Old Memory page tab → new page slug. */
     const LEGACY_TABS = [
@@ -82,6 +84,17 @@ class PressHub_AI_Fiches_Admin {
             [ __CLASS__, 'render_agenda_page' ]
         );
 
+        if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+            add_submenu_page(
+                self::MENU_SLUG,
+                __( 'PressHub AI — Policies', 'presshub-ai-editor' ),
+                __( 'Policies', 'presshub-ai-editor' ),
+                $cap,
+                self::POLICY_SLUG,
+                [ __CLASS__, 'render_policy_page' ]
+            );
+        }
+
         if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
             add_submenu_page(
                 self::MENU_SLUG,
@@ -97,7 +110,7 @@ class PressHub_AI_Fiches_Admin {
     /** The agenda/people markup reuses the memory editor's stylesheet (preview <pre> etc.). */
     public function enqueue_assets( $hook ): void {
         $hook = (string) $hook;
-        if ( false === strpos( $hook, self::AGENDA_SLUG ) && false === strpos( $hook, self::PEOPLE_SLUG ) ) {
+        if ( false === strpos( $hook, self::AGENDA_SLUG ) && false === strpos( $hook, self::PEOPLE_SLUG ) && false === strpos( $hook, self::POLICY_SLUG ) ) {
             return;
         }
         if ( ! current_user_can( self::capability() ) ) {
@@ -157,6 +170,18 @@ class PressHub_AI_Fiches_Admin {
     public static function render_people_page(): void {
         self::guard_page();
         echo self::build_people_page( wp_unslash( $_GET ) ); // phpcs:ignore WordPress.Security.NonceVerification,WordPress.Security.EscapeOutput -- read-only; escaped in build_tab().
+    }
+
+    public static function render_policy_page(): void {
+        self::guard_page();
+        echo self::build_policy_page( wp_unslash( $_GET ) ); // phpcs:ignore WordPress.Security.NonceVerification,WordPress.Security.EscapeOutput -- read-only; escaped in build_page().
+    }
+
+    public static function build_policy_page( array $query = [] ): string {
+        return self::wrap(
+            __( 'Policies', 'presshub-ai-editor' ),
+            class_exists( 'PressHub_AI_Policy_Fiches' ) ? PressHub_AI_Policy_Fiches::build_page( $query ) : ''
+        );
     }
 
     public static function build_agenda_page( array $query = [] ): string {

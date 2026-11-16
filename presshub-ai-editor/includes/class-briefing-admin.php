@@ -1287,6 +1287,11 @@ class PressHub_AI_Briefing_Admin {
                         </div>
 
                         <?php echo self::source_balance_html( (array) ( $status['articles'] ?? [] ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in source_balance_html(). ?>
+                        <?php
+                        if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+                            echo PressHub_AI_Policy_Fiches::hub_alerts_html( (array) ( $status['articles'] ?? [] ), (string) $date ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in hub_alerts_html().
+                        }
+                        ?>
 
                         <div class="presshub-articles-summary-box" style="<?php echo empty( $status['articles'] ) ? 'display:none;' : ''; ?>">
                             <p style="margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
