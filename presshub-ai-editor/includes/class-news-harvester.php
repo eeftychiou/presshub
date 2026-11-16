@@ -1649,7 +1649,7 @@ class PressHub_AI_News_Harvester {
         // eats into their time budget; its articles are placed right after the
         // manual uploads so the curation article cap does not drop them.
         $this->merge_press_releases( $payload );
-        // Posts from monitored X / TikTok accounts, sent in by the social worker.
+        // Posts from monitored X / TikTok accounts and Facebook Pages, sent in by the social worker.
         $this->merge_social_posts( $payload, $date, $edition );
         // Issue #190: clean content and drop stale, promo, too-short and duplicate items.
         if ( class_exists( 'PressHub_AI_Pool_Cleaner' ) ) {
