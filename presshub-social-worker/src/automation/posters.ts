@@ -905,29 +905,86 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
  */
 export async function markTikTokAiGenerated(page: any): Promise<boolean> {
   const label = /AI-generated content|AI-generated|Περιεχόμενο που δημιουργήθηκε από AI/i;
-  const findSwitch = () =>
-    page
+  const switchSelector = '[role="switch"], .Switch__content, input[type="checkbox"]';
+
+  const pickVisibleSwitch = async (container: any): Promise<any | null> => {
+    const candidates = container.locator(switchSelector);
+    const count = await candidates.count().catch(() => 0);
+    // Prefer visible [role="switch"] or .Switch__content over a potentially hidden native checkbox.
+    for (const preferred of ['[role="switch"]', '.Switch__content', 'input[type="checkbox"]']) {
+      const sub = container.locator(preferred);
+      const subCount = await sub.count().catch(() => 0);
+      for (let i = 0; i < subCount; i++) {
+        const el = sub.nth(i);
+        if (await el.isVisible().catch(() => false)) {
+          return el;
+        }
+      }
+    }
+    for (let i = 0; i < count; i++) {
+      const el = candidates.nth(i);
+      if (await el.isVisible().catch(() => false)) {
+        return el;
+      }
+    }
+    return null;
+  };
+
+  const findVisibleSwitch = async (): Promise<any | null> => {
+    const aigcContainer = page.locator('[data-e2e="aigc_container"]').first();
+    if ((await aigcContainer.count().catch(() => 0)) > 0) {
+      const sw = await pickVisibleSwitch(aigcContainer);
+      if (sw) return sw;
+    }
+
+    const rows = page
       .locator('div, label')
       .filter({ hasText: label })
-      .filter({ has: page.locator('[role="switch"], input[type="checkbox"]') })
-      .last()
-      .locator('[role="switch"], input[type="checkbox"]')
-      .first();
-  const isOn = async (sw: any): Promise<boolean> =>
-    (await sw.getAttribute('aria-checked').catch(() => null)) === 'true' || (await sw.isChecked().catch(() => false));
+      .filter({ has: page.locator(switchSelector) });
+    const rowCount = await rows.count().catch(() => 0);
+    for (let i = rowCount - 1; i >= 0; i--) {
+      const sw = await pickVisibleSwitch(rows.nth(i));
+      if (sw) return sw;
+    }
+    return null;
+  };
+
+  const isOn = async (sw: any): Promise<boolean> => {
+    if (!sw) return false;
+    if ((await sw.getAttribute('aria-checked').catch(() => null)) === 'true') return true;
+    if ((await sw.getAttribute('data-state').catch(() => null)) === 'checked') return true;
+    if (await sw.isChecked().catch(() => false)) return true;
+    return await sw.evaluate((el: any) => {
+      const root = el.closest('[data-layout="switch-root"], .Switch__root') || el.parentElement;
+      if (!root) return false;
+      const checkedEl = root.querySelector('[aria-checked="true"], [data-state="checked"]');
+      if (checkedEl) return true;
+      const input = root.querySelector('input[type="checkbox"]');
+      return Boolean(input && input.checked);
+    }).catch(() => false);
+  };
 
   try {
-    let sw = findSwitch();
-    // The switch sits under "Show more" and may be in the page but hidden until it is opened.
-    if ((await sw.count()) === 0 || !(await sw.isVisible().catch(() => false))) {
-      const more = page.locator('button:has-text("Show more"), div[role="button"]:has-text("Show more"), button:has-text("More options")').first();
-      if ((await more.count()) > 0) {
+    let sw = await findVisibleSwitch();
+    // The switch sits under "Show more" and may be in a display:none container until expanded.
+    if (!sw) {
+      const more = page.locator(
+        '[data-e2e="advanced_settings_container"] .more-btn, ' +
+        'button:has-text("Show more"), ' +
+        'div[role="button"]:has-text("Show more"), ' +
+        'div.more-btn:has-text("Show more"), ' +
+        'span:text-is("Show more"), ' +
+        'button:has-text("More options"), ' +
+        'div[role="button"]:has-text("More options")'
+      ).first();
+      if ((await more.count().catch(() => 0)) > 0) {
+        await more.scrollIntoViewIfNeeded().catch(() => {});
         await more.click({ timeout: 5000 }).catch(() => more.click({ force: true }).catch(() => {}));
         await page.waitForTimeout(600);
       }
-      sw = findSwitch();
+      sw = await findVisibleSwitch();
     }
-    if ((await sw.count()) === 0) {
+    if (!sw) {
       WorkerLogger.warn('TikTok Automation', 'Could not find the "AI-generated content" switch; the short is posted without the AI label. Turn it on by hand in TikTok and report the page change.');
       return false;
     }
@@ -935,6 +992,7 @@ export async function markTikTokAiGenerated(page: any): Promise<boolean> {
       WorkerLogger.debug('TikTok Automation', '"AI-generated content" is already on.');
       return true;
     }
+    await sw.scrollIntoViewIfNeeded().catch(() => {});
     await sw.click({ timeout: 5000 }).catch(() => sw.click({ force: true }));
     await page.waitForTimeout(500);
     // TikTok asks to confirm the label in a dialog ("Turn on").
@@ -943,7 +1001,8 @@ export async function markTikTokAiGenerated(page: any): Promise<boolean> {
       await confirm.click({ force: true }).catch(() => {});
       await page.waitForTimeout(400);
     }
-    const on = await isOn(findSwitch());
+    const updatedSw = (await findVisibleSwitch()) || sw;
+    const on = await isOn(updatedSw);
     if (on) {
       WorkerLogger.info('TikTok Automation', 'Marked the video as AI-generated content.');
     } else {
