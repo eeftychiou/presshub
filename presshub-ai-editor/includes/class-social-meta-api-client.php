@@ -98,6 +98,12 @@ class PressHub_Social_Meta_API_Client {
 
         $version = self::GRAPH_API_VERSION;
 
+        // Several AI post images: one post with every photo attached.
+        $image_urls = class_exists( 'PressHub_Social_Post_Images' ) ? PressHub_Social_Post_Images::media_urls( $job ) : [];
+        if ( count( $image_urls ) > 1 ) {
+            return self::publish_facebook_photos( $page_id, $token, $copy, $image_urls );
+        }
+
         if ( $has_image ) {
             $endpoint = "https://graph.facebook.com/{$version}/{$page_id}/photos";
             $body     = [
@@ -145,6 +151,83 @@ class PressHub_Social_Meta_API_Client {
             'external_post_url' => "https://www.facebook.com/{$id}",
             'metadata'          => [ 'raw_response' => $data ],
         ];
+    }
+
+    /**
+     * Publish one Facebook Page post with several photos: each photo is uploaded
+     * unpublished, then a feed post attaches them all.
+     *
+     * @param string[] $image_urls
+     * @return array|WP_Error
+     */
+    private static function publish_facebook_photos( string $page_id, string $token, string $copy, array $image_urls ): array|WP_Error {
+        $version  = self::GRAPH_API_VERSION;
+        $media    = [];
+        foreach ( $image_urls as $i => $url ) {
+            $response = wp_remote_post( "https://graph.facebook.com/{$version}/{$page_id}/photos", [
+                'timeout'   => 30,
+                'body'      => [
+                    'url'          => $url,
+                    'published'    => 'false',
+                    'access_token' => $token,
+                ],
+                'sslverify' => true,
+            ] );
+            $data = self::facebook_response( $response, sprintf( 'photo %d/%d upload', $i + 1, count( $image_urls ) ) );
+            if ( is_wp_error( $data ) ) {
+                return $data;
+            }
+            if ( empty( $data['id'] ) ) {
+                return new WP_Error( 'facebook_api_error', sprintf( 'Facebook photo %d/%d upload returned no id.', $i + 1, count( $image_urls ) ) );
+            }
+            $media[] = (string) $data['id'];
+        }
+
+        $body = [
+            'message'      => $copy,
+            'access_token' => $token,
+        ];
+        foreach ( $media as $i => $media_id ) {
+            $body[ "attached_media[{$i}]" ] = wp_json_encode( [ 'media_fbid' => $media_id ] );
+        }
+        $response = wp_remote_post( "https://graph.facebook.com/{$version}/{$page_id}/feed", [
+            'timeout'   => 30,
+            'body'      => $body,
+            'sslverify' => true,
+        ] );
+        $data = self::facebook_response( $response, 'multi-photo post' );
+        if ( is_wp_error( $data ) ) {
+            return $data;
+        }
+
+        $id = (string) ( $data['id'] ?? '' );
+        return [
+            'external_post_id'  => $id,
+            'external_post_url' => "https://www.facebook.com/{$id}",
+            'metadata'          => [ 'raw_response' => $data, 'photo_ids' => $media ],
+        ];
+    }
+
+    /**
+     * Decode a Graph API response, or the error it carries.
+     *
+     * @param array|WP_Error $response
+     * @return array|WP_Error
+     */
+    private static function facebook_response( $response, string $step ): array|WP_Error {
+        if ( is_wp_error( $response ) ) {
+            PressHub_Social_Logger::error( sprintf( 'Facebook HTTP transport error (%s): %s', $step, $response->get_error_message() ) );
+            return $response;
+        }
+        $code = (int) wp_remote_retrieve_response_code( $response );
+        $raw  = wp_remote_retrieve_body( $response );
+        $data = json_decode( $raw, true );
+        if ( $code >= 400 || ! is_array( $data ) || ! empty( $data['error'] ) ) {
+            $err_msg = is_array( $data ) ? ( $data['error']['message'] ?? sprintf( 'Facebook API returned HTTP %d: %s', $code, $raw ) ) : sprintf( 'Facebook API returned HTTP %d: %s', $code, $raw );
+            PressHub_Social_Logger::error( sprintf( 'Facebook API error (%s): %s', $step, $err_msg ), [ 'status_code' => $code ] );
+            return new WP_Error( 'facebook_api_error', $err_msg );
+        }
+        return $data;
     }
 
     /**

@@ -275,6 +275,12 @@ class PressHub_Social_REST_Controller {
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
+                // A job waiting for its AI post images is claimed once they are ready.
+                if ( class_exists( 'PressHub_Social_Post_Images' ) && ! PressHub_Social_Post_Images::ready_to_post( $candidate ) ) {
+                    PressHub_Social_Post_Images::schedule_prepare( (int) ( $candidate['post_id'] ?? 0 ) );
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
                 $to_claim[] = $candidate;
             }
         }
@@ -301,6 +307,17 @@ class PressHub_Social_REST_Controller {
             // Atomic: an overlapping claim that already took this job skips it.
             if ( ! PressHub_Social_Queue::claim_for_processing( $job_id ) ) {
                 continue;
+            }
+
+            // Re-read the row: ready_to_post() may have just released it to the featured image.
+            $job = PressHub_Social_Queue::get_job( $job_id ) ?? $job;
+
+            // Every AI post image, for platforms that carry several (X, Facebook).
+            if ( class_exists( 'PressHub_Social_Post_Images' ) ) {
+                $media_urls = PressHub_Social_Post_Images::media_urls( $job );
+                if ( ! empty( $media_urls ) ) {
+                    $job['media_urls'] = $media_urls;
+                }
             }
 
             $post_id    = (int) ( $job['post_id'] ?? 0 );

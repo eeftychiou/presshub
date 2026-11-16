@@ -1342,3 +1342,24 @@ describe('Automation Posters Strict-Mode & Scoping Tests', () => {
     );
   });
 });
+
+describe('postMediaFiles', () => {
+  const { postMediaFiles } = require('../src/automation/posters');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ph-media-files-'));
+  const a = path.join(dir, 'a.png');
+  const b = path.join(dir, 'b.png');
+  fs.writeFileSync(a, 'a');
+  fs.writeFileSync(b, 'b');
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  test('prefers mediaPaths, skips missing files and caps the count', () => {
+    expect(postMediaFiles({ mediaPath: a, mediaPaths: [b, path.join(dir, 'gone.png'), a] }, 4)).toEqual([path.resolve(b), path.resolve(a)]);
+    expect(postMediaFiles({ mediaPaths: [a, b, a, b, a] }, 4)).toHaveLength(4);
+  });
+
+  test('falls back to mediaPath, or nothing', () => {
+    expect(postMediaFiles({ mediaPath: a }, 4)).toEqual([path.resolve(a)]);
+    expect(postMediaFiles({}, 4)).toEqual([]);
+  });
+});

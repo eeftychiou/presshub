@@ -240,6 +240,22 @@ class PressHub_Social_Settings_Storage {
             'default'           => '',
         ] );
 
+        // AI post images (generated images for X, Facebook, Instagram and TikTok article posts)
+        register_setting( self::OPTION_GROUP, 'presshub_social_post_images_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_post_images_enabled' ],
+            'default'           => false,
+        ] );
+        foreach ( self::PLATFORMS as $images_platform ) {
+            register_setting( self::OPTION_GROUP, 'presshub_social_post_images_' . $images_platform, [
+                'type'              => 'integer',
+                'sanitize_callback' => function ( $val ) use ( $images_platform ) {
+                    return self::sanitize_post_images_count( $val, $images_platform );
+                },
+                'default'           => 1,
+            ] );
+        }
+
         // TikTok shorts (one 30-60 s video per top story of a podcast post)
         register_setting( self::OPTION_GROUP, 'presshub_social_tiktok_shorts_enabled', [
             'type'              => 'boolean',
@@ -401,6 +417,20 @@ class PressHub_Social_Settings_Storage {
             'type'              => 'string',
             'sanitize_callback' => function( $val ) {
                 return self::sanitize_prompt( $val, 'presshub_social_prompt_system' );
+            },
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_post_images', [
+            'type'              => 'string',
+            'sanitize_callback' => function ( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_post_images' );
+            },
+        ] );
+
+        register_setting( self::OPTION_GROUP, 'presshub_social_prompt_post_image_style', [
+            'type'              => 'string',
+            'sanitize_callback' => function ( $val ) {
+                return self::sanitize_prompt( $val, 'presshub_social_prompt_post_image_style' );
             },
         ] );
 
@@ -686,6 +716,8 @@ class PressHub_Social_Settings_Storage {
             update_option( 'presshub_social_template_' . $platform, PressHub_Social_Prompt_Loader::load( 'template_' . $platform . '.txt' ) );
         }
         update_option( 'presshub_social_prompt_tiktok_shorts', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts.txt' ) );
+        update_option( 'presshub_social_prompt_post_images', PressHub_Social_Prompt_Loader::load( 'social_post_images.txt' ) );
+        update_option( 'presshub_social_prompt_post_image_style', PressHub_Social_Prompt_Loader::load( 'social_post_image_style.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_style', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_style.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_music', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_music.txt' ) );
         update_option( 'presshub_social_prompt_tiktok_shorts_image_moods', PressHub_Social_Prompt_Loader::load( 'social_tiktok_shorts_image_moods.txt' ) );
@@ -1457,6 +1489,68 @@ class PressHub_Social_Settings_Storage {
      * Seeds from social_tiktok_shorts.txt if the option does not exist yet; preserves an
      * empty string if cleared (the shorts then fail loudly).
      */
+    /** Whether article posts get AI-generated images instead of the featured image (default off). */
+    public static function get_post_images_enabled(): bool {
+        return in_array( get_option( 'presshub_social_post_images_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_post_images_enabled( $value ): bool {
+        // A save from another settings tab has no checkbox and no presence marker: keep the stored value.
+        if ( null === $value && empty( $_POST['presshub_social_post_images_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_post_images_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /**
+     * Most AI images a platform's post can carry: X and Facebook up to 4, Instagram and
+     * TikTok 1 (the image of the Instagram card or the TikTok video).
+     */
+    public static function post_images_max( string $platform ): int {
+        return in_array( $platform, [ 'twitter', 'facebook' ], true ) ? 4 : 1;
+    }
+
+    /** AI images per post on a platform (0 keeps the featured image, default 1). */
+    public static function get_post_images_count( string $platform ): int {
+        return self::sanitize_post_images_count( get_option( 'presshub_social_post_images_' . sanitize_key( $platform ), 1 ), $platform );
+    }
+
+    public static function sanitize_post_images_count( $value, string $platform = 'twitter' ): int {
+        if ( null === $value ) {
+            return self::get_post_images_count( $platform );
+        }
+        return max( 0, min( self::post_images_max( $platform ), (int) $value ) );
+    }
+
+    /**
+     * Prompt that plans the images of an article post (JSON {"images":[...]}). Seeds from
+     * social_post_images.txt if the option does not exist yet.
+     */
+    public static function get_post_images_prompt(): string {
+        return self::seeded_prompt( 'presshub_social_prompt_post_images', 'social_post_images.txt' );
+    }
+
+    /**
+     * Image style for the images of article posts ({description}, {orientation}). Seeds
+     * from social_post_image_style.txt if the option does not exist yet.
+     */
+    public static function get_post_image_style(): string {
+        return self::seeded_prompt( 'presshub_social_prompt_post_image_style', 'social_post_image_style.txt' );
+    }
+
+    private static function seeded_prompt( string $option, string $file ): string {
+        $val = get_option( $option, false );
+        if ( false === $val ) {
+            try {
+                $val = PressHub_Social_Prompt_Loader::load( $file );
+                update_option( $option, $val );
+            } catch ( Exception $e ) {
+                $val = '';
+            }
+        }
+        return is_string( $val ) ? trim( $val ) : '';
+    }
+
     public static function get_tiktok_shorts_prompt(): string {
         $val = get_option( 'presshub_social_prompt_tiktok_shorts', false );
         if ( false === $val || ( is_string( $val ) && self::is_legacy_tiktok_shorts_prompt( $val ) ) ) {

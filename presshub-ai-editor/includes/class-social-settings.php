@@ -309,6 +309,45 @@ class PressHub_Social_Settings {
             'presshub_social_ai_sec'
         );
 
+        add_settings_section(
+            'presshub_social_post_images_sec',
+            __( 'AI Post Images', 'presshub-social-autopost' ),
+            '__return_empty_string',
+            'presshub_social_ai'
+        );
+
+        add_settings_field(
+            'presshub_social_post_images_enabled',
+            __( 'Generate Images for Posts', 'presshub-social-autopost' ),
+            [ $render, 'render_post_images_enabled_field' ],
+            'presshub_social_ai',
+            'presshub_social_post_images_sec'
+        );
+
+        $image_platforms = [
+            'twitter'   => [ __( 'X / Twitter Images', 'presshub-social-autopost' ), __( 'Landscape 16:9 images attached to the post (up to 4). An attached image replaces X\'s link preview card; the article link stays in the text.', 'presshub-social-autopost' ) ],
+            'facebook'  => [ __( 'Facebook Images', 'presshub-social-autopost' ), __( 'Landscape 16:9 images (up to 4; more than 1 makes a multi-photo post). X and Facebook share the same images, so the second platform costs nothing extra.', 'presshub-social-autopost' ) ],
+            'instagram' => [ __( 'Instagram Image', 'presshub-social-autopost' ), __( 'One square 1:1 image used as the background of the Instagram card. Reels from podcast shorts keep their own story images.', 'presshub-social-autopost' ) ],
+            'tiktok'    => [ __( 'TikTok Image', 'presshub-social-autopost' ), __( 'One vertical 9:16 image used as the background of the TikTok video of an article. Podcast shorts keep their own story images.', 'presshub-social-autopost' ) ],
+        ];
+        foreach ( $image_platforms as $image_platform => [ $label, $desc ] ) {
+            add_settings_field(
+                'presshub_social_post_images_' . $image_platform,
+                $label,
+                [ $render, 'render_number_field' ],
+                'presshub_social_ai',
+                'presshub_social_post_images_sec',
+                [
+                    'option'  => 'presshub_social_post_images_' . $image_platform,
+                    'default' => 1,
+                    'min'     => 0,
+                    'max'     => PressHub_Social_Settings_Storage::post_images_max( $image_platform ),
+                    'unit'    => __( 'images', 'presshub-social-autopost' ),
+                    'desc'    => $desc . ' ' . __( '0 keeps the featured image.', 'presshub-social-autopost' ),
+                ]
+            );
+        }
+
         // ------------------------------------------------------------------
         // Tab 3: API Credentials
         // ------------------------------------------------------------------
@@ -948,6 +987,32 @@ class PressHub_Social_Settings {
                 'option' => 'presshub_social_prompt_system',
                 'rows'   => 6,
                 'desc'   => __( 'Core journalistic persona and instructions delivered to the LLM.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_post_images',
+            __( 'AI Post Images: Planning Prompt', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_prompts',
+            'presshub_social_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_post_images',
+                'rows'   => 8,
+                'desc'   => __( 'Used when AI Post Images are on (AI Copywriter tab). One call per article writes the image descriptions as JSON {"images":["...", ...]}, shared by every platform. Placeholders: {count} (the most images any platform asks for), {title}, {content} (the article text), {site_name}. Keep the rules that leave real people and text out of the images.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_prompt_post_image_style',
+            __( 'AI Post Images: Image Prompt', 'presshub-social-autopost' ),
+            [ $render, 'render_textarea_field' ],
+            'presshub_social_prompts',
+            'presshub_social_prompts_sec',
+            [
+                'option' => 'presshub_social_prompt_post_image_style',
+                'rows'   => 3,
+                'desc'   => __( 'Sent to the image generator for each post image. {description} is one description from the Planning Prompt, {orientation} the shape for the platform (e.g. "landscape 16:9"). This text sets the look. Without {description} the description is put first.', 'presshub-social-autopost' ),
             ]
         );
 

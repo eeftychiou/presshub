@@ -929,14 +929,15 @@ class PressHub_Social_TikTok_Shorts {
             try {
                 if ( null !== self::$image_generator ) {
                     $result = call_user_func( self::$image_generator, $prompt, $post_id, $short );
-                } elseif ( class_exists( 'PressHub_AI_API_Client' ) ) {
-                    $client = new PressHub_AI_API_Client();
-                    $result = $client->generate_featured_image( $prompt, '9:16', $post_id, [
+                } elseif ( class_exists( 'PressHub_Social_Image_Library' ) ) {
+                    // The shared library reuses an image already made for this post with the
+                    // same description and style, and keeps it for later features.
+                    $result = PressHub_Social_Image_Library::get_or_create( $post_id, $visual, $style, '9:16', [
                         'title'   => (string) $short['topic'],
                         'content' => (string) preg_replace( '/\[\s*SPEAKER_[12]\s*\]\s*:/iu', '', (string) $short['script'] ),
-                    ] );
+                    ], 'tiktok_short' );
                 } else {
-                    $result = new WP_Error( 'missing_api_client', 'PressHub_AI_API_Client is not loaded.' );
+                    $result = new WP_Error( 'missing_image_library', 'PressHub_Social_Image_Library is not loaded.' );
                 }
             } catch ( Throwable $e ) {
                 $result = new WP_Error( 'image_generation_exception', $e->getMessage() );
