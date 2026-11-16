@@ -1664,8 +1664,10 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
  * goes on with Instagram's default crop.
  */
 export async function selectInstagramCrop(page: Page, preferred: string[]): Promise<string | null> {
+  // Case-insensitive: Google Chrome (the worker's browser) labels it "Select Crop", while
+  // headless Chromium says "Select crop".
   const cropButton = page.locator(
-    '[role="button"]:has(svg[aria-label="Select crop"]), button:has(svg[aria-label="Select crop"]), svg[aria-label="Select crop"]'
+    '[role="button"]:has(svg[aria-label="Select crop" i]), button:has(svg[aria-label="Select crop" i]), svg[aria-label="Select crop" i]'
   ).first();
   const hasCrop = await cropButton.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
   if (!hasCrop) {
@@ -1722,6 +1724,84 @@ export async function dismissInstagramInterstitials(page: Page): Promise<string[
     await page.waitForTimeout(800);
   }
   return clicked;
+}
+
+/** Collapse whitespace so captions compare the same in the composer, og:title and body text. */
+export function normalizeInstagramText(text: string): string {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Read the posting account's username from the open composer ("<name>'s profile picture").
+ * Returns null when it is not shown.
+ */
+export async function readInstagramComposerAccount(page: Page): Promise<string | null> {
+  const alt = await page
+    .getByRole('dialog')
+    .locator('img[alt$="profile picture" i]')
+    .first()
+    .getAttribute('alt', { timeout: 2000 })
+    .catch(() => null);
+  const match = alt ? /^(.+?)['’]s profile picture$/i.exec(alt.trim()) : null;
+  return match ? match[1].trim() : null;
+}
+
+export interface InstagramPermalink {
+  url: string;
+  shortcode: string;
+}
+
+/**
+ * Find the real link of a post that was just shared: the newest non-pinned post on the
+ * account's profile whose time is not older than `sharedAtMs` (minus a 2 min clock margin)
+ * and whose caption starts with the start of `copy`. Checks at most the 6 newest posts.
+ * Returns null when nothing matches, so the caller never reports a made-up link.
+ */
+export async function resolveInstagramPermalink(
+  page: Page,
+  copy: string,
+  sharedAtMs: number,
+  accountName: string | null
+): Promise<InstagramPermalink | null> {
+  if (!accountName) {
+    WorkerLogger.warn('Instagram Automation', 'Posting account name not found in the composer; cannot look up the new post link.');
+    return null;
+  }
+  const prefix = normalizeInstagramText(copy).slice(0, 40);
+  const profileUrl = `https://www.instagram.com/${encodeURIComponent(accountName)}/`;
+  WorkerLogger.debug('Instagram Automation', `Looking up the new post's link on ${profileUrl}...`);
+  await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
+  const tiles = page.locator('a[href*="/p/"], a[href*="/reel/"]');
+  await tiles.first().waitFor({ state: 'attached', timeout: 15000 }).catch(() => {});
+  const candidates: string[] = await tiles
+    .evaluateAll((as) =>
+      as
+        .filter((a) => !a.querySelector('svg[aria-label*="Pinned" i]'))
+        .map((a) => a.getAttribute('href') || '')
+        .filter((h) => /\/(p|reel)\/[A-Za-z0-9_-]+/.test(h))
+    )
+    .catch(() => [] as string[]);
+  const unique = [...new Set(candidates)].slice(0, 6);
+
+  for (const href of unique) {
+    const url = new URL(href, 'https://www.instagram.com/').toString();
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.locator('time[datetime]').first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    const datetime = await page.locator('time[datetime]').first().getAttribute('datetime', { timeout: 2000 }).catch(() => null);
+    const postedAt = datetime ? Date.parse(datetime) : NaN;
+    if (Number.isFinite(postedAt) && postedAt < sharedAtMs - 120000) {
+      // Older than this share: the posts further down are older still.
+      break;
+    }
+    const ogTitle = await page.locator('meta[property="og:title"]').getAttribute('content', { timeout: 2000 }).catch(() => '');
+    const body = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
+    const text = normalizeInstagramText(`${ogTitle || ''} ${body || ''}`);
+    if (prefix && text.includes(prefix)) {
+      const shortcode = (/\/(?:p|reel)\/([A-Za-z0-9_-]+)/.exec(url) || [])[1] || '';
+      return { url, shortcode };
+    }
+  }
+  return null;
 }
 
 /**
@@ -1867,7 +1947,12 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     await captionBox.click();
     await captionBox.fill(options.copy);
 
+    // The caption step shows the posting account ("<name>'s profile picture"); remember it
+    // to look up the new post's link on the profile afterwards.
+    const accountName = await readInstagramComposerAccount(page);
+
     WorkerLogger.info('Instagram Automation', 'Clicking Share button...');
+    const sharedAt = Date.now();
     // Only the composer's own "Share": a page-wide `:has-text("Share")` also matches the feed's
     // paper-plane Share icons behind the modal (their SVG title is "Share"), whose clicks the
     // modal intercepts, and the composer's "Share to" toggle.
@@ -1888,16 +1973,25 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       });
     }
 
-    const generatedId = `ig-${Date.now()}`;
-    const postUrl = `https://instagram.com/p/${generatedId}`;
-    WorkerLogger.info('Instagram Automation', `Post completed! URL: ${postUrl}, ID: ${generatedId}`);
+    // Instagram's web composer does not show the new post's link, so find it on the profile.
+    const permalink = await resolveInstagramPermalink(page, options.copy, sharedAt, accountName).catch((err: any) => {
+      WorkerLogger.warn('Instagram Automation', `Could not look up the new post's link: ${String(err?.message || err).split('\n')[0]}`);
+      return null;
+    });
+    const postUrl = permalink?.url || '';
+    const postId = permalink?.shortcode || '';
+    if (permalink) {
+      WorkerLogger.info('Instagram Automation', `Post completed! URL: ${postUrl}, ID: ${postId}`);
+    } else {
+      WorkerLogger.warn('Instagram Automation', 'Post completed, but its link could not be confirmed on the profile; reporting it without a URL.');
+    }
 
     return {
       success: true,
       platform: 'instagram',
-      externalPostId: generatedId,
+      externalPostId: postId,
       externalPostUrl: postUrl,
-      external_id: generatedId,
+      external_id: postId,
       external_url: postUrl,
       mediaPath: options.mediaPath
     };
