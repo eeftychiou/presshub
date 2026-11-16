@@ -625,6 +625,67 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       fs.rmSync(outDir, { recursive: true, force: true });
     });
 
+    test('uploads every AI post image to X and removes the downloads afterwards', async () => {
+      const os = require('os');
+      const pathMod = require('path');
+      const outDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'ph-test-post-images-'));
+      const reports: any[] = [];
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [{
+                id: 510, platform: 'twitter', post_id: 760, post_copy: 'Κείμενο https://presshub.cy/x',
+                media_url: 'https://presshub.cy/wp-content/uploads/a.png',
+                media_urls: ['https://presshub.cy/wp-content/uploads/a.png', 'https://presshub.cy/wp-content/uploads/b.png', 'https://presshub.cy/wp-content/uploads/missing.png']
+              }]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          reports.push(JSON.parse(init.body));
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        if (url.endsWith('/a.png') || url.endsWith('/b.png')) {
+          return { ok: true, status: 200, headers: { get: () => 'image/png' }, arrayBuffer: async () => new TextEncoder().encode('png-bytes').buffer } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      let seen: PostOptions | undefined;
+      let existedDuringPost = false;
+      const mockPoster = jest.fn().mockImplementation(async (options: PostOptions) => {
+        seen = options;
+        existedDuringPost = (options.mediaPaths || []).every((f) => fs.existsSync(f));
+        return { success: true, platform: options.platform, external_url: 'https://x.com/i/status/1', external_id: '1' };
+      });
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster, outputDir: outDir });
+
+      const stats = await poller.pollOnce();
+      expect(stats.succeeded).toBe(1);
+      expect(seen?.mediaPaths).toHaveLength(2);
+      expect(seen?.mediaPath).toBe(seen?.mediaPaths?.[0]);
+      expect(seen?.mediaPaths?.[0]).toMatch(/job-510-1\.png$/);
+      expect(existedDuringPost).toBe(true);
+      expect((seen?.mediaPaths || []).some((f) => fs.existsSync(f))).toBe(false);
+      expect(reports[0]).toEqual(expect.objectContaining({ job_id: 510, status: 'published' }));
+      fs.rmSync(outDir, { recursive: true, force: true });
+    });
+
+    test('posts an X job without AI images as before (no media)', async () => {
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string) => {
+        if (url.endsWith('/worker/claim')) {
+          return { ok: true, json: async () => ({ jobs: [{ id: 511, platform: 'twitter', post_copy: 'Κείμενο', media_url: 'https://presshub.cy/featured.jpg' }] }) } as any;
+        }
+        return { ok: true, json: async () => ({ success: true }) } as any;
+      });
+      const mockPoster = jest.fn().mockResolvedValue({ success: true, platform: 'twitter', external_id: '2' });
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster });
+      await poller.pollOnce();
+      expect(mockPoster).toHaveBeenCalledWith(expect.objectContaining({ platform: 'twitter', mediaPath: undefined }));
+      expect(mockPoster.mock.calls[0][0].mediaPaths).toBeUndefined();
+    });
+
     test('fails a TikTok short that has no audio instead of posting it silent', async () => {
       const reports: any[] = [];
       const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {

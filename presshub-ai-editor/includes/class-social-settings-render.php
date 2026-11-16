@@ -450,6 +450,17 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_post_images_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_post_images_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_post_images_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_post_images_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Post AI-generated images with each article instead of its featured image. The images are made in the background right after publishing with the image generator set in PressHub AI Editor → Settings → AI Featured Images, and are shared between platforms. A post waits up to 20 minutes for them; if they fail, it goes out with the featured image. Podcast shorts are not affected.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
     public function render_tiktok_shorts_enabled_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
         ?>

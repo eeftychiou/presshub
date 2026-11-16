@@ -153,8 +153,9 @@ class PressHub_Social_Dispatcher {
             ? max( 0, PressHub_Social_Settings_Storage::get_dispatch_interval() )
             : 0;
 
-        $base_time = time();
-        $job_ids   = [];
+        $base_time    = time();
+        $job_ids      = [];
+        $needs_images = false;
 
         foreach ( $platforms as $index => $platform ) {
             // Determine engine for platform
@@ -220,6 +221,13 @@ class PressHub_Social_Dispatcher {
                 'last_error'   => $failed_error,
             ];
 
+            // AI post images: the job waits for its generated images (made in the
+            // background), keeping the featured image as its fallback.
+            $with_images = class_exists( 'PressHub_Social_Post_Images' ) && PressHub_Social_Post_Images::applies( $post_id, $platform );
+            if ( $with_images ) {
+                $job_data['metadata'] = PressHub_Social_Post_Images::job_metadata( $platform );
+            }
+
             $job_id = PressHub_Social_Queue::enqueue( $job_data );
             if ( is_wp_error( $job_id ) ) {
                 if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'error' ) ) {
@@ -229,12 +237,19 @@ class PressHub_Social_Dispatcher {
                 }
             } elseif ( $job_id > 0 ) {
                 $job_ids[] = $job_id;
+                if ( $with_images ) {
+                    $needs_images = true;
+                }
                 if ( class_exists( 'PressHub_Social_Logger' ) && method_exists( 'PressHub_Social_Logger', 'info' ) ) {
                     PressHub_Social_Logger::info(
-                        sprintf( 'Enqueued social job #%d for post #%d on %s (engine: %s, scheduled: %s)', $job_id, $post_id, $platform, $engine, $scheduled_at )
+                        sprintf( 'Enqueued social job #%d for post #%d on %s (engine: %s, scheduled: %s%s)', $job_id, $post_id, $platform, $engine, $scheduled_at, $with_images ? ', with AI images' : '' )
                     );
                 }
             }
+        }
+
+        if ( ! empty( $needs_images ) ) {
+            PressHub_Social_Post_Images::schedule_prepare( $post_id );
         }
 
         return $job_ids;
@@ -285,6 +300,17 @@ class PressHub_Social_Dispatcher {
             $job['post_copy'] = $regenerated_str;
             PressHub_Social_Queue::update_job_copy( $job_id, $job['post_copy'] );
         }
+
+        // A job waiting for its AI images is not sent until they are ready (or it has
+        // waited too long and goes out with the featured image).
+        if ( class_exists( 'PressHub_Social_Post_Images' ) && ! PressHub_Social_Post_Images::ready_to_post( $job ) ) {
+            PressHub_Social_Post_Images::schedule_prepare( $post_id );
+            return new WP_Error(
+                PressHub_Social_Post_Images::PENDING_CODE,
+                __( 'Job is waiting for its AI images and will be sent once they are ready.', 'presshub-social-autopost' )
+            );
+        }
+        $job = PressHub_Social_Queue::get_job( $job_id ) ?? $job;
 
         // In Pull Mode, automation jobs are polled and executed by the local worker via REST.
         // Keep the job pending with scheduled_at = now so it is picked up immediately on the next poll.
@@ -427,7 +453,7 @@ class PressHub_Social_Dispatcher {
             $res = self::dispatch_job( $job_id );
             if ( true === $res ) {
                 $summary['succeeded']++;
-            } elseif ( is_wp_error( $res ) && PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE === $res->get_error_code() ) {
+            } elseif ( is_wp_error( $res ) && in_array( $res->get_error_code(), [ PressHub_Social_Meta_API_Client::INSTAGRAM_PENDING_CODE, 'social_post_images_pending' ], true ) ) {
                 $summary['deferred']++;
             } else {
                 $summary['failed']++;

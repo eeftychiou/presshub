@@ -37,6 +37,8 @@ export interface ClaimedJob {
     /** Mood the plan chose for the story, for the logs. */
     mood?: string;
   };
+  /** AI post images for X and Facebook (all of them; media_url is the first). */
+  media_urls?: string[];
   specs?: {
     tiktok_video_duration?: number;
     tiktok_video_width?: number;
@@ -215,6 +217,39 @@ export class PressHubPoller {
   }
 
   /**
+   * Downloads a job's AI post images (media_urls) for upload to X or Facebook.
+   * A failed download is skipped; the post goes out with the images that arrived
+   * (or with none, as a text post with its link preview).
+   */
+  public async downloadPostImages(job: ClaimedJob, max: number = 4): Promise<string[]> {
+    const urls = Array.isArray(job.media_urls)
+      ? job.media_urls.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u)).slice(0, max)
+      : [];
+    if (urls.length === 0) return [];
+
+    const dir = path.join(this.outputDir || path.resolve(process.cwd(), 'output'), 'post-images');
+    fs.mkdirSync(dir, { recursive: true });
+    const files: string[] = [];
+    for (let i = 0; i < urls.length; i++) {
+      try {
+        const res = await this.fetchFn(urls[i], { headers: { 'User-Agent': 'Mozilla/5.0 PressHub-Poller/1.0' } });
+        if (!res || !res.ok) {
+          WorkerLogger.warn('Poller', `Job #${job.id}: AI image ${i + 1}/${urls.length} download failed: HTTP ${res?.status}`);
+          continue;
+        }
+        const type = String(res.headers?.get?.('content-type') || '');
+        const ext = /png/i.test(type) || /\.png(\?|$)/i.test(urls[i]) ? 'png' : /webp/i.test(type) ? 'webp' : 'jpg';
+        const file = path.join(dir, `job-${job.id}-${i + 1}.${ext}`);
+        fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+        files.push(file);
+      } catch (err: any) {
+        WorkerLogger.warn('Poller', `Job #${job.id}: AI image ${i + 1}/${urls.length} download failed: ${err.message}`);
+      }
+    }
+    return files;
+  }
+
+  /**
    * Executes a single poll cycle: claims jobs from WordPress, executes them,
    * and reports results back to WordPress.
    */
@@ -319,6 +354,8 @@ export class PressHubPoller {
           }
 
           let mediaPath: string | undefined;
+          let mediaPaths: string[] | undefined;
+          let downloadedImages: string[] = [];
 
           const { imageUrl, audioUrl } = await this.resolveJobMedia(job);
           const isPodcast = Boolean(
@@ -403,17 +440,35 @@ export class PressHubPoller {
             });
             mediaPath = card?.filePath;
             WorkerLogger.info('Poller', `${jobTag} Card generated at: ${mediaPath}`);
+          } else if ((platform === 'twitter' || platform === 'facebook') && Array.isArray(job.media_urls) && job.media_urls.length > 0) {
+            // AI post images: attach every one of them to the post.
+            downloadedImages = await this.downloadPostImages(job);
+            if (downloadedImages.length > 0) {
+              mediaPaths = downloadedImages;
+              mediaPath = downloadedImages[0];
+              WorkerLogger.info('Poller', `${jobTag} Attaching ${downloadedImages.length} AI image(s).`);
+            } else {
+              WorkerLogger.warn('Poller', `${jobTag} No AI image could be downloaded; posting without images.`);
+            }
           }
 
           WorkerLogger.info('Poller', `${jobTag} Dispatching browser automation poster...`);
-          const result: PostResult = await this.posterHandler({
-            platform: platform as Platform,
-            copy,
-            mediaPath,
-            sessionsDir: this.sessionsDir,
-            // Shorts use an AI voice and AI images: TikTok requires the AI-generated label.
-            ...(platform === 'tiktok' && job.tiktok_short ? { aiGenerated: true } : {})
-          });
+          let result: PostResult;
+          try {
+            result = await this.posterHandler({
+              platform: platform as Platform,
+              copy,
+              mediaPath,
+              ...(mediaPaths ? { mediaPaths } : {}),
+              sessionsDir: this.sessionsDir,
+              // Shorts use an AI voice and AI images: TikTok requires the AI-generated label.
+              ...(platform === 'tiktok' && job.tiktok_short ? { aiGenerated: true } : {})
+            });
+          } finally {
+            for (const file of downloadedImages) {
+              try { fs.unlinkSync(file); } catch {}
+            }
+          }
 
           if (result && result.success) {
             const extUrl = result.external_url || result.externalPostUrl || result.external_id || result.externalPostId;

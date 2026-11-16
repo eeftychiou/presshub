@@ -21,6 +21,8 @@ export interface PostOptions {
   platform: Platform;
   copy: string;
   mediaPath?: string;
+  /** Several images for one post (X and Facebook, up to 4); takes precedence over mediaPath. */
+  mediaPaths?: string[];
   sessionsDir?: string;
   timeoutMs?: number;
   cdpUrl?: string;
@@ -42,6 +44,20 @@ export interface PostResult {
 }
 
 export type PosterHandler = (options: PostOptions) => Promise<PostResult>;
+
+/**
+ * The files to attach to a post: mediaPaths when given (missing files skipped, at
+ * most `max`), else mediaPath. Absolute paths.
+ */
+export function postMediaFiles(options: Pick<PostOptions, 'mediaPath' | 'mediaPaths'>, max: number): string[] {
+  const candidates = Array.isArray(options.mediaPaths) && options.mediaPaths.length > 0
+    ? options.mediaPaths
+    : options.mediaPath ? [options.mediaPath] : [];
+  return candidates
+    .filter((f) => typeof f === 'string' && f !== '' && fs.existsSync(f))
+    .slice(0, Math.max(1, max))
+    .map((f) => path.resolve(f));
+}
 
 /**
  * Captures a full-page debug screenshot when browser automation encounters an error or timeout.
@@ -446,17 +462,18 @@ export async function postTwitter(options: PostOptions): Promise<PostResult> {
     // X's "Save post? / Discard" modal which traps and aborts composer submission!
     await page.waitForTimeout(500);
 
-    // If media attached, upload via file input
-    if (options.mediaPath && fs.existsSync(options.mediaPath)) {
-      const mediaSize = fs.statSync(options.mediaPath).size;
-      WorkerLogger.info('Twitter Automation', `Uploading media attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
+    // If media attached, upload via file input (X takes up to 4 images in one post)
+    const twitterMedia = postMediaFiles(options, 4);
+    if (twitterMedia.length > 0) {
+      const mediaSize = twitterMedia.reduce((sum, f) => sum + fs.statSync(f).size, 0);
+      WorkerLogger.info('Twitter Automation', `Uploading ${twitterMedia.length} media attachment(s): ${twitterMedia.join(', ')} (${mediaSize} bytes)...`);
       const fileInput = isModal
         ? modalSurface.locator('input[type="file"], input[data-testid="fileInput"]').first()
         : page.locator('div[data-slot="xds-modal-surface"] input[type="file"], div[role="dialog"] input[type="file"], input[type="file"], input[data-testid="fileInput"]').first();
       if ((await fileInput.count()) > 0) {
-        await fileInput.setInputFiles(path.resolve(options.mediaPath));
-        // Wait for attachment preview to appear
-        await page.waitForTimeout(3000);
+        await fileInput.setInputFiles(twitterMedia.length === 1 ? twitterMedia[0] : twitterMedia);
+        // Wait for the attachment previews to appear
+        await page.waitForTimeout(3000 + (twitterMedia.length - 1) * 1500);
       }
     }
 
@@ -1519,13 +1536,14 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
     await postBox.click();
     await postBox.fill(options.copy);
 
-    if (options.mediaPath && fs.existsSync(options.mediaPath)) {
-      const mediaSize = fs.statSync(options.mediaPath).size;
-      WorkerLogger.info('Facebook Automation', `Uploading media attachment: ${options.mediaPath} (${mediaSize} bytes)...`);
+    const facebookMedia = postMediaFiles(options, 4);
+    if (facebookMedia.length > 0) {
+      const mediaSize = facebookMedia.reduce((sum, f) => sum + fs.statSync(f).size, 0);
+      WorkerLogger.info('Facebook Automation', `Uploading ${facebookMedia.length} media attachment(s): ${facebookMedia.join(', ')} (${mediaSize} bytes)...`);
       const fileInput = page.locator('input[type="file"][accept*="image"], input[type="file"]').first();
       if ((await fileInput.count()) > 0) {
-        await fileInput.setInputFiles(path.resolve(options.mediaPath));
-        await page.waitForTimeout(2000);
+        await fileInput.setInputFiles(facebookMedia.length === 1 ? facebookMedia[0] : facebookMedia);
+        await page.waitForTimeout(2000 + (facebookMedia.length - 1) * 1500);
       }
     }
 

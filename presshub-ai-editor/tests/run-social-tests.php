@@ -498,6 +498,8 @@ if ( file_exists( $base_dir . '/includes/class-social-ai-copywriter.php' ) ) {
 require_once $base_dir . '/includes/class-social-activator.php';
 require_once $base_dir . '/includes/class-social-queue.php';
 require_once $base_dir . '/includes/class-social-tiktok-narrator.php';
+require_once $base_dir . '/includes/class-social-image-library.php';
+require_once $base_dir . '/includes/class-social-post-images.php';
 require_once $base_dir . '/includes/class-social-tiktok-shorts.php';
 require_once $base_dir . '/includes/class-social-tiktok-music.php';
 require_once $base_dir . '/includes/class-social-meta-api-client.php';
@@ -3026,6 +3028,240 @@ delete_option( 'presshub_social_meta_access_token' );
 delete_option( 'presshub_social_instagram_account_id' );
 delete_option( 'presshub_social_instagram_shorts_enabled' );
 delete_option( 'presshub_social_tiktok_shorts_enabled' );
+
+
+// ----------------------------------------------------------------------
+// AI post images (#194): generated images for X, Facebook, Instagram, TikTok
+// ----------------------------------------------------------------------
+echo "\n--- AI post images ---\n";
+
+$GLOBALS['POSTS_STORE'][760] = [
+    'ID'           => 760,
+    'post_type'    => 'post',
+    'post_status'  => 'publish',
+    'post_title'   => 'Πρωινή Ενημέρωση: ΕΕ και Κυπριακό',
+    'post_content' => '<p>Η ΕΕ συζητά το Κυπριακό.</p><p>Ο Great Sea Interconnector προχωρά.</p>',
+];
+$GLOBALS['test_posts'][760] = new WP_Post( $GLOBALS['POSTS_STORE'][760] );
+$GLOBALS['POST_THUMBNAILS'][760] = 7601;
+update_option( 'presshub_social_engine_twitter', 'automation' );
+update_option( 'presshub_social_engine_facebook', 'automation' );
+update_option( 'presshub_social_engine_instagram', 'automation' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+$img_saved_sessions = get_option( 'presshub_social_worker_sessions', [] );
+update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'facebook' => true, 'instagram' => true, 'tiktok' => true ] );
+$img_saved_enabled = [];
+foreach ( [ 'twitter', 'facebook', 'instagram' ] as $img_p ) {
+    $img_saved_enabled[ $img_p ] = get_option( 'presshub_social_enabled_' . $img_p, null );
+    update_option( 'presshub_social_enabled_' . $img_p, 1 );
+}
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Κείμενο ανάρτησης https://presshub.cy/x' );
+delete_option( 'presshub_social_post_images_enabled' );
+
+// Settings: defaults and clamps.
+assert_false( PressHub_Social_Settings_Storage::get_post_images_enabled(), 'AI post images are off by default' );
+assert_equals( 1, PressHub_Social_Settings_Storage::get_post_images_count( 'twitter' ), 'X gets 1 AI image by default' );
+assert_equals( 4, PressHub_Social_Settings_Storage::sanitize_post_images_count( 9, 'twitter' ), 'X images clamp to 4' );
+assert_equals( 4, PressHub_Social_Settings_Storage::sanitize_post_images_count( 7, 'facebook' ), 'Facebook images clamp to 4' );
+assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_post_images_count( 3, 'instagram' ), 'Instagram takes 1 image (the card background)' );
+assert_equals( 1, PressHub_Social_Settings_Storage::sanitize_post_images_count( 3, 'tiktok' ), 'TikTok takes 1 image (the video background)' );
+assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_post_images_count( -2, 'twitter' ), 'Image count never goes below 0' );
+assert_true( str_contains( PressHub_Social_Settings_Storage::get_post_images_prompt(), '{count}' ), 'The planning prompt is seeded from social_post_images.txt' );
+assert_true( str_contains( PressHub_Social_Settings_Storage::get_post_image_style(), '{orientation}' ), 'The image prompt is seeded from social_post_image_style.txt' );
+
+// Library: build_prompt and key.
+assert_equals( 'A flag. Photo, landscape 16:9 frame.', PressHub_Social_Image_Library::build_prompt( '{description} Photo, {orientation} frame.', 'A flag.', '16:9' ), 'Image prompt fills description and orientation' );
+assert_equals( 'A flag. Photo.', PressHub_Social_Image_Library::build_prompt( 'Photo.', 'A flag.', '1:1' ), 'Without {description} the description comes first' );
+assert_true( PressHub_Social_Image_Library::key( 'a', 's', '16:9' ) !== PressHub_Social_Image_Library::key( 'a', 's', '1:1' ), 'The same picture in another aspect is a different image' );
+
+// Off: jobs carry no image state and nothing is scheduled.
+PressHub_Social_Queue::reset_memory_store();
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$off_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+assert_equals( '', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $off_ids[0] ) ), 'With AI post images off a job has no image state' );
+assert_equals( 0, count( array_filter( $GLOBALS['SCHEDULED_EVENTS'], fn( $e ) => PressHub_Social_Post_Images::PREPARE_HOOK === $e['hook'] ) ), 'With AI post images off nothing is prepared' );
+
+// On: X wants 2, Facebook 1, Instagram 1.
+update_option( 'presshub_social_post_images_enabled', true );
+update_option( 'presshub_social_post_images_twitter', 2 );
+update_option( 'presshub_social_post_images_facebook', 1 );
+update_option( 'presshub_social_post_images_instagram', 1 );
+PressHub_Social_Queue::reset_memory_store();
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+delete_post_meta( 760, PressHub_Social_Image_Library::META );
+delete_post_meta( 760, PressHub_Social_Post_Images::PLAN_META );
+$img_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter', 'facebook', 'instagram' ] );
+assert_equals( 3, count( $img_ids ), 'Three jobs queued with AI post images on' );
+[ $tw_id, $fb_id, $ig_id ] = $img_ids;
+$tw_job  = PressHub_Social_Queue::get_job( $tw_id );
+$tw_meta = json_decode( (string) $tw_job['metadata'], true )['post_images'] ?? [];
+assert_equals( 'pending', $tw_meta['state'] ?? '', 'A new job waits for its AI images' );
+assert_equals( 2, $tw_meta['count'] ?? 0, 'The X job asks for 2 images' );
+assert_equals( '16:9', $tw_meta['aspect'] ?? '', 'X images are 16:9' );
+assert_equals( '1:1', json_decode( (string) PressHub_Social_Queue::get_job( $ig_id )['metadata'], true )['post_images']['aspect'] ?? '', 'Instagram images are 1:1' );
+assert_equals( 'http://example.test/?attachment_id=7601', $tw_job['media_url'], 'The featured image stays as the fallback' );
+$img_prep = array_values( array_filter( $GLOBALS['SCHEDULED_EVENTS'], fn( $e ) => PressHub_Social_Post_Images::PREPARE_HOOK === $e['hook'] ) );
+assert_equals( [ 760 ], $img_prep[0]['args'] ?? null, 'Enqueuing schedules the image preparation for the post' );
+
+// Claim: a job waiting for its images is not claimed and stays pending.
+foreach ( $img_ids as $iid ) {
+    PressHub_Social_Queue::update_job( $iid, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+}
+$img_req = new WP_REST_Request( 'POST', '/worker/claim' );
+$img_req->set_param( 'sessions', [ 'twitter' => true, 'facebook' => true, 'instagram' => true ] );
+$img_req->set_param( 'limit', 5 );
+$img_claim = PressHub_Social_REST_Controller::handle_claim( $img_req );
+assert_equals( 0, count( $img_claim['jobs'] ), 'Jobs waiting for AI images are not claimed' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $tw_id )['status'], 'A job waiting for AI images stays pending' );
+
+// Prepare: one plan call, images shared between X and Facebook (same aspect).
+$plan_calls = [];
+PressHub_Social_Post_Images::set_ai_caller( function ( $sys, $user ) use ( &$plan_calls ) {
+    $plan_calls[] = $user;
+    return '```json' . "\n" . '{"images":["EU flag over Nicosia old town at dawn","Undersea power cable on a ship deck at Limassol port","Extra description"]}' . "\n```";
+} );
+$gen_calls = [];
+PressHub_Social_Image_Library::set_generator( function ( $prompt, $aspect, $post_id, $context ) use ( &$gen_calls ) {
+    $gen_calls[] = [ $prompt, $aspect ];
+    $n = count( $gen_calls );
+    return [ 'url' => 'https://example.com/uploads/post-img-' . $n . '.png', 'id' => 8800 + $n ];
+} );
+PressHub_Social_Post_Images::prepare_post( 760 );
+assert_equals( 1, count( $plan_calls ), 'One planning call for all platforms of the post' );
+assert_true( str_contains( $plan_calls[0] ?? '', 'Πρωινή Ενημέρωση' ) && str_contains( $plan_calls[0] ?? '', 'Great Sea Interconnector' ) && ! str_contains( $plan_calls[0] ?? '', '<p>' ), 'The plan sees the title and the plain article text' );
+assert_true( str_contains( $plan_calls[0] ?? '', 'Plan 2 image(s)' ), 'The plan asks for the most images any platform wants' );
+assert_equals( 3, count( $gen_calls ), 'X and Facebook share their 16:9 images; Instagram gets its own 1:1 image' );
+assert_true( str_contains( $gen_calls[0][0], 'EU flag over Nicosia' ) && str_contains( $gen_calls[0][0], 'landscape 16:9' ), 'The image prompt has the description and the platform shape' );
+$tw_job  = PressHub_Social_Queue::get_job( $tw_id );
+$tw_meta = json_decode( (string) $tw_job['metadata'], true )['post_images'] ?? [];
+assert_equals( 'ready', $tw_meta['state'] ?? '', 'The X job is ready after preparation' );
+assert_equals( 2, count( $tw_meta['images'] ?? [] ), 'The X job has 2 images' );
+assert_equals( 'https://example.com/uploads/post-img-1.png', $tw_job['media_url'], 'The first AI image becomes the job media' );
+assert_equals( [ 'https://example.com/uploads/post-img-1.png' ], PressHub_Social_Post_Images::media_urls( PressHub_Social_Queue::get_job( $fb_id ) ), 'Facebook reuses the first X image' );
+assert_equals( 'https://example.com/uploads/post-img-3.png', PressHub_Social_Queue::get_job( $ig_id )['media_url'], 'Instagram gets its square image' );
+assert_equals( 3, count( PressHub_Social_Image_Library::all( 760 ) ), 'The post library holds the 3 images for later reuse' );
+
+// Running again makes no new call.
+PressHub_Social_Post_Images::prepare_post( 760 );
+assert_equals( 1, count( $plan_calls ), 'A prepared post is not planned again' );
+assert_equals( 3, count( $gen_calls ), 'A prepared post makes no new images' );
+
+// Claim now hands out the jobs with every image.
+$img_claim = PressHub_Social_REST_Controller::handle_claim( $img_req );
+$claimed_by_platform = [];
+foreach ( $img_claim['jobs'] as $cj ) {
+    $claimed_by_platform[ $cj['platform'] ] = $cj;
+}
+assert_equals( 3, count( $img_claim['jobs'] ), 'Prepared jobs are claimed' );
+assert_equals( [ 'https://example.com/uploads/post-img-1.png', 'https://example.com/uploads/post-img-2.png' ], $claimed_by_platform['twitter']['media_urls'] ?? null, 'The claimed X job carries both images' );
+assert_equals( 'https://example.com/uploads/post-img-3.png', $claimed_by_platform['instagram']['media_url'] ?? null, 'The claimed Instagram job uses its AI image for the card' );
+
+// A new job for the same post reuses the stored plan and images.
+PressHub_Social_Queue::reset_memory_store();
+$again = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+PressHub_Social_Post_Images::prepare_post( 760 );
+assert_equals( 1, count( $plan_calls ), 'A repost reuses the stored image plan' );
+assert_equals( 3, count( $gen_calls ), 'A repost reuses the stored images' );
+assert_equals( 2, count( PressHub_Social_Post_Images::media_urls( PressHub_Social_Queue::get_job( $again[0] ) ) ), 'The repost has its 2 images' );
+
+// Facebook API: several images become one multi-photo post.
+update_option( 'presshub_social_engine_facebook', 'api' );
+update_option( 'presshub_social_meta_page_id', 'page-1' );
+update_option( 'presshub_social_meta_access_token', 'tok-1' );
+update_option( 'presshub_social_post_images_facebook', 2 );
+PressHub_Social_Queue::reset_memory_store();
+$fb_api_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'facebook' ] );
+$fb_waiting = PressHub_Social_Dispatcher::dispatch_job( $fb_api_ids[0] );
+assert_true( is_wp_error( $fb_waiting ) && PressHub_Social_Post_Images::PENDING_CODE === $fb_waiting->get_error_code(), 'An API job waiting for AI images is not sent' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $fb_api_ids[0] )['status'], 'The waiting API job stays pending' );
+PressHub_Social_Post_Images::prepare_post( 760 );
+$GLOBALS['CAPTURED_REQUESTS'] = [];
+$fb_photo_n = 0;
+$GLOBALS['CAPTURE_FILTER'] = function ( $pre, $req ) use ( &$fb_photo_n ) {
+    [ $url ] = $req;
+    if ( str_contains( $url, '/photos' ) ) {
+        $fb_photo_n++;
+        return [ 'response' => [ 'code' => 200 ], 'body' => '{"id":"photo-' . $fb_photo_n . '"}' ];
+    }
+    if ( str_contains( $url, '/feed' ) ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => '{"id":"page-1_post-9"}' ];
+    }
+    return null;
+};
+$fb_sent = PressHub_Social_Dispatcher::dispatch_job( $fb_api_ids[0] );
+unset( $GLOBALS['CAPTURE_FILTER'] );
+$fb_reqs = $GLOBALS['CAPTURED_REQUESTS'];
+assert_true( true === $fb_sent, 'The Facebook multi-photo post is published' );
+assert_equals( 3, count( $fb_reqs ), 'Two unpublished photo uploads and one feed post' );
+assert_equals( 'false', $fb_reqs[0][1]['body']['published'] ?? '', 'Photos are uploaded unpublished' );
+assert_equals( 'https://example.com/uploads/post-img-2.png', $fb_reqs[1][1]['body']['url'] ?? '', 'The second photo is the second AI image' );
+assert_true( str_ends_with( $fb_reqs[2][0], '/page-1/feed' ) && '{"media_fbid":"photo-2"}' === ( $fb_reqs[2][1]['body']['attached_media[1]'] ?? '' ), 'The feed post attaches both photos' );
+assert_equals( 'published', PressHub_Social_Queue::get_job( $fb_api_ids[0] )['status'], 'The job is published' );
+update_option( 'presshub_social_engine_facebook', 'automation' );
+update_option( 'presshub_social_post_images_facebook', 1 );
+
+// Every image fails: the job posts with the featured image.
+PressHub_Social_Queue::reset_memory_store();
+delete_post_meta( 760, PressHub_Social_Image_Library::META );
+PressHub_Social_Image_Library::set_generator( fn() => new WP_Error( 'image_http_429', 'Image API rate limit' ) );
+$fail_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+PressHub_Social_Post_Images::prepare_post( 760 );
+$fail_job = PressHub_Social_Queue::get_job( $fail_ids[0] );
+assert_equals( 'fallback', PressHub_Social_Post_Images::state( $fail_job ), 'A job whose images all fail falls back' );
+assert_equals( 'http://example.test/?attachment_id=7601', $fail_job['media_url'], 'The fallback job keeps the featured image' );
+assert_true( str_contains( (string) ( json_decode( (string) $fail_job['metadata'], true )['post_images']['reason'] ?? '' ), 'rate limit' ), 'The fallback records why' );
+assert_true( PressHub_Social_Post_Images::ready_to_post( $fail_job ), 'A fallback job can be posted' );
+
+// A plan that keeps failing: retried with backoff, then the jobs fall back.
+PressHub_Social_Queue::reset_memory_store();
+delete_post_meta( 760, PressHub_Social_Post_Images::PLAN_META );
+delete_post_meta( 760, PressHub_Social_Post_Images::PREP_ATTEMPTS_META );
+PressHub_Social_Post_Images::set_ai_caller( fn() => 'not json at all' );
+$plan_fail_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$GLOBALS['NEXT_SCHEDULED'] = [];
+PressHub_Social_Post_Images::prepare_post( 760 );
+assert_equals( 'pending', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $plan_fail_ids[0] ) ), 'After one failed plan the job still waits' );
+assert_equals( 1, count( array_filter( $GLOBALS['SCHEDULED_EVENTS'], fn( $e ) => PressHub_Social_Post_Images::PREPARE_HOOK === $e['hook'] && $e['time'] > time() ) ), 'A failed plan is retried later' );
+for ( $i = 0; $i < PressHub_Social_Settings_Storage::get_max_attempts(); $i++ ) {
+    PressHub_Social_Post_Images::prepare_post( 760 );
+}
+assert_equals( 'fallback', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $plan_fail_ids[0] ) ), 'After the retry budget the job falls back to the featured image' );
+
+// A job still waiting long after its posting time is released.
+PressHub_Social_Queue::reset_memory_store();
+$late_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+PressHub_Social_Queue::update_job( $late_ids[0], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - PressHub_Social_Post_Images::MAX_WAIT - 120 ) ] );
+$late_claim = PressHub_Social_REST_Controller::handle_claim( $img_req );
+assert_equals( 1, count( $late_claim['jobs'] ), 'A job waiting too long is claimed with the featured image' );
+assert_equals( 'http://example.test/?attachment_id=7601', $late_claim['jobs'][0]['media_url'] ?? '', 'The released job posts the featured image' );
+assert_false( isset( $late_claim['jobs'][0]['media_urls'] ), 'The released job carries no AI images' );
+
+// Plan parsing.
+assert_equals( [ 'a', 'b' ], PressHub_Social_Post_Images::parse_plan( '["a","b","c"]', 2 ), 'A bare JSON list is accepted and capped' );
+assert_equals( [ 'x y' ], PressHub_Social_Post_Images::parse_plan( 'Here: {"images":[" x   y ", ""]}', 4 ), 'Prose around the JSON and blank items are ignored' );
+assert_true( is_wp_error( PressHub_Social_Post_Images::parse_plan( '{"images":[]}', 2 ) ), 'An empty image list is an error' );
+
+// Shorts images go through the shared library too.
+assert_true( method_exists( 'PressHub_Social_Image_Library', 'get_or_create' ), 'Shorts and posts share the image library' );
+
+PressHub_Social_Post_Images::set_ai_caller( null );
+PressHub_Social_Image_Library::set_generator( null );
+PressHub_Social_AI_Copywriter::set_ai_caller( null );
+delete_option( 'presshub_social_post_images_enabled' );
+delete_option( 'presshub_social_post_images_twitter' );
+delete_option( 'presshub_social_post_images_facebook' );
+delete_option( 'presshub_social_post_images_instagram' );
+delete_option( 'presshub_social_meta_page_id' );
+delete_option( 'presshub_social_meta_access_token' );
+update_option( 'presshub_social_worker_sessions', $img_saved_sessions );
+foreach ( $img_saved_enabled as $img_p => $img_v ) {
+    if ( null === $img_v ) {
+        delete_option( 'presshub_social_enabled_' . $img_p );
+    } else {
+        update_option( 'presshub_social_enabled_' . $img_p, $img_v );
+    }
+}
 
 // ----------------------------------------------------------------------
 // Test Summary
