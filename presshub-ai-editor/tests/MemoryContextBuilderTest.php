@@ -200,6 +200,8 @@ $baseline_podcast = function( array $art, string $d = '2026-09-10', string $dur 
 // The pre-#135 baselines predate the briefing SEO rules appended to the
 // user prompt (PressHub_AI_Briefing_SEO::prompt_rules()); compare without them.
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_seo_enhance_enabled'] = 0;
+// Same for the claim-check rules appended to the curation user prompt.
+add_filter( 'presshub_ai_briefing_claim_check', '__return_false' );
 
 // --- Test A: When memory is disabled (presshub_ai_memory_enabled = 0) ---
 $GLOBALS['OPTIONS_STORE']['presshub_ai_memory_enabled'] = 0;

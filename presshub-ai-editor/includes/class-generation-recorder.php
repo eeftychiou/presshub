@@ -48,6 +48,7 @@ class PressHub_AI_Generation_Recorder {
         'memory_digest',
         'memory_rollup',
         'memory_stakeholders',
+        'memory_policy',
         'coauthor_draft',
         'scorecard',
         'copilot_chat',
@@ -334,6 +335,9 @@ class PressHub_AI_Generation_Recorder {
         if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
             PressHub_AI_Stakeholders::clear_last_applied();
         }
+        if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+            PressHub_AI_Policy_Fiches::clear_last_applied();
+        }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'reset_last_llm_request' ) ) {
             PressHub_AI_Token_Logger::reset_last_llm_request();
         }
@@ -385,6 +389,18 @@ class PressHub_AI_Generation_Recorder {
                     }
                 }
                 PressHub_AI_Stakeholders::clear_last_applied();
+            }
+            // Policy fiches (applied after the people fiches).
+            if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+                $policy = PressHub_AI_Policy_Fiches::last_applied();
+                if ( is_array( $policy ) ) {
+                    $config['policy_fiches']       = array_values( (array) $policy['fiches'] );
+                    $config['policy_fiches_chars'] = (int) $policy['chars'];
+                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $policy['original_hash'] ) {
+                        $sys_prompt = $policy['prompt'];
+                    }
+                }
+                PressHub_AI_Policy_Fiches::clear_last_applied();
             }
             $user_id     = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 );
             if ( $user_id > 0 ) {

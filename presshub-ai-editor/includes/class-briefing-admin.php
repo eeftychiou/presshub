@@ -93,6 +93,7 @@ class PressHub_AI_Briefing_Admin {
             'notes'        => $notes,
             'max_articles' => $max_articles,
             'priority'     => $priority,
+            'alignment'    => PressHub_AI_Settings_Storage::sanitize_source_alignment( $data['alignment'] ?? '' ),
         ];
 
         $existing_index  = null;
@@ -240,6 +241,36 @@ class PressHub_AI_Briefing_Admin {
         $target['enabled'] = $new_enabled;
 
         return self::save_news_source( $target );
+    }
+
+    /**
+     * Source balance of the pool by alignment, with a warning when every
+     * tagged article comes from pro-government sources. '' when no source in
+     * the pool has an alignment.
+     */
+    public static function source_balance_html( array $articles ): string {
+        if ( empty( $articles ) || ! class_exists( 'PressHub_AI_News_Curator' ) ) {
+            return '';
+        }
+        $balance = PressHub_AI_News_Curator::alignment_balance( $articles );
+        if ( 0 === array_sum( $balance['counts'] ) ) {
+            return '';
+        }
+        $labels = PressHub_AI_Settings_Render::alignment_labels();
+        $pills  = '';
+        foreach ( $balance['counts'] as $key => $n ) {
+            if ( $n > 0 ) {
+                $pills .= '<span class="presshub-stat-pill presshub-balance-' . esc_attr( $key ) . '">' . esc_html( $labels[ $key ] . ': ' . $n ) . '</span> ';
+            }
+        }
+        if ( $balance['untagged'] > 0 ) {
+            $pills .= '<span class="presshub-stat-pill presshub-balance-untagged">' . esc_html( sprintf( /* translators: %d: count */ __( 'Not tagged: %d', 'presshub-ai-editor' ), $balance['untagged'] ) ) . '</span>';
+        }
+        $html = '<div class="presshub-source-balance" id="presshub-source-balance"><p class="description" style="margin: 8px 0 4px;"><strong>' . esc_html__( 'Source balance', 'presshub-ai-editor' ) . '</strong></p><p style="margin: 0; display: flex; flex-wrap: wrap; gap: 6px;">' . $pills . '</p>';
+        if ( $balance['one_sided'] ) {
+            $html .= '<p class="presshub-source-balance-warning" style="margin: 6px 0 0; color: #8a4b00;">⚠️ ' . esc_html__( 'One-sided pool: the tagged articles all come from pro-government sources, with no opposition, independent or social-partner source. The briefing attributes their claims, but consider adding other sources.', 'presshub-ai-editor' ) . '</p>';
+        }
+        return $html . '</div>';
     }
 
     public function __construct() {
@@ -1254,6 +1285,13 @@ class PressHub_AI_Briefing_Admin {
                                 </div>
                             <?php endif; ?>
                         </div>
+
+                        <?php echo self::source_balance_html( (array) ( $status['articles'] ?? [] ) ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in source_balance_html(). ?>
+                        <?php
+                        if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+                            echo PressHub_AI_Policy_Fiches::hub_alerts_html( (array) ( $status['articles'] ?? [] ), (string) $date ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in hub_alerts_html().
+                        }
+                        ?>
 
                         <div class="presshub-articles-summary-box" style="<?php echo empty( $status['articles'] ) ? 'display:none;' : ''; ?>">
                             <p style="margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">

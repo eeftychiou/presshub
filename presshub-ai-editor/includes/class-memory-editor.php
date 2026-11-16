@@ -567,28 +567,16 @@ class PressHub_AI_Memory_Editor {
         $html .= '<p class="description">' . esc_html( sprintf( /* translators: %d: days */ __( 'Review and correct what the briefings remember. Showing the last %d days. Edits are marked as edited, survive regeneration and are written to the audit log.', 'presshub-ai-editor' ), $days ) ) . '</p>';
         $html .= '<div id="presshub-memory-notices" role="status" aria-live="polite"></div>';
 
-        // Issue #198: Timeline | Agenda tabs.
-        $tab = 'timeline';
-        if ( isset( $query['tab'] ) && 'agenda' === $query['tab'] && class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
-            $tab = 'agenda';
-        } elseif ( isset( $query['tab'] ) && 'stakeholders' === $query['tab'] && class_exists( 'PressHub_AI_Stakeholders' ) ) {
-            $tab = 'stakeholders'; // Issue #197.
-        }
-        if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
-            $base  = add_query_arg( [ 'page' => self::PAGE_SLUG ], admin_url( 'admin.php' ) );
-            $html .= '<nav class="nav-tab-wrapper presshub-memory-tabs">';
-            $html .= '<a href="' . esc_url( $base ) . '" class="nav-tab' . ( 'timeline' === $tab ? ' nav-tab-active' : '' ) . '">' . esc_html__( 'Timeline', 'presshub-ai-editor' ) . '</a>';
-            $html .= '<a href="' . esc_url( add_query_arg( [ 'tab' => 'agenda' ], $base ) ) . '" class="nav-tab' . ( 'agenda' === $tab ? ' nav-tab-active' : '' ) . '">' . esc_html__( 'Agenda', 'presshub-ai-editor' ) . '</a>';
+        // The agenda (#198) and people (#197) fiches moved to their own
+        // "Policy Fiches" menu; old ?tab= links are redirected by
+        // PressHub_AI_Fiches_Admin::maybe_redirect_legacy().
+        if ( class_exists( 'PressHub_AI_Fiches_Admin' ) ) {
+            $html .= '<p class="presshub-memory-fiches-link">' . esc_html__( 'The editorial agenda and the people fiches are under Policy Fiches:', 'presshub-ai-editor' ) . ' '
+                . '<a href="' . esc_url( PressHub_AI_Fiches_Admin::agenda_url() ) . '">' . esc_html__( 'Editorial agenda', 'presshub-ai-editor' ) . '</a>';
             if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
-                $html .= '<a href="' . esc_url( add_query_arg( [ 'tab' => 'stakeholders' ], $base ) ) . '" class="nav-tab' . ( 'stakeholders' === $tab ? ' nav-tab-active' : '' ) . '">' . esc_html__( 'People', 'presshub-ai-editor' ) . '</a>';
+                $html .= ' &middot; <a href="' . esc_url( PressHub_AI_Fiches_Admin::people_url() ) . '">' . esc_html__( 'People', 'presshub-ai-editor' ) . '</a>';
             }
-            $html .= '</nav>';
-        }
-        if ( 'agenda' === $tab ) {
-            return $html . PressHub_AI_Editorial_Agenda::build_tab( $query ) . '</div>';
-        }
-        if ( 'stakeholders' === $tab ) {
-            return $html . PressHub_AI_Stakeholders::build_tab( $query ) . '</div>';
+            $html .= '</p>';
         }
 
         if ( ! PressHub_AI_Settings_Storage::get_memory_enabled() ) {

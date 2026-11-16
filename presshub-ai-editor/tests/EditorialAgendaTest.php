@@ -9,7 +9,7 @@
  *     memory digests / intent classification / QA, nothing before a save.
  *  4. call_provider wiring and the generation record (version + prompt as sent).
  *  5. weekly suggestion from a rollup, accept and dismiss.
- *  6. admin form parsing and the Memory → Agenda tab.
+ *  6. admin form parsing and the Policy Fiches → Editorial agenda page.
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
@@ -203,8 +203,9 @@ ea_check( 'tab: history lists earlier versions', false !== strpos( $tab, 'v2 · 
 ea_check( 'tab: notice shown', false !== strpos( $tab, 'Agenda saved' ) );
 ea_check( 'tab: preview of the curation text', false !== strpos( $tab, 'ΑΤΖΕΝΤΑ (έκδοση 3)' ) );
 
-$page = PressHub_AI_Memory_Editor::build_page( [ 'tab' => 'agenda' ] );
-ea_check( 'memory page: agenda tab active', false !== strpos( $page, 'nav-tab nav-tab-active">Agenda' ) && false !== strpos( $page, $A::POST_SAVE ) );
+$page = PressHub_AI_Fiches_Admin::build_agenda_page( [] );
+ea_check( 'policy fiches page: agenda rendered', false !== strpos( $page, '<h1>Editorial agenda</h1>' ) && false !== strpos( $page, $A::POST_SAVE ) );
+ea_check( 'agenda: page slug is the Policy Fiches page', 'presshub-ai-agenda' === $A::page_slug() );
 
 if ( $failures > 0 ) {
     echo "EditorialAgendaTest: {$failures} of {$checks} checks failed\n";

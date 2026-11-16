@@ -123,6 +123,10 @@ $presshub_ai_options = [
     'presshub_ai_editorial_agenda_history',
     'presshub_ai_editorial_agenda_suggestion',
     'presshub_ai_stakeholders',
+    'presshub_ai_policy_fiches',
+    'presshub_ai_policy_candidates',
+    'presshub_ai_policy_alerts',
+    'presshub_ai_policy_draft_state',
 ];
 
 foreach ( $presshub_ai_options as $presshub_ai_option ) {

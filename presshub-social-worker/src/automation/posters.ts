@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import { WorkerLogger } from '../logger';
 import {
   Platform,
@@ -973,11 +973,12 @@ export async function markTikTokAiGenerated(page: any): Promise<boolean> {
     if ((await sw.getAttribute('data-state').catch(() => null)) === 'checked') return true;
     if (await sw.isChecked().catch(() => false)) return true;
     return await sw.evaluate((el: any) => {
-      const root = el.closest('[data-layout="switch-root"], .Switch__root') || el.parentElement;
-      if (!root) return false;
-      const checkedEl = root.querySelector('[aria-checked="true"], [data-state="checked"]');
+      const switchRoot = el.closest('[data-layout="switch-root"], .Switch__root');
+      const scope = switchRoot || el;
+      if (scope.matches?.('[aria-checked="true"], [data-state="checked"]')) return true;
+      const checkedEl = scope.querySelector('[aria-checked="true"], [data-state="checked"]');
       if (checkedEl) return true;
-      const input = root.querySelector('input[type="checkbox"]');
+      const input = scope.matches?.('input[type="checkbox"]') ? scope : scope.querySelector('input[type="checkbox"]');
       return Boolean(input && input.checked);
     }).catch(() => false);
   };
@@ -986,21 +987,35 @@ export async function markTikTokAiGenerated(page: any): Promise<boolean> {
     let sw = await findVisibleSwitch();
     // The switch sits under "Show more" and may be in a display:none container until expanded.
     if (!sw) {
-      const more = page.locator(
-        '[data-e2e="advanced_settings_container"] .more-btn, ' +
-        'button:has-text("Show more"), ' +
-        'div[role="button"]:has-text("Show more"), ' +
-        'div.more-btn:has-text("Show more"), ' +
-        'span:text-is("Show more"), ' +
-        'button:has-text("More options"), ' +
-        'div[role="button"]:has-text("More options")'
-      ).first();
-      if ((await more.count().catch(() => 0)) > 0) {
-        await more.scrollIntoViewIfNeeded().catch(() => {});
-        await more.click({ timeout: 5000 }).catch(() => more.click({ force: true }).catch(() => {}));
-        await page.waitForTimeout(600);
+      // Priority-ordered selectors: Playwright evaluates comma-joined selectors in document order,
+      // so we iterate individually to prevent an earlier decoy "Show more" from winning.
+      const moreSelectors = [
+        '[data-e2e="advanced_settings_container"].collapsed .more-btn',
+        '[data-e2e="advanced_settings_container"] .more-btn:has-text("Show more")',
+        'div.more-btn:has-text("Show more")',
+        'button:has-text("Show more")',
+        'div[role="button"]:has-text("Show more")',
+        'button:has-text("More options")',
+        'div[role="button"]:has-text("More options")',
+        'span:text-is("Show more")',
+      ];
+      let clickedMore = false;
+      for (const sel of moreSelectors) {
+        const m = page.locator(sel).first();
+        if (await m.isVisible().catch(() => false)) {
+          await m.scrollIntoViewIfNeeded().catch(() => {});
+          await m.click({ timeout: 5000 }).catch(() => m.click({ force: true }).catch(() => {}));
+          clickedMore = true;
+          break;
+        }
       }
-      sw = await findVisibleSwitch();
+      // Poll briefly for slow/lazy renders after expanding (or if already expanded).
+      const maxAttempts = clickedMore ? 6 : 2;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await page.waitForTimeout(400);
+        sw = await findVisibleSwitch();
+        if (sw) break;
+      }
     }
     if (!sw) {
       WorkerLogger.warn('TikTok Automation', 'Could not find the "AI-generated content" switch; the short is posted without the AI label. Turn it on by hand in TikTok and report the page change.');
@@ -1649,8 +1664,10 @@ export async function postFacebook(options: PostOptions): Promise<PostResult> {
  * goes on with Instagram's default crop.
  */
 export async function selectInstagramCrop(page: Page, preferred: string[]): Promise<string | null> {
+  // Case-insensitive: Google Chrome (the worker's browser) labels it "Select Crop", while
+  // headless Chromium says "Select crop".
   const cropButton = page.locator(
-    '[role="button"]:has(svg[aria-label="Select crop"]), button:has(svg[aria-label="Select crop"]), svg[aria-label="Select crop"]'
+    '[role="button"]:has(svg[aria-label="Select crop" i]), button:has(svg[aria-label="Select crop" i]), svg[aria-label="Select crop" i]'
   ).first();
   const hasCrop = await cropButton.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
   if (!hasCrop) {
@@ -1707,6 +1724,109 @@ export async function dismissInstagramInterstitials(page: Page): Promise<string[
     await page.waitForTimeout(800);
   }
   return clicked;
+}
+
+/** Collapse whitespace so captions compare the same in the composer, og:title and body text. */
+export function normalizeInstagramText(text: string): string {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Read the posting account's username from the open composer ("<name>'s profile picture").
+ * Returns null when it is not shown.
+ */
+export async function readInstagramComposerAccount(page: Page): Promise<string | null> {
+  const alt = await page
+    .getByRole('dialog')
+    .locator('img[alt$="profile picture" i]')
+    .first()
+    .getAttribute('alt', { timeout: 2000 })
+    .catch(() => null);
+  const match = alt ? /^(.+?)['’]s profile picture$/i.exec(alt.trim()) : null;
+  return match ? match[1].trim() : null;
+}
+
+export interface InstagramPermalink {
+  url: string;
+  shortcode: string;
+}
+
+/**
+ * Find the real link of a post that was just shared: the newest non-pinned post on the
+ * account's profile whose time is not older than `sharedAtMs` (minus a 2 min clock margin)
+ * and whose caption starts with the start of `copy`. Checks at most the 6 newest posts.
+ * Returns null when nothing matches, so the caller never reports a made-up link.
+ */
+export async function resolveInstagramPermalink(
+  page: Page,
+  copy: string,
+  sharedAtMs: number,
+  accountName: string | null
+): Promise<InstagramPermalink | null> {
+  if (!accountName) {
+    WorkerLogger.warn('Instagram Automation', 'Posting account name not found in the composer; cannot look up the new post link.');
+    return null;
+  }
+  const prefix = normalizeInstagramText(copy).slice(0, 40);
+  const profileUrl = `https://www.instagram.com/${encodeURIComponent(accountName)}/`;
+  WorkerLogger.debug('Instagram Automation', `Looking up the new post's link on ${profileUrl}...`);
+  await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
+  const tiles = page.locator('a[href*="/p/"], a[href*="/reel/"]');
+  await tiles.first().waitFor({ state: 'attached', timeout: 15000 }).catch(() => {});
+  const candidates: string[] = await tiles
+    .evaluateAll((as) =>
+      as
+        .filter((a) => !a.querySelector('svg[aria-label*="Pinned" i]'))
+        .map((a) => a.getAttribute('href') || '')
+        .filter((h) => /\/(p|reel)\/[A-Za-z0-9_-]+/.test(h))
+    )
+    .catch(() => [] as string[]);
+  const unique = [...new Set(candidates)].slice(0, 6);
+
+  for (const href of unique) {
+    const url = new URL(href, 'https://www.instagram.com/').toString();
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.locator('time[datetime]').first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
+    const datetime = await page.locator('time[datetime]').first().getAttribute('datetime', { timeout: 2000 }).catch(() => null);
+    const postedAt = datetime ? Date.parse(datetime) : NaN;
+    if (Number.isFinite(postedAt) && postedAt < sharedAtMs - 120000) {
+      // Older than this share: the posts further down are older still.
+      break;
+    }
+    const ogTitle = await page.locator('meta[property="og:title"]').getAttribute('content', { timeout: 2000 }).catch(() => '');
+    const body = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
+    const text = normalizeInstagramText(`${ogTitle || ''} ${body || ''}`);
+    if (prefix && text.includes(prefix)) {
+      const shortcode = (/\/(?:p|reel)\/([A-Za-z0-9_-]+)/.exec(url) || [])[1] || '';
+      return { url, shortcode };
+    }
+  }
+  return null;
+}
+
+/**
+ * Find a button of Instagram's "Create new post" / "New reel" composer by its exact
+ * accessible name (e.g. "Next", "Share"). It is looked up inside the open dialog only, so
+ * look-alikes in the feed behind the modal ("Share" icons) or "Share to" never match. Only
+ * when no dialog is open at all does it fall back to a page-wide exact match. Returns null
+ * when the button does not become visible within `timeoutMs`.
+ */
+export async function findInstagramComposerButton(page: Page, name: string, timeoutMs: number): Promise<Locator | null> {
+  const inDialog = page.getByRole('dialog').getByRole('button', { name, exact: true }).first();
+  const anywhere = page.getByRole('button', { name, exact: true }).first();
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await inDialog.isVisible().catch(() => false)) {
+      return inDialog;
+    }
+    if ((await page.getByRole('dialog').count().catch(() => 0)) === 0 && (await anywhere.isVisible().catch(() => false))) {
+      return anywhere;
+    }
+    if (Date.now() >= deadline) {
+      return null;
+    }
+    await page.waitForTimeout(250);
+  }
 }
 
 /**
@@ -1809,17 +1929,14 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     }
 
     WorkerLogger.debug('Instagram Automation', 'Advancing Next buttons...');
-    const nextButton = page.locator(
-      'button:has-text("Next"), div[role="button"]:has-text("Next")'
-    ).first();
-    await nextButton.waitFor({ state: 'visible', timeout: isVideo ? 20000 : 10000 }).catch(() => {});
-    if ((await nextButton.count()) > 0) {
-      await nextButton.click();
+    // Crop -> Edit -> Caption: click the composer's own "Next" until it is gone (at most 3 steps).
+    for (let step = 0; step < 3; step++) {
+      const nextButton = await findInstagramComposerButton(page, 'Next', step === 0 ? (isVideo ? 20000 : 10000) : 3000);
+      if (!nextButton) break;
+      await nextButton.click({ timeout: 10000 }).catch((err: any) => {
+        throw new Error(`Instagram composer "Next" button could not be clicked: ${String(err?.message || err).split('\n')[0]}`);
+      });
       await page.waitForTimeout(1000);
-      if ((await nextButton.count()) > 0 && (await nextButton.isVisible().catch(() => false))) {
-        await nextButton.click();
-        await page.waitForTimeout(1000);
-      }
     }
 
     WorkerLogger.info('Instagram Automation', `Typing caption (${options.copy.length} chars)...`);
@@ -1830,12 +1947,22 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
     await captionBox.click();
     await captionBox.fill(options.copy);
 
+    // The caption step shows the posting account ("<name>'s profile picture"); remember it
+    // to look up the new post's link on the profile afterwards.
+    const accountName = await readInstagramComposerAccount(page);
+
     WorkerLogger.info('Instagram Automation', 'Clicking Share button...');
-    const shareButton = page.locator(
-      'button:has-text("Share"), div[role="button"]:has-text("Share")'
-    ).first();
-    await shareButton.waitFor({ state: 'visible', timeout: 15000 });
-    await shareButton.click();
+    const sharedAt = Date.now();
+    // Only the composer's own "Share": a page-wide `:has-text("Share")` also matches the feed's
+    // paper-plane Share icons behind the modal (their SVG title is "Share"), whose clicks the
+    // modal intercepts, and the composer's "Share to" toggle.
+    const shareButton = await findInstagramComposerButton(page, 'Share', 15000);
+    if (!shareButton) {
+      throw new Error('Instagram composer "Share" button not found (the composer may have closed or changed).');
+    }
+    await shareButton.click({ timeout: 10000 }).catch((err: any) => {
+      throw new Error(`Instagram composer "Share" button could not be clicked: ${String(err?.message || err).split('\n')[0]}`);
+    });
 
     const sharedText = page.locator('text=/Your (reel|post) has been shared/i').first();
     if (isVideo) {
@@ -1846,16 +1973,25 @@ export async function postInstagram(options: PostOptions): Promise<PostResult> {
       });
     }
 
-    const generatedId = `ig-${Date.now()}`;
-    const postUrl = `https://instagram.com/p/${generatedId}`;
-    WorkerLogger.info('Instagram Automation', `Post completed! URL: ${postUrl}, ID: ${generatedId}`);
+    // Instagram's web composer does not show the new post's link, so find it on the profile.
+    const permalink = await resolveInstagramPermalink(page, options.copy, sharedAt, accountName).catch((err: any) => {
+      WorkerLogger.warn('Instagram Automation', `Could not look up the new post's link: ${String(err?.message || err).split('\n')[0]}`);
+      return null;
+    });
+    const postUrl = permalink?.url || '';
+    const postId = permalink?.shortcode || '';
+    if (permalink) {
+      WorkerLogger.info('Instagram Automation', `Post completed! URL: ${postUrl}, ID: ${postId}`);
+    } else {
+      WorkerLogger.warn('Instagram Automation', 'Post completed, but its link could not be confirmed on the profile; reporting it without a URL.');
+    }
 
     return {
       success: true,
       platform: 'instagram',
-      externalPostId: generatedId,
+      externalPostId: postId,
       externalPostUrl: postUrl,
-      external_id: generatedId,
+      external_id: postId,
       external_url: postUrl,
       mediaPath: options.mediaPath
     };

@@ -604,7 +604,7 @@ class PressHub_AI_Stakeholders {
     }
 
     // ---------------------------------------------------------------------
-    // Admin (Memory → Stakeholders tab)
+    // Admin (Policy Fiches → People)
     // ---------------------------------------------------------------------
 
     private static function guard(): void {
@@ -615,9 +615,13 @@ class PressHub_AI_Stakeholders {
         check_admin_referer( self::NONCE );
     }
 
+    /** Admin page of the fiches (Policy Fiches → People). */
+    public static function page_slug(): string {
+        return class_exists( 'PressHub_AI_Fiches_Admin' ) ? PressHub_AI_Fiches_Admin::PEOPLE_SLUG : 'presshub-ai-people';
+    }
+
     private static function back( array $args ): void {
-        $slug = class_exists( 'PressHub_AI_Memory_Editor' ) ? PressHub_AI_Memory_Editor::PAGE_SLUG : 'presshub-ai-memory';
-        wp_safe_redirect( add_query_arg( array_merge( [ 'page' => $slug, 'tab' => 'stakeholders' ], $args ), admin_url( 'admin.php' ) ) );
+        wp_safe_redirect( add_query_arg( array_merge( [ 'page' => self::page_slug() ], $args ), admin_url( 'admin.php' ) ) );
         exit;
     }
 
@@ -655,7 +659,7 @@ class PressHub_AI_Stakeholders {
 
     public static function build_tab( array $query = [] ): string {
         $fiches  = self::all();
-        $base    = add_query_arg( [ 'page' => class_exists( 'PressHub_AI_Memory_Editor' ) ? PressHub_AI_Memory_Editor::PAGE_SLUG : 'presshub-ai-memory', 'tab' => 'stakeholders' ], admin_url( 'admin.php' ) );
+        $base    = add_query_arg( [ 'page' => self::page_slug() ], admin_url( 'admin.php' ) );
         $notices = [
             'saved'                     => __( 'Fiche saved. It is now marked as edited and keeps your changes on rebuild.', 'presshub-ai-editor' ),
             'merged'                    => __( 'Fiches merged.', 'presshub-ai-editor' ),

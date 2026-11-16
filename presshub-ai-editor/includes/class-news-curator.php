@@ -217,8 +217,10 @@ class PressHub_AI_News_Curator {
         // Issue #196 - each article's source priority (1-5, 3 = normal).
         $articles   = array_values( $articles );
         $priorities = [];
+        $alignments = [];
         foreach ( $articles as $i => $a ) {
             $priorities[ $i ] = self::article_priority( is_array( $a ) ? $a : [] );
+            $alignments[ $i ] = self::article_alignment( is_array( $a ) ? $a : [] );
         }
         if ( $original_count > $max_articles ) {
             // Issue #196 - keep the highest-priority sources first (ties keep
@@ -238,16 +240,22 @@ class PressHub_AI_News_Curator {
                 $entry             = self::breakdown_identity( $dropped, (int) $drop_idx );
                 $entry['reason']   = 'cap_articles';
                 $entry['priority'] = $priorities[ $drop_idx ];
+                if ( '' !== $alignments[ $drop_idx ] ) {
+                    $entry['alignment'] = $alignments[ $drop_idx ];
+                }
                 self::$last_breakdown_dropped_cap[] = $entry;
             }
             $kept_articles   = [];
             $kept_priorities = [];
+            $kept_alignments = [];
             foreach ( $keep as $k ) {
                 $kept_articles[]   = $articles[ $k ];
                 $kept_priorities[] = $priorities[ $k ];
+                $kept_alignments[] = $alignments[ $k ];
             }
             $articles   = $kept_articles;
             $priorities = $kept_priorities;
+            $alignments = $kept_alignments;
             $truncated  = true;
         }
 
@@ -277,6 +285,9 @@ class PressHub_AI_News_Curator {
             $entry['chars_original'] = $chars_original;
             $entry['truncated']      = $art_truncated;
             $entry['priority']       = $priorities[ $index ];
+            if ( '' !== $alignments[ $index ] ) {
+                $entry['alignment'] = $alignments[ $index ];
+            }
             $breakdown_sent[]        = $entry;
 
             $block = "### {$num}. {$title}\n";
@@ -286,6 +297,9 @@ class PressHub_AI_News_Curator {
             }
             if ( PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT !== $priorities[ $index ] ) {
                 $block .= ' | **' . __( 'Προτεραιότητα πηγής', 'presshub-ai-editor' ) . ':** ' . self::priority_label( $priorities[ $index ] ) . ' (' . $priorities[ $index ] . '/5)';
+            }
+            if ( '' !== $alignments[ $index ] ) {
+                $block .= ' | **' . __( 'Τάση πηγής', 'presshub-ai-editor' ) . ':** ' . self::alignment_label_el( $alignments[ $index ] );
             }
             if ( $is_press_release ) {
                 // Press releases arrive by email: they are the sender's own
@@ -327,6 +341,12 @@ class PressHub_AI_News_Curator {
         } ) ) {
             // Issue #196 - say once what the priority labels mean.
             $rendered = __( 'Σημείωση για τις πηγές: κάποια άρθρα έχουν «Προτεραιότητα πηγής» (1 = χαμηλή, 5 = υψηλή, χωρίς ένδειξη = κανονική). Για τα κύρια θέματα προτίμησε πηγές υψηλής προτεραιότητας. Ισχυρισμούς που στηρίζονται μόνο σε πηγή χαμηλής προτεραιότητας διασταύρωσέ τους με άλλη πηγή ή απόδωσέ τους ρητά.', 'presshub-ai-editor' )
+                . "\n\n---\n\n" . $rendered;
+        }
+
+        if ( array_filter( $alignments ) ) {
+            // Say once what the alignment labels mean and how to use them.
+            $rendered = __( 'Σημείωση για την τάση των πηγών: κάποια άρθρα έχουν «Τάση πηγής» (φιλοκυβερνητική, αντιπολιτευτική, ανεξάρτητη, θεσμική, κοινωνικός εταίρος). Ισχυρισμούς από πηγή με τάση απόδωσέ τους σε όποιον τους διατυπώνει και μην τους παρουσιάζεις ως επιβεβαιωμένα γεγονότα. Όταν ένα θέμα καλύπτεται μόνο από πηγές μίας τάσης, γράψε το ως θέση της πλευράς αυτής και ανέφερε τη θέση της άλλης πλευράς αν υπάρχει στο υλικό.', 'presshub-ai-editor' )
                 . "\n\n---\n\n" . $rendered;
         }
 
@@ -403,6 +423,93 @@ class PressHub_AI_News_Curator {
     /** Tests: forget the cached host => priority map. */
     public static function reset_priority_map(): void {
         self::$priority_map = null;
+    }
+
+    /**
+     * An article's source alignment: its own 'source_alignment' when set, else
+     * the configured source on the same host (or a parent domain), else ''.
+     * Press releases and social posts carry no alignment.
+     */
+    public static function article_alignment( array $article ): string {
+        if ( isset( $article['source_alignment'] ) && is_string( $article['source_alignment'] ) && '' !== $article['source_alignment'] ) {
+            return PressHub_AI_Settings_Storage::sanitize_source_alignment( $article['source_alignment'] );
+        }
+        if ( ! empty( $article['is_press_release'] ) || ! empty( $article['is_social_post'] )
+            || in_array( $article['source_type'] ?? '', [ 'press_release', 'social_post' ], true ) ) {
+            return '';
+        }
+        $host = strtolower( preg_replace( '/^www\./i', '', (string) parse_url( (string) ( $article['url'] ?? '' ), PHP_URL_HOST ) ) );
+        if ( '' === $host ) {
+            return '';
+        }
+        if ( null === self::$alignment_map ) {
+            self::$alignment_map = PressHub_AI_Settings_Storage::get_source_alignment_map();
+        }
+        for ( $h = $host; '' !== $h && false !== strpos( $h, '.' ); $h = (string) substr( $h, strpos( $h, '.' ) + 1 ) ) {
+            if ( isset( self::$alignment_map[ $h ] ) ) {
+                return self::$alignment_map[ $h ];
+            }
+        }
+        return '';
+    }
+
+    /** Host => alignment, read once per request. */
+    private static $alignment_map = null;
+
+    /** Tests: forget the cached host => alignment map. */
+    public static function reset_alignment_map(): void {
+        self::$alignment_map = null;
+    }
+
+    /** Greek label of an alignment, as the model sees it. */
+    public static function alignment_label_el( string $alignment ): string {
+        $labels = [
+            'government'     => __( 'φιλοκυβερνητική', 'presshub-ai-editor' ),
+            'opposition'     => __( 'αντιπολιτευτική', 'presshub-ai-editor' ),
+            'independent'    => __( 'ανεξάρτητη', 'presshub-ai-editor' ),
+            'institutional'  => __( 'θεσμική', 'presshub-ai-editor' ),
+            'social_partner' => __( 'κοινωνικός εταίρος', 'presshub-ai-editor' ),
+        ];
+        return $labels[ $alignment ] ?? '';
+    }
+
+    /**
+     * Pool balance by alignment, for the Hub's one-sided warning.
+     *
+     * @return array{counts:array<string,int>,untagged:int,one_sided:bool}
+     */
+    public static function alignment_balance( array $articles ): array {
+        $counts   = array_fill_keys( array_keys( PressHub_AI_Settings_Storage::SOURCE_ALIGNMENTS ), 0 );
+        $untagged = 0;
+        foreach ( $articles as $a ) {
+            $al = self::article_alignment( is_array( $a ) ? $a : [] );
+            if ( '' === $al ) {
+                $untagged++;
+            } else {
+                $counts[ $al ]++;
+            }
+        }
+        $counter   = $counts['opposition'] + $counts['independent'] + $counts['social_partner'];
+        $one_sided = $counts['government'] > 0 && 0 === $counter;
+        return [ 'counts' => $counts, 'untagged' => $untagged, 'one_sided' => $one_sided ];
+    }
+
+    /**
+     * Claim-check rules added to the curation user prompt (code-built, so a
+     * customised system prompt keeps them). Filter
+     * `presshub_ai_briefing_claim_check` to switch them off.
+     */
+    public static function claim_check_rules(): string {
+        $on = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'presshub_ai_briefing_claim_check', true ) : true;
+        if ( ! $on ) {
+            return '';
+        }
+        return "\n\n" . __( 'Έλεγχος ισχυρισμών (για θέματα πολιτικής, νομοθεσίας ή αντιπαράθεσης):', 'presshub-ai-editor' ) . "\n"
+            . __( '1. Απόδωσε κάθε ισχυρισμό σε όποιον τον διατυπώνει. Μην γράφεις ως γεγονός ό,τι είναι θέση της κυβέρνησης, κόμματος ή φορέα.', 'presshub-ai-editor' ) . "\n"
+            . __( '2. Όταν κάποιος κατηγορεί άλλον ότι εμποδίζει ή καθυστερεί κάτι (π.χ. τη Βουλή, την αντιπολίτευση, τους κοινωνικούς εταίρους), ανέφερε τη θέση και το επιχείρημα αυτού που κατηγορείται, αν υπάρχει στο υλικό. Αν δεν υπάρχει, γράψε ότι η θέση του δεν περιλαμβάνεται στις διαθέσιμες πηγές.', 'presshub-ai-editor' ) . "\n"
+            . __( '3. Εξήγησε ποιος αποφασίζει στην πράξη (ψηφοφορία στη Βουλή, απόφαση του Υπουργικού, διάταγμα, προϋπολογισμός) και τι συνδέεται με τι στην πρόταση, όταν αυτό προκύπτει από το υλικό.', 'presshub-ai-editor' ) . "\n"
+            . __( '4. Ξεχώρισε ζητήματα που παρουσιάζονται μαζί ενώ είναι διαφορετικά (π.χ. αύξηση σε σημερινούς συνταξιούχους και αλλαγές για τους σημερινούς εργαζόμενους).', 'presshub-ai-editor' ) . "\n"
+            . __( '5. Μην επινοείς θέσεις, αριθμούς ή γεγονότα που δεν υπάρχουν στο υλικό.', 'presshub-ai-editor' );
     }
 
     private static function priority_label( int $p ): string {
@@ -872,6 +979,9 @@ class PressHub_AI_News_Curator {
                 );
             }
         }
+
+        // Claim check: attribute claims, give the blamed side, say who decides.
+        $user_prompt .= self::claim_check_rules();
 
         // Headline length, short paragraphs and inline source links. Kept in
         // the code-built user prompt so a customised system prompt keeps them.
