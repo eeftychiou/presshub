@@ -340,7 +340,7 @@ All code contributions must strictly adhere to WordPress security best practices
 > **No operational limit, threshold, cap, time budget, batch size, retry count, or rate limit that affects user-visible behavior may be hard-coded as a default inside business logic.** Every such value **must** be a WordPress option exposed in the **Settings** page (`PressHub AI → Settings`), with:
 >
 > 1. A registered option key (e.g. `presshub_ai_<scope>_<knob>`).
-> 2. A `register_setting()` call with a `sanitize_callback` that clamps the value to documented safe bounds.
+> 2. A `PressHub_Settings_Registry::register()` call (not a bare `register_setting()`) with a `sanitize_callback` that clamps the value to documented safe bounds, **and** an entry in `includes/settings-registry-data.php` (page, tab, section, label, help, type, checkbox/secret flags, status, default). The registry is the single source of truth for every save path (options.php and both AJAX saves, #233); `SettingsRegistryTest` fails if the two disagree, `SettingsSaveIsolationTest` checks that each tab saves only its own options, and `docs/settings-inventory.md` must be regenerated with `php presshub-ai-editor/scripts/settings-inventory.php`.
 > 3. A `sanitize_<knob>` static method on `PressHub_AI_Settings_Storage`.
 > 4. A `get_<knob>` static helper on `PressHub_AI_Settings_Storage` returning the clamped value with a documented default.
 > 5. An `add_settings_field()` row on the relevant settings section.
