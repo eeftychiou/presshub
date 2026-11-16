@@ -62,7 +62,7 @@ function presshub_settings_inventory_markdown(): string {
         $tabs = $counts[ $p ]['tabs'] ?? [];
         foreach ( $tabs as $tab => $n ) {
             $md .= "### Tab `{$tab}` ({$n})\n\n";
-            $md .= "| Option | Label | Type | Notes |\n|---|---|---|---|\n";
+            $md .= "| Option | Label | Type | Unit | Notes |\n|---|---|---|---|---|\n";
             foreach ( PressHub_Settings_Registry::for_tab( $p, $tab ) as $key => $e ) {
                 if ( $e['tab'] !== $tab ) {
                     continue;
@@ -87,11 +87,13 @@ function presshub_settings_inventory_markdown(): string {
                 if ( function_exists( 'mb_strlen' ) && mb_strlen( $label_txt ) > 90 ) {
                     $label_txt = mb_substr( $label_txt, 0, 87 ) . '…';
                 }
-                $md .= sprintf( "| `%s` | %s | %s | %s |\n", $key, $label_txt, $e['type'] ?? 'string', implode( ', ', $notes ) );
+                $md .= sprintf( "| `%s` | %s | %s | %s | %s |\n", $key, $label_txt, $e['type'] ?? 'string', str_replace( '|', '\\|', (string) ( $e['unit'] ?? '' ) ), implode( ', ', $notes ) );
             }
             $md .= "\n";
         }
     }
+
+    $md .= presshub_settings_inventory_filters( $all );
 
     $md .= "## Scheduled for removal\n\n";
     if ( ! $unused ) {
@@ -103,6 +105,48 @@ function presshub_settings_inventory_markdown(): string {
         }
     }
     return $md;
+}
+
+/**
+ * Developer filters: every presshub_* filter the plugins apply, with the
+ * setting it runs on top of when there is one (#233 step 5).
+ */
+function presshub_settings_inventory_filters( array $all ): string {
+    $backed = [
+        'presshub_ai_policy_fiches_enabled'          => 'presshub_ai_policy_fiches_enabled',
+        'presshub_ai_stakeholders_enabled'           => 'presshub_ai_stakeholders_enabled',
+        'presshub_ai_briefing_claim_check'           => 'presshub_ai_claim_check_enabled',
+        'presshub_ai_pool_cleanup_enabled'           => 'presshub_ai_pool_cleanup_enabled',
+        'presshub_ai_pool_max_age_hours'             => 'presshub_ai_pool_max_age_hours',
+        'presshub_ai_pool_duplicate_similarity'      => 'presshub_ai_pool_duplicate_similarity',
+        'presshub_ai_policy_fiches_budgets'          => 'presshub_ai_policy_fiches_budgets',
+        'presshub_ai_stakeholders_budgets'           => 'presshub_ai_stakeholders_budgets',
+        'presshub_ai_editorial_agenda_budgets'       => 'presshub_ai_editorial_agenda_budgets',
+        'presshub_ai_podcast_show_notes_enabled'     => 'presshub_ai_podcast_show_notes_enabled',
+        'presshub_social_trending_max_per_account'   => 'presshub_ai_social_trending_max_per_account',
+        'presshub_social_trending_share_after_hour'  => 'presshub_ai_social_trending_share_after_hour',
+        'presshub_ai_debug_prompts'                  => 'presshub_ai_debug_prompts',
+        'presshub_ai_fetch_source_urls'              => 'presshub_ai_fetch_urls',
+        'presshub_ai_harvest_time_budget'            => 'presshub_ai_harvest_time_budget',
+    ];
+    $names = [];
+    $files = array_merge( glob( dirname( __DIR__ ) . '/includes/*.php' ) ?: [], [ dirname( __DIR__ ) . '/presshub-ai-editor.php' ] );
+    foreach ( $files as $file ) {
+        if ( preg_match_all( "/apply_filters\\(\\s*'(presshub_[a-z0-9_]+)'/", (string) file_get_contents( $file ), $m ) ) {
+            foreach ( $m[1] as $n ) {
+                $names[ $n ] = true;
+            }
+        }
+    }
+    ksort( $names );
+    $md  = "## Developer filters\n\n";
+    $md .= "Hooks for developers and hosting. Where a filter has a related setting, the filter adjusts the saved value; the rest stay code-only.\n\n";
+    $md .= "| Filter | Related setting |\n|---|---|\n";
+    foreach ( array_keys( $names ) as $n ) {
+        $opt = $backed[ $n ] ?? '';
+        $md .= sprintf( "| `%s` | %s |\n", $n, '' !== $opt && isset( $all[ $opt ] ) ? '`' . $opt . '`' : 'code only' );
+    }
+    return $md . "\n";
 }
 
 if ( PHP_SAPI === 'cli' && isset( $argv ) && realpath( $argv[0] ) === realpath( __FILE__ ) ) {

@@ -932,6 +932,9 @@ class PressHub_AI_Settings_Render {
                     <?php $this->render_section_with_fields( 'presshub_ai_social', __( 'Social & OpenGraph Metadata (Twitter/X & Facebook Cards)', 'presshub-ai-editor' ) ); ?>
 
                     <hr style="margin: 25px 0;">
+                    <?php $this->render_diagnostics_section(); ?>
+
+                    <hr style="margin: 25px 0;">
                     <h2><?php echo __( 'Connection Testing & Verification', 'presshub-ai-editor' ); ?></h2>
                     <p><?php echo __( 'Verify connectivity with any configured provider. Each test uses its own rate-limit budget and logs activity in the Token Logger dashboard.', 'presshub-ai-editor' ); ?></p>
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -1017,6 +1020,7 @@ class PressHub_AI_Settings_Render {
                     <span id="presshub-ai-save-spinner" class="spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
                 </div>
             </form>
+            <?php $this->render_transfer_forms(); ?>
 
             <!-- Sticky Save Changes Bar for Long Settings Pages (Issue #16 & #17) -->
             <div id="presshub-sticky-save-bar" class="presshub-sticky-save-bar" role="region" aria-label="<?php echo esc_attr__( 'Quick Save Bar', 'presshub-ai-editor' ); ?>" style="display: none;">
@@ -2522,6 +2526,117 @@ class PressHub_AI_Settings_Render {
      * @param string $module Option infix, e.g. "briefing_text".
      * @param string $role   Role label shown to editors, e.g. "Curator".
      */
+    /**
+     * The import forms live outside the settings form (forms can't nest); the
+     * controls inside the Diagnostics section point at them with form="…".
+     */
+    public function render_transfer_forms() {
+        if ( ! class_exists( 'PressHub_Settings_Transfer' ) ) {
+            return;
+        }
+        $nonce = function_exists( 'wp_nonce_field' ) ? wp_nonce_field( PressHub_Settings_Transfer::NONCE, '_wpnonce', true, false ) : '';
+        $post  = admin_url( 'admin-post.php' );
+        ?>
+        <form id="presshub-settings-import-form" method="post" action="<?php echo self::esc_attr_safe( $post ); ?>" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="<?php echo self::esc_attr_safe( PressHub_Settings_Transfer::PREVIEW_ACTION ); ?>" />
+            <?php echo $nonce; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core nonce markup. ?>
+        </form>
+        <form id="presshub-settings-apply-form" method="post" action="<?php echo self::esc_attr_safe( $post ); ?>">
+            <input type="hidden" name="action" value="<?php echo self::esc_attr_safe( PressHub_Settings_Transfer::APPLY_ACTION ); ?>" />
+            <?php echo $nonce; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core nonce markup. ?>
+        </form>
+        <?php
+    }
+
+    /**
+     * Advanced & System → Diagnostics (#233): settings export / import and the
+     * list of settings scheduled for removal.
+     */
+    public function render_diagnostics_section() {
+        $T       = 'PressHub_Settings_Transfer';
+        $unused  = class_exists( 'PressHub_Settings_Registry' ) ? PressHub_Settings_Registry::unused() : [];
+        $pending = class_exists( $T ) ? $T::pending() : null;
+        $state   = isset( $_GET['presshub_import'] ) ? sanitize_key( wp_unslash( $_GET['presshub_import'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification -- display only.
+        ?>
+        <h2 id="presshub-diagnostics"><?php echo esc_html__( 'Diagnostics', 'presshub-ai-editor' ); ?></h2>
+
+        <h3><?php echo esc_html__( 'Export and import settings', 'presshub-ai-editor' ); ?></h3>
+        <p class="description"><?php echo esc_html__( 'Download every PressHub AI and PressHub Social setting as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them.', 'presshub-ai-editor' ); ?></p>
+        <?php if ( 'done' === $state ) : ?>
+            <div class="notice notice-success inline"><p><?php echo self::esc_html_safe( sprintf( __( 'Import finished: %d settings changed.', 'presshub-ai-editor' ), isset( $_GET['presshub_import_count'] ) ? (int) $_GET['presshub_import_count'] : 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification ?></p></div>
+        <?php elseif ( 'expired' === $state ) : ?>
+            <div class="notice notice-warning inline"><p><?php echo esc_html__( 'Nothing was imported: the preview had expired. Choose the file again.', 'presshub-ai-editor' ); ?></p></div>
+        <?php endif; ?>
+        <p>
+            <?php if ( class_exists( $T ) ) : ?>
+                <a class="button" href="<?php echo self::esc_attr_safe( $T::export_url() ); ?>"><?php echo esc_html__( 'Export settings (JSON, no keys)', 'presshub-ai-editor' ); ?></a>
+            <?php endif; ?>
+            &nbsp;
+            <label for="presshub_settings_file" class="screen-reader-text"><?php echo esc_html__( 'Settings export file', 'presshub-ai-editor' ); ?></label>
+            <input type="file" id="presshub_settings_file" name="presshub_settings_file" accept="application/json,.json" form="presshub-settings-import-form" class="presshub-no-dirty" />
+            <button type="submit" class="button" form="presshub-settings-import-form"><?php echo esc_html__( 'Preview import', 'presshub-ai-editor' ); ?></button>
+        </p>
+        <?php if ( $pending && isset( $pending['error'] ) ) : ?>
+            <div class="notice notice-error inline"><p><?php echo self::esc_html_safe( (string) $pending['error'] ); ?></p></div>
+        <?php elseif ( $pending && isset( $pending['options'] ) && class_exists( $T ) ) : ?>
+            <?php $preview = $T::preview( (array) $pending['options'] ); ?>
+            <div class="presshub-import-preview" style="border:1px solid #c3c4c7;background:#fff;padding:12px;margin:8px 0;">
+                <p><strong><?php echo self::esc_html_safe( sprintf( __( 'Import preview: %1$d settings would change, %2$d are already the same, %3$d are skipped.', 'presshub-ai-editor' ), count( $preview['changes'] ), $preview['unchanged'], count( $preview['skipped'] ) ) ); ?></strong></p>
+                <?php if ( $preview['changes'] ) : ?>
+                    <table class="widefat striped" style="max-width:100%;">
+                        <thead><tr><th><?php echo esc_html__( 'Setting', 'presshub-ai-editor' ); ?></th><th><?php echo esc_html__( 'Now', 'presshub-ai-editor' ); ?></th><th><?php echo esc_html__( 'After import', 'presshub-ai-editor' ); ?></th></tr></thead>
+                        <tbody>
+                        <?php foreach ( $preview['changes'] as $key => $change ) : ?>
+                            <?php $entry = PressHub_Settings_Registry::get( $key ); ?>
+                            <tr>
+                                <td><?php echo self::esc_html_safe( (string) ( $entry['label'] ?? $key ) ); ?><br /><code><?php echo self::esc_html_safe( $key ); ?></code></td>
+                                <td><code><?php echo self::esc_html_safe( $T::display_value( $change['from'] ) ); ?></code></td>
+                                <td><code><?php echo self::esc_html_safe( $T::display_value( $change['to'] ) ); ?></code></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+                <?php if ( $preview['skipped'] ) : ?>
+                    <p class="description"><?php echo self::esc_html_safe( __( 'Skipped:', 'presshub-ai-editor' ) . ' ' . implode( ', ', array_map( static function ( $k, $why ) { return $k . ' (' . $why . ')'; }, array_keys( $preview['skipped'] ), $preview['skipped'] ) ) ); ?></p>
+                <?php endif; ?>
+                <p>
+                    <button type="submit" class="button button-primary" form="presshub-settings-apply-form" <?php echo $preview['changes'] ? '' : 'disabled="disabled"'; ?>><?php echo esc_html__( 'Apply import', 'presshub-ai-editor' ); ?></button>
+                    <span class="description"><?php echo esc_html__( 'Export your current settings first if you may want them back.', 'presshub-ai-editor' ); ?></span>
+                </p>
+            </div>
+        <?php endif; ?>
+
+        <h3 id="presshub-scheduled-for-removal"><?php echo esc_html__( 'Scheduled for removal', 'presshub-ai-editor' ); ?></h3>
+        <p class="description"><?php echo esc_html__( 'PressHub no longer reads these settings, so they are no longer shown on their pages. Their saved values are kept until you approve their removal in the clean-up release.', 'presshub-ai-editor' ); ?></p>
+        <?php if ( ! $unused ) : ?>
+            <p><?php echo esc_html__( 'None.', 'presshub-ai-editor' ); ?></p>
+        <?php else : ?>
+            <table class="widefat striped presshub-removal-list" style="max-width:100%;">
+                <thead><tr>
+                    <th><?php echo esc_html__( 'Setting', 'presshub-ai-editor' ); ?></th>
+                    <th><?php echo esc_html__( 'Was shown on', 'presshub-ai-editor' ); ?></th>
+                    <th><?php echo esc_html__( 'Saved value', 'presshub-ai-editor' ); ?></th>
+                    <th><?php echo esc_html__( 'Why it is unused', 'presshub-ai-editor' ); ?></th>
+                    <th><?php echo esc_html__( 'Last read', 'presshub-ai-editor' ); ?></th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ( $unused as $key => $e ) : ?>
+                    <?php $stored = get_option( $key, null ); ?>
+                    <tr>
+                        <td><?php echo self::esc_html_safe( (string) ( $e['label'] ?? $key ) ); ?><br /><code><?php echo self::esc_html_safe( $key ); ?></code></td>
+                        <td><?php echo self::esc_html_safe( (string) ( $e['was_shown_on'] ?? '' ) ); ?></td>
+                        <td><code><?php echo self::esc_html_safe( class_exists( $T ) ? $T::display_value( $stored, ! empty( $e['secret'] ) ) : '' ); ?></code></td>
+                        <td><?php echo self::esc_html_safe( (string) ( $e['unused_reason'] ?? '' ) ); ?></td>
+                        <td><?php echo self::esc_html_safe( (string) ( $e['last_read'] ?? '' ) ); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+        <?php
+    }
+
     /** A 0/1 switch whose default is on (#233). */
     public function render_switch_field( string $option, string $label, string $help = '' ) {
         $on = PressHub_AI_Settings_Storage::get_switch( $option );

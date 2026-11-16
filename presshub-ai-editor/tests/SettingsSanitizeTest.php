@@ -103,8 +103,13 @@ class SettingsSanitizeTest
         if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '500' ) !== 500 ) {
             $failures[] = 'max_tokens 500 should pass through.';
         }
-        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '0' ) !== 1 ) {
-            $failures[] = 'max_tokens 0 should clamp to 1.';
+        // #233: 0 means "provider default" (the same as empty), so a stored 0
+        // survives a re-save or an import; negative values still clamp to 1.
+        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '0' ) !== 0 ) {
+            $failures[] = 'max_tokens 0 should stay 0 (provider default).';
+        }
+        if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '-5' ) !== 1 ) {
+            $failures[] = 'max_tokens -5 should clamp to 1.';
         }
         if ( self::sanitize( $cbs, 'presshub_ai_max_tokens_anthropic', '99999' ) !== 65536 ) {
             $failures[] = 'max_tokens 99999 should clamp to 65536.';

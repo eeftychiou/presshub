@@ -150,6 +150,11 @@ class PressHub_Settings_Registry {
         } );
     }
 
+    /** True when the option is declared unused (scheduled for removal in #237). */
+    public static function is_unused( string $key ): bool {
+        return self::STATUS_UNUSED === ( self::get( $key )['status'] ?? self::STATUS_ACTIVE );
+    }
+
     public static function is_secret( string $key ): bool {
         return ! empty( self::get( $key )['secret'] );
     }

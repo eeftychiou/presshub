@@ -1202,6 +1202,11 @@ class PressHub_AI_Settings_Storage {
             return 0;
         }
         $n = (int) wp_unslash( $value );
+        if ( 0 === $n && is_numeric( $value ) ) {
+            // A stored 0 means "provider default", the same as empty, so
+            // re-saving or importing it keeps it (#233).
+            return 0;
+        }
         if ( $n <= 0 ) {
             return 1;
         }

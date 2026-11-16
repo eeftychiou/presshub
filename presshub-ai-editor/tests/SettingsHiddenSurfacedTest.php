@@ -144,6 +144,30 @@ class SettingsHiddenSurfacedTest {
             }
         }
 
+        // 5. The registry's "checkbox" flag matches the page, so unticking a box
+        //    and saving its tab stores 0 (found two that did not, #233).
+        preg_match_all( '/<input\b[^>]*>/', $html, $inputs );
+        $boxes = [];
+        foreach ( $inputs[0] as $tag ) {
+            if ( false !== strpos( $tag, 'type="checkbox"' ) && preg_match( '/name="([^"\[]+)"/', $tag, $n ) ) {
+                $boxes[ $n[1] ] = true;
+            }
+        }
+        foreach ( PressHub_Settings_Registry::for_page( 'ai' ) as $key => $e ) {
+            if ( ! empty( $e['removes'] ) ) {
+                continue;
+            }
+            if ( isset( $boxes[ $key ] ) !== ! empty( $e['checkbox'] ) ) {
+                $failures[] = "{$key}: the page renders " . ( isset( $boxes[ $key ] ) ? 'a checkbox' : 'no checkbox' ) . ' but the registry says checkbox=' . ( empty( $e['checkbox'] ) ? 'false' : 'true' ) . '.';
+            }
+        }
+        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_ai_image_feature_enabled' => 1, 'presshub_ai_briefing_podcast_include_text' => 1 ];
+        PressHub_Settings_Registry::save_posted( 'ai', 'images', [] );
+        PressHub_Settings_Registry::save_posted( 'ai', 'briefing', [] );
+        if ( 0 !== $GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled'] || 0 !== $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_include_text'] ) {
+            $failures[] = 'Unticking "Generate featured images" or "Include transcript" and saving the tab should store 0.';
+        }
+
         if ( $failures ) {
             echo "FAIL\n";
             foreach ( $failures as $f ) {
