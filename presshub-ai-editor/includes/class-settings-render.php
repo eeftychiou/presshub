@@ -2725,7 +2725,7 @@ class PressHub_AI_Settings_Render {
                                     <?php $field_id = $option . '_' . trim( $task, '_' ); ?>
                                     <label for="<?php echo self::esc_attr_safe( $field_id ); ?>" style="display:inline-block;min-width:12em;margin:0 12px 6px 0;">
                                         <?php echo self::esc_html_safe( $task_names[ $task ] ?? $task ); ?>
-                                        <input type="number" min="0" max="20000" step="100" name="<?php echo self::esc_attr_safe( $option . '[' . $task . ']' ); ?>" id="<?php echo self::esc_attr_safe( $field_id ); ?>" value="<?php echo self::esc_attr_safe( (string) ( $current[ $task ] ?? $default ) ); ?>" class="small-text" style="width:6em;" />
+                                        <input type="number" min="0" max="20000" step="1" name="<?php echo self::esc_attr_safe( $option . '[' . $task . ']' ); ?>" id="<?php echo self::esc_attr_safe( $field_id ); ?>" value="<?php echo self::esc_attr_safe( (string) ( $current[ $task ] ?? $default ) ); ?>" class="small-text" style="width:6em;" />
                                     </label>
                                 <?php endforeach; ?>
                                 <p class="description"><?php echo self::esc_html_safe( sprintf( __( 'Most characters of %s added to each kind of AI call. 0 leaves that task without them.', 'presshub-ai-editor' ), strtolower( $budget_names[ $option ] ?? $option ) ) ); ?></p>
