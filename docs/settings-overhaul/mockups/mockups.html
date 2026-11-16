@@ -41,7 +41,7 @@ th{font-size:12px;color:#50575e;background:#f6f7f7}
 <!-- 1. Phase 1: hidden settings surfaced -->
 <div class="screen" id="p1">
  <div class="side"><div>Dashboard</div><div>Posts</div><div class="gap"></div><div class="top">Settings</div><div class="sub">General</div><div class="sub cur">PressHub AI</div><div class="gap"></div><div>Daily Briefing Hub</div><div>Policy Fiches</div><div>PressHub Social</div></div>
- <div class="main"><h1>PressHub AI Settings</h1><div class="crumb">Phase 1: same tabs as today. Only previously hidden settings become visible.</div>
+ <div class="main"><h1>PressHub AI Settings</h1><div class="crumb">Phase 1: same tabs as today. Previously hidden settings become visible; nothing is removed yet.</div>
  <div class="tabs"><div class="tab">AI Providers</div><div class="tab">AI Co-Author &amp; Review</div><div class="tab on">Daily Briefing Hub</div><div class="tab">AI Featured Images</div><div class="tab">AI Copilot</div><div class="tab">Token &amp; Usage Logs</div><div class="tab">Advanced &amp; System</div></div>
  <div class="two">
  <div class="card"><h2>§2 Podcast &amp; Audio <span class="pill new">2 fields now visible</span></h2>
@@ -126,7 +126,7 @@ th{font-size:12px;color:#50575e;background:#f6f7f7}
    <tr><td>Instagram</td><td class="mono">Account 1784…</td><td><span class="pill ok">Linked</span></td></tr>
    <tr><td>X</td><td class="mono">Bearer ••••Q2</td><td><span class="pill ok">Valid</span></td></tr>
    <tr><td>TikTok</td><td class="mono">Open ID ••••a1</td><td><span class="pill warn">Expires in 3 days</span></td></tr></table>
-   <div class="hint" style="margin-top:6px">The 3 unused X OAuth1 fields are gone.</div></div>
+   <div class="collapsed" style="margin-top:8px">▸ Unused fields (3 X OAuth1 keys): kept here, removed in the final clean-up phase</div></div>
   <div class="card"><h2>Local worker <span class="pill ok">Heartbeat 2 min ago</span></h2>
    <div class="row"><label>Mode</label><div><span class="in">◉ Pull</span> <span class="in">○ Push</span></div></div>
    <div class="row"><label>Worker secret</label><div><span class="in mono">••••••••••••7f</span> <span class="btn">Regenerate</span></div></div>
@@ -135,7 +135,7 @@ th{font-size:12px;color:#50575e;background:#f6f7f7}
  </div>
  <div class="two">
   <div class="card"><h2>Press release inbox</h2><div class="row"><label>IMAP</label><div class="mono">imap.gmail.com:993 · press@… · ••••••</div></div><div class="row"><label>Status</label><div><span class="pill ok">Last fetch 04:10, 3 new</span></div></div></div>
-  <div class="card"><h2>Plugin updates</h2><div class="row"><label>GitHub token</label><div><span class="in mono">ghp_••••••••3a</span> <span class="hint">one token (the Social copy is removed)</span></div></div></div>
+  <div class="card"><h2>Plugin updates</h2><div class="row"><label>GitHub token</label><div><span class="in mono">ghp_••••••••3a</span> <div class="hint">The second token from Social is shown as "Unused, removed in the final clean-up phase".</div></div></div></div>
  </div>
  <div class="notice info">Old addresses (<span class="mono">options-general.php?page=presshub-ai</span>, <span class="mono">admin.php?page=presshub-social-settings&amp;tab=…</span>) redirect to the matching tab here.</div>
  </div></div>
@@ -167,10 +167,12 @@ th{font-size:12px;color:#50575e;background:#f6f7f7}
 <!-- 6. Phase 5: migration notice -->
 <div class="screen" id="p5-migration">
  <div class="side"><div>Dashboard</div><div class="gap"></div><div class="top cur">PressHub</div><div class="sub cur">Settings</div></div>
- <div class="main"><h1>PressHub Settings</h1><div class="crumb">Phase 5 (only if approved): stored option names are renamed once, on update.</div>
- <div class="notice ok"><b>PressHub updated its settings storage.</b> 21 Shorts settings and 6 presenter settings were copied to their new names. Nothing changed on screen. <a href="#">See what moved</a> · <a href="#">Dismiss</a></div>
+ <div class="main"><h1>PressHub Settings</h1><div class="crumb">Phase 5: clean-up once every setting has its place. Unused settings are removed; renames only if approved.</div>
+ <div class="notice ok"><b>PressHub cleaned up its settings.</b> 9 unused settings were removed, and 21 Shorts and 6 presenter settings were copied to their new names. Nothing you use changed. <a href="#">See what moved</a> · <a href="#">Dismiss</a></div>
  <div class="card"><h2>Migration report <span class="pill ok">Done 2026-12-02 06:01</span></h2>
  <table><tr><th>Old option</th><th>New option</th><th>Value kept</th><th>Old key</th></tr>
+ <tr class="mono"><td>presshub_social_github_token</td><td>(removed: plugin updates use presshub_ai_github_token)</td><td>—</td><td>deleted</td></tr>
+ <tr class="mono"><td>presshub_social_twitter_api_key, _api_secret, …</td><td>(removed: never read)</td><td>—</td><td>deleted</td></tr>
  <tr class="mono"><td>presshub_social_tiktok_shorts_count</td><td>presshub_social_shorts_count</td><td>3</td><td>deleted after 1 release</td></tr>
  <tr class="mono"><td>presshub_social_tiktok_shorts_voice_1</td><td>presshub_social_shorts_voice_1</td><td>Puck</td><td>deleted after 1 release</td></tr>
  <tr class="mono"><td>presshub_ai_briefing_host_female</td><td>presshub_ai_briefing_presenter_1</td><td>Ελένη</td><td>deleted after 1 release</td></tr>
