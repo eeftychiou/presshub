@@ -49,6 +49,7 @@ fa_check( 'menu: sits after Daily Briefing Hub (26) and before PressHub Social (
 $subs = array_column( $GLOBALS['SUBMENU_PAGES']['presshub-ai-agenda'] ?? [], 'menu_title', 'menu_slug' );
 fa_check( 'submenu: Editorial agenda', 'Editorial agenda' === ( $subs['presshub-ai-agenda'] ?? '' ) );
 fa_check( 'submenu: People', 'People' === ( $subs['presshub-ai-people'] ?? '' ) );
+fa_check( 'submenu: Policies', 'Policies' === ( $subs['presshub-ai-policies'] ?? '' ) );
 fa_check( 'submenu: Memory stays under Daily Briefing Hub', ! isset( $subs['presshub-ai-memory'] ) );
 
 // 2. Legacy redirects.

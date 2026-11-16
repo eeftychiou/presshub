@@ -1291,6 +1291,43 @@ class PressHub_AI_Settings_Storage {
         return $map;
     }
 
+    /**
+     * Source alignment: who a source tends to speak for. Used to label articles
+     * in the curation context and to warn when a pool has only one side.
+     * '' = not set. Labels: PressHub_AI_Settings_Render::alignment_labels().
+     */
+    const SOURCE_ALIGNMENTS = [
+        'government'     => true,
+        'opposition'     => true,
+        'independent'    => true,
+        'institutional'  => true,
+        'social_partner' => true,
+    ];
+
+    public static function sanitize_source_alignment( $value ): string {
+        $v = is_string( $value ) ? sanitize_key( $value ) : '';
+        return isset( self::SOURCE_ALIGNMENTS[ $v ] ) ? $v : '';
+    }
+
+    /**
+     * Host => alignment for the configured sources that have one (enabled or
+     * not). Two sources on one host: the first one that is set wins.
+     *
+     * @return array<string,string>
+     */
+    public static function get_source_alignment_map(): array {
+        $map = [];
+        foreach ( self::normalize_sources( self::get_briefing_sources() ) as $src ) {
+            $alignment = self::sanitize_source_alignment( $src['alignment'] ?? '' );
+            $host      = strtolower( preg_replace( '/^www\./i', '', (string) parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) ) );
+            if ( '' === $alignment || '' === $host || isset( $map[ $host ] ) ) {
+                continue;
+            }
+            $map[ $host ] = $alignment;
+        }
+        return $map;
+    }
+
     public static function normalize_sources( $value ): array {
         if ( empty( $value ) ) {
             return PressHub_AI_Settings_Migration::default_structured_sources();
@@ -1343,6 +1380,7 @@ class PressHub_AI_Settings_Storage {
                         'notes'        => '',
                         'max_articles' => 5,
                         'priority'     => self::SOURCE_PRIORITY_DEFAULT,
+                        'alignment'    => '',
                     ];
                 } elseif ( is_array( $item ) ) {
                     // Structured source object
@@ -1401,6 +1439,7 @@ class PressHub_AI_Settings_Storage {
                         'notes'        => $notes,
                         'max_articles' => $max_articles,
                         'priority'     => $priority,
+                        'alignment'    => self::sanitize_source_alignment( $item['alignment'] ?? '' ),
                     ];
                 }
             }

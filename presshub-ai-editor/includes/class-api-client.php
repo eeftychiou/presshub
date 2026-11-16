@@ -3120,6 +3120,11 @@ class PressHub_AI_API_Client {
         $generic_record = empty( $this->suppress_provider_prompt_log ) && class_exists( 'PressHub_AI_Generation_Recorder' );
         $generic_t0     = $generic_record ? self::begin_generation_record() : 0.0;
 
+        // Policy fiches match against the call's own material: the user prompt and
+        // the system prompt as the caller built it, before the agenda (whose theme
+        // titles would otherwise match on every call) and the people fiches.
+        $policy_material = ( is_string( $user_prompt ) ? $user_prompt : '' ) . "\n" . ( is_string( $sys_prompt ) ? $sys_prompt : '' );
+
         // Issue #198: the editor's current agenda goes into every editorial call.
         if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
             $sys_prompt = PressHub_AI_Editorial_Agenda::apply( $sys_prompt, $this->get_action() );
@@ -3128,6 +3133,11 @@ class PressHub_AI_API_Client {
         // so the recorder can rebuild the prompt as sent from both).
         if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
             $sys_prompt = PressHub_AI_Stakeholders::apply( $sys_prompt, $user_prompt, $this->get_action() );
+        }
+        // Policy fiches (principles, framing, claims to check) of the policy files
+        // in the material; last, so the recorder can rebuild the prompt as sent.
+        if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+            $sys_prompt = PressHub_AI_Policy_Fiches::apply( $sys_prompt, $policy_material, $this->get_action() );
         }
 
         if ( $this->provider === 'anthropic' ) {
