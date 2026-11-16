@@ -1835,6 +1835,58 @@ class PressHub_Social_Settings_Storage {
         return is_string( $val ) ? trim( $val ) : '';
     }
 
+    /**
+     * One rule for prompt and template text (#261): CRLF and CR become LF and
+     * surrounding whitespace is trimmed. Used by the sanitizers and by the
+     * prompt loader, so seeded defaults and saved values are byte-identical.
+     */
+    public static function normalize_multiline( string $value ): string {
+        return trim( str_replace( [ "\r\n", "\r" ], "\n", $value ) );
+    }
+
+    /**
+     * #261: rewrites stored social prompts and templates with
+     * normalize_multiline() once, so exports and import previews stop
+     * reporting trailing-newline differences. Guarded by the
+     * presshub_social_migrated_prompt_newlines flag.
+     */
+    public static function migrate_normalize_prompt_newlines(): void {
+        if ( '1' === get_option( 'presshub_social_migrated_prompt_newlines', '0' ) ) {
+            return;
+        }
+        $keys = [
+            'presshub_social_prompt_system',
+            'presshub_social_prompt_post_images',
+            'presshub_social_prompt_post_image_style',
+            'presshub_social_prompt_tiktok_shorts_image_style',
+            'presshub_social_prompt_tiktok_shorts_image_moods',
+            'presshub_social_prompt_tiktok_shorts_tts_style',
+            'presshub_social_prompt_tiktok_shorts_music',
+            'presshub_social_prompt_tiktok_article_short',
+            'presshub_social_prompt_tiktok_shorts',
+        ];
+        foreach ( self::PLATFORMS as $platform ) {
+            $keys[] = 'presshub_social_prompt_' . $platform;
+            $keys[] = 'presshub_social_template_' . $platform;
+        }
+        $changed = [];
+        foreach ( $keys as $key ) {
+            $val = get_option( $key, false );
+            if ( ! is_string( $val ) ) {
+                continue;
+            }
+            $norm = self::normalize_multiline( $val );
+            if ( $norm !== $val ) {
+                update_option( $key, $norm );
+                $changed[] = $key;
+            }
+        }
+        if ( $changed ) {
+            PressHub_Social_Logger::info( 'Normalized line endings of stored social prompts (#261)', [ 'options' => $changed ] );
+        }
+        update_option( 'presshub_social_migrated_prompt_newlines', '1' );
+    }
+
     public static function sanitize_prompt( $value, string $option_name = '' ): string {
         if ( null === $value && '' !== $option_name ) {
             return (string) get_option( $option_name, '' );
@@ -1844,7 +1896,7 @@ class PressHub_Social_Settings_Storage {
         }
         // options.php already unslashes the posted value; unslashing again would strip
         // real backslashes, such as the "\n" in a prompt's JSON example.
-        return substr( trim( $value ), 0, 10000 );
+        return substr( self::normalize_multiline( $value ), 0, 10000 );
     }
 
     public static function sanitize_template( $value, string $option_name = '' ): string {
@@ -1855,7 +1907,7 @@ class PressHub_Social_Settings_Storage {
             return '';
         }
         // options.php already unslashes the posted value (see sanitize_prompt()).
-        return substr( trim( $value ), 0, 5000 );
+        return substr( self::normalize_multiline( $value ), 0, 5000 );
     }
 
     // ------------------------------------------------------------------

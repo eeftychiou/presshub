@@ -464,6 +464,7 @@ function presshub_ai_init() {
     // Initialize Social Auto-Post Subsystem
     if ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'seed_defaults' ) ) {
         PressHub_Social_Settings_Storage::seed_defaults();
+        PressHub_Social_Settings_Storage::migrate_normalize_prompt_newlines();
     }
     if ( class_exists( 'PressHub_Social_Settings' ) && method_exists( 'PressHub_Social_Settings', 'init' ) ) {
         PressHub_Social_Settings::init();
