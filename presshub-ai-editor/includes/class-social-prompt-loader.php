@@ -84,6 +84,9 @@ class PressHub_Social_Prompt_Loader {
             throw new RuntimeException( $error_msg );
         }
 
+        // Seeded options must equal what a settings save stores (#261), so
+        // asset text gets the same line-ending and trim rules as the sanitizers.
+        $content = PressHub_Social_Settings_Storage::normalize_multiline( $content );
         self::$cache[ $clean_path ] = $content;
         return $content;
     }

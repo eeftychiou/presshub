@@ -162,7 +162,15 @@ class PressHub_Settings_Transfer {
         }
         try {
             foreach ( $changes as $key => $change ) {
-                update_option( $key, self::sanitized( $key, $change['to'] ) );
+                $clean = self::sanitized( $key, $change['to'] );
+                // A value that sanitizes to what is stored is not a change
+                // (#261), so it is neither written nor reported.
+                $missing = new stdClass();
+                $current = get_option( $key, $missing );
+                if ( $current !== $missing && serialize( $current ) === serialize( $clean ) ) {
+                    continue;
+                }
+                update_option( $key, $clean );
                 $written[] = $key;
             }
         } finally {
