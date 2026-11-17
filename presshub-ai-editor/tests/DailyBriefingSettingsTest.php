@@ -29,6 +29,7 @@ require_once __DIR__ . '/wordpress-stubs.php';
 defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER', true );
 
 require_once __DIR__ . '/../presshub-ai-editor.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 
 class DailyBriefingSettingsTest
@@ -684,9 +685,7 @@ class DailyBriefingSettingsTest
         // Render page test: verify Section 3 renders podcast style selector and obsolete prompt-1-row is removed
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $renderer = new PressHub_AI_Settings_Render();
-        ob_start();
-        $renderer->render_settings_page();
-        $page_html = ob_get_clean();
+                $page_html = presshub_test_render_all_sections();
 
         if ( false === strpos( $page_html, 'name="presshub_ai_briefing_podcast_style"' ) ) {
             $failures[] = 'render_settings_page should render briefing podcast style selector.';

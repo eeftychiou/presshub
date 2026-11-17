@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/class-capabilities.php';
+require_once __DIR__ . '/class-settings-sections.php';
 
 require_once __DIR__ . '/class-social-logger.php';
 require_once __DIR__ . '/class-social-settings-storage.php';
@@ -71,6 +72,14 @@ class PressHub_Social_Settings {
     }
 
     /**
+     * URL of the Social publishing section of PressHub → Settings (#246),
+     * optionally at a group anchor.
+     */
+    public static function settings_url( string $anchor = '' ): string {
+        return PressHub_Settings_Sections::url( 'social-publishing', $anchor );
+    }
+
+    /**
      * Register admin menu and submenus.
      *
      * @return void
@@ -79,7 +88,7 @@ class PressHub_Social_Settings {
         $cap    = self::settings_cap();
         $parent = class_exists( 'PressHub_Admin_Menu' ) ? PressHub_Admin_Menu::PARENT : 'presshub-ai-briefing-hub';
 
-        // #235: the Social Queue and Social settings sit under the one PressHub menu.
+        // #235: the Social Queue sits under the one PressHub menu.
         add_submenu_page(
             $parent,
             __( 'PressHub — Social Queue', 'presshub-social-autopost' ),
@@ -89,14 +98,8 @@ class PressHub_Social_Settings {
             [ $this, 'render_queue_page' ]
         );
 
-        add_submenu_page(
-            $parent,
-            __( 'PressHub — Social settings', 'presshub-social-autopost' ),
-            __( 'Social settings', 'presshub-social-autopost' ),
-            $cap,
-            self::SETTINGS_SLUG,
-            [ $this, 'render_settings_page' ]
-        );
+        // #246: Social settings are sections of PressHub → Settings now; the old
+        // URL redirects there (PressHub_Admin_Menu::maybe_redirect_legacy).
     }
 
     /**
@@ -121,7 +124,7 @@ class PressHub_Social_Settings {
             <div style="background:#fff; border:1px solid #ccd0d4; padding:20px; border-radius:4px; margin-top:15px;">
                 <p><em><?php echo esc_html__( 'The queue management interface is active.', 'presshub-social-autopost' ); ?></em></p>
                 <p>
-                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ); ?>" class="button button-primary">
+                    <a href="<?php echo esc_url( self::settings_url() ); ?>" class="button button-primary">
                         <?php echo esc_html__( 'Configure Social Settings', 'presshub-social-autopost' ); ?>
                     </a>
                 </p>
@@ -150,7 +153,10 @@ class PressHub_Social_Settings {
      * @return void
      */
     public function handle_reset_prompts_action(): void {
-        if ( ! isset( $_GET['page'] ) || self::SETTINGS_SLUG !== $_GET['page'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $page = isset( $_GET['page'] ) && is_scalar( $_GET['page'] ) ? (string) $_GET['page'] : '';
+        // #246: the reset link lives on PressHub → Settings → Social publishing; the old page slug still works.
+        if ( self::SETTINGS_SLUG !== $page && PressHub_Settings_Sections::PAGE_SLUG !== $page ) {
             return;
         }
         if ( ! isset( $_GET['action'] ) || 'reset_prompts' !== $_GET['action'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -164,11 +170,7 @@ class PressHub_Social_Settings {
         PressHub_Social_Settings_Storage::reset_prompts_to_defaults();
         PressHub_Social_Logger::info( 'Operator reset social prompts and templates to asset defaults.' );
 
-        wp_safe_redirect( add_query_arg( [
-            'page'    => self::SETTINGS_SLUG,
-            'tab'     => 'prompts',
-            'message' => 'prompts_reset',
-        ], admin_url( 'admin.php' ) ) );
+        wp_safe_redirect( add_query_arg( 'message', 'prompts_reset', self::settings_url( 'post-copy' ) ) );
         exit;
     }
 

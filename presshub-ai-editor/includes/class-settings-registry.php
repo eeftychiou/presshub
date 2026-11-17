@@ -25,6 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/class-capabilities.php';
+require_once __DIR__ . '/class-settings-sections.php';
 
 class PressHub_Settings_Registry {
 
@@ -203,12 +204,18 @@ class PressHub_Settings_Registry {
                 'key'      => $key,
                 'page'     => (string) ( $e['page'] ?? 'ai' ),
                 'tab'      => (string) ( $e['tab'] ?? '' ),
+                'section'  => PressHub_Settings_Sections::section_of( (string) $key, $e ),
                 'group'    => (string) ( $e['group'] ?? '' ),
                 'label'    => (string) ( $e['label'] ?? $key ),
                 'help'     => (string) ( $e['help'] ?? '' ),
                 'aliases'  => array_values( array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ),
                 'checkbox' => ! empty( $e['checkbox'] ),
             ];
+            if ( ! empty( $e['depends_on'] ) && is_string( $e['depends_on'] ) ) {
+                $parent            = self::get( $e['depends_on'] );
+                $row['depends_on'] = $e['depends_on'];
+                $row['depends_label'] = (string) ( $parent['label'] ?? $e['depends_on'] );
+            }
             $default = self::default_value( $key );
             if ( null === $default && isset( $registered[ $key ] ) && array_key_exists( 'default', $registered[ $key ] ) ) {
                 $default = $registered[ $key ]['default'];
@@ -224,65 +231,72 @@ class PressHub_Settings_Registry {
         return $index;
     }
 
+    /** User meta that remembers a dismissed "What's new in settings" panel. */
+    const WHATS_NEW_META = 'presshub_settings_whats_new_246_dismissed';
+
     /**
-     * Everything assets/js/settings-search.js needs on one settings page.
+     * Everything assets/js/settings-search.js needs on the Settings page
+     * (#246): the search index across all sections the user can open, each
+     * section's URL and label, old #tab hashes and the What's new panel.
      *
-     * @param string $page 'ai' or 'social'.
+     * @param string $section The section on screen.
      */
-    public static function search_payload( string $page ): array {
+    public static function search_payload( string $section = '' ): array {
+        $visible = PressHub_Settings_Sections::visible();
+        $urls    = [];
+        $labels  = [];
+        foreach ( $visible as $slug ) {
+            $urls[ $slug ]   = PressHub_Settings_Sections::url( $slug );
+            $labels[ $slug ] = PressHub_Settings_Sections::label( $slug );
+        }
+        $entries = array_values( array_filter( self::search_index(), static function ( $row ) use ( $urls ) {
+            return isset( $urls[ $row['section'] ?? '' ] );
+        } ) );
+        $dismissed = function_exists( 'get_user_meta' ) && function_exists( 'get_current_user_id' )
+            && (bool) get_user_meta( get_current_user_id(), self::WHATS_NEW_META, true );
         return [
-            'page'       => $page,
-            'pages'      => [
-                'ai'     => admin_url( 'admin.php?page=presshub-ai' ),
-                'social' => admin_url( 'admin.php?page=presshub-social-settings' ),
+            'page'                => 'settings',
+            'section'             => $section,
+            'section_urls'        => $urls,
+            'section_labels'      => $labels,
+            'entries'             => $entries,
+            'legacy_hashes'       => PressHub_Settings_Sections::legacy_hash_urls(),
+            'whats_new_dismissed' => $dismissed,
+            'whats_new'           => [
+                __( 'PressHub AI and PressHub Social settings are now one Settings page. Pick a section on the left; each section has its own Save.', 'presshub-ai-editor' ),
+                __( 'Connections holds the social platform accounts, the automation worker, Google Cloud and plugin updates. AI models holds the provider grid and the Copilot model.', 'presshub-ai-editor' ),
+                __( 'Writing & QA brings together Co-author drafting, the QA gate, SEO & tags and Featured images. Social publishing holds everything from the old Social settings page except the accounts.', 'presshub-ai-editor' ),
+                __( 'Site & system shows every retention period in one table, with link previews, rate limits and diagnostics. Token & usage logs are on PressHub → Usage & logs.', 'presshub-ai-editor' ),
+                __( 'Leaving a section with unsaved changes asks first. Old links and bookmarks still work: they open the section that now holds the setting.', 'presshub-ai-editor' ),
             ],
-            'entries'    => self::search_index(),
-            'tab_labels' => [
-                'ai'     => [
-                    'providers'        => __( 'AI Providers', 'presshub-ai-editor' ),
-                    'coauthor'         => __( 'AI Co-Author & Review', 'presshub-ai-editor' ),
-                    'briefing'         => __( 'Daily Briefing Hub', 'presshub-ai-editor' ),
-                    'social_listening' => __( 'Social listening', 'presshub-ai-editor' ),
-                    'images'           => __( 'AI Featured Images', 'presshub-ai-editor' ),
-                    'copilot'          => __( 'AI Copilot & Assistant', 'presshub-ai-editor' ),
-                    'knowledge'        => __( 'Editorial knowledge', 'presshub-ai-editor' ),
-                    'advanced'         => __( 'Advanced & System', 'presshub-ai-editor' ),
-                ],
-                'social' => [
-                    'general'     => __( 'General & Engines', 'presshub-ai-editor' ),
-                    'ai'          => __( 'AI Copywriter', 'presshub-ai-editor' ),
-                    'credentials' => __( 'API Credentials', 'presshub-ai-editor' ),
-                    'worker'      => __( 'Automation Worker', 'presshub-ai-editor' ),
-                    'shorts'      => __( 'Shorts & Reels', 'presshub-ai-editor' ),
-                    'queue'       => __( 'Queue & Alerts', 'presshub-ai-editor' ),
-                    'prompts'     => __( 'Prompts & Templates', 'presshub-ai-editor' ),
-                ],
-            ],
-            'whats_new'  => [
-                'ai'     => [
-                    __( 'Daily Briefing Hub is one page of six groups: Schedule, Sources & harvesting, Text story, Podcast script, Voices & audio and Publishing, with an "On this page" bar.', 'presshub-ai-editor' ),
-                    __( 'Social account monitoring and the Trending in Cyprus roundup moved to the new Social listening tab.', 'presshub-ai-editor' ),
-                    __( 'Editorial memory moved to Editorial knowledge. SEO & tags moved to AI Co-Author & Review. The briefing QA prompt moved to Daily Briefing → Text story.', 'presshub-ai-editor' ),
-                    __( 'Use the search box to find any setting, including by its old name. Fields show their default with a Reset link, and leaving a tab with unsaved changes asks first.', 'presshub-ai-editor' ),
-                ],
-                'social' => [
-                    __( 'Everything Shorts and Reels use is on the new Shorts & Reels tab, with a list of anything that stops them from running.', 'presshub-ai-editor' ),
-                    __( 'Automation Worker keeps only the worker connection. Card and video sizes and TikTok narration moved to AI Copywriter → Images & video. X max characters moved next to the X engine.', 'presshub-ai-editor' ),
-                    __( 'Use the search box to find any setting on either settings page.', 'presshub-ai-editor' ),
-                ],
-            ],
-            'i18n'       => [
+            'i18n'                => [
                 'search_label'       => __( 'Search settings', 'presshub-ai-editor' ),
-                'search_placeholder' => __( 'Search settings (name, help text or old name)', 'presshub-ai-editor' ),
+                'search_placeholder' => __( 'Search settings…', 'presshub-ai-editor' ),
+                'search_help'        => __( 'Type a setting name, its help text or an old name.', 'presshub-ai-editor' ),
                 'no_results'         => __( 'No matching settings', 'presshub-ai-editor' ),
+                /* translators: %d: number of results */
+                'results_count'      => __( '%d settings found', 'presshub-ai-editor' ),
                 'default_label'      => __( 'Default:', 'presshub-ai-editor' ),
-                'reset'              => __( 'Reset', 'presshub-ai-editor' ),
+                'reset'              => __( 'Reset to default', 'presshub-ai-editor' ),
                 /* translators: %s: setting label */
                 'reset_aria'         => __( 'Reset %s to its default', 'presshub-ai-editor' ),
                 'on'                 => __( 'On', 'presshub-ai-editor' ),
                 'off'                => __( 'Off', 'presshub-ai-editor' ),
                 'empty_default'      => __( 'empty (uses the provider or built-in default)', 'presshub-ai-editor' ),
+                /* translators: %s: label of the switch a setting depends on */
+                'depends_reason'     => __( 'Used only when "%s" is on.', 'presshub-ai-editor' ),
+                /* translators: 1: number of changed fields, 2: section name */
+                'leave_confirm'      => __( "Leave this page? Your %1\$d changes in %2\$s aren't saved.", 'presshub-ai-editor' ),
+                /* translators: %s: section name */
+                'leave_confirm_one'  => __( "Leave this page? Your change in %s isn't saved.", 'presshub-ai-editor' ),
+                'unsaved_one'        => __( '1 unsaved change', 'presshub-ai-editor' ),
+                /* translators: %d: number of changed fields */
+                'unsaved_many'       => __( '%d unsaved changes', 'presshub-ai-editor' ),
+                'error_prefix'       => __( 'Error:', 'presshub-ai-editor' ),
+                'invalid_value'      => __( 'Enter a valid value.', 'presshub-ai-editor' ),
+                'not_saved'          => __( 'Not saved. Fix the fields listed above.', 'presshub-ai-editor' ),
                 'whats_new_title'    => __( "What's new in settings", 'presshub-ai-editor' ),
+                'whats_new_search'   => __( 'Search for a setting', 'presshub-ai-editor' ),
                 'dismiss'            => __( 'Dismiss this notice.', 'presshub-ai-editor' ),
             ],
         ];
@@ -313,12 +327,13 @@ class PressHub_Settings_Registry {
     }
 
     /**
-     * Old PressHub admin URLs and where they go now (#235). 3b extends this
-     * map to settings sections. Each rule: the admin file and ?page= of the
-     * old URL, an optional ?tab= it must carry (dropped on redirect), and the
-     * new page slug. Other query arguments are kept.
+     * Old PressHub admin URLs and where they go now (#235, #246). Each rule:
+     * the admin file and ?page= of the old URL, an optional ?tab= it must
+     * carry, the new page slug and, for settings, the new section and the
+     * group anchor inside it. ?tab= is dropped when the rule names a tab or
+     * a section (drop_tab); other query arguments are kept.
      *
-     * @return array<int,array{file:string,page:string,to:string,tab?:string}>
+     * @return array<int,array{file:string,page:string,to:string,tab?:string,section?:string,anchor?:string,drop_tab?:string}>
      */
     public static function legacy_admin_redirects(): array {
         $rules = [
@@ -327,7 +342,6 @@ class PressHub_Settings_Registry {
             [ 'file' => 'options-general.php', 'page' => 'presshub-ai-presets', 'to' => 'presshub-ai-presets' ],
             // An older build filed the Social Queue under Settings.
             [ 'file' => 'options-general.php', 'page' => 'presshub-social-queue', 'to' => 'presshub-social-queue' ],
-            [ 'file' => 'options-general.php', 'page' => 'presshub-social-settings', 'to' => 'presshub-social-settings' ],
             // Token & Usage Logs left the settings tabs for Usage & logs.
             [ 'file' => 'admin.php', 'page' => 'presshub-ai', 'tab' => 'token_logs', 'to' => 'presshub-ai-usage' ],
             [ 'file' => 'admin.php', 'page' => 'presshub-ai', 'tab' => 'token_usage', 'to' => 'presshub-ai-usage' ],
@@ -335,6 +349,8 @@ class PressHub_Settings_Registry {
             // Short form of the menu.
             [ 'file' => 'admin.php', 'page' => 'presshub', 'to' => 'presshub-ai-briefing-hub' ],
         ];
+        // #246: Social settings and every old tab of both pages go to their section.
+        $rules = array_merge( $rules, PressHub_Settings_Sections::legacy_redirects() );
         /**
          * Filters the old-URL redirect map used by the PressHub menu.
          *
@@ -441,15 +457,8 @@ class PressHub_Settings_Registry {
     // ------------------------------------------------------------------
 
     /**
-     * Writes the posted values for a page (or one tab of it).
-     *
-     *  - Remove-key flags call their sanitizer (which deletes the key) when ticked.
-     *    A new mailbox password typed in the same save wins over "Remove".
-     *  - Secrets are written only when a new, unmasked value is posted
-     *    (keep-on-empty). Their sanitizers store the value themselves.
-     *  - Rendered checkboxes that are absent from the post are saved as 0, but
-     *    only for the tab being saved, so another tab's checkboxes are never touched.
-     *  - Everything else is written only when posted.
+     * Writes the posted values for a page (or one tab of it), by the rules
+     * of write_posted(). The "save all" handler and older callers use it.
      *
      * @param string $page      'ai' or 'social'.
      * @param string $tab       Tab key, or '' for the whole page.
@@ -458,11 +467,73 @@ class PressHub_Settings_Registry {
      */
     public static function save_posted( string $page, string $tab, array $post_data ): array {
         $map        = self::options_map( $page, $tab );
-        $saved_keys = [];
-        $post_data  = self::expand_bracket_keys( $post_data );
+        $saved_keys = self::write_posted( $map, self::expand_bracket_keys( $post_data ), $tab ?: 'all' );
+        self::flush_option_cache( array_keys( $map ) );
 
+        return [
+            'saved_keys' => $saved_keys,
+            'count'      => count( $saved_keys ),
+            'keys'       => array_keys( $map ),
+        ];
+    }
+
+    /**
+     * Writes the posted values of one Settings section (#246), across both
+     * option groups. Only the section's own options are read from the post,
+     * so a section's Save never writes, zeroes or drops another section's
+     * fields; each option keeps the sanitize callback (and so the group) it
+     * was registered with.
+     *
+     * @param string $section     Section slug (PressHub_Settings_Sections).
+     * @param array  $post_data   Decoded request data.
+     * @param bool   $with_social Whether Social options may be written (the Social capability).
+     * @return array{saved_keys:string[],count:int,keys:string[]}
+     */
+    public static function save_section( string $section, array $post_data, bool $with_social = true ): array {
+        self::ensure_registered();
+        $map = [];
+        foreach ( PressHub_Settings_Sections::entries( $section ) as $key => $entry ) {
+            if ( self::is_unused( $key ) || ( ! $with_social && 'social' === ( $entry['page'] ?? '' ) ) ) {
+                continue;
+            }
+            $cb          = self::sanitizer( $key );
+            $map[ $key ] = $cb ?: static function ( $v ) {
+                return function_exists( 'wp_unslash' ) ? wp_unslash( $v ) : $v;
+            };
+        }
+        $saved_keys = self::write_posted( $map, self::expand_bracket_keys( $post_data ), $section );
+        self::flush_option_cache( array_keys( $map ) );
+
+        return [
+            'saved_keys' => $saved_keys,
+            'count'      => count( $saved_keys ),
+            'keys'       => array_keys( $map ),
+        ];
+    }
+
+    /**
+     * The one write loop behind save_posted() and save_section().
+     *
+     *  - Remove-key flags call their sanitizer (which deletes the key) when ticked.
+     *    A new mailbox password typed in the same save wins over "Remove".
+     *  - Secrets are written only when a new, unmasked value is posted
+     *    (keep-on-empty). AI sanitizers store the value themselves; Social
+     *    secrets are stored here, and their "<option>_remove" box clears them.
+     *  - Rendered checkboxes that are absent from the post are saved as 0, but
+     *    only for the options in $map, so other tabs and sections are never touched.
+     *  - A Social field that is absent but posts a "<option>_present" marker, or
+     *    is a rendered checkbox, is saved as its sanitizer's value for null, the
+     *    way options.php saved it (an empty list, an unticked box, or no change).
+     *  - Everything else is written only when posted.
+     *
+     * @param array<string,callable> $map
+     * @return string[] Saved option names.
+     */
+    private static function write_posted( array $map, array $post_data, string $context ): array {
+        $saved_keys = [];
         foreach ( $map as $option => $sanitizer ) {
-            $entry = self::get( $option ) ?? [];
+            $entry  = self::get( $option ) ?? [];
+            $social = 'social' === ( $entry['page'] ?? '' );
             try {
                 if ( ! empty( $entry['removes'] ) ) {
                     if ( 'presshub_ai_remove_press_inbox_password' === $option ) {
@@ -479,6 +550,12 @@ class PressHub_Settings_Registry {
                 }
 
                 if ( ! empty( $entry['secret'] ) ) {
+                    if ( $social && ! empty( $post_data[ $option . '_remove' ] ) ) {
+                        // delete_option() skips the sanitizer, which keeps a stored secret on ''.
+                        delete_option( $option );
+                        $saved_keys[] = $option;
+                        continue;
+                    }
                     if ( isset( $post_data[ $option ] ) ) {
                         // The settings payload is JSON (not slashed); the mailbox
                         // password must keep any backslashes it contains.
@@ -486,7 +563,10 @@ class PressHub_Settings_Registry {
                             ? (string) $post_data[ $option ]
                             : trim( (string) wp_unslash( $post_data[ $option ] ) );
                         if ( '' !== $raw && false === strpos( $raw, '••••' ) ) {
-                            call_user_func( $sanitizer, $raw );
+                            $clean = call_user_func( $sanitizer, $raw );
+                            if ( $social ) {
+                                update_option( $option, $clean );
+                            }
                             $saved_keys[] = $option;
                         }
                     }
@@ -496,29 +576,32 @@ class PressHub_Settings_Registry {
                 if ( isset( $post_data[ $option ] ) ) {
                     update_option( $option, call_user_func( $sanitizer, $post_data[ $option ] ) );
                     $saved_keys[] = $option;
+                } elseif ( $social && ( ! empty( $post_data[ $option . '_present' ] ) || ( ! empty( $entry['checkbox'] ) && ! empty( $entry['rendered'] ) ) ) ) {
+                    // As options.php did: the Social sanitizer gets null and reads its
+                    // "_present" marker (an empty list, an unticked box, or "keep").
+                    update_option( $option, call_user_func( $sanitizer, null ) );
+                    $saved_keys[] = $option;
                 } elseif ( ! empty( $entry['checkbox'] ) && ! empty( $entry['rendered'] ) ) {
                     update_option( $option, 0 );
                     $saved_keys[] = $option;
                 }
             } catch ( Throwable $e ) {
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                    PressHub_AI_Logger::warning( sprintf( 'Error updating option %s in section %s: %s', $option, $tab ?: 'all', $e->getMessage() ) );
+                    PressHub_AI_Logger::warning( sprintf( 'Error updating option %s in section %s: %s', $option, $context, $e->getMessage() ) );
                 }
             }
         }
+        return $saved_keys;
+    }
 
+    /** @param string[] $keys */
+    private static function flush_option_cache( array $keys ): void {
         if ( function_exists( 'wp_cache_delete' ) ) {
             wp_cache_delete( 'alloptions', 'options' );
             wp_cache_delete( 'notoptions', 'options' );
-            foreach ( array_keys( $map ) as $key ) {
+            foreach ( $keys as $key ) {
                 wp_cache_delete( $key, 'options' );
             }
         }
-
-        return [
-            'saved_keys' => $saved_keys,
-            'count'      => count( $saved_keys ),
-            'keys'       => array_keys( $map ),
-        ];
     }
 }

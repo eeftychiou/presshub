@@ -1,0 +1,357 @@
+/**
+ * PressHub → Settings, one section per page load (#246):
+ *
+ *  - asks before leaving a section with unsaved changes (section links, the
+ *    narrow-screen section <select>, other admin links; closing the tab is
+ *    covered by the beforeunload guard in admin.js),
+ *  - says how many changes are unsaved, in a role="status" line,
+ *  - shows validation and save errors as a summary that links to each field,
+ *    with the same message next to the field, and prefixes the title "Error:",
+ *  - keeps the focused field clear of the sticky save bar (WCAG 2.2 SC 2.4.11),
+ *  - disables, with a reason, fields whose switch is off,
+ *  - remembers a dismissed "What's new in settings" panel.
+ *
+ * Needs admin.js (window.PressHubSettingsState, the save handler and its
+ * presshub:settings-* events) and window.presshubSettingsIndex.
+ */
+(function ($) {
+    'use strict';
+
+    var page = document.getElementById('presshub-settings-page');
+    if (!page) {
+        return;
+    }
+    var data = window.presshubSettingsIndex || {};
+    var t = data.i18n || {};
+    var section = page.getAttribute('data-section') || '';
+    var sectionLabel = (data.section_labels && data.section_labels[section]) || $.trim($('#presshub-settings-section-title').text());
+    var baseTitle = document.title;
+
+    function state() {
+        return window.PressHubSettingsState || null;
+    }
+
+    function changedCount() {
+        var s = state();
+        return s ? s.changedCount(section) : 0;
+    }
+
+    function isDirty() {
+        var s = state();
+        return !!(s && s.isDirty());
+    }
+
+    // ------------------------------------------------------------------
+    // Unsaved-changes guard on links and the section <select>.
+    // ------------------------------------------------------------------
+    function confirmLeave() {
+        if (!isDirty()) {
+            return true;
+        }
+        var n = changedCount();
+        var msg = n === 1
+            ? (t.leave_confirm_one || "Leave this page? Your change in %s isn't saved.").replace('%s', sectionLabel)
+            : (t.leave_confirm || "Leave this page? Your %1$d changes in %2$s aren't saved.").replace('%1$d', String(n)).replace('%2$s', sectionLabel);
+        if (window.confirm(msg)) {
+            var s = state();
+            if (s) {
+                s.leaving = true;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    function leavesPage(a) {
+        var href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#' || /^(javascript|mailto|tel):/i.test(href)) {
+            return false;
+        }
+        if (a.target && a.target !== '_self') {
+            return false;
+        }
+        if (a.hasAttribute('download')) {
+            return false;
+        }
+        // Same page, other anchor.
+        try {
+            var url = new URL(a.href, window.location.href);
+            if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) {
+                return false;
+            }
+        } catch (e) {}
+        return true;
+    }
+
+    document.addEventListener('click', function (e) {
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+            return;
+        }
+        var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a || !leavesPage(a)) {
+            return;
+        }
+        if (a.classList.contains('presshub-confirm-link')) {
+            return; // Handled below; it asks its own question.
+        }
+        if (!confirmLeave()) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }, true);
+
+    $(document).on('change', '#presshub-settings-section-select', function () {
+        var $sel = $(this);
+        var url = $sel.val();
+        if (!url) {
+            return;
+        }
+        if (confirmLeave()) {
+            window.location.href = url;
+        } else {
+            $sel.find('option').prop('selected', false).filter(function () {
+                return this.defaultSelected;
+            }).prop('selected', true);
+        }
+    });
+
+    // Links that act at once (restore all prompts) ask first.
+    $(document).on('click', '.presshub-confirm-link', function (e) {
+        var question = $(this).attr('data-confirm') || '';
+        if (question && !window.confirm(question)) {
+            e.preventDefault();
+            return;
+        }
+        var s = state();
+        if (s) {
+            s.leaving = true;
+        }
+    });
+
+    // ------------------------------------------------------------------
+    // "N unsaved changes".
+    // ------------------------------------------------------------------
+    var $badge = $('#presshub-sticky-unsaved-badge');
+    var lastCount = -1;
+    function updateUnsaved() {
+        var n = isDirty() ? changedCount() : 0;
+        if (n === lastCount) {
+            return;
+        }
+        lastCount = n;
+        if (n > 0) {
+            $badge.text(n === 1 ? (t.unsaved_one || '1 unsaved change') : (t.unsaved_many || '%d unsaved changes').replace('%d', String(n))).prop('hidden', false);
+        } else {
+            $badge.text('').prop('hidden', true);
+        }
+    }
+    $(document).on('presshub:settings-dirty', updateUnsaved);
+
+    // ------------------------------------------------------------------
+    // Error summary + inline messages.
+    // ------------------------------------------------------------------
+    var $summary = $('#presshub-settings-error-summary');
+    var $summaryList = $summary.find('.presshub-error-summary-list');
+
+    function fieldLabel(el) {
+        var $el = $(el);
+        var label = '';
+        if (el.id) {
+            label = $.trim($('label[for="' + el.id + '"]').first().text());
+        }
+        if (!label) {
+            var $wrap = $el.closest('label');
+            if ($wrap.length) {
+                label = $.trim($wrap.clone().children().remove().end().text());
+            }
+        }
+        if (!label) {
+            label = $.trim($el.closest('tr').find('th').first().text()) || el.name;
+        }
+        return label;
+    }
+
+    function clearErrors() {
+        $summary.prop('hidden', true);
+        $summaryList.empty();
+        $('.presshub-field-error').remove();
+        $('[aria-invalid="true"]').each(function () {
+            var $el = $(this);
+            $el.removeAttr('aria-invalid');
+            var describedBy = ($el.attr('aria-describedby') || '').split(/\s+/).filter(function (id) {
+                return id && id.indexOf('-presshub-error') === -1;
+            }).join(' ');
+            if (describedBy) {
+                $el.attr('aria-describedby', describedBy);
+            } else {
+                $el.removeAttr('aria-describedby');
+            }
+        });
+        document.title = baseTitle;
+    }
+
+    function showSummary(items) {
+        $summaryList.empty();
+        $.each(items, function (_, item) {
+            var $li = $('<li></li>');
+            if (item.id) {
+                $('<a></a>').attr('href', '#' + item.id).text(item.text).on('click', function (e) {
+                    e.preventDefault();
+                    var el = document.getElementById(item.id);
+                    if (el) {
+                        $(el).parents('details').attr('open', 'open');
+                        el.focus();
+                    }
+                }).appendTo($li);
+            } else {
+                $li.text(item.text);
+            }
+            $summaryList.append($li);
+        });
+        $summary.prop('hidden', false);
+        document.title = (t.error_prefix || 'Error:') + ' ' + baseTitle;
+        try {
+            $summary[0].scrollIntoView({ block: 'start' });
+        } catch (e) {}
+        $summary[0].focus();
+    }
+
+    $(document).on('presshub:settings-invalid', function (_, invalid) {
+        clearErrors();
+        var items = [];
+        $.each(invalid || [], function (i, el) {
+            if (!el.id) {
+                el.id = 'presshub-field-' + (el.name || 'field').replace(/[^a-z0-9_-]/gi, '_') + '-' + i;
+            }
+            var msg = el.validationMessage || t.invalid_value || 'Enter a valid value.';
+            var errId = el.id + '-presshub-error';
+            var $err = $('<p class="presshub-field-error"></p>').attr('id', errId).text(msg);
+            var $anchor = $(el).closest('label').length ? $(el).closest('label') : $(el);
+            $anchor.after($err);
+            $(el).attr('aria-invalid', 'true').attr('aria-describedby', $.trim(($(el).attr('aria-describedby') || '') + ' ' + errId));
+            $(el).parents('details').attr('open', 'open');
+            items.push({ id: el.id, text: fieldLabel(el) + ': ' + msg });
+        });
+        showSummary(items);
+        $('#presshub-sticky-status-msg').removeClass('is-success').addClass('is-error').text(t.not_saved || 'Not saved. Fix the fields listed above.');
+    });
+
+    $(document).on('presshub:settings-save-failed', function (_, tabKey, message) {
+        clearErrors();
+        showSummary([{ id: '', text: String(message || '') }]);
+    });
+
+    $(document).on('presshub:settings-saved', function () {
+        clearErrors();
+        lastCount = -1;
+        updateUnsaved();
+    });
+
+    // An invalid field that becomes valid loses its message.
+    $(document).on('input change', '#presshub-ai-settings-form [aria-invalid="true"]', function () {
+        if (typeof this.checkValidity === 'function' && this.checkValidity()) {
+            $('#' + this.id + '-presshub-error').remove();
+            $(this).removeAttr('aria-invalid');
+        }
+    });
+
+    // ------------------------------------------------------------------
+    // Keep the focused field clear of the sticky save bar.
+    // ------------------------------------------------------------------
+    var bar = document.getElementById('presshub-sticky-save-bar');
+    document.addEventListener('focusin', function (e) {
+        if (!bar || !e.target || bar.contains(e.target) || !document.getElementById('presshub-ai-settings-form').contains(e.target)) {
+            return;
+        }
+        var barTop = bar.getBoundingClientRect().top;
+        var rect = e.target.getBoundingClientRect();
+        var gap = 16;
+        if (rect.bottom > barTop - gap && rect.top < window.innerHeight) {
+            window.scrollBy(0, rect.bottom - barTop + gap);
+        }
+    });
+
+    // ------------------------------------------------------------------
+    // Fields that do not apply: disabled, with a reason (registry depends_on).
+    // ------------------------------------------------------------------
+    function controlsFor(key) {
+        var form = document.getElementById('presshub-ai-settings-form');
+        if (!form) {
+            return [];
+        }
+        var list = [];
+        var byId = document.getElementById(key);
+        if (byId && form.contains(byId) && /^(INPUT|SELECT|TEXTAREA)$/.test(byId.tagName) && byId.type !== 'hidden') {
+            list.push(byId);
+        }
+        $(form).find('[name="' + key + '"], [name^="' + key + '["]').each(function () {
+            if (this.type !== 'hidden' && list.indexOf(this) === -1) {
+                list.push(this);
+            }
+        });
+        return list;
+    }
+
+    function switchIsOn(el) {
+        if (el.type === 'checkbox' || el.type === 'radio') {
+            return el.checked;
+        }
+        return el.value !== '' && el.value !== '0';
+    }
+
+    $.each(data.entries || [], function (_, e) {
+        if (e.section !== section || !e.depends_on) {
+            return;
+        }
+        var parents = controlsFor(e.depends_on);
+        var mine = controlsFor(e.key);
+        if (!parents.length || !mine.length) {
+            return;
+        }
+        var parent = parents[0];
+        var reasonId = 'presshub-applies-' + e.key;
+        var $reason = $('<p class="description presshub-applies-reason"></p>').attr('id', reasonId)
+            .text((t.depends_reason || 'Used only when "%s" is on.').replace('%s', e.depends_label || e.depends_on));
+        var last = mine[mine.length - 1];
+        var $anchor = $(last).closest('label').length ? $(last).closest('label') : $(last);
+        $anchor.after($reason);
+
+        function apply() {
+            var on = switchIsOn(parent);
+            $.each(mine, function (_, el) {
+                // Disabled fields are still sent on Save (admin.js reads every field).
+                el.disabled = !on;
+                var ids = ($(el).attr('aria-describedby') || '').split(/\s+/).filter(function (id) { return id && id !== reasonId; });
+                if (!on) {
+                    ids.push(reasonId);
+                }
+                if (ids.length) {
+                    $(el).attr('aria-describedby', ids.join(' '));
+                } else {
+                    $(el).removeAttr('aria-describedby');
+                }
+                $(el).trigger('presshub:applies');
+            });
+            $reason.prop('hidden', on);
+        }
+        $(parent).on('change input', apply);
+        apply();
+    });
+
+    // ------------------------------------------------------------------
+    // "What's new in settings": dismissed once per user.
+    // ------------------------------------------------------------------
+    $(document).on('click', '#presshub-whats-new .notice-dismiss', function () {
+        if (!window.presshubAI || !window.presshubAI.ajax_url) {
+            return;
+        }
+        $.post(window.presshubAI.ajax_url, {
+            action: 'presshub_dismiss_settings_whats_new',
+            nonce: window.presshubAI.nonce
+        });
+    });
+    $(document).on('click', '.presshub-whats-new-search', function (e) {
+        e.preventDefault();
+        $('#presshub-settings-search-input').trigger('focus');
+    });
+})(jQuery);

@@ -93,7 +93,6 @@ $expected = [
     'presshub-ai-people'             => 'People',
     'presshub-ai-usage'              => 'Usage & logs',
     'presshub-ai'                    => 'Settings',
-    'presshub-social-settings'       => 'Social settings',
     'presshub-ai-presets'            => 'Presets',
 ];
 
@@ -229,7 +228,7 @@ foreach ( [ 'author' => AMC_AUTHOR, 'contributor' => AMC_CONTRIBUTOR ] as $role 
 }
 
 $GLOBALS['FILTERS']['presshub_ai_settings_cap'][] = [ 'callback' => static function () { return 'manage_options'; }, 'priority' => 10, 'accepted_args' => 1 ];
-$admin_only = [ 'presshub-ai', 'presshub-social-settings', 'presshub-ai-presets', 'presshub-social-queue', 'presshub-ai-usage' ];
+$admin_only = [ 'presshub-ai', 'presshub-ai-presets', 'presshub-social-queue', 'presshub-ai-usage' ];
 $GLOBALS['CURRENT_USER_CAPS'] = AMC_EDITOR;
 $caps = array_column( amc_build_menu(), 'capability', 'menu_slug' );
 foreach ( $admin_only as $slug ) {
@@ -248,7 +247,14 @@ amc_check( 'default: PressHub capability is edit_others_posts', 'edit_others_pos
 $GLOBALS['FILTERS']['presshub_social_settings_cap'][] = [ 'callback' => static function () { return 'manage_options'; }, 'priority' => 10, 'accepted_args' => 1 ];
 $GLOBALS['CURRENT_USER_CAPS'] = AMC_EDITOR;
 $caps = array_column( amc_build_menu(), 'capability', 'menu_slug' );
-amc_check( 'social filter: Social Queue and Social settings admin-only', 'manage_options' === ( $caps['presshub-social-queue'] ?? '' ) && 'manage_options' === ( $caps['presshub-social-settings'] ?? '' ) );
+amc_check( 'social filter: Social Queue admin-only', 'manage_options' === ( $caps['presshub-social-queue'] ?? '' ) );
+amc_check( 'social filter: Social publishing section hidden from editors', ! in_array( 'social-publishing', PressHub_Settings_Sections::visible(), true ) && ! PressHub_Settings_Sections::can_view( 'social-publishing' ) );
+amc_check( 'social filter: Connections hides the Social groups from editors', ! isset( PressHub_Settings_Sections::visible_groups( 'connections' )['social-accounts'] ) && isset( PressHub_Settings_Sections::visible_groups( 'connections' )['google-cloud'] ) );
+$r = amc_ajax( [ $ajax, 'save_settings_section' ], [ 'tab' => 'social-publishing', 'payload_b64' => base64_encode( '{"presshub_social_batch_size":"7"}' ) ] );
+amc_check( 'social filter: editor Social publishing save refused', null !== $r && false === $r['success'] && 403 === ( $r['status'] ?? 0 ) );
+$GLOBALS['OPTIONS_STORE']['presshub_social_worker_url'] = 'http://keep.example';
+$r = amc_ajax( [ $ajax, 'save_settings_section' ], [ 'tab' => 'connections', 'payload_b64' => base64_encode( '{"presshub_social_worker_url":"http://changed.example","presshub_ai_imagen_region":"europe-west4"}' ) ] );
+amc_check( 'social filter: editor Connections save skips Social options', null !== $r && true === $r['success'] && 'http://keep.example' === ( $GLOBALS['OPTIONS_STORE']['presshub_social_worker_url'] ?? '' ) && 'europe-west4' === ( $GLOBALS['OPTIONS_STORE']['presshub_ai_imagen_region'] ?? '' ) );
 amc_check( 'social filter: AI Settings stay open to editors', amc_can( $caps['presshub-ai'] ?? 'x' ) );
 amc_check( 'social filter: options.php group follows it', 'manage_options' === PressHub_Capabilities::social_option_page_capability() );
 $r = amc_ajax( [ 'PressHub_Social_Ajax_Handlers', 'handle_retry_job' ], [ 'job_id' => 1 ] );
@@ -271,32 +277,46 @@ foreach ( $groups as $group ) {
 // ---------------------------------------------------------------------
 // 6. Old URLs.
 // ---------------------------------------------------------------------
+// Each: file, query, expected page, expected section ('' = none), expected #anchor, kept args.
 $redirects = [
-    [ 'options-general.php', [ 'page' => 'presshub-ai' ], 'page=presshub-ai', [] ],
-    [ 'options-general.php', [ 'page' => 'presshub-ai', 'tab' => 'briefing' ], 'page=presshub-ai', [ 'tab=briefing' ] ],
-    [ 'options-general.php', [ 'page' => 'presshub-ai-presets' ], 'page=presshub-ai-presets', [] ],
-    [ 'options-general.php', [ 'page' => 'presshub-social-queue', 'status' => 'failed' ], 'page=presshub-social-queue', [ 'status=failed' ] ],
-    [ 'options-general.php', [ 'page' => 'presshub-social-settings', 'tab' => 'worker' ], 'page=presshub-social-settings', [ 'tab=worker' ] ],
-    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'token_logs' ], 'page=presshub-ai-usage', [] ],
-    [ 'admin.php', [ 'page' => 'presshub' ], 'page=presshub-ai-briefing-hub', [] ],
+    [ 'options-general.php', [ 'page' => 'presshub-ai' ], 'presshub-ai', '', '', [] ],
+    [ 'options-general.php', [ 'page' => 'presshub-ai', 'tab' => 'briefing' ], 'presshub-ai', '', '', [ 'tab=briefing' ] ],
+    [ 'options-general.php', [ 'page' => 'presshub-ai-presets' ], 'presshub-ai-presets', '', '', [] ],
+    [ 'options-general.php', [ 'page' => 'presshub-social-queue', 'status' => 'failed' ], 'presshub-social-queue', '', '', [ 'status=failed' ] ],
+    [ 'options-general.php', [ 'page' => 'presshub-social-settings', 'tab' => 'worker' ], 'presshub-ai', 'connections', 'automation-worker', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'token_logs' ], 'presshub-ai-usage', '', '', [] ],
+    [ 'admin.php', [ 'page' => 'presshub' ], 'presshub-ai-briefing-hub', '', '', [] ],
+    // #246: every old tab of both settings pages opens its section.
+    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'briefing' ], 'presshub-ai', 'daily-briefing', '', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'images' ], 'presshub-ai', 'writing-qa', 'featured-images', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'copilot' ], 'presshub-ai', 'ai-models', 'copilot', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'advanced' ], 'presshub-ai', 'site-system', '', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-social-settings' ], 'presshub-ai', 'social-publishing', '', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-social-settings', 'tab' => 'credentials' ], 'presshub-ai', 'connections', 'social-accounts', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-social-settings', 'tab' => 'shorts', 'x' => '1' ], 'presshub-ai', 'social-publishing', 'shorts', [ 'x=1' ] ],
+    [ 'admin.php', [ 'page' => 'presshub-social-settings', 'tab' => 'no_such_tab' ], 'presshub-ai', 'social-publishing', '', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-social-settings', 'action' => 'reset_prompts', '_wpnonce' => 'n1' ], 'presshub-ai', 'social-publishing', '', [ 'action=reset_prompts', '_wpnonce=n1' ] ],
 ];
 foreach ( $redirects as $r ) {
     $url = PressHub_Admin_Menu::legacy_redirect_url( $r[0], $r[1] );
     parse_str( (string) parse_url( $url, PHP_URL_QUERY ), $q );
-    $ok = '/wp-admin/admin.php' === parse_url( $url, PHP_URL_PATH ) && 'page=' . ( $q['page'] ?? '' ) === $r[2];
-    foreach ( $r[3] as $kept ) {
+    $ok = '/wp-admin/admin.php' === parse_url( $url, PHP_URL_PATH ) && ( $q['page'] ?? '' ) === $r[2];
+    $ok = $ok && ( '' === $r[3] ? ! isset( $q['section'] ) : ( $q['section'] ?? '' ) === $r[3] );
+    $ok = $ok && (string) parse_url( $url, PHP_URL_FRAGMENT ) === $r[4];
+    foreach ( $r[5] as $kept ) {
         [ $k, $v ] = explode( '=', $kept );
         $ok = $ok && ( $q[ $k ] ?? null ) === $v;
     }
-    if ( 'token_logs' === ( $r[1]['tab'] ?? '' ) ) {
+    if ( '' !== $r[3] || 'token_logs' === ( $r[1]['tab'] ?? '' ) ) {
         $ok = $ok && ! isset( $q['tab'] );
     }
     amc_check( 'redirect: ' . $r[0] . '?' . http_build_query( $r[1] ) . ' → ' . $url, $ok );
 }
+// A redirected section URL is final: no loop.
+amc_check( 'redirect: a section URL is not redirected again', '' === PressHub_Admin_Menu::legacy_redirect_url( 'admin.php', [ 'page' => 'presshub-ai', 'section' => 'daily-briefing' ] ) );
 foreach ( [
     [ 'admin.php', [ 'page' => 'presshub-ai' ] ],
-    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'briefing' ] ],
-    [ 'admin.php', [ 'page' => 'presshub-social-settings', 'tab' => 'worker' ] ],
+    [ 'admin.php', [ 'page' => 'presshub-ai', 'section' => 'connections' ] ],
     [ 'admin.php', [ 'page' => 'presshub-ai-briefing-hub' ] ],
     [ 'admin.php', [ 'page' => 'presshub-ai-agenda' ] ],
     [ 'options-general.php', [ 'page' => 'some-other-plugin' ] ],
@@ -367,24 +387,22 @@ foreach ( PressHub_Settings_Registry::all() as $key => $e ) {
     }
 }
 amc_check( 'secrets: the registry declares secret options', count( $secrets ) > 3 );
-ob_start();
-try {
-    ( new PressHub_AI_Settings_Render() )->render_settings_page();
-} catch ( Throwable $t ) {
-}
 PressHub_Settings_Registry::ensure_registered();
-try {
-    PressHub_Social_Settings::get_instance()->register_settings();
-    foreach ( [ 'general', 'ai', 'credentials', 'worker', 'shorts', 'queue', 'prompts' ] as $presshub_tab ) {
-        $_GET['tab'] = $presshub_tab;
-        PressHub_Social_Settings::get_instance()->render_settings_page();
+PressHub_Social_Settings::get_instance()->register_settings();
+ob_start();
+$rendered_sections = 0;
+foreach ( PressHub_Settings_Sections::slugs() as $presshub_section ) {
+    $_GET['section'] = $presshub_section;
+    try {
+        ( new PressHub_AI_Settings_Render() )->render_settings_page();
+        $rendered_sections++;
+    } catch ( Throwable $t ) {
+        echo 'render threw: ' . $t->getMessage();
     }
-    unset( $_GET['tab'] );
-} catch ( Throwable $t ) {
-    echo 'social render threw: ' . $t->getMessage();
 }
+unset( $_GET['section'] );
 $html = (string) ob_get_clean();
-amc_check( 'secrets: both settings pages rendered for the editor', false !== strpos( $html, 'id="presshub-ai-settings-form"' ) && false !== strpos( $html, 'id="presshub-social-settings-form"' ) );
+amc_check( 'secrets: every Settings section rendered for the editor', 8 === $rendered_sections && 8 === substr_count( $html, 'id="presshub-ai-settings-form"' ) && false !== strpos( $html, 'name="presshub_social_worker_secret"' ) );
 $leaked = array_keys( array_filter( $secrets, static function ( $v ) use ( $html ) {
     return false !== strpos( $html, $v );
 } ) );

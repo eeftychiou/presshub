@@ -20,6 +20,7 @@
 require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/wp-action-wrapper.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsPageTest
 {
@@ -424,8 +425,9 @@ class SettingsPageTest
         if ( empty( $GLOBALS['RENDERED_SETTINGS_FIELDS']['presshub_ai_options'] ) ) {
             $failures[] = 'render_settings_page() should call settings_fields( presshub_ai_options ).';
         }
-        if ( empty( $GLOBALS['RENDERED_SECTIONS']['presshub-ai'] ) ) {
-            $failures[] = 'render_settings_page() should call do_settings_sections( presshub-ai ).';
+        // #246: the page renders one section pane (the default, Connections).
+        if ( false === strpos( $html, 'id="presshub-tab-pane-connections"' ) ) {
+            $failures[] = 'render_settings_page() should render the default section pane (Connections).';
         }
         $tabs = $GLOBALS['HELP_TABS'] ?? [];
         if ( empty( $tabs ) ) {
@@ -442,6 +444,8 @@ class SettingsPageTest
         if ( false === strpos( $html, 'presshub-ai-settings-form' ) ) {
             $failures[] = 'render_settings_page() should output the settings form.';
         }
+        // #246: one section per page load; the fields below live in several sections.
+        $html .= presshub_test_render_all_sections();
         if ( false === strpos( $html, 'name="presshub_ai_log_tts_payloads"' ) ) {
             $failures[] = 'render_settings_page() should output presshub_ai_log_tts_payloads input.';
         }

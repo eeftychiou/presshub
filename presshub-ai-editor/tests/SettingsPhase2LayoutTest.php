@@ -26,16 +26,12 @@ defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE
 require_once __DIR__ . '/../presshub-ai-editor.php';
 require_once __DIR__ . '/../includes/class-social-settings.php';
 require_once __DIR__ . '/../includes/class-social-settings-render.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsPhase2LayoutTest {
 
     private static function pane( string $html, string $tab ): string {
-        $start = strpos( $html, 'id="presshub-tab-pane-' . $tab . '"' );
-        if ( false === $start ) {
-            return '';
-        }
-        $next = strpos( $html, 'id="presshub-tab-pane-', $start + 10 );
-        return substr( $html, $start, false === $next ? null : $next - $start );
+        return presshub_test_tab_pane( $html, $tab );
     }
 
     public static function run(): void {
@@ -46,13 +42,13 @@ class SettingsPhase2LayoutTest {
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         PressHub_Settings_Registry::reset();
         PressHub_Settings_Registry::ensure_registered();
-        ob_start();
-        ( new PressHub_AI_Settings_Render() )->render_settings_page();
-        $html = (string) ob_get_clean();
+        $html = presshub_test_render_all_sections();
 
-        $briefing = self::pane( $html, 'briefing' );
+        $briefing      = self::pane( $html, 'briefing' );
+        $briefing_page = presshub_test_render_section( 'daily-briefing' );
         foreach ( array_keys( PressHub_AI_Settings_Render::briefing_groups() ) as $group ) {
-            if ( false === strpos( $briefing, 'id="' . $group . '"' ) || false === strpos( $briefing, 'href="#' . $group . '"' ) ) {
+            // #246: the "On this page" bar sits above the section's form.
+            if ( false === strpos( $briefing, 'id="' . $group . '"' ) || false === strpos( $briefing_page, 'href="#' . $group . '"' ) ) {
                 $failures[] = "Daily Briefing should render group {$group} with an On this page link.";
             }
         }
@@ -71,16 +67,18 @@ class SettingsPhase2LayoutTest {
         if ( false === strpos( self::pane( $html, 'knowledge' ), 'name="presshub_ai_memory_enabled"' ) ) {
             $failures[] = 'Editorial memory should render on Editorial knowledge.';
         }
-        if ( false === strpos( self::pane( $html, 'coauthor' ), 'id="presshub-subpane-coauthor-seo"' ) || false !== strpos( self::pane( $html, 'images' ), 'presshub_ai_seo_max_tags' ) ) {
-            $failures[] = 'SEO & tags should render in the Co-Author SEO sub-tab, not on Featured Images.';
+        // #246: SEO & tags and Featured images are groups of Writing & QA.
+        if ( false === strpos( presshub_test_group( $html, 'seo' ), 'presshub_ai_seo_max_tags' ) || false !== strpos( presshub_test_group( $html, 'featured-images' ), 'presshub_ai_seo_max_tags' ) ) {
+            $failures[] = 'SEO & tags should render in the SEO & tags group, not in Featured images.';
         }
 
-        // 2. Every rendered AI option is drawn in its registry tab's pane.
+        // 2. Every rendered AI option is drawn in its section's pane (#246: the
+        // section, not the old tab, decides where an option lives).
         foreach ( PressHub_Settings_Registry::for_page( 'ai' ) as $key => $e ) {
             if ( empty( $e['rendered'] ) || ! empty( $e['removes'] ) || PressHub_Settings_Registry::is_unused( $key ) || in_array( $e['tab'], [ 'providers', 'advanced' ], true ) ) {
                 continue;
             }
-            $pane = self::pane( $html, $e['tab'] );
+            $pane = self::pane( $html, PressHub_Settings_Sections::section_of( $key ) );
             if ( '' === $pane ) {
                 $failures[] = "No pane for tab {$e['tab']} ({$key}).";
                 continue;
@@ -165,9 +163,14 @@ class SettingsPhase2LayoutTest {
         if ( ! in_array( 'presshub_ai_briefing_host_female', $keys, true ) || ! in_array( 'presshub_social_tiktok_shorts_count', $keys, true ) ) {
             $failures[] = 'Search index should cover both pages.';
         }
-        $payload = PressHub_Settings_Registry::search_payload( 'ai' );
-        if ( 'ai' !== $payload['page'] || empty( $payload['tab_labels']['social']['shorts'] ) || empty( $payload['whats_new']['ai'] ) ) {
-            $failures[] = 'Search payload should carry the page, tab labels and what\'s new.';
+        $payload = PressHub_Settings_Registry::search_payload( 'writing-qa' );
+        if ( 'writing-qa' !== $payload['section'] || empty( $payload['section_urls']['social-publishing'] ) || empty( $payload['section_labels']['daily-briefing'] ) || empty( $payload['whats_new'] ) || empty( $payload['legacy_hashes']['briefing'] ) ) {
+            $failures[] = 'Search payload should carry the section, every section URL and label, old #tab hashes and what\'s new.';
+        }
+        foreach ( $payload['entries'] as $row ) {
+            if ( '' === ( $row['section'] ?? '' ) ) {
+                $failures[] = "Search entry {$row['key']} has no section.";
+            }
         }
 
         if ( $failures ) {

@@ -1,0 +1,528 @@
+/**
+ * PressHub → Settings (#246, settings overhaul phase 3b).
+ *
+ * One stylesheet for the Settings page: the section list, the section and
+ * its groups, the save bar, errors, search, per-field defaults and the
+ * What's new panel, followed by the utility classes that replaced every
+ * inline style="" attribute of the settings renderers (CI refuses new ones).
+ * Rules are scoped to #presshub-settings-page (and the Usage & logs page,
+ * which reuses the token log renderer) so they win over admin.css the way
+ * the inline styles did, while still yielding to jQuery's show()/hide().
+ */
+
+/* ---------------------------------------------------------------- Layout */
+.presshub-settings-page { --presshub-savebar-height: 64px; }
+html:has(#presshub-settings-page) { scroll-padding-top: 90px; scroll-padding-bottom: calc(var(--presshub-savebar-height, 64px) + 24px); }
+
+.presshub-settings-page .presshub-settings-layout {
+    display: grid;
+    grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+    margin-top: 12px;
+}
+.presshub-settings-page .presshub-settings-main { min-width: 0; }
+.presshub-settings-page .presshub-settings-section-title { margin: 0 0 4px; font-size: 1.5em; }
+.presshub-settings-page .presshub-settings-section-intro { margin: 0 0 12px; color: #50575e; max-width: 70em; }
+.presshub-settings-page .presshub-settings-group-intro { margin-top: 0; }
+.presshub-settings-page .presshub-settings-subgroup { margin-top: 8px; }
+.presshub-settings-page .presshub-settings-subgroup-title { margin: 16px 0 4px; font-size: 1.05em; }
+.presshub-settings-page .presshub-is-hidden { display: none; }
+
+/* ---------------------------------------------------------- Section list */
+.presshub-settings-page .presshub-settings-nav {
+    position: sticky;
+    top: 46px;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    padding: 12px 0 8px;
+}
+.presshub-settings-page .presshub-settings-nav-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.presshub-settings-page .presshub-settings-nav-list li { margin: 0; }
+.presshub-settings-page .presshub-settings-nav-link {
+    display: block;
+    padding: 8px 14px 8px 12px;
+    border-left: 4px solid transparent;
+    color: #1d2327;
+    text-decoration: none;
+    font-size: 14px;
+}
+.presshub-settings-page .presshub-settings-nav-link:hover { background: #f6f7f7; color: #135e96; }
+.presshub-settings-page .presshub-settings-nav-link:focus { box-shadow: 0 0 0 2px #2271b1; outline: 2px solid transparent; }
+.presshub-settings-page .presshub-settings-nav-link[aria-current="page"] {
+    border-left-color: #2271b1;
+    background: #f0f6fc;
+    color: #135e96;
+    font-weight: 600;
+}
+.presshub-settings-page .presshub-settings-nav-select-wrap { display: none; padding: 0 12px; }
+.presshub-settings-page .presshub-settings-nav-select-wrap label { display: block; font-weight: 600; margin-bottom: 4px; }
+.presshub-settings-page .presshub-settings-nav-select { width: 100%; max-width: 100%; }
+
+/* ---------------------------------------------------------------- Search */
+.presshub-settings-page .presshub-settings-search { position: relative; margin: 0 12px; }
+.presshub-settings-page .presshub-settings-search input[type="search"] { width: 100%; }
+.presshub-settings-page .presshub-settings-search-results {
+    position: absolute; z-index: 100; left: 0; min-width: 100%; width: 420px; max-width: 80vw; margin: 2px 0 0; padding: 0;
+    list-style: none; background: #fff; border: 1px solid #8c8f94; border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .12); max-height: 360px; overflow-y: auto;
+}
+.presshub-settings-page .presshub-settings-search-results li { margin: 0; padding: 7px 10px; cursor: pointer; border-bottom: 1px solid #f0f0f1; }
+.presshub-settings-page .presshub-settings-search-results li.is-active,
+.presshub-settings-page .presshub-settings-search-results li:hover { background: #f0f6fc; }
+.presshub-settings-page .presshub-search-meta { color: #50575e; font-size: 12px; }
+.presshub-settings-page .presshub-search-empty { cursor: default; color: #50575e; }
+.presshub-settings-page .presshub-search-hit { outline: 3px solid #f0b849; outline-offset: 2px; transition: outline-color .4s; }
+
+/* ------------------------------------------------- Defaults and reasons */
+.presshub-settings-page .presshub-field-default { display: inline-block; margin-left: 8px; color: #50575e; font-size: 12px; }
+.presshub-settings-page .presshub-field-default .presshub-field-reset { margin-left: 4px; font-size: 12px; }
+.presshub-settings-page .presshub-applies-reason { font-style: italic; }
+.presshub-settings-page input:disabled + .presshub-field-default,
+.presshub-settings-page select:disabled + .presshub-field-default { opacity: .7; }
+
+/* ------------------------------------------------------- Advanced blocks */
+.presshub-settings-page .presshub-settings-advanced { margin: 12px 0 4px; }
+.presshub-settings-page .presshub-settings-advanced > summary { cursor: pointer; font-weight: 600; padding: 8px 0; color: #2271b1; }
+
+/* ------------------------------------------------------------- Save bar */
+.presshub-settings-page .presshub-settings-savebar {
+    position: sticky;
+    bottom: 0;
+    left: auto;
+    right: auto;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    min-height: var(--presshub-savebar-height);
+    margin: 16px 0 0;
+    padding: 12px 16px;
+    box-sizing: border-box;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 4px 4px 0 0;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, .06);
+    animation: none;
+    backdrop-filter: none;
+}
+.presshub-settings-page .presshub-settings-savebar .spinner { float: none; margin: 0; }
+.presshub-settings-page .presshub-sticky-unsaved-badge { color: #8a4b00; font-weight: 600; }
+.presshub-settings-page .presshub-sticky-status-msg.is-success { color: #007017; font-weight: 600; }
+.presshub-settings-page .presshub-sticky-status-msg.is-error { color: #b32d2e; font-weight: 600; }
+
+/* --------------------------------------------------------------- Errors */
+.presshub-settings-page .presshub-error-summary { padding: 8px 12px 4px; border-left-width: 4px; }
+.presshub-settings-page .presshub-error-summary:focus { box-shadow: 0 0 0 2px #b32d2e; outline: 2px solid transparent; }
+.presshub-settings-page .presshub-error-summary-title { margin: 4px 0; font-size: 1.1em; }
+.presshub-settings-page .presshub-error-summary-list { margin: 4px 0 8px 18px; list-style: disc; }
+.presshub-settings-page .presshub-field-error { margin: 4px 0 0; color: #b32d2e; font-weight: 600; }
+.presshub-settings-page [aria-invalid="true"] { border-color: #b32d2e; box-shadow: 0 0 0 1px #b32d2e; }
+.presshub-settings-page .presshub-settings-notice-list { margin: 4px 0 0 18px; list-style: disc; }
+
+/* ------------------------------------------------------------ What's new */
+.presshub-settings-page .presshub-whats-new-title { margin: .6em 0 .3em; font-size: 1.1em; }
+.presshub-settings-page .presshub-whats-new-list { margin-left: 20px; list-style: disc; }
+
+/* ------------------------------------------- Retention and reset boxes */
+.presshub-settings-page .presshub-retention-caption { text-align: left; font-weight: 600; padding: 8px 0; }
+.presshub-settings-page .presshub-social-reset-box { background: #fff; border: 1px solid #ccd0d4; padding: 4px 15px 8px; border-radius: 4px; max-width: 800px; margin: 16px 0 20px; }
+
+/* ---------------------------------------------------------- Narrow view */
+@media (max-width: 960px) {
+    .presshub-settings-page .presshub-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .presshub-settings-page .presshub-settings-nav { position: static; padding: 12px 0; }
+    .presshub-settings-page .presshub-settings-nav-list { display: none; }
+    .presshub-settings-page .presshub-settings-nav-select-wrap { display: block; margin-top: 10px; }
+}
+@media (max-width: 782px) {
+    .presshub-settings-page .presshub-settings-savebar { padding: 10px 12px; }
+    /* Touch targets: the section <select> and links are at least 44px high. */
+    .presshub-settings-page .presshub-settings-nav-select,
+    .presshub-settings-page .presshub-settings-nav-link { min-height: 44px; }
+}
+
+/* ------------------------------------------------------------------
+ * Utility classes: one per declaration that used to sit in a style=""
+ * attribute of class-settings-render.php or class-social-settings-render.php.
+ * Shorthand properties come first so a longhand on the same element wins,
+ * as it did inline.
+ * ------------------------------------------------------------------ */
+#presshub-settings-page .ph-background-1e1e1e,
+#presshub-usage-logs-page .ph-background-1e1e1e { background: #1e1e1e; }
+#presshub-settings-page .ph-background-d4edda,
+#presshub-usage-logs-page .ph-background-d4edda { background: #d4edda; }
+#presshub-settings-page .ph-background-f0f0f1,
+#presshub-usage-logs-page .ph-background-f0f0f1 { background: #f0f0f1; }
+#presshub-settings-page .ph-background-f6f7f7,
+#presshub-usage-logs-page .ph-background-f6f7f7 { background: #f6f7f7; }
+#presshub-settings-page .ph-background-f8d7da,
+#presshub-usage-logs-page .ph-background-f8d7da { background: #f8d7da; }
+#presshub-settings-page .ph-background-fcf0f1,
+#presshub-usage-logs-page .ph-background-fcf0f1 { background: #fcf0f1; }
+#presshub-settings-page .ph-background-fff,
+#presshub-usage-logs-page .ph-background-fff { background: #fff; }
+#presshub-settings-page .ph-background-fff3cd,
+#presshub-usage-logs-page .ph-background-fff3cd { background: #fff3cd; }
+#presshub-settings-page .ph-background-fff8e5,
+#presshub-usage-logs-page .ph-background-fff8e5 { background: #fff8e5; }
+#presshub-settings-page .ph-background-none,
+#presshub-usage-logs-page .ph-background-none { background: none; }
+#presshub-settings-page .ph-border-0,
+#presshub-usage-logs-page .ph-border-0 { border: 0; }
+#presshub-settings-page .ph-border-1px-dashed-ccd0d4,
+#presshub-usage-logs-page .ph-border-1px-dashed-ccd0d4 { border: 1px dashed #ccd0d4; }
+#presshub-settings-page .ph-border-1px-solid-c3c4c7,
+#presshub-usage-logs-page .ph-border-1px-solid-c3c4c7 { border: 1px solid #c3c4c7; }
+#presshub-settings-page .ph-border-1px-solid-ccd0d4,
+#presshub-usage-logs-page .ph-border-1px-solid-ccd0d4 { border: 1px solid #ccd0d4; }
+#presshub-settings-page .ph-border-1px-solid-dcdcde,
+#presshub-usage-logs-page .ph-border-1px-solid-dcdcde { border: 1px solid #dcdcde; }
+#presshub-settings-page .ph-border-1px-solid-f5c6cb,
+#presshub-usage-logs-page .ph-border-1px-solid-f5c6cb { border: 1px solid #f5c6cb; }
+#presshub-settings-page .ph-border-bottom-1px-solid-dcdcde,
+#presshub-usage-logs-page .ph-border-bottom-1px-solid-dcdcde { border-bottom: 1px solid #dcdcde; }
+#presshub-settings-page .ph-border-bottom-1px-solid-e2e4e7,
+#presshub-usage-logs-page .ph-border-bottom-1px-solid-e2e4e7 { border-bottom: 1px solid #e2e4e7; }
+#presshub-settings-page .ph-border-left-4px-solid-dba617,
+#presshub-usage-logs-page .ph-border-left-4px-solid-dba617 { border-left: 4px solid #dba617; }
+#presshub-settings-page .ph-border-left-4px-solid-ffb900,
+#presshub-usage-logs-page .ph-border-left-4px-solid-ffb900 { border-left: 4px solid #ffb900; }
+#presshub-settings-page .ph-border-none,
+#presshub-usage-logs-page .ph-border-none { border: none; }
+#presshub-settings-page .ph-border-radius-3px,
+#presshub-usage-logs-page .ph-border-radius-3px { border-radius: 3px; }
+#presshub-settings-page .ph-border-radius-4px,
+#presshub-usage-logs-page .ph-border-radius-4px { border-radius: 4px; }
+#presshub-settings-page .ph-border-radius-6px,
+#presshub-usage-logs-page .ph-border-radius-6px { border-radius: 6px; }
+#presshub-settings-page .ph-border-top-1px-solid-ccd0d4,
+#presshub-usage-logs-page .ph-border-top-1px-solid-ccd0d4 { border-top: 1px solid #ccd0d4; }
+#presshub-settings-page .ph-border-top-1px-solid-dcdcde,
+#presshub-usage-logs-page .ph-border-top-1px-solid-dcdcde { border-top: 1px solid #dcdcde; }
+#presshub-settings-page .ph-flex-1,
+#presshub-usage-logs-page .ph-flex-1 { flex: 1; }
+#presshub-settings-page .ph-gap-10px,
+#presshub-usage-logs-page .ph-gap-10px { gap: 10px; }
+#presshub-settings-page .ph-gap-12px,
+#presshub-usage-logs-page .ph-gap-12px { gap: 12px; }
+#presshub-settings-page .ph-gap-15px,
+#presshub-usage-logs-page .ph-gap-15px { gap: 15px; }
+#presshub-settings-page .ph-gap-20px,
+#presshub-usage-logs-page .ph-gap-20px { gap: 20px; }
+#presshub-settings-page .ph-gap-4px,
+#presshub-usage-logs-page .ph-gap-4px { gap: 4px; }
+#presshub-settings-page .ph-gap-6px,
+#presshub-usage-logs-page .ph-gap-6px { gap: 6px; }
+#presshub-settings-page .ph-gap-8px,
+#presshub-usage-logs-page .ph-gap-8px { gap: 8px; }
+#presshub-settings-page .ph-margin-0,
+#presshub-usage-logs-page .ph-margin-0 { margin: 0; }
+#presshub-settings-page .ph-margin-0-0-0-6px,
+#presshub-usage-logs-page .ph-margin-0-0-0-6px { margin: 0 0 0 6px; }
+#presshub-settings-page .ph-margin-0-0-5px-0,
+#presshub-usage-logs-page .ph-margin-0-0-5px-0 { margin: 0 0 5px 0; }
+#presshub-settings-page .ph-margin-0-0-8px,
+#presshub-usage-logs-page .ph-margin-0-0-8px { margin: 0 0 8px; }
+#presshub-settings-page .ph-margin-0-12px-6px-0,
+#presshub-usage-logs-page .ph-margin-0-12px-6px-0 { margin: 0 12px 6px 0; }
+#presshub-settings-page .ph-margin-0-5px-0-0,
+#presshub-usage-logs-page .ph-margin-0-5px-0-0 { margin: 0 5px 0 0; }
+#presshub-settings-page .ph-margin-0_8em-0-0_4em,
+#presshub-usage-logs-page .ph-margin-0_8em-0-0_4em { margin: 0.8em 0 0.4em; }
+#presshub-settings-page .ph-margin-10px-0-20px,
+#presshub-usage-logs-page .ph-margin-10px-0-20px { margin: 10px 0 20px; }
+#presshub-settings-page .ph-margin-1em-0-0,
+#presshub-usage-logs-page .ph-margin-1em-0-0 { margin: 1em 0 0; }
+#presshub-settings-page .ph-margin-2px-6px-2px-0,
+#presshub-usage-logs-page .ph-margin-2px-6px-2px-0 { margin: 2px 6px 2px 0; }
+#presshub-settings-page .ph-margin-35px-0-25px,
+#presshub-usage-logs-page .ph-margin-35px-0-25px { margin: 35px 0 25px; }
+#presshub-settings-page .ph-margin-4px-0,
+#presshub-usage-logs-page .ph-margin-4px-0 { margin: 4px 0; }
+#presshub-settings-page .ph-margin-8px-0,
+#presshub-usage-logs-page .ph-margin-8px-0 { margin: 8px 0; }
+#presshub-settings-page .ph-margin-8px-0-0-0,
+#presshub-usage-logs-page .ph-margin-8px-0-0-0 { margin: 8px 0 0 0; }
+#presshub-settings-page .ph-padding-0-6px,
+#presshub-usage-logs-page .ph-padding-0-6px { padding: 0 6px; }
+#presshub-settings-page .ph-padding-10px,
+#presshub-usage-logs-page .ph-padding-10px { padding: 10px; }
+#presshub-settings-page .ph-padding-10px-14px,
+#presshub-usage-logs-page .ph-padding-10px-14px { padding: 10px 14px; }
+#presshub-settings-page .ph-padding-12px,
+#presshub-usage-logs-page .ph-padding-12px { padding: 12px; }
+#presshub-settings-page .ph-padding-12px-14px,
+#presshub-usage-logs-page .ph-padding-12px-14px { padding: 12px 14px; }
+#presshub-settings-page .ph-padding-12px-15px,
+#presshub-usage-logs-page .ph-padding-12px-15px { padding: 12px 15px; }
+#presshub-settings-page .ph-padding-12px-20px,
+#presshub-usage-logs-page .ph-padding-12px-20px { padding: 12px 20px; }
+#presshub-settings-page .ph-padding-14px-20px,
+#presshub-usage-logs-page .ph-padding-14px-20px { padding: 14px 20px; }
+#presshub-settings-page .ph-padding-15px,
+#presshub-usage-logs-page .ph-padding-15px { padding: 15px; }
+#presshub-settings-page .ph-padding-20px,
+#presshub-usage-logs-page .ph-padding-20px { padding: 20px; }
+#presshub-settings-page .ph-padding-2px-6px,
+#presshub-usage-logs-page .ph-padding-2px-6px { padding: 2px 6px; }
+#presshub-settings-page .ph-padding-2px-8px,
+#presshub-usage-logs-page .ph-padding-2px-8px { padding: 2px 8px; }
+#presshub-settings-page .ph-padding-30px,
+#presshub-usage-logs-page .ph-padding-30px { padding: 30px; }
+#presshub-settings-page .ph-padding-6px-10px,
+#presshub-usage-logs-page .ph-padding-6px-10px { padding: 6px 10px; }
+#presshub-settings-page .ph-padding-8px-12px,
+#presshub-usage-logs-page .ph-padding-8px-12px { padding: 8px 12px; }
+#presshub-settings-page .ph-align-items-center,
+#presshub-usage-logs-page .ph-align-items-center { align-items: center; }
+#presshub-settings-page .ph-align-items-flex-end,
+#presshub-usage-logs-page .ph-align-items-flex-end { align-items: flex-end; }
+#presshub-settings-page .ph-box-shadow-0-1px-3px-rgba-0-0-0-0_05,
+#presshub-usage-logs-page .ph-box-shadow-0-1px-3px-rgba-0-0-0-0_05 { box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+#presshub-settings-page .ph-color-155724,
+#presshub-usage-logs-page .ph-color-155724 { color: #155724; }
+#presshub-settings-page .ph-color-2271b1,
+#presshub-usage-logs-page .ph-color-2271b1 { color: #2271b1; }
+#presshub-settings-page .ph-color-333,
+#presshub-usage-logs-page .ph-color-333 { color: #333; }
+#presshub-settings-page .ph-color-46b450,
+#presshub-usage-logs-page .ph-color-46b450 { color: #46b450; }
+#presshub-settings-page .ph-color-50575e,
+#presshub-usage-logs-page .ph-color-50575e { color: #50575e; }
+#presshub-settings-page .ph-color-555,
+#presshub-usage-logs-page .ph-color-555 { color: #555; }
+#presshub-settings-page .ph-color-613e00,
+#presshub-usage-logs-page .ph-color-613e00 { color: #613e00; }
+#presshub-settings-page .ph-color-646970,
+#presshub-usage-logs-page .ph-color-646970 { color: #646970; }
+#presshub-settings-page .ph-color-666,
+#presshub-usage-logs-page .ph-color-666 { color: #666; }
+#presshub-settings-page .ph-color-721c24,
+#presshub-usage-logs-page .ph-color-721c24 { color: #721c24; }
+#presshub-settings-page .ph-color-72777c,
+#presshub-usage-logs-page .ph-color-72777c { color: #72777c; }
+#presshub-settings-page .ph-color-856404,
+#presshub-usage-logs-page .ph-color-856404 { color: #856404; }
+#presshub-settings-page .ph-color-a00,
+#presshub-usage-logs-page .ph-color-a00 { color: #a00; }
+#presshub-settings-page .ph-color-b32d2e,
+#presshub-usage-logs-page .ph-color-b32d2e { color: #b32d2e; }
+#presshub-settings-page .ph-color-d4d4d4,
+#presshub-usage-logs-page .ph-color-d4d4d4 { color: #d4d4d4; }
+#presshub-settings-page .ph-color-d63638,
+#presshub-usage-logs-page .ph-color-d63638 { color: #d63638; }
+#presshub-settings-page .ph-color-dba617,
+#presshub-usage-logs-page .ph-color-dba617 { color: #dba617; }
+#presshub-settings-page .ph-color-dc3232,
+#presshub-usage-logs-page .ph-color-dc3232 { color: #dc3232; }
+#presshub-settings-page .ph-color-red,
+#presshub-usage-logs-page .ph-color-red { color: red; }
+#presshub-settings-page .ph-cursor-pointer,
+#presshub-usage-logs-page .ph-cursor-pointer { cursor: pointer; }
+#presshub-settings-page .ph-display-block,
+#presshub-usage-logs-page .ph-display-block { display: block; }
+#presshub-settings-page .ph-display-flex,
+#presshub-usage-logs-page .ph-display-flex { display: flex; }
+#presshub-settings-page .ph-display-grid,
+#presshub-usage-logs-page .ph-display-grid { display: grid; }
+#presshub-settings-page .ph-display-inline-block,
+#presshub-usage-logs-page .ph-display-inline-block { display: inline-block; }
+#presshub-settings-page .ph-display-inline-flex,
+#presshub-usage-logs-page .ph-display-inline-flex { display: inline-flex; }
+#presshub-settings-page .ph-display-none,
+#presshub-usage-logs-page .ph-display-none { display: none; }
+#presshub-settings-page .ph-flex-direction-column,
+#presshub-usage-logs-page .ph-flex-direction-column { flex-direction: column; }
+#presshub-settings-page .ph-flex-grow-1,
+#presshub-usage-logs-page .ph-flex-grow-1 { flex-grow: 1; }
+#presshub-settings-page .ph-flex-wrap-wrap,
+#presshub-usage-logs-page .ph-flex-wrap-wrap { flex-wrap: wrap; }
+#presshub-settings-page .ph-float-none,
+#presshub-usage-logs-page .ph-float-none { float: none; }
+#presshub-settings-page .ph-font-family-consolas-monaco-monospace,
+#presshub-usage-logs-page .ph-font-family-consolas-monaco-monospace { font-family: Consolas, Monaco, monospace; }
+#presshub-settings-page .ph-font-family-monospace,
+#presshub-usage-logs-page .ph-font-family-monospace { font-family: monospace; }
+#presshub-settings-page .ph-font-size-11px,
+#presshub-usage-logs-page .ph-font-size-11px { font-size: 11px; }
+#presshub-settings-page .ph-font-size-12px,
+#presshub-usage-logs-page .ph-font-size-12px { font-size: 12px; }
+#presshub-settings-page .ph-font-size-13px,
+#presshub-usage-logs-page .ph-font-size-13px { font-size: 13px; }
+#presshub-settings-page .ph-font-size-14px,
+#presshub-usage-logs-page .ph-font-size-14px { font-size: 14px; }
+#presshub-settings-page .ph-font-size-16px,
+#presshub-usage-logs-page .ph-font-size-16px { font-size: 16px; }
+#presshub-settings-page .ph-font-size-20px,
+#presshub-usage-logs-page .ph-font-size-20px { font-size: 20px; }
+#presshub-settings-page .ph-font-style-italic,
+#presshub-usage-logs-page .ph-font-style-italic { font-style: italic; }
+#presshub-settings-page .ph-font-weight-500,
+#presshub-usage-logs-page .ph-font-weight-500 { font-weight: 500; }
+#presshub-settings-page .ph-font-weight-600,
+#presshub-usage-logs-page .ph-font-weight-600 { font-weight: 600; }
+#presshub-settings-page .ph-font-weight-bold,
+#presshub-usage-logs-page .ph-font-weight-bold { font-weight: bold; }
+#presshub-settings-page .ph-font-weight-normal,
+#presshub-usage-logs-page .ph-font-weight-normal { font-weight: normal; }
+#presshub-settings-page .ph-grid-column-1-1,
+#presshub-usage-logs-page .ph-grid-column-1-1 { grid-column: 1 / -1; }
+#presshub-settings-page .ph-grid-column-span-2,
+#presshub-usage-logs-page .ph-grid-column-span-2 { grid-column: span 2; }
+#presshub-settings-page .ph-grid-template-columns-1fr-1fr,
+#presshub-usage-logs-page .ph-grid-template-columns-1fr-1fr { grid-template-columns: 1fr 1fr; }
+#presshub-settings-page .ph-height-12px,
+#presshub-usage-logs-page .ph-height-12px { height: 12px; }
+#presshub-settings-page .ph-height-14px,
+#presshub-usage-logs-page .ph-height-14px { height: 14px; }
+#presshub-settings-page .ph-height-16px,
+#presshub-usage-logs-page .ph-height-16px { height: 16px; }
+#presshub-settings-page .ph-height-30px,
+#presshub-usage-logs-page .ph-height-30px { height: 30px; }
+#presshub-settings-page .ph-height-32px,
+#presshub-usage-logs-page .ph-height-32px { height: 32px; }
+#presshub-settings-page .ph-justify-content-center,
+#presshub-usage-logs-page .ph-justify-content-center { justify-content: center; }
+#presshub-settings-page .ph-justify-content-flex-end,
+#presshub-usage-logs-page .ph-justify-content-flex-end { justify-content: flex-end; }
+#presshub-settings-page .ph-justify-content-space-between,
+#presshub-usage-logs-page .ph-justify-content-space-between { justify-content: space-between; }
+#presshub-settings-page .ph-line-height-1_4,
+#presshub-usage-logs-page .ph-line-height-1_4 { line-height: 1.4; }
+#presshub-settings-page .ph-line-height-1_5,
+#presshub-usage-logs-page .ph-line-height-1_5 { line-height: 1.5; }
+#presshub-settings-page .ph-margin-bottom-10px,
+#presshub-usage-logs-page .ph-margin-bottom-10px { margin-bottom: 10px; }
+#presshub-settings-page .ph-margin-bottom-12px,
+#presshub-usage-logs-page .ph-margin-bottom-12px { margin-bottom: 12px; }
+#presshub-settings-page .ph-margin-bottom-15px,
+#presshub-usage-logs-page .ph-margin-bottom-15px { margin-bottom: 15px; }
+#presshub-settings-page .ph-margin-bottom-16px,
+#presshub-usage-logs-page .ph-margin-bottom-16px { margin-bottom: 16px; }
+#presshub-settings-page .ph-margin-bottom-20px,
+#presshub-usage-logs-page .ph-margin-bottom-20px { margin-bottom: 20px; }
+#presshub-settings-page .ph-margin-bottom-4px,
+#presshub-usage-logs-page .ph-margin-bottom-4px { margin-bottom: 4px; }
+#presshub-settings-page .ph-margin-bottom-5px,
+#presshub-usage-logs-page .ph-margin-bottom-5px { margin-bottom: 5px; }
+#presshub-settings-page .ph-margin-bottom-6px,
+#presshub-usage-logs-page .ph-margin-bottom-6px { margin-bottom: 6px; }
+#presshub-settings-page .ph-margin-bottom-8px,
+#presshub-usage-logs-page .ph-margin-bottom-8px { margin-bottom: 8px; }
+#presshub-settings-page .ph-margin-bottom-_25em,
+#presshub-usage-logs-page .ph-margin-bottom-_25em { margin-bottom: .25em; }
+#presshub-settings-page .ph-margin-left-10px,
+#presshub-usage-logs-page .ph-margin-left-10px { margin-left: 10px; }
+#presshub-settings-page .ph-margin-left-4px,
+#presshub-usage-logs-page .ph-margin-left-4px { margin-left: 4px; }
+#presshub-settings-page .ph-margin-left-8px,
+#presshub-usage-logs-page .ph-margin-left-8px { margin-left: 8px; }
+#presshub-settings-page .ph-margin-left-auto,
+#presshub-usage-logs-page .ph-margin-left-auto { margin-left: auto; }
+#presshub-settings-page .ph-margin-right-2px,
+#presshub-usage-logs-page .ph-margin-right-2px { margin-right: 2px; }
+#presshub-settings-page .ph-margin-right-4px,
+#presshub-usage-logs-page .ph-margin-right-4px { margin-right: 4px; }
+#presshub-settings-page .ph-margin-top-0,
+#presshub-usage-logs-page .ph-margin-top-0 { margin-top: 0; }
+#presshub-settings-page .ph-margin-top-10px,
+#presshub-usage-logs-page .ph-margin-top-10px { margin-top: 10px; }
+#presshub-settings-page .ph-margin-top-12px,
+#presshub-usage-logs-page .ph-margin-top-12px { margin-top: 12px; }
+#presshub-settings-page .ph-margin-top-15px,
+#presshub-usage-logs-page .ph-margin-top-15px { margin-top: 15px; }
+#presshub-settings-page .ph-margin-top-1em,
+#presshub-usage-logs-page .ph-margin-top-1em { margin-top: 1em; }
+#presshub-settings-page .ph-margin-top-1px,
+#presshub-usage-logs-page .ph-margin-top-1px { margin-top: 1px; }
+#presshub-settings-page .ph-margin-top-25px,
+#presshub-usage-logs-page .ph-margin-top-25px { margin-top: 25px; }
+#presshub-settings-page .ph-margin-top-2px,
+#presshub-usage-logs-page .ph-margin-top-2px { margin-top: 2px; }
+#presshub-settings-page .ph-margin-top-4px,
+#presshub-usage-logs-page .ph-margin-top-4px { margin-top: 4px; }
+#presshub-settings-page .ph-margin-top-6px,
+#presshub-usage-logs-page .ph-margin-top-6px { margin-top: 6px; }
+#presshub-settings-page .ph-margin-top-8px,
+#presshub-usage-logs-page .ph-margin-top-8px { margin-top: 8px; }
+#presshub-settings-page .ph-max-height-180px,
+#presshub-usage-logs-page .ph-max-height-180px { max-height: 180px; }
+#presshub-settings-page .ph-max-height-380px,
+#presshub-usage-logs-page .ph-max-height-380px { max-height: 380px; }
+#presshub-settings-page .ph-max-height-520px,
+#presshub-usage-logs-page .ph-max-height-520px { max-height: 520px; }
+#presshub-settings-page .ph-max-height-70vh,
+#presshub-usage-logs-page .ph-max-height-70vh { max-height: 70vh; }
+#presshub-settings-page .ph-max-width-100pct,
+#presshub-usage-logs-page .ph-max-width-100pct { max-width: 100%; }
+#presshub-settings-page .ph-max-width-650px,
+#presshub-usage-logs-page .ph-max-width-650px { max-width: 650px; }
+#presshub-settings-page .ph-max-width-800px,
+#presshub-usage-logs-page .ph-max-width-800px { max-width: 800px; }
+#presshub-settings-page .ph-max-width-900px,
+#presshub-usage-logs-page .ph-max-width-900px { max-width: 900px; }
+#presshub-settings-page .ph-min-height-90px,
+#presshub-usage-logs-page .ph-min-height-90px { min-height: 90px; }
+#presshub-settings-page .ph-min-width-12em,
+#presshub-usage-logs-page .ph-min-width-12em { min-width: 12em; }
+#presshub-settings-page .ph-min-width-200px,
+#presshub-usage-logs-page .ph-min-width-200px { min-width: 200px; }
+#presshub-settings-page .ph-overflow-y-auto,
+#presshub-usage-logs-page .ph-overflow-y-auto { overflow-y: auto; }
+#presshub-settings-page .ph-padding-bottom-12px,
+#presshub-usage-logs-page .ph-padding-bottom-12px { padding-bottom: 12px; }
+#presshub-settings-page .ph-text-align-center,
+#presshub-usage-logs-page .ph-text-align-center { text-align: center; }
+#presshub-settings-page .ph-text-align-right,
+#presshub-usage-logs-page .ph-text-align-right { text-align: right; }
+#presshub-settings-page .ph-text-decoration-none,
+#presshub-usage-logs-page .ph-text-decoration-none { text-decoration: none; }
+#presshub-settings-page .ph-vertical-align-middle,
+#presshub-usage-logs-page .ph-vertical-align-middle { vertical-align: middle; }
+#presshub-settings-page .ph-vertical-align-text-bottom,
+#presshub-usage-logs-page .ph-vertical-align-text-bottom { vertical-align: text-bottom; }
+#presshub-settings-page .ph-vertical-align-text-top,
+#presshub-usage-logs-page .ph-vertical-align-text-top { vertical-align: text-top; }
+#presshub-settings-page .ph-white-space-nowrap,
+#presshub-usage-logs-page .ph-white-space-nowrap { white-space: nowrap; }
+#presshub-settings-page .ph-white-space-pre-wrap,
+#presshub-usage-logs-page .ph-white-space-pre-wrap { white-space: pre-wrap; }
+#presshub-settings-page .ph-width-100pct,
+#presshub-usage-logs-page .ph-width-100pct { width: 100%; }
+#presshub-settings-page .ph-width-110px,
+#presshub-usage-logs-page .ph-width-110px { width: 110px; }
+#presshub-settings-page .ph-width-120px,
+#presshub-usage-logs-page .ph-width-120px { width: 120px; }
+#presshub-settings-page .ph-width-12em,
+#presshub-usage-logs-page .ph-width-12em { width: 12em; }
+#presshub-settings-page .ph-width-12px,
+#presshub-usage-logs-page .ph-width-12px { width: 12px; }
+#presshub-settings-page .ph-width-130px,
+#presshub-usage-logs-page .ph-width-130px { width: 130px; }
+#presshub-settings-page .ph-width-140px,
+#presshub-usage-logs-page .ph-width-140px { width: 140px; }
+#presshub-settings-page .ph-width-14px,
+#presshub-usage-logs-page .ph-width-14px { width: 14px; }
+#presshub-settings-page .ph-width-150px,
+#presshub-usage-logs-page .ph-width-150px { width: 150px; }
+#presshub-settings-page .ph-width-16px,
+#presshub-usage-logs-page .ph-width-16px { width: 16px; }
+#presshub-settings-page .ph-width-170px,
+#presshub-usage-logs-page .ph-width-170px { width: 170px; }
+#presshub-settings-page .ph-width-180px,
+#presshub-usage-logs-page .ph-width-180px { width: 180px; }
+#presshub-settings-page .ph-width-6em,
+#presshub-usage-logs-page .ph-width-6em { width: 6em; }
+#presshub-settings-page .ph-width-80px,
+#presshub-usage-logs-page .ph-width-80px { width: 80px; }
+#presshub-settings-page .ph-width-90px,
+#presshub-usage-logs-page .ph-width-90px { width: 90px; }
+#presshub-settings-page .ph-width-95pct,
+#presshub-usage-logs-page .ph-width-95pct { width: 95%; }
+#presshub-settings-page .ph-word-break-break-all,
+#presshub-usage-logs-page .ph-word-break-break-all { word-break: break-all; }
+#presshub-settings-page .ph-word-break-break-word,
+#presshub-usage-logs-page .ph-word-break-break-word { word-break: break-word; }

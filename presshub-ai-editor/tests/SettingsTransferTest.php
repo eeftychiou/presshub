@@ -21,6 +21,7 @@ defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE
 require_once __DIR__ . '/../presshub-ai-editor.php';
 require_once __DIR__ . '/../includes/class-social-settings.php';
 require_once __DIR__ . '/../includes/class-social-settings-render.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsTransferTest {
 
@@ -148,10 +149,8 @@ class SettingsTransferTest {
         // 4. Scheduled for removal: listed on Diagnostics with a masked value…
         $GLOBALS['OPTIONS_STORE']     = $secret_values;
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
-        ob_start();
-        ( new PressHub_AI_Settings_Render() )->render_settings_page();
-        $html = (string) ob_get_clean();
-        $adv  = substr( $html, (int) strpos( $html, 'id="presshub-tab-pane-advanced"' ) );
+        $html = presshub_test_render_all_sections();
+        $adv  = substr( $html, (int) strpos( $html, 'id="presshub-tab-pane-site-system"' ) );
         foreach ( array_keys( PressHub_Settings_Registry::unused() ) as $k ) {
             if ( false === strpos( $adv, '<code>' . $k . '</code>' ) ) {
                 $failures[] = "{$k} should be listed under Scheduled for removal.";

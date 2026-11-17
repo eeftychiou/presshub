@@ -12,6 +12,7 @@ require_once __DIR__ . '/../includes/class-admin-menu.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 require_once __DIR__ . '/../includes/class-ajax-handlers.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsModularRedesignTest
 {
@@ -63,16 +64,18 @@ class SettingsModularRedesignTest
         // -------------------------------------------------------------
         self::reset_world();
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
-        ob_start();
-        $settings->render_settings_page();
-        $html = ob_get_clean();
+        $html = presshub_test_render_all_sections();
 
         $expected_panes = [
-            'presshub-tab-pane-providers',
-            'presshub-tab-pane-coauthor',
-            'presshub-tab-pane-briefing',
-            'presshub-tab-pane-copilot',
-            'presshub-tab-pane-advanced',
+            // #246: one pane per section.
+            'presshub-tab-pane-connections',
+            'presshub-tab-pane-ai-models',
+            'presshub-tab-pane-writing-qa',
+            'presshub-tab-pane-daily-briefing',
+            'presshub-tab-pane-editorial-knowledge',
+            'presshub-tab-pane-social-publishing',
+            'presshub-tab-pane-social-listening',
+            'presshub-tab-pane-site-system',
         ];
         // #235: Token & Usage Logs moved to PressHub → Usage & logs.
         if ( false !== strpos( $html, 'id="presshub-tab-pane-token_logs"' ) ) {

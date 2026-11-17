@@ -14,6 +14,7 @@ require_once __DIR__ . '/../includes/class-prompt-loader.php';
 require_once __DIR__ . '/../includes/class-settings-storage.php';
 require_once __DIR__ . '/../includes/class-settings-render.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsQAPromptStudioTest
 {
@@ -28,24 +29,15 @@ class SettingsQAPromptStudioTest
         $settings = new PressHub_AI_Settings();
         $settings->register_settings();
 
-        ob_start();
-        $settings->render_settings_page();
-        $html = ob_get_clean();
+        $html = presshub_test_render_all_sections();
 
-        if ( false === strpos( $html, 'class="presshub-subtab-wrapper nav-tab-wrapper presshub-coauthor-subtabs"' ) ) {
-            $failures[] = 'Co-Author subtab wrapper .presshub-coauthor-subtabs missing from settings render.';
+        // #246: Writing & QA shows Drafting and the QA gate as groups on one page.
+        $wq = presshub_test_tab_pane( $html, 'writing-qa' );
+        if ( '' === presshub_test_group( $wq, 'drafting' ) || '' === presshub_test_group( $wq, 'qa-gate' ) ) {
+            $failures[] = 'Writing & QA should hold the Drafting and QA gate groups.';
         }
-
-        if ( false === strpos( $html, 'data-subtab="drafting"' ) || false === strpos( $html, 'data-subtab="qa"' ) ) {
-            $failures[] = 'Co-Author subtabs data-subtab="drafting" or data-subtab="qa" missing.';
-        }
-
-        if ( false === strpos( $html, 'id="presshub-subpane-coauthor-drafting"' ) ) {
-            $failures[] = 'Subpane #presshub-subpane-coauthor-drafting missing from settings render.';
-        }
-
-        if ( false === strpos( $html, 'id="presshub-subpane-coauthor-qa"' ) ) {
-            $failures[] = 'Subpane #presshub-subpane-coauthor-qa missing from settings render.';
+        if ( false !== strpos( $html, 'presshub-coauthor-subtabs' ) ) {
+            $failures[] = 'The Co-Author subtabs are gone in #246 and must not render.';
         }
 
         // Verify QA form fields exist inside the QA subpane
@@ -86,19 +78,17 @@ class SettingsQAPromptStudioTest
         // Case 3: the briefing tab holds the briefing QA prompt and the gate
         // notice; the gate switches stay on Co-Author.
         // -------------------------------------------------------------
-        $tab3_start = strpos( $html, 'id="presshub-tab-pane-briefing"' );
-        $tab4_start = strpos( $html, 'id="presshub-tab-pane-social_listening"' );
-        if ( false === $tab3_start || false === $tab4_start ) {
-            $failures[] = 'Could not locate the briefing tab boundaries in HTML.';
+        $tab3_html = presshub_test_tab_pane( $html, 'daily-briefing' );
+        if ( '' === $tab3_html ) {
+            $failures[] = 'Could not locate the Daily Briefing section in HTML.';
         } else {
-            $tab3_html = substr( $html, $tab3_start, $tab4_start - $tab3_start );
             if ( false !== strpos( $tab3_html, 'name="presshub_ai_qa_include_briefings"' ) ) {
                 $failures[] = 'The briefing tab must not render presshub_ai_qa_include_briefings (it stays on the QA gate).';
             }
             if ( false === strpos( $tab3_html, 'name="presshub_ai_qa_briefing_prompt"' ) ) {
                 $failures[] = 'The briefing tab must render presshub_ai_qa_briefing_prompt in Text story.';
             }
-            if ( false === strpos( $tab3_html, 'presshub-switch-to-qa-studio' ) ) {
+            if ( false === strpos( $tab3_html, 'section=writing-qa#qa-gate' ) ) {
                 $failures[] = 'The briefing tab is missing the link to the QA review gate.';
             }
         }

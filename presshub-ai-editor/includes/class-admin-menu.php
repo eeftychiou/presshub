@@ -11,9 +11,11 @@
  *   ├─ Policies                  admin.php?page=presshub-ai-policies
  *   ├─ People                    admin.php?page=presshub-ai-people
  *   ├─ Usage & logs              admin.php?page=presshub-ai-usage
- *   ├─ Settings                  admin.php?page=presshub-ai
- *   ├─ Social settings           admin.php?page=presshub-social-settings
+ *   ├─ Settings                  admin.php?page=presshub-ai&section=<slug>
  *   └─ Presets                   admin.php?page=presshub-ai-presets
+ *
+ * Since 3b (#246) Settings holds both former settings pages in eight
+ * sections, and the old Social settings URL redirects to its section.
  *
  * The top-level entry reuses the Hub's slug, so the Hub URL and its page hook
  * (toplevel_page_presshub-ai-briefing-hub) are unchanged. Each page class still
@@ -58,7 +60,6 @@ class PressHub_Admin_Menu {
         'presshub-ai-people',
         self::USAGE_SLUG,
         'presshub-ai',
-        'presshub-social-settings',
         'presshub-ai-presets',
     ];
 
@@ -225,13 +226,20 @@ class PressHub_Admin_Menu {
             }
             $args = $query;
             unset( $args['page'] );
-            if ( isset( $rule['tab'] ) ) {
+            $lead = [ 'page' => (string) $rule['to'] ];
+            if ( isset( $rule['tab'] ) || ! empty( $rule['drop_tab'] ) || ! empty( $rule['section'] ) ) {
                 unset( $args['tab'] );
+            }
+            if ( ! empty( $rule['section'] ) ) {
+                // #246: the one Settings page opens the section that holds the old tab.
+                unset( $args['section'] );
+                $lead['section'] = (string) $rule['section'];
             }
             $args = array_filter( $args, 'is_scalar' );
             // Build the query ourselves: add_query_arg() does not encode array values.
-            $query = http_build_query( array_merge( [ 'page' => (string) $rule['to'] ], array_map( 'strval', $args ) ), '', '&', PHP_QUERY_RFC3986 );
-            return admin_url( 'admin.php?' . $query );
+            $query  = http_build_query( array_merge( $lead, array_map( 'strval', $args ) ), '', '&', PHP_QUERY_RFC3986 );
+            $anchor = isset( $rule['anchor'] ) ? (string) $rule['anchor'] : '';
+            return admin_url( 'admin.php?' . $query ) . ( '' !== $anchor ? '#' . rawurlencode( $anchor ) : '' );
         }
         return '';
     }

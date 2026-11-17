@@ -21,6 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/class-capabilities.php';
+require_once __DIR__ . '/class-settings-sections.php';
 
 require_once __DIR__ . '/class-provider-defaults.php';
 require_once __DIR__ . '/class-settings-storage.php';
@@ -58,17 +59,22 @@ class PressHub_AI_Settings {
             }
 
             wp_enqueue_style( 'presshub-ai-admin-css', PRESSHUB_AI_URL . 'assets/admin.css', [], PRESSHUB_AI_VERSION );
+            // #246: the settings renderers' styles (no inline style="" left), also used by Usage & logs.
+            wp_enqueue_style( 'presshub-settings', PRESSHUB_AI_URL . 'assets/css/settings.css', [ 'presshub-ai-admin-css' ], PRESSHUB_AI_VERSION );
             wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
             if ( self::is_settings_hook( $hook ) && class_exists( 'PressHub_Settings_Registry' ) ) {
-                // #234: settings search, per-field defaults and the what's-new panel.
+                // #246: the one Settings page: its stylesheet (no inline styles in
+                // the renderers), search in the section list, per-field defaults,
+                // the unsaved-changes guard and the What's new panel.
                 PressHub_Settings_Registry::ensure_registered();
-                wp_enqueue_style( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/css/settings-search.css', [], PRESSHUB_AI_VERSION );
                 wp_enqueue_script( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/js/settings-search.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
-                wp_localize_script( 'presshub-settings-search', 'presshubSettingsIndex', PressHub_Settings_Registry::search_payload( 'ai' ) );
+                wp_localize_script( 'presshub-settings-search', 'presshubSettingsIndex', PressHub_Settings_Registry::search_payload( PressHub_Settings_Sections::current() ) );
+                wp_enqueue_script( 'presshub-settings-page', PRESSHUB_AI_URL . 'assets/js/settings-page.js', [ 'jquery', 'presshub-ai-admin-js', 'presshub-settings-search' ], PRESSHUB_AI_VERSION, true );
             }
             wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
                 'ajax_url'             => admin_url( 'admin-ajax.php' ),
                 'usage_url'            => admin_url( 'admin.php?page=presshub-ai-usage' ),
+                'settings_section'     => self::is_settings_hook( $hook ) && class_exists( 'PressHub_Settings_Sections' ) ? PressHub_Settings_Sections::current() : '',
                 'nonce'                => wp_create_nonce( 'presshub_ai_nonce' ),
                 'provider_templates'   => PressHub_AI_Provider_Defaults::get_templates(),
                 'configured_providers' => array_map( function( $p ) {

@@ -14,6 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/class-capabilities.php';
+require_once __DIR__ . '/class-settings-sections.php';
 
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-news-curator.php';
@@ -393,7 +394,7 @@ class PressHub_AI_Briefing_Admin {
                 // operator's current configuration.
                 'cap_articles'          => PressHub_AI_Settings_Storage::get_curation_max_articles(),
                 'cap_chars_per_article' => PressHub_AI_Settings_Storage::get_curation_max_chars_per_article(),
-                'curation_settings_url' => admin_url( 'admin.php?page=presshub-ai#briefing' ),
+                'curation_settings_url' => PressHub_Settings_Sections::url( 'daily-briefing' ),
                 'i18n'     => [
                     'harvesting'         => __( 'Συλλογή ειδήσεων σε εξέλιξη...', 'presshub-ai-editor' ),
                     'curating'           => __( 'Σύνταξη κειμένου ενημέρωσης...', 'presshub-ai-editor' ),
@@ -930,12 +931,12 @@ class PressHub_AI_Briefing_Admin {
         }
 
         $status = $this->get_briefing_status( $date, $edition );
-        $settings_url = admin_url( 'admin.php?page=presshub-ai' );
+        $settings_url = PressHub_Settings_Sections::url( 'daily-briefing' );
         // Issue #61 — deep link into the Daily Briefing tab where the
         // curation cap knobs (Maximum Articles Sent to Curation LLM /
         // Maximum Characters per Article) live. The settings page uses
         // hash-based tabs, so the fragment activates the briefing pane.
-        $curation_settings_url = admin_url( 'admin.php?page=presshub-ai#briefing' );
+        $curation_settings_url = PressHub_Settings_Sections::url( 'daily-briefing' );
 
         // ---------------------------------------------------------------------
         // Defensive PHP fallback for aggregate word/token totals (#57).
@@ -1654,7 +1655,7 @@ class PressHub_AI_Briefing_Admin {
                         <button type="button" class="button button-primary" id="btn-synthesize-audio">
                             🔊 <?php echo $status['audio_created'] ? esc_html__( 'Re-synthesize Audio', 'presshub-ai-editor' ) : esc_html__( 'Synthesize Audio Podcast', 'presshub-ai-editor' ); ?>
                         </button>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=presshub-ai#briefing' ) ); ?>" class="button button-secondary" title="<?php echo esc_attr__( 'Inspect the complete JSON message sent to Gemini Speech and test delivery settings', 'presshub-ai-editor' ); ?>">
+                        <a href="<?php echo esc_url( PressHub_Settings_Sections::url( 'daily-briefing' ) ); ?>" class="button button-secondary" title="<?php echo esc_attr__( 'Inspect the complete JSON message sent to Gemini Speech and test delivery settings', 'presshub-ai-editor' ); ?>">
                             🎙️ <?php echo esc_html__( 'Speech JSON & Voice Tester', 'presshub-ai-editor' ); ?>
                         </a>
                         <?php if ( $status['audio_created'] && ! empty( $status['podcast_edit_url'] ) ) : ?>
