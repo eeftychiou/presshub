@@ -44,6 +44,10 @@ class PressHub_AI_Social_Trending {
     /** Post meta on roundup posts: the run key and the items shown. */
     const META_KEY   = '_presshub_social_trending_key';
     const META_ITEMS = '_presshub_social_trending_items';
+    /** AI summary at the top of a roundup: [ 'hash' => md5 of the post keys, 'text' => paragraph, 'generated_at' => ISO time ]. */
+    const META_SUMMARY = '_presshub_social_trending_summary';
+    const SUMMARY_MAX_CHARS      = 900;
+    const SUMMARY_POST_TEXT_CHARS = 500;
 
     /** A run publishes with what it has if the worker has not reported after this long. */
     const WORKER_WAIT_SEC = 2700;
@@ -1157,26 +1161,27 @@ class PressHub_AI_Social_Trending {
         $map     = get_option( self::OPTION_POSTS, [] );
         $map     = is_array( $map ) ? $map : [];
         $title   = self::build_title( $now );
-        $content = self::build_content( $items, $now );
         $status  = PressHub_AI_Settings_Storage::get_social_trending_post_status();
         $items_meta = function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : json_encode( $items );
 
         $existing = (int) ( $map[ $key ] ?? 0 );
-        if ( $existing > 0 ) {
-            $post = get_post( $existing );
-            if ( $post && 'trash' !== ( $post->post_status ?? '' ) ) {
-                $res = wp_update_post( [
-                    'ID'           => $existing,
-                    'post_title'   => $title,
-                    'post_content' => $content,
-                ], true );
-                if ( is_wp_error( $res ) ) {
-                    return $res;
-                }
-                update_post_meta( $existing, self::META_ITEMS, $items_meta );
-                self::maybe_set_featured_image( $existing, $items );
-                return $existing;
+        $post     = $existing > 0 ? get_post( $existing ) : null;
+        $update   = $post && 'trash' !== ( $post->post_status ?? '' );
+        $summary  = self::summary_for( $items, $update ? $existing : 0 );
+        $content  = self::build_content( $items, $now, $summary['text'] );
+        if ( $update ) {
+            $res = wp_update_post( [
+                'ID'           => $existing,
+                'post_title'   => $title,
+                'post_content' => $content,
+            ], true );
+            if ( is_wp_error( $res ) ) {
+                return $res;
             }
+            update_post_meta( $existing, self::META_ITEMS, $items_meta );
+            self::save_summary_meta( $existing, $summary );
+            self::maybe_set_featured_image( $existing, $items );
+            return $existing;
         }
 
         $cat     = self::ensure_category();
@@ -1213,8 +1218,156 @@ class PressHub_AI_Social_Trending {
             $map = array_slice( $map, -self::MAX_POST_KEYS, null, true );
         }
         update_option( self::OPTION_POSTS, $map, false );
+        self::save_summary_meta( (int) $id, $summary );
         self::maybe_set_featured_image( (int) $id, $items );
         return (int) $id;
+    }
+
+    /* ------------------------------------------------------------------
+     * AI summary at the top of the roundup
+     * ---------------------------------------------------------------- */
+
+    /** @var callable|null fn( string $sys, string $user ): string|WP_Error — AI override for tests. */
+    public static $summary_caller = null;
+
+    /** Same posts in the same order = same summary; the numbers changing does not call the AI again. */
+    public static function summary_hash( array $items ): string {
+        return md5( implode( ',', array_map( static function ( $it ) {
+            return (string) ( $it['key'] ?? '' );
+        }, array_values( $items ) ) ) );
+    }
+
+    /**
+     * The summary for these posts: reused from the post when its posts did
+     * not change, otherwise written by the AI. Empty when switched off or
+     * when the AI fails (the roundup is published without it).
+     *
+     * @return array{hash:string,text:string,fresh:bool}
+     */
+    public static function summary_for( array $items, int $post_id ): array {
+        $hash = self::summary_hash( $items );
+        $none = [ 'hash' => $hash, 'text' => '', 'fresh' => false ];
+        if ( empty( $items ) || ! PressHub_AI_Settings_Storage::get_social_trending_summary_enabled() ) {
+            return $none;
+        }
+        if ( $post_id > 0 ) {
+            $prev = get_post_meta( $post_id, self::META_SUMMARY, true );
+            if ( is_array( $prev ) && $hash === ( $prev['hash'] ?? '' ) && '' !== (string) ( $prev['text'] ?? '' ) ) {
+                return [ 'hash' => $hash, 'text' => (string) $prev['text'], 'fresh' => false ];
+            }
+        }
+        $text = self::generate_summary( $items, $post_id );
+        if ( is_wp_error( $text ) ) {
+            self::log( 'warning', 'Social trending: the summary was not written, the roundup is saved without it: ' . $text->get_error_message() );
+            return $none;
+        }
+        return [ 'hash' => $hash, 'text' => $text, 'fresh' => true ];
+    }
+
+    private static function save_summary_meta( int $post_id, array $summary ): void {
+        if ( $post_id <= 0 || empty( $summary['fresh'] ) || '' === (string) $summary['text'] ) {
+            return;
+        }
+        update_post_meta( $post_id, self::META_SUMMARY, [
+            'hash'         => (string) $summary['hash'],
+            'text'         => (string) $summary['text'],
+            'generated_at' => gmdate( 'c' ),
+        ] );
+    }
+
+    /** The posts as the prompt lists them: rank, platform, author, numbers, text. */
+    public static function summary_posts_text( array $items ): string {
+        $lines = [];
+        foreach ( array_values( $items ) as $i => $it ) {
+            $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? (string) $it['platform'];
+            $author = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : ( '' !== (string) $it['handle'] ? '@' . $it['handle'] : $label );
+            $text   = self::excerpt( (string) $it['text'], self::SUMMARY_POST_TEXT_CHARS );
+            $lines[] = sprintf(
+                '%d. [%s] %s (%s likes/reactions, %s comments, %s shares): %s',
+                $i + 1,
+                $label,
+                $author,
+                (int) $it['likes'],
+                (int) $it['comments'],
+                (int) $it['shares'],
+                '' !== $text ? $text : '(video or image without text)'
+            );
+        }
+        return implode( "\n", $lines );
+    }
+
+    /**
+     * Ask the social AI provider for the summary paragraph.
+     *
+     * @return string|WP_Error
+     */
+    public static function generate_summary( array $items, int $post_id = 0 ) {
+        try {
+            $template = class_exists( 'PressHub_AI_Prompt_Loader' ) ? (string) PressHub_AI_Prompt_Loader::load( 'social_trending_summary.txt' ) : '';
+        } catch ( Throwable $t ) {
+            $template = '';
+        }
+        if ( '' === trim( $template ) ) {
+            return new WP_Error( 'missing_template', 'The trending summary prompt (social_trending_summary.txt) is missing.' );
+        }
+        $site = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'name' ) : '';
+        $user = strtr( $template, [
+            '{site_name}' => '' !== $site ? $site : 'PressHub.Cy',
+            '{hours}'     => (string) PressHub_AI_Settings_Storage::get_social_trending_max_age_hours(),
+            '{posts}'     => self::summary_posts_text( $items ),
+        ] );
+        $sys = 'You are a careful Greek-language news editor. You reply with a single valid JSON object and nothing else.';
+
+        if ( is_callable( self::$summary_caller ) ) {
+            $raw = call_user_func( self::$summary_caller, $sys, $user );
+        } else {
+            if ( ! class_exists( 'PressHub_AI_API_Client' ) || ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+                return new WP_Error( 'missing_api_client', 'The AI client is not loaded.' );
+            }
+            $config = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
+            if ( is_wp_error( $config ) ) {
+                return $config;
+            }
+            $client = null;
+            $t0     = PressHub_AI_API_Client::begin_generation_record();
+            try {
+                $client = new PressHub_AI_API_Client( $config );
+                $client->set_action( 'social_trending_summary' );
+                $client->suppress_provider_prompt_log = true;
+                $raw = $client->call_provider( $sys, $user, true, [], 0.3, [ 'purpose' => 'social_trending_summary' ] );
+            } catch ( Throwable $t ) {
+                $raw = new WP_Error( 'ai_dispatch_exception', $t->getMessage() );
+            }
+            if ( null !== $client ) {
+                $client->suppress_provider_prompt_log = false;
+                PressHub_AI_API_Client::finish_generation_record( $t0, 'generic', $client, $sys, $user, $raw, [
+                    'post_id' => $post_id,
+                    'config'  => [ 'action' => 'social_trending_summary' ],
+                ] );
+            }
+        }
+        if ( is_wp_error( $raw ) ) {
+            return $raw;
+        }
+        return self::parse_summary( (string) $raw );
+    }
+
+    /**
+     * The summary text from the model's reply: JSON {"summary": "..."}, tags
+     * and links stripped, whitespace collapsed, capped.
+     *
+     * @return string|WP_Error
+     */
+    public static function parse_summary( string $raw ) {
+        $data = class_exists( 'PressHub_AI_SEO' ) ? PressHub_AI_SEO::decode_json_object( $raw ) : json_decode( trim( $raw ), true );
+        $text = is_array( $data ) && is_string( $data['summary'] ?? null ) ? $data['summary'] : '';
+        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $text ) : strip_tags( $text );
+        $text = (string) preg_replace( '#https?://\S+#u', '', $text );
+        $text = trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+        if ( '' === $text ) {
+            return new WP_Error( 'summary_empty', 'The AI reply had no summary.' );
+        }
+        return self::excerpt( $text, self::SUMMARY_MAX_CHARS );
     }
 
     private static function fmt_count( int $n ): string {
@@ -1282,6 +1435,16 @@ class PressHub_AI_Social_Trending {
         return "<!-- wp:quote {\"className\":\"presshub-trending-fallback\"} -->\n<blockquote class=\"wp-block-quote presshub-trending-fallback\">" . $quote . $cite . "</blockquote>\n<!-- /wp:quote -->";
     }
 
+    /** facebook.com/<digits> with nothing else: no post or video the plugins can embed. */
+    public static function is_bare_facebook_url( string $url ): bool {
+        return 1 === preg_match( '#^https://(www\.|m\.|web\.)?facebook\.com/\d+/?$#', $url );
+    }
+
+    /** A link Facebook's embedded video plugin can play. */
+    public static function is_facebook_video_url( string $url ): bool {
+        return 1 === preg_match( '#^https://(www\.|m\.|web\.)?facebook\.com/(?:[^?\#]+/)?(?:videos|reel)/\d|^https://(www\.|m\.|web\.)?facebook\.com/watch/?\?(?:.*&)?v=\d#', $url );
+    }
+
     /**
      * The embed for one post.
      *
@@ -1314,8 +1477,16 @@ class PressHub_AI_Social_Trending {
             $inner = ( '' !== $text ? '<p>' . esc_html( $text ) . '</p>' : '' ) . '<p>' . $link . '</p>';
             return "<!-- wp:html -->\n<div class=\"presshub-trending-embed presshub-trending-embed-instagram\"><blockquote class=\"instagram-media\" data-instgrm-permalink=\"" . $url . "\" data-instgrm-version=\"14\" data-instgrm-captioned>" . $inner . "</blockquote></div>\n<!-- /wp:html -->";
         }
-        // Facebook.
-        $class = 'video' === $it['media_type'] ? 'fb-video' : 'fb-post';
+        // Facebook. facebook.com/<post id> is what the worker falls back to
+        // when a story had no usable link; neither plugin can show it (a
+        // reel shown that way is "Video unavailable" and can't be clicked),
+        // so it gets the quote card with a working link instead.
+        if ( self::is_bare_facebook_url( (string) $it['url'] ) ) {
+            return self::quote_block( $it );
+        }
+        // The video plugin plays only video links (/reel/, /videos/,
+        // /watch/?v=); a video inside a /posts/ link plays in the post plugin.
+        $class = self::is_facebook_video_url( (string) $it['url'] ) ? 'fb-video' : 'fb-post';
         $inner = '<blockquote cite="' . $url . '" class="fb-xfbml-parse-ignore">' . ( '' !== $text ? '<p>' . esc_html( $text ) . '</p>' : '' ) . '<p>' . $link . '</p></blockquote>';
         return "<!-- wp:html -->\n<div class=\"presshub-trending-embed presshub-trending-embed-facebook\"><div class=\"" . $class . "\" data-href=\"" . $url . "\" data-width=\"500\" data-show-text=\"true\" data-lazy=\"true\">" . $inner . "</div></div>\n<!-- /wp:html -->";
     }
@@ -1324,7 +1495,7 @@ class PressHub_AI_Social_Trending {
      * Block-editor content: intro, then one card (group block) per post with a
      * heading (rank, author, platform badge), the engagement line and the embed.
      */
-    public static function build_content( array $items, int $now ): string {
+    public static function build_content( array $items, int $now, string $summary = '' ): string {
         $platforms = [];
         foreach ( $items as $it ) {
             $platforms[ $it['platform'] ] = self::PLATFORM_LABELS[ $it['platform'] ];
@@ -1337,6 +1508,9 @@ class PressHub_AI_Social_Trending {
             $updated
         );
         $out = [];
+        if ( '' !== trim( $summary ) ) {
+            $out[] = "<!-- wp:paragraph {\"className\":\"presshub-trending-summary\"} -->\n<p class=\"presshub-trending-summary\">" . esc_html( trim( $summary ) ) . "</p>\n<!-- /wp:paragraph -->";
+        }
         $out[] = "<!-- wp:paragraph {\"className\":\"presshub-trending-intro\"} -->\n<p class=\"presshub-trending-intro\">" . esc_html( $intro ) . "</p>\n<!-- /wp:paragraph -->";
 
         foreach ( array_values( $items ) as $i => $it ) {
@@ -1424,6 +1598,7 @@ class PressHub_AI_Social_Trending {
             . '.presshub-trending-card .wp-block-embed,.presshub-trending-embed{margin:0;max-width:100%;overflow:hidden;}'
             . '.presshub-trending-embed .instagram-media,.presshub-trending-embed .fb-post,.presshub-trending-embed .fb-video{max-width:540px;margin:0 auto;}'
             . '.presshub-trending-fallback{margin:0;}'
+            . '.presshub-trending-summary{font-size:1.1em;line-height:1.6;border-left:4px solid currentColor;padding:.25rem 0 .25rem 1rem;margin:0 0 1.5rem;}'
             . '@media (prefers-color-scheme:dark){.presshub-trending-card{border-color:rgba(255,255,255,.15);}}';
     }
 

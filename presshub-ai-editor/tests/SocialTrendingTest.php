@@ -63,6 +63,7 @@ function st_reset( array $opts = [] ) {
         'presshub_ai_social_trending_facebook_pages'     => "https://www.facebook.com/philenews",
         'presshub_ai_social_trending_min_engagement'     => 10,
         'gmt_offset'                                     => 2,
+        'presshub_ai_social_trending_summary_enabled'    => 0,
     ], $opts );
     $GLOBALS['TERMS']               = [];
     $GLOBALS['POSTS_STORE']         = [];
@@ -70,6 +71,7 @@ function st_reset( array $opts = [] ) {
     $GLOBALS['POST_META_STORE']     = [];
     $GLOBALS['WP_UPDATE_POST_CALLS'] = 0;
     PressHub_AI_Social_Trending::$http_get = null;
+    PressHub_AI_Social_Trending::$summary_caller = null;
 }
 
 function st_post( string $platform, string $id, int $likes, int $age_min, array $extra = [] ) {
@@ -371,6 +373,18 @@ st_check( 'content: rank, author and handle in the heading', false !== strpos( $
 st_check( 'content: Instagram without author shows handle', false !== strpos( $html, '<span class="presshub-trending-rank">3.</span> @acct103 <span class="presshub-trending-badge' ) );
 $fbv  = $T::normalize_item( st_post( 'facebook', '105', 100, 30, [ 'url' => 'https://www.facebook.com/philenews/videos/9', 'media' => [ 'type' => 'video' ] ] ), $now );
 st_check( 'content: Facebook video uses fb-video', false !== strpos( $T::embed_block( $fbv ), '<div class="fb-video"' ) );
+// Facebook reels: a bare facebook.com/<post id> link cannot be embedded ("Video unavailable").
+$fb_bare = $T::normalize_item( st_post( 'facebook', '106', 100, 30, [ 'url' => 'https://www.facebook.com/1787118390090840', 'media' => [ 'type' => 'video' ] ] ), $now );
+$fb_bare_html = $T::embed_block( $fb_bare );
+st_check( 'content: bare Facebook link becomes a quote card with a link', false === strpos( $fb_bare_html, 'fb-video' ) && false === strpos( $fb_bare_html, 'fb-post' ) && false !== strpos( $fb_bare_html, 'presshub-trending-fallback' ) && false !== strpos( $fb_bare_html, 'href="https://www.facebook.com/1787118390090840"' ) );
+$fb_watch = $T::normalize_item( st_post( 'facebook', '107', 100, 30, [ 'url' => 'https://www.facebook.com/watch/?v=1026139433848847&__cft__=x', 'media' => [ 'type' => 'video' ] ] ), $now );
+st_check( 'normalize: Facebook watch link keeps only v', 'https://www.facebook.com/watch/?v=1026139433848847' === $fb_watch['url'] );
+st_check( 'content: Facebook watch link uses fb-video', false !== strpos( $T::embed_block( $fb_watch ), '<div class="fb-video" data-href="https://www.facebook.com/watch/?v=1026139433848847"' ) );
+$fb_reel = $T::normalize_item( st_post( 'facebook', '108', 100, 30, [ 'url' => 'https://www.facebook.com/reel/1026139433848847', 'media' => [ 'type' => 'video' ] ] ), $now );
+st_check( 'content: Facebook reel link uses fb-video', false !== strpos( $T::embed_block( $fb_reel ), '<div class="fb-video" data-href="https://www.facebook.com/reel/1026139433848847"' ) );
+$fb_vpost = $T::normalize_item( st_post( 'facebook', '109', 100, 30, [ 'url' => 'https://www.facebook.com/philenews/posts/pfbid0xyz', 'media' => [ 'type' => 'video' ] ] ), $now );
+st_check( 'content: a video inside a posts/ link uses the post plugin', false !== strpos( $T::embed_block( $fb_vpost ), '<div class="fb-post" data-href="https://www.facebook.com/philenews/posts/pfbid0xyz"' ) );
+st_check( 'facebook urls: bare / video detection', $T::is_bare_facebook_url( 'https://www.facebook.com/123456/' ) && ! $T::is_bare_facebook_url( 'https://www.facebook.com/philenews' ) && $T::is_facebook_video_url( 'https://www.facebook.com/philenews/videos/9' ) && ! $T::is_facebook_video_url( 'https://www.facebook.com/philenews/posts/9' ) );
 // oEmbed fallback: a link WordPress cannot embed becomes a readable card.
 $T::$oembed_check = static function ( $url ) { return false === strpos( $url, '/status/101' ); };
 $fallback = $T::build_content( $items, $now );
@@ -538,6 +552,45 @@ $early_res  = $T::ingest_worker_posts( $early_plan['run_id'], [ st_post( 'x', '6
 unset( $GLOBALS['ST_NOW'] );
 $early_ins  = $GLOBALS['WP_INSERTED_POSTS'][0] ?? [];
 st_check( 'hold: an early roundup is inserted as a scheduled post for 08:00', ( $early_res['post_id'] ?? 0 ) > 0 && 'future' === ( $early_ins['post_status'] ?? '' ) && '2026-11-14 08:00:00' === ( $early_ins['post_date'] ?? '' ) && '2026-11-14 06:00:00' === ( $early_ins['post_date_gmt'] ?? '' ) );
+
+// =========================================================================
+// AI summary at the top of the roundup
+// =========================================================================
+st_reset( [ 'presshub_ai_social_trending_summary_enabled' => 1 ] );
+$GLOBALS['WP_INSERTED_POSTS'] = [];
+$sum_calls = [];
+$T::$summary_caller = static function ( $sys, $user ) use ( &$sum_calls ) {
+    $sum_calls[] = $user;
+    return '```json' . "\n" . '{"summary":"Συζήτηση για <b>το Κυπριακό</b> https://evil.example/x και τις εκλογές."}' . "\n```";
+};
+$plan = $T::get_worker_plan( false, $now );
+$res  = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '301', 500, 30, [ 'text' => 'Κυπριακό: νέα συνάντηση' ] ), st_post( 'tiktok', '302', 400, 30 ) ], [], $now );
+$pid  = (int) ( $res['post_id'] ?? 0 );
+$body = (string) ( $GLOBALS['POSTS_STORE'][ $pid ]['post_content'] ?? '' );
+st_check( 'summary: AI asked once with the posts in the prompt', 1 === count( $sum_calls ) && false !== strpos( $sum_calls[0], 'Κυπριακό: νέα συνάντηση' ) && false !== strpos( $sum_calls[0], '1. [X] Account 301' ) && false === strpos( $sum_calls[0], '{posts}' ) );
+st_check( 'summary: first block of the post, tags and links stripped', 0 === strpos( $body, '<!-- wp:paragraph {"className":"presshub-trending-summary"} -->' ) && false !== strpos( $body, '<p class="presshub-trending-summary">Συζήτηση για το Κυπριακό και τις εκλογές.</p>' ) && false === strpos( $body, 'evil.example' ) && strpos( $body, 'presshub-trending-summary' ) < strpos( $body, 'presshub-trending-intro' ) );
+st_check( 'summary: stored on the post with the posts hash', is_array( $GLOBALS['POST_META_STORE'][ $pid ][ $T::META_SUMMARY ] ?? null ) && $T::summary_hash( [ [ 'key' => 'x_301' ], [ 'key' => 'tiktok_302' ] ] ) === $GLOBALS['POST_META_STORE'][ $pid ][ $T::META_SUMMARY ]['hash'] );
+// Same posts on the next refresh: reused, no new AI call.
+$plan = $T::get_worker_plan( false, $now + 6 * 3600 );
+$res2 = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '301', 900, 30, [ 'text' => 'Κυπριακό: νέα συνάντηση' ] ), st_post( 'tiktok', '302', 400, 30 ) ], [], $now + 6 * 3600 );
+st_check( 'summary: same posts reuse the stored summary', $pid === (int) ( $res2['post_id'] ?? 0 ) && 1 === count( $sum_calls ) && false !== strpos( (string) $GLOBALS['POSTS_STORE'][ $pid ]['post_content'], 'Συζήτηση για το Κυπριακό' ) );
+// Different posts: written again; an AI failure leaves the roundup without a summary.
+$T::$summary_caller = static function () use ( &$sum_calls ) { $sum_calls[] = 'fail'; return new WP_Error( 'http', 'quota' ); };
+$plan = $T::get_worker_plan( false, $now + 12 * 3600 );
+$res3 = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '303', 900, 30 ) ], [], $now + 12 * 3600 );
+$body3 = (string) ( $GLOBALS['POSTS_STORE'][ (int) $res3['post_id'] ]['post_content'] ?? '' );
+st_check( 'summary: new posts call the AI again; failure publishes without it', 2 === count( $sum_calls ) && (int) $res3['post_id'] > 0 && false === strpos( $body3, 'presshub-trending-summary' ) && false !== strpos( $body3, 'presshub-trending-intro' ) );
+// Switched off: no AI call.
+st_reset();
+$T::$summary_caller = static function () use ( &$sum_calls ) { $sum_calls[] = 'off'; return '{"summary":"x"}'; };
+$plan = $T::get_worker_plan( false, $now );
+$T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '304', 500, 30 ) ], [], $now );
+st_check( 'summary: disabled setting skips the AI', 2 === count( $sum_calls ) );
+st_check( 'summary: parse rejects replies without a summary', is_wp_error( $T::parse_summary( 'not json' ) ) && is_wp_error( $T::parse_summary( '{"summary":"  "}' ) ) );
+st_check( 'summary: long replies capped', mb_strlen( $T::parse_summary( '{"summary":"' . str_repeat( 'α', 2000 ) . '"}' ) ) <= $T::SUMMARY_MAX_CHARS + 1 );
+st_check( 'front css: summary styled', false !== strpos( $T::front_css(), '.presshub-trending-summary' ) );
+$T::$summary_caller = null;
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "{$failures} failure(s)\n" );
     exit( 1 );
