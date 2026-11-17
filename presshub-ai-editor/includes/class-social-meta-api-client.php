@@ -163,8 +163,10 @@ class PressHub_Social_Meta_API_Client {
      * available"). `GET /{page_id}?fields=access_token` with that token returns the Page's
      * own token (one made from a long-lived user token does not expire). A Page token
      * passed in is returned as is (Graph gives back no other token for it). The result is
-     * cached for 6 hours per stored token; on any lookup error the stored token is used and
-     * a WARNING is logged, so a token that already is a Page token keeps working.
+     * cached for 6 hours per stored token. On a Graph error or an HTTP 4xx/5xx the stored
+     * token is used, a WARNING is logged and that fallback is cached for 15 minutes; a
+     * transport error falls back without caching. A token that already is a Page token
+     * keeps working.
      */
     public static function facebook_page_token( string $page_id, string $token ): string {
         if ( '' === $page_id || '' === $token ) {
@@ -183,32 +185,54 @@ class PressHub_Social_Meta_API_Client {
             : wp_remote_get( $url, [ 'timeout' => 15, 'sslverify' => true ] );
 
         if ( is_wp_error( $res ) ) {
+            // A transport error may be momentary: fall back, but do not cache it.
             PressHub_Social_Logger::warning( 'Facebook Page token lookup failed (' . $res->get_error_message() . '); posting with the stored Meta Access Token.' );
             return $token;
         }
+        $status = 0;
         if ( is_array( $res ) && ( isset( $res['access_token'] ) || isset( $res['error'] ) || isset( $res['id'] ) ) ) {
             $data = $res;
         } else {
-            $data = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+            $status = (int) wp_remote_retrieve_response_code( $res );
+            $data   = json_decode( (string) wp_remote_retrieve_body( $res ), true );
         }
-        if ( ! is_array( $data ) || ! empty( $data['error'] ) ) {
-            $msg = is_array( $data ) ? (string) ( $data['error']['message'] ?? 'unknown error' ) : 'invalid response';
+        if ( $status >= 400 || ! is_array( $data ) || ! empty( $data['error'] ) ) {
+            if ( is_array( $data ) && ! empty( $data['error']['message'] ) ) {
+                $msg = (string) $data['error']['message'];
+            } elseif ( $status >= 400 ) {
+                $msg = sprintf( 'HTTP %d', $status );
+            } else {
+                $msg = 'invalid response';
+            }
             PressHub_Social_Logger::warning( 'Facebook Page token lookup failed (' . $msg . '); posting with the stored Meta Access Token.' );
+            // Remember the fallback briefly so a run of posts does not repeat a failing lookup.
+            self::cache_facebook_page_token( $cache_key, $token, self::FB_PAGE_TOKEN_FAILURE_TTL );
             return $token;
         }
 
         $page_token = (string) ( $data['access_token'] ?? '' );
         if ( '' === $page_token ) {
             // Already a Page token (or the user cannot manage the Page): post with it as is.
+            self::cache_facebook_page_token( $cache_key, $token, self::FB_PAGE_TOKEN_TTL );
             return $token;
         }
         if ( $page_token !== $token ) {
             PressHub_Social_Logger::info( sprintf( 'Facebook: using the Page access token of Page %s derived from the stored Meta Access Token.', $page_id ) );
         }
-        if ( function_exists( 'set_transient' ) ) {
-            set_transient( $cache_key, $page_token, 6 * HOUR_IN_SECONDS );
-        }
+        self::cache_facebook_page_token( $cache_key, $page_token, self::FB_PAGE_TOKEN_TTL );
         return $page_token;
+    }
+
+    /** Seconds a derived (or confirmed) Facebook Page token is cached. */
+    private const FB_PAGE_TOKEN_TTL = 6 * 3600;
+
+    /** Seconds a failed Page token lookup falls back to the stored token before retrying. */
+    private const FB_PAGE_TOKEN_FAILURE_TTL = 15 * 60;
+
+    private static function cache_facebook_page_token( string $cache_key, string $value, int $ttl ): void {
+        if ( function_exists( 'set_transient' ) ) {
+            set_transient( $cache_key, $value, $ttl );
+        }
     }
 
     /**
