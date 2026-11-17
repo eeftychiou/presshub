@@ -1802,7 +1802,10 @@ tr.presshub-setting-inactive button {
     background: #fcfcfc;
 }
 .presshub-schedule-card h4 { margin: 12px 0 0; }
-.presshub-schedule-card .form-table th { width: 150px; }
+.presshub-schedule-card .form-table th,
+.presshub-schedule-card .form-table td { display: block; width: auto; padding: 6px 0; }
+.presshub-schedule-card .form-table tr { display: block; border-bottom: 1px solid #f0f0f1; }
+.presshub-schedule-card input[type="time"], .presshub-schedule-card input[type="text"] { max-width: 100%; }
 .presshub-group-advanced { margin: 10px 0 4px; }
 .presshub-group-advanced > summary {
     cursor: pointer;
@@ -1815,3 +1818,8 @@ tr.presshub-setting-inactive button {
 @media (max-width: 782px) {
     .presshub-on-this-page { position: static; }
 }
+
+/* Keep wide tables (the source manager) inside their group on narrow screens. */
+.presshub-settings-group { overflow-x: auto; }
+.presshub-settings-group .presshub-sources-manager-wrap { max-width: 100%; overflow-x: auto; }
+

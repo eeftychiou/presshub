@@ -543,6 +543,13 @@ add_action( 'admin_enqueue_scripts', function( string $hook_suffix ) {
             true
         );
         wp_localize_script( 'presshub-social-settings', 'presshubSocial', $js_vars );
+        if ( class_exists( 'PressHub_Settings_Registry' ) ) {
+            // #234: settings search, per-field defaults and the what's-new panel.
+            PressHub_Settings_Registry::ensure_registered();
+            wp_enqueue_style( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/css/settings-search.css', [], PRESSHUB_AI_VERSION );
+                wp_enqueue_script( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/js/settings-search.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
+            wp_localize_script( 'presshub-settings-search', 'presshubSettingsIndex', PressHub_Settings_Registry::search_payload( 'social' ) );
+        }
     }
 } );
 

@@ -49,6 +49,9 @@
             el.scrollIntoView({ block: 'center' });
         }
         revealSocialAnchor((window.location.hash || '').replace('#', ''));
+        $(window).on('hashchange', function () {
+            revealSocialAnchor((window.location.hash || '').replace('#', ''));
+        });
 
         // #234: fields used only in Push mode are read-only, with a reason, in
         // Pull mode. readonly keeps their values posting unchanged.

@@ -179,6 +179,110 @@ class PressHub_Settings_Registry {
         return null;
     }
 
+    /**
+     * Index for the settings search and the per-field Default / Reset links
+     * (#234): every active, rendered, non-secret option of both pages.
+     * Defaults come from the registry, else from register_setting(); only
+     * scalar defaults are passed.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function search_index(): array {
+        $registered = function_exists( 'get_registered_settings' ) ? get_registered_settings() : [];
+        $index      = [];
+        foreach ( self::all() as $key => $e ) {
+            if ( empty( $e['rendered'] ) || ! empty( $e['secret'] ) || ! empty( $e['removes'] ) || self::is_unused( $key ) ) {
+                continue;
+            }
+            $row = [
+                'key'      => $key,
+                'page'     => (string) ( $e['page'] ?? 'ai' ),
+                'tab'      => (string) ( $e['tab'] ?? '' ),
+                'group'    => (string) ( $e['group'] ?? '' ),
+                'label'    => (string) ( $e['label'] ?? $key ),
+                'help'     => (string) ( $e['help'] ?? '' ),
+                'aliases'  => array_values( array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ),
+                'checkbox' => ! empty( $e['checkbox'] ),
+            ];
+            $default = self::default_value( $key );
+            if ( null === $default && isset( $registered[ $key ] ) && array_key_exists( 'default', $registered[ $key ] ) ) {
+                $default = $registered[ $key ]['default'];
+            }
+            if ( is_bool( $default ) ) {
+                $default = $default ? 1 : 0;
+            }
+            if ( is_scalar( $default ) && ( ! is_string( $default ) || strlen( $default ) <= 200 ) ) {
+                $row['default'] = $default;
+            }
+            $index[] = $row;
+        }
+        return $index;
+    }
+
+    /**
+     * Everything assets/js/settings-search.js needs on one settings page.
+     *
+     * @param string $page 'ai' or 'social'.
+     */
+    public static function search_payload( string $page ): array {
+        return [
+            'page'       => $page,
+            'pages'      => [
+                'ai'     => admin_url( 'options-general.php?page=presshub-ai' ),
+                'social' => admin_url( 'admin.php?page=presshub-social-settings' ),
+            ],
+            'entries'    => self::search_index(),
+            'tab_labels' => [
+                'ai'     => [
+                    'providers'        => __( 'AI Providers', 'presshub-ai-editor' ),
+                    'coauthor'         => __( 'AI Co-Author & Review', 'presshub-ai-editor' ),
+                    'briefing'         => __( 'Daily Briefing Hub', 'presshub-ai-editor' ),
+                    'social_listening' => __( 'Social listening', 'presshub-ai-editor' ),
+                    'images'           => __( 'AI Featured Images', 'presshub-ai-editor' ),
+                    'copilot'          => __( 'AI Copilot & Assistant', 'presshub-ai-editor' ),
+                    'knowledge'        => __( 'Editorial knowledge', 'presshub-ai-editor' ),
+                    'advanced'         => __( 'Advanced & System', 'presshub-ai-editor' ),
+                ],
+                'social' => [
+                    'general'     => __( 'General & Engines', 'presshub-ai-editor' ),
+                    'ai'          => __( 'AI Copywriter', 'presshub-ai-editor' ),
+                    'credentials' => __( 'API Credentials', 'presshub-ai-editor' ),
+                    'worker'      => __( 'Automation Worker', 'presshub-ai-editor' ),
+                    'shorts'      => __( 'Shorts & Reels', 'presshub-ai-editor' ),
+                    'queue'       => __( 'Queue & Alerts', 'presshub-ai-editor' ),
+                    'prompts'     => __( 'Prompts & Templates', 'presshub-ai-editor' ),
+                ],
+            ],
+            'whats_new'  => [
+                'ai'     => [
+                    __( 'Daily Briefing Hub is one page of six groups: Schedule, Sources & harvesting, Text story, Podcast script, Voices & audio and Publishing, with an "On this page" bar.', 'presshub-ai-editor' ),
+                    __( 'Social account monitoring and the Trending in Cyprus roundup moved to the new Social listening tab.', 'presshub-ai-editor' ),
+                    __( 'Editorial memory moved to Editorial knowledge. SEO & tags moved to AI Co-Author & Review. The briefing QA prompt moved to Daily Briefing → Text story.', 'presshub-ai-editor' ),
+                    __( 'Use the search box to find any setting, including by its old name. Fields show their default with a Reset link, and leaving a tab with unsaved changes asks first.', 'presshub-ai-editor' ),
+                ],
+                'social' => [
+                    __( 'Everything Shorts and Reels use is on the new Shorts & Reels tab, with a list of anything that stops them from running.', 'presshub-ai-editor' ),
+                    __( 'Automation Worker keeps only the worker connection. Card and video sizes and TikTok narration moved to AI Copywriter → Images & video. X max characters moved next to the X engine.', 'presshub-ai-editor' ),
+                    __( 'Use the search box to find any setting on either settings page.', 'presshub-ai-editor' ),
+                ],
+            ],
+            'i18n'       => [
+                'search_label'       => __( 'Search settings', 'presshub-ai-editor' ),
+                'search_placeholder' => __( 'Search settings (name, help text or old name)', 'presshub-ai-editor' ),
+                'no_results'         => __( 'No matching settings', 'presshub-ai-editor' ),
+                'default_label'      => __( 'Default:', 'presshub-ai-editor' ),
+                'reset'              => __( 'Reset', 'presshub-ai-editor' ),
+                /* translators: %s: setting label */
+                'reset_aria'         => __( 'Reset %s to its default', 'presshub-ai-editor' ),
+                'on'                 => __( 'On', 'presshub-ai-editor' ),
+                'off'                => __( 'Off', 'presshub-ai-editor' ),
+                'empty_default'      => __( 'empty (uses the provider or built-in default)', 'presshub-ai-editor' ),
+                'whats_new_title'    => __( "What's new in settings", 'presshub-ai-editor' ),
+                'dismiss'            => __( 'Dismiss this notice.', 'presshub-ai-editor' ),
+            ],
+        ];
+    }
+
     // ------------------------------------------------------------------
     // Registration.
     // ------------------------------------------------------------------
