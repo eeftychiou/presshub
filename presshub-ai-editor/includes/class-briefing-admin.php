@@ -13,6 +13,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-news-curator.php';
 require_once __DIR__ . '/class-podcast-producer.php';
@@ -286,65 +288,42 @@ class PressHub_AI_Briefing_Admin {
      * @return string Required capability.
      */
     public static function capability(): string {
-        return (string) apply_filters( 'presshub_ai_briefing_cap', 'edit_others_posts' );
+        return PressHub_Capabilities::briefing();
     }
 
     /**
-     * Register Daily Briefing Hub as its own top-level operational menu.
+     * Register the Daily Briefing Hub and its pages under the PressHub menu (#235).
      *
-     * Previously this page was filed under Settings → Daily Briefing Hub, which
-     * violated the UX convention that Settings hosts static configuration only.
-     * The hub orchestrates harvest → curate → generate script → synthesize audio,
-     * so it is promoted to a top-level sibling of Posts / Media (Issue #73).
-     *
-     * Layout:
-     *   Daily Briefing Hub                  ← top-level entry (dashicons-microphone)
-     *     └─ Daily Briefing Hub             ← same page, registered as its own
-     *                                        first submenu so WP keeps the
-     *                                        rendered link visible under its
-     *                                        own parent in the sidebar.
-     *
-     * The PressHub AI settings page (options-general.php?page=presshub-ai) is
-     * deliberately left untouched. Editors reach it via the existing
-     * `curation_settings_url` deep-link exposed in the JS payload.
+     * The top-level "PressHub" entry is added by PressHub_Admin_Menu with this
+     * page's slug, so clicking PressHub opens the Hub and the Hub URL
+     * (admin.php?page=presshub-ai-briefing-hub) is unchanged. This method adds
+     * the Hub as the first submenu with its render callback, then Generation
+     * records and Memory. PressHub_Admin_Menu puts the whole submenu in order.
      *
      * Capability gating: the hub uses
      * {@see self::capability()} (filterable `presshub_ai_briefing_cap`,
      * default `edit_others_posts` for editors and above).
      */
     public function add_admin_menu() {
-        $cap      = self::capability();
-        $icon     = 'dashicons-microphone';
-        $position = 26; // After Comments (25), before Appearance (60).
+        $cap    = self::capability();
+        $parent = class_exists( 'PressHub_Admin_Menu' ) ? PressHub_Admin_Menu::PARENT : 'presshub-ai-briefing-hub';
 
-        // 1) Top-level entry.
-        add_menu_page(
-            __( 'PressHub AI — Daily Briefing Hub', 'presshub-ai-editor' ),
-            __( 'Daily Briefing Hub', 'presshub-ai-editor' ),
-            $cap,
-            'presshub-ai-briefing-hub',
-            [ $this, 'render_hub_page' ],
-            $icon,
-            $position
-        );
-
-        // 2) Same page registered explicitly as a submenu of itself so the
-        //    rendered sidebar entry survives any future top-level reshuffling.
+        // 1) The Hub as the first submenu of PressHub (same slug as the top level).
         add_submenu_page(
-            'presshub-ai-briefing-hub',
-            __( 'PressHub AI — Daily Briefing Hub', 'presshub-ai-editor' ),
+            $parent,
+            __( 'PressHub — Daily Briefing Hub', 'presshub-ai-editor' ),
             __( 'Daily Briefing Hub', 'presshub-ai-editor' ),
             $cap,
             'presshub-ai-briefing-hub',
             [ $this, 'render_hub_page' ]
         );
 
-        // 3) Generation records (Issue #133): read-only, filterable list of
+        // 2) Generation records (Issue #133): read-only, filterable list of
         //    generation records with the same inspector as the post metabox.
         if ( class_exists( 'PressHub_AI_Generation_Inspector' ) ) {
             add_submenu_page(
-                'presshub-ai-briefing-hub',
-                __( 'PressHub AI — Generation records', 'presshub-ai-editor' ),
+                $parent,
+                __( 'PressHub — Generation records', 'presshub-ai-editor' ),
                 __( 'Generation records', 'presshub-ai-editor' ),
                 PressHub_AI_Generation_Inspector::CAPABILITY,
                 PressHub_AI_Generation_Inspector::PAGE_SLUG,
@@ -352,11 +331,11 @@ class PressHub_AI_Briefing_Admin {
             );
         }
 
-        // 4) Memory editor (Issue #137): review and correct editorial memory.
+        // 3) Memory editor (Issue #137): review and correct editorial memory.
         if ( class_exists( 'PressHub_AI_Memory_Editor' ) ) {
             add_submenu_page(
-                'presshub-ai-briefing-hub',
-                __( 'PressHub AI — Editorial memory', 'presshub-ai-editor' ),
+                $parent,
+                __( 'PressHub — Memory', 'presshub-ai-editor' ),
                 __( 'Memory', 'presshub-ai-editor' ),
                 PressHub_AI_Memory_Editor::CAPABILITY,
                 PressHub_AI_Memory_Editor::PAGE_SLUG,
@@ -414,7 +393,7 @@ class PressHub_AI_Briefing_Admin {
                 // operator's current configuration.
                 'cap_articles'          => PressHub_AI_Settings_Storage::get_curation_max_articles(),
                 'cap_chars_per_article' => PressHub_AI_Settings_Storage::get_curation_max_chars_per_article(),
-                'curation_settings_url' => admin_url( 'options-general.php?page=presshub-ai#briefing' ),
+                'curation_settings_url' => admin_url( 'admin.php?page=presshub-ai#briefing' ),
                 'i18n'     => [
                     'harvesting'         => __( 'Συλλογή ειδήσεων σε εξέλιξη...', 'presshub-ai-editor' ),
                     'curating'           => __( 'Σύνταξη κειμένου ενημέρωσης...', 'presshub-ai-editor' ),
@@ -951,12 +930,12 @@ class PressHub_AI_Briefing_Admin {
         }
 
         $status = $this->get_briefing_status( $date, $edition );
-        $settings_url = admin_url( 'options-general.php?page=presshub-ai' );
+        $settings_url = admin_url( 'admin.php?page=presshub-ai' );
         // Issue #61 — deep link into the Daily Briefing tab where the
         // curation cap knobs (Maximum Articles Sent to Curation LLM /
         // Maximum Characters per Article) live. The settings page uses
         // hash-based tabs, so the fragment activates the briefing pane.
-        $curation_settings_url = admin_url( 'options-general.php?page=presshub-ai#briefing' );
+        $curation_settings_url = admin_url( 'admin.php?page=presshub-ai#briefing' );
 
         // ---------------------------------------------------------------------
         // Defensive PHP fallback for aggregate word/token totals (#57).
@@ -1317,7 +1296,7 @@ class PressHub_AI_Briefing_Admin {
                                 <p id="presshub-milestone-llm-subtext" class="presshub-llm-subtext presshub-milestone-llm-subtext description" data-cap-articles="<?php echo esc_attr( (int) $cap_articles_server ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>" title="<?php echo esc_attr__( 'Pool tokens vs. tokens actually sent to the LLM (capped by max articles × max chars/article).', 'presshub-ai-editor' ); ?>">
                                     <?php echo esc_html( $llm_subtext_label ); ?>
                                     <a href="<?php echo esc_url( $curation_settings_url ); ?>" class="presshub-llm-subtext-link">
-                                        <?php echo esc_html__( 'Configure cap in Settings → Daily Briefing.', 'presshub-ai-editor' ); ?>
+                                        <?php echo esc_html__( 'Configure cap in PressHub → Settings → Daily Briefing Hub.', 'presshub-ai-editor' ); ?>
                                     </a>
                                 </p>
                             <?php endif; ?>
@@ -1765,7 +1744,7 @@ class PressHub_AI_Briefing_Admin {
                         <p id="presshub-inspector-llm-subtext" class="presshub-llm-subtext presshub-inspector-llm-subtext description" data-cap-articles="<?php echo esc_attr( (int) $cap_articles_server ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>" title="<?php echo esc_attr__( 'Pool tokens vs. tokens actually sent to the LLM (capped by max articles × max chars/article).', 'presshub-ai-editor' ); ?>">
                             <?php echo esc_html( $llm_subtext_label ); ?>
                             <a href="<?php echo esc_url( $curation_settings_url ); ?>" class="presshub-llm-subtext-link">
-                                <?php echo esc_html__( 'Configure cap in Settings → Daily Briefing.', 'presshub-ai-editor' ); ?>
+                                <?php echo esc_html__( 'Configure cap in PressHub → Settings → Daily Briefing Hub.', 'presshub-ai-editor' ); ?>
                             </a>
                         </p>
                     <?php endif; ?>

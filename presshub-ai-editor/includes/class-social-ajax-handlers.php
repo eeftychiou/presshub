@@ -9,6 +9,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 class PressHub_Social_Ajax_Handlers {
 
     /**
@@ -156,14 +158,14 @@ class PressHub_Social_Ajax_Handlers {
     /**
      * AJAX handler: queue a test render of a podcast post's TikTok shorts (real prompts,
      * voices and images; the worker saves the videos and posts nothing).
-     * Capability: manage_options (each test render calls the LLM, TTS and image APIs).
+     * Capability: PressHub_Capabilities::manage() (each test render calls the LLM, TTS and image APIs).
      *
      * @return void
      */
     public static function handle_render_test_shorts(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
 
@@ -187,14 +189,14 @@ class PressHub_Social_Ajax_Handlers {
      * AJAX handler: generate one missing background music track for TikTok shorts (one
      * Lyria call). The settings page calls it again while `remaining` is above 0.
      * `reset=1` first deletes every track, so a new set is made.
-     * Capability: manage_options (each call spends on the Gemini API).
+     * Capability: PressHub_Capabilities::manage() (each call spends on the Gemini API).
      *
      * @return void
      */
     public static function handle_generate_music_track(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
         if ( function_exists( 'set_time_limit' ) ) {
@@ -227,14 +229,14 @@ class PressHub_Social_Ajax_Handlers {
 
     /**
      * AJAX handler: Test credentials or connection for a social platform or worker.
-     * Capability: manage_options.
+     * Capability: PressHub_Capabilities::manage().
      *
      * @return void
      */
     public static function handle_test_connection(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
 
@@ -267,14 +269,14 @@ class PressHub_Social_Ajax_Handlers {
 
     /**
      * AJAX handler: Retry a failed or cancelled queue job.
-     * Capability: manage_options.
+     * Capability: PressHub_Capabilities::manage().
      *
      * @return void
      */
     public static function handle_retry_job(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
 
@@ -324,14 +326,14 @@ class PressHub_Social_Ajax_Handlers {
 
     /**
      * AJAX handler: Cancel a pending job.
-     * Capability: manage_options.
+     * Capability: PressHub_Capabilities::manage().
      *
      * @return void
      */
     public static function handle_cancel_job(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
 
@@ -353,14 +355,14 @@ class PressHub_Social_Ajax_Handlers {
 
     /**
      * AJAX handler: Dispatch a specific job or all due jobs immediately.
-     * Capability: manage_options.
+     * Capability: PressHub_Capabilities::manage().
      *
      * @return void
      */
     public static function handle_dispatch_now(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
 
@@ -398,14 +400,14 @@ class PressHub_Social_Ajax_Handlers {
 
     /**
      * AJAX handler: Regenerate social media copy for an existing queue job using AI prompts.
-     * Capability: edit_posts or manage_options.
+     * Capability: edit_posts or PressHub_Capabilities::manage().
      *
      * @return void
      */
     public static function handle_regenerate_job_copy(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
 
@@ -476,14 +478,14 @@ class PressHub_Social_Ajax_Handlers {
 
     /**
      * AJAX handler: Update the copy of an existing queue job.
-     * Capability: edit_posts or manage_options.
+     * Capability: edit_posts or PressHub_Capabilities::manage().
      *
      * @return void
      */
     public static function handle_update_job_copy(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
 
@@ -525,14 +527,14 @@ class PressHub_Social_Ajax_Handlers {
     /**
      * AJAX handler: Create a new queue job from an existing job with modified copy and dispatch it.
      * Leaves the original job completely untouched.
-     * Capability: edit_posts or manage_options.
+     * Capability: edit_posts or PressHub_Capabilities::manage().
      *
      * @return void
      */
     public static function handle_repost_job(): void {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( 'edit_posts' ) && ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
         }
 

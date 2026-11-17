@@ -152,6 +152,8 @@ require_once PRESSHUB_AI_DIR . 'includes/class-logger.php';
 // `PressHub_AI_Settings` facade retains its full sanitise_*/render_*
 // surface (PHP allows both an old class and a new, differently-named
 // class to coexist in the same runtime).
+require_once PRESSHUB_AI_DIR . 'includes/class-capabilities.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-admin-menu.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-storage.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-render.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-migration.php';
@@ -395,6 +397,7 @@ if ( ! defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' )
 }
 
 function presshub_ai_init() {
+    PressHub_Admin_Menu::register_hooks();
     new PressHub_AI_Settings();
     new PressHub_AI_Metaboxes();
     new PressHub_AI_Ajax_Handlers();

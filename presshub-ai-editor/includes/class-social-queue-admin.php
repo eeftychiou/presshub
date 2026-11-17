@@ -9,6 +9,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 class PressHub_Social_Queue_Admin {
 
     /**
@@ -21,35 +23,13 @@ class PressHub_Social_Queue_Admin {
     }
 
     /**
-     * Register the admin submenu page.
-     *
-     * @return void
-     */
-    public static function register_menu(): void {
-        global $admin_page_hooks;
-
-        // Attach to PressHub Social Settings if present, otherwise options-general.php
-        $parent_slug = isset( $admin_page_hooks['presshub_social_settings'] )
-            ? 'presshub_social_settings'
-            : 'options-general.php';
-
-        add_submenu_page(
-            $parent_slug,
-            __( 'PressHub Social Queue & Logs', 'presshub-social-autopost' ),
-            __( 'Social Queue', 'presshub-social-autopost' ),
-            'manage_options',
-            'presshub-social-queue',
-            [ __CLASS__, 'render_page' ]
-        );
-    }
-
-    /**
      * Render the admin Queue Dashboard page.
      *
      * @return void
      */
     public static function render_page(): void {
-        if ( ! current_user_can( 'manage_options' ) ) {
+        $cap = class_exists( 'PressHub_Social_Settings' ) ? PressHub_Social_Settings::settings_cap() : PressHub_Capabilities::manage();
+        if ( ! current_user_can( $cap ) ) {
             wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'presshub-social-autopost' ) );
         }
 

@@ -12,6 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 require_once __DIR__ . '/class-social-logger.php';
 require_once __DIR__ . '/class-social-settings-storage.php';
 require_once __DIR__ . '/class-social-settings-render.php';
@@ -65,7 +67,7 @@ class PressHub_Social_Settings {
      * @return string
      */
     public static function settings_cap(): string {
-        return (string) apply_filters( 'presshub_social_settings_cap', 'manage_options' );
+        return (string) apply_filters( 'presshub_social_settings_cap', PressHub_Capabilities::manage() );
     }
 
     /**
@@ -74,31 +76,23 @@ class PressHub_Social_Settings {
      * @return void
      */
     public function add_admin_menu(): void {
-        $cap = self::settings_cap();
+        $cap    = self::settings_cap();
+        $parent = class_exists( 'PressHub_Admin_Menu' ) ? PressHub_Admin_Menu::PARENT : 'presshub-ai-briefing-hub';
 
-        add_menu_page(
-            __( 'PressHub Social', 'presshub-social-autopost' ),
-            __( 'PressHub Social', 'presshub-social-autopost' ),
-            $cap,
-            self::MENU_SLUG,
-            [ $this, 'render_queue_page' ],
-            'dashicons-share',
-            30
-        );
-
+        // #235: the Social Queue and Social settings sit under the one PressHub menu.
         add_submenu_page(
-            self::MENU_SLUG,
+            $parent,
+            __( 'PressHub — Social Queue', 'presshub-social-autopost' ),
             __( 'Social Queue', 'presshub-social-autopost' ),
-            __( 'Queue', 'presshub-social-autopost' ),
             $cap,
             self::MENU_SLUG,
             [ $this, 'render_queue_page' ]
         );
 
         add_submenu_page(
-            self::MENU_SLUG,
-            __( 'Social Settings', 'presshub-social-autopost' ),
-            __( 'Settings', 'presshub-social-autopost' ),
+            $parent,
+            __( 'PressHub — Social settings', 'presshub-social-autopost' ),
+            __( 'Social settings', 'presshub-social-autopost' ),
             $cap,
             self::SETTINGS_SLUG,
             [ $this, 'render_settings_page' ]

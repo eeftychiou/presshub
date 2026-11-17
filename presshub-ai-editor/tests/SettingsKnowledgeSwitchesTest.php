@@ -131,7 +131,7 @@ class SettingsKnowledgeSwitchesTest {
 
         // 6. The tab renders every switch.
         $GLOBALS['OPTIONS_STORE']     = [];
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         ob_start();
         ( new PressHub_AI_Settings_Render() )->render_settings_page();
         $html = (string) ob_get_clean();

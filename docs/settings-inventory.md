@@ -8,13 +8,13 @@
 
 | Page | Options | Not shown on screen | Secrets |
 |---|---|---|---|
-| Settings → PressHub AI | 216 | 27 | 5 |
-| PressHub Social → Settings | 84 | 8 | 9 |
+| PressHub → Settings | 216 | 27 | 5 |
+| PressHub → Social settings | 84 | 8 | 9 |
 | **Total** | **300** | | |
 
 **Scheduled for removal:** 4 option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).
 
-## Settings → PressHub AI
+## PressHub → Settings
 
 ### Tab `providers` (17)
 
@@ -272,7 +272,7 @@
 | `presshub_ai_stakeholders_budgets` | People fiche context per AI task (characters) | array | characters |  |
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters |  |
 
-## PressHub Social → Settings
+## PressHub → Social settings
 
 ### Tab `general` (13)
 
@@ -451,6 +451,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_stakeholders_budgets` | `presshub_ai_stakeholders_budgets` |
 | `presshub_ai_stakeholders_enabled` | `presshub_ai_stakeholders_enabled` |
 | `presshub_ai_url_fetcher_headers` | code only |
+| `presshub_legacy_admin_redirects` | code only |
 | `presshub_settings_registry` | code only |
 | `presshub_social_post_image_aspect` | code only |
 | `presshub_social_settings_cap` | code only |

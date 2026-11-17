@@ -221,7 +221,7 @@ class InputLimitsTest
         // P6 regression: the per-provider Test Connection buttons send
         // 'provider'; the handler must pass it through to test_connection().
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini'] = 'gemini-2.0-flash';
         $_POST = [ 'provider' => 'gemini', 'nonce' => 'valid' ];
         $GLOBALS['CAPTURE_FILTER'] = function ( $prev, $ctx ) {

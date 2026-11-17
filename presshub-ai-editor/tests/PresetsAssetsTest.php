@@ -124,7 +124,7 @@ class PresetsAssetsTest
 
         // --- Case 4: admin page render — markup intact, no inline script ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['OPTIONS_STORE'][ PressHub_AI_Preset_Store::OPTION_DEFAULT_PRESETS ] = [
             [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'Inverted pyramid.', 'enabled' => true ],
         ];
@@ -197,7 +197,7 @@ class PresetsAssetsTest
         }
 
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['OPTIONS_STORE'][ PressHub_AI_Preset_Store::OPTION_DEFAULT_PRESETS ] = [
             [ 'slug' => 'long-style', 'name' => 'Long', 'instruction_text' => $long_text, 'enabled' => true ],
         ];

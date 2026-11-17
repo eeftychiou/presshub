@@ -25,6 +25,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 class PressHub_AI_Social_Trending {
 
     const OPTION_STATE      = 'presshub_ai_social_trending_state';
@@ -107,7 +109,7 @@ class PressHub_AI_Social_Trending {
      * Admin "Refresh now": start a run even if the interval has not passed.
      */
     public static function handle_run_now(): void {
-        if ( ! current_user_can( 'manage_options' ) ) {
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_die( esc_html__( 'Unauthorized', 'presshub-ai-editor' ) );
         }
         check_admin_referer( self::RUN_ACTION );

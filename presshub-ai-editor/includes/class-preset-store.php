@@ -311,7 +311,7 @@ class PressHub_AI_Preset_Store {
      *
      * Soft delete (recommended for author scope so existing selections
      * keep resolving) sets enabled=false and keeps the row; hard delete
-     * drops the row entirely (plugin scope, manage_options only).
+     * drops the row entirely (plugin scope, the PressHub capability only).
      *
      * @param string $scope   'author' (user meta) or 'plugin' (option).
      * @param int    $user_id Author id; ignored for plugin scope.

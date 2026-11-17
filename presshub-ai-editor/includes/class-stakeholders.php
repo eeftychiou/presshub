@@ -606,7 +606,7 @@ class PressHub_AI_Stakeholders {
     }
 
     // ---------------------------------------------------------------------
-    // Admin (Policy Fiches → People)
+    // Admin (PressHub → People)
     // ---------------------------------------------------------------------
 
     private static function guard(): void {
@@ -617,7 +617,7 @@ class PressHub_AI_Stakeholders {
         check_admin_referer( self::NONCE );
     }
 
-    /** Admin page of the fiches (Policy Fiches → People). */
+    /** Admin page of the fiches (PressHub → People). */
     public static function page_slug(): string {
         return class_exists( 'PressHub_AI_Fiches_Admin' ) ? PressHub_AI_Fiches_Admin::PEOPLE_SLUG : 'presshub-ai-people';
     }

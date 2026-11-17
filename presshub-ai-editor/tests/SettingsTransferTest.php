@@ -147,7 +147,7 @@ class SettingsTransferTest {
 
         // 4. Scheduled for removal: listed on Diagnostics with a masked value…
         $GLOBALS['OPTIONS_STORE']     = $secret_values;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         ob_start();
         ( new PressHub_AI_Settings_Render() )->render_settings_page();
         $html = (string) ob_get_clean();

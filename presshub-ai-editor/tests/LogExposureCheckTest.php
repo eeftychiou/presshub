@@ -82,7 +82,7 @@ function lec_reset(): void {
     $GLOBALS['TRANSIENT_STORE'] = [];
     $GLOBALS['JSON_RESPONSES'] = [];
     $GLOBALS['NONCE_VALID'] = true;
-    $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+    $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
     unset( $GLOBALS['TEST_LOG_DIR_ERROR'], $GLOBALS['TEST_LOG_DIR_OUTSIDE'] );
 }
 
@@ -162,7 +162,7 @@ $msg = '';
 try { PressHub_AI_Log_Exposure_Check::ajax_recheck(); } catch ( RuntimeException $e ) { $msg = $e->getMessage(); }
 lec_check( 0 === strpos( $msg, 'wp_send_json_error' ) && 0 === count( $GLOBALS['CAPTURED_GETS'] ), 'missing capability must be rejected before any check' );
 
-$GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
 $GLOBALS['JSON_RESPONSES'] = [];
 $msg = '';
 try { PressHub_AI_Log_Exposure_Check::ajax_recheck(); } catch ( RuntimeException $e ) { $msg = $e->getMessage(); }
@@ -172,7 +172,7 @@ lec_check( ( $resp['data']['state'] ?? '' ) === 'protected' && false !== strpos(
 lec_check( 1 === count( $GLOBALS['CAPTURED_GETS'] ), 'recheck must force a fresh request' );
 
 // The presshub_ai_settings_cap filter is honoured.
-$GLOBALS['FILTERS']['presshub_ai_settings_cap'][] = [ 'callback' => function () { return 'edit_others_posts'; } ];
+$GLOBALS['FILTERS']['presshub_ai_settings_cap'][] = [ 'callback' => function () { return 'presshub_custom_cap'; } ];
 $msg = '';
 try { PressHub_AI_Log_Exposure_Check::ajax_recheck(); } catch ( RuntimeException $e ) { $msg = $e->getMessage(); }
 lec_check( 0 === strpos( $msg, 'wp_send_json_error' ), 'presshub_ai_settings_cap filter must be applied' );

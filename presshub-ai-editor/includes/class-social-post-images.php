@@ -340,7 +340,7 @@ class PressHub_Social_Post_Images {
     public static function get_plan( int $post_id, int $count ) {
         $prompt = PressHub_Social_Settings_Storage::get_post_images_prompt();
         if ( '' === $prompt ) {
-            return new WP_Error( 'missing_post_images_prompt', 'the AI post images prompt (presshub_social_prompt_post_images) is empty. Restore it in PressHub Social → Settings → Prompts.' );
+            return new WP_Error( 'missing_post_images_prompt', 'the AI post images prompt (presshub_social_prompt_post_images) is empty. Restore it in PressHub → Social settings → Prompts.' );
         }
 
         $context = self::article_context( $post_id );

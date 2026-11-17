@@ -247,7 +247,7 @@
             // .text() destroys child elements, so the server-rendered
             // "Configure cap in Settings" anchor must be re-appended after
             // the rewrite (Issue #61 — link points to the Settings page).
-            $nodes.text(text).append(' <a href="' + (presshubBriefingAdmin && presshubBriefingAdmin.curation_settings_url || '#') + '" class="presshub-llm-subtext-link">' + __('Configure cap in Settings → Daily Briefing.', 'presshub-ai-editor') + '</a>').show();
+            $nodes.text(text).append(' <a href="' + (presshubBriefingAdmin && presshubBriefingAdmin.curation_settings_url || '#') + '" class="presshub-llm-subtext-link">' + __('Configure cap in PressHub → Settings → Daily Briefing Hub.', 'presshub-ai-editor') + '</a>').show();
         }
 
         function updateSelectedCountBadge() {

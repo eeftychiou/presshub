@@ -26,7 +26,7 @@ class SettingsResponsiveTabsTest
         // Case 1: Render Settings Page output contains responsive navigation wrapper
         // -------------------------------------------------------------
         $GLOBALS['OPTIONS_STORE'] = [];
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         
         $settings_render = new PressHub_AI_Settings_Render();
         ob_start();
@@ -53,7 +53,6 @@ class SettingsResponsiveTabsTest
             'coauthor',
             'briefing',
             'copilot',
-            'token_logs',
             'advanced',
         ];
 

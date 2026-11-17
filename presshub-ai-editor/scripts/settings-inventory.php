@@ -27,8 +27,8 @@ function presshub_settings_inventory_markdown(): string {
     $all = PressHub_Settings_Registry::all();
 
     $pages = [
-        'ai'     => 'Settings → PressHub AI',
-        'social' => 'PressHub Social → Settings',
+        'ai'     => 'PressHub → Settings',
+        'social' => 'PressHub → Social settings',
     ];
     $counts = [];
     foreach ( $all as $e ) {
