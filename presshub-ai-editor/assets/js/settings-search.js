@@ -10,7 +10,7 @@
     'use strict';
 
     var data = window.presshubSettingsIndex;
-    if (!data || !Array.isArray(data.entries)) {
+    if (!data || !Array.isArray(data.entries) || !document.querySelector('#presshub-ai-settings-form, #presshub-social-settings-form')) {
         return;
     }
     var t = data.i18n || {};

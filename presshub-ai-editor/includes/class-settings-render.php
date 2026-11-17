@@ -2908,7 +2908,7 @@ class PressHub_AI_Settings_Render {
         <h2><?php echo esc_html__( 'Editorial knowledge', 'presshub-ai-editor' ); ?></h2>
         <p><?php echo esc_html__( 'What PressHub adds to every AI call on top of the prompt: policy fiches, people fiches, claim checks and the article pool the curator reads.', 'presshub-ai-editor' ); ?></p>
         <?php if ( ! $memory_on ) : ?>
-            <div class="notice notice-warning inline"><p><?php echo esc_html__( 'Editorial memory is off (Daily Briefing Hub), so policy and people fiches are not added whatever the switches below say.', 'presshub-ai-editor' ); ?></p></div>
+            <div class="notice notice-warning inline"><p><?php echo esc_html__( 'Editorial memory is off (see Editorial memory below), so policy and people fiches are not added whatever the switches below say.', 'presshub-ai-editor' ); ?></p></div>
         <?php endif; ?>
         <table class="form-table" role="presentation">
             <tbody>

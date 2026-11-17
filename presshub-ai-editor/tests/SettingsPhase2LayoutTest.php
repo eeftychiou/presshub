@@ -149,7 +149,7 @@ class SettingsPhase2LayoutTest {
         if ( [] !== $render->shorts_unmet_requirements() ) {
             $failures[] = 'With everything ready, no requirement should be listed.';
         }
-        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_mode' => 'push', 'presshub_social_tiktok_shorts_enabled' => 0, 'presshub_social_instagram_shorts_enabled' => 0, 'presshub_social_tiktok_article_shorts_enabled' => 0 ];
+        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_mode' => 'push', 'presshub_social_tiktok_shorts_enabled' => 0, 'presshub_social_instagram_shorts_enabled' => 0, 'presshub_social_tiktok_article_shorts_enabled' => 1 ];
         if ( [] !== $render->shorts_unmet_requirements() ) {
             $failures[] = 'With Shorts and Reels off, no notice.';
         }

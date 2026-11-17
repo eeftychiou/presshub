@@ -349,11 +349,11 @@ class PressHub_Social_Settings_Render {
         $val = max( (int) $min, min( (int) $max, $val ) );
         ?>
         <?php $push_only = ! empty( $args['push_only'] ); ?>
-        <input type="number" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" min="<?php echo esc_attr( $min ); ?>" max="<?php echo esc_attr( $max ); ?>" step="<?php echo esc_attr( $step ); ?>" class="small-text<?php echo $push_only ? ' presshub-push-only' : ''; ?>"<?php echo $push_only ? $this->push_only_attrs() : ''; ?> />
+        <input type="number" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" min="<?php echo esc_attr( $min ); ?>" max="<?php echo esc_attr( $max ); ?>" step="<?php echo esc_attr( $step ); ?>" class="small-text<?php echo $push_only ? ' presshub-push-only' : ''; ?>"<?php echo $push_only ? $this->push_only_attrs( $option ) : ''; ?> />
         <?php if ( ! empty( $args['unit'] ) ) : ?>
             <span style="margin-left:4px;"><?php echo esc_html( $args['unit'] ); ?></span>
         <?php endif; ?>
-        <?php if ( $push_only ) { $this->render_push_only_reason(); } ?>
+        <?php if ( $push_only ) { $this->render_push_only_reason( $option ); } ?>
         <?php if ( '' !== $desc ) : ?>
             <p class="description"><?php echo esc_html( $desc ); ?></p>
         <?php endif; ?>
@@ -438,14 +438,14 @@ class PressHub_Social_Settings_Render {
      * readonly attributes for a field used only in Push mode. readonly (not
      * disabled) so the value still posts and is saved unchanged.
      */
-    private function push_only_attrs(): string {
-        return 'pull' === PressHub_Social_Settings_Storage::get_worker_mode() ? ' readonly="readonly" aria-describedby="presshub-push-only-reason"' : '';
+    private function push_only_attrs( string $field_id ): string {
+        return 'pull' === PressHub_Social_Settings_Storage::get_worker_mode() ? ' readonly="readonly" aria-describedby="' . esc_attr( $field_id ) . '-push-reason"' : '';
     }
 
-    private function render_push_only_reason(): void {
+    private function render_push_only_reason( string $field_id ): void {
         $pull = 'pull' === PressHub_Social_Settings_Storage::get_worker_mode();
         ?>
-        <span class="presshub-push-only-reason description" style="display:<?php echo $pull ? 'block' : 'none'; ?>; font-style: italic;"><?php echo esc_html__( 'Used only in Push mode.', 'presshub-social-autopost' ); ?></span>
+        <span id="<?php echo esc_attr( $field_id ); ?>-push-reason" class="presshub-push-only-reason description" style="display:<?php echo $pull ? 'block' : 'none'; ?>; font-style: italic;"><?php echo esc_html__( 'Used only in Push mode.', 'presshub-social-autopost' ); ?></span>
         <?php
     }
 
@@ -462,7 +462,9 @@ class PressHub_Social_Settings_Render {
      * @return array<int,array{text:string,url:string,link:string}>
      */
     public function shorts_unmet_requirements(): array {
-        $tiktok    = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() || PressHub_Social_Settings_Storage::get_tiktok_article_shorts_enabled();
+        // Article shorts only run where that platform's shorts switch is on, so
+        // they are not a switch of their own here (#234 review).
+        $tiktok    = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
         $instagram = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
         if ( ! $tiktok && ! $instagram ) {
             return [];
@@ -541,7 +543,7 @@ class PressHub_Social_Settings_Render {
     public function render_shorts_narration_intro(): void {
         $engine = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
         $label  = ( '' === $engine || 'gemini' === $engine || 0 === strpos( $engine, 'gemini' ) ) ? 'Gemini TTS' : 'Google Cloud TTS';
-        $url    = admin_url( 'admin.php?page=presshub-ai#briefing-voices' );
+        $url    = admin_url( 'options-general.php?page=presshub-ai#briefing-voices' );
         ?>
         <p>
             <?php echo esc_html__( 'Speech engine:', 'presshub-social-autopost' ); ?>
@@ -554,8 +556,8 @@ class PressHub_Social_Settings_Render {
     public function render_worker_url_field(): void {
         $url = PressHub_Social_Settings_Storage::get_worker_url();
         ?>
-        <input type="url" id="presshub_social_worker_url" name="presshub_social_worker_url" value="<?php echo esc_attr( $url ); ?>" class="regular-text code presshub-push-only" placeholder="http://127.0.0.1:3456"<?php echo $this->push_only_attrs(); ?> />
-        <?php $this->render_push_only_reason(); ?>
+        <input type="url" id="presshub_social_worker_url" name="presshub_social_worker_url" value="<?php echo esc_attr( $url ); ?>" class="regular-text code presshub-push-only" placeholder="http://127.0.0.1:3456"<?php echo $this->push_only_attrs( 'presshub_social_worker_url' ); ?> />
+        <?php $this->render_push_only_reason( 'presshub_social_worker_url' ); ?>
         <p class="description"><?php echo esc_html__( 'HTTP endpoint of the local or remote Playwright / Puppeteer automation worker service.', 'presshub-social-autopost' ); ?></p>
         <?php
         $this->render_test_connection_button( 'worker' );
