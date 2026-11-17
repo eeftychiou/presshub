@@ -3256,6 +3256,7 @@ class PressHub_AI_Settings_Render {
         $min_eng   = $S::get_social_trending_min_engagement();
         $excluded  = implode( "\n", $S::get_social_trending_excluded_words() );
         $brief_on  = $S::get_social_trending_briefing_enabled();
+        $summary_on = $S::get_social_trending_summary_enabled();
         $brief_n   = $S::get_social_trending_briefing_count();
         $per_acct  = $S::get_trending_max_per_account();
         $after_h   = $S::get_trending_share_after_hour();
@@ -3360,6 +3361,13 @@ class PressHub_AI_Settings_Render {
             <td>
                 <input type="number" min="0" max="23" name="presshub_ai_social_trending_share_after_hour" id="presshub_ai_social_trending_share_after_hour" value="<?php echo self::esc_attr_safe( (string) $after_h ); ?>" class="small-text" />
                 <p class="description"><?php echo esc_html__( 'A roundup made before this local hour is scheduled for that hour, so its social posts go out when people read. 0 publishes at once. Default: 8.', 'presshub-ai-editor' ); ?></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_summary_enabled"><?php echo esc_html__( 'AI summary', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <label><input type="checkbox" name="presshub_ai_social_trending_summary_enabled" id="presshub_ai_social_trending_summary_enabled" value="1" <?php checked( $summary_on ); ?> /> <?php echo esc_html__( 'Open each roundup with a short AI summary of what the posts are about', 'presshub-ai-editor' ); ?></label>
+                <p class="description"><?php echo esc_html__( 'The social AI provider writes a short Greek paragraph on what the posts are about, shown above the posts. It is written again only when the posts in the roundup change. If the AI fails, the roundup is published without it.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>

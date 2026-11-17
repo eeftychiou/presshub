@@ -107,6 +107,7 @@ $presshub_ai_options = [
     'presshub_ai_social_trending_min_engagement',
     'presshub_ai_social_trending_excluded_words',
     'presshub_ai_social_trending_briefing_enabled',
+    'presshub_ai_social_trending_summary_enabled',
     'presshub_ai_social_trending_briefing_count',
     'presshub_ai_social_trending_briefing_pool',
     'presshub_ai_social_trending_state',

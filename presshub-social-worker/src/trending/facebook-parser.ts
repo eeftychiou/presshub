@@ -87,6 +87,42 @@ export function handleFromUrl(url: string): string {
   return '';
 }
 
+const POST_LINK = /facebook\.com\/(?:[^?#]+\/)?(?:posts|videos|reel)\/|story_fbid=|permalink\.php|\/photo|\/watch\/?\?(?:.*&)?v=\d/;
+const VIDEO_LINK = /facebook\.com\/(?:[^?#]+\/)?(?:videos|reel)\/\d|\/watch\/?\?(?:.*&)?v=\d/;
+
+/**
+ * The link to embed for a story. Reels and other video posts often carry no
+ * post permalink at all, and facebook.com/<post_id> is not something the
+ * embedded video plugin can play ("Video unavailable"), so a video story
+ * links to its video (facebook.com/reel/<id>, /videos/<id> or
+ * /watch/?v=<video id>). Only when nothing better is found does it fall back
+ * to facebook.com/<post_id>, which WordPress shows as a plain link card.
+ * A post permalink (…/posts/pfbid…) is kept when there is no video link: the
+ * embedded post plugin plays the video inside the post.
+ */
+export function storyPermalink(story: any, id: string, hasVideo: boolean): string {
+  const isUrl = (k: string, v: any, re: RegExp): v is string =>
+    (k === 'url' || k === 'permalink_url' || k === 'wwwURL' || k === 'shareable_url') && typeof v === 'string' && /^https:\/\/(?:www\.|web\.|m\.)?facebook\.com\//.test(v) && re.test(v);
+  const bare = /^https:\/\/(?:www\.|web\.|m\.)?facebook\.com\/\d+\/?$/;
+  if (hasVideo) {
+    const videoUrl =
+      (typeof story.url === 'string' && isUrl('url', story.url, VIDEO_LINK) ? story.url : undefined) ||
+      bfs<string>(story, (k, v) => (isUrl(k, v, VIDEO_LINK) ? v : undefined));
+    if (videoUrl) return videoUrl;
+  }
+  const postUrl =
+    (typeof story.url === 'string' && /facebook\.com\//.test(story.url) && !bare.test(story.url) ? story.url : undefined) ||
+    bfs<string>(story, (k, v) => (isUrl(k, v, POST_LINK) ? v : undefined));
+  if (postUrl) return postUrl;
+  if (hasVideo) {
+    const videoId = bfs<string>(story, (_k, v) =>
+      v && typeof v === 'object' && !Array.isArray(v) && v.__typename === 'Video' && /^\d{5,25}$/.test(String(v.id || v.videoId || '')) ? String(v.id || v.videoId) : undefined
+    );
+    if (videoId) return `https://www.facebook.com/watch/?v=${videoId}`;
+  }
+  return `https://www.facebook.com/${id}`;
+}
+
 function parseStory(story: any): FacebookPost | null {
   const id = String(story?.post_id || '');
   if (!/^\d{5,25}$/.test(id)) return null;
@@ -97,12 +133,9 @@ function parseStory(story: any): FacebookPost | null {
   if (!created) return null;
 
   const actor = bfs<any>(story, (k, v) => (k === 'actors' && Array.isArray(v) && v[0]?.name ? v[0] : undefined)) || {};
-  const permalink =
-    (typeof story.url === 'string' && /facebook\.com\//.test(story.url) ? story.url : undefined) ||
-    bfs<string>(story, (k, v) =>
-      (k === 'url' || k === 'permalink_url' || k === 'wwwURL') && typeof v === 'string' && /facebook\.com\/.+\/(posts|videos|reel)\/|story_fbid=|permalink\.php|\/photo/.test(v) ? v : undefined
-    ) ||
-    `https://www.facebook.com/${id}`;
+  const hasVideo = bfs<boolean>(story, (k, v) => (k === '__typename' && v === 'Video' ? true : undefined)) === true;
+  const hasPhoto = !hasVideo && bfs<boolean>(story, (k, v) => (k === '__typename' && v === 'Photo' ? true : undefined)) === true;
+  const permalink = storyPermalink(story, id, hasVideo);
 
   const reactions =
     bfs<number>(story, (k, v) => (k === 'reaction_count' && v && typeof v.count === 'number' ? v.count : undefined)) ??
@@ -114,9 +147,6 @@ function parseStory(story: any): FacebookPost | null {
     bfs<number>(story, (k, v) => (k === 'total_comment_count' && typeof v === 'number' ? v : undefined)) ??
     0;
   const views = bfs<number>(story, (k, v) => (k === 'video_view_count' || k === 'play_count') && typeof v === 'number' ? v : undefined) ?? 0;
-
-  const hasVideo = bfs<boolean>(story, (k, v) => (k === '__typename' && v === 'Video' ? true : undefined)) === true;
-  const hasPhoto = !hasVideo && bfs<boolean>(story, (k, v) => (k === '__typename' && v === 'Photo' ? true : undefined)) === true;
 
   const thumbnail =
     bfs<string>(story, (k, v) => (k === 'preferred_thumbnail' && typeof v?.image?.uri === 'string' && /^https:\/\//.test(v.image.uri) ? v.image.uri : undefined)) ||
