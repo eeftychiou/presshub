@@ -206,6 +206,9 @@ $admin_only_actions = [
     'social cancel_job'          => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_cancel_job' ], [ 'job_id' => 1 ] ],
     'social dispatch_now'        => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_dispatch_now' ], [] ],
     'social generate_music'      => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_generate_music_track' ], [] ],
+    'social regenerate_job_copy' => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_regenerate_job_copy' ], [ 'job_id' => 1 ] ],
+    'social update_job_copy'     => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_update_job_copy' ], [ 'job_id' => 1, 'copy' => 'x' ] ],
+    'social repost_job'          => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_repost_job' ], [ 'job_id' => 1, 'copy' => 'x' ] ],
 ];
 if ( method_exists( $ajax, 'test_press_inbox' ) ) {
     $admin_only_actions['test_press_inbox'] = [ [ $ajax, 'test_press_inbox' ], [] ];
@@ -241,6 +244,17 @@ amc_check( 'filter: administrator settings save still works', null !== $r && tru
 unset( $GLOBALS['FILTERS']['presshub_ai_settings_cap'] );
 amc_check( 'default: PressHub capability is edit_others_posts', 'edit_others_posts' === PressHub_Capabilities::manage() );
 
+// Narrowing only the Social filter narrows every Social gate: pages, options.php and AJAX.
+$GLOBALS['FILTERS']['presshub_social_settings_cap'][] = [ 'callback' => static function () { return 'manage_options'; }, 'priority' => 10, 'accepted_args' => 1 ];
+$GLOBALS['CURRENT_USER_CAPS'] = AMC_EDITOR;
+$caps = array_column( amc_build_menu(), 'capability', 'menu_slug' );
+amc_check( 'social filter: Social Queue and Social settings admin-only', 'manage_options' === ( $caps['presshub-social-queue'] ?? '' ) && 'manage_options' === ( $caps['presshub-social-settings'] ?? '' ) );
+amc_check( 'social filter: AI Settings stay open to editors', amc_can( $caps['presshub-ai'] ?? 'x' ) );
+amc_check( 'social filter: options.php group follows it', 'manage_options' === PressHub_Capabilities::social_option_page_capability() );
+$r = amc_ajax( [ 'PressHub_Social_Ajax_Handlers', 'handle_retry_job' ], [ 'job_id' => 1 ] );
+amc_check( 'social filter: editor Social Queue AJAX refused', null !== $r && false === $r['success'] );
+unset( $GLOBALS['FILTERS']['presshub_social_settings_cap'] );
+
 // ---------------------------------------------------------------------
 // 5. options.php capability per option group.
 // ---------------------------------------------------------------------
@@ -250,7 +264,8 @@ $groups = array_unique( array_column( PressHub_Settings_Registry::registered(), 
 amc_check( 'groups: both settings groups registered', ! array_diff( array_values( PressHub_Settings_Registry::GROUPS ), $groups ) );
 foreach ( $groups as $group ) {
     $cap = apply_filters( 'option_page_capability_' . $group, 'manage_options' );
-    amc_check( "groups: {$group} saves with the PressHub capability", PressHub_Capabilities::manage() === $cap );
+    $want = 'presshub_social_options' === $group ? PressHub_Capabilities::social() : PressHub_Capabilities::manage();
+    amc_check( "groups: {$group} saves with the PressHub capability", $want === $cap );
 }
 
 // ---------------------------------------------------------------------
@@ -318,7 +333,7 @@ foreach ( [ 'class-ajax-handlers.php', 'class-social-ajax-handlers.php' ] as $f 
     $lines = file( $root . '/includes/' . $f );
     foreach ( $lines as $i => $line ) {
         $prev = $lines[ $i - 1 ] ?? '';
-        if ( false !== strpos( $line, 'wp_send_json_error' ) && preg_match( '/current_user_can\( (PressHub_Capabilities::manage\(\)|\$cap) \)/', $prev ) && false === strpos( $prev, "'image', 'report'" ) ) {
+        if ( false !== strpos( $line, 'wp_send_json_error' ) && preg_match( '/current_user_can\( (PressHub_Capabilities::(manage|social)\(\)|\$cap) \)/', $prev ) && false === strpos( $prev, "'image', 'report'" ) ) {
             amc_check( "403: {$f}:" . ( $i + 1 ) . ' refuses with HTTP 403', false !== strpos( $line, '403' ) );
         }
     }

@@ -67,7 +67,7 @@ class PressHub_Social_Settings {
      * @return string
      */
     public static function settings_cap(): string {
-        return (string) apply_filters( 'presshub_social_settings_cap', PressHub_Capabilities::manage() );
+        return PressHub_Capabilities::social();
     }
 
     /**

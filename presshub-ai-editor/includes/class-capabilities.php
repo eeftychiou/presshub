@@ -48,6 +48,17 @@ class PressHub_Capabilities {
         return '' !== $cap ? $cap : self::DEFAULT_CAP;
     }
 
+    /**
+     * The capability for the Social Queue, Social settings and their AJAX
+     * actions: manage(), narrowed further by `presshub_social_settings_cap`.
+     */
+    public static function social(): string {
+        $cap = function_exists( 'apply_filters' )
+            ? (string) apply_filters( 'presshub_social_settings_cap', self::manage() )
+            : self::manage();
+        return '' !== $cap ? $cap : self::manage();
+    }
+
     /** Whether the current user may use PressHub pages and actions. */
     public static function current_user_can_manage(): bool {
         return function_exists( 'current_user_can' ) && current_user_can( self::manage() );
@@ -62,11 +73,19 @@ class PressHub_Capabilities {
         if ( '' === $group || ! function_exists( 'add_filter' ) ) {
             return;
         }
-        add_filter( 'option_page_capability_' . $group, [ __CLASS__, 'option_page_capability' ] );
+        $callback = 'presshub_social_options' === $group
+            ? [ __CLASS__, 'social_option_page_capability' ]
+            : [ __CLASS__, 'option_page_capability' ];
+        add_filter( 'option_page_capability_' . $group, $callback );
     }
 
     /** Filter callback for option_page_capability_<group>. */
     public static function option_page_capability( $cap = '' ): string {
         return self::manage();
+    }
+
+    /** Filter callback for the Social settings group: same gate as the Social pages. */
+    public static function social_option_page_capability( $cap = '' ): string {
+        return self::social();
     }
 }

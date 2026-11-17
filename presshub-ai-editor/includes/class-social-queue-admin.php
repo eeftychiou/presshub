@@ -28,7 +28,7 @@ class PressHub_Social_Queue_Admin {
      * @return void
      */
     public static function render_page(): void {
-        $cap = class_exists( 'PressHub_Social_Settings' ) ? PressHub_Social_Settings::settings_cap() : PressHub_Capabilities::manage();
+        $cap = PressHub_Capabilities::social();
         if ( ! current_user_can( $cap ) ) {
             wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'presshub-social-autopost' ) );
         }

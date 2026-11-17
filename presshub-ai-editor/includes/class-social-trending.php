@@ -110,7 +110,7 @@ class PressHub_AI_Social_Trending {
      */
     public static function handle_run_now(): void {
         if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
-            wp_die( esc_html__( 'Unauthorized', 'presshub-ai-editor' ) );
+            wp_die( esc_html__( 'Unauthorized', 'presshub-ai-editor' ), '', [ 'response' => 403 ] );
         }
         check_admin_referer( self::RUN_ACTION );
         $state = self::maybe_start_run( null, true );
