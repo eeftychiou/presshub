@@ -92,7 +92,7 @@ class PressHub_Social_Metabox {
                     </label>
                     <span class="spinner" id="presshub-social-global-spinner"></span>
                 </div>
-                <?php if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && '' !== PressHub_Social_TikTok_Shorts::source_type( (int) $post_id ) && current_user_can( PressHub_Capabilities::manage() ) ) : ?>
+                <?php if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && '' !== PressHub_Social_TikTok_Shorts::source_type( (int) $post_id ) && current_user_can( PressHub_Capabilities::social() ) ) : ?>
                     <div class="presshub-social-test-shorts" style="margin-top:8px;">
                         <button type="button" class="button button-secondary" id="presshub-render-test-shorts" data-post-id="<?php echo esc_attr( $post_id ); ?>">
                             <span class="dashicons dashicons-video-alt3" style="vertical-align:middle;"></span>

@@ -330,6 +330,8 @@ class PressHub_Settings_Registry {
             [ 'file' => 'options-general.php', 'page' => 'presshub-social-settings', 'to' => 'presshub-social-settings' ],
             // Token & Usage Logs left the settings tabs for Usage & logs.
             [ 'file' => 'admin.php', 'page' => 'presshub-ai', 'tab' => 'token_logs', 'to' => 'presshub-ai-usage' ],
+            [ 'file' => 'admin.php', 'page' => 'presshub-ai', 'tab' => 'token_usage', 'to' => 'presshub-ai-usage' ],
+            [ 'file' => 'admin.php', 'page' => 'presshub-ai', 'tab' => 'usage', 'to' => 'presshub-ai-usage' ],
             // Short form of the menu.
             [ 'file' => 'admin.php', 'page' => 'presshub', 'to' => 'presshub-ai-briefing-hub' ],
         ];
