@@ -30,7 +30,7 @@ class SettingsPerTabAjaxSaveTest
         $GLOBALS['JSON_RESPONSES'] = [];
         $GLOBALS['UPDATE_OPTION_CALLS'] = [];
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $_POST = [];
     }
 

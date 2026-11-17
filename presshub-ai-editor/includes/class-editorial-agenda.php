@@ -43,7 +43,7 @@ class PressHub_AI_Editorial_Agenda {
     const NOTES_MAX         = 600;
     const GUIDANCE_MAX      = 2000;
 
-    /** Admin-post actions (Policy Fiches → Editorial agenda). */
+    /** Admin-post actions (PressHub → Editorial agenda). */
     const POST_SAVE    = 'presshub_ai_agenda_save';
     const POST_SUGGEST = 'presshub_ai_agenda_suggest';
     const POST_ACCEPT  = 'presshub_ai_agenda_accept';
@@ -487,7 +487,7 @@ class PressHub_AI_Editorial_Agenda {
     }
 
     // ---------------------------------------------------------------------
-    // Admin-post handlers (Policy Fiches → Editorial agenda)
+    // Admin-post handlers (PressHub → Editorial agenda)
     // ---------------------------------------------------------------------
 
     private static function guard(): void {
@@ -498,7 +498,7 @@ class PressHub_AI_Editorial_Agenda {
         check_admin_referer( self::NONCE );
     }
 
-    /** Admin page of the agenda (Policy Fiches → Editorial agenda). */
+    /** Admin page of the agenda (PressHub → Editorial agenda). */
     public static function page_slug(): string {
         return class_exists( 'PressHub_AI_Fiches_Admin' ) ? PressHub_AI_Fiches_Admin::AGENDA_SLUG : 'presshub-ai-agenda';
     }

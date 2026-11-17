@@ -31,9 +31,11 @@ class DailyBriefingAdminTest
         $failures = [];
 
         // =========================================================================
-        // Case 1: Admin Menu Registration (Issue #73 — top-level menu)
+        // Case 1: Admin Menu Registration (Issue #73 top-level; #235 one PressHub menu
+        // whose top-level entry uses the Hub's slug and opens the Hub)
         // =========================================================================
         self::reset_world();
+        PressHub_Admin_Menu::add_top_level();
         $admin = new PressHub_AI_Briefing_Admin();
         $admin->add_admin_menu();
 
@@ -61,8 +63,8 @@ class DailyBriefingAdminTest
             if ( false === strpos( $briefing_top['page_title'], 'Daily Briefing Hub' ) ) {
                 $failures[] = 'Top-level page title should contain "Daily Briefing Hub"; got: ' . $briefing_top['page_title'];
             }
-            if ( false === strpos( $briefing_top['menu_title'], 'Daily Briefing Hub' ) ) {
-                $failures[] = 'Top-level menu title should contain "Daily Briefing Hub"; got: ' . $briefing_top['menu_title'];
+            if ( 'PressHub' !== $briefing_top['menu_title'] ) {
+                $failures[] = 'Top-level menu title should be "PressHub" (#235); got: ' . $briefing_top['menu_title'];
             }
             if ( $briefing_top['capability'] !== 'edit_others_posts' ) {
                 $failures[] = 'Top-level capability should default to edit_others_posts; got: ' . $briefing_top['capability'];

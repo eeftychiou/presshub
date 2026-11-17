@@ -35,10 +35,11 @@ if ( ! isset( $GLOBALS['SENT_EMAILS'] ) ) {
     $GLOBALS['SENT_EMAILS'] = [];
 }
 if ( ! isset( $GLOBALS['CURRENT_USER_CAPS'] ) ) {
-    $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options', 'edit_post' ];
+    $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options', 'edit_post', 'edit_others_posts' ];
 } else {
     $GLOBALS['CURRENT_USER_CAPS'][] = 'edit_posts';
     $GLOBALS['CURRENT_USER_CAPS'][] = 'manage_options';
+$GLOBALS['CURRENT_USER_CAPS'][] = 'edit_others_posts';
     $GLOBALS['CURRENT_USER_CAPS'][] = 'edit_post';
 }
 
@@ -313,7 +314,7 @@ $GLOBALS['test_postmeta'] = [];
 $GLOBALS['test_posts']    = [];
 $GLOBALS['test_cron']     = [];
 $GLOBALS['test_mails']    = [];
-$GLOBALS['test_user_caps'] = [ 'edit_posts' => true, 'manage_options' => true ];
+$GLOBALS['test_user_caps'] = [ 'edit_posts' => true, 'manage_options' => true, 'edit_others_posts' => true ];
 
 if ( ! function_exists( 'get_option' ) ) {
     function get_option( $key, $default = false ) {
@@ -851,7 +852,7 @@ echo "\n--- Suite 10: Metabox Security & Save Verification ---\n";
 
 $test_post_id = 301;
 $_POST = [];
-$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options', 'edit_post' ];
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options', 'edit_post', 'edit_others_posts' ];
 
 // 1. Missing nonce -> should abort save
 $_POST['presshub_social_platforms'] = [ 'twitter', 'facebook' ];

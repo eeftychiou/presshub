@@ -14,6 +14,8 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-capabilities.php';
+
 class PressHub_AI_Log_Exposure_Check {
 
     const TRANSIENT = 'presshub_ai_log_exposure_status';
@@ -207,7 +209,7 @@ HTML;
      */
     public static function ajax_recheck(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        if ( ! current_user_can( apply_filters( 'presshub_ai_settings_cap', 'manage_options' ) ) ) {
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( [ 'message' => 'Permission denied.' ], 403 );
             return;
         }

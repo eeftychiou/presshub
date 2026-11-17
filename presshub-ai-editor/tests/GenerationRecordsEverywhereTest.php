@@ -586,7 +586,7 @@ gre_check( 'retention: the old copilot_chat record is pruned, the fresh one kept
 // =========================================================================
 gre_reset();
 gre_check( 'settings: prompt debug dump and TTS payload dump default off', false === PressHub_AI_Settings_Storage::get_debug_prompts() && false === PressHub_AI_Settings_Storage::get_log_tts_payloads() );
-$GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_posts' ];
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_posts', 'edit_others_posts' ];
 $GLOBALS['wp_settings_fields_registry'] = [];
 $titles = [];
 if ( ! function_exists( 'add_settings_field_titles_probe' ) ) {

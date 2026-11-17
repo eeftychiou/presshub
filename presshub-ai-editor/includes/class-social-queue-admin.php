@@ -9,6 +9,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 class PressHub_Social_Queue_Admin {
 
     /**
@@ -21,35 +23,13 @@ class PressHub_Social_Queue_Admin {
     }
 
     /**
-     * Register the admin submenu page.
-     *
-     * @return void
-     */
-    public static function register_menu(): void {
-        global $admin_page_hooks;
-
-        // Attach to PressHub Social Settings if present, otherwise options-general.php
-        $parent_slug = isset( $admin_page_hooks['presshub_social_settings'] )
-            ? 'presshub_social_settings'
-            : 'options-general.php';
-
-        add_submenu_page(
-            $parent_slug,
-            __( 'PressHub Social Queue & Logs', 'presshub-social-autopost' ),
-            __( 'Social Queue', 'presshub-social-autopost' ),
-            'manage_options',
-            'presshub-social-queue',
-            [ __CLASS__, 'render_page' ]
-        );
-    }
-
-    /**
      * Render the admin Queue Dashboard page.
      *
      * @return void
      */
     public static function render_page(): void {
-        if ( ! current_user_can( 'manage_options' ) ) {
+        $cap = PressHub_Capabilities::social();
+        if ( ! current_user_can( $cap ) ) {
             wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'presshub-social-autopost' ) );
         }
 
@@ -78,7 +58,7 @@ class PressHub_Social_Queue_Admin {
         <div class="wrap presshub-social-admin-wrap" data-nonce="<?php echo esc_attr( $ajax_nonce ); ?>">
             <h1 class="wp-heading-inline">
                 <span class="dashicons dashicons-share" style="font-size:28px; width:28px; height:28px; vertical-align:middle; margin-right:6px;"></span>
-                <?php esc_html_e( 'PressHub Social — Queue & Dispatch Monitor', 'presshub-social-autopost' ); ?>
+                <?php esc_html_e( 'PressHub — Social Queue', 'presshub-social-autopost' ); ?>
             </h1>
 
             <!-- KPI Cards Section -->

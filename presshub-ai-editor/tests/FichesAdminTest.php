@@ -3,7 +3,7 @@
  * FichesAdminTest — top-level "Policy Fiches" menu for the editorial agenda
  * (#198) and the people / stakeholder fiches (#197).
  *
- *  1. Menu: top-level entry with Editorial agenda and People submenus, editor capability.
+ *  1. Menu: Editorial agenda, Policies and People under the PressHub menu (#235), editor capability.
  *  2. Legacy Memory-tab links redirect to the new pages, keeping other arguments.
  *  3. The Memory page no longer renders the fiches tabs and links to the new menu.
  *  4. Assets only on the fiches pages.
@@ -40,17 +40,15 @@ $F = 'PressHub_AI_Fiches_Admin';
 $GLOBALS['MENU_PAGES']    = [];
 $GLOBALS['SUBMENU_PAGES'] = [];
 ( new $F() )->add_admin_menu();
-$top = $GLOBALS['MENU_PAGES'][0] ?? [];
-fa_check( 'menu: one top-level entry', 1 === count( $GLOBALS['MENU_PAGES'] ) );
-fa_check( 'menu: labelled Policy Fiches', 'Policy Fiches' === ( $top['menu_title'] ?? '' ) );
-fa_check( 'menu: lands on the agenda page', 'presshub-ai-agenda' === ( $top['menu_slug'] ?? '' ) );
-fa_check( 'menu: editor capability, same as Memory', PressHub_AI_Memory_Editor::CAPABILITY === ( $top['capability'] ?? '' ) );
-fa_check( 'menu: sits after Daily Briefing Hub (26) and before PressHub Social (30)', 27 === ( $top['position'] ?? null ) );
-$subs = array_column( $GLOBALS['SUBMENU_PAGES']['presshub-ai-agenda'] ?? [], 'menu_title', 'menu_slug' );
-fa_check( 'submenu: Editorial agenda', 'Editorial agenda' === ( $subs['presshub-ai-agenda'] ?? '' ) );
-fa_check( 'submenu: People', 'People' === ( $subs['presshub-ai-people'] ?? '' ) );
-fa_check( 'submenu: Policies', 'Policies' === ( $subs['presshub-ai-policies'] ?? '' ) );
-fa_check( 'submenu: Memory stays under Daily Briefing Hub', ! isset( $subs['presshub-ai-memory'] ) );
+fa_check( 'menu: no top-level entry of its own any more (#235)', 0 === count( $GLOBALS['MENU_PAGES'] ) );
+$subs = array_column( $GLOBALS['SUBMENU_PAGES'][ PressHub_Admin_Menu::PARENT ] ?? [], 'menu_title', 'menu_slug' );
+$caps = array_column( $GLOBALS['SUBMENU_PAGES'][ PressHub_Admin_Menu::PARENT ] ?? [], 'capability', 'menu_slug' );
+fa_check( 'submenu: Editorial agenda under PressHub', 'Editorial agenda' === ( $subs['presshub-ai-agenda'] ?? '' ) );
+fa_check( 'submenu: People under PressHub', 'People' === ( $subs['presshub-ai-people'] ?? '' ) );
+fa_check( 'submenu: Policies under PressHub', 'Policies' === ( $subs['presshub-ai-policies'] ?? '' ) );
+fa_check( 'submenu: editor capability, same as Memory', PressHub_AI_Memory_Editor::CAPABILITY === ( $caps['presshub-ai-people'] ?? '' ) );
+fa_check( 'submenu: Memory is not registered here', ! isset( $subs['presshub-ai-memory'] ) );
+fa_check( 'submenu: nothing left under the old Policy Fiches parent', empty( $GLOBALS['SUBMENU_PAGES']['presshub-ai-agenda'] ) );
 
 // 2. Legacy redirects.
 $u = $F::legacy_redirect_url( [ 'page' => 'presshub-ai-memory', 'tab' => 'agenda', 'agenda_notice' => 'saved' ] );

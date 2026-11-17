@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.40.1
+ * Version: 2.41.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -122,7 +122,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.40.1' );
+define( 'PRESSHUB_AI_VERSION', '2.41.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -152,6 +152,8 @@ require_once PRESSHUB_AI_DIR . 'includes/class-logger.php';
 // `PressHub_AI_Settings` facade retains its full sanitise_*/render_*
 // surface (PHP allows both an old class and a new, differently-named
 // class to coexist in the same runtime).
+require_once PRESSHUB_AI_DIR . 'includes/class-capabilities.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-admin-menu.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-storage.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-render.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-migration.php';
@@ -395,6 +397,7 @@ if ( ! defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' )
 }
 
 function presshub_ai_init() {
+    PressHub_Admin_Menu::register_hooks();
     new PressHub_AI_Settings();
     new PressHub_AI_Metaboxes();
     new PressHub_AI_Ajax_Handlers();

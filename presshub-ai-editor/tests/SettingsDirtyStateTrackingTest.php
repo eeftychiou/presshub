@@ -24,7 +24,7 @@ class SettingsDirtyStateTrackingTest
         // Case 1: Render Settings Page HTML contains dirty state elements
         // -------------------------------------------------------------
         $GLOBALS['OPTIONS_STORE'] = [];
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
 
         $renderer = new PressHub_AI_Settings_Render();
         ob_start();

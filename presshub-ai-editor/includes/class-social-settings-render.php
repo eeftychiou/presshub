@@ -12,6 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 require_once __DIR__ . '/class-social-logger.php';
 require_once __DIR__ . '/class-social-settings-storage.php';
 
@@ -23,7 +25,7 @@ class PressHub_Social_Settings_Render {
      * @return string
      */
     private function settings_cap(): string {
-        return (string) apply_filters( 'presshub_social_settings_cap', 'manage_options' );
+        return PressHub_Capabilities::social();
     }
 
     /**
@@ -53,7 +55,7 @@ class PressHub_Social_Settings_Render {
 
         ?>
         <div class="wrap presshub-social-settings-wrap">
-            <h1><?php echo esc_html__( 'PressHub Social AutoPost Settings', 'presshub-social-autopost' ); ?></h1>
+            <h1><?php echo esc_html__( 'PressHub — Social settings', 'presshub-social-autopost' ); ?></h1>
 
             <?php
             if ( isset( $_GET['message'] ) && 'prompts_reset' === $_GET['message'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -61,6 +63,9 @@ class PressHub_Social_Settings_Render {
             }
             if ( function_exists( 'settings_errors' ) ) {
                 settings_errors( 'presshub_social_options' );
+                // options.php files its "Settings saved." notice under "general",
+                // which WordPress only prints by itself on Settings-menu pages.
+                settings_errors( 'general' );
             }
             ?>
 
@@ -543,7 +548,7 @@ class PressHub_Social_Settings_Render {
     public function render_shorts_narration_intro(): void {
         $engine = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
         $label  = ( '' === $engine || 'gemini' === $engine || 0 === strpos( $engine, 'gemini' ) ) ? 'Gemini TTS' : 'Google Cloud TTS';
-        $url    = admin_url( 'options-general.php?page=presshub-ai#briefing-voices' );
+        $url    = admin_url( 'admin.php?page=presshub-ai#briefing-voices' );
         ?>
         <p>
             <?php echo esc_html__( 'Speech engine:', 'presshub-social-autopost' ); ?>
@@ -591,7 +596,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_post_images_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_post_images_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Post AI-generated images with each article instead of its featured image. The images are made in the background right after publishing with the image generator set in PressHub AI Editor → Settings → AI Featured Images, and are shared between platforms. A post waits up to 20 minutes for them; if they fail, it goes out with the featured image. Podcast shorts are not affected.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Post AI-generated images with each article instead of its featured image. The images are made in the background right after publishing with the image generator set in PressHub → Settings → AI Featured Images, and are shared between platforms. A post waits up to 20 minutes for them; if they fail, it goes out with the featured image. Podcast shorts are not affected.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }

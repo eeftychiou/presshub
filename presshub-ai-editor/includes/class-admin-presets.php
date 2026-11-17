@@ -1,6 +1,8 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-capabilities.php';
+
 require_once __DIR__ . '/class-preset-ui.php';
 
 /**
@@ -34,7 +36,10 @@ class PressHub_AI_Admin_Presets {
      * plugin-scope config (and translated strings) localized for it.
      */
     public function enqueue_scripts( $hook ) {
-        if ( 'settings_page_presshub-ai-presets' !== $hook ) {
+        $hook = (string) $hook;
+        $is_presets = 'settings_page_presshub-ai-presets' === $hook
+            || ( class_exists( 'PressHub_Admin_Menu' ) && PressHub_Admin_Menu::is_page_hook( $hook, 'presshub-ai-presets' ) );
+        if ( ! $is_presets ) {
             return;
         }
         wp_enqueue_script( self::SCRIPT_HANDLE, PRESSHUB_AI_URL . 'assets/presets.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
@@ -68,14 +73,15 @@ class PressHub_AI_Admin_Presets {
      * Filterable, mirroring the settings page gate (P3).
      */
     public function settings_cap(): string {
-        return (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        return PressHub_Capabilities::manage();
     }
 
     public function add_presets_submenu() {
+        // #235: Presets stays its own page (Q6), now under the PressHub menu.
         add_submenu_page(
-            'options-general.php',
-            __( 'PressHub AI — Instruction Presets', 'presshub-ai-editor' ),
-            __( 'PressHub AI Presets', 'presshub-ai-editor' ),
+            class_exists( 'PressHub_Admin_Menu' ) ? PressHub_Admin_Menu::PARENT : 'presshub-ai-briefing-hub',
+            __( 'PressHub — Presets', 'presshub-ai-editor' ),
+            __( 'Presets', 'presshub-ai-editor' ),
             $this->settings_cap(),
             'presshub-ai-presets',
             [ $this, 'render_page' ]
@@ -128,7 +134,7 @@ class PressHub_AI_Admin_Presets {
         ];
         ?>
         <div class="wrap">
-            <h1><?php echo esc_html( __( 'PressHub AI — Instruction Presets', 'presshub-ai-editor' ) ); ?></h1>
+            <h1><?php echo esc_html( __( 'PressHub — Presets', 'presshub-ai-editor' ) ); ?></h1>
             <p class="description">
                 <?php echo esc_html( __( 'Plugin-default presets are available to every author as a starting point. Presets are appended to a fixed editorial system prompt — they cannot replace it.', 'presshub-ai-editor' ) ); ?>
             </p>

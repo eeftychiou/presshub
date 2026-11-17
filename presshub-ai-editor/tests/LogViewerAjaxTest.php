@@ -22,7 +22,7 @@ $failures = [];
 function lva_reset_env(): void {
     $GLOBALS['JSON_RESPONSES'] = [];
     $GLOBALS['NONCE_VALID'] = true;
-    $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+    $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
     $_POST = [
         'nonce' => 'valid_nonce',
     ];

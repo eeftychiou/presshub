@@ -26,7 +26,7 @@ class SettingsStickySaveBarTest
         // Case 1: Render Settings Page HTML contains sticky save bar markup
         // -------------------------------------------------------------
         $GLOBALS['OPTIONS_STORE'] = [];
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
 
         $renderer = new PressHub_AI_Settings_Render();
         ob_start();

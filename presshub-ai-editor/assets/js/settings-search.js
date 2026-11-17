@@ -131,7 +131,7 @@
                 var where = (data.tab_labels && data.tab_labels[e.page] && data.tab_labels[e.page][e.tab]) || e.tab;
                 var $li = $('<li role="option"></li>').attr('id', 'presshub-search-opt-' + i).attr('aria-selected', i === active ? 'true' : 'false');
                 $li.append($('<strong></strong>').text(e.label));
-                var meta = where + (e.page !== currentPage ? ' ↗ ' + (e.page === 'social' ? 'PressHub Social' : 'PressHub AI') : '');
+                var meta = where + (e.page !== currentPage ? ' ↗ ' + (e.page === 'social' ? 'Social settings' : 'Settings') : '');
                 $li.append(' ', $('<span class="presshub-search-meta"></span>').text(meta));
                 if (i === active) {
                     $li.addClass('is-active');

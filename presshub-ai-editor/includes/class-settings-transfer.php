@@ -16,6 +16,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 require_once __DIR__ . '/class-settings-registry.php';
 
 class PressHub_Settings_Transfer {
@@ -223,7 +225,7 @@ class PressHub_Settings_Transfer {
     // ------------------------------------------------------------------
 
     private static function guard(): void {
-        $cap = function_exists( 'apply_filters' ) ? (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' ) : 'manage_options';
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_die( esc_html__( 'You are not allowed to export or import PressHub settings.', 'presshub-ai-editor' ), 403 );
         }
@@ -235,7 +237,7 @@ class PressHub_Settings_Transfer {
     }
 
     public static function settings_url( array $args = [] ): string {
-        $url = admin_url( 'options-general.php?page=presshub-ai' );
+        $url = admin_url( 'admin.php?page=presshub-ai' );
         if ( $args && function_exists( 'add_query_arg' ) ) {
             $url = add_query_arg( $args, $url );
         }

@@ -43,7 +43,7 @@ class SettingsPhase2LayoutTest {
 
         // 1. AI page layout.
         $GLOBALS['OPTIONS_STORE']     = [];
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         PressHub_Settings_Registry::reset();
         PressHub_Settings_Registry::ensure_registered();
         ob_start();

@@ -506,7 +506,7 @@ class PressHub_Social_TikTok_Shorts {
         }
         $url = PressHub_Social_TikTok_Music::pick_track( $mood, $job_id );
         if ( '' === $url ) {
-            PressHub_Social_Logger::warning( sprintf( 'TikTok short job #%d has no %s music track, so it is rendered without music. Generate the tracks in PressHub Social → Settings → Automation Worker → Generate Music Tracks.', $job_id, $mood ) );
+            PressHub_Social_Logger::warning( sprintf( 'TikTok short job #%d has no %s music track, so it is rendered without music. Generate the tracks in PressHub → Social settings → Automation Worker → Generate Music Tracks.', $job_id, $mood ) );
             return [ 'mood' => $mood ];
         }
         return [
@@ -765,7 +765,7 @@ class PressHub_Social_TikTok_Shorts {
         if ( '' === $prompt ) {
             $option = $article ? 'presshub_social_prompt_tiktok_article_short' : 'presshub_social_prompt_tiktok_shorts';
             PressHub_Social_Logger::error( sprintf( 'TikTok shorts prompt is empty (%s).', $option ) );
-            return new WP_Error( 'missing_tiktok_shorts_prompt', sprintf( 'the TikTok shorts prompt (%s) is empty. Restore it in PressHub Social → Settings → Prompts.', $option ) );
+            return new WP_Error( 'missing_tiktok_shorts_prompt', sprintf( 'the TikTok shorts prompt (%s) is empty. Restore it in PressHub → Social settings → Prompts.', $option ) );
         }
 
         $count     = $article ? 1 : max( 1, $count );

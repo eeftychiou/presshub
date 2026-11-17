@@ -20,6 +20,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 require_once __DIR__ . '/class-provider-defaults.php';
 require_once __DIR__ . '/class-settings-storage.php';
 require_once __DIR__ . '/class-settings-render.php';
@@ -47,7 +49,7 @@ class PressHub_AI_Settings {
     }
 
     public function enqueue_scripts( $hook ) {
-        if ( 'settings_page_presshub-ai' === $hook || false !== strpos( (string) $hook, 'presshub-ai' ) ) {
+        if ( self::is_settings_hook( $hook ) || false !== strpos( (string) $hook, 'presshub-ai' ) ) {
             require_once __DIR__ . '/class-provider-defaults.php';
             require_once __DIR__ . '/class-provider-store.php';
 
@@ -57,7 +59,7 @@ class PressHub_AI_Settings {
 
             wp_enqueue_style( 'presshub-ai-admin-css', PRESSHUB_AI_URL . 'assets/admin.css', [], PRESSHUB_AI_VERSION );
             wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
-            if ( 'settings_page_presshub-ai' === $hook && class_exists( 'PressHub_Settings_Registry' ) ) {
+            if ( self::is_settings_hook( $hook ) && class_exists( 'PressHub_Settings_Registry' ) ) {
                 // #234: settings search, per-field defaults and the what's-new panel.
                 PressHub_Settings_Registry::ensure_registered();
                 wp_enqueue_style( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/css/settings-search.css', [], PRESSHUB_AI_VERSION );
@@ -66,6 +68,7 @@ class PressHub_AI_Settings {
             }
             wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
                 'ajax_url'             => admin_url( 'admin-ajax.php' ),
+                'usage_url'            => admin_url( 'admin.php?page=presshub-ai-usage' ),
                 'nonce'                => wp_create_nonce( 'presshub_ai_nonce' ),
                 'provider_templates'   => PressHub_AI_Provider_Defaults::get_templates(),
                 'configured_providers' => array_map( function( $p ) {
@@ -82,17 +85,28 @@ class PressHub_AI_Settings {
      * filterable via presshub_ai_settings_cap.
      */
     public function settings_cap(): string {
-        return (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        return PressHub_Capabilities::manage();
     }
 
+    /** #235: Settings sits under the one PressHub menu (was Settings → PressHub AI). */
     public function add_settings_page() {
-        add_options_page(
-            __( 'PressHub AI Settings', 'presshub-ai-editor' ),
-            __( 'PressHub AI', 'presshub-ai-editor' ),
+        add_submenu_page(
+            class_exists( 'PressHub_Admin_Menu' ) ? PressHub_Admin_Menu::PARENT : 'presshub-ai-briefing-hub',
+            __( 'PressHub — Settings', 'presshub-ai-editor' ),
+            __( 'Settings', 'presshub-ai-editor' ),
             $this->settings_cap(),
             'presshub-ai',
             [ $this, 'render_settings_page' ]
         );
+    }
+
+    /** Whether an admin page hook is the PressHub Settings page (old and new hook names). */
+    public static function is_settings_hook( $hook ): bool {
+        $hook = (string) $hook;
+        if ( 'settings_page_presshub-ai' === $hook ) {
+            return true;
+        }
+        return class_exists( 'PressHub_Admin_Menu' ) && PressHub_Admin_Menu::is_page_hook( $hook, 'presshub-ai' );
     }
 
 
