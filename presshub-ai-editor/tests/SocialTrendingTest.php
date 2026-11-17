@@ -435,6 +435,9 @@ $T::$sideload = static function () { return new WP_Error( 'http', 'expired' ); }
 $tf = $T::normalize_item( st_post( 'tiktok', '304', 900, 10, [ 'url' => 'https://www.tiktok.com/@acct304/photo/304', 'thumbnail' => 'https://p16-sign.tiktokcdn.com/f.jpeg' ] ), $now );
 $tf_html = $T::embed_block( $tf );
 st_check( 'photo: failed copy, quote card with link', false !== strpos( $tf_html, 'presshub-trending-fallback' ) && false === strpos( $tf_html, 'wp:image' ) && ! isset( get_option( $T::OPTION_IMAGES )['tiktok_304'] ) );
+$failed_calls = 0;
+$T::$sideload = static function () use ( &$failed_calls ) { $failed_calls++; return new WP_Error( 'http', 'expired' ); };
+st_check( 'photo: failed copy not downloaded again for the featured image', 0 === $T::maybe_set_featured_image( 80, [ $tf ] ) && 0 === $failed_calls && empty( $GLOBALS['THUMBS'][80] ) );
 $T::$sideload = static function ( $url ) use ( &$sideloads ) { $sideloads[] = [ $url ]; return 9200 + count( $sideloads ); };
 $GLOBALS['OPTIONS_STORE'][ $T::OPTION_IMAGES ] = [];
 for ( $i = 0; $i < $T::IMAGES_KEPT + 5; $i++ ) {

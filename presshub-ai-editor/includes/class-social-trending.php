@@ -1401,6 +1401,9 @@ class PressHub_AI_Social_Trending {
     /** @var callable|null fn( string $image_url, int $post_id, string $desc ): int|WP_Error — sideload override for tests. */
     public static $sideload = null;
 
+    /** TikTok photo image URLs whose copy failed in this request, so one roundup build downloads each at most once. */
+    private static $photo_failed = [];
+
     /** @var array<string, bool> oEmbed results within one request. */
     private static $oembed_cache = [];
 
@@ -1614,7 +1617,7 @@ class PressHub_AI_Social_Trending {
             . '.presshub-trending-card .wp-block-embed,.presshub-trending-embed{margin:0;max-width:100%;overflow:hidden;}'
             . '.presshub-trending-embed .instagram-media,.presshub-trending-embed .fb-post,.presshub-trending-embed .fb-video{max-width:540px;margin:0 auto;}'
             . '.presshub-trending-fallback{margin:0;}'
-            . '.presshub-trending-card .presshub-tiktok-photo-card{margin:0;}'
+            . '.presshub-trending-card .presshub-tiktok-photo-card{margin:0 auto;}'
             . '.presshub-tiktok-photo-card img{max-width:min(100%,420px);height:auto;}'
             . '.presshub-trending-summary{font-size:1.1em;line-height:1.6;border-left:4px solid currentColor;padding:.25rem 0 .25rem 1rem;margin:0 0 1.5rem;}'
             . '@media (prefers-color-scheme:dark){.presshub-trending-card{border-color:rgba(255,255,255,.15);}}';
@@ -1663,12 +1666,13 @@ class PressHub_AI_Social_Trending {
             }
         }
         $thumb = (string) ( $it['thumbnail'] ?? '' );
-        if ( '' === $thumb ) {
+        if ( '' === $thumb || isset( self::$photo_failed[ $thumb ] ) ) {
             return null;
         }
         $desc = sprintf( 'TikTok · %s', '' !== (string) $it['author_name'] ? $it['author_name'] : $it['handle'] );
         $att  = self::sideload( $thumb, 0, $desc );
         if ( is_wp_error( $att ) || (int) $att <= 0 ) {
+            self::$photo_failed[ $thumb ] = true;
             self::log( 'warning', 'Social trending: TikTok photo image not copied, showing a text card: ' . ( is_wp_error( $att ) ? $att->get_error_message() : 'no attachment' ), [ 'url' => (string) $it['url'] ] );
             return null;
         }
@@ -1713,8 +1717,13 @@ class PressHub_AI_Social_Trending {
             return 0;
         }
         $desc = sprintf( '%s · %s', self::PLATFORM_LABELS[ $pick['platform'] ], '' !== $pick['author_name'] ? $pick['author_name'] : $pick['handle'] );
-        $photo = 'tiktok' === $pick['platform'] && PressHub_AI_Embeds::is_tiktok_photo_url( (string) $pick['url'] ) ? self::photo_image( $pick ) : null;
-        $att   = null !== $photo ? $photo['id'] : self::sideload( $pick['thumbnail'], $post_id, $desc );
+        if ( 'tiktok' === $pick['platform'] && PressHub_AI_Embeds::is_tiktok_photo_url( (string) $pick['url'] ) ) {
+            // Same image as the roundup card: reuse its copy; a failed copy is not downloaded again.
+            $photo = self::photo_image( $pick );
+            $att   = null !== $photo ? $photo['id'] : 0;
+        } else {
+            $att = self::sideload( $pick['thumbnail'], $post_id, $desc );
+        }
         if ( is_wp_error( $att ) || (int) $att <= 0 ) {
             self::log( 'info', 'Social trending: featured image not set: ' . ( is_wp_error( $att ) ? $att->get_error_message() : 'no attachment' ) );
             return 0;
