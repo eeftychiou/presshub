@@ -3043,7 +3043,7 @@ class PressHub_AI_Settings_Render {
                         echo self::esc_html_safe( sprintf(
                             /* translators: %d: days */
                             __( 'Kept for %d days. Every retention period is set in one table under Site & system.', 'presshub-ai-editor' ),
-                            (int) get_option( 'presshub_ai_memory_retention_days', 90 )
+                            (int) PressHub_AI_Settings_Storage::get_memory_retention_days()
                         ) );
                         ?> <a href="<?php echo self::esc_attr_safe( PressHub_Settings_Sections::url( 'site-system', 'logging-retention' ) ); ?>"><?php echo esc_html__( 'Change in Logging & retention', 'presshub-ai-editor' ); ?></a></p>
                     </td>
