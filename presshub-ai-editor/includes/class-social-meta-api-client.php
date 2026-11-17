@@ -92,6 +92,9 @@ class PressHub_Social_Meta_API_Client {
             );
         }
 
+        // A personal (user) token cannot post as the Page; use the Page's own token.
+        $token = self::facebook_page_token( $page_id, $token );
+
         $copy      = (string) ( $job['post_copy'] ?? '' );
         $media_url = ! empty( $job['media_url'] ) ? (string) $job['media_url'] : '';
         $has_image = ! empty( $media_url ) && ( empty( $job['media_type'] ) || 'image' === $job['media_type'] );
@@ -151,6 +154,61 @@ class PressHub_Social_Meta_API_Client {
             'external_post_url' => "https://www.facebook.com/{$id}",
             'metadata'          => [ 'raw_response' => $data ],
         ];
+    }
+
+    /**
+     * The token to post to a Facebook Page with. The stored Meta Access Token may be a
+     * personal (user) token, e.g. a long-lived one from the Access Token Debugger: Graph
+     * rejects Page posts made with it ("(#200) The permission(s) publish_actions are not
+     * available"). `GET /{page_id}?fields=access_token` with that token returns the Page's
+     * own token (one made from a long-lived user token does not expire). A Page token
+     * passed in is returned as is (Graph gives back no other token for it). The result is
+     * cached for 6 hours per stored token; on any lookup error the stored token is used and
+     * a WARNING is logged, so a token that already is a Page token keeps working.
+     */
+    public static function facebook_page_token( string $page_id, string $token ): string {
+        if ( '' === $page_id || '' === $token ) {
+            return $token;
+        }
+        $cache_key = 'presshub_fb_page_token_' . md5( $page_id . '|' . $token );
+        $cached    = function_exists( 'get_transient' ) ? get_transient( $cache_key ) : false;
+        if ( is_string( $cached ) && '' !== $cached ) {
+            return $cached;
+        }
+
+        $url = 'https://graph.facebook.com/' . self::GRAPH_API_VERSION . '/' . rawurlencode( $page_id )
+            . '?fields=access_token&access_token=' . rawurlencode( $token );
+        $res = null !== self::$http_get
+            ? call_user_func( self::$http_get, $url )
+            : wp_remote_get( $url, [ 'timeout' => 15, 'sslverify' => true ] );
+
+        if ( is_wp_error( $res ) ) {
+            PressHub_Social_Logger::warning( 'Facebook Page token lookup failed (' . $res->get_error_message() . '); posting with the stored Meta Access Token.' );
+            return $token;
+        }
+        if ( is_array( $res ) && ( isset( $res['access_token'] ) || isset( $res['error'] ) || isset( $res['id'] ) ) ) {
+            $data = $res;
+        } else {
+            $data = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+        }
+        if ( ! is_array( $data ) || ! empty( $data['error'] ) ) {
+            $msg = is_array( $data ) ? (string) ( $data['error']['message'] ?? 'unknown error' ) : 'invalid response';
+            PressHub_Social_Logger::warning( 'Facebook Page token lookup failed (' . $msg . '); posting with the stored Meta Access Token.' );
+            return $token;
+        }
+
+        $page_token = (string) ( $data['access_token'] ?? '' );
+        if ( '' === $page_token ) {
+            // Already a Page token (or the user cannot manage the Page): post with it as is.
+            return $token;
+        }
+        if ( $page_token !== $token ) {
+            PressHub_Social_Logger::info( sprintf( 'Facebook: using the Page access token of Page %s derived from the stored Meta Access Token.', $page_id ) );
+        }
+        if ( function_exists( 'set_transient' ) ) {
+            set_transient( $cache_key, $page_token, 6 * HOUR_IN_SECONDS );
+        }
+        return $page_token;
     }
 
     /**
