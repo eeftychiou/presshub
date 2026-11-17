@@ -111,6 +111,17 @@ class PressHub_Settings_Sections {
         ],
     ];
 
+    /** Other #hashes the former AI page understood (tab aliases) => [ section, anchor ]. */
+    const LEGACY_HASH_ALIASES = [
+        'scorecard'        => [ 'writing-qa', 'qa-gate' ],
+        'scorecards'       => [ 'writing-qa', 'qa-gate' ],
+        'editorial-qa'     => [ 'writing-qa', 'qa-gate' ],
+        'editorial_qa'     => [ 'writing-qa', 'qa-gate' ],
+        'seo'              => [ 'writing-qa', 'seo' ],
+        'social-listening' => [ 'social-listening', '' ],
+        'memory'           => [ 'editorial-knowledge', 'knowledge-memory' ],
+    ];
+
     /**
      * The sections, in menu order: label, one-line intro and the groups shown
      * in the "On this page" bar (group anchor => label). 'social' marks a
@@ -368,8 +379,22 @@ class PressHub_Settings_Sections {
      */
     public static function legacy_hash_urls(): array {
         $out = [];
+        // Group anchors of phase 2 (#briefing-sources, #featured-images…), now in one section each.
+        foreach ( self::definitions() as $slug => $def ) {
+            foreach ( array_keys( (array) ( $def['groups'] ?? [] ) ) as $group ) {
+                $out[ (string) $group ] = self::url( $slug, (string) $group );
+            }
+        }
         foreach ( self::LEGACY_TARGETS['ai'] as $tab => $target ) {
             $out[ $tab ] = self::url( $target[0], $target[1] );
+        }
+        foreach ( self::LEGACY_HASH_ALIASES as $hash => $target ) {
+            $out[ $hash ] = self::url( $target[0], $target[1] );
+        }
+        // Token & Usage Logs moved to PressHub → Usage & logs (#235).
+        $usage = function_exists( 'admin_url' ) ? admin_url( 'admin.php?page=presshub-ai-usage' ) : '';
+        foreach ( [ 'token_logs', 'token_usage', 'usage' ] as $hash ) {
+            $out[ $hash ] = $usage;
         }
         return $out;
     }

@@ -61,6 +61,15 @@
             return false;
         }
         $(el).parents('details').attr('open', 'open');
+        // Podcast prompts sit in style and presenter-count panes: open the pane's tab.
+        var stylePane = $(el).closest('.presshub-style-pane')[0];
+        if (stylePane && stylePane.id) {
+            $('.presshub-style-tab[data-style="' + stylePane.id.replace(/^presshub-style-/, '') + '"]').trigger('click');
+        }
+        var hostPane = $(el).closest('.presshub-host-pane')[0];
+        if (hostPane && hostPane.id) {
+            $('.presshub-host-tab[data-target="' + hostPane.id + '"]').trigger('click');
+        }
         if (typeof el.scrollIntoView === 'function') {
             el.scrollIntoView({ block: 'center' });
         }
@@ -87,6 +96,10 @@
     function goTo(entry) {
         if (entry.section !== currentSection) {
             if (urls[entry.section]) {
+                // Unsaved changes: the same "Leave this page?" question as the section links.
+                if (typeof window.PressHubSettingsConfirmLeave === 'function' && !window.PressHubSettingsConfirmLeave()) {
+                    return;
+                }
                 window.location.href = urls[entry.section] + '#' + encodeURIComponent(entry.key);
             }
             return;
@@ -104,12 +117,13 @@
             return;
         }
         var hasSection = /[?&]section=/.test(window.location.search);
-        if (!hasSection && data.legacy_hashes && data.legacy_hashes[hash]) {
+        if (!hasSection && data.legacy_hashes && data.legacy_hashes[hash] && !document.getElementById(hash)) {
             window.location.replace(data.legacy_hashes[hash]);
             return;
         }
         var target = document.getElementById(hash);
-        if (target && document.getElementById('presshub-settings-main').contains(target)) {
+        // A hidden input (sources, image pools) is found through fieldFor() below.
+        if (target && target.type !== 'hidden' && document.getElementById('presshub-settings-main').contains(target)) {
             $(target).parents('details').attr('open', 'open');
             if (/^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) {
                 reveal(target);

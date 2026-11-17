@@ -192,6 +192,70 @@ if ( [] !== get_option( 'presshub_social_enabled_platforms' ) ) {
     $failures[] = 'A "_present" marker with nothing ticked should save an empty platform list; got ' . var_export( get_option( 'presshub_social_enabled_platforms' ), true );
 }
 
+// List fields: admin.js posts "option[]" as one array of every ticked value.
+$GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_enabled_platforms' => [ 'tiktok' ] ];
+sst_ajax( [ $ajax, 'save_settings_section' ], [ 'tab' => 'social-publishing', 'payload_b64' => base64_encode( (string) json_encode( [
+    'presshub_social_enabled_platforms_present' => '1',
+    'presshub_social_enabled_platforms[]'       => [ 'twitter', 'facebook', 'instagram', 'tiktok' ],
+] ) ) ] );
+$saved = get_option( 'presshub_social_enabled_platforms' );
+if ( ! is_array( $saved ) || 4 !== count( $saved ) || array_diff( [ 'twitter', 'facebook', 'instagram', 'tiktok' ], $saved ) ) {
+    $failures[] = 'Saving four ticked platforms should keep all four; got ' . var_export( $saved, true );
+}
+if ( [ 'a', 'b' ] !== ( PressHub_Settings_Registry::expand_bracket_keys( [ 'x[]' => [ 'a', 'b' ] ] )['x'] ?? null ) ) {
+    $failures[] = 'expand_bracket_keys() must not nest a list posted as an array.';
+}
+if ( [ 'a' ] !== ( PressHub_Settings_Registry::expand_bracket_keys( [ 'x[]' => 'a' ] )['x'] ?? null ) ) {
+    $failures[] = 'expand_bracket_keys() should still accept a single "option[]" value.';
+}
+$js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/admin.js' );
+if ( 2 !== substr_count( $js, '= collectSettingsPayload($' ) || false === strpos( $js, "if (/\\[\\]$/.test(name))" ) ) {
+    $failures[] = 'Both settings saves in admin.js should use collectSettingsPayload(), which posts "option[]" fields as lists.';
+}
+
+// A new Social secret typed while "Remove" is still ticked is stored, not removed.
+$GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_worker_secret' => 'old-secret' ];
+sst_ajax( [ $ajax, 'save_settings_section' ], [ 'tab' => 'connections', 'payload_b64' => base64_encode( '{"presshub_social_worker_secret":"brand-new-secret","presshub_social_worker_secret_remove":"1"}' ) ] );
+if ( 'brand-new-secret' !== get_option( 'presshub_social_worker_secret' ) ) {
+    $failures[] = 'A new Social secret should win over a ticked Remove; got ' . var_export( get_option( 'presshub_social_worker_secret' ), true );
+}
+if ( false === strpos( $js, 'function resetSocialSecretFields()' ) ) {
+    $failures[] = 'admin.js should untick Social "Remove" boxes after a successful save.';
+}
+
+// Empty featured-image pools say so on load (the notice is not hidden).
+$GLOBALS['OPTIONS_STORE'] = [];
+$briefing = presshub_test_render_section( 'daily-briefing' );
+if ( ! preg_match( '/class="presshub-image-pool-empty"/', $briefing ) || ! preg_match( '/class="presshub-image-pool-fallback description"/', $briefing ) ) {
+    $failures[] = 'An empty image pool should show its "No images in pool" and Noon fallback notices on load.';
+}
+if ( preg_match( "/\\? '' : ''/", (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-settings-render.php' ) ) ) {
+    $failures[] = "class-settings-render.php has a ternary that prints '' either way (a lost conditional class).";
+}
+
+// Old #hashes of the former page land in their section.
+$hashes = PressHub_Settings_Registry::search_payload( 'connections' )['legacy_hashes'] ?? [];
+foreach ( [
+    'briefing-voices' => 'section=daily-briefing#briefing-voices',
+    'briefing-sources' => 'section=daily-briefing#briefing-sources',
+    'featured-images'  => 'section=writing-qa#featured-images',
+    'memory'           => 'section=editorial-knowledge#knowledge-memory',
+    'seo'              => 'section=writing-qa#seo',
+    'social-listening' => 'section=social-listening',
+    'images'           => 'section=writing-qa#featured-images',
+    'token_logs'       => 'page=presshub-ai-usage',
+    'usage'            => 'page=presshub-ai-usage',
+] as $hash => $expect ) {
+    if ( false === strpos( (string) ( $hashes[ $hash ] ?? '' ), $expect ) ) {
+        $failures[] = "Old #{$hash} should go to {$expect}; got " . var_export( $hashes[ $hash ] ?? null, true );
+    }
+}
+
+// The export link downloads; it is not a page the leave prompt guards.
+if ( ! preg_match( '/<a class="button" href="[^"]*"\s+download>Export settings/', presshub_test_render_section( 'site-system' ) ) ) {
+    $failures[] = 'The settings export link should carry the download attribute.';
+}
+
 // ---------------------------------------------------------------------
 // 5. Prompts reset: link and redirect target.
 // ---------------------------------------------------------------------

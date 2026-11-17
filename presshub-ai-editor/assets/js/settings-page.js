@@ -53,14 +53,30 @@
             ? (t.leave_confirm_one || "Leave this page? Your change in %s isn't saved.").replace('%s', sectionLabel)
             : (t.leave_confirm || "Leave this page? Your %1$d changes in %2$s aren't saved.").replace('%1$d', String(n)).replace('%2$s', sectionLabel);
         if (window.confirm(msg)) {
-            var s = state();
-            if (s) {
-                s.leaving = true;
-            }
+            markLeaving();
             return true;
         }
         return false;
     }
+
+    /**
+     * Skips the beforeunload prompt for the navigation the user just
+     * confirmed. Reset shortly after, in case the link did not leave the
+     * page (a download), so closing the tab later still asks.
+     */
+    function markLeaving() {
+        var s = state();
+        if (!s) {
+            return;
+        }
+        s.leaving = true;
+        setTimeout(function () {
+            s.leaving = false;
+        }, 2000);
+    }
+
+    // settings-search.js asks the same question before opening another section.
+    window.PressHubSettingsConfirmLeave = confirmLeave;
 
     function leavesPage(a) {
         var href = a.getAttribute('href') || '';
@@ -122,10 +138,7 @@
             e.preventDefault();
             return;
         }
-        var s = state();
-        if (s) {
-            s.leaving = true;
-        }
+        markLeaving();
     });
 
     // ------------------------------------------------------------------

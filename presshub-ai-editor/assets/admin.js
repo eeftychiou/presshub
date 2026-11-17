@@ -1379,6 +1379,7 @@ jQuery(document).ready(function($) {
         var $pass = $('#presshub_ai_press_inbox_password');
         var $remove = $('#presshub_ai_remove_press_inbox_password');
         if (!$pass.length) {
+            resetSocialSecretFields();
             return;
         }
         var typed = String($pass.val() || '');
@@ -1391,6 +1392,33 @@ jQuery(document).ready(function($) {
             $remove.prop('checked', false);
             $remove.closest('label').hide();
         }
+        resetSocialSecretFields();
+    }
+
+    /**
+     * #246: Social secrets (Connections) after a successful save: a new value
+     * shows masked, a cleared one shows empty, and "Remove" is unticked so a
+     * secret typed later is not removed again.
+     */
+    function resetSocialSecretFields() {
+        $('#presshub-settings-page input[type="checkbox"][name$="_remove"]').each(function() {
+            var $remove = $(this);
+            var option = String($remove.attr('name') || '').replace(/_remove$/, '');
+            var $field = $('[name="' + option + '"]');
+            if (!$field.length || !$field.is('input[type="password"]')) {
+                return;
+            }
+            var typed = String($field.val() || '');
+            var hasNew = typed !== '' && typed.indexOf('••••') === -1;
+            if (hasNew) {
+                $field.val('••••••••');
+                $remove.prop('checked', false);
+            } else if ($remove.is(':checked')) {
+                $field.val('');
+                $remove.prop('checked', false);
+                $remove.closest('label').hide();
+            }
+        });
     }
 
     function getTabFormSnapshot(tabKey) {
@@ -1675,6 +1703,22 @@ jQuery(document).ready(function($) {
     // ------------------------------------------------------------------
     // Settings Tabs Navigation with Modular Mapping & Dynamic Dashboards
     // ------------------------------------------------------------------
+    /** The "empty prompt" warning under the QA prompt follows its textarea. */
+    function bindQaPromptWarnings() {
+        $(document).on('input change', '.presshub-qa-prompt-textarea', function() {
+            var $textarea = $(this);
+            var $pane = $textarea.closest('.presshub-qa-pane');
+            var $warning = $pane.find('.presshub-empty-prompt-warning');
+            if ($warning.length) {
+                if ($.trim($textarea.val()) === '') {
+                    $warning.slideDown(150);
+                } else {
+                    $warning.slideUp(150);
+                }
+            }
+        });
+    }
+
     function initSettingsTabs() {
         // #235: Token & Usage Logs moved to PressHub → Usage & logs.
         if ($('#presshub-usage-logs-page').length) {
@@ -1687,6 +1731,7 @@ jQuery(document).ready(function($) {
         if ($('#presshub-settings-page').length) {
             initTabBaselines();
             updateStickySaveBarDirtyState();
+            bindQaPromptWarnings();
             $(document).on('input change keyup', '#presshub-ai-settings-form input, #presshub-ai-settings-form select, #presshub-ai-settings-form textarea', function() {
                 var $pane = $(this).closest('.presshub-tab-pane');
                 if ($pane.length && $pane.attr('id')) {
@@ -1979,18 +2024,7 @@ jQuery(document).ready(function($) {
             }
         });
 
-        $(document).on('input change', '.presshub-qa-prompt-textarea', function() {
-            var $textarea = $(this);
-            var $pane = $textarea.closest('.presshub-qa-pane');
-            var $warning = $pane.find('.presshub-empty-prompt-warning');
-            if ($warning.length) {
-                if ($.trim($textarea.val()) === '') {
-                    $warning.slideDown(150);
-                } else {
-                    $warning.slideUp(150);
-                }
-            }
-        });
+        bindQaPromptWarnings();
 
         $(document).on('change', '#presshub-mobile-tab-select', function(e) {
             var tabKey = $(this).val();
@@ -3812,6 +3846,53 @@ jQuery(document).ready(function($) {
         return false;
     }
 
+    /**
+     * The settings fields under $container as a flat object for the AJAX save.
+     * List fields (name="option[]") post every ticked or selected value as an
+     * array, as a form post to options.php did (#246: Social platforms).
+     */
+    function collectSettingsPayload($container) {
+        var payload = {};
+        $container.find('input, select, textarea').each(function() {
+            var $el = $(this);
+            var name = $el.attr('name');
+            if (!name || name === 'action' || name === 'option_page' || name === '_wp_http_referer' || name === '_wpnonce') {
+                return;
+            }
+            if (/\[\]$/.test(name)) {
+                var list = Array.isArray(payload[name]) ? payload[name] : [];
+                if ($el.is(':checkbox') || $el.is(':radio')) {
+                    if ($el.is(':checked')) {
+                        list.push($el.val() || '1');
+                    }
+                } else {
+                    var v = $el.val();
+                    if (Array.isArray(v)) {
+                        list = list.concat(v);
+                    } else if (v !== null && v !== undefined) {
+                        list.push(v);
+                    }
+                }
+                if (list.length) {
+                    payload[name] = list;
+                }
+                return;
+            }
+            if ($el.is(':checkbox')) {
+                if ($el.is(':checked')) {
+                    payload[name] = $el.val() || '1';
+                }
+            } else if ($el.is(':radio')) {
+                if ($el.is(':checked')) {
+                    payload[name] = $el.val();
+                }
+            } else {
+                payload[name] = $el.val();
+            }
+        });
+        return payload;
+    }
+
     function saveSettingsTab(tabKey) {
         if (!tabKey) {
             return;
@@ -3858,25 +3939,7 @@ jQuery(document).ready(function($) {
             $stickyStatus.removeClass('is-success is-error').text(__('Saving...', 'presshub-ai-editor')).show();
         }
 
-        var settingsPayload = {};
-        $tabPane.find('input, select, textarea').each(function() {
-            var $el = $(this);
-            var name = $el.attr('name');
-            if (!name || name === 'action' || name === 'option_page' || name === '_wp_http_referer' || name === '_wpnonce') {
-                return;
-            }
-            if ($el.is(':checkbox')) {
-                if ($el.is(':checked')) {
-                    settingsPayload[name] = $el.val() || '1';
-                }
-            } else if ($el.is(':radio')) {
-                if ($el.is(':checked')) {
-                    settingsPayload[name] = $el.val();
-                }
-            } else {
-                settingsPayload[name] = $el.val();
-            }
-        });
+        var settingsPayload = collectSettingsPayload($tabPane);
 
         var jsonString = JSON.stringify(settingsPayload);
         var base64Payload = '';
@@ -4070,25 +4133,7 @@ jQuery(document).ready(function($) {
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
 
-        var settingsPayload = {};
-        $form.find('input, select, textarea').each(function() {
-            var $el = $(this);
-            var name = $el.attr('name');
-            if (!name || name === 'action' || name === 'option_page' || name === '_wp_http_referer' || name === '_wpnonce') {
-                return;
-            }
-            if ($el.is(':checkbox')) {
-                if ($el.is(':checked')) {
-                    settingsPayload[name] = $el.val() || '1';
-                }
-            } else if ($el.is(':radio')) {
-                if ($el.is(':checked')) {
-                    settingsPayload[name] = $el.val();
-                }
-            } else {
-                settingsPayload[name] = $el.val();
-            }
-        });
+        var settingsPayload = collectSettingsPayload($form);
 
         var jsonString = JSON.stringify(settingsPayload);
         var base64Payload = '';

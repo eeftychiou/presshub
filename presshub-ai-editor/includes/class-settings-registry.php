@@ -442,7 +442,10 @@ class PressHub_Settings_Registry {
                     $post_data[ $m[1] ] = [];
                 }
                 if ( '' === $m[2] ) {
-                    $post_data[ $m[1] ][] = $value;
+                    // "option[]" arrives as one list (admin.js) or one value.
+                    foreach ( is_array( $value ) ? array_values( $value ) : [ $value ] as $item ) {
+                        $post_data[ $m[1] ][] = $item;
+                    }
                 } else {
                     $post_data[ $m[1] ][ $m[2] ] = $value;
                 }
@@ -518,7 +521,8 @@ class PressHub_Settings_Registry {
      *    A new mailbox password typed in the same save wins over "Remove".
      *  - Secrets are written only when a new, unmasked value is posted
      *    (keep-on-empty). AI sanitizers store the value themselves; Social
-     *    secrets are stored here, and their "<option>_remove" box clears them.
+     *    secrets are stored here, and their "<option>_remove" box clears them
+     *    unless a new value is typed in the same save.
      *  - Rendered checkboxes that are absent from the post are saved as 0, but
      *    only for the options in $map, so other tabs and sections are never touched.
      *  - A Social field that is absent but posts a "<option>_present" marker, or
@@ -550,7 +554,10 @@ class PressHub_Settings_Registry {
                 }
 
                 if ( ! empty( $entry['secret'] ) ) {
-                    if ( $social && ! empty( $post_data[ $option . '_remove' ] ) ) {
+                    $typed = isset( $post_data[ $option ] ) ? trim( (string) $post_data[ $option ] ) : '';
+                    $is_new = '' !== $typed && false === strpos( $typed, '••••' );
+                    // A new secret typed in the same save wins over a ticked "Remove".
+                    if ( $social && ! $is_new && ! empty( $post_data[ $option . '_remove' ] ) ) {
                         // delete_option() skips the sanitizer, which keeps a stored secret on ''.
                         delete_option( $option );
                         $saved_keys[] = $option;

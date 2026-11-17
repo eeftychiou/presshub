@@ -2801,7 +2801,7 @@ class PressHub_AI_Settings_Render {
         <?php endif; ?>
         <p>
             <?php if ( class_exists( $T ) ) : ?>
-                <a class="button" href="<?php echo self::esc_attr_safe( $T::export_url() ); ?>"><?php echo esc_html__( 'Export settings (JSON, no keys)', 'presshub-ai-editor' ); ?></a>
+                <a class="button" href="<?php echo self::esc_attr_safe( $T::export_url() ); ?>" download><?php echo esc_html__( 'Export settings (JSON, no keys)', 'presshub-ai-editor' ); ?></a>
             <?php endif; ?>
             &nbsp;
             <label for="presshub_settings_file" class="screen-reader-text"><?php echo esc_html__( 'Settings export file', 'presshub-ai-editor' ); ?></label>
@@ -4387,12 +4387,12 @@ class PressHub_AI_Settings_Render {
                 <?php endforeach; ?>
             </div>
 
-            <div class="ph-display-none presshub-image-pool-empty" <?php echo $has_images ? '' : ''; ?>>
+            <div class="presshub-image-pool-empty<?php echo $has_images ? ' presshub-is-hidden' : ''; ?>">
                 <p class="description"><?php echo esc_html__( 'No images in pool. Click below to select images from the Media Library.', 'presshub-ai-editor' ); ?></p>
             </div>
 
             <?php if ( $is_noon ) : ?>
-                <p class="ph-display-none presshub-image-pool-fallback description" <?php echo $has_images ? '' : ''; ?>>
+                <p class="presshub-image-pool-fallback description<?php echo $has_images ? ' presshub-is-hidden' : ''; ?>">
                     <em><?php echo esc_html__( 'Note: If the Noon pool is empty, PressHub AI automatically falls back to the Morning pool.', 'presshub-ai-editor' ); ?></em>
                 </p>
             <?php endif; ?>
