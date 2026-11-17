@@ -1711,6 +1711,10 @@ jQuery(document).ready(function($) {
                 return false;
             }
             var el = document.getElementById(anchorId);
+            if (!el && /^[a-z0-9_]+$/i.test(anchorId)) {
+                // Checkboxes and array options (name="key[task]") have no id of their own.
+                el = document.querySelector('#presshub-ai-settings-form [name="' + anchorId + '"]:not([type=hidden]), #presshub-ai-settings-form [name^="' + anchorId + '["]:not([type=hidden])');
+            }
             if (!el) {
                 return false;
             }
@@ -1983,11 +1987,14 @@ jQuery(document).ready(function($) {
                 // #234 review: hash navigation (search results, links) goes
                 // through the unsaved-changes guard as well.
                 var targetEl = isTab ? document.getElementById('presshub-tab-pane-' + targetTab) : document.getElementById(hash);
+                if (!targetEl && !isTab && /^[a-z0-9_]+$/i.test(hash)) {
+                    targetEl = document.querySelector('#presshub-ai-settings-form [name="' + hash + '"], #presshub-ai-settings-form [name^="' + hash + '["]');
+                }
                 var $targetPane = targetEl ? $(targetEl).closest('.presshub-tab-pane') : $();
                 var $current = $('.presshub-tab-pane:visible').first();
                 if ($targetPane.length && $current.length && $targetPane[0] !== $current[0] && !confirmLeaveTab($current)) {
                     if (window.history && window.history.replaceState) {
-                        window.history.replaceState(null, null, lastHash || window.location.pathname + window.location.search);
+                        window.history.replaceState(null, null, '#' + ($current.attr('id') || '').replace('presshub-tab-pane-', ''));
                     }
                     return;
                 }

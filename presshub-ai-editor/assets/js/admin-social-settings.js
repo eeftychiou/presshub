@@ -37,7 +37,7 @@
         // on the field's new tab.
         function revealSocialAnchor(id) {
             var el = id ? document.getElementById(id) : null;
-            if (!el && id) {
+            if (!el && id && /^[a-z0-9_]+$/i.test(id)) {
                 // Checkboxes and array fields have a name but no id.
                 var named = document.querySelectorAll('[name="' + id + '"], [name^="' + id + '["]');
                 for (var i = 0; i < named.length && !el; i++) {
