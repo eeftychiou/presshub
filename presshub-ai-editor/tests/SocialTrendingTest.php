@@ -411,6 +411,38 @@ st_check( 'featured: no picture, nothing to do', 0 === $T::maybe_set_featured_im
 $T::$sideload = static function () { return new WP_Error( 'http', 'expired' ); };
 st_check( 'featured: sideload failure tolerated', 0 === $T::maybe_set_featured_image( 78, [ $T::normalize_item( st_post( 'x', '205', 1, 10, [ 'thumbnail' => 'https://pbs.twimg.com/media/a.jpg' ] ), $now ) ] ) && empty( $GLOBALS['THUMBS'][78] ) );
 $T::$sideload = null;
+// TikTok photo posts: first image from the Media Library, never TikTok's player.
+$GLOBALS['THUMBS'] = [];
+unset( $GLOBALS['OPTIONS_STORE'][ $T::OPTION_IMAGES ] );
+$sideloads = [];
+$T::$sideload = static function ( $url, $post_id, $desc ) use ( &$sideloads ) { $sideloads[] = [ $url, $post_id, $desc ]; return 9100 + count( $sideloads ); };
+$tp = $T::normalize_item( st_post( 'tiktok', '301', 900, 10, [ 'url' => 'https://www.tiktok.com/@acct301/photo/301', 'thumbnail' => 'https://p16-sign.tiktokcdn.com/p.jpeg', 'media' => [ 'type' => 'image' ] ] ), $now );
+$tp_html = $T::embed_block( $tp );
+st_check( 'photo: image card instead of the player', 0 === strpos( $tp_html, '<!-- wp:image {"id":9101,' ) && false === strpos( $tp_html, 'wp:embed' ) && false === stripos( $tp_html, 'iframe' ) );
+st_check( 'photo: image and caption link to the post', 2 === substr_count( $tp_html, 'href="https://www.tiktok.com/@acct301/photo/301"' ) && false !== strpos( $tp_html, 'Δείτε όλη την ανάρτηση στο TikTok' ) );
+st_check( 'photo: Media Library copy shown, not the signed TikTok link', false !== strpos( $tp_html, 'src="https://example.com/wp-content/uploads/image-9101.jpg"' ) && false === strpos( $tp_html, 'tiktokcdn' ) );
+st_check( 'photo: post text used as alt', false !== strpos( $tp_html, 'alt="Κείμενο 301"' ) );
+st_check( 'photo: sideloaded once, unattached', 1 === count( $sideloads ) && 'https://p16-sign.tiktokcdn.com/p.jpeg' === $sideloads[0][0] && 0 === $sideloads[0][1] );
+$T::embed_block( $tp );
+st_check( 'photo: later roundup updates reuse the copy', 1 === count( $sideloads ) && 9101 === get_option( $T::OPTION_IMAGES )['tiktok_301'] );
+st_check( 'photo: featured image reuses the copy', 9101 === $T::maybe_set_featured_image( 79, [ $tp ] ) && 1 === count( $sideloads ) && 9101 === $GLOBALS['THUMBS'][79] );
+$tv = $T::normalize_item( st_post( 'tiktok', '302', 900, 10, [ 'url' => 'https://www.tiktok.com/@acct302/video/302', 'thumbnail' => 'https://p16-sign.tiktokcdn.com/v.jpeg' ] ), $now );
+st_check( 'photo: TikTok videos keep the embed', false !== strpos( $T::embed_block( $tv ), '"providerNameSlug":"tiktok"' ) && 1 === count( $sideloads ) );
+$tn = $T::normalize_item( st_post( 'tiktok', '303', 900, 10, [ 'url' => 'https://www.tiktok.com/@acct303/photo/303' ] ), $now );
+$tn_html = $T::embed_block( $tn );
+st_check( 'photo: no image, quote card with link', false !== strpos( $tn_html, 'presshub-trending-fallback' ) && false !== strpos( $tn_html, 'href="https://www.tiktok.com/@acct303/photo/303"' ) && false === strpos( $tn_html, 'wp:embed' ) );
+$T::$sideload = static function () { return new WP_Error( 'http', 'expired' ); };
+$tf = $T::normalize_item( st_post( 'tiktok', '304', 900, 10, [ 'url' => 'https://www.tiktok.com/@acct304/photo/304', 'thumbnail' => 'https://p16-sign.tiktokcdn.com/f.jpeg' ] ), $now );
+$tf_html = $T::embed_block( $tf );
+st_check( 'photo: failed copy, quote card with link', false !== strpos( $tf_html, 'presshub-trending-fallback' ) && false === strpos( $tf_html, 'wp:image' ) && ! isset( get_option( $T::OPTION_IMAGES )['tiktok_304'] ) );
+$T::$sideload = static function ( $url ) use ( &$sideloads ) { $sideloads[] = [ $url ]; return 9200 + count( $sideloads ); };
+$GLOBALS['OPTIONS_STORE'][ $T::OPTION_IMAGES ] = [];
+for ( $i = 0; $i < $T::IMAGES_KEPT + 5; $i++ ) {
+    $T::photo_image( [ 'key' => 'tiktok_k' . $i, 'platform' => 'tiktok', 'id' => 'k' . $i, 'handle' => 'h', 'author_name' => '', 'url' => 'https://www.tiktok.com/@h/photo/' . $i, 'thumbnail' => 'https://p16-sign.tiktokcdn.com/' . $i . '.jpeg' ] );
+}
+$imap = get_option( $T::OPTION_IMAGES );
+st_check( 'photo: image map capped, oldest dropped', $T::IMAGES_KEPT === count( $imap ) && ! isset( $imap['tiktok_k0'] ) && isset( $imap[ 'tiktok_k' . ( $T::IMAGES_KEPT + 4 ) ] ) );
+$T::$sideload = null;
 st_check( 'front css: platform badges styled', false !== strpos( $T::front_css(), '.presshub-trending-badge-facebook' ) );
 
 // =========================================================================
