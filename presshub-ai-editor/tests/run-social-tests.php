@@ -3151,6 +3151,30 @@ assert_equals( 1, (int) ( $err_job['attempts'] ?? 0 ), 'ERROR container consumes
 
 PressHub_Social_Meta_API_Client::set_instagram_poll_budget( 4, 5 );
 
+// facebook_page_token(): a stored user token is swapped for the Page's own token (cached),
+// a lookup error or a token that already is a Page token falls back to the stored token.
+$fb_lookups = [];
+PressHub_Social_Meta_API_Client::set_http_get( function( $url ) use ( &$fb_lookups ) {
+    $fb_lookups[] = $url;
+    return [ 'access_token' => 'PAGE_TOKEN_123', 'id' => '1520729961113876' ];
+} );
+$fb_pt = PressHub_Social_Meta_API_Client::facebook_page_token( '1520729961113876', 'USER_TOKEN_A' );
+assert_equals( 'PAGE_TOKEN_123', $fb_pt, 'facebook_page_token swaps a user token for the Page token' );
+assert_true( str_contains( $fb_lookups[0] ?? '', '/1520729961113876?fields=access_token&access_token=USER_TOKEN_A' ), 'facebook_page_token asks Graph for the Page access_token with the stored token' );
+PressHub_Social_Meta_API_Client::facebook_page_token( '1520729961113876', 'USER_TOKEN_A' );
+assert_equals( 1, count( $fb_lookups ), 'facebook_page_token caches the Page token per stored token' );
+
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'error' => [ 'message' => 'Error validating access token: The session has been invalidated' ] ];
+} );
+assert_equals( 'USER_TOKEN_B', PressHub_Social_Meta_API_Client::facebook_page_token( '1520729961113876', 'USER_TOKEN_B' ), 'facebook_page_token falls back to the stored token on a Graph error' );
+
+PressHub_Social_Meta_API_Client::set_http_get( function() {
+    return [ 'id' => '1520729961113876' ];
+} );
+assert_equals( 'PAGE_TOKEN_ALREADY', PressHub_Social_Meta_API_Client::facebook_page_token( '1520729961113876', 'PAGE_TOKEN_ALREADY' ), 'facebook_page_token keeps a token Graph returns no other token for' );
+assert_equals( 'TOK', PressHub_Social_Meta_API_Client::facebook_page_token( '', 'TOK' ), 'facebook_page_token without a Page ID returns the stored token' );
+
 PressHub_Social_Meta_API_Client::set_http_get( null );
 PressHub_Social_Meta_API_Client::set_http_post( null );
 delete_option( 'presshub_social_meta_access_token' );
