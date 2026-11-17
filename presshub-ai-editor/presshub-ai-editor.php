@@ -181,6 +181,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-mime-parser.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-press-release-inbox.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-monitor.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-trending.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-embeds.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
@@ -226,6 +227,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-settings-render.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-settings.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-rest-controller.php';
+
+// TikTok photo posts embed through their /video/ link.
+PressHub_AI_Embeds::register();
 
 // Register Social REST API routes
 add_action( 'rest_api_init', [ 'PressHub_Social_REST_Controller', 'register_routes' ] );
