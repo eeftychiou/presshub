@@ -77,6 +77,41 @@ describe('Facebook parser', () => {
   });
 });
 
+describe('Facebook video links', () => {
+  const reel = (id: string, media: any, url?: string) => {
+    const s = fbStory(id);
+    s.comet_sections.context_layout.story.comet_sections.metadata[0].story.url = url;
+    s.comet_sections.content.story.attachments = [{ media }];
+    return s;
+  };
+
+  test('a reel with only a bare post link gets a watch link from its video id', () => {
+    const [p] = parseFacebookStories([reel('1787118390090840', { __typename: 'Video', id: '1026139433848847' }, 'https://www.facebook.com/1787118390090840')]);
+    expect(p.media.type).toBe('video');
+    expect(p.url).toBe('https://www.facebook.com/watch/?v=1026139433848847');
+  });
+
+  test('a bare post link with tracking parameters still gets the watch link', () => {
+    const [p] = parseFacebookStories([reel('1787118390090844', { __typename: 'Video', id: '1026139433848847' }, 'https://www.facebook.com/1787118390090844?__cft__[0]=x&__tn__=R')]);
+    expect(p.url).toBe('https://www.facebook.com/watch/?v=1026139433848847');
+  });
+
+  test('a reel link in the story wins over the video id', () => {
+    const [p] = parseFacebookStories([reel('1787118390090841', { __typename: 'Video', id: '1026139433848847', url: 'https://www.facebook.com/reel/1026139433848847' })]);
+    expect(p.url).toBe('https://www.facebook.com/reel/1026139433848847');
+  });
+
+  test('a video post keeps its posts/ permalink when there is no video link', () => {
+    const [p] = parseFacebookStories([reel('1787118390090842', { __typename: 'Video', id: '1026139433848847' }, 'https://www.facebook.com/philenews/posts/pfbid0xyz')]);
+    expect(p.url).toBe('https://www.facebook.com/philenews/posts/pfbid0xyz');
+  });
+
+  test('a story with no link at all still falls back to facebook.com/<post id>', () => {
+    const [p] = parseFacebookStories([reel('1787118390090843', { __typename: 'Photo' })]);
+    expect(p.url).toBe('https://www.facebook.com/1787118390090843');
+  });
+});
+
 describe('Engagement metrics in the shared parsers', () => {
   test('X tweets carry likes, replies, reposts + quotes and views', () => {
     const json = {

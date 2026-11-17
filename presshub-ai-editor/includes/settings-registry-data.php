@@ -1191,6 +1191,23 @@ return [
     'status' => 'active',
     'depends_on' => 'presshub_ai_social_trending_enabled',
   ],
+  'presshub_ai_social_trending_summary_enabled' => [
+    'page' => 'ai',
+    'tab' => 'social_listening',
+    'group' => 'trending',
+    'section' => '',
+    'label' => 'AI summary at the top of the roundup',
+    'help' => 'The social AI provider writes a short Greek paragraph on what the posts are about, shown above the posts. It is written again only when the posts in the roundup change. If the AI fails, the roundup is published without it.',
+    'checkbox' => true,
+    'secret' => false,
+    'type' => 'string',
+    'rendered' => true,
+    'status' => 'active',
+    'aliases' => [
+      0 => 'AI summary',
+    ],
+    'depends_on' => 'presshub_ai_social_trending_enabled',
+  ],
   'presshub_ai_social_trending_briefing_enabled' => [
     'page' => 'ai',
     'tab' => 'social_listening',

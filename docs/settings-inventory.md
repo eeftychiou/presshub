@@ -8,9 +8,9 @@
 
 | Page | Options | Not shown on screen | Secrets |
 |---|---|---|---|
-| Settings → PressHub AI | 215 | 27 | 5 |
+| Settings → PressHub AI | 216 | 27 | 5 |
 | PressHub Social → Settings | 84 | 8 | 9 |
-| **Total** | **299** | | |
+| **Total** | **300** | | |
 
 **Scheduled for removal:** 4 option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).
 
@@ -192,7 +192,7 @@
 | `presshub_ai_briefing_podcast_prompt_3_conversational_news_reporting` | Briefing podcast prompt 3 conversational news reporting | string |  |  |
 | `presshub_ai_podcast_show_notes_enabled` | Podcast show notes | integer |  | checkbox |
 
-### Tab `social_listening` (31)
+### Tab `social_listening` (32)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
@@ -223,6 +223,7 @@
 | `presshub_ai_social_trending_max_age_hours` | Oldest trending post (h) | string | h | needs `presshub_ai_social_trending_enabled` on, was: Selection |
 | `presshub_ai_social_trending_min_engagement` | Minimum trending engagement | string | engagement points | needs `presshub_ai_social_trending_enabled` on, was: Selection |
 | `presshub_ai_social_trending_excluded_words` | Excluded Words | string |  | needs `presshub_ai_social_trending_enabled` on |
+| `presshub_ai_social_trending_summary_enabled` | AI summary at the top of the roundup | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: AI summary |
 | `presshub_ai_social_trending_briefing_enabled` | Use trending posts in the briefing | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
 | `presshub_ai_social_trending_briefing_count` | Trending posts given to the briefing | string | posts | needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
 | `presshub_ai_social_trending_max_per_account` | Trending posts per account | integer | posts | needs `presshub_ai_social_trending_enabled` on |

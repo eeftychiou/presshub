@@ -2857,6 +2857,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_social_trending_min_engagement'    => [ __CLASS__, 'sanitize_social_trending_min_engagement' ],
             'presshub_ai_social_trending_excluded_words'    => [ __CLASS__, 'sanitize_social_trending_excluded_words' ],
             'presshub_ai_social_trending_briefing_enabled'  => [ __CLASS__, 'sanitize_boolean' ],
+            'presshub_ai_social_trending_summary_enabled'   => [ __CLASS__, 'sanitize_boolean' ],
             'presshub_ai_social_trending_briefing_count'    => [ __CLASS__, 'sanitize_social_trending_briefing_count' ],
         ];
     }
@@ -2869,6 +2870,7 @@ class PressHub_AI_Settings_Storage {
             'presshub_ai_social_trending_platform_instagram',
             'presshub_ai_social_trending_platform_facebook',
             'presshub_ai_social_trending_briefing_enabled',
+            'presshub_ai_social_trending_summary_enabled',
         ];
     }
 
@@ -3058,6 +3060,11 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_social_trending_min_engagement(): int {
         return self::sanitize_social_trending_min_engagement( get_option( 'presshub_ai_social_trending_min_engagement', 20 ) );
+    }
+
+    /** Open each roundup with a short AI summary of what the posts are about (on by default). */
+    public static function get_social_trending_summary_enabled(): bool {
+        return 1 === (int) get_option( 'presshub_ai_social_trending_summary_enabled', 1 );
     }
 
     /** Add the top trending posts to each briefing edition (off by default). */
