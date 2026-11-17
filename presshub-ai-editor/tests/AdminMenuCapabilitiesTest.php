@@ -125,6 +125,23 @@ PressHub_Admin_Menu::order_submenu();
 $order = array_column( $GLOBALS['submenu'][ PressHub_Admin_Menu::PARENT ], 2 );
 amc_check( 'order: submenu follows the planned order, add-ons last', array_merge( array_keys( $expected ), [ 'some-addon-page' ] ) === $order );
 
+// WordPress core adds a bare "PressHub" row for the parent when another
+// submenu (Usage & logs, Settings) is registered before the Hub's own row.
+$GLOBALS['submenu'] = [ PressHub_Admin_Menu::PARENT => [
+    [ 'PressHub', 'edit_others_posts', 'presshub-ai-briefing-hub', 'PressHub — Daily Briefing Hub' ],
+    [ 'Usage & logs', 'edit_others_posts', 'presshub-ai-usage', 'PressHub — Usage & logs' ],
+    [ 'Settings', 'edit_others_posts', 'presshub-ai', 'PressHub — Settings' ],
+    [ 'Daily Briefing Hub', 'edit_others_posts', 'presshub-ai-briefing-hub', 'PressHub — Daily Briefing Hub' ],
+] ];
+PressHub_Admin_Menu::order_submenu();
+$rows = $GLOBALS['submenu'][ PressHub_Admin_Menu::PARENT ];
+$hub  = array_values( array_filter( $rows, static function ( $r ) { return 'presshub-ai-briefing-hub' === $r[2]; } ) );
+amc_check( 'order: the automatic PressHub row is dropped, one Hub entry left', 1 === count( $hub ) && 'Daily Briefing Hub' === $hub[0][0] );
+amc_check( 'order: Hub entry first, others kept', [ 'presshub-ai-briefing-hub', 'presshub-ai-usage', 'presshub-ai' ] === array_column( $rows, 2 ) );
+$GLOBALS['submenu'] = [ PressHub_Admin_Menu::PARENT => [ [ 'Daily Briefing Hub', 'x', 'presshub-ai-briefing-hub', '' ] ] ];
+PressHub_Admin_Menu::order_submenu();
+amc_check( 'order: a single Hub row is kept', 1 === count( $GLOBALS['submenu'][ PressHub_Admin_Menu::PARENT ] ) );
+
 // Page hooks the asset loaders recognise.
 amc_check( 'hook: Settings page under PressHub', PressHub_AI_Settings::is_settings_hook( 'presshub_page_presshub-ai' ) );
 amc_check( 'hook: old Settings hook still recognised', PressHub_AI_Settings::is_settings_hook( 'settings_page_presshub-ai' ) );
@@ -177,6 +194,24 @@ foreach ( [ 'administrator' => AMC_ADMIN, 'editor' => AMC_EDITOR ] as $role => $
     amc_check( "{$role}: Settings and Usage & logs render", $rendered );
 }
 
+// Other admin-only actions: refused for authors and contributors.
+$admin_only_actions = [
+    'test_api_connection'        => [ [ $ajax, 'test_api_connection' ], [ 'provider' => 'openai' ] ],
+    'save_preset (plugin scope)' => [ [ $ajax, 'save_preset' ], [ 'scope' => 'plugin', 'name' => 'x', 'content' => 'y' ] ],
+    'delete_preset (plugin)'     => [ [ $ajax, 'delete_preset' ], [ 'scope' => 'plugin', 'preset_id' => 'x' ] ],
+    'save_org_default'           => [ [ $ajax, 'save_org_default' ], [] ],
+    'test_source'                => [ [ $ajax, 'test_source' ], [ 'url' => 'https://example.test/' ] ],
+    'social test_connection'     => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_test_connection' ], [ 'platform' => 'x' ] ],
+    'social retry_job'           => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_retry_job' ], [ 'job_id' => 1 ] ],
+    'social cancel_job'          => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_cancel_job' ], [ 'job_id' => 1 ] ],
+    'social dispatch_now'        => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_dispatch_now' ], [] ],
+    'social generate_music'      => [ [ 'PressHub_Social_Ajax_Handlers', 'handle_generate_music_track' ], [] ],
+];
+if ( method_exists( $ajax, 'test_press_inbox' ) ) {
+    $admin_only_actions['test_press_inbox'] = [ [ $ajax, 'test_press_inbox' ], [] ];
+}
+$settings_actions_for_lower_roles = $settings_actions + $admin_only_actions;
+
 foreach ( [ 'author' => AMC_AUTHOR, 'contributor' => AMC_CONTRIBUTOR ] as $role => $caps ) {
     $GLOBALS['CURRENT_USER_CAPS'] = $caps;
     $subs = amc_build_menu();
@@ -184,7 +219,7 @@ foreach ( [ 'author' => AMC_AUTHOR, 'contributor' => AMC_CONTRIBUTOR ] as $role 
     foreach ( $subs as $row ) {
         amc_check( "{$role}: may not open {$row['menu_slug']}", ! amc_can( (string) $row['capability'] ) );
     }
-    foreach ( $settings_actions as $name => $spec ) {
+    foreach ( $settings_actions_for_lower_roles as $name => $spec ) {
         $r = amc_ajax( $spec[0], $spec[1] );
         amc_check( "{$role}: AJAX {$name} refused", null === $r || false === $r['success'] );
     }
@@ -256,6 +291,10 @@ foreach ( [
     amc_check( 'no redirect: ' . $r[0] . ' ' . wp_json_encode( $r[1] ), '' === PressHub_Admin_Menu::legacy_redirect_url( $r[0], $r[1] ) );
 }
 
+$url = PressHub_Admin_Menu::legacy_redirect_url( 'options-general.php', [ 'page' => 'presshub-ai', 'q' => 'a&b=c #x+y', 'tab' => 'briefing' ] );
+parse_str( (string) parse_url( $url, PHP_URL_QUERY ), $q );
+amc_check( 'redirect: kept arguments are URL-encoded (' . $url . ')', 'a&b=c #x+y' === ( $q['q'] ?? null ) && 'briefing' === ( $q['tab'] ?? null ) && ! isset( $q['b'] ) && false === strpos( $url, '#' ) );
+
 // ---------------------------------------------------------------------
 // 7. CI greps.
 // ---------------------------------------------------------------------
@@ -272,6 +311,17 @@ foreach ( $files as $file ) {
         $code .= is_array( $tok ) ? $tok[1] : $tok;
     }
     amc_check( 'grep: no raw manage_options check in ' . basename( $file ), false === strpos( $code, "'manage_options'" ) && false === strpos( $code, '"manage_options"' ) );
+}
+
+// Capability refusals in the admin AJAX handlers answer 403.
+foreach ( [ 'class-ajax-handlers.php', 'class-social-ajax-handlers.php' ] as $f ) {
+    $lines = file( $root . '/includes/' . $f );
+    foreach ( $lines as $i => $line ) {
+        $prev = $lines[ $i - 1 ] ?? '';
+        if ( false !== strpos( $line, 'wp_send_json_error' ) && preg_match( '/current_user_can\( (PressHub_Capabilities::manage\(\)|\$cap) \)/', $prev ) && false === strpos( $prev, "'image', 'report'" ) ) {
+            amc_check( "403: {$f}:" . ( $i + 1 ) . ' refuses with HTTP 403', false !== strpos( $line, '403' ) );
+        }
+    }
 }
 
 $link_files = array_merge(

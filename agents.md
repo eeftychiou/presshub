@@ -325,7 +325,7 @@ All code contributions must strictly adhere to WordPress security best practices
 1. **Nonce Verification**:
    - Every AJAX action and form POST must verify nonces via `check_ajax_referer( 'presshub_ai_nonce', 'nonce' )` or `check_admin_referer()`.
 2. **Capability & Authorization Checks**:
-   - All admin endpoints and settings modifications must enforce explicit user capability gates (`current_user_can( 'manage_options' )` or filtered capability `apply_filters( 'presshub_ai_settings_cap', 'manage_options' )`).
+   - All admin endpoints and settings modifications must enforce explicit user capability gates through `current_user_can( PressHub_Capabilities::manage() )` (#235: `edit_others_posts` by default, so editors and administrators alike; filterable through `presshub_ai_settings_cap`). Never check `manage_options` directly: `AdminMenuCapabilitiesTest` fails on a raw `manage_options` literal in plugin code. New admin pages register under `PressHub_Admin_Menu::PARENT` (the one PressHub menu), never as a new top-level menu.
 3. **Data Sanitization & Escaping**:
    - **Input Sanitization**: Always sanitize input using `sanitize_text_field()`, `sanitize_textarea_field()`, `sanitize_key()`, `esc_url_raw()`, and `wp_unslash()`.
    - **Output Escaping**: Always escape output in templates and HTML renders using `esc_html()`, `esc_attr()`, `esc_url()`, `esc_textarea()`, or `wp_kses_post()`.

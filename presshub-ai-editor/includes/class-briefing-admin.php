@@ -1014,7 +1014,7 @@ class PressHub_AI_Briefing_Admin {
             <header class="presshub-hub-header">
                 <div class="presshub-hub-title-group">
                     <h1 class="wp-heading-inline">
-                        <?php echo esc_html__( 'PressHub AI — Daily News Briefing Hub', 'presshub-ai-editor' ); ?>
+                        <?php echo esc_html__( 'PressHub — Daily Briefing Hub', 'presshub-ai-editor' ); ?>
                     </h1>
                     <span class="presshub-date-badge">
                         📅 <?php echo esc_html( $status['formatted_date'] ); ?> (<code><?php echo esc_html( $date ); ?></code>)

@@ -369,7 +369,7 @@ class PressHub_Social_AI_Copywriter {
                     // A speech, image or music model cannot write copy or JSON; every job would fail.
                     PressHub_Social_Logger::warning(
                         sprintf(
-                            'Social copy provider "%s" uses "%s", which is not a text model. Using the first enabled text provider instead. Pick a text model under PressHub Social > Settings > AI Provider.',
+                            'Social copy provider "%s" uses "%s", which is not a text model. Using the first enabled text provider instead. Pick a text model under PressHub > Social settings > AI Copywriter.',
                             $module_provider_id,
                             '' !== $module_model ? $module_model : (string) ( $candidate['default_model'] ?? '' )
                         ),

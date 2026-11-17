@@ -58,7 +58,7 @@ class PressHub_Social_Queue_Admin {
         <div class="wrap presshub-social-admin-wrap" data-nonce="<?php echo esc_attr( $ajax_nonce ); ?>">
             <h1 class="wp-heading-inline">
                 <span class="dashicons dashicons-share" style="font-size:28px; width:28px; height:28px; vertical-align:middle; margin-right:6px;"></span>
-                <?php esc_html_e( 'PressHub Social — Queue & Dispatch Monitor', 'presshub-social-autopost' ); ?>
+                <?php esc_html_e( 'PressHub — Social Queue', 'presshub-social-autopost' ); ?>
             </h1>
 
             <!-- KPI Cards Section -->

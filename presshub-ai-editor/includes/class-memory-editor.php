@@ -571,7 +571,7 @@ class PressHub_AI_Memory_Editor {
         // "Policy Fiches" menu; old ?tab= links are redirected by
         // PressHub_AI_Fiches_Admin::maybe_redirect_legacy().
         if ( class_exists( 'PressHub_AI_Fiches_Admin' ) ) {
-            $html .= '<p class="presshub-memory-fiches-link">' . esc_html__( 'The editorial agenda and the people fiches are under Policy Fiches:', 'presshub-ai-editor' ) . ' '
+            $html .= '<p class="presshub-memory-fiches-link">' . esc_html__( 'The editorial agenda and the people fiches are under PressHub:', 'presshub-ai-editor' ) . ' '
                 . '<a href="' . esc_url( PressHub_AI_Fiches_Admin::agenda_url() ) . '">' . esc_html__( 'Editorial agenda', 'presshub-ai-editor' ) . '</a>';
             if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
                 $html .= ' &middot; <a href="' . esc_url( PressHub_AI_Fiches_Admin::people_url() ) . '">' . esc_html__( 'People', 'presshub-ai-editor' ) . '</a>';

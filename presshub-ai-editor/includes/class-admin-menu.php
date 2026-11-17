@@ -140,7 +140,39 @@ class PressHub_Admin_Menu {
         if ( empty( $submenu[ self::PARENT ] ) || ! is_array( $submenu[ self::PARENT ] ) ) {
             return;
         }
-        $submenu[ self::PARENT ] = self::sorted( $submenu[ self::PARENT ] );
+        $submenu[ self::PARENT ] = self::sorted( self::without_auto_parent_row( $submenu[ self::PARENT ] ) );
+    }
+
+    /**
+     * WordPress adds a row for the parent itself (titled "PressHub") when the
+     * first submenu under it is not the parent's own slug. The Hub registers
+     * its own "Daily Briefing Hub" row with that slug, so drop the automatic
+     * one and keep a single entry per slug for the Hub.
+     *
+     * @param array<int,array> $items
+     * @return array<int,array>
+     */
+    public static function without_auto_parent_row( array $items ): array {
+        $hub_rows = array_keys( array_filter( $items, static function ( $item ) {
+            return is_array( $item ) && self::PARENT === (string) ( $item[2] ?? '' );
+        } ) );
+        if ( count( $hub_rows ) < 2 ) {
+            return $items;
+        }
+        // Keep the row the Hub registered (not titled with the bare menu title), else the last.
+        $keep = end( $hub_rows );
+        foreach ( $hub_rows as $i ) {
+            if ( self::MENU_TITLE !== (string) ( $items[ $i ][0] ?? '' ) ) {
+                $keep = $i;
+                break;
+            }
+        }
+        foreach ( $hub_rows as $i ) {
+            if ( $i !== $keep ) {
+                unset( $items[ $i ] );
+            }
+        }
+        return array_values( $items );
     }
 
     /**
@@ -197,7 +229,9 @@ class PressHub_Admin_Menu {
                 unset( $args['tab'] );
             }
             $args = array_filter( $args, 'is_scalar' );
-            return self::url( (string) $rule['to'], array_map( 'strval', $args ) );
+            // Build the query ourselves: add_query_arg() does not encode array values.
+            $query = http_build_query( array_merge( [ 'page' => (string) $rule['to'] ], array_map( 'strval', $args ) ), '', '&', PHP_QUERY_RFC3986 );
+            return admin_url( 'admin.php?' . $query );
         }
         return '';
     }

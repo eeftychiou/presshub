@@ -128,7 +128,7 @@ class PressHub_AI_Ajax_Handlers {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ), 403 );
         }
 
         // P6: the per-provider Test Connection buttons send the target
@@ -743,7 +743,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : 'author';
         if ( 'plugin' === $scope ) {
             if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
-                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ), 403 );
             }
         } elseif ( ! current_user_can( 'edit_posts' ) ) {
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
@@ -804,7 +804,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : 'author';
         if ( 'plugin' === $scope ) {
             if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
-                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ), 403 );
             }
         } elseif ( ! current_user_can( 'edit_posts' ) ) {
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
@@ -921,7 +921,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ), 403 );
         }
 
         $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : '';
@@ -2811,7 +2811,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
         $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ] );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
         $inbox  = new PressHub_AI_Press_Release_Inbox();
         $result = $inbox->test_connection();
@@ -2828,7 +2828,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
         $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ] );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $url  = isset( $_POST['url'] ) ? esc_url_raw( wp_unslash( $_POST['url'] ) ) : '';

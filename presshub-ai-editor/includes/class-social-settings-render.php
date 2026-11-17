@@ -63,6 +63,9 @@ class PressHub_Social_Settings_Render {
             }
             if ( function_exists( 'settings_errors' ) ) {
                 settings_errors( 'presshub_social_options' );
+                // options.php files its "Settings saved." notice under "general",
+                // which WordPress only prints by itself on Settings-menu pages.
+                settings_errors( 'general' );
             }
             ?>
 
