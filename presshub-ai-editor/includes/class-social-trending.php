@@ -33,6 +33,10 @@ class PressHub_AI_Social_Trending {
     const OPTION_CANDIDATES = 'presshub_ai_social_trending_candidates';
     const OPTION_POSTS      = 'presshub_ai_social_trending_posts';
     const OPTION_IG_TAG_IDS = 'presshub_ai_social_trending_ig_tag_ids';
+    /** item key => Media Library id of the image shown for a TikTok photo post. */
+    const OPTION_IMAGES     = 'presshub_ai_social_trending_images';
+    /** Most recent image entries kept in OPTION_IMAGES. */
+    const IMAGES_KEPT       = 300;
     /** Posts picked by roundups, kept for the briefing until used or too old. */
     const OPTION_BRIEFING_POOL = 'presshub_ai_social_trending_briefing_pool';
     /** Pool entries older than this are dropped (seconds). */
@@ -1397,6 +1401,9 @@ class PressHub_AI_Social_Trending {
     /** @var callable|null fn( string $image_url, int $post_id, string $desc ): int|WP_Error — sideload override for tests. */
     public static $sideload = null;
 
+    /** TikTok photo image URLs whose copy failed in this request, so one roundup build downloads each at most once. */
+    private static $photo_failed = [];
+
     /** @var array<string, bool> oEmbed results within one request. */
     private static $oembed_cache = [];
 
@@ -1464,6 +1471,16 @@ class PressHub_AI_Social_Trending {
         $text  = self::excerpt( (string) $it['text'], 300 );
         $link  = '<a href="' . $url . '" target="_blank" rel="noopener nofollow">' . esc_html( sprintf( 'Δείτε την ανάρτηση στο %s', $label ) ) . '</a>';
 
+        // TikTok photo posts: TikTok's player fails for most visitors
+        // ("Player authentication failed"), so show the first image instead.
+        if ( 'tiktok' === $it['platform'] && PressHub_AI_Embeds::is_tiktok_photo_url( (string) $it['url'] ) ) {
+            $img = self::photo_image( $it );
+            if ( null === $img ) {
+                return self::quote_block( $it );
+            }
+            $alt = '' !== $text ? $text : sprintf( 'Ανάρτηση στο %s', $label );
+            return PressHub_AI_Embeds::image_card_block( (string) $it['url'], $img['id'], $img['src'], self::excerpt( $alt, 150 ) );
+        }
         if ( in_array( $it['platform'], [ 'x', 'tiktok' ], true ) ) {
             $provider = 'x' === $it['platform'] ? 'twitter' : 'tiktok';
             $type     = 'x' === $it['platform'] ? 'rich' : 'video';
@@ -1600,6 +1617,8 @@ class PressHub_AI_Social_Trending {
             . '.presshub-trending-card .wp-block-embed,.presshub-trending-embed{margin:0;max-width:100%;overflow:hidden;}'
             . '.presshub-trending-embed .instagram-media,.presshub-trending-embed .fb-post,.presshub-trending-embed .fb-video{max-width:540px;margin:0 auto;}'
             . '.presshub-trending-fallback{margin:0;}'
+            . '.presshub-trending-card .presshub-tiktok-photo-card{margin:0 auto;}'
+            . '.presshub-tiktok-photo-card img{max-width:min(100%,420px);height:auto;}'
             . '.presshub-trending-summary{font-size:1.1em;line-height:1.6;border-left:4px solid currentColor;padding:.25rem 0 .25rem 1rem;margin:0 0 1.5rem;}'
             . '@media (prefers-color-scheme:dark){.presshub-trending-card{border-color:rgba(255,255,255,.15);}}';
     }
@@ -1607,6 +1626,76 @@ class PressHub_AI_Social_Trending {
     /* ------------------------------------------------------------------
      * Featured image
      * ---------------------------------------------------------------- */
+
+    /**
+     * Copy a platform image into the Media Library. Platform image links are
+     * signed and expire, so they can't be shown directly.
+     *
+     * @return int|WP_Error attachment id
+     */
+    private static function sideload( string $image_url, int $post_id, string $desc ) {
+        if ( is_callable( self::$sideload ) ) {
+            return call_user_func( self::$sideload, $image_url, $post_id, $desc );
+        }
+        if ( ! function_exists( 'media_sideload_image' ) && defined( 'ABSPATH' ) && file_exists( ABSPATH . 'wp-admin/includes/media.php' ) ) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+        }
+        if ( ! function_exists( 'media_sideload_image' ) ) {
+            return new WP_Error( 'presshub_no_sideload', 'media_sideload_image is not available' );
+        }
+        return media_sideload_image( $image_url, $post_id, $desc, 'id' );
+    }
+
+    /**
+     * The Media Library copy of a TikTok photo post's image, sideloaded once
+     * per post and reused by later roundup updates.
+     *
+     * @return array{id:int,src:string}|null null when the post has no image or the copy failed
+     */
+    public static function photo_image( array $it ): ?array {
+        $key = (string) ( $it['key'] ?? ( $it['platform'] . '_' . $it['id'] ) );
+        $map = get_option( self::OPTION_IMAGES, [] );
+        $map = is_array( $map ) ? $map : [];
+        $id  = (int) ( $map[ $key ] ?? 0 );
+        if ( $id > 0 ) {
+            $src = self::attachment_src( $id );
+            if ( '' !== $src ) {
+                return [ 'id' => $id, 'src' => $src ];
+            }
+        }
+        $thumb = (string) ( $it['thumbnail'] ?? '' );
+        if ( '' === $thumb || isset( self::$photo_failed[ $thumb ] ) ) {
+            return null;
+        }
+        $desc = sprintf( 'TikTok · %s', '' !== (string) $it['author_name'] ? $it['author_name'] : $it['handle'] );
+        $att  = self::sideload( $thumb, 0, $desc );
+        if ( is_wp_error( $att ) || (int) $att <= 0 ) {
+            self::$photo_failed[ $thumb ] = true;
+            self::log( 'warning', 'Social trending: TikTok photo image not copied, showing a text card: ' . ( is_wp_error( $att ) ? $att->get_error_message() : 'no attachment' ), [ 'url' => (string) $it['url'] ] );
+            return null;
+        }
+        $src = self::attachment_src( (int) $att );
+        if ( '' === $src ) {
+            return null;
+        }
+        unset( $map[ $key ] );
+        $map[ $key ] = (int) $att;
+        if ( count( $map ) > self::IMAGES_KEPT ) {
+            $map = array_slice( $map, -self::IMAGES_KEPT, null, true );
+        }
+        update_option( self::OPTION_IMAGES, $map, false );
+        return [ 'id' => (int) $att, 'src' => $src ];
+    }
+
+    private static function attachment_src( int $id ): string {
+        $src = function_exists( 'wp_get_attachment_image_url' ) ? wp_get_attachment_image_url( $id, 'large' ) : false;
+        if ( ! $src && function_exists( 'wp_get_attachment_url' ) ) {
+            $src = wp_get_attachment_url( $id );
+        }
+        return is_string( $src ) ? $src : '';
+    }
 
     /**
      * Give a roundup post without a featured image the picture of its top
@@ -1628,18 +1717,12 @@ class PressHub_AI_Social_Trending {
             return 0;
         }
         $desc = sprintf( '%s · %s', self::PLATFORM_LABELS[ $pick['platform'] ], '' !== $pick['author_name'] ? $pick['author_name'] : $pick['handle'] );
-        if ( is_callable( self::$sideload ) ) {
-            $att = call_user_func( self::$sideload, $pick['thumbnail'], $post_id, $desc );
+        if ( 'tiktok' === $pick['platform'] && PressHub_AI_Embeds::is_tiktok_photo_url( (string) $pick['url'] ) ) {
+            // Same image as the roundup card: reuse its copy; a failed copy is not downloaded again.
+            $photo = self::photo_image( $pick );
+            $att   = null !== $photo ? $photo['id'] : 0;
         } else {
-            if ( ! function_exists( 'media_sideload_image' ) && defined( 'ABSPATH' ) && file_exists( ABSPATH . 'wp-admin/includes/media.php' ) ) {
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-                require_once ABSPATH . 'wp-admin/includes/media.php';
-                require_once ABSPATH . 'wp-admin/includes/image.php';
-            }
-            if ( ! function_exists( 'media_sideload_image' ) ) {
-                return 0;
-            }
-            $att = media_sideload_image( $pick['thumbnail'], $post_id, $desc, 'id' );
+            $att = self::sideload( $pick['thumbnail'], $post_id, $desc );
         }
         if ( is_wp_error( $att ) || (int) $att <= 0 ) {
             self::log( 'info', 'Social trending: featured image not set: ' . ( is_wp_error( $att ) ? $att->get_error_message() : 'no attachment' ) );
