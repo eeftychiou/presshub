@@ -2,7 +2,7 @@
  * PressHub AI — classic editor (post.php / post-new.php) admin JS.
  *
  * Drives the metabox buttons (Generate Initial Draft, Run AI Editorial Review)
- * and the Settings → PressHub AI "Test Connection" buttons. Strings are
+ * and the PressHub → Settings "Test Connection" buttons. Strings are
  * translatable via the wp.i18n runtime that the PHP enqueue wires in.
  *
  * UI review batch (2026-08-16 Antigravity UI review):
@@ -1675,9 +1675,19 @@ jQuery(document).ready(function($) {
     // Settings Tabs Navigation with Modular Mapping & Dynamic Dashboards
     // ------------------------------------------------------------------
     function initSettingsTabs() {
+        // #235: Token & Usage Logs moved to PressHub → Usage & logs.
+        if ($('#presshub-usage-logs-page').length) {
+            loadTokenLogs(1);
+            loadAuditLogs(1);
+            return;
+        }
         var $tabs = $('#presshub-ai-settings-tabs');
         var $mobileSelect = $('#presshub-mobile-tab-select');
         if (!$tabs.length && !$mobileSelect.length) {
+            return;
+        }
+        if (/^#(token_logs|token_usage|usage)$/.test(window.location.hash || '') && typeof presshubAI !== 'undefined' && presshubAI.usage_url) {
+            window.location.replace(presshubAI.usage_url);
             return;
         }
 
@@ -1842,10 +1852,7 @@ jQuery(document).ready(function($) {
             // Form Submit Button visibility (per-tab AJAX save buttons used in JS)
             $('#presshub-settings-submit-wrap').hide();
 
-            if (tabKey === 'token_logs') {
-                loadTokenLogs(1);
-                loadAuditLogs(1);
-            } else if (tabKey === 'advanced') {
+            if (tabKey === 'advanced') {
                 loadDiagnosticLogs();
             }
 

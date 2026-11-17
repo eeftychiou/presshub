@@ -682,7 +682,7 @@ class DailyBriefingSettingsTest
         }
 
         // Render page test: verify Section 3 renders podcast style selector and obsolete prompt-1-row is removed
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $renderer = new PressHub_AI_Settings_Render();
         ob_start();
         $renderer->render_settings_page();
@@ -814,7 +814,7 @@ class DailyBriefingSettingsTest
 
     private static function reset_world(): void {
         $GLOBALS['OPTIONS_STORE']            = [];
-        $GLOBALS['CURRENT_USER_CAPS']        = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS']        = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID']          = 1;
         $GLOBALS['REGISTERED_SETTINGS']      = [];
         $GLOBALS['SANITIZE_CALLBACKS']       = [];

@@ -24,7 +24,7 @@ class SettingsQAPromptStudioTest
         // Case 1: Tab 2 Subtabs Render Structure
         // -------------------------------------------------------------
         self::reset_world();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $settings = new PressHub_AI_Settings();
         $settings->register_settings();
 
@@ -127,7 +127,7 @@ class SettingsQAPromptStudioTest
         // Test saving coauthor section with customized prompts
         self::reset_world();
         $GLOBALS['NONCE_VALID']       = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $handlers = new PressHub_AI_Ajax_Handlers();
         $_POST = [
             'action'                           => 'presshub_ai_save_settings_section',
@@ -169,7 +169,7 @@ class SettingsQAPromptStudioTest
 
     private static function reset_world(): void {
         $GLOBALS['WP_OPTIONS']               = [];
-        $GLOBALS['CURRENT_USER_CAPS']       = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS']       = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['REGISTERED_SETTINGS']     = [];
         $GLOBALS['SETTINGS_SECTIONS']        = [];
         $GLOBALS['SETTINGS_FIELDS']          = [];

@@ -252,7 +252,7 @@ class DynamicModelDiscoveryTest {
         // 7. AJAX Action `presshub_ai_fetch_provider_models`
         // ==================================================================
         self::reset_world();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['NONCE_VALID'] = true;
         $_POST['nonce'] = wp_create_nonce( 'presshub_ai_nonce' );
 
@@ -330,7 +330,7 @@ class DynamicModelDiscoveryTest {
         $GLOBALS['OPTIONS_STORE']       = [];
         $GLOBALS['REGISTERED_SETTINGS'] = [];
         $GLOBALS['SANITIZE_CALLBACKS']  = [];
-        $GLOBALS['CURRENT_USER_CAPS']   = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS']   = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['JSON_RESPONSES']      = [];
         $GLOBALS['NONCE_VALID']         = true;
         $GLOBALS['CAPTURED_GETS']       = [];

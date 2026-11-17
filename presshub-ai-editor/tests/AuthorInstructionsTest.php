@@ -220,7 +220,7 @@ class AuthorInstructionsTest
 
         // --- plugin quota (50 max) ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $rows = [];
         for ( $i = 0; $i < 50; $i++ ) {
@@ -237,7 +237,7 @@ class AuthorInstructionsTest
 
         // --- happy path (plugin scope, admin): option updated, user meta untouched ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $_POST = [ 'scope' => 'plugin', 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'Inverted pyramid.' ];
         $data = self::drive_success( function () {
@@ -329,7 +329,7 @@ class AuthorInstructionsTest
 
         // --- plugin hard delete (admin) ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
             [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'T', 'enabled' => true ],

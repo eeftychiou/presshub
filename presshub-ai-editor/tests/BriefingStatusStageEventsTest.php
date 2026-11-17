@@ -391,7 +391,7 @@ class BriefingStatusStageEventsTest {
         $_GET                                = [];
         $_FILES                              = [];
         $GLOBALS['OPTIONS_STORE']            = [];
-        $GLOBALS['CURRENT_USER_CAPS']        = [ 'edit_posts', 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS']        = [ 'edit_posts', 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID']          = 1;
         $GLOBALS['NONCE_VALID']              = true;
         $GLOBALS['SUBMENU_PAGES']            = [];

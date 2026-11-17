@@ -182,7 +182,7 @@ lpt_check( '2-day-old files survive a 10 day retention', file_exists( $app_file 
 $handlers = new PressHub_AI_Ajax_Handlers();
 $GLOBALS['JSON_RESPONSES']    = [];
 $GLOBALS['NONCE_VALID']       = true;
-$GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
 file_put_contents( $tts_file, "tts line\n" );
 file_put_contents( $tts_file . '.' . $mid_stamp . '.old', 'x' );
 $_POST = [ 'nonce' => 'n', 'target' => 'all' ];

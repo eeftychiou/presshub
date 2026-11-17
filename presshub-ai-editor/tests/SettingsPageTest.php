@@ -409,7 +409,7 @@ class SettingsPageTest
 
         // --- Case 4: render invokes settings_fields + do_settings_sections and adds the help tab ---
         self::reset_world();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $settings = new PressHub_AI_Settings();
         $settings->register_settings();
         ob_start();
@@ -614,7 +614,7 @@ class SettingsPageTest
         require_once __DIR__ . '/../includes/class-ajax-handlers.php';
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $_POST = [
             'nonce'                 => 'valid_nonce',
             'presshub_ai_provider'  => 'gemini',

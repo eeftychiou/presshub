@@ -20,6 +20,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 require_once __DIR__ . '/class-provider-defaults.php';
 require_once __DIR__ . '/class-provider-store.php';
 require_once __DIR__ . '/class-settings-storage.php';
@@ -32,7 +34,7 @@ class PressHub_AI_Settings_Render {
      * Filterable for sites that delegate settings to a custom role.
      */
     public function settings_cap(): string {
-        return (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        return PressHub_Capabilities::manage();
     }
 
     /**
@@ -57,7 +59,7 @@ class PressHub_AI_Settings_Render {
         }
         ?>
         <div class="wrap presshub-ai-settings-wrap">
-            <h1><?php echo __( 'PressHub AI Settings', 'presshub-ai-editor' ); ?></h1>
+            <h1><?php echo esc_html__( 'PressHub — Settings', 'presshub-ai-editor' ); ?></h1>
 
             <div class="presshub-settings-nav-container">
                 <div class="presshub-mobile-tab-select-wrap">
@@ -70,7 +72,6 @@ class PressHub_AI_Settings_Render {
                         <option value="images"><?php echo esc_html__( 'AI Featured Images', 'presshub-ai-editor' ); ?></option>
                         <option value="copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></option>
                         <option value="knowledge"><?php echo esc_html__( 'Editorial knowledge', 'presshub-ai-editor' ); ?></option>
-                        <option value="token_logs"><?php echo esc_html__( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></option>
                         <option value="advanced"><?php echo esc_html__( 'Advanced & System', 'presshub-ai-editor' ); ?></option>
                     </select>
                 </div>
@@ -83,7 +84,6 @@ class PressHub_AI_Settings_Render {
                     <a href="#images" id="presshub-tab-images" class="nav-tab" data-tab="images" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-images"><?php echo esc_html__( 'AI Featured Images', 'presshub-ai-editor' ); ?></a>
                     <a href="#copilot" id="presshub-tab-copilot" class="nav-tab" data-tab="copilot" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-copilot"><?php echo esc_html__( 'AI Copilot & Assistant', 'presshub-ai-editor' ); ?></a>
                     <a href="#knowledge" id="presshub-tab-knowledge" class="nav-tab" data-tab="knowledge" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-knowledge"><?php echo esc_html__( 'Editorial knowledge', 'presshub-ai-editor' ); ?></a>
-                    <a href="#token_logs" id="presshub-tab-token_logs" class="nav-tab" data-tab="token_logs" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-token_logs"><?php echo esc_html__( 'Token & Usage Logs', 'presshub-ai-editor' ); ?></a>
                     <a href="#advanced" id="presshub-tab-advanced" class="nav-tab" data-tab="advanced" role="tab" aria-selected="false" aria-controls="presshub-tab-pane-advanced"><?php echo esc_html__( 'Advanced & System', 'presshub-ai-editor' ); ?></a>
                 </nav>
             </div>
@@ -942,11 +942,6 @@ class PressHub_AI_Settings_Render {
                         <button type="button" class="button button-primary presshub-tab-save-btn" data-tab="knowledge"><?php echo esc_html__( 'Save Editorial Knowledge Settings', 'presshub-ai-editor' ); ?></button>
                         <span class="spinner presshub-tab-save-spinner" role="status" style="float: none; margin: 0;"><span class="screen-reader-text"></span></span>
                     </div>
-                </div>
-
-                <!-- TAB 5: Token & Usage Analytics Logs -->
-                <div id="presshub-tab-pane-token_logs" class="presshub-tab-pane" style="display: none;">
-                    <?php $this->render_token_logs_tab(); ?>
                 </div>
 
                 <!-- TAB 6: Advanced & System Settings -->
@@ -2608,7 +2603,7 @@ class PressHub_AI_Settings_Render {
         <h2 id="presshub-diagnostics"><?php echo esc_html__( 'Diagnostics', 'presshub-ai-editor' ); ?></h2>
 
         <h3><?php echo esc_html__( 'Export and import settings', 'presshub-ai-editor' ); ?></h3>
-        <p class="description"><?php echo esc_html__( 'Download every PressHub AI and PressHub Social setting as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them. The AI providers you set up (with their keys) are not in the file either, so add them again on a new site.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Download every PressHub setting (Settings and Social settings) as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them. The AI providers you set up (with their keys) are not in the file either, so add them again on a new site.', 'presshub-ai-editor' ); ?></p>
         <?php if ( 'done' === $state ) : ?>
             <div class="notice notice-success inline"><p><?php echo self::esc_html_safe( sprintf( __( 'Import finished: %d settings changed.', 'presshub-ai-editor' ), isset( $_GET['presshub_import_count'] ) ? (int) $_GET['presshub_import_count'] : 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification ?></p></div>
         <?php elseif ( 'expired' === $state ) : ?>
@@ -3279,7 +3274,7 @@ class PressHub_AI_Settings_Render {
         ?>
         <tr class="presshub-social-trending-heading">
             <th scope="row" colspan="2"><h3 style="margin:1em 0 0;"><?php echo esc_html__( 'Trending in Cyprus: Social Roundup Post', 'presshub-ai-editor' ); ?></h3>
-                <p class="description" style="font-weight:normal;"><?php echo esc_html__( 'Every few hours, collect the most engaging recent posts about Cyprus and publish them as a roundup post in their own category. X, TikTok and Facebook are read by the social worker (Pull Mode, reader sessions); Instagram uses the Instagram account and Meta token from PressHub Social › API Credentials.', 'presshub-ai-editor' ); ?></p>
+                <p class="description" style="font-weight:normal;"><?php echo esc_html__( 'Every few hours, collect the most engaging recent posts about Cyprus and publish them as a roundup post in their own category. X, TikTok and Facebook are read by the social worker (Pull Mode, reader sessions); Instagram uses the Instagram account and Meta token from PressHub › Social settings › API Credentials.', 'presshub-ai-editor' ); ?></p>
                 <p class="description" style="font-weight:normal;"><?php
                     echo esc_html( sprintf(
                         /* translators: 1: last run, 2: posts in last roundup, 3: run status */

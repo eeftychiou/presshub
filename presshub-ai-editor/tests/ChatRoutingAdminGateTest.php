@@ -26,11 +26,11 @@ class ChatRoutingAdminGateTest
         foreach ( [
             'image_author'  => [ 'edit_posts', 'image',  'permission_denied' ],
             'report_author' => [ 'edit_posts', 'report', 'permission_denied' ],
-            'image_admin'   => [ [ 'edit_posts', 'manage_options' ], 'image',  'allowed' ],
-            'report_admin'  => [ [ 'edit_posts', 'manage_options' ], 'report', 'allowed' ],
+            'image_admin'   => [ [ 'edit_posts', 'manage_options', 'edit_others_posts' ], 'image',  'allowed' ],
+            'report_admin'  => [ [ 'edit_posts', 'manage_options', 'edit_others_posts' ], 'report', 'allowed' ],
             'chat_author'   => [ 'edit_posts', 'chat',  'allowed' ],
             'research_author' => [ 'edit_posts', 'research', 'allowed' ],
-            'chat_admin'    => [ [ 'edit_posts', 'manage_options' ], 'chat',  'allowed' ],
+            'chat_admin'    => [ [ 'edit_posts', 'manage_options', 'edit_others_posts' ], 'chat',  'allowed' ],
         ] as $key => [ $caps, $intent, $expectation ] ) {
             self::reset_world();
             $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'openai-key';

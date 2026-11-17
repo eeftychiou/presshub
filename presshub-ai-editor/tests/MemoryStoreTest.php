@@ -369,7 +369,7 @@ function test_memory_store(): void {
 
     $ajax = new PressHub_AI_Ajax_Handlers();
     $GLOBALS['NONCE_VALID'] = true;
-    $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+    $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
     $_POST['tab'] = 'knowledge'; // #234: memory settings moved to Editorial knowledge.
     $_POST['nonce'] = 'dummy';
     // Do NOT include presshub_ai_memory_enabled in POST, simulating unchecked checkbox

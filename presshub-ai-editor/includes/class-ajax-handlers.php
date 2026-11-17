@@ -1,6 +1,8 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+require_once __DIR__ . '/class-capabilities.php';
+
 require_once __DIR__ . '/class-rate-limiter.php';
 require_once __DIR__ . '/class-preset-sanitizer.php';
 require_once __DIR__ . '/class-preset-store.php';
@@ -125,8 +127,8 @@ class PressHub_AI_Ajax_Handlers {
     public function test_api_connection() {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ), 403 );
         }
 
         // P6: the per-provider Test Connection buttons send the target
@@ -447,7 +449,7 @@ class PressHub_AI_Ajax_Handlers {
         // user from racking up Google Cloud costs without an admin's
         // explicit configuration of the project + keys.
         $pre_intent = isset( $_POST['intent'] ) ? sanitize_text_field( wp_unslash( $_POST['intent'] ) ) : '';
-        if ( in_array( $pre_intent, [ 'image', 'report' ], true ) && ! current_user_can( 'manage_options' ) ) {
+        if ( in_array( $pre_intent, [ 'image', 'report' ], true ) && ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
@@ -467,7 +469,7 @@ class PressHub_AI_Ajax_Handlers {
         // image/report intent, an author must not be able to trigger the
         // paid call. (Belt-and-suspenders in case the client somehow
         // bypasses the pre_intent hint above.)
-        if ( in_array( $intent, [ 'image', 'report' ], true ) && ! current_user_can( 'manage_options' ) ) {
+        if ( in_array( $intent, [ 'image', 'report' ], true ) && ! current_user_can( PressHub_Capabilities::manage() ) ) {
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
         }
 
@@ -732,7 +734,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      * existing enabled state is preserved, new presets default to enabled).
      *
      * Scope rules: 'author' requires edit_posts and always targets the
-     * current user's own library; 'plugin' requires manage_options and
+     * current user's own library; 'plugin' requires the PressHub capability and
      * targets the plugin-default option.
      */
     public function save_preset() {
@@ -740,8 +742,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : 'author';
         if ( 'plugin' === $scope ) {
-            if ( ! current_user_can( 'manage_options' ) ) {
-                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+            if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
+                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ), 403 );
             }
         } elseif ( ! current_user_can( 'edit_posts' ) ) {
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
@@ -793,7 +795,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      * to PressHub_AI_Preset_Store::remove().
      *
      * Author scope: soft delete — sets enabled=false but keeps the row so
-     * existing selections don't break. Plugin scope (manage_options):
+     * existing selections don't break. Plugin scope (the PressHub capability):
      * hard delete — the row is removed from the plugin-default option.
      */
     public function delete_preset() {
@@ -801,8 +803,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : 'author';
         if ( 'plugin' === $scope ) {
-            if ( ! current_user_can( 'manage_options' ) ) {
-                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+            if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
+                wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ), 403 );
             }
         } elseif ( ! current_user_can( 'edit_posts' ) ) {
             wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
@@ -904,7 +906,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      * AJAX: presshub_ai_save_org_default — set or clear one admin-curated
      * org default (2026-08-15 design §9 Q3 / Antigravity A-6).
      *
-     * Admin-only (manage_options). POST params:
+     * Admin-only (the PressHub capability). POST params:
      *   scope: 'taxonomy' | 'role',
      *   key:   term slug (taxonomy scope) or role name (role scope),
      *   value: preset slug | '__none__' (disable presets at this layer)
@@ -918,8 +920,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
     public function save_org_default() {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ) );
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
+            wp_send_json_error( __( 'Permission denied.', 'presshub-ai-editor' ), 403 );
         }
 
         $scope = isset( $_POST['scope'] ) ? sanitize_text_field( wp_unslash( $_POST['scope'] ) ) : '';
@@ -1010,7 +1012,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         if ( class_exists( 'PressHub_AI_Briefing_Admin' ) && method_exists( 'PressHub_AI_Briefing_Admin', 'capability' ) ) {
             return PressHub_AI_Briefing_Admin::capability();
         }
-        return (string) apply_filters( 'presshub_ai_briefing_cap', 'edit_others_posts' );
+        return PressHub_Capabilities::briefing();
     }
 
     /**
@@ -1799,7 +1801,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         try {
             check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
-            $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+            $cap = PressHub_Capabilities::manage();
             if ( ! current_user_can( $cap ) ) {
                 wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub AI settings.', 'presshub-ai-editor' ) ], 403 );
             }
@@ -1888,7 +1890,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         try {
             check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
 
-            $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+            $cap = PressHub_Capabilities::manage();
             if ( ! current_user_can( $cap ) ) {
                 wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub AI settings.', 'presshub-ai-editor' ) ], 403 );
             }
@@ -1985,7 +1987,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function save_provider(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2039,7 +2041,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function delete_provider(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2067,7 +2069,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function test_provider(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2122,7 +2124,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function fetch_token_logs(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2179,7 +2181,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function export_token_csv(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2244,7 +2246,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function clear_token_logs(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2264,7 +2266,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function fetch_audit_logs(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2312,7 +2314,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function export_audit_csv(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2359,7 +2361,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function clear_audit_logs(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2381,7 +2383,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function get_logs(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Insufficient permissions.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2543,7 +2545,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function clear_logs(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Insufficient permissions.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2628,7 +2630,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             check_admin_referer( 'presshub_ai_download_log' );
         }
 
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_die( esc_html__( 'Insufficient permissions.', 'presshub-ai-editor' ), 403 );
         }
@@ -2748,7 +2750,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function fetch_provider_models(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
@@ -2807,9 +2809,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function test_press_inbox(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ] );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
         $inbox  = new PressHub_AI_Press_Release_Inbox();
         $result = $inbox->test_connection();
@@ -2824,9 +2826,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
     public function test_source(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ] );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $url  = isset( $_POST['url'] ) ? esc_url_raw( wp_unslash( $_POST['url'] ) ) : '';
@@ -2900,7 +2902,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
      */
     public function bulk_import_sources(): void {
         check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
-        $cap = (string) apply_filters( 'presshub_ai_settings_cap', 'manage_options' );
+        $cap = PressHub_Capabilities::manage();
         if ( ! current_user_can( $cap ) ) {
             wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }

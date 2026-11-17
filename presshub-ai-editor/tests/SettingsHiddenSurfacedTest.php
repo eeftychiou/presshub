@@ -25,7 +25,7 @@ class SettingsHiddenSurfacedTest {
     ];
 
     private static function render_page(): string {
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $renderer = new PressHub_AI_Settings_Render();
         ob_start();
         $renderer->render_settings_page();

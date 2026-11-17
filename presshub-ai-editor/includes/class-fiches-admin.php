@@ -1,19 +1,19 @@
 <?php
 /**
- * PressHub_AI_Fiches_Admin - top-level "Policy Fiches" admin menu.
+ * PressHub_AI_Fiches_Admin - the fiche pages under the PressHub menu.
  *
- * The editorial agenda fiche (#198) and the stakeholder / people fiches (#197)
- * used to be tabs on Daily Briefing Hub → Memory. They now get their own menu,
- * next to Daily Briefing Hub and PressHub Social:
+ * The editorial agenda fiche (#198), the policy fiches and the stakeholder /
+ * people fiches (#197) used to be tabs on Daily Briefing Hub → Memory, then had
+ * their own "Policy Fiches" menu (2.37). Since #235 they sit under PressHub,
+ * after Memory:
  *
- *   Policy Fiches                 ← top-level entry (dashicons-id-alt)
+ *   PressHub
  *     ├─ Editorial agenda         admin.php?page=presshub-ai-agenda
  *     ├─ Policies                 admin.php?page=presshub-ai-policies
  *     └─ People                   admin.php?page=presshub-ai-people
  *
- * The page slugs belong to the pages, not to the menu, so when the settings
- * overhaul (#232, phase 3 / #235) folds everything under one PressHub menu
- * only the parent changes and every link keeps working.
+ * The page slugs belong to the pages, not to the menu, so moving them changed
+ * only the parent and every link keeps working.
  *
  * Old links (admin.php?page=presshub-ai-memory&tab=agenda|stakeholders) are
  * redirected to the new pages with their other query arguments kept.
@@ -31,7 +31,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class PressHub_AI_Fiches_Admin {
 
-    /** Top-level menu slug; the Agenda page doubles as the menu's landing page. */
+    /** Former top-level menu slug (the Agenda page); kept for code that links to it. */
     const MENU_SLUG   = 'presshub-ai-agenda';
     const AGENDA_SLUG = 'presshub-ai-agenda';
     const PEOPLE_SLUG = 'presshub-ai-people';
@@ -63,21 +63,13 @@ class PressHub_AI_Fiches_Admin {
     }
 
     public function add_admin_menu(): void {
-        $cap = self::capability();
+        $cap    = self::capability();
+        $parent = class_exists( 'PressHub_Admin_Menu' ) ? PressHub_Admin_Menu::PARENT : 'presshub-ai-briefing-hub';
 
-        add_menu_page(
-            __( 'PressHub AI — Policy Fiches', 'presshub-ai-editor' ),
-            __( 'Policy Fiches', 'presshub-ai-editor' ),
-            $cap,
-            self::MENU_SLUG,
-            [ __CLASS__, 'render_agenda_page' ],
-            'dashicons-id-alt',
-            27 // Right after Daily Briefing Hub (26), before PressHub Social (30).
-        );
-
+        // #235: the pages sit under the one PressHub menu; their slugs are unchanged.
         add_submenu_page(
-            self::MENU_SLUG,
-            __( 'PressHub AI — Editorial agenda', 'presshub-ai-editor' ),
+            $parent,
+            __( 'PressHub — Editorial agenda', 'presshub-ai-editor' ),
             __( 'Editorial agenda', 'presshub-ai-editor' ),
             $cap,
             self::AGENDA_SLUG,
@@ -86,8 +78,8 @@ class PressHub_AI_Fiches_Admin {
 
         if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
             add_submenu_page(
-                self::MENU_SLUG,
-                __( 'PressHub AI — Policies', 'presshub-ai-editor' ),
+                $parent,
+                __( 'PressHub — Policies', 'presshub-ai-editor' ),
                 __( 'Policies', 'presshub-ai-editor' ),
                 $cap,
                 self::POLICY_SLUG,
@@ -97,8 +89,8 @@ class PressHub_AI_Fiches_Admin {
 
         if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
             add_submenu_page(
-                self::MENU_SLUG,
-                __( 'PressHub AI — People', 'presshub-ai-editor' ),
+                $parent,
+                __( 'PressHub — People', 'presshub-ai-editor' ),
                 __( 'People', 'presshub-ai-editor' ),
                 $cap,
                 self::PEOPLE_SLUG,

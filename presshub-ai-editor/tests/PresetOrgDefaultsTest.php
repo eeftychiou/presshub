@@ -59,7 +59,7 @@ class PresetOrgDefaultsTest
 
         // --- invalid scope ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $_POST = [ 'scope' => 'author', 'key' => 'sports', 'value' => 'wire-style' ];
         $msg = self::expect_json_error( function () {
             ( new PressHub_AI_Ajax_Handlers() )->save_org_default();
@@ -70,7 +70,7 @@ class PresetOrgDefaultsTest
 
         // --- invalid key (bad slug) ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $_POST = [ 'scope' => 'taxonomy', 'key' => 'Bad Key!', 'value' => 'wire-style' ];
         $msg = self::expect_json_error( function () {
             ( new PressHub_AI_Ajax_Handlers() )->save_org_default();
@@ -81,7 +81,7 @@ class PresetOrgDefaultsTest
 
         // --- invalid value (bad slug) ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $_POST = [ 'scope' => 'role', 'key' => 'editor', 'value' => 'Bad_Slug' ];
         $msg = self::expect_json_error( function () {
             ( new PressHub_AI_Ajax_Handlers() )->save_org_default();
@@ -92,7 +92,7 @@ class PresetOrgDefaultsTest
 
         // --- value must name an ENABLED plugin-default preset ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
             [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'T', 'enabled' => true ],
             [ 'slug' => 'ghost', 'name' => 'Ghost', 'instruction_text' => 'T', 'enabled' => false ],
@@ -121,7 +121,7 @@ class PresetOrgDefaultsTest
 
         // --- save a taxonomy default ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
             [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'T', 'enabled' => true ],
@@ -140,7 +140,7 @@ class PresetOrgDefaultsTest
 
         // --- save a role default ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
             [ 'slug' => 'fact-check', 'name' => 'Fact check', 'instruction_text' => 'T', 'enabled' => true ],
@@ -156,7 +156,7 @@ class PresetOrgDefaultsTest
 
         // --- update replaces the existing assignment in place ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
             [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'T', 'enabled' => true ],
@@ -174,7 +174,7 @@ class PresetOrgDefaultsTest
 
         // --- '__none__' disables presets at that layer ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $_POST = [ 'scope' => 'role', 'key' => 'author', 'value' => '__none__' ];
         $data = self::drive_success( function () {
@@ -190,7 +190,7 @@ class PresetOrgDefaultsTest
 
         // --- '' clears the assignment ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_taxonomy_presets'] = [ 'sports' => 'wire-style', 'politics' => 'fact-check' ];
         $_POST = [ 'scope' => 'taxonomy', 'key' => 'sports', 'value' => '' ];
@@ -207,7 +207,7 @@ class PresetOrgDefaultsTest
 
         // --- throttle: saturated preset bucket blocks the mutation ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
             [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'T', 'enabled' => true ],
@@ -254,7 +254,7 @@ class PresetOrgDefaultsTest
         // ==================================================================
 
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
             [ 'slug' => 'wire-style', 'name' => 'Wire', 'instruction_text' => 'Inverted pyramid.', 'enabled' => true ],
             [ 'slug' => 'ghost', 'name' => 'Ghost', 'instruction_text' => 'T', 'enabled' => false ],
@@ -297,7 +297,7 @@ class PresetOrgDefaultsTest
 
         // --- render with no terms: graceful empty state ---
         self::reset();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $admin = new PressHub_AI_Admin_Presets();
         ob_start();
         $admin->render_page();

@@ -8,6 +8,7 @@ require_once __DIR__ . '/wp-action-wrapper.php';
 require_once __DIR__ . '/../includes/class-provider-defaults.php';
 require_once __DIR__ . '/../includes/class-provider-store.php';
 require_once __DIR__ . '/../includes/class-token-logger.php';
+require_once __DIR__ . '/../includes/class-admin-menu.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 require_once __DIR__ . '/../includes/class-ajax-handlers.php';
 require_once __DIR__ . '/../includes/class-settings.php';
@@ -61,7 +62,7 @@ class SettingsModularRedesignTest
         // Case 2: Render Settings Page output contains all 6 tabs
         // -------------------------------------------------------------
         self::reset_world();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         ob_start();
         $settings->render_settings_page();
         $html = ob_get_clean();
@@ -71,9 +72,12 @@ class SettingsModularRedesignTest
             'presshub-tab-pane-coauthor',
             'presshub-tab-pane-briefing',
             'presshub-tab-pane-copilot',
-            'presshub-tab-pane-token_logs',
             'presshub-tab-pane-advanced',
         ];
+        // #235: Token & Usage Logs moved to PressHub → Usage & logs.
+        if ( false !== strpos( $html, 'id="presshub-tab-pane-token_logs"' ) ) {
+            $failures[] = 'Settings page still renders the Token & Usage Logs tab; it moved to Usage & logs.';
+        }
 
         foreach ( $expected_panes as $pane_id ) {
             if ( false === strpos( $html, 'id="' . $pane_id . '"' ) ) {
@@ -85,6 +89,13 @@ class SettingsModularRedesignTest
             $failures[] = "Settings page HTML missing provider modal dialog.";
         }
 
+        // The log details modal belongs to the token dashboard on Usage & logs.
+        ob_start();
+        PressHub_Admin_Menu::render_usage_page();
+        $html = ob_get_clean();
+        if ( false === strpos( $html, 'id="presshub-usage-logs-page"' ) || false === strpos( $html, 'id="presshub-token-logs-tbody"' ) ) {
+            $failures[] = 'Usage & logs page missing the token dashboard.';
+        }
         if ( false === strpos( $html, 'id="presshub-log-details-modal"' ) ) {
             $failures[] = "Settings page HTML missing log details modal dialog (#presshub-log-details-modal).";
         }
@@ -105,7 +116,7 @@ class SettingsModularRedesignTest
         // Case 3: AJAX Save Provider Endpoint
         // -------------------------------------------------------------
         self::reset_world();
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['NONCE_VALID'] = true;
         $_REQUEST['_ajax_nonce'] = wp_create_nonce( 'presshub_ai_nonce' );
         $_POST['nonce']          = wp_create_nonce( 'presshub_ai_nonce' );
@@ -406,7 +417,7 @@ class SettingsModularRedesignTest
         $GLOBALS['OPTIONS_STORE'] = [];
         $GLOBALS['REGISTERED_SETTINGS'] = [];
         $GLOBALS['SANITIZE_CALLBACKS'] = [];
-        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['JSON_RESPONSES'] = [];
         $GLOBALS['NONCE_VALID'] = true;
         $_POST = [];

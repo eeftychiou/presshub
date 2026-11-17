@@ -112,7 +112,7 @@ class SettingsSaveIsolationTest {
                     'payload_b64' => base64_encode( json_encode( $payload ) ),
                 ];
                 $GLOBALS['NONCE_VALID']       = true;
-                $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options' ];
+                $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
                 $GLOBALS['JSON_RESPONSES']    = [];
                 try {
                     $handlers->save_settings_section();

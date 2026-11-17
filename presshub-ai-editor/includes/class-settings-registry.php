@@ -24,6 +24,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/class-capabilities.php';
+
 class PressHub_Settings_Registry {
 
     const STATUS_ACTIVE = 'active';
@@ -56,6 +58,9 @@ class PressHub_Settings_Registry {
 
     /** @var array<string,array> Runtime registrations: option => [ group, args ]. */
     private static $registered = [];
+
+    /** @var array<string,bool> Option groups whose option_page_capability filter is in place. */
+    private static $groups = [];
 
     // ------------------------------------------------------------------
     // Declared metadata.
@@ -228,7 +233,7 @@ class PressHub_Settings_Registry {
         return [
             'page'       => $page,
             'pages'      => [
-                'ai'     => admin_url( 'options-general.php?page=presshub-ai' ),
+                'ai'     => admin_url( 'admin.php?page=presshub-ai' ),
                 'social' => admin_url( 'admin.php?page=presshub-social-settings' ),
             ],
             'entries'    => self::search_index(),
@@ -296,10 +301,54 @@ class PressHub_Settings_Registry {
      * @param array  $args   register_setting() arguments.
      */
     public static function register( string $group, string $option, array $args = [] ): void {
+        if ( ! isset( self::$groups[ $group ] ) && class_exists( 'PressHub_Capabilities' ) ) {
+            // #235: editors save through options.php with the PressHub capability.
+            self::$groups[ $group ] = true;
+            PressHub_Capabilities::register_option_group( $group );
+        }
         self::$registered[ $option ] = [ 'group' => $group, 'args' => $args ];
         if ( function_exists( 'register_setting' ) ) {
             register_setting( $group, $option, $args );
         }
+    }
+
+    /**
+     * Old PressHub admin URLs and where they go now (#235). 3b extends this
+     * map to settings sections. Each rule: the admin file and ?page= of the
+     * old URL, an optional ?tab= it must carry (dropped on redirect), and the
+     * new page slug. Other query arguments are kept.
+     *
+     * @return array<int,array{file:string,page:string,to:string,tab?:string}>
+     */
+    public static function legacy_admin_redirects(): array {
+        $rules = [
+            // Settings → PressHub AI and its Presets page moved under PressHub.
+            [ 'file' => 'options-general.php', 'page' => 'presshub-ai', 'to' => 'presshub-ai' ],
+            [ 'file' => 'options-general.php', 'page' => 'presshub-ai-presets', 'to' => 'presshub-ai-presets' ],
+            // An older build filed the Social Queue under Settings.
+            [ 'file' => 'options-general.php', 'page' => 'presshub-social-queue', 'to' => 'presshub-social-queue' ],
+            [ 'file' => 'options-general.php', 'page' => 'presshub-social-settings', 'to' => 'presshub-social-settings' ],
+            // Token & Usage Logs left the settings tabs for Usage & logs.
+            [ 'file' => 'admin.php', 'page' => 'presshub-ai', 'tab' => 'token_logs', 'to' => 'presshub-ai-usage' ],
+            [ 'file' => 'admin.php', 'page' => 'presshub-ai', 'tab' => 'token_usage', 'to' => 'presshub-ai-usage' ],
+            [ 'file' => 'admin.php', 'page' => 'presshub-ai', 'tab' => 'usage', 'to' => 'presshub-ai-usage' ],
+            // Short form of the menu.
+            [ 'file' => 'admin.php', 'page' => 'presshub', 'to' => 'presshub-ai-briefing-hub' ],
+        ];
+        /**
+         * Filters the old-URL redirect map used by the PressHub menu.
+         *
+         * @param array $rules Redirect rules.
+         */
+        if ( function_exists( 'apply_filters' ) ) {
+            $filtered = apply_filters( 'presshub_legacy_admin_redirects', $rules );
+            if ( is_array( $filtered ) ) {
+                $rules = array_values( array_filter( $filtered, static function ( $r ) {
+                    return is_array( $r ) && isset( $r['file'], $r['page'], $r['to'] );
+                } ) );
+            }
+        }
+        return $rules;
     }
 
     /**
@@ -332,6 +381,7 @@ class PressHub_Settings_Registry {
     /** Test helper: forget runtime registrations and reload declared data. */
     public static function reset(): void {
         self::$registered = [];
+        self::$groups     = [];
         self::$data       = null;
     }
 
