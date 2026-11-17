@@ -37,6 +37,16 @@
         // on the field's new tab.
         function revealSocialAnchor(id) {
             var el = id ? document.getElementById(id) : null;
+            if (!el && id) {
+                // Checkboxes and array fields have a name but no id.
+                var named = document.querySelectorAll('[name="' + id + '"], [name^="' + id + '["]');
+                for (var i = 0; i < named.length && !el; i++) {
+                    if (named[i].type !== 'hidden') {
+                        el = named[i];
+                    }
+                }
+                el = el || named[0] || null;
+            }
             if (!el) {
                 return;
             }
@@ -49,6 +59,22 @@
             el.scrollIntoView({ block: 'center' });
         }
         revealSocialAnchor((window.location.hash || '').replace('#', ''));
+
+        // Links to another tab of this page (the Shorts readiness notice)
+        // switch tabs in place, so unsaved edits are kept.
+        $(document).on('click', '#presshub-social-settings-form a[href*="page=presshub-social-settings"]', function (e) {
+            var href = $(this).attr('href') || '';
+            var tabMatch = href.match(/[?&]tab=([a-z_]+)/);
+            if (!tabMatch || !$('#presshub-social-tab-pane-' + tabMatch[1]).length || /[?&]action=/.test(href)) {
+                return;
+            }
+            e.preventDefault();
+            $('.presshub-social-tab-link[data-tab="' + tabMatch[1] + '"]').trigger('click');
+            var hashIdx = href.indexOf('#');
+            if (hashIdx !== -1) {
+                revealSocialAnchor(href.slice(hashIdx + 1));
+            }
+        });
         $(window).on('hashchange', function () {
             revealSocialAnchor((window.location.hash || '').replace('#', ''));
         });

@@ -32,6 +32,19 @@
                 return els[i];
             }
         }
+        // Array options: name="key[]" or name="key[task]".
+        var arr = document.querySelectorAll('[name^="' + key + '["]');
+        for (var j = 0; j < arr.length; j++) {
+            if (arr[j].type !== 'hidden') {
+                return arr[j];
+            }
+        }
+        // Widgets that keep the value in a hidden input (sources, image
+        // pools): point at the widget instead.
+        var hidden = el || (els.length ? els[0] : null);
+        if (hidden && hidden.type === 'hidden' && hidden.parentElement) {
+            return hidden.parentElement;
+        }
         return el || null;
     }
 
@@ -224,6 +237,10 @@
         if (e.checkbox) {
             return cur === (e.default ? 1 : 0);
         }
+        // A blank numeric field shows a stored 0 ("use the provider default").
+        if (typeof e.default === 'number' && cur === '' && e.default === 0) {
+            return true;
+        }
         if (typeof e.default === 'number' && cur !== '' && !isNaN(Number(cur))) {
             return Number(cur) === e.default;
         }
@@ -236,7 +253,7 @@
                 return;
             }
             var el = fieldFor(e.key);
-            if (!el || el.tagName === 'TEXTAREA' || el.type === 'password' || el.type === 'radio' || el.readOnly) {
+            if (!el || !/^(INPUT|SELECT)$/.test(el.tagName) || el.type === 'password' || el.type === 'radio' || el.type === 'hidden') {
                 return;
             }
             if (e.checkbox && el.type !== 'checkbox') {
@@ -253,9 +270,13 @@
             ($unit.length ? $unit : $anchor).after($span);
 
             function sync() {
-                $btn.prop('hidden', isDefault(e, el));
+                // Read-only fields (e.g. push-only worker fields in Pull mode) get no Reset.
+                $btn.prop('hidden', el.readOnly || isDefault(e, el));
             }
             $btn.on('click', function () {
+                if (el.readOnly) {
+                    return;
+                }
                 if (e.checkbox) {
                     $el.prop('checked', !!e.default);
                 } else {
@@ -265,6 +286,7 @@
                 sync();
             });
             $el.on('input change', sync);
+            $(document).on('change', '#presshub_social_worker_mode', function () { setTimeout(sync, 0); });
             sync();
         });
     }

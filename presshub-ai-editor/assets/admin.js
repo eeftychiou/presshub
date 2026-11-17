@@ -1461,10 +1461,23 @@ jQuery(document).ready(function($) {
                 $el.data('phBaseline', $el.val());
             }
         });
+        $('#presshub-tab-pane-' + tabKey).find('.presshub-image-pool-grid').each(function() {
+            $(this).data('phGridBaseline', $(this).html());
+        });
     }
 
     function revertTab(tabKey) {
         var $pane = $('#presshub-tab-pane-' + tabKey);
+        var $grids = $pane.find('.presshub-image-pool-grid');
+        $grids.each(function() {
+            var base = $(this).data('phGridBaseline');
+            if (typeof base === 'string') {
+                $(this).html(base);
+            }
+        });
+        if ($grids.length) {
+            $(document).trigger('presshub:image-pools-reset');
+        }
         $pane.find('input, select, textarea').each(function() {
             var $el = $(this);
             var base = $el.data('phBaseline');
@@ -1711,11 +1724,21 @@ jQuery(document).ready(function($) {
                 switchCoauthorSubtab($sub.attr('id').replace('presshub-subpane-coauthor-', ''));
             }
             $el.parents('details').attr('open', 'open');
-            if (typeof el.scrollIntoView === 'function') {
+            // A hidden input or a field in a closed style/presenter pane cannot
+            // be scrolled to: use the nearest visible container instead.
+            var target = el;
+            while (target && target.parentElement && (target.offsetParent === null || target.type === 'hidden') && target.tagName !== 'BODY') {
+                target = target.parentElement;
+            }
+            if (target && typeof target.scrollIntoView === 'function') {
                 try {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 } catch (err) {
-                    el.scrollIntoView();
+                    target.scrollIntoView();
+                }
+                if (target !== el) {
+                    $(target).addClass('presshub-search-hit');
+                    setTimeout(function() { $(target).removeClass('presshub-search-hit'); }, 2500);
                 }
             }
             if (window.history && window.history.replaceState) {
@@ -1951,16 +1974,30 @@ jQuery(document).ready(function($) {
             }
         });
 
+        var lastHash = window.location.hash || '';
         $(window).on('hashchange', function() {
             var hash = (window.location.hash || '').replace('#', '');
             if (hash) {
                 var targetTab = tabAliases[hash] || hash;
-                if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length) {
+                var isTab = $tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length;
+                // #234 review: hash navigation (search results, links) goes
+                // through the unsaved-changes guard as well.
+                var targetEl = isTab ? document.getElementById('presshub-tab-pane-' + targetTab) : document.getElementById(hash);
+                var $targetPane = targetEl ? $(targetEl).closest('.presshub-tab-pane') : $();
+                var $current = $('.presshub-tab-pane:visible').first();
+                if ($targetPane.length && $current.length && $targetPane[0] !== $current[0] && !confirmLeaveTab($current)) {
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState(null, null, lastHash || window.location.pathname + window.location.search);
+                    }
+                    return;
+                }
+                if (isTab) {
                     switchTab(hash);
                 } else {
                     revealAnchor(hash);
                 }
             }
+            lastHash = window.location.hash || '';
         });
 
         var initialHash = (window.location.hash || '').replace('#', '');
@@ -4834,6 +4871,14 @@ jQuery(document).ready(function($) {
         });
 
         frame.open();
+    });
+
+    // #234: the tab guard put a pool grid back to its saved state; resync
+    // the hidden input and the empty/fallback notices from the grid.
+    $(document).on('presshub:image-pools-reset', function() {
+        $('.presshub-image-pool-manager').each(function() {
+            syncImagePoolManager($(this));
+        });
     });
 
     // Remove single image from pool
