@@ -27,7 +27,7 @@ jQuery(document).ready(function($) {
     // a global binding that collides with any other script declaring __
     // ("Identifier '__' has already been declared" — SyntaxError kills the
     // whole file). Function scope is immune to that class of bug.
-    const { __ } = wp.i18n;
+    const { __, sprintf } = wp.i18n;
 
     // ------------------------------------------------------------------
     // Small helpers.
@@ -1401,9 +1401,11 @@ jQuery(document).ready(function($) {
      * secret typed later is not removed again.
      */
     function resetSocialSecretFields() {
-        $('#presshub-settings-page input[type="checkbox"][name$="_remove"]').each(function() {
+        $('#presshub-settings-page input[type="checkbox"][name$="_remove"], #presshub-settings-page input[type="checkbox"][name^="presshub_ai_remove_"]').each(function() {
             var $remove = $(this);
-            var option = String($remove.attr('name') || '').replace(/_remove$/, '');
+            var name = String($remove.attr('name') || '');
+            // Social: <option>_remove. AI: presshub_ai_remove_<x> clears presshub_ai_<x>.
+            var option = /^presshub_ai_remove_/.test(name) ? name.replace(/^presshub_ai_remove_/, 'presshub_ai_') : name.replace(/_remove$/, '');
             var $field = $('[name="' + option + '"]');
             if (!$field.length || !$field.is('input[type="password"]')) {
                 return;

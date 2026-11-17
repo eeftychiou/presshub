@@ -637,7 +637,7 @@ class PressHub_Social_Settings_Render {
         ?>
         <div class="presshub-social-music-library">
             <?php if ( empty( $status ) ) : ?>
-                <p><?php echo esc_html__( 'No moods: the TikTok Shorts: Music Prompts setting (Prompts tab) has no "mood: prompt" lines.', 'presshub-social-autopost' ); ?></p>
+                <p><?php echo esc_html__( 'No moods: the TikTok Shorts: Music Prompts setting (Social publishing › Shorts) has no "mood: prompt" lines.', 'presshub-social-autopost' ); ?></p>
             <?php else : ?>
                 <table class="ph-max-width-800px widefat striped">
                     <tbody>

@@ -540,11 +540,10 @@ class PressHub_Settings_Registry {
             $social = 'social' === ( $entry['page'] ?? '' );
             try {
                 if ( ! empty( $entry['removes'] ) ) {
-                    if ( 'presshub_ai_remove_press_inbox_password' === $option ) {
-                        $new_pass = (string) ( $post_data['presshub_ai_press_inbox_password'] ?? '' );
-                        if ( '' !== $new_pass && false === strpos( $new_pass, '••••' ) ) {
-                            continue;
-                        }
+                    // A new key, token or password typed in the same save wins over "Remove".
+                    $new_secret = trim( (string) ( $post_data[ (string) $entry['removes'] ] ?? '' ) );
+                    if ( '' !== $new_secret && false === strpos( $new_secret, '••••' ) ) {
+                        continue;
                     }
                     if ( ! empty( $post_data[ $option ] ) ) {
                         call_user_func( $sanitizer, $post_data[ $option ] );

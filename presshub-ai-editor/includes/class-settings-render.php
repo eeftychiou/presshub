@@ -1111,7 +1111,7 @@ class PressHub_AI_Settings_Render {
                         </tbody>
                     </table>
         </section>
-        <section id="social-listening-trending" class="presshub-settings-group">
+        <section id="social-listening-trending" class="presshub-settings-group" aria-label="<?php echo esc_attr__( 'Trending in Cyprus', 'presshub-ai-editor' ); ?>">
 
                     <table class="form-table" role="presentation">
                         <tbody>
@@ -2793,7 +2793,7 @@ class PressHub_AI_Settings_Render {
         <h2 id="presshub-diagnostics"><?php echo esc_html__( 'Diagnostics', 'presshub-ai-editor' ); ?></h2>
 
         <h3><?php echo esc_html__( 'Export and import settings', 'presshub-ai-editor' ); ?></h3>
-        <p class="description"><?php echo esc_html__( 'Download every PressHub setting (Settings and Social settings) as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them. The AI providers you set up (with their keys) are not in the file either, so add them again on a new site.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Download every PressHub setting (every Settings section) as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them. The AI providers you set up (with their keys) are not in the file either, so add them again on a new site.', 'presshub-ai-editor' ); ?></p>
         <?php if ( 'done' === $state ) : ?>
             <div class="notice notice-success inline"><p><?php echo self::esc_html_safe( sprintf( __( 'Import finished: %d settings changed.', 'presshub-ai-editor' ), isset( $_GET['presshub_import_count'] ) ? (int) $_GET['presshub_import_count'] : 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification ?></p></div>
         <?php elseif ( 'expired' === $state ) : ?>
@@ -3465,7 +3465,7 @@ class PressHub_AI_Settings_Render {
         ?>
         <tr class="presshub-social-trending-heading">
             <th scope="row" colspan="2"><h3 class="ph-margin-1em-0-0"><?php echo esc_html__( 'Trending in Cyprus: Social Roundup Post', 'presshub-ai-editor' ); ?></h3>
-                <p class="ph-font-weight-normal description"><?php echo esc_html__( 'Every few hours, collect the most engaging recent posts about Cyprus and publish them as a roundup post in their own category. X, TikTok and Facebook are read by the social worker (Pull Mode, reader sessions); Instagram uses the Instagram account and Meta token from PressHub › Social settings › API Credentials.', 'presshub-ai-editor' ); ?></p>
+                <p class="ph-font-weight-normal description"><?php echo esc_html__( 'Every few hours, collect the most engaging recent posts about Cyprus and publish them as a roundup post in their own category. X, TikTok and Facebook are read by the social worker (Pull Mode, reader sessions); Instagram uses the Instagram account and Meta token from PressHub › Settings › Connections › Social accounts.', 'presshub-ai-editor' ); ?></p>
                 <p class="ph-font-weight-normal description"><?php
                     echo esc_html( sprintf(
                         /* translators: 1: last run, 2: posts in last roundup, 3: run status */

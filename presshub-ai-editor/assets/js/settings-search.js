@@ -112,7 +112,12 @@
     // field that now lives in another section.
     // ------------------------------------------------------------------
     function followHash() {
-        var hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+        var hash = '';
+        try {
+            hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+        } catch (e) {
+            return; // A malformed %-escape: nothing to follow.
+        }
         if (!hash) {
             return;
         }

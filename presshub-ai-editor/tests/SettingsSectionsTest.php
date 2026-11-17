@@ -223,6 +223,17 @@ if ( false === strpos( $js, 'function resetSocialSecretFields()' ) ) {
     $failures[] = 'admin.js should untick Social "Remove" boxes after a successful save.';
 }
 
+// The same for AI keys: a new GitHub token typed with "Remove" ticked is kept.
+$GLOBALS['OPTIONS_STORE'] = [ 'presshub_ai_github_token' => 'ghp_oldtoken1234567' ];
+sst_ajax( [ $ajax, 'save_settings_section' ], [ 'tab' => 'connections', 'payload_b64' => base64_encode( '{"presshub_ai_github_token":"ghp_newtoken7654321","presshub_ai_remove_github_token":"1"}' ) ] );
+if ( 'ghp_newtoken7654321' !== get_option( 'presshub_ai_github_token' ) ) {
+    $failures[] = 'A new GitHub token should win over a ticked Remove; got ' . var_export( get_option( 'presshub_ai_github_token' ), true );
+}
+sst_ajax( [ $ajax, 'save_settings_section' ], [ 'tab' => 'connections', 'payload_b64' => base64_encode( '{"presshub_ai_github_token":"ghp_••••••••4321","presshub_ai_remove_github_token":"1"}' ) ] );
+if ( '' !== (string) get_option( 'presshub_ai_github_token', '' ) ) {
+    $failures[] = 'Remove with the masked GitHub token should delete it.';
+}
+
 // Empty featured-image pools say so on load (the notice is not hidden).
 $GLOBALS['OPTIONS_STORE'] = [];
 $briefing = presshub_test_render_section( 'daily-briefing' );
