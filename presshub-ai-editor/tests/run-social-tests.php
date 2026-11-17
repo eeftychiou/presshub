@@ -3175,6 +3175,25 @@ PressHub_Social_Meta_API_Client::set_http_get( function() {
 assert_equals( 'PAGE_TOKEN_ALREADY', PressHub_Social_Meta_API_Client::facebook_page_token( '1520729961113876', 'PAGE_TOKEN_ALREADY' ), 'facebook_page_token keeps a token Graph returns no other token for' );
 assert_equals( 'TOK', PressHub_Social_Meta_API_Client::facebook_page_token( '', 'TOK' ), 'facebook_page_token without a Page ID returns the stored token' );
 
+// An HTTP 4xx/5xx with no Graph error body falls back, and the fallback is cached briefly.
+PressHub_Social_Meta_API_Client::set_http_get( null );
+$fb_http_gets = 0;
+$GLOBALS['GET_RESPONSE_FILTER'] = function ( $url ) use ( &$fb_http_gets ) {
+    if ( ! str_contains( $url, 'fields=access_token' ) ) {
+        return null;
+    }
+    $fb_http_gets++;
+    return [ 'response' => [ 'code' => 502 ], 'body' => '<html>Bad Gateway</html>' ];
+};
+assert_equals( 'USER_TOKEN_C', PressHub_Social_Meta_API_Client::facebook_page_token( '1520729961113876', 'USER_TOKEN_C' ), 'facebook_page_token falls back to the stored token on HTTP 502' );
+PressHub_Social_Meta_API_Client::facebook_page_token( '1520729961113876', 'USER_TOKEN_C' );
+assert_equals( 1, $fb_http_gets, 'facebook_page_token caches a failed lookup instead of repeating it on every post' );
+$GLOBALS['GET_RESPONSE_FILTER'] = function ( $url ) {
+    return str_contains( $url, 'fields=access_token' ) ? [ 'response' => [ 'code' => 200 ], 'body' => '{"access_token":"PAGE_TOKEN_D","id":"1520729961113876"}' ] : null;
+};
+assert_equals( 'PAGE_TOKEN_D', PressHub_Social_Meta_API_Client::facebook_page_token( '1520729961113876', 'USER_TOKEN_D' ), 'facebook_page_token reads the Page token from a real HTTP 200 body' );
+unset( $GLOBALS['GET_RESPONSE_FILTER'] );
+
 PressHub_Social_Meta_API_Client::set_http_get( null );
 PressHub_Social_Meta_API_Client::set_http_post( null );
 delete_option( 'presshub_social_meta_access_token' );
@@ -3341,9 +3360,15 @@ $GLOBALS['CAPTURE_FILTER'] = function ( $pre, $req ) use ( &$fb_photo_n ) {
     }
     return null;
 };
+$GLOBALS['GET_RESPONSE_FILTER'] = function ( $url ) {
+    return str_contains( $url, '/page-1?fields=access_token&access_token=tok-1' )
+        ? [ 'response' => [ 'code' => 200 ], 'body' => '{"access_token":"page-tok-1","id":"page-1"}' ]
+        : null;
+};
 $fb_sent = PressHub_Social_Dispatcher::dispatch_job( $fb_api_ids[0] );
-unset( $GLOBALS['CAPTURE_FILTER'] );
+unset( $GLOBALS['CAPTURE_FILTER'], $GLOBALS['GET_RESPONSE_FILTER'] );
 $fb_reqs = $GLOBALS['CAPTURED_REQUESTS'];
+assert_equals( [ 'page-tok-1', 'page-tok-1', 'page-tok-1' ], array_map( fn( $r ) => $r[1]['body']['access_token'] ?? '', $fb_reqs ), 'Every multi-photo request posts with the Page token derived from the stored user token' );
 assert_true( true === $fb_sent, 'The Facebook multi-photo post is published' );
 assert_equals( 3, count( $fb_reqs ), 'Two unpublished photo uploads and one feed post' );
 assert_equals( 'false', $fb_reqs[0][1]['body']['published'] ?? '', 'Photos are uploaded unpublished' );
