@@ -1,12 +1,16 @@
 <?php
 /**
- * Embed fixes for links WordPress's oEmbed providers can't show on their own.
+ * TikTok photo posts (carousels, /@user/photo/<id> links).
  *
- * TikTok photo posts (carousels) have /@user/photo/<id> links. WordPress
- * sends them to TikTok's oEmbed endpoint, which answers 400 for /photo/
- * links, so the post shows a bare link. The same id under /video/ embeds
- * and plays the carousel, so the link is rewritten just for the oEmbed
- * request. The post keeps its original link.
+ * TikTok's oEmbed answers 400 for /photo/ links, and the player it hands out
+ * for the same id under /video/ shows "Player authentication failed" in many
+ * browsers (any without TikTok cookies, incognito included). So PressHub
+ * never shows TikTok's player for a photo post:
+ *
+ * - In posts, an embed of a /photo/ link renders a link card (embed handler,
+ *   runs before oEmbed, also used by the block editor's preview).
+ * - The Trending roundup shows the post's first image, copied into the Media
+ *   Library, linking to TikTok (PressHub_AI_Social_Trending::embed_block()).
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -15,33 +19,50 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class PressHub_AI_Embeds {
 
-    const TIKTOK_OEMBED = 'https://www.tiktok.com/oembed';
+    const HANDLER_ID = 'presshub_tiktok_photo';
+    const PHOTO_URL  = '#^https?://(?:www\.|m\.)?tiktok\.com/@([^/?\#]+)/photo/(\d+)#i';
 
     public static function register(): void {
-        add_filter( 'oembed_fetch_url', [ __CLASS__, 'filter_oembed_fetch_url' ], 10, 2 );
+        if ( function_exists( 'wp_embed_register_handler' ) ) {
+            wp_embed_register_handler( self::HANDLER_ID, self::PHOTO_URL, [ __CLASS__, 'tiktok_photo_handler' ] );
+        }
     }
 
-    /** The /video/ link for a TikTok /photo/ link, or null for any other link. */
-    public static function tiktok_photo_to_video( string $url ): ?string {
-        if ( 1 !== preg_match( '#^(https?://(?:www\.|m\.)?tiktok\.com/@[^/?\#]+)/photo/(\d+)(.*)$#i', $url, $m ) ) {
-            return null;
-        }
-        return $m[1] . '/video/' . $m[2] . $m[3];
+    public static function is_tiktok_photo_url( string $url ): bool {
+        return 1 === preg_match( self::PHOTO_URL, $url );
+    }
+
+    /** The account handle in a TikTok /photo/ link, '' for any other link. */
+    public static function tiktok_photo_handle( string $url ): string {
+        return 1 === preg_match( self::PHOTO_URL, $url, $m ) ? rawurldecode( $m[1] ) : '';
+    }
+
+    /** wp_embed_register_handler callback: ( $matches, $attr, $url, $rawattr ). */
+    public static function tiktok_photo_handler( $matches, $attr, $url, $rawattr = [] ): string {
+        return self::link_card( (string) $url );
+    }
+
+    /** "Photos by @handle on TikTok" card linking to the post. */
+    public static function link_card( string $url, string $text = '' ): string {
+        $handle = self::tiktok_photo_handle( $url );
+        $label  = '' !== $handle ? sprintf( 'Φωτογραφίες του @%s στο TikTok', $handle ) : 'Φωτογραφίες στο TikTok';
+        $quote  = '' !== $text ? '<p>' . esc_html( $text ) . '</p>' : '';
+        return '<blockquote class="wp-block-quote presshub-tiktok-photo-link">' . $quote
+            . '<p><strong>' . esc_html( $label ) . '</strong></p>'
+            . '<cite><a href="' . esc_url( $url ) . '" target="_blank" rel="noopener nofollow">Δείτε την ανάρτηση στο TikTok</a></cite></blockquote>';
     }
 
     /**
-     * oembed_fetch_url: point TikTok's oEmbed request for a /photo/ link at
-     * the /video/ link. WordPress built $provider with
-     * add_query_arg( 'url', urlencode( $url ), $provider ).
+     * Block markup for an image that links to the TikTok post, with a caption
+     * link. $attachment_id/$src are the Media Library copy of the image.
      */
-    public static function filter_oembed_fetch_url( $provider, $url = '' ) {
-        if ( ! is_string( $provider ) || ! is_string( $url ) || 0 !== stripos( $provider, self::TIKTOK_OEMBED ) ) {
-            return $provider;
-        }
-        $video = self::tiktok_photo_to_video( $url );
-        if ( null === $video ) {
-            return $provider;
-        }
-        return str_replace( 'url=' . urlencode( $url ), 'url=' . urlencode( $video ), $provider );
+    public static function image_card_block( string $url, int $attachment_id, string $src, string $alt ): string {
+        $u     = esc_url( $url );
+        $attrs = json_encode( [ 'id' => $attachment_id, 'sizeSlug' => 'large', 'linkDestination' => 'custom', 'align' => 'center', 'className' => 'presshub-tiktok-photo-card' ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );
+        return "<!-- wp:image " . $attrs . " -->\n"
+            . '<figure class="wp-block-image aligncenter size-large presshub-tiktok-photo-card">'
+            . '<a href="' . $u . '" target="_blank" rel="noopener nofollow"><img src="' . esc_url( $src ) . '" alt="' . esc_attr( $alt ) . '" class="wp-image-' . $attachment_id . '"/></a>'
+            . '<figcaption class="wp-element-caption"><a href="' . $u . '" target="_blank" rel="noopener nofollow">Δείτε όλη την ανάρτηση στο TikTok</a></figcaption>'
+            . "</figure>\n<!-- /wp:image -->";
     }
 }
