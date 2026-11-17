@@ -42,6 +42,7 @@ class PressHub_Social_Settings_Render {
             'ai'          => __( 'AI Copywriter', 'presshub-social-autopost' ),
             'credentials' => __( 'API Credentials', 'presshub-social-autopost' ),
             'worker'      => __( 'Automation Worker', 'presshub-social-autopost' ),
+            'shorts'      => __( 'Shorts & Reels', 'presshub-social-autopost' ),
             'queue'       => __( 'Queue & Alerts', 'presshub-social-autopost' ),
             'prompts'     => __( 'Prompts & Templates', 'presshub-social-autopost' ),
         ];
@@ -67,7 +68,7 @@ class PressHub_Social_Settings_Render {
                 <?php foreach ( $valid_tabs as $tab_id => $tab_title ) : ?>
                     <a href="<?php echo esc_url( add_query_arg( [ 'page' => 'presshub-social-settings', 'tab' => $tab_id ], admin_url( 'admin.php' ) ) ); ?>"
                        data-tab="<?php echo esc_attr( $tab_id ); ?>"
-                       class="nav-tab presshub-social-tab-link <?php echo $active_tab === $tab_id ? 'nav-tab-active' : ''; ?>">
+                       class="nav-tab presshub-social-tab-link <?php echo $active_tab === $tab_id ? 'nav-tab-active' : ''; ?>"<?php echo $active_tab === $tab_id ? ' aria-current="page"' : ''; ?>>
                         <?php echo esc_html( $tab_title ); ?>
                     </a>
                 <?php endforeach; ?>
@@ -81,7 +82,15 @@ class PressHub_Social_Settings_Render {
                     <div id="presshub-social-tab-pane-<?php echo esc_attr( $tab_id ); ?>"
                          class="presshub-social-tab-pane"
                          style="<?php echo $active_tab === $tab_id ? '' : 'display:none;'; ?>">
+                        <?php if ( 'shorts' === $tab_id ) { $this->render_shorts_readiness_notice(); } ?>
                         <?php do_settings_sections( 'presshub_social_' . $tab_id ); ?>
+
+                        <?php if ( 'shorts' === $tab_id ) : ?>
+                            <details class="presshub-shorts-prompts" id="presshub-shorts-prompts" style="margin-top: 20px;">
+                                <summary style="cursor: pointer; font-weight: 600; font-size: 1.1em;"><?php echo esc_html__( 'Shorts prompts (script, image, narration, music)', 'presshub-social-autopost' ); ?></summary>
+                                <?php do_settings_sections( 'presshub_social_shorts_prompts' ); ?>
+                            </details>
+                        <?php endif; ?>
 
                         <?php if ( 'prompts' === $tab_id ) : ?>
                             <hr style="margin: 30px 0 20px;" />
@@ -339,10 +348,12 @@ class PressHub_Social_Settings_Render {
         // to the range the field accepts.
         $val = max( (int) $min, min( (int) $max, $val ) );
         ?>
-        <input type="number" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" min="<?php echo esc_attr( $min ); ?>" max="<?php echo esc_attr( $max ); ?>" step="<?php echo esc_attr( $step ); ?>" class="small-text" />
+        <?php $push_only = ! empty( $args['push_only'] ); ?>
+        <input type="number" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" min="<?php echo esc_attr( $min ); ?>" max="<?php echo esc_attr( $max ); ?>" step="<?php echo esc_attr( $step ); ?>" class="small-text<?php echo $push_only ? ' presshub-push-only' : ''; ?>"<?php echo $push_only ? $this->push_only_attrs( $option ) : ''; ?> />
         <?php if ( ! empty( $args['unit'] ) ) : ?>
             <span style="margin-left:4px;"><?php echo esc_html( $args['unit'] ); ?></span>
         <?php endif; ?>
+        <?php if ( $push_only ) { $this->render_push_only_reason( $option ); } ?>
         <?php if ( '' !== $desc ) : ?>
             <p class="description"><?php echo esc_html( $desc ); ?></p>
         <?php endif; ?>
@@ -419,10 +430,134 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    // ------------------------------------------------------------------
+    // Phase 2 (#234): Shorts & Reels tab and disabled-with-reason fields.
+    // ------------------------------------------------------------------
+
+    /**
+     * readonly attributes for a field used only in Push mode. readonly (not
+     * disabled) so the value still posts and is saved unchanged.
+     */
+    private function push_only_attrs( string $field_id ): string {
+        return 'pull' === PressHub_Social_Settings_Storage::get_worker_mode() ? ' readonly="readonly" aria-describedby="' . esc_attr( $field_id ) . '-push-reason"' : '';
+    }
+
+    private function render_push_only_reason( string $field_id ): void {
+        $pull = 'pull' === PressHub_Social_Settings_Storage::get_worker_mode();
+        ?>
+        <span id="<?php echo esc_attr( $field_id ); ?>-push-reason" class="presshub-push-only-reason description" style="display:<?php echo $pull ? 'block' : 'none'; ?>; font-style: italic;"><?php echo esc_html__( 'Used only in Push mode.', 'presshub-social-autopost' ); ?></span>
+        <?php
+    }
+
+    /** Link to a Social settings tab, optionally to a field on it. */
+    private function social_tab_url( string $tab, string $anchor = '' ): string {
+        $url = add_query_arg( [ 'page' => 'presshub-social-settings', 'tab' => $tab ], admin_url( 'admin.php' ) );
+        return $url . ( '' !== $anchor ? '#' . $anchor : '' );
+    }
+
+    /**
+     * Every unmet requirement of the enabled Shorts and Reels, each with a
+     * link to its fix (#234). Empty when nothing is enabled or all is ready.
+     *
+     * @return array<int,array{text:string,url:string,link:string}>
+     */
+    public function shorts_unmet_requirements(): array {
+        // Article shorts only run where that platform's shorts switch is on, so
+        // they are not a switch of their own here (#234 review).
+        $tiktok    = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
+        $instagram = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
+        if ( ! $tiktok && ! $instagram ) {
+            return [];
+        }
+        $issues = [];
+        if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() ) {
+            $issues[] = [
+                'text' => __( 'The worker is in Push mode. Shorts and Reels need Pull mode.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'worker', 'presshub_social_worker_mode' ),
+                'link' => __( 'Change worker mode', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $tiktok && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'tiktok' ) ) {
+            $issues[] = [
+                'text' => __( 'TikTok shorts need the automation engine, but TikTok uses another engine.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_tiktok' ),
+                'link' => __( 'Change TikTok engine', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $instagram && 'automation' !== PressHub_Social_Settings_Storage::get_platform_engine( 'instagram' ) ) {
+            $issues[] = [
+                'text' => __( 'Instagram Reels need the automation engine, but Instagram uses another engine.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'general', 'presshub_social_engine_instagram' ),
+                'link' => __( 'Change Instagram engine', 'presshub-social-autopost' ),
+            ];
+        }
+        return $issues;
+    }
+
+    public function render_shorts_readiness_notice(): void {
+        $issues = $this->shorts_unmet_requirements();
+        if ( ! $issues ) {
+            return;
+        }
+        ?>
+        <div class="notice notice-error inline presshub-shorts-readiness" style="margin: 10px 0 20px;">
+            <h3 style="margin: 0.8em 0 0.4em;">
+                <?php
+                /* translators: %d: number of things to fix */
+                echo esc_html( sprintf( _n( 'Shorts can\'t run yet. %d thing to fix:', 'Shorts can\'t run yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) ) );
+                ?>
+            </h3>
+            <ol>
+                <?php foreach ( $issues as $issue ) : ?>
+                    <li><?php echo esc_html( $issue['text'] ); ?> <a href="<?php echo esc_url( $issue['url'] ); ?>"><?php echo esc_html( $issue['link'] ); ?></a></li>
+                <?php endforeach; ?>
+            </ol>
+        </div>
+        <?php
+    }
+
+    /** "Where to post" intro: whether each platform is ready, in words. */
+    public function render_shorts_where_intro(): void {
+        $pull  = 'pull' === PressHub_Social_Settings_Storage::get_worker_mode();
+        $rows  = [
+            'TikTok'          => 'tiktok',
+            'Instagram Reels' => 'instagram',
+        ];
+        echo '<ul class="presshub-shorts-ready-list" style="margin: 0 0 8px;">';
+        foreach ( $rows as $label => $platform ) {
+            $engine = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
+            $ready  = $pull && 'automation' === $engine;
+            echo '<li>' . esc_html( $label ) . ': ' . ( $ready
+                ? '<strong>' . esc_html__( 'Ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html__( '(automation engine, worker in Pull mode)', 'presshub-social-autopost' )
+                : '<strong>' . esc_html__( 'Not ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html( sprintf(
+                    /* translators: 1: engine, 2: worker mode */
+                    __( '(engine: %1$s, worker: %2$s mode)', 'presshub-social-autopost' ),
+                    $engine,
+                    $pull ? 'Pull' : 'Push'
+                ) ) ) . '</li>';
+        }
+        echo '</ul>';
+    }
+
+    /** Narration intro: the speech engine, shown read-only with its one home. */
+    public function render_shorts_narration_intro(): void {
+        $engine = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
+        $label  = ( '' === $engine || 'gemini' === $engine || 0 === strpos( $engine, 'gemini' ) ) ? 'Gemini TTS' : 'Google Cloud TTS';
+        $url    = admin_url( 'options-general.php?page=presshub-ai#briefing-voices' );
+        ?>
+        <p>
+            <?php echo esc_html__( 'Speech engine:', 'presshub-social-autopost' ); ?>
+            <strong><?php echo esc_html( $label ); ?></strong>
+            &mdash; <a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html__( 'change in Daily Briefing → Voices & audio', 'presshub-social-autopost' ); ?></a>
+        </p>
+        <?php
+    }
+
     public function render_worker_url_field(): void {
         $url = PressHub_Social_Settings_Storage::get_worker_url();
         ?>
-        <input type="url" id="presshub_social_worker_url" name="presshub_social_worker_url" value="<?php echo esc_attr( $url ); ?>" class="regular-text code" placeholder="http://127.0.0.1:3456" />
+        <input type="url" id="presshub_social_worker_url" name="presshub_social_worker_url" value="<?php echo esc_attr( $url ); ?>" class="regular-text code presshub-push-only" placeholder="http://127.0.0.1:3456"<?php echo $this->push_only_attrs( 'presshub_social_worker_url' ); ?> />
+        <?php $this->render_push_only_reason( 'presshub_social_worker_url' ); ?>
         <p class="description"><?php echo esc_html__( 'HTTP endpoint of the local or remote Playwright / Puppeteer automation worker service.', 'presshub-social-autopost' ); ?></p>
         <?php
         $this->render_test_connection_button( 'worker' );

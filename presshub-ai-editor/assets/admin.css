@@ -1760,3 +1760,66 @@ tr.presshub-setting-inactive button {
 .presshub-ai-container .presshub-seo-actions .button {
     margin-top: 4px;
 }
+
+/* ------------------------------------------------------------------
+ * Settings overhaul phase 2 (#234): named groups, schedule grid,
+ * "On this page" bar and the single Advanced block per group.
+ * ------------------------------------------------------------------ */
+.presshub-on-this-page {
+    position: sticky;
+    top: 32px;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 12px 0 18px;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+}
+.presshub-on-this-page-label { color: #50575e; font-weight: 600; }
+.presshub-on-this-page a { text-decoration: none; }
+.presshub-settings-group {
+    margin: 0 0 24px;
+    padding: 4px 18px 12px;
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    scroll-margin-top: 90px;
+}
+.presshub-settings-group-title { margin: 14px 0 4px; font-size: 1.2em; }
+.presshub-schedule-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+}
+.presshub-schedule-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 0 12px;
+    background: #fcfcfc;
+}
+.presshub-schedule-card h4 { margin: 12px 0 0; }
+.presshub-schedule-card .form-table th,
+.presshub-schedule-card .form-table td { display: block; width: auto; padding: 6px 0; }
+.presshub-schedule-card .form-table tr { display: block; border-bottom: 1px solid #f0f0f1; }
+.presshub-schedule-card input[type="time"], .presshub-schedule-card input[type="text"] { max-width: 100%; }
+.presshub-group-advanced { margin: 10px 0 4px; }
+.presshub-group-advanced > summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 8px 0;
+    color: #2271b1;
+}
+.presshub-subgroup-row th h4 { font-size: 1em; color: #1d2327; }
+.presshub-field-disabled-reason { display: block; margin-top: 4px; color: #50575e; font-style: italic; }
+@media (max-width: 782px) {
+    .presshub-on-this-page { position: static; }
+}
+
+/* Keep wide tables (the source manager) inside their group on narrow screens. */
+.presshub-settings-group { overflow-x: auto; }
+.presshub-settings-group .presshub-sources-manager-wrap { max-width: 100%; overflow-x: auto; }
+

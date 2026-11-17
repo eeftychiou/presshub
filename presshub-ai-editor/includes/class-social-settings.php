@@ -533,6 +533,7 @@ class PressHub_Social_Settings {
             'presshub_social_worker_sec',
             [
                 'option' => 'presshub_social_worker_timeout',
+                'push_only' => true, // #234: read-only with a reason in Pull mode.
                 'min'    => 10,
                 'max'    => 300,
                 'unit'   => __( 'seconds', 'presshub-social-autopost' ),
@@ -542,17 +543,24 @@ class PressHub_Social_Settings {
 
         add_settings_section(
             'presshub_social_media_specs_sec',
-            __( 'Media & Video Specifications', 'presshub-social-autopost' ),
+            __( 'Images & video', 'presshub-social-autopost' ),
             '__return_empty_string',
-            'presshub_social_worker'
+            'presshub_social_ai'
         );
+
+        // #234: Shorts & Reels tab.
+        add_settings_section( 'presshub_social_shorts_where_sec', __( 'Where to post', 'presshub-social-autopost' ), [ $render, 'render_shorts_where_intro' ], 'presshub_social_shorts' );
+        add_settings_section( 'presshub_social_shorts_script_sec', __( 'Schedule & script', 'presshub-social-autopost' ), '__return_empty_string', 'presshub_social_shorts' );
+        add_settings_section( 'presshub_social_shorts_narration_sec', __( 'Narration', 'presshub-social-autopost' ), [ $render, 'render_shorts_narration_intro' ], 'presshub_social_shorts' );
+        add_settings_section( 'presshub_social_shorts_music_sec', __( 'Music', 'presshub-social-autopost' ), '__return_empty_string', 'presshub_social_shorts' );
+        add_settings_section( 'presshub_social_shorts_prompts_sec', '', '__return_empty_string', 'presshub_social_shorts_prompts' );
 
         add_settings_field(
             'presshub_social_twitter_max_chars',
             __( 'X/Twitter Max Characters', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_general',
+            'presshub_social_engines_sec',
             [
                 'option' => 'presshub_social_twitter_max_chars',
                 'min'    => 280,
@@ -565,7 +573,7 @@ class PressHub_Social_Settings {
             'presshub_social_instagram_card_width',
             __( 'Instagram Card Width', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
+            'presshub_social_ai',
             'presshub_social_media_specs_sec',
             [
                 'option' => 'presshub_social_instagram_card_width',
@@ -579,7 +587,7 @@ class PressHub_Social_Settings {
             'presshub_social_instagram_card_height',
             __( 'Instagram Card Height', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
+            'presshub_social_ai',
             'presshub_social_media_specs_sec',
             [
                 'option' => 'presshub_social_instagram_card_height',
@@ -593,7 +601,7 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_video_width',
             __( 'TikTok Video Width', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
+            'presshub_social_ai',
             'presshub_social_media_specs_sec',
             [
                 'option' => 'presshub_social_tiktok_video_width',
@@ -607,7 +615,7 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_video_height',
             __( 'TikTok Video Height', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
+            'presshub_social_ai',
             'presshub_social_media_specs_sec',
             [
                 'option' => 'presshub_social_tiktok_video_height',
@@ -621,7 +629,7 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_video_duration',
             __( 'TikTok Video Duration', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
+            'presshub_social_ai',
             'presshub_social_media_specs_sec',
             [
                 'option' => 'presshub_social_tiktok_video_duration',
@@ -635,7 +643,7 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_narration_enabled',
             __( 'TikTok Narration (TTS)', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_narration_enabled_field' ],
-            'presshub_social_worker',
+            'presshub_social_ai',
             'presshub_social_media_specs_sec'
         );
 
@@ -643,7 +651,7 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_narration_outro',
             __( 'TikTok Narration Outro', 'presshub-social-autopost' ),
             [ $render, 'render_text_field' ],
-            'presshub_social_worker',
+            'presshub_social_ai',
             'presshub_social_media_specs_sec',
             [
                 'option'      => 'presshub_social_tiktok_narration_outro',
@@ -657,7 +665,7 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_narration_voice',
             __( 'TikTok Narration Voice', 'presshub-social-autopost' ),
             [ $render, 'render_text_field' ],
-            'presshub_social_worker',
+            'presshub_social_ai',
             'presshub_social_media_specs_sec',
             [
                 'option'      => 'presshub_social_tiktok_narration_voice',
@@ -670,32 +678,32 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_enabled',
             __( 'TikTok Shorts', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_shorts_enabled_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec'
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
         );
 
         add_settings_field(
             'presshub_social_instagram_shorts_enabled',
             __( 'Instagram Reels (Shorts)', 'presshub-social-autopost' ),
             [ $render, 'render_instagram_shorts_enabled_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec'
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
         );
 
         add_settings_field(
             'presshub_social_tiktok_article_shorts_enabled',
             __( 'Article Shorts', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_article_shorts_enabled_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec'
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
         );
 
         add_settings_field(
             'presshub_social_tiktok_shorts_count',
             __( 'Shorts per Podcast', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_count',
                 'default' => 3,
@@ -709,8 +717,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_spacing_minutes',
             __( 'Time Between Shorts', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_spacing_minutes',
                 'default' => 90,
@@ -725,8 +733,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_max_words',
             __( 'Short Script Length', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_max_words',
                 'default' => 130,
@@ -741,8 +749,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_images',
             __( 'Story Images per Short', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_images',
                 'default' => 3,
@@ -757,8 +765,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_caption_words',
             __( 'Short Post Text Length', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_script_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_caption_words',
                 'default' => 120,
@@ -773,8 +781,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_narrators',
             __( 'Short Narrators', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_narration_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_narrators',
                 'default' => 1,
@@ -789,8 +797,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_voice_1',
             __( 'Short Narrator Voice', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_shorts_voice_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_narration_sec',
             [
                 'narrator'    => 1,
                 'option'      => 'presshub_social_tiktok_shorts_voice_1',
@@ -804,8 +812,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_voice_2',
             __( 'Second Narrator Voice', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_shorts_voice_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_narration_sec',
             [
                 'narrator'    => 2,
                 'option'      => 'presshub_social_tiktok_shorts_voice_2',
@@ -819,8 +827,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_voice_speed',
             __( 'Short Voice Speed', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_narration_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_voice_speed',
                 'default' => 110,
@@ -828,7 +836,7 @@ class PressHub_Social_Settings {
                 'max'     => 150,
                 'step'    => 5,
                 'unit'    => '%',
-                'desc'    => __( 'Speaking rate of the shorts, in percent of normal. Short videos keep attention with a slightly faster pace; 110% is brisk but clear. The tone is set in Prompts → TikTok Shorts: Narration Style.', 'presshub-social-autopost' ),
+                'desc'    => __( 'Speaking rate of the shorts, in percent of normal. Short videos keep attention with a slightly faster pace; 110% is brisk but clear. The tone is set in Shorts prompts → Narration Style, at the bottom of this tab.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -836,16 +844,16 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_music_enabled',
             __( 'Shorts Background Music', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_shorts_music_enabled_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec'
+            'presshub_social_shorts',
+            'presshub_social_shorts_music_sec'
         );
 
         add_settings_field(
             'presshub_social_tiktok_shorts_music_volume',
             __( 'Music Volume', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_music_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_music_volume',
                 'default' => 15,
@@ -860,8 +868,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_music_tracks',
             __( 'Music Tracks per Mood', 'presshub-social-autopost' ),
             [ $render, 'render_number_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_music_sec',
             [
                 'option'  => 'presshub_social_tiktok_shorts_music_tracks',
                 'default' => 2,
@@ -876,8 +884,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_music_model',
             __( 'Music Model', 'presshub-social-autopost' ),
             [ $render, 'render_text_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec',
+            'presshub_social_shorts',
+            'presshub_social_shorts_music_sec',
             [
                 'option'      => 'presshub_social_tiktok_shorts_music_model',
                 'default'     => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL,
@@ -890,8 +898,8 @@ class PressHub_Social_Settings {
             'presshub_social_tiktok_shorts_music_library',
             __( 'Music Tracks', 'presshub-social-autopost' ),
             [ $render, 'render_tiktok_shorts_music_library_field' ],
-            'presshub_social_worker',
-            'presshub_social_media_specs_sec'
+            'presshub_social_shorts',
+            'presshub_social_shorts_music_sec'
         );
 
         // ------------------------------------------------------------------
@@ -1043,8 +1051,8 @@ class PressHub_Social_Settings {
             'presshub_social_prompt_tiktok_shorts',
             __( 'TikTok Shorts: Script Prompt', 'presshub-social-autopost' ),
             [ $render, 'render_textarea_field' ],
-            'presshub_social_prompts',
-            'presshub_social_prompts_sec',
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
@@ -1056,8 +1064,8 @@ class PressHub_Social_Settings {
             'presshub_social_prompt_tiktok_article_short',
             __( 'Article Shorts: Script Prompt', 'presshub-social-autopost' ),
             [ $render, 'render_textarea_field' ],
-            'presshub_social_prompts',
-            'presshub_social_prompts_sec',
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
             [
                 'option' => 'presshub_social_prompt_tiktok_article_short',
                 'rows'   => 10,
@@ -1069,8 +1077,8 @@ class PressHub_Social_Settings {
             'presshub_social_prompt_tiktok_shorts_image_style',
             __( 'TikTok Shorts: Image Prompt', 'presshub-social-autopost' ),
             [ $render, 'render_textarea_field' ],
-            'presshub_social_prompts',
-            'presshub_social_prompts_sec',
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts_image_style',
                 'rows'   => 3,
@@ -1082,8 +1090,8 @@ class PressHub_Social_Settings {
             'presshub_social_prompt_tiktok_shorts_image_moods',
             __( 'TikTok Shorts: Image Styles per Mood', 'presshub-social-autopost' ),
             [ $render, 'render_textarea_field' ],
-            'presshub_social_prompts',
-            'presshub_social_prompts_sec',
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts_image_moods',
                 'rows'   => 5,
@@ -1095,8 +1103,8 @@ class PressHub_Social_Settings {
             'presshub_social_prompt_tiktok_shorts_tts_style',
             __( 'TikTok Shorts: Narration Style', 'presshub-social-autopost' ),
             [ $render, 'render_textarea_field' ],
-            'presshub_social_prompts',
-            'presshub_social_prompts_sec',
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts_tts_style',
                 'rows'   => 4,
@@ -1108,8 +1116,8 @@ class PressHub_Social_Settings {
             'presshub_social_prompt_tiktok_shorts_music',
             __( 'TikTok Shorts: Music Prompts', 'presshub-social-autopost' ),
             [ $render, 'render_textarea_field' ],
-            'presshub_social_prompts',
-            'presshub_social_prompts_sec',
+            'presshub_social_shorts_prompts',
+            'presshub_social_shorts_prompts_sec',
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts_music',
                 'rows'   => 6,

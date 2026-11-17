@@ -52,7 +52,9 @@ class SettingsKnowledgeSwitchesTest {
         // 2. Saved through the Editorial knowledge tab, the values apply.
         $GLOBALS['OPTIONS_STORE'] = [];
         $result = PressHub_Settings_Registry::save_posted( 'ai', 'knowledge', [
-            // policy fiches and claim checks left unticked
+            // policy fiches and claim checks left unticked; Editorial memory
+            // sits on this tab since #234 and stays ticked.
+            'presshub_ai_memory_enabled'                        => '1',
             'presshub_ai_stakeholders_enabled'                  => '1',
             'presshub_ai_pool_cleanup_enabled'                  => '1',
             'presshub_ai_pool_max_age_hours'                    => '24',
@@ -83,7 +85,7 @@ class SettingsKnowledgeSwitchesTest {
         if ( 20000 !== PressHub_AI_Stakeholders::budget_for( 'briefing_curation' ) ) {
             $failures[] = 'Budgets should be capped at 20,000 characters.';
         }
-        foreach ( [ 'presshub_ai_podcast_show_notes_enabled', 'presshub_ai_social_trending_max_per_account', 'presshub_ai_memory_enabled' ] as $other ) {
+        foreach ( [ 'presshub_ai_podcast_show_notes_enabled', 'presshub_ai_social_trending_max_per_account' ] as $other ) {
             if ( array_key_exists( $other, $GLOBALS['OPTIONS_STORE'] ) ) {
                 $failures[] = "Saving Editorial knowledge must not write {$other} (another tab).";
             }
@@ -113,14 +115,15 @@ class SettingsKnowledgeSwitchesTest {
             $failures[] = 'With Editorial memory off, fiches stay off.';
         }
 
-        // 5. Briefing-tab switches save with the briefing tab.
+        // 5. Trending switches save with Social listening (#234), show notes with the briefing tab.
         $GLOBALS['OPTIONS_STORE'] = [];
-        PressHub_Settings_Registry::save_posted( 'ai', 'briefing', [
+        PressHub_Settings_Registry::save_posted( 'ai', 'briefing', [] );
+        PressHub_Settings_Registry::save_posted( 'ai', 'social_listening', [
             'presshub_ai_social_trending_max_per_account'  => '3',
             'presshub_ai_social_trending_share_after_hour' => '0',
         ] );
         if ( 3 !== PressHub_AI_Social_Trending::max_per_account() || 0 !== PressHub_AI_Social_Trending::share_after_hour() ) {
-            $failures[] = 'Trending per-account cap and publish hour should save on the briefing tab.';
+            $failures[] = 'Trending per-account cap and publish hour should save on the Social listening tab.';
         }
         if ( 0 !== ( $GLOBALS['OPTIONS_STORE']['presshub_ai_podcast_show_notes_enabled'] ?? null ) || $S::get_podcast_show_notes_enabled() ) {
             $failures[] = 'Unticked "Podcast show notes" on the briefing tab should store 0 and turn them off.';

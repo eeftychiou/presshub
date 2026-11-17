@@ -57,6 +57,13 @@ class PressHub_AI_Settings {
 
             wp_enqueue_style( 'presshub-ai-admin-css', PRESSHUB_AI_URL . 'assets/admin.css', [], PRESSHUB_AI_VERSION );
             wp_enqueue_script( 'presshub-ai-admin-js', PRESSHUB_AI_URL . 'assets/admin.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );
+            if ( 'settings_page_presshub-ai' === $hook && class_exists( 'PressHub_Settings_Registry' ) ) {
+                // #234: settings search, per-field defaults and the what's-new panel.
+                PressHub_Settings_Registry::ensure_registered();
+                wp_enqueue_style( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/css/settings-search.css', [], PRESSHUB_AI_VERSION );
+                wp_enqueue_script( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/js/settings-search.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
+                wp_localize_script( 'presshub-settings-search', 'presshubSettingsIndex', PressHub_Settings_Registry::search_payload( 'ai' ) );
+            }
             wp_localize_script( 'presshub-ai-admin-js', 'presshubAI', [
                 'ajax_url'             => admin_url( 'admin-ajax.php' ),
                 'nonce'                => wp_create_nonce( 'presshub_ai_nonce' ),

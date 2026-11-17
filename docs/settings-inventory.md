@@ -38,11 +38,16 @@
 | `presshub_ai_openai_org` | OpenAI Organization ID (optional) | string |  | not shown on screen |
 | `presshub_ai_anthropic_version` | Anthropic API Version | string |  | not shown on screen |
 
-### Tab `coauthor` (14)
+### Tab `coauthor` (18)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
 | `presshub_ai_fetch_urls` | Fetch source URLs before prompting | boolean |  | checkbox, was: Fetch and extract source URLs server-side before prompting (recommended — models cannot browse web pages). |
+| `presshub_ai_image_metadata_enabled` | AI Image Metadata | integer |  | checkbox |
+| `presshub_ai_seo_auto_enabled` | Automatic Tags & SEO | integer |  | checkbox |
+| `presshub_ai_briefing_seo_enhance_enabled` | Daily Briefing SEO Structure | integer |  | checkbox |
+| `presshub_ai_seo_max_tags` | Tags per post | integer | tags | was: Maximum Tags per Post |
+| `presshub_ai_seo_review_enabled` | SEO Score in Editorial Review | integer |  | checkbox |
 | `presshub_ai_coauthor_provider` | Active Co-Author Provider | string |  |  |
 | `presshub_ai_coauthor_model` | Co-Author model override | string |  | was: Custom Model Override |
 | `presshub_ai_coauthor_temperature` | Co-Author temperature | number | ratio | was: Sampling Temperature |
@@ -55,7 +60,6 @@
 | `presshub_ai_qa_notify_editor` | Notify Editor on Failures | integer |  | checkbox |
 | `presshub_ai_qa_editor_email` | Editor Notification Email | string |  |  |
 | `presshub_ai_qa_article_prompt` | Article QA Review Prompt Template | string |  |  |
-| `presshub_ai_qa_briefing_prompt` | Daily Briefing QA Review Prompt Template | string |  |  |
 
 ### Tab `advanced` (19)
 
@@ -81,7 +85,7 @@
 | `presshub_ai_social_meta_enabled` | Enable Social Metadata (OpenGraph & Twitter Cards) | boolean |  | checkbox |
 | `presshub_ai_social_meta_all_posts` | Enable for All Published Posts | boolean |  | checkbox |
 
-### Tab `briefing` (140)
+### Tab `briefing` (102)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
@@ -97,35 +101,6 @@
 | `presshub_ai_briefing_noon_schedule_enabled` | Enable Noon Briefing Schedule | integer |  | checkbox |
 | `presshub_ai_briefing_noon_harvest_time` | Noon Harvest Time | string |  | needs `presshub_ai_briefing_noon_schedule_enabled` on |
 | `presshub_ai_briefing_noon_generation_time` | Noon Generation Time | string |  | needs `presshub_ai_briefing_noon_schedule_enabled` on |
-| `presshub_ai_social_monitor_enabled` | Monitor Social Accounts | string |  | checkbox |
-| `presshub_ai_social_monitor_interval_min` | Social scan interval (min) | string | min | needs `presshub_ai_social_monitor_enabled` on, was: Scan Schedule |
-| `presshub_ai_social_monitor_max_age_hours` | Oldest social post read (h) | string | h | needs `presshub_ai_social_monitor_enabled` on, was: Scan Schedule |
-| `presshub_ai_social_monitor_max_posts_per_account` | Social posts per account | string | posts | needs `presshub_ai_social_monitor_enabled` on, was: Post Limits |
-| `presshub_ai_social_monitor_max_posts_per_harvest` | Social posts per harvest | string | posts | needs `presshub_ai_social_monitor_enabled` on, was: Post Limits |
-| `presshub_ai_social_monitor_x_list_url` | X List (optional) | string |  | needs `presshub_ai_social_monitor_enabled` on |
-| `presshub_ai_social_monitor_transcribe_videos` | Transcribe social videos | string |  | checkbox, needs `presshub_ai_social_monitor_enabled` on, was: Videos |
-| `presshub_ai_social_monitor_max_video_seconds` | Longest video transcribed (s) | string | s | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
-| `presshub_ai_social_monitor_max_video_mb` | Largest video transcribed (MB) | string | MB | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
-| `presshub_ai_social_trending_enabled` | Publish trending roundup | string |  | checkbox, was: Publish Trending Roundup |
-| `presshub_ai_social_trending_interval_hours` | Trending roundup interval (h) | string | h | needs `presshub_ai_social_trending_enabled` on, was: Publish Trending Roundup |
-| `presshub_ai_social_trending_platform_x` | Trending from X | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
-| `presshub_ai_social_trending_platform_tiktok` | Trending from TikTok | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
-| `presshub_ai_social_trending_platform_instagram` | Trending from Instagram | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
-| `presshub_ai_social_trending_platform_facebook` | Trending from Facebook | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
-| `presshub_ai_social_trending_keywords` | Search Terms (X, TikTok) | string |  | needs `presshub_ai_social_trending_enabled` on |
-| `presshub_ai_social_trending_hashtags` | Hashtags (Instagram, TikTok) | string |  | needs `presshub_ai_social_trending_enabled` on |
-| `presshub_ai_social_trending_facebook_pages` | Facebook Pages | string |  | needs `presshub_ai_social_trending_enabled` on |
-| `presshub_ai_social_trending_category` | Trending roundup category | string |  | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
-| `presshub_ai_social_trending_post_mode` | Trending roundup post mode | string |  | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
-| `presshub_ai_social_trending_post_status` | Trending roundup post status | string |  | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
-| `presshub_ai_social_trending_title` | Trending roundup title | string |  | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
-| `presshub_ai_social_trending_max_items` | Posts in the roundup | string | posts | needs `presshub_ai_social_trending_enabled` on, was: Selection |
-| `presshub_ai_social_trending_max_per_platform` | Trending posts per platform | string | posts | needs `presshub_ai_social_trending_enabled` on, was: Selection |
-| `presshub_ai_social_trending_max_age_hours` | Oldest trending post (h) | string | h | needs `presshub_ai_social_trending_enabled` on, was: Selection |
-| `presshub_ai_social_trending_min_engagement` | Minimum trending engagement | string | engagement points | needs `presshub_ai_social_trending_enabled` on, was: Selection |
-| `presshub_ai_social_trending_excluded_words` | Excluded Words | string |  | needs `presshub_ai_social_trending_enabled` on |
-| `presshub_ai_social_trending_briefing_enabled` | Use trending posts in the briefing | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
-| `presshub_ai_social_trending_briefing_count` | Trending posts given to the briefing | string | posts | needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
 | `presshub_ai_press_inbox_enabled` | Read Press Release Inbox | string |  | checkbox |
 | `presshub_ai_press_inbox_host` | Mail server (IMAP host) | string |  | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
 | `presshub_ai_press_inbox_port` | Mail server port | string | port | needs `presshub_ai_press_inbox_enabled` on, was: Port |
@@ -193,6 +168,7 @@
 | `presshub_ai_briefing_podcast_prompt_1` | Podcast Dialogue System Prompt (1 Host) | string |  | not shown on screen |
 | `presshub_ai_briefing_podcast_prompt_2` | Podcast Dialogue System Prompt (2 Hosts) | string |  | not shown on screen |
 | `presshub_ai_briefing_podcast_prompt_3` | Podcast Dialogue System Prompt (3 Hosts) | string |  | not shown on screen |
+| `presshub_ai_qa_briefing_prompt` | Daily Briefing QA Review Prompt Template | string |  |  |
 | `presshub_ai_briefing_text_provider` | Curator AI Provider | string |  |  |
 | `presshub_ai_briefing_text_model` | Curator Model Override | string |  |  |
 | `presshub_ai_briefing_text_temperature` | Curator temperature | number | ratio | was: Briefing text temperature |
@@ -204,14 +180,6 @@
 | `presshub_ai_briefing_podcast_max_tokens` | Scriptwriter Maximum Output Tokens | integer | tokens |  |
 | `presshub_ai_briefing_podcast_timeout` | Scriptwriter timeout (s) | integer | s | was: Briefing podcast timeout |
 | `presshub_ai_briefing_podcast_tts_provider` | Speech AI Provider (logosAI) | string |  |  |
-| `presshub_ai_memory_enabled` | Enable Editorial Memory | integer |  | checkbox |
-| `presshub_ai_memory_daily_days` | Recent Memory Window (days) | integer | days | needs `presshub_ai_memory_enabled` on |
-| `presshub_ai_memory_background_days` | Background Memory Window (days) | integer | days | needs `presshub_ai_memory_enabled` on |
-| `presshub_ai_memory_briefing_budget_chars` | Briefing Memory Budget (chars) | integer | characters | needs `presshub_ai_memory_enabled` on |
-| `presshub_ai_memory_podcast_budget_chars` | Podcast Memory Budget (chars) | integer | characters | needs `presshub_ai_memory_enabled` on |
-| `presshub_ai_memory_retention_days` | Memory Retention Window (days) | integer | days | needs `presshub_ai_memory_enabled` on |
-| `presshub_ai_briefing_memory_provider` | Memory Model Provider | string |  |  |
-| `presshub_ai_briefing_memory_model` | Memory Model Override | string |  |  |
 | `presshub_ai_briefing_podcast_style` | Active Dialogue Style | string |  |  |
 | `presshub_ai_briefing_podcast_prompt_1_default_greek_chat` | Briefing podcast prompt 1 default greek chat | string |  |  |
 | `presshub_ai_briefing_podcast_prompt_2_default_greek_chat` | Briefing podcast prompt 2 default greek chat | string |  |  |
@@ -223,10 +191,44 @@
 | `presshub_ai_briefing_podcast_prompt_2_conversational_news_reporting` | Briefing podcast prompt 2 conversational news reporting | string |  |  |
 | `presshub_ai_briefing_podcast_prompt_3_conversational_news_reporting` | Briefing podcast prompt 3 conversational news reporting | string |  |  |
 | `presshub_ai_podcast_show_notes_enabled` | Podcast show notes | integer |  | checkbox |
+
+### Tab `social_listening` (31)
+
+| Option | Label | Type | Unit | Notes |
+|---|---|---|---|---|
+| `presshub_ai_social_monitor_enabled` | Monitor Social Accounts | string |  | checkbox |
+| `presshub_ai_social_monitor_interval_min` | Social scan interval (min) | string | min | needs `presshub_ai_social_monitor_enabled` on, was: Scan Schedule |
+| `presshub_ai_social_monitor_max_age_hours` | Oldest social post read (h) | string | h | needs `presshub_ai_social_monitor_enabled` on, was: Scan Schedule |
+| `presshub_ai_social_monitor_max_posts_per_account` | Social posts per account | string | posts | needs `presshub_ai_social_monitor_enabled` on, was: Post Limits |
+| `presshub_ai_social_monitor_max_posts_per_harvest` | Social posts per harvest | string | posts | needs `presshub_ai_social_monitor_enabled` on, was: Post Limits |
+| `presshub_ai_social_monitor_x_list_url` | X List (optional) | string |  | needs `presshub_ai_social_monitor_enabled` on |
+| `presshub_ai_social_monitor_transcribe_videos` | Transcribe social videos | string |  | checkbox, needs `presshub_ai_social_monitor_enabled` on, was: Videos |
+| `presshub_ai_social_monitor_max_video_seconds` | Longest video transcribed (s) | string | s | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
+| `presshub_ai_social_monitor_max_video_mb` | Largest video transcribed (MB) | string | MB | needs `presshub_ai_social_monitor_enabled` on, was: Videos |
+| `presshub_ai_social_trending_enabled` | Publish trending roundup | string |  | checkbox, was: Publish Trending Roundup |
+| `presshub_ai_social_trending_interval_hours` | Trending roundup interval (h) | string | h | needs `presshub_ai_social_trending_enabled` on, was: Publish Trending Roundup |
+| `presshub_ai_social_trending_platform_x` | Trending from X | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
+| `presshub_ai_social_trending_platform_tiktok` | Trending from TikTok | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
+| `presshub_ai_social_trending_platform_instagram` | Trending from Instagram | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
+| `presshub_ai_social_trending_platform_facebook` | Trending from Facebook | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Platforms |
+| `presshub_ai_social_trending_keywords` | Search Terms (X, TikTok) | string |  | needs `presshub_ai_social_trending_enabled` on |
+| `presshub_ai_social_trending_hashtags` | Hashtags (Instagram, TikTok) | string |  | needs `presshub_ai_social_trending_enabled` on |
+| `presshub_ai_social_trending_facebook_pages` | Facebook Pages | string |  | needs `presshub_ai_social_trending_enabled` on |
+| `presshub_ai_social_trending_category` | Trending roundup category | string |  | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
+| `presshub_ai_social_trending_post_mode` | Trending roundup post mode | string |  | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
+| `presshub_ai_social_trending_post_status` | Trending roundup post status | string |  | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
+| `presshub_ai_social_trending_title` | Trending roundup title | string |  | needs `presshub_ai_social_trending_enabled` on, was: Roundup Post |
+| `presshub_ai_social_trending_max_items` | Posts in the roundup | string | posts | needs `presshub_ai_social_trending_enabled` on, was: Selection |
+| `presshub_ai_social_trending_max_per_platform` | Trending posts per platform | string | posts | needs `presshub_ai_social_trending_enabled` on, was: Selection |
+| `presshub_ai_social_trending_max_age_hours` | Oldest trending post (h) | string | h | needs `presshub_ai_social_trending_enabled` on, was: Selection |
+| `presshub_ai_social_trending_min_engagement` | Minimum trending engagement | string | engagement points | needs `presshub_ai_social_trending_enabled` on, was: Selection |
+| `presshub_ai_social_trending_excluded_words` | Excluded Words | string |  | needs `presshub_ai_social_trending_enabled` on |
+| `presshub_ai_social_trending_briefing_enabled` | Use trending posts in the briefing | string |  | checkbox, needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
+| `presshub_ai_social_trending_briefing_count` | Trending posts given to the briefing | string | posts | needs `presshub_ai_social_trending_enabled` on, was: Use in the Briefing |
 | `presshub_ai_social_trending_max_per_account` | Trending posts per account | integer | posts | needs `presshub_ai_social_trending_enabled` on |
 | `presshub_ai_social_trending_share_after_hour` | Publish trending roundups from (hour) | integer | hour | needs `presshub_ai_social_trending_enabled` on |
 
-### Tab `images` (11)
+### Tab `images` (6)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
@@ -236,11 +238,6 @@
 | `presshub_ai_image_generation_provider` | Image Generation AI Provider | string |  |  |
 | `presshub_ai_image_aspect_ratio` | Default Aspect Ratio | string |  |  |
 | `presshub_ai_image_analysis_prompt` | Article Analysis Prompt Template | string |  |  |
-| `presshub_ai_image_metadata_enabled` | AI Image Metadata | integer |  | checkbox |
-| `presshub_ai_seo_auto_enabled` | Automatic Tags & SEO | integer |  | checkbox |
-| `presshub_ai_briefing_seo_enhance_enabled` | Daily Briefing SEO Structure | integer |  | checkbox |
-| `presshub_ai_seo_max_tags` | Tags per post | integer | tags | was: Maximum Tags per Post |
-| `presshub_ai_seo_review_enabled` | SEO Score in Editorial Review | integer |  | checkbox |
 
 ### Tab `copilot` (5)
 
@@ -252,10 +249,18 @@
 | `presshub_ai_copilot_max_tokens` | Copilot maximum output tokens | integer | tokens | was: Maximum Output Tokens |
 | `presshub_ai_copilot_timeout` | Copilot timeout (s) | integer | s | was: Request Timeout (seconds) |
 
-### Tab `knowledge` (9)
+### Tab `knowledge` (17)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
+| `presshub_ai_memory_enabled` | Enable Editorial Memory | integer |  | checkbox |
+| `presshub_ai_memory_daily_days` | Recent Memory Window (days) | integer | days | needs `presshub_ai_memory_enabled` on |
+| `presshub_ai_memory_background_days` | Background Memory Window (days) | integer | days | needs `presshub_ai_memory_enabled` on |
+| `presshub_ai_memory_briefing_budget_chars` | Briefing Memory Budget (chars) | integer | characters | needs `presshub_ai_memory_enabled` on |
+| `presshub_ai_memory_podcast_budget_chars` | Podcast Memory Budget (chars) | integer | characters | needs `presshub_ai_memory_enabled` on |
+| `presshub_ai_memory_retention_days` | Memory Retention Window (days) | integer | days | needs `presshub_ai_memory_enabled` on |
+| `presshub_ai_briefing_memory_provider` | Memory Model Provider | string |  |  |
+| `presshub_ai_briefing_memory_model` | Memory Model Override | string |  |  |
 | `presshub_ai_policy_fiches_enabled` | Policy fiches in AI calls | integer |  | checkbox, needs `presshub_ai_memory_enabled` on |
 | `presshub_ai_stakeholders_enabled` | People fiches in AI calls | integer |  | checkbox, needs `presshub_ai_memory_enabled` on |
 | `presshub_ai_claim_check_enabled` | Claim checks in curation | integer |  | checkbox |
@@ -268,7 +273,7 @@
 
 ## PressHub Social → Settings
 
-### Tab `general` (12)
+### Tab `general` (13)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
@@ -284,8 +289,9 @@
 | `presshub_social_engine_facebook` | Facebook Engine | string |  |  |
 | `presshub_social_engine_instagram` | Instagram Engine | string |  |  |
 | `presshub_social_engine_tiktok` | Tiktok Engine | string |  |  |
+| `presshub_social_twitter_max_chars` | X/Twitter Max Characters | integer | characters |  |
 
-### Tab `ai` (10)
+### Tab `ai` (18)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
@@ -294,6 +300,14 @@
 | `presshub_social_ai_temperature` | Temperature | string |  |  |
 | `presshub_social_ai_max_tokens` | Social copy maximum tokens | integer | tokens | was: Max Tokens |
 | `presshub_social_ai_timeout` | Social copy timeout (s) | integer | s | was: Request Timeout |
+| `presshub_social_instagram_card_width` | Instagram card width (px) | integer | px | was: Instagram Card Width |
+| `presshub_social_instagram_card_height` | Instagram card height (px) | integer | px | was: Instagram Card Height |
+| `presshub_social_tiktok_video_width` | TikTok video width (px) | integer | px | was: TikTok Video Width |
+| `presshub_social_tiktok_video_height` | TikTok video height (px) | integer | px | was: TikTok Video Height |
+| `presshub_social_tiktok_video_duration` | TikTok video length (s) | integer | s | was: TikTok Video Duration |
+| `presshub_social_tiktok_narration_enabled` | TikTok Narration (TTS) | boolean |  | checkbox |
+| `presshub_social_tiktok_narration_outro` | TikTok Narration Outro | string |  | needs `presshub_social_tiktok_narration_enabled` on |
+| `presshub_social_tiktok_narration_voice` | TikTok Narration Voice | string |  | needs `presshub_social_tiktok_narration_enabled` on |
 | `presshub_social_post_images_enabled` | Generate Images for Posts | boolean |  | checkbox |
 | `presshub_social_post_images_twitter` | X / Twitter Images | integer | images | needs `presshub_social_post_images_enabled` on |
 | `presshub_social_post_images_facebook` | Facebook Images | integer | images | needs `presshub_social_post_images_enabled` on |
@@ -311,7 +325,7 @@
 | `presshub_social_alert_email_enabled` | Enable Failure Email Alerts | boolean |  | checkbox |
 | `presshub_social_alert_email_address` | Alert Recipient Email | string |  |  |
 
-### Tab `worker` (29)
+### Tab `worker` (4)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
@@ -319,15 +333,11 @@
 | `presshub_social_worker_url` | Worker Service Endpoint | string |  |  |
 | `presshub_social_worker_secret` | Worker Secret Token | string |  | secret, masked |
 | `presshub_social_worker_timeout` | Worker timeout (s) | integer | s | was: Worker Timeout |
-| `presshub_social_twitter_max_chars` | X/Twitter Max Characters | integer | characters |  |
-| `presshub_social_instagram_card_width` | Instagram card width (px) | integer | px | was: Instagram Card Width |
-| `presshub_social_instagram_card_height` | Instagram card height (px) | integer | px | was: Instagram Card Height |
-| `presshub_social_tiktok_video_width` | TikTok video width (px) | integer | px | was: TikTok Video Width |
-| `presshub_social_tiktok_video_height` | TikTok video height (px) | integer | px | was: TikTok Video Height |
-| `presshub_social_tiktok_video_duration` | TikTok video length (s) | integer | s | was: TikTok Video Duration |
-| `presshub_social_tiktok_narration_enabled` | TikTok Narration (TTS) | boolean |  | checkbox |
-| `presshub_social_tiktok_narration_outro` | TikTok Narration Outro | string |  | needs `presshub_social_tiktok_narration_enabled` on |
-| `presshub_social_tiktok_narration_voice` | TikTok Narration Voice | string |  | needs `presshub_social_tiktok_narration_enabled` on |
+
+### Tab `shorts` (22)
+
+| Option | Label | Type | Unit | Notes |
+|---|---|---|---|---|
 | `presshub_social_tiktok_shorts_enabled` | TikTok Shorts | boolean |  | checkbox |
 | `presshub_social_instagram_shorts_enabled` | Instagram Reels (Shorts) | boolean |  | checkbox |
 | `presshub_social_tiktok_article_shorts_enabled` | Article Shorts | boolean |  | checkbox, needs `presshub_social_tiktok_shorts_enabled` on |
@@ -344,6 +354,12 @@
 | `presshub_social_tiktok_shorts_music_volume` | Music volume (%) | integer | % | needs `presshub_social_tiktok_shorts_music_enabled` on, was: Music Volume |
 | `presshub_social_tiktok_shorts_music_tracks` | Music Tracks per Mood | integer | tracks | needs `presshub_social_tiktok_shorts_music_enabled` on |
 | `presshub_social_tiktok_shorts_music_model` | Music Model | string |  | needs `presshub_social_tiktok_shorts_music_enabled` on |
+| `presshub_social_prompt_tiktok_shorts_image_style` | TikTok Shorts: Image Prompt | string |  |  |
+| `presshub_social_prompt_tiktok_shorts_image_moods` | TikTok Shorts: Image Styles per Mood | string |  |  |
+| `presshub_social_prompt_tiktok_shorts_tts_style` | TikTok Shorts: Narration Style | string |  |  |
+| `presshub_social_prompt_tiktok_shorts_music` | TikTok Shorts: Music Prompts | string |  |  |
+| `presshub_social_prompt_tiktok_article_short` | Article Shorts: Script Prompt | string |  |  |
+| `presshub_social_prompt_tiktok_shorts` | TikTok Shorts: Script Prompt | string |  |  |
 
 ### Tab `credentials` (10)
 
@@ -360,19 +376,13 @@
 | `presshub_social_tiktok_access_token` | TikTok Access Token | string |  | secret, masked |
 | `presshub_social_tiktok_open_id` | TikTok Creator Open ID | string |  |  |
 
-### Tab `prompts` (17)
+### Tab `prompts` (11)
 
 | Option | Label | Type | Unit | Notes |
 |---|---|---|---|---|
 | `presshub_social_prompt_system` | System Prompt (All Platforms) | string |  |  |
 | `presshub_social_prompt_post_images` | AI Post Images: Planning Prompt | string |  |  |
 | `presshub_social_prompt_post_image_style` | AI Post Images: Image Prompt | string |  |  |
-| `presshub_social_prompt_tiktok_shorts_image_style` | TikTok Shorts: Image Prompt | string |  |  |
-| `presshub_social_prompt_tiktok_shorts_image_moods` | TikTok Shorts: Image Styles per Mood | string |  |  |
-| `presshub_social_prompt_tiktok_shorts_tts_style` | TikTok Shorts: Narration Style | string |  |  |
-| `presshub_social_prompt_tiktok_shorts_music` | TikTok Shorts: Music Prompts | string |  |  |
-| `presshub_social_prompt_tiktok_article_short` | Article Shorts: Script Prompt | string |  |  |
-| `presshub_social_prompt_tiktok_shorts` | TikTok Shorts: Script Prompt | string |  |  |
 | `presshub_social_prompt_twitter` | X/Twitter Caption Prompt | string |  |  |
 | `presshub_social_template_twitter` | X/Twitter Static Fallback Template | string |  |  |
 | `presshub_social_prompt_facebook` | Facebook Caption Prompt | string |  |  |

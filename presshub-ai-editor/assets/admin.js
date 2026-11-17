@@ -1431,7 +1431,7 @@ jQuery(document).ready(function($) {
      * Initialize baseline snapshots for all savable tab panes.
      */
     function initTabBaselines() {
-        var savableTabs = ['coauthor', 'briefing', 'copilot', 'knowledge', 'advanced'];
+        var savableTabs = ['coauthor', 'briefing', 'social_listening', 'images', 'copilot', 'knowledge', 'advanced'];
         savableTabs.forEach(function(key) {
             tabBaselines[key] = getTabFormSnapshot(key);
         });
@@ -1442,8 +1442,61 @@ jQuery(document).ready(function($) {
                 if (typeof tabBaselines[tabKey] === 'undefined') {
                     tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
                 }
+                captureElementBaselines(tabKey);
             }
         });
+    }
+
+    /**
+     * #234: remembers each field's saved value so a tab can be put back
+     * when the editor leaves it without saving.
+     */
+    function captureElementBaselines(tabKey) {
+        $('#presshub-tab-pane-' + tabKey).find('input, select, textarea').each(function() {
+            var $el = $(this);
+            var type = $el.attr('type');
+            if (type === 'checkbox' || type === 'radio') {
+                $el.data('phBaseline', $el.is(':checked'));
+            } else if (type !== 'file' && type !== 'button' && type !== 'submit') {
+                $el.data('phBaseline', $el.val());
+            }
+        });
+        $('#presshub-tab-pane-' + tabKey).find('.presshub-image-pool-grid').each(function() {
+            $(this).data('phGridBaseline', $(this).html());
+        });
+    }
+
+    function revertTab(tabKey) {
+        var $pane = $('#presshub-tab-pane-' + tabKey);
+        var $grids = $pane.find('.presshub-image-pool-grid');
+        $grids.each(function() {
+            var base = $(this).data('phGridBaseline');
+            if (typeof base === 'string') {
+                $(this).html(base);
+            }
+        });
+        if ($grids.length) {
+            $(document).trigger('presshub:image-pools-reset');
+        }
+        $pane.find('input, select, textarea').each(function() {
+            var $el = $(this);
+            var base = $el.data('phBaseline');
+            if (typeof base === 'undefined') {
+                return;
+            }
+            var type = $el.attr('type');
+            if (type === 'checkbox' || type === 'radio') {
+                if ($el.is(':checked') !== base) {
+                    $el.prop('checked', base).trigger('change');
+                }
+            } else if ($el.val() !== base) {
+                $el.val(base).trigger('change');
+            }
+        });
+        if ($pane.find('#presshub_ai_briefing_sources').length) {
+            $(document).trigger('presshub:sources-reset');
+        }
+        updateTabDirtyState(tabKey);
     }
 
     /**
@@ -1640,8 +1693,118 @@ jQuery(document).ready(function($) {
             'editorial-qa': 'coauthor',
             'editorial_qa': 'coauthor',
             'coauthor-qa': 'coauthor',
-            'coauthor-drafting': 'coauthor'
+            'coauthor-drafting': 'coauthor',
+            'coauthor-seo': 'coauthor',
+            'seo': 'coauthor',
+            'social-listening': 'social_listening',
+            'memory': 'knowledge'
         };
+
+        /**
+         * #234: opens the tab (and Co-Author sub-tab or <details>) that holds
+         * the element with this id, then scrolls to it. Used for group links
+         * such as #briefing-sources and for old bookmarks to moved fields.
+         * Returns false when there is no such element.
+         */
+        function revealAnchor(anchorId) {
+            if (!anchorId) {
+                return false;
+            }
+            var el = document.getElementById(anchorId);
+            if (!el && /^[a-z0-9_]+$/i.test(anchorId)) {
+                // Checkboxes and array options (name="key[task]") have no id of their own.
+                el = document.querySelector('#presshub-ai-settings-form [name="' + anchorId + '"]:not([type=hidden]), #presshub-ai-settings-form [name^="' + anchorId + '["]:not([type=hidden])');
+            }
+            if (!el) {
+                return false;
+            }
+            var $el = $(el);
+            var $pane = $el.closest('.presshub-tab-pane');
+            if ($pane.length && $pane.attr('id')) {
+                switchTab($pane.attr('id').replace('presshub-tab-pane-', ''));
+            }
+            var $sub = $el.closest('.presshub-coauthor-subpane');
+            if ($sub.length && $sub.attr('id')) {
+                switchCoauthorSubtab($sub.attr('id').replace('presshub-subpane-coauthor-', ''));
+            }
+            $el.parents('details').attr('open', 'open');
+            // A hidden input or a field in a closed style/presenter pane cannot
+            // be scrolled to: use the nearest visible container instead.
+            var target = el;
+            while (target && target.parentElement && (target.offsetParent === null || target.type === 'hidden') && target.tagName !== 'BODY') {
+                target = target.parentElement;
+            }
+            if (target && typeof target.scrollIntoView === 'function') {
+                try {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } catch (err) {
+                    target.scrollIntoView();
+                }
+                if (target !== el) {
+                    $(target).addClass('presshub-search-hit');
+                    setTimeout(function() { $(target).removeClass('presshub-search-hit'); }, 2500);
+                }
+            }
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState(null, null, '#' + anchorId);
+            }
+            return true;
+        }
+
+        $(document).on('click', '#presshub-ai-settings-form a[href^="#"], .presshub-on-this-page a[href^="#"]', function(e) {
+            var target = ($(this).attr('href') || '').replace('#', '');
+            if (!target || $(this).hasClass('nav-tab') || $(this).hasClass('presshub-coauthor-subtab') || $(this).hasClass('presshub-qa-tab') || $(this).hasClass('presshub-switch-to-qa-studio')) {
+                return;
+            }
+            var isTab = $tabs.find('.nav-tab[data-tab="' + (tabAliases[target] || target) + '"]').length > 0;
+            if (isTab) {
+                e.preventDefault();
+                requestTabSwitch(target);
+                return;
+            }
+            if (document.getElementById(target) && $(document.getElementById(target)).closest('#presshub-ai-settings-form').length) {
+                e.preventDefault();
+                var $targetPane = $(document.getElementById(target)).closest('.presshub-tab-pane');
+                var $current = $('.presshub-tab-pane:visible').first();
+                if ($targetPane.length && $current.length && $targetPane[0] !== $current[0] && !confirmLeaveTab($current)) {
+                    return;
+                }
+                revealAnchor(target);
+            }
+        });
+
+        /**
+         * #234 unsaved-changes guard: asks before leaving a tab with unsaved
+         * edits. "Leave" puts the tab back to its last saved state.
+         */
+        function confirmLeaveTab($pane) {
+            if (!$pane || !$pane.length || !$pane.attr('id')) {
+                return true;
+            }
+            var key = $pane.attr('id').replace('presshub-tab-pane-', '');
+            if (typeof isTabDirty !== 'function' || !isTabDirty(key)) {
+                return true;
+            }
+            var ok = window.confirm(__('This tab has unsaved changes. Leave it and discard them?', 'presshub-ai-editor'));
+            if (ok) {
+                revertTab(key);
+            }
+            return ok;
+        }
+
+        function requestTabSwitch(tabKey) {
+            var target = tabAliases[tabKey] || tabKey;
+            var $current = $('.presshub-tab-pane:visible').first();
+            if ($current.length && $current.attr('id') !== 'presshub-tab-pane-' + target && !confirmLeaveTab($current)) {
+                var currentKey = $current.attr('id').replace('presshub-tab-pane-', '');
+                if ($mobileSelect.length) {
+                    $mobileSelect.val(currentKey);
+                }
+                return false;
+            }
+            switchTab(tabKey);
+            return true;
+        }
 
         function switchCoauthorSubtab(subtabKey) {
             var $subtabs = $('.presshub-coauthor-subtabs');
@@ -1690,6 +1853,8 @@ jQuery(document).ready(function($) {
                 switchCoauthorSubtab('qa');
             } else if (rawKey === 'coauthor-drafting') {
                 switchCoauthorSubtab('drafting');
+            } else if (rawKey === 'coauthor-seo' || rawKey === 'seo') {
+                switchCoauthorSubtab('seo');
             }
 
             // Scroll active tab into view in horizontal scrolling container
@@ -1719,7 +1884,10 @@ jQuery(document).ready(function($) {
             var savableTabs = {
                 'coauthor': __('AI Co-Author & Review', 'presshub-ai-editor'),
                 'briefing': __('Daily Briefing Hub', 'presshub-ai-editor'),
+                'social_listening': __('Social listening', 'presshub-ai-editor'),
+                'images': __('AI Featured Images', 'presshub-ai-editor'),
                 'copilot': __('AI Copilot & Assistant', 'presshub-ai-editor'),
+                'knowledge': __('Editorial knowledge', 'presshub-ai-editor'),
                 'advanced': __('Advanced & System', 'presshub-ai-editor')
             };
 
@@ -1739,7 +1907,7 @@ jQuery(document).ready(function($) {
         $tabs.on('click', '.nav-tab', function(e) {
             e.preventDefault();
             var tabKey = $(this).data('tab');
-            switchTab(tabKey);
+            requestTabSwitch(tabKey);
         });
 
         $(document).on('click', '.presshub-coauthor-subtab', function(e) {
@@ -1772,16 +1940,17 @@ jQuery(document).ready(function($) {
             var subtab = $(this).data('subtab') || 'qa';
             var promptTarget = $(this).data('prompt-target') || 'briefing';
 
-            switchTab(targetTab);
+            if (promptTarget === 'briefing') {
+                // #234: the briefing QA prompt lives in Daily Briefing -> Text story.
+                revealAnchor('presshub_ai_qa_briefing_prompt');
+                return;
+            }
+            if (!requestTabSwitch(targetTab)) {
+                return;
+            }
             switchCoauthorSubtab(subtab);
 
-            if (promptTarget === 'briefing') {
-                $('.presshub-qa-tab[data-qa-target="presshub-qa-pane-briefing"]').trigger('click');
-            } else {
-                $('.presshub-qa-tab[data-qa-target="presshub-qa-pane-article"]').trigger('click');
-            }
-
-            var $targetPane = (promptTarget === 'briefing') ? $('#presshub-qa-pane-briefing') : $('#presshub-qa-pane-article');
+            var $targetPane = $('#presshub-qa-pane-article');
             if ($targetPane.length && typeof $targetPane[0].scrollIntoView === 'function') {
                 try {
                     $targetPane[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1805,18 +1974,37 @@ jQuery(document).ready(function($) {
         $(document).on('change', '#presshub-mobile-tab-select', function(e) {
             var tabKey = $(this).val();
             if (tabKey) {
-                switchTab(tabKey);
+                requestTabSwitch(tabKey);
             }
         });
 
+        var lastHash = window.location.hash || '';
         $(window).on('hashchange', function() {
             var hash = (window.location.hash || '').replace('#', '');
             if (hash) {
                 var targetTab = tabAliases[hash] || hash;
-                if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length) {
+                var isTab = $tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length;
+                // #234 review: hash navigation (search results, links) goes
+                // through the unsaved-changes guard as well.
+                var targetEl = isTab ? document.getElementById('presshub-tab-pane-' + targetTab) : document.getElementById(hash);
+                if (!targetEl && !isTab && /^[a-z0-9_]+$/i.test(hash)) {
+                    targetEl = document.querySelector('#presshub-ai-settings-form [name="' + hash + '"], #presshub-ai-settings-form [name^="' + hash + '["]');
+                }
+                var $targetPane = targetEl ? $(targetEl).closest('.presshub-tab-pane') : $();
+                var $current = $('.presshub-tab-pane:visible').first();
+                if ($targetPane.length && $current.length && $targetPane[0] !== $current[0] && !confirmLeaveTab($current)) {
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState(null, null, '#' + ($current.attr('id') || '').replace('presshub-tab-pane-', ''));
+                    }
+                    return;
+                }
+                if (isTab) {
                     switchTab(hash);
+                } else {
+                    revealAnchor(hash);
                 }
             }
+            lastHash = window.location.hash || '';
         });
 
         var initialHash = (window.location.hash || '').replace('#', '');
@@ -1824,6 +2012,8 @@ jQuery(document).ready(function($) {
             var targetTab = tabAliases[initialHash] || initialHash;
             if ($tabs.find('.nav-tab[data-tab="' + targetTab + '"]').length || $mobileSelect.find('option[value="' + targetTab + '"]').length) {
                 switchTab(initialHash);
+            } else if (!revealAnchor(initialHash)) {
+                updateStickySaveBar($tabs.find('.nav-tab-active').data('tab') || 'providers');
             }
         } else {
             // Ensure default active tab is in sync
@@ -2469,6 +2659,14 @@ jQuery(document).ready(function($) {
     }
 
     initSourcesState();
+
+    // #234: the tab guard put the hidden sources input back; redraw the table.
+    $(document).on('presshub:sources-reset', function() {
+        initSourcesState();
+        if (typeof renderSourcesTable === 'function') {
+            renderSourcesTable();
+        }
+    });
 
     function syncSourcesInput() {
         $('#presshub_ai_briefing_sources').val(JSON.stringify(presshubSourcesState)).trigger('input');
@@ -3675,6 +3873,7 @@ jQuery(document).ready(function($) {
                 // Issue #206: take the clean baseline only after the sources input
                 // holds the server's normalized list, or the tab looks unsaved.
                 tabBaselines[tabKey] = getTabFormSnapshot(tabKey);
+                captureElementBaselines(tabKey);
                 updateTabDirtyState(tabKey);
                 var noticeHtml = '<div class="notice notice-success is-dismissible presshub-settings-notice" style="margin: 15px 0;"><p>' + presshubEsc(successMsg) + '</p></div>';
                 $tabPane.prepend(noticeHtml);
@@ -4679,6 +4878,14 @@ jQuery(document).ready(function($) {
         });
 
         frame.open();
+    });
+
+    // #234: the tab guard put a pool grid back to its saved state; resync
+    // the hidden input and the empty/fallback notices from the grid.
+    $(document).on('presshub:image-pools-reset', function() {
+        $('.presshub-image-pool-manager').each(function() {
+            syncImagePoolManager($(this));
+        });
     });
 
     // Remove single image from pool

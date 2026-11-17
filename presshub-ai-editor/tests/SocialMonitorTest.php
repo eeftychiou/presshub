@@ -299,8 +299,8 @@ sm_check( 'settings: x list url normalised', 'https://x.com/i/lists/123456' === 
 sm_check( 'settings: x list url rejects others', '' === PressHub_AI_Settings_Storage::sanitize_social_monitor_x_list_url( 'https://x.com/someone' ) );
 sm_check( 'settings: interval clamped', 30 === PressHub_AI_Settings_Storage::sanitize_social_monitor_interval_min( 5 ) && 120 === PressHub_AI_Settings_Storage::sanitize_social_monitor_interval_min( 'x' ) );
 sm_check( 'settings: video mb clamped to 20', 20 === PressHub_AI_Settings_Storage::sanitize_social_monitor_max_video_mb( 99 ) );
-$bmap = PressHub_AI_Settings_Storage::get_section_options_map( 'briefing' );
-sm_check( 'settings: briefing section saves monitor options', isset( $bmap['presshub_ai_social_monitor_enabled'], $bmap['presshub_ai_social_monitor_x_list_url'] ) );
+$bmap = PressHub_AI_Settings_Storage::get_section_options_map( 'social_listening' ); // #234
+sm_check( 'settings: social listening section saves monitor options', isset( $bmap['presshub_ai_social_monitor_enabled'], $bmap['presshub_ai_social_monitor_x_list_url'] ) );
 
 ob_start();
 ( new PressHub_AI_Settings_Render() )->render_social_monitor_rows();

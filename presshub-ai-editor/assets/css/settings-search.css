@@ -1,0 +1,16 @@
+/* Settings search, per-field defaults and what's-new panel (#234). */
+.presshub-settings-search { position: relative; margin: 10px 0 14px; max-width: 520px; }
+.presshub-settings-search input[type="search"] { width: 100%; max-width: 520px; }
+.presshub-settings-search-results {
+    position: absolute; z-index: 100; left: 0; right: 0; margin: 2px 0 0; padding: 0;
+    list-style: none; background: #fff; border: 1px solid #8c8f94; border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 360px; overflow-y: auto;
+}
+.presshub-settings-search-results li { margin: 0; padding: 7px 10px; cursor: pointer; border-bottom: 1px solid #f0f0f1; }
+.presshub-settings-search-results li.is-active,
+.presshub-settings-search-results li:hover { background: #f0f6fc; }
+.presshub-settings-search-results .presshub-search-meta { color: #50575e; font-size: 12px; }
+.presshub-settings-search-results .presshub-search-empty { cursor: default; color: #50575e; }
+.presshub-field-default { display: inline-block; margin-left: 8px; color: #50575e; font-size: 12px; }
+.presshub-field-default .presshub-field-reset { margin-left: 4px; font-size: 12px; }
+.presshub-search-hit { outline: 3px solid #f0b849 !important; outline-offset: 2px; transition: outline-color .4s; }

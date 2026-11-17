@@ -453,6 +453,7 @@ return [
   'presshub_ai_briefing_tts_api_key' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Speech Generation API Key (Google AI Studio / Gemini)',
     'help' => 'Google AI Studio key used only for speech. Empty uses the main Gemini key.',
@@ -465,6 +466,7 @@ return [
   'presshub_ai_remove_briefing_tts_api_key' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => '',
     'label' => 'Remove briefing tts api key',
     'help' => '',
@@ -478,6 +480,7 @@ return [
   'presshub_ai_briefing_tts_engine' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Speech engine',
     'help' => 'Which speech service reads the podcast aloud. It also decides which voices the Shorts & Reels narrator can use. Default: Google AI Studio.',
@@ -497,6 +500,7 @@ return [
   'presshub_ai_briefing_tts_model' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Voice Generation AI Model',
     'help' => 'Model ID used for speech synthesis (e.g. gemini-2.5-flash-preview-tts, gemini-3.1-flash-tts-preview). Leave empty to inherit the default model from the selected Speech AI Provider.',
@@ -513,6 +517,7 @@ return [
   'presshub_ai_briefing_tts_timeout' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Speech AI timeout (s)',
     'help' => 'Maximum time in seconds to wait for speech synthesis response (60 to 900 seconds). Default 300s. Increase for lengthy multi-topic podcast scripts.',
@@ -624,6 +629,7 @@ return [
   'presshub_ai_briefing_sources' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => 'presshub_ai_briefing',
     'label' => 'News Source URLs',
     'help' => 'Active text/RSS sources are crawled every morning during the harvest window. Multi-modal (video/audio) sources are preserved for upcoming ingestion pipelines. Changes to this list are stored only when you click "Save Daily Briefing Settings".',
@@ -636,6 +642,7 @@ return [
   'presshub_ai_briefing_schedule_enabled' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'schedule',
     'section' => 'presshub_ai_briefing',
     'label' => 'Enable Scheduled Briefing Hub',
     'help' => 'Runs the morning harvest and generation every day at the times below. Default: off.',
@@ -648,6 +655,7 @@ return [
   'presshub_ai_briefing_harvest_time' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'schedule',
     'section' => 'presshub_ai_briefing',
     'label' => 'Morning Harvest Time',
     'help' => 'Time when morning Greek news sources are scraped and snapshot saved. Default 06:30.',
@@ -665,6 +673,7 @@ return [
   'presshub_ai_briefing_generation_time' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'schedule',
     'section' => 'presshub_ai_briefing',
     'label' => 'Generation Trigger Time',
     'help' => 'Time when text story curation and podcast synthesis are triggered. Default 07:15.',
@@ -682,6 +691,7 @@ return [
   'presshub_ai_briefing_noon_schedule_enabled' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'schedule',
     'section' => 'presshub_ai_briefing',
     'label' => 'Enable Noon Briefing Schedule',
     'help' => 'Runs a second, noon briefing every day at the noon times below. Default: on.',
@@ -698,6 +708,7 @@ return [
   'presshub_ai_briefing_noon_harvest_time' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'schedule',
     'section' => 'presshub_ai_briefing',
     'label' => 'Noon Harvest Time',
     'help' => 'Time when noon Greek news sources are scraped and noon snapshot saved. Default 12:30.',
@@ -715,6 +726,7 @@ return [
   'presshub_ai_briefing_noon_generation_time' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'schedule',
     'section' => 'presshub_ai_briefing',
     'label' => 'Noon Generation Time',
     'help' => 'Time when noon text story curation and podcast synthesis are triggered. Default 13:00.',
@@ -731,7 +743,8 @@ return [
   ],
   'presshub_ai_social_monitor_enabled' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'Monitor Social Accounts',
     'help' => 'Reads the listed social accounts during each harvest and adds their posts to the article pool. Default: off.',
@@ -743,7 +756,8 @@ return [
   ],
   'presshub_ai_social_monitor_interval_min' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'Social scan interval (min)',
     'help' => 'An extra scan is also requested in the 30 minutes before each scheduled harvest. Fewer scans mean fewer page visits and less risk for the reader accounts.',
@@ -760,7 +774,8 @@ return [
   ],
   'presshub_ai_social_monitor_max_age_hours' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'Oldest social post read (h)',
     'help' => 'An extra scan is also requested in the 30 minutes before each scheduled harvest. Fewer scans mean fewer page visits and less risk for the reader accounts.',
@@ -777,7 +792,8 @@ return [
   ],
   'presshub_ai_social_monitor_max_posts_per_account' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'Social posts per account',
     'help' => 'Newest posts are used first. They are placed before the web articles, so keep this below the "Maximum Articles Sent to Curation LLM" setting.',
@@ -794,7 +810,8 @@ return [
   ],
   'presshub_ai_social_monitor_max_posts_per_harvest' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'Social posts per harvest',
     'help' => 'Newest posts are used first. They are placed before the web articles, so keep this below the "Maximum Articles Sent to Curation LLM" setting.',
@@ -811,7 +828,8 @@ return [
   ],
   'presshub_ai_social_monitor_x_list_url' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'X List (optional)',
     'help' => 'A private List on the reader account that contains the monitored X accounts. The worker then reads one page instead of one per account. When this is set, profiles are not visited, so every monitored X source must be in the List. Accounts in the List that are not News Sources are ignored.',
@@ -824,7 +842,8 @@ return [
   ],
   'presshub_ai_social_monitor_transcribe_videos' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'Transcribe social videos',
     'help' => 'Needs a Gemini provider. Gemini accepts inline files up to about 20 MB; the worker picks the smallest X video quality that fits.',
@@ -840,7 +859,8 @@ return [
   ],
   'presshub_ai_social_monitor_max_video_seconds' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'Longest video transcribed (s)',
     'help' => 'Needs a Gemini provider. Gemini accepts inline files up to about 20 MB; the worker picks the smallest X video quality that fits.',
@@ -857,7 +877,8 @@ return [
   ],
   'presshub_ai_social_monitor_max_video_mb' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'monitoring',
     'section' => '',
     'label' => 'Largest video transcribed (MB)',
     'help' => 'Needs a Gemini provider. Gemini accepts inline files up to about 20 MB; the worker picks the smallest X video quality that fits.',
@@ -874,7 +895,8 @@ return [
   ],
   'presshub_ai_social_trending_enabled' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Publish trending roundup',
     'help' => 'Each refresh is a handful of page visits per platform on the reader accounts. Keep it at 3 hours or more.',
@@ -889,7 +911,8 @@ return [
   ],
   'presshub_ai_social_trending_interval_hours' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending roundup interval (h)',
     'help' => 'Each refresh is a handful of page visits per platform on the reader accounts. Keep it at 3 hours or more.',
@@ -906,7 +929,8 @@ return [
   ],
   'presshub_ai_social_trending_platform_x' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending from X',
     'help' => 'Collects trending posts from X through the social worker. Default: off.',
@@ -922,7 +946,8 @@ return [
   ],
   'presshub_ai_social_trending_platform_tiktok' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending from TikTok',
     'help' => 'Collects trending videos from TikTok through the social worker. Default: off.',
@@ -938,7 +963,8 @@ return [
   ],
   'presshub_ai_social_trending_platform_instagram' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending from Instagram',
     'help' => 'Collects top hashtag posts from Instagram with the Meta token. Default: off.',
@@ -954,7 +980,8 @@ return [
   ],
   'presshub_ai_social_trending_platform_facebook' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending from Facebook',
     'help' => 'Collects posts from the listed Facebook Pages through the social worker. Default: off.',
@@ -970,7 +997,8 @@ return [
   ],
   'presshub_ai_social_trending_keywords' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Search Terms (X, TikTok)',
     'help' => 'One per line. X runs two Top searches: the Greek terms (Greek-language posts only, lower like threshold) and the other terms (higher threshold), so global English posts do not crowd out local ones. TikTok also searches the first two terms.',
@@ -983,7 +1011,8 @@ return [
   ],
   'presshub_ai_social_trending_hashtags' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Hashtags (Instagram, TikTok)',
     'help' => 'Up to 5, without #. The worker opens the TikTok page of the first three (they show newer videos than search). Instagram allows 30 different hashtags per account per week, so change them rarely. The Meta app needs the instagram_basic permission and Instagram Public Content Access.',
@@ -996,7 +1025,8 @@ return [
   ],
   'presshub_ai_social_trending_facebook_pages' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Facebook Pages',
     'help' => 'One Page URL per line. Facebook has no public search, so the worker reads these Cypriot Pages and the roundup keeps their most engaging recent posts. Each Page is one visit per refresh. Needs a Facebook reader session on the worker. Load the starter list of Cyprus news Pages',
@@ -1009,7 +1039,8 @@ return [
   ],
   'presshub_ai_social_trending_category' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending roundup category',
     'help' => 'The category is created if it does not exist. In the title, {date} and {time} are replaced with the refresh date and time. X and TikTok posts are embedded; Instagram and Facebook posts are quoted with a link.',
@@ -1025,7 +1056,8 @@ return [
   ],
   'presshub_ai_social_trending_post_mode' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending roundup post mode',
     'help' => 'The category is created if it does not exist. In the title, {date} and {time} are replaced with the refresh date and time. X and TikTok posts are embedded; Instagram and Facebook posts are quoted with a link.',
@@ -1041,7 +1073,8 @@ return [
   ],
   'presshub_ai_social_trending_post_status' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending roundup post status',
     'help' => 'The category is created if it does not exist. In the title, {date} and {time} are replaced with the refresh date and time. X and TikTok posts are embedded; Instagram and Facebook posts are quoted with a link.',
@@ -1057,7 +1090,8 @@ return [
   ],
   'presshub_ai_social_trending_title' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending roundup title',
     'help' => 'The category is created if it does not exist. In the title, {date} and {time} are replaced with the refresh date and time. X and TikTok posts are embedded; Instagram and Facebook posts are quoted with a link.',
@@ -1073,7 +1107,8 @@ return [
   ],
   'presshub_ai_social_trending_max_items' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Posts in the roundup',
     'help' => 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. At most two posts per account, and a story that several posts share (same link or same opening text) is shown once.',
@@ -1090,7 +1125,8 @@ return [
   ],
   'presshub_ai_social_trending_max_per_platform' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending posts per platform',
     'help' => 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. At most two posts per account, and a story that several posts share (same link or same opening text) is shown once.',
@@ -1107,7 +1143,8 @@ return [
   ],
   'presshub_ai_social_trending_max_age_hours' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Oldest trending post (h)',
     'help' => 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. At most two posts per account, and a story that several posts share (same link or same opening text) is shown once.',
@@ -1124,7 +1161,8 @@ return [
   ],
   'presshub_ai_social_trending_min_engagement' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Minimum trending engagement',
     'help' => 'Engagement is likes + 2 × comments + 3 × shares. Posts are ranked within each platform by engagement and freshness, then the platforms take turns so the roundup stays mixed. At most two posts per account, and a story that several posts share (same link or same opening text) is shown once.',
@@ -1141,7 +1179,8 @@ return [
   ],
   'presshub_ai_social_trending_excluded_words' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Excluded Words',
     'help' => 'One word or phrase per line. Posts that contain one (as a whole word, in the text, name or handle) are left out of the roundup. Useful against crypto, betting and similar spam.',
@@ -1154,7 +1193,8 @@ return [
   ],
   'presshub_ai_social_trending_briefing_enabled' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Use trending posts in the briefing',
     'help' => 'The best posts from the roundups since the last edition go into the harvest as one item, "What Cyprus is talking about on social media", marked as public conversation rather than verified news. The brief and the podcast get one short social segment from it. Each post is used once; posts by monitored accounts and by the news sites in the source list are left out, since those already reach the harvest.',
@@ -1170,7 +1210,8 @@ return [
   ],
   'presshub_ai_social_trending_briefing_count' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => '',
     'label' => 'Trending posts given to the briefing',
     'help' => 'The best posts from the roundups since the last edition go into the harvest as one item, "What Cyprus is talking about on social media", marked as public conversation rather than verified news. The brief and the podcast get one short social segment from it. Each post is used once; posts by monitored accounts and by the news sites in the source list are left out, since those already reach the harvest.',
@@ -1188,6 +1229,7 @@ return [
   'presshub_ai_press_inbox_enabled' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Read Press Release Inbox',
     'help' => 'Reads press releases from the mailbox below during each harvest. Default: off.',
@@ -1200,6 +1242,7 @@ return [
   'presshub_ai_press_inbox_host' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Mail server (IMAP host)',
     'help' => 'IMAP server of the press release mailbox, for example imap.gmail.com.',
@@ -1216,6 +1259,7 @@ return [
   'presshub_ai_press_inbox_port' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Mail server port',
     'help' => 'IMAP port of the mailbox (1 to 65535). Default: 993.',
@@ -1233,6 +1277,7 @@ return [
   'presshub_ai_press_inbox_encryption' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Mail server encryption',
     'help' => 'How the connection to the mailbox is encrypted. Default: SSL.',
@@ -1249,6 +1294,7 @@ return [
   'presshub_ai_press_inbox_verify_ssl' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Verify the mail server certificate',
     'help' => 'Checks the mail server\'s certificate. Turn off only for a self-signed test server. Default: on.',
@@ -1265,6 +1311,7 @@ return [
   'presshub_ai_press_inbox_username' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Mailbox Username',
     'help' => 'Login name of the press release mailbox, usually its email address.',
@@ -1278,6 +1325,7 @@ return [
   'presshub_ai_press_inbox_password' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Mailbox Password',
     'help' => 'Stored in the WordPress database and never shown again. Leave as is to keep the saved password.',
@@ -1291,6 +1339,7 @@ return [
   'presshub_ai_remove_press_inbox_password' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Remove press inbox password',
     'help' => '',
@@ -1304,6 +1353,7 @@ return [
   'presshub_ai_press_inbox_folder' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Folders',
     'help' => 'The processed folder is created if it does not exist. Emails that are skipped (sender not allowed, too old, too large) stay in the inbox, marked as read.',
@@ -1317,6 +1367,7 @@ return [
   'presshub_ai_press_inbox_processed_folder' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Move used emails to',
     'help' => 'The processed folder is created if it does not exist. Emails that are skipped (sender not allowed, too old, too large) stay in the inbox, marked as read.',
@@ -1330,6 +1381,7 @@ return [
   'presshub_ai_press_inbox_allowed_senders' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Allowed Senders',
     'help' => 'One address or domain per line (a domain also covers its subdomains). Leave empty to accept every sender.',
@@ -1343,6 +1395,7 @@ return [
   'presshub_ai_press_inbox_max_messages' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Press releases per harvest',
     'help' => 'Most press releases read per harvest. Default: 15.',
@@ -1360,6 +1413,7 @@ return [
   'presshub_ai_press_inbox_max_age_hours' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Oldest press release read (h)',
     'help' => 'Press releases older than this are ignored. Default: 48.',
@@ -1377,6 +1431,7 @@ return [
   'presshub_ai_press_inbox_max_attachment_mb' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Largest attachment read (MB)',
     'help' => 'Larger attachments are skipped. Default: 10.',
@@ -1394,6 +1449,7 @@ return [
   'presshub_ai_press_inbox_timeout' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Mail server timeout (s)',
     'help' => 'Seconds to wait for the mail server. Default: 30.',
@@ -1411,6 +1467,7 @@ return [
   'presshub_ai_press_inbox_extract_attachments' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => '',
     'label' => 'Read press release attachments',
     'help' => 'Adds the text of PDF and Word attachments to the press release. Default: on.',
@@ -1427,6 +1484,7 @@ return [
   'presshub_ai_harvest_time_budget' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'sources',
     'section' => 'presshub_ai_briefing',
     'label' => 'Harvest time budget (s)',
     'help' => 'Maximum execution time in seconds allocated for crawling news sources and extracting articles during each briefing cycle (10 to 900 seconds / 15 minutes). Default: 60s.',
@@ -1443,6 +1501,7 @@ return [
   'presshub_ai_curation_max_articles' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => 'presshub_ai_briefing',
     'label' => 'Articles sent to the curator',
     'help' => 'Upper bound on the number of harvested articles forwarded to the Daily Briefing curation LLM. The News Pool Inspector still shows every harvested article; only the first N (by snapshot order) are included in the curation prompt. Range: 1 to 200. Default: 40.',
@@ -1459,6 +1518,7 @@ return [
   'presshub_ai_curation_max_chars_per_article' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => 'presshub_ai_briefing',
     'label' => 'Characters per article sent to the curator',
     'help' => 'Per-article body character cap inside the curation prompt. Articles longer than this are truncated with the "…[περικομμένο]" marker. Range: 100 to 400,000. Default: 3000.',
@@ -1475,6 +1535,7 @@ return [
   'presshub_ai_briefing_text_preset' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => 'presshub_ai_briefing',
     'label' => 'Text Instruction Preset',
     'help' => 'Instruction preset applied to the morning text briefing curation agent.',
@@ -1487,6 +1548,7 @@ return [
   'presshub_ai_briefing_podcast_preset' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast dialogue preset',
     'help' => 'Instruction preset the podcast scriptwriter follows when it writes the dialogue. Default: Standard Conversational.',
@@ -1502,6 +1564,7 @@ return [
   'presshub_ai_briefing_target_duration' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'presshub_ai_briefing',
     'label' => 'Target Podcast Duration',
     'help' => 'Target duration and word budget pacing for daily podcast synthesis.',
@@ -1518,6 +1581,7 @@ return [
   'presshub_ai_briefing_host_count' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast presenters',
     'help' => 'Select the number of presenters for podcast dialogue synthesis.',
@@ -1534,6 +1598,7 @@ return [
   'presshub_ai_briefing_host_female' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Presenter 1 Name',
     'help' => 'Name of the lead presenter (Presenter 1). Default: Μαρία.',
@@ -1550,6 +1615,7 @@ return [
   'presshub_ai_briefing_host_male' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Presenter 2 Name',
     'help' => 'Name of the co-host / commentator (Presenter 2). Default: Νίκος.',
@@ -1566,6 +1632,7 @@ return [
   'presshub_ai_briefing_host_tertiary' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Presenter 3 Name',
     'help' => 'Name of the third presenter/commentator (e.g. Κώστας). Default Κώστας.',
@@ -1578,6 +1645,7 @@ return [
   'presshub_ai_briefing_voice_female' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Presenter 1 Voice (TTS)',
     'help' => 'Voice persona for Presenter 1. Default: Kore.',
@@ -1594,6 +1662,7 @@ return [
   'presshub_ai_briefing_voice_male' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Presenter 2 Voice (TTS)',
     'help' => 'Voice persona for Presenter 2. Default: Fenrir.',
@@ -1610,6 +1679,7 @@ return [
   'presshub_ai_briefing_voice_tertiary' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Presenter 3 Voice (TTS)',
     'help' => 'Voice persona for Presenter 3. Default: Puck.',
@@ -1622,6 +1692,7 @@ return [
   'presshub_ai_briefing_audio_split_by_topic' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Split Audio Synthesis by Topic',
     'help' => 'Splits the podcast script by topic markers ([TOPIC_START] ... [TOPIC_END]), synthesizes each section with fresh neural context, and stitches them with natural transitions. Prevents voice drift and host persona convergence on longer podcasts.',
@@ -1634,6 +1705,7 @@ return [
   'presshub_ai_briefing_audio_transition_sfx' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => '',
     'label' => 'Topic Transition SFX',
     'help' => 'Inject an audio sound effect (instead of just silence) when transitioning between topics. Note: Custom files must be placed in the plugin assets/audio/ folder.',
@@ -1646,6 +1718,7 @@ return [
   'presshub_ai_briefing_audio_intro_sfx' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => '',
     'label' => 'Podcast Intro SFX',
     'help' => 'Play at the very beginning of the podcast. Note: Custom files must be placed in the plugin assets/audio/ folder.',
@@ -1658,6 +1731,7 @@ return [
   'presshub_ai_briefing_audio_outro_sfx' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => '',
     'label' => 'Podcast Outro SFX',
     'help' => 'Play at the very end of the podcast. Note: Custom files must be placed in the plugin assets/audio/ folder.',
@@ -1670,6 +1744,7 @@ return [
   'presshub_ai_briefing_voice_speed' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast speaking rate (×)',
     'help' => 'Speaking rate multiplier (0.85 to 1.25). Default 1.00.',
@@ -1686,6 +1761,7 @@ return [
   'presshub_ai_briefing_voice_pitch' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast voice pitch (semitones)',
     'help' => 'Voice pitch adjustment (-4.0 to 4.0 semitones). Default 0.0.',
@@ -1702,6 +1778,7 @@ return [
   'presshub_ai_briefing_tts_style' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Speaking Delivery Style (logosAI)',
     'help' => 'Select emotional tone and delivery cadence for Gemini audio speech synthesis (logosAI system).',
@@ -1718,6 +1795,7 @@ return [
   'presshub_ai_briefing_tts_custom_style' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Custom Speaking Style Prompt',
     'help' => 'Custom prompt prefix prepended before spoken text when Style is set to "Custom Prompt Instruction".',
@@ -1734,6 +1812,7 @@ return [
   'presshub_ai_briefing_tts_payload_mode' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Gemini Speech Payload Structure',
     'help' => 'Controls how prompts, delivery instructions, speaker personas, speed, and pitch are formatted when calling the Gemini Speech API.',
@@ -1750,6 +1829,7 @@ return [
   'presshub_ai_briefing_tts_system_instruction' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Gemini Speech System Instruction',
     'help' => 'System instruction template passed to the Gemini model for speech synthesis. Leave empty to use the built-in external default template. Supported placeholders: {style_instruction}, {speed}, {pitch}, {speaker1}, {speaker2}.',
@@ -1766,6 +1846,7 @@ return [
   'presshub_ai_briefing_tts_turn_pause_ms' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Turn Pause Duration (ms)',
     'help' => 'Silence duration in milliseconds inserted between consecutive dialogue turns (0 to 2000 ms). Default 250 ms.',
@@ -1783,6 +1864,7 @@ return [
   'presshub_ai_briefing_tts_topic_pause_ms' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Topic Transition Pause (ms)',
     'help' => 'Silence duration in milliseconds inserted between podcast topics during audio stitching (0 to 5000 ms). Default 600 ms.',
@@ -1800,6 +1882,7 @@ return [
   'presshub_ai_briefing_tts_request_delay_ms' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Inter-Turn Throttle Delay (ms)',
     'help' => 'Throttle delay in milliseconds between consecutive TTS API requests to prevent rate limiting (0 to 5000 ms). Default 250 ms.',
@@ -1817,6 +1900,7 @@ return [
   'presshub_ai_briefing_tts_max_retries' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Speech API Max Retries (429/5xx)',
     'help' => 'Maximum automatic retries upon encountering HTTP 429 rate limit or 5xx server errors during synthesis (0 to 5). Default 2.',
@@ -1834,6 +1918,7 @@ return [
   'presshub_ai_briefing_tts_retry_backoff_ms' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Speech API Retry Backoff (ms)',
     'help' => 'Initial exponential backoff duration in milliseconds before retrying a failed speech request (500 to 15000 ms). Default 2000 ms. Used for 5xx and connection errors, and for a 429 that carries no retry delay.',
@@ -1851,6 +1936,7 @@ return [
   'presshub_ai_briefing_tts_requests_per_minute' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Speech API Requests per Minute',
     'help' => 'Maximum Gemini speech requests per model per minute, shared by podcast synthesis, TikTok narration and the test button. Synthesis waits instead of exceeding it. Set it just below your Google AI Studio limit (Tier 1: 10). 0 disables pacing. Default 9.',
@@ -1868,6 +1954,7 @@ return [
   'presshub_ai_briefing_tts_max_retry_wait_ms' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Speech API Max Retry Wait (ms)',
     'help' => 'When Gemini answers 429 with a retry delay ("Please retry in 43s"), synthesis waits that long before retrying, up to this cap (1000 to 120000 ms). Default 60000 ms. Per-day quota errors are never retried.',
@@ -1885,6 +1972,7 @@ return [
   'presshub_ai_briefing_tts_cron_retry_delay_min' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Scheduled Synthesis Retry Delay (min)',
     'help' => 'If scheduled audio synthesis fails, retry it once after this many minutes. Turns already synthesized are reused from the cache. Not retried for configuration errors or a per-day quota. 0 disables. Default 5.',
@@ -1902,6 +1990,7 @@ return [
   'presshub_ai_briefing_text_category' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Text Briefing Category',
     'help' => 'WordPress post category assigned to text briefing posts.',
@@ -1915,6 +2004,7 @@ return [
   'presshub_ai_briefing_podcast_category' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast Category',
     'help' => 'WordPress post category assigned to synthesized podcast posts.',
@@ -1928,6 +2018,7 @@ return [
   'presshub_ai_briefing_text_status' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Text Post Status',
     'help' => 'Default status for newly generated morning text briefing posts.',
@@ -1940,6 +2031,7 @@ return [
   'presshub_ai_briefing_text_title_prefix' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Text Story Title Prefix',
     'help' => 'Editorial prefix prepended to the generated Text Story post title (e.g. "Πρωινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Πρωινή Ενημέρωση:". A duplicate-prefix collision guard prevents the same prefix from appearing twice when the curator\'s <h1> headline already contains it.',
@@ -1956,6 +2048,7 @@ return [
   'presshub_ai_briefing_text_title_date_format' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Text Story Title Date Format',
     'help' => 'date() format appended after the title prefix and headline (e.g. "d/m/Y" → 26/08/2026). Leave blank to omit the date. Default: "d/m/Y". Tokens are validated by PHP\'s date() function before being saved.',
@@ -1972,6 +2065,7 @@ return [
   'presshub_ai_briefing_noon_text_title_prefix' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Noon Text Story Title Prefix',
     'help' => 'Editorial prefix prepended to the generated Noon Text Story post title (e.g. "Μεσημβρινή Ενημέρωση:"). Leave blank to use the curator\'s headline verbatim. Max 60 characters. Default: "Μεσημβρινή Ενημέρωση:".',
@@ -1988,6 +2082,7 @@ return [
   'presshub_ai_briefing_podcast_title_prefix' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Morning Podcast Title Prefix',
     'help' => 'Editorial prefix prepended to the generated Morning Podcast post title (e.g. "Πρωινό Podcast Ενημέρωσης - "). Default: "Πρωινό Podcast Ενημέρωσης - ".',
@@ -2004,6 +2099,7 @@ return [
   'presshub_ai_briefing_morning_podcast_title_prefix' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => '',
     'label' => 'Morning podcast title prefix (legacy)',
     'help' => 'Older copy of the morning podcast title prefix, still read as a fallback.',
@@ -2019,6 +2115,7 @@ return [
   'presshub_ai_briefing_noon_podcast_title_prefix' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Noon Podcast Title Prefix',
     'help' => 'Editorial prefix prepended to the generated Noon Podcast post title (e.g. "Μεσημβρινό Podcast Ενημέρωσης - "). Default: "Μεσημβρινό Podcast Ενημέρωσης - ".',
@@ -2035,6 +2132,7 @@ return [
   'presshub_ai_briefing_featured_image_ids_morning' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Morning Featured Image Pool',
     'help' => 'No images in pool. Click below to select images from the Media Library.',
@@ -2047,6 +2145,7 @@ return [
   'presshub_ai_briefing_featured_image_ids_noon' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Noon Featured Image Pool',
     'help' => 'No images in pool. Click below to select images from the Media Library.',
@@ -2059,6 +2158,7 @@ return [
   'presshub_ai_briefing_featured_image_ids' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Featured Image Pool (Attachment IDs)',
     'help' => 'Media library IDs the briefing picks its featured image from, kept from older releases.',
@@ -2071,6 +2171,7 @@ return [
   'presshub_ai_briefing_featured_image_source' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Text Briefing Featured Image Source',
     'help' => 'Choose whether text briefings pick an image randomly from the Featured Image Pool or automatically synthesize a custom editorial image using the configured AI image generator (with automatic fallback to the pool if generation fails).',
@@ -2087,6 +2188,7 @@ return [
   'presshub_ai_briefing_podcast_featured_image_source' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast Featured Image Source',
     'help' => 'Choose whether audio podcast posts pick an image randomly from the Featured Image Pool or automatically synthesize a custom editorial image using the configured AI image generator (with automatic fallback to the pool if generation fails).',
@@ -2193,7 +2295,8 @@ return [
   ],
   'presshub_ai_image_metadata_enabled' => [
     'page' => 'ai',
-    'tab' => 'images',
+    'tab' => 'coauthor',
+    'group' => 'seo',
     'section' => 'presshub_ai_images',
     'label' => 'AI Image Metadata',
     'help' => 'Default: Enabled. Uses the Article Analysis AI Provider to describe the image in the article\'s language and gives the file a descriptive name, so images are easy to find and reuse in the Media Library.',
@@ -2205,7 +2308,8 @@ return [
   ],
   'presshub_ai_seo_auto_enabled' => [
     'page' => 'ai',
-    'tab' => 'images',
+    'tab' => 'coauthor',
+    'group' => 'seo',
     'section' => 'presshub_ai_images',
     'label' => 'Automatic Tags & SEO',
     'help' => 'Default: Enabled. Briefing and podcast posts get tags and an SEO excerpt when they are created. For co-author drafts the tags and excerpt are added to the editor when you insert the draft, so you can still review them before saving.',
@@ -2217,7 +2321,8 @@ return [
   ],
   'presshub_ai_briefing_seo_enhance_enabled' => [
     'page' => 'ai',
-    'tab' => 'images',
+    'tab' => 'coauthor',
+    'group' => 'seo',
     'section' => 'presshub_ai_images',
     'label' => 'Daily Briefing SEO Structure',
     'help' => 'Default: Enabled. Source links that do not match a harvested article are removed, a "Πηγές" list is added, the first mention of each tag links to its tag page, and a "Διαβάστε επίσης" list links up to 4 related posts.',
@@ -2229,7 +2334,8 @@ return [
   ],
   'presshub_ai_seo_max_tags' => [
     'page' => 'ai',
-    'tab' => 'images',
+    'tab' => 'coauthor',
+    'group' => 'seo',
     'section' => 'presshub_ai_images',
     'label' => 'Tags per post',
     'help' => 'Upper limit of tags assigned to a post automatically (1 - 15). Default 8. Existing site tags are reused where they fit.',
@@ -2249,7 +2355,8 @@ return [
   ],
   'presshub_ai_seo_review_enabled' => [
     'page' => 'ai',
-    'tab' => 'images',
+    'tab' => 'coauthor',
+    'group' => 'seo',
     'section' => 'presshub_ai_images',
     'label' => 'SEO Score in Editorial Review',
     'help' => 'Default: Enabled. Checks headline, excerpt, tags, category, images and alt text, structure and links. The SEO score is advisory and never blocks publishing.',
@@ -2262,6 +2369,7 @@ return [
   'presshub_ai_briefing_podcast_include_text' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Include transcript in podcast post',
     'help' => 'Adds the podcast script under the audio player in the podcast post. Default: off.',
@@ -2277,6 +2385,7 @@ return [
   'presshub_ai_briefing_podcast_status' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast Post Status',
     'help' => 'Default status for newly generated podcast posts.',
@@ -2289,6 +2398,7 @@ return [
   'presshub_ai_briefing_text_prompt' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => 'presshub_ai_briefing',
     'label' => 'Curator System Prompt',
     'help' => 'Custom system prompt for Greek text story curation. Leave empty to use standard prompt. Supports placeholders: {date}, {sources_list}, {articles_count}. (Optional: {articles_context} if you prefer articles placed inside the system prompt rather than the user prompt).',
@@ -2301,6 +2411,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_1' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast Dialogue System Prompt (1 Host)',
     'help' => 'Older single-presenter podcast prompt, still read when no per-style prompt is set.',
@@ -2313,6 +2424,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_2' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast Dialogue System Prompt (2 Hosts)',
     'help' => 'Older two-presenter podcast prompt, still read when no per-style prompt is set.',
@@ -2325,6 +2437,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_3' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast Dialogue System Prompt (3 Hosts)',
     'help' => 'Older three-presenter podcast prompt, still read when no per-style prompt is set.',
@@ -2500,7 +2613,8 @@ return [
   ],
   'presshub_ai_qa_briefing_prompt' => [
     'page' => 'ai',
-    'tab' => 'coauthor',
+    'tab' => 'briefing',
+    'group' => 'text',
     'section' => 'presshub_ai_briefing',
     'label' => 'Daily Briefing QA Review Prompt Template',
     'help' => 'User prompt template sent to the QA model when evaluating automated Daily Briefing roundups. Evaluates multi-source synthesis, briefing flow, readability, and brevity. Supports {content} placeholder.',
@@ -2588,6 +2702,7 @@ return [
   'presshub_ai_briefing_text_provider' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => '',
     'label' => 'Curator AI Provider',
     'help' => 'AI Provider responsible for filtering and summarizing morning news into article drafts.',
@@ -2600,6 +2715,7 @@ return [
   'presshub_ai_briefing_text_model' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => '',
     'label' => 'Curator Model Override',
     'help' => 'Model the curator uses. Empty uses the provider\'s default model.',
@@ -2612,6 +2728,7 @@ return [
   'presshub_ai_briefing_text_temperature' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => 'curator_model',
     'label' => 'Curator temperature',
     'help' => 'How freely the curator words its output, from 0 to 2. Empty uses the provider\'s temperature.',
@@ -2629,6 +2746,7 @@ return [
   'presshub_ai_briefing_text_max_tokens' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => '',
     'label' => 'Curator Maximum Output Tokens',
     'help' => 'Maximum output tokens for news story curation (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).',
@@ -2642,6 +2760,7 @@ return [
   'presshub_ai_briefing_text_timeout' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'text',
     'section' => 'curator_model',
     'label' => 'Curator timeout (s)',
     'help' => 'Seconds to wait for the curator model (10 to 600). Empty uses the provider\'s timeout.',
@@ -2659,6 +2778,7 @@ return [
   'presshub_ai_briefing_podcast_provider' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Scriptwriter AI Provider',
     'help' => 'AI Provider responsible for writing conversational podcast scripts.',
@@ -2671,6 +2791,7 @@ return [
   'presshub_ai_briefing_podcast_model' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Scriptwriter Model Override',
     'help' => 'Model the podcast scriptwriter uses. Empty uses the provider\'s default model.',
@@ -2683,6 +2804,7 @@ return [
   'presshub_ai_briefing_podcast_temperature' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'podcast_model',
     'label' => 'Scriptwriter temperature',
     'help' => 'How freely the podcast scriptwriter words its output, from 0 to 2. Empty uses the provider\'s temperature.',
@@ -2700,6 +2822,7 @@ return [
   'presshub_ai_briefing_podcast_max_tokens' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Scriptwriter Maximum Output Tokens',
     'help' => 'Maximum output tokens for podcast script generation (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).',
@@ -2713,6 +2836,7 @@ return [
   'presshub_ai_briefing_podcast_timeout' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'podcast_model',
     'label' => 'Scriptwriter timeout (s)',
     'help' => 'Seconds to wait for the scriptwriter model (10 to 600). Empty uses the provider\'s timeout.',
@@ -2730,6 +2854,7 @@ return [
   'presshub_ai_briefing_podcast_tts_provider' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'voices',
     'section' => '',
     'label' => 'Speech AI Provider (logosAI)',
     'help' => 'Select which AI provider powers neural speech generation (Google Gemini / AI Studio configured in the AI Providers tab).',
@@ -2741,7 +2866,8 @@ return [
   ],
   'presshub_ai_memory_enabled' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'knowledge',
+    'group' => 'memory',
     'section' => 'presshub_ai_briefing',
     'label' => 'Enable Editorial Memory',
     'help' => 'When disabled, generations use only that day\'s harvested articles.',
@@ -2753,7 +2879,8 @@ return [
   ],
   'presshub_ai_memory_daily_days' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'knowledge',
+    'group' => 'memory',
     'section' => 'presshub_ai_briefing',
     'label' => 'Recent Memory Window (days)',
     'help' => 'Number of recent days covered as daily story digests (0 - 14 days, default: 7).',
@@ -2767,7 +2894,8 @@ return [
   ],
   'presshub_ai_memory_background_days' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'knowledge',
+    'group' => 'memory',
     'section' => 'presshub_ai_briefing',
     'label' => 'Background Memory Window (days)',
     'help' => 'Background window covered as weekly rollups (0 - 90 days, >= recent days, default: 30).',
@@ -2781,7 +2909,8 @@ return [
   ],
   'presshub_ai_memory_briefing_budget_chars' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'knowledge',
+    'group' => 'memory',
     'section' => 'presshub_ai_briefing',
     'label' => 'Briefing Memory Budget (chars)',
     'help' => 'Maximum character budget for memory context injected into daily briefing prompt (0 - 60,000, default: 12,000).',
@@ -2795,7 +2924,8 @@ return [
   ],
   'presshub_ai_memory_podcast_budget_chars' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'knowledge',
+    'group' => 'memory',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast Memory Budget (chars)',
     'help' => 'Maximum character budget for memory context injected into podcast prompt (0 - 60,000, default: 6,000).',
@@ -2809,7 +2939,8 @@ return [
   ],
   'presshub_ai_memory_retention_days' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'knowledge',
+    'group' => 'memory',
     'section' => 'presshub_ai_briefing',
     'label' => 'Memory Retention Window (days)',
     'help' => 'Retention period before old memory entries and links are pruned (30 - 730 days, default: 180).',
@@ -2823,7 +2954,8 @@ return [
   ],
   'presshub_ai_briefing_memory_provider' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'knowledge',
+    'group' => 'memory',
     'section' => 'presshub_ai_briefing',
     'label' => 'Memory Model Provider',
     'help' => 'AI Provider for memory digests and weekly rollups. Can point to a cheaper model.',
@@ -2835,7 +2967,8 @@ return [
   ],
   'presshub_ai_briefing_memory_model' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'knowledge',
+    'group' => 'memory',
     'section' => 'presshub_ai_briefing',
     'label' => 'Memory Model Override',
     'help' => 'Model override for memory digests and rollups (e.g. gpt-4o-mini, gemini-2.0-flash).',
@@ -2848,6 +2981,7 @@ return [
   'presshub_ai_briefing_podcast_style' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => 'presshub_ai_briefing',
     'label' => 'Active Dialogue Style',
     'help' => 'Selects the dialogue style template that the podcast producer will use. The per-style override textareas below let you customize each style\'s prompts (3 hosts × 3 styles = 9 override fields).',
@@ -2860,6 +2994,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_1_default_greek_chat' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 1 default greek chat',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker label: [SPEAKER_1]:',
@@ -2872,6 +3007,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_2_default_greek_chat' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 2 default greek chat',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker labels: [SPEAKER_1]:, [SPEAKER_2]:',
@@ -2884,6 +3020,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_3_default_greek_chat' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 3 default greek chat',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker labels: [SPEAKER_1]:, [SPEAKER_2]:, [SPEAKER_3]:',
@@ -2896,6 +3033,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_1_bbc_broadcasting_standards' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 1 bbc broadcasting standards',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker label: [SPEAKER_1]:',
@@ -2908,6 +3046,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_2_bbc_broadcasting_standards' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 2 bbc broadcasting standards',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker labels: [SPEAKER_1]:, [SPEAKER_2]:',
@@ -2920,6 +3059,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_3_bbc_broadcasting_standards' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 3 bbc broadcasting standards',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker labels: [SPEAKER_1]:, [SPEAKER_2]:, [SPEAKER_3]:',
@@ -2932,6 +3072,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_1_conversational_news_reporting' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 1 conversational news reporting',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker label: [SPEAKER_1]:',
@@ -2944,6 +3085,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_2_conversational_news_reporting' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 2 conversational news reporting',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker labels: [SPEAKER_1]:, [SPEAKER_2]:',
@@ -2956,6 +3098,7 @@ return [
   'presshub_ai_briefing_podcast_prompt_3_conversational_news_reporting' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'podcast',
     'section' => '',
     'label' => 'Briefing podcast prompt 3 conversational news reporting',
     'help' => 'Available placeholders: {date}, {sources_list}, {articles_context}, {duration_text}, {word_budget}. Speaker labels: [SPEAKER_1]:, [SPEAKER_2]:, [SPEAKER_3]:',
@@ -3330,7 +3473,8 @@ return [
   ],
   'presshub_social_twitter_max_chars' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'general',
+    'group' => 'engines',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'X/Twitter Max Characters',
     'help' => 'Standard limit is 280; set up to 4000 if your account has X Premium.',
@@ -3344,7 +3488,8 @@ return [
   ],
   'presshub_social_instagram_card_width' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'ai',
+    'group' => 'images_video',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Instagram card width (px)',
     'help' => 'Width of the image card made for Instagram posts. Default: 1080.',
@@ -3361,7 +3506,8 @@ return [
   ],
   'presshub_social_instagram_card_height' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'ai',
+    'group' => 'images_video',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Instagram card height (px)',
     'help' => 'Height of the image card made for Instagram posts. Default: 1080.',
@@ -3378,7 +3524,8 @@ return [
   ],
   'presshub_social_tiktok_video_width' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'ai',
+    'group' => 'images_video',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'TikTok video width (px)',
     'help' => 'Width of the video made for TikTok posts. Default: 1080.',
@@ -3395,7 +3542,8 @@ return [
   ],
   'presshub_social_tiktok_video_height' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'ai',
+    'group' => 'images_video',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'TikTok video height (px)',
     'help' => 'Height of the video made for TikTok posts. Default: 1920.',
@@ -3412,7 +3560,8 @@ return [
   ],
   'presshub_social_tiktok_video_duration' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'ai',
+    'group' => 'images_video',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'TikTok video length (s)',
     'help' => 'Length of the video made for TikTok posts. Default: 10.',
@@ -3429,7 +3578,8 @@ return [
   ],
   'presshub_social_tiktok_narration_enabled' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'ai',
+    'group' => 'images_video',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'TikTok Narration (TTS)',
     'help' => 'Reads the TikTok post text aloud over the video. Default: on.',
@@ -3442,7 +3592,8 @@ return [
   ],
   'presshub_social_tiktok_narration_outro' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'ai',
+    'group' => 'images_video',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'TikTok Narration Outro',
     'help' => 'Spoken at the end of every TikTok narration. Leave empty to use the default.',
@@ -3456,7 +3607,8 @@ return [
   ],
   'presshub_social_tiktok_narration_voice' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'ai',
+    'group' => 'images_video',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'TikTok Narration Voice',
     'help' => 'Gemini voice name (e.g. Kore, Puck). Leave empty to use the Daily Briefing Presenter 1 voice.',
@@ -3543,7 +3695,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_enabled' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'where',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'TikTok Shorts',
     'help' => 'Turns each podcast into short narrated videos for TikTok. Default: off.',
@@ -3556,7 +3709,8 @@ return [
   ],
   'presshub_social_instagram_shorts_enabled' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'where',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Instagram Reels (Shorts)',
     'help' => 'Posts the same short videos to Instagram as Reels. Default: off.',
@@ -3569,7 +3723,8 @@ return [
   ],
   'presshub_social_tiktok_article_shorts_enabled' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'where',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Article Shorts',
     'help' => 'Turns every article and opinion piece into one short narrated video, like the podcast shorts, on TikTok and on Instagram when Instagram Reels are on. If the short cannot be made, the article is posted the classic way. Default: on.',
@@ -3583,7 +3738,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_count' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'script',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Shorts per Podcast',
     'help' => 'How many top stories of each podcast become their own TikTok video.',
@@ -3598,7 +3754,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_spacing_minutes' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'script',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Time between shorts (min)',
     'help' => 'The first short is posted when the podcast is published, the next ones this many minutes apart. Shorts from an earlier edition that have not been posted yet are cancelled when the next podcast is published.',
@@ -3616,7 +3773,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_max_words' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'script',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Short Script Length',
     'help' => 'Word cap for one short. 130 words is about 50 seconds of speech.',
@@ -3631,7 +3789,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_images' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'script',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Story Images per Short',
     'help' => 'AI images made for each short with the site\'s image generator (9:16), shown in turn behind the captions. 0 uses a branded background. The podcast\'s featured image is never used.',
@@ -3646,7 +3805,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_caption_words' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'script',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Short Post Text Length',
     'help' => 'Length of the text posted with each short (a summary of the story, before the hashtags). Longer texts are found more often in TikTok search; 120 words is 4-6 short sentences.',
@@ -3661,7 +3821,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_narrators' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'narration',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Short Narrators',
     'help' => 'How many voices read each short. 1 (recommended) is one presenter talking straight to the viewer, read in one go for a natural flow. 2 alternates two voices like the podcast. Independent of the Daily Briefing host count.',
@@ -3676,7 +3837,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_voice_1' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'narration',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Short Narrator Voice',
     'help' => 'Gemini TTS voice of the (first) narrator; the list has all 30 Gemini voices with their character. Lively choices: Puck (upbeat, male), Laomedeia (upbeat, female), Fenrir (excitable), Sadachbia (lively), Zephyr (bright). With the Google Cloud engine this is a text field for a Cloud voice such as el-GR-Chirp3-HD-Achird. "Daily Briefing presenter voice" (or an empty field) uses the Daily Briefing presenter 1 voice.',
@@ -3690,7 +3852,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_voice_2' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'narration',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Second Narrator Voice',
     'help' => 'Used only with 2 narrators. Pick a voice that sounds clearly different from the first. Empty uses the Daily Briefing presenter 2 voice.',
@@ -3704,7 +3867,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_voice_speed' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'narration',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Short voice speed (%)',
     'help' => 'Speaking rate of the shorts, in percent of normal. Short videos keep attention with a slightly faster pace; 110% is brisk but clear. The tone is set in Prompts → TikTok Shorts: Narration Style.',
@@ -3722,7 +3886,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_music_enabled' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'music',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Shorts Background Music',
     'help' => 'Adds a background music track to each short. Default: off.',
@@ -3735,7 +3900,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_music_volume' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'music',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Music volume (%)',
     'help' => 'Level of the music under the voice, in percent of its full volume. It dips further while someone speaks and fades out at the end. 15% is a quiet bed; 0 mutes it.',
@@ -3753,7 +3919,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_music_tracks' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'music',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Music Tracks per Mood',
     'help' => 'How many tracks Generate Music Tracks makes for each mood. Shorts of the same mood take turns between them.',
@@ -3768,7 +3935,8 @@ return [
   ],
   'presshub_social_tiktok_shorts_music_model' => [
     'page' => 'social',
-    'tab' => 'worker',
+    'tab' => 'shorts',
+    'group' => 'music',
     'section' => 'presshub_social_media_specs_sec',
     'label' => 'Music Model',
     'help' => 'Google Lyria model, called with the Gemini API key. lyria-3-clip-preview makes 30-second clips (looped under longer shorts); lyria-3.5 makes longer tracks. Changing it makes new tracks on the next Generate Music Tracks.',
@@ -3988,7 +4156,8 @@ return [
   ],
   'presshub_social_prompt_tiktok_shorts_image_style' => [
     'page' => 'social',
-    'tab' => 'prompts',
+    'tab' => 'shorts',
+    'group' => 'prompts',
     'section' => 'presshub_social_prompts_sec',
     'label' => 'TikTok Shorts: Image Prompt',
     'help' => 'Sent to the image generator for each story image of a short (9:16). {description} is one image description written by the Script Prompt (its "visuals" rules decide what the images show); this text sets the look. Without {description} the description is put first. Empty sends the description alone.',
@@ -4001,7 +4170,8 @@ return [
   ],
   'presshub_social_prompt_tiktok_shorts_image_moods' => [
     'page' => 'social',
-    'tab' => 'prompts',
+    'tab' => 'shorts',
+    'group' => 'prompts',
     'section' => 'presshub_social_prompts_sec',
     'label' => 'TikTok Shorts: Image Styles per Mood',
     'help' => 'One line per mood, "mood: style", written like the Image Prompt ({description} is the image description). A short uses the line of the mood its Script Prompt chose; a mood without a line (by default serious, urgent and none) uses the Image Prompt above. The defaults give neutral and upbeat stories bold editorial illustrations. Keep real people out of the images.',
@@ -4013,7 +4183,8 @@ return [
   ],
   'presshub_social_prompt_tiktok_shorts_tts_style' => [
     'page' => 'social',
-    'tab' => 'prompts',
+    'tab' => 'shorts',
+    'group' => 'prompts',
     'section' => 'presshub_social_prompts_sec',
     'label' => 'TikTok Shorts: Narration Style',
     'help' => 'How the voice reads the shorts: tone, energy, pace and emotion, as an instruction to the Gemini TTS (write more than a few words). The default is an energetic, warm TikTok presenter. Empty uses the Daily Briefing speaking style.',
@@ -4025,7 +4196,8 @@ return [
   ],
   'presshub_social_prompt_tiktok_shorts_music' => [
     'page' => 'social',
-    'tab' => 'prompts',
+    'tab' => 'shorts',
+    'group' => 'prompts',
     'section' => 'presshub_social_prompts_sec',
     'label' => 'TikTok Shorts: Music Prompts',
     'help' => 'One line per mood, "mood: prompt". Each prompt is sent to Google Lyria to make that mood\'s background tracks (Automation Worker → Generate Music Tracks). The mood names are what the Script Prompt may choose ({moods}); "none" always means no music. A changed line makes that mood\'s tracks again on the next generate.',
@@ -4037,7 +4209,8 @@ return [
   ],
   'presshub_social_prompt_tiktok_article_short' => [
     'page' => 'social',
-    'tab' => 'prompts',
+    'tab' => 'shorts',
+    'group' => 'prompts',
     'section' => 'presshub_social_prompts_sec',
     'label' => 'Article Shorts: Script Prompt',
     'help' => 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the TikTok or Instagram Caption Prompt; this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way.',
@@ -4049,7 +4222,8 @@ return [
   ],
   'presshub_social_prompt_tiktok_shorts' => [
     'page' => 'social',
-    'tab' => 'prompts',
+    'tab' => 'shorts',
+    'group' => 'prompts',
     'section' => 'presshub_social_prompts_sec',
     'label' => 'TikTok Shorts: Script Prompt',
     'help' => 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.',
@@ -4293,6 +4467,7 @@ return [
   'presshub_ai_podcast_show_notes_enabled' => [
     'page' => 'ai',
     'tab' => 'briefing',
+    'group' => 'publishing',
     'section' => 'presshub_ai_briefing',
     'label' => 'Podcast show notes',
     'help' => 'Adds chapter times, a link to the written brief and its sources under each podcast post. Default: on.',
@@ -4305,7 +4480,8 @@ return [
   ],
   'presshub_ai_social_trending_max_per_account' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => 'presshub_ai_briefing',
     'label' => 'Trending posts per account',
     'help' => 'Most posts from one account in a trending roundup, per platform (1 to 10). Default: 1.',
@@ -4320,7 +4496,8 @@ return [
   ],
   'presshub_ai_social_trending_share_after_hour' => [
     'page' => 'ai',
-    'tab' => 'briefing',
+    'tab' => 'social_listening',
+    'group' => 'trending',
     'section' => 'presshub_ai_briefing',
     'label' => 'Publish trending roundups from (hour)',
     'help' => 'A roundup made before this local hour waits until then, so its social posts go out when people read. 0 publishes at once. Default: 8.',

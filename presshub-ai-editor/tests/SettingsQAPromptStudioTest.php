@@ -63,68 +63,43 @@ class SettingsQAPromptStudioTest
         }
 
         // -------------------------------------------------------------
-        // Case 2: Tabbed Editorial QA Prompt Studio
+        // Case 2: QA Prompt Studio (article prompt) on Co-Author; the
+        // briefing QA prompt moved to Daily Briefing -> Text story (#234).
         // -------------------------------------------------------------
-        if ( false === strpos( $html, 'class="presshub-qa-prompt-tabs nav-tab-wrapper"' ) ) {
-            $failures[] = 'Prompt Studio tabs .presshub-qa-prompt-tabs missing from settings render.';
-        }
-
-        if ( false === strpos( $html, 'data-qa-target="presshub-qa-pane-article"' ) ) {
-            $failures[] = 'Article QA prompt tab data-qa-target="presshub-qa-pane-article" missing.';
-        }
-
-        if ( false === strpos( $html, 'data-qa-target="presshub-qa-pane-briefing"' ) ) {
-            $failures[] = 'Briefing QA prompt tab data-qa-target="presshub-qa-pane-briefing" missing.';
-        }
-
         if ( false === strpos( $html, 'id="presshub-qa-pane-article"' ) ) {
             $failures[] = '#presshub-qa-pane-article missing from settings render.';
         }
-
-        if ( false === strpos( $html, 'id="presshub-qa-pane-briefing"' ) ) {
-            $failures[] = '#presshub-qa-pane-briefing missing from settings render.';
-        }
-
         if ( false === strpos( $html, 'name="presshub_ai_qa_article_prompt"' ) ) {
             $failures[] = 'Textarea presshub_ai_qa_article_prompt missing from settings render.';
         }
-
-        if ( false === strpos( $html, 'name="presshub_ai_qa_briefing_prompt"' ) ) {
-            $failures[] = 'Textarea presshub_ai_qa_briefing_prompt missing from settings render.';
-        }
-
-        // Verify template loader and reset buttons exist
         if ( false === strpos( $html, 'data-target="presshub_ai_qa_article_prompt"' ) ) {
             $failures[] = 'Action button for presshub_ai_qa_article_prompt missing.';
+        }
+        if ( 1 !== substr_count( $html, 'name="presshub_ai_qa_briefing_prompt"' ) ) {
+            $failures[] = 'presshub_ai_qa_briefing_prompt must render exactly once.';
         }
         if ( false === strpos( $html, 'data-target="presshub_ai_qa_briefing_prompt"' ) ) {
             $failures[] = 'Action button for presshub_ai_qa_briefing_prompt missing.';
         }
 
         // -------------------------------------------------------------
-        // Case 3: Tab 3 (Briefing) No Duplicate Inputs & Clean Gate Notice
+        // Case 3: the briefing tab holds the briefing QA prompt and the gate
+        // notice; the gate switches stay on Co-Author.
         // -------------------------------------------------------------
         $tab3_start = strpos( $html, 'id="presshub-tab-pane-briefing"' );
-        $tab4_start = strpos( $html, 'id="presshub-tab-pane-copilot"' );
+        $tab4_start = strpos( $html, 'id="presshub-tab-pane-social_listening"' );
         if ( false === $tab3_start || false === $tab4_start ) {
-            $failures[] = 'Could not locate Tab 3 or Tab 4 boundaries in HTML.';
+            $failures[] = 'Could not locate the briefing tab boundaries in HTML.';
         } else {
             $tab3_html = substr( $html, $tab3_start, $tab4_start - $tab3_start );
-
-            // Check that input/textarea for QA are NOT duplicated inside Tab 3
             if ( false !== strpos( $tab3_html, 'name="presshub_ai_qa_include_briefings"' ) ) {
-                $failures[] = 'Tab 3 contains duplicate input name="presshub_ai_qa_include_briefings". Should only exist in Tab 2 QA subpane.';
+                $failures[] = 'The briefing tab must not render presshub_ai_qa_include_briefings (it stays on the QA gate).';
             }
-            if ( false !== strpos( $tab3_html, 'name="presshub_ai_qa_briefing_prompt"' ) ) {
-                $failures[] = 'Tab 3 contains duplicate textarea name="presshub_ai_qa_briefing_prompt". Should only exist in Tab 2 Prompt Studio.';
+            if ( false === strpos( $tab3_html, 'name="presshub_ai_qa_briefing_prompt"' ) ) {
+                $failures[] = 'The briefing tab must render presshub_ai_qa_briefing_prompt in Text story.';
             }
-
-            // Check that Tab 3 has the switcher button to navigate to QA studio
             if ( false === strpos( $tab3_html, 'presshub-switch-to-qa-studio' ) ) {
-                $failures[] = 'Tab 3 missing switcher button .presshub-switch-to-qa-studio.';
-            }
-            if ( false === strpos( $tab3_html, 'data-prompt-target="briefing"' ) ) {
-                $failures[] = 'Tab 3 switcher button missing data-prompt-target="briefing".';
+                $failures[] = 'The briefing tab is missing the link to the QA review gate.';
             }
         }
 
@@ -132,8 +107,9 @@ class SettingsQAPromptStudioTest
         // Case 4: Settings Storage Section Maps & Persistence
         // -------------------------------------------------------------
         $coauthor_map = PressHub_AI_Settings_Storage::get_section_options_map( 'coauthor' );
-        if ( ! isset( $coauthor_map['presshub_ai_qa_briefing_prompt'] ) ) {
-            $failures[] = 'presshub_ai_qa_briefing_prompt missing from get_section_options_map("coauthor").';
+        $briefing_map = PressHub_AI_Settings_Storage::get_section_options_map( 'briefing' );
+        if ( ! isset( $briefing_map['presshub_ai_qa_briefing_prompt'] ) || isset( $coauthor_map['presshub_ai_qa_briefing_prompt'] ) ) {
+            $failures[] = 'presshub_ai_qa_briefing_prompt should save with the briefing tab only.';
         }
         if ( ! isset( $coauthor_map['presshub_ai_qa_article_prompt'] ) ) {
             $failures[] = 'presshub_ai_qa_article_prompt missing from get_section_options_map("coauthor").';
@@ -162,7 +138,6 @@ class SettingsQAPromptStudioTest
             'presshub_ai_qa_include_briefings' => '1',
             'presshub_ai_qa_min_score'         => '85',
             'presshub_ai_qa_article_prompt'    => 'Custom article QA prompt template',
-            'presshub_ai_qa_briefing_prompt'   => 'Custom briefing QA prompt template',
         ];
 
         try {
@@ -175,9 +150,6 @@ class SettingsQAPromptStudioTest
 
         if ( 'Custom article QA prompt template' !== $saved_article_prompt ) {
             $failures[] = 'Failed to save presshub_ai_qa_article_prompt via coauthor tab. Got: ' . var_export( $saved_article_prompt, true );
-        }
-        if ( 'Custom briefing QA prompt template' !== $saved_briefing_prompt ) {
-            $failures[] = 'Failed to save presshub_ai_qa_briefing_prompt via coauthor tab. Got: ' . var_export( $saved_briefing_prompt, true );
         }
         if ( 85 !== (int) $saved_qa_score ) {
             $failures[] = 'Failed to save presshub_ai_qa_min_score via coauthor tab. Got: ' . var_export( $saved_qa_score, true );
