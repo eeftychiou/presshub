@@ -91,6 +91,11 @@ describe('Facebook video links', () => {
     expect(p.url).toBe('https://www.facebook.com/watch/?v=1026139433848847');
   });
 
+  test('a bare post link with tracking parameters still gets the watch link', () => {
+    const [p] = parseFacebookStories([reel('1787118390090844', { __typename: 'Video', id: '1026139433848847' }, 'https://www.facebook.com/1787118390090844?__cft__[0]=x&__tn__=R')]);
+    expect(p.url).toBe('https://www.facebook.com/watch/?v=1026139433848847');
+  });
+
   test('a reel link in the story wins over the video id', () => {
     const [p] = parseFacebookStories([reel('1787118390090841', { __typename: 'Video', id: '1026139433848847', url: 'https://www.facebook.com/reel/1026139433848847' })]);
     expect(p.url).toBe('https://www.facebook.com/reel/1026139433848847');

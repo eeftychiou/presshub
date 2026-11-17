@@ -103,7 +103,8 @@ const VIDEO_LINK = /facebook\.com\/(?:[^?#]+\/)?(?:videos|reel)\/\d|\/watch\/?\?
 export function storyPermalink(story: any, id: string, hasVideo: boolean): string {
   const isUrl = (k: string, v: any, re: RegExp): v is string =>
     (k === 'url' || k === 'permalink_url' || k === 'wwwURL' || k === 'shareable_url') && typeof v === 'string' && /^https:\/\/(?:www\.|web\.|m\.)?facebook\.com\//.test(v) && re.test(v);
-  const bare = /^https:\/\/(?:www\.|web\.|m\.)?facebook\.com\/\d+\/?$/;
+  // facebook.com/<digits>, with or without tracking parameters (?__cft__[0]=…).
+  const bare = /^https:\/\/(?:www\.|web\.|m\.)?facebook\.com\/\d+\/?(?:[?#].*)?$/;
   if (hasVideo) {
     const videoUrl =
       (typeof story.url === 'string' && isUrl('url', story.url, VIDEO_LINK) ? story.url : undefined) ||
