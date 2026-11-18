@@ -2,6 +2,8 @@
 
 Welcome to the **PressHub** repository. This document outlines the standard operating procedures, workflows, security rules, debugging tools, and verification tasks for all autonomous agents and developers contributing to the codebase.
 
+> **🛑 Design gate for settings (binding).** Any change that adds, moves, renames or removes a setting, a Settings section, a settings page or a menu item must be checked against [`docs/settings-design-principles.md`](docs/settings-design-principles.md) **twice**: when it is designed (the issue says which rules apply and how the change meets them) and before it is merged (the PR fills in the checklist from that file, also in the PR template). Breaking a rule needs the owner's agreement in the issue and an entry under "Exceptions" in that file. Reviewers request changes when the checklist is missing or a rule is broken.
+
 ---
 
 ## 🏗️ Repository Architecture
@@ -337,13 +339,13 @@ All code contributions must strictly adhere to WordPress security best practices
 
 ## ⚙️ Settings-First Principle (Anti-Pattern Guard)
 
-> **No operational limit, threshold, cap, time budget, batch size, retry count, or rate limit that affects user-visible behavior may be hard-coded as a default inside business logic.** Every such value **must** be a WordPress option exposed in the **Settings** page (`PressHub AI → Settings`), with:
+> **No operational limit, threshold, cap, time budget, batch size, retry count, or rate limit that affects user-visible behavior may be hard-coded as a default inside business logic.** Every such value **must** be a WordPress option exposed on **PressHub → Settings**, in the section of the feature it changes ([`docs/settings-design-principles.md`](docs/settings-design-principles.md) §1.2), with:
 >
 > 1. A registered option key (e.g. `presshub_ai_<scope>_<knob>`).
 > 2. A `PressHub_Settings_Registry::register()` call (not a bare `register_setting()`) with a `sanitize_callback` that clamps the value to documented safe bounds, **and** an entry in `includes/settings-registry-data.php` (page, tab, section, label, help, type, checkbox/secret flags, status, default). The registry is the single source of truth for every save path (options.php and both AJAX saves, #233); `SettingsRegistryTest` fails if the two disagree, `SettingsSaveIsolationTest` checks that each tab saves only its own options, and `docs/settings-inventory.md` must be regenerated with `php presshub-ai-editor/scripts/settings-inventory.php`.
 > 3. A `sanitize_<knob>` static method on `PressHub_AI_Settings_Storage`.
 > 4. A `get_<knob>` static helper on `PressHub_AI_Settings_Storage` returning the clamped value with a documented default.
-> 5. An `add_settings_field()` row on the relevant settings section.
+> 5. A row in its section, printed by that section's `render_section_<slug>()` (`add_settings_field()` only for the sections printed by `render_section_with_fields()`; see §2.6 of the principles).
 > 6. A `render_<knob>_field()` method on the settings render class.
 >
 > Consumers must read the value via the storage helper, **not** via `get_option()` + `apply_filters()` defaults.
@@ -385,7 +387,7 @@ $value = (int) get_option( 'presshub_ai_some_max_knob', 40 ); // without a sanit
 $value = PressHub_AI_Settings_Storage::get_some_max_knob();
 ```
 
-If a PR introduces a new operational knob without the full six-step registration, request changes citing this section.
+If a PR introduces a new operational knob without the full six-step registration, or without the settings checklist from `docs/settings-design-principles.md`, request changes citing this section.
 
 ---
 
@@ -394,7 +396,7 @@ If a PR introduces a new operational knob without the full six-step registration
 > **The plugin is under active development. Do NOT write backward-compatibility layers, multi-tiered legacy fallbacks, or defensive code to support deprecated options or older schema formats.**
 
 1. **Provider Store is the Sole Source of Truth**:
-   - Providers and their default models are managed solely in `PressHub_AI_Provider_Store` (`wp_presshub_ai_providers`).
+   - Providers, their keys and their default models are managed solely in `PressHub_AI_Provider_Store` (the `presshub_ai_configured_providers` option, edited in Settings → Connections).
    - Do NOT maintain or check deprecated global options like `presshub_ai_provider`, `presshub_ai_api_key`, `presshub_ai_model_{type}`, or `presshub_ai_model` in business logic.
 2. **Direct Module Configuration**:
    - Each module reads its provider from `presshub_ai_{module}_provider` and optional override from `presshub_ai_{module}_model`.
@@ -716,7 +718,7 @@ When UI changes are involved, perform visual inspection in the local testing env
    - Morning Podcast Title Prefix (`presshub_ai_briefing_podcast_title_prefix`, default `"Πρωινό Podcast Ενημέρωσης - "`) and Noon Podcast Title Prefix (`presshub_ai_briefing_noon_podcast_title_prefix`, default `"Μεσημβρινό Podcast Ενημέρωσης - "`) are separate Settings-First options.
 
 6. **AI Featured Image Generation & Studio Engine Guidelines**:
-   - Master option `presshub_ai_image_feature_enabled` (0/1) in Settings tab "AI Featured Images" (`#images`).
+   - Master option `presshub_ai_image_feature_enabled` (0/1) under **PressHub → Settings → Writing & QA → Featured images** (`section=writing-qa#featured-images`). The image prompt and image generation providers are rows of **AI models**.
    - Dedicated prompt analysis module (`image_prompt`) loads external prompt asset `assets/prompts/article_image_analysis_prompt.txt` to enforce editorial photojournalism realism, 35mm photography look, authentic textures, and strict prohibition of rendered typography/text.
    - Dedicated image generation module (`image_generation`) routes to Google Gemini or OpenAI. The synthesis model is resolved directly from the chosen provider's configured `default_model` in `PressHub_AI_Provider_Store` (e.g. `gemini-3.1-flash-image` or `dall-e-3`), with no redundant module-level override field in settings per Clean Slate Architecture.
    - Image sources for Daily Briefing Hub (`presshub_ai_briefing_featured_image_source`) and Podcasts (`presshub_ai_briefing_podcast_featured_image_source`) can be configured to either `"pool"` or `"auto_generate"`.
@@ -733,7 +735,7 @@ When UI changes are involved, perform visual inspection in the local testing env
 8. **AI Co-Author & Editorial Review Source Material Limits**:
    - **Settings-First Option**: `presshub_ai_coauthor_max_source_chars` controls the maximum permitted character length for source material pasted into the AI Co-Author story drafting tool.
    - **Storage Accessor & Clamping**: `PressHub_AI_Settings_Storage::get_coauthor_max_source_chars()` returns an integer default of `200000` (200,000 characters), sanitized via `sanitize_coauthor_max_source_chars()` within safe bounds of 1,000 to 1,000,000 characters.
-   - **Admin Settings UI**: Rendered in the settings pane under `PressHub AI → Settings → AI Co-Author & Editorial Review → Co-Author Story Drafting` (`#coauthor`).
+   - **Admin Settings UI**: Rendered under **PressHub → Settings → Writing & QA → Drafting** (`section=writing-qa#drafting`).
    - **Dynamic Server Validation & Localized Feedback**: Enforced in `PressHub_AI_Ajax_Handlers::generate_draft()`. If exceeded, execution halts immediately with a localized error string formatted using `number_format_i18n()` indicating the active character limit.
    - **Client-Side Attribute Alignment**: In `PressHub_AI_Metaboxes::render_metabox()`, the `#presshub_ai_source_material` textarea dynamically sets its `maxlength` attribute based on the active storage option.
 

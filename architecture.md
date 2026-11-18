@@ -8,9 +8,10 @@
 
 ## 2. Core Architectural Principles
 
+0. **Settings design principles (binding)**: [`docs/settings-design-principles.md`](docs/settings-design-principles.md) sets where settings live (one PressHub menu, one Settings page in eight fixed sections, one home per setting, secrets only in Connections, models only in AI models), how they are registered, saved, changed and removed, and how they read on screen. Every change to settings is checked against it at design time and before merge (agents.md, design gate). §4.0–4.0d below describe the machinery that implements it.
 1. **Settings-First Principle**:
    - No operational threshold, time budget, batch size, or title format is hard-coded into business logic.
-   - Every operational parameter is registered as an option in `PressHub_AI_Settings_Storage` with full sanitization, documented defaults, and UI exposure in `PressHub AI → Settings`.
+   - Every operational parameter is registered through `PressHub_Settings_Registry` with one sanitizer and one getter in `PressHub_AI_Settings_Storage` (documented default, safe bounds), and shown in its section of `PressHub → Settings`.
 2. **Zero-Silent-Fallback Principle**:
    - Missing configuration, prompts, or model specifications fail loudly and explicitly via `WP_Error` or exceptions with structured error logging. Hidden runtime string fallbacks are strictly prohibited.
 3. **External Prompt Assets**:
@@ -318,12 +319,12 @@ graph TD
   - **Resolution Threshold Guard**: `PressHub_AI_API_Client::resolve_options_for_module()` enforces strict minimum thresholds (`max_tokens >= 64`, `timeout >= 10s`). Sub-threshold options in `wp_options` are safely bypassed in favor of the configured provider record (`$provider_record['max_tokens']`, e.g. 60,000 for Gemini) or class defaults (`PressHub_AI_Provider_Defaults::default_max_tokens()`).
   - **Sanitizer Protection**: `PressHub_AI_Settings_Storage::sanitize_max_tokens()` returns `0` (indicating no module-level override) for `null` or empty string inputs instead of clamping to 1.
   - **Settings-First Accessors**: Added dedicated storage helpers (`get_briefing_podcast_max_tokens()`, `get_briefing_text_max_tokens()`; the co-author and copilot ones were removed as unused in #237) returning `0` when unset or `< 64`.
-  - **Exposed Settings Inputs**: Exposed explicit "Maximum Output Tokens" inputs across all pipeline modules in `PressHub AI → Settings` with safe bounds (`min="64" max="65536"`).
+  - **Exposed Settings Inputs**: "Maximum Output Tokens" is edited per task in the row expander of `PressHub → Settings → AI models`, with safe bounds (`min="64" max="65536"`).
   - **Sanitizer bounds**: per-module timeouts clamp to 10–300 s and temperatures to 0–2 when saved; the API client ignores stored values below its thresholds (`max_tokens < 64`, `timeout < 10`). The old 2.5.3 per-request purge was removed (#259).
 
 ### 4.14 AI Featured Image Generation & Studio Engine
-- **Dedicated Settings Tab ("AI Featured Images")**:
-  - Located under `PressHub AI → Settings` (`#images`).
+- **Settings (Writing & QA → Featured images)**:
+  - Located under `PressHub → Settings → Writing & QA → Featured images` (`section=writing-qa#featured-images`); the image prompt and image generation providers and models are rows of **AI models** (§4.0c).
   - Managed via `PressHub_AI_Settings_Storage`:
     - `presshub_ai_image_feature_enabled`: Master feature toggle (0/1).
     - `presshub_ai_image_prompt_provider` & `presshub_ai_image_prompt_model`: AI provider & model to analyze article content and formulate visual prompts.
@@ -357,7 +358,7 @@ graph TD
   - Registered option `presshub_ai_coauthor_max_source_chars`.
   - Storage helper `PressHub_AI_Settings_Storage::get_coauthor_max_source_chars()` defaults to `200000` (200,000 characters).
   - Sanitizer `PressHub_AI_Settings_Storage::sanitize_coauthor_max_source_chars()` clamps inputs to safe bounds (1,000 to 1,000,000 characters).
-  - Configurable in WordPress Admin under `PressHub AI → Settings → AI Co-Author & Editorial Review → Co-Author Story Drafting` (`#coauthor`).
+  - Configurable under `PressHub → Settings → Writing & QA → Drafting` (`section=writing-qa#drafting`).
 - **Enforcement & Localization**:
   - `PressHub_AI_Ajax_Handlers::generate_draft()` validates source text against `get_coauthor_max_source_chars()`. If exceeded, it halts immediately with a localized error string formatted with `number_format_i18n()` displaying the active limit.
   - `PressHub_AI_Metaboxes::render_metabox()` renders `maxlength` on `#presshub_ai_source_material` aligned with the active configured limit.
