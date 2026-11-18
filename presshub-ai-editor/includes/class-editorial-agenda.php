@@ -275,13 +275,24 @@ class PressHub_AI_Editorial_Agenda {
      * @return string '' when there is nothing to send or no budget.
      */
     public static function render( array $agenda, int $budget, string $today = '' ): string {
+        return self::render_report( $agenda, $budget, $today )['text'];
+    }
+
+    /**
+     * The agenda block plus what the budget cut. The budget counts the themes
+     * and guidance; the fixed header and footer are not charged to it.
+     *
+     * @return array{text:string,left_out:array}
+     */
+    public static function render_report( array $agenda, int $budget, string $today = '' ): array {
+        $none = [ 'text' => '', 'left_out' => [] ];
         if ( $budget <= 0 || $agenda['version'] <= 0 ) {
-            return '';
+            return $none;
         }
         $themes   = self::active_themes( $agenda, $today );
         $guidance = (string) $agenda['guidance'];
         if ( empty( $themes ) && '' === $guidance ) {
-            return '';
+            return $none;
         }
 
         $header = "=== ΤΡΕΧΟΥΣΑ ΣΥΝΤΑΚΤΙΚΗ ΑΤΖΕΝΤΑ (έκδοση {$agenda['version']}) ===\n"
@@ -289,6 +300,7 @@ class PressHub_AI_Editorial_Agenda {
         $footer = '=== ΤΕΛΟΣ ΑΤΖΕΝΤΑΣ ===';
 
         $theme_lines = [];
+        $titles      = [];
         foreach ( $themes as $theme ) {
             $line = '- [Προτεραιότητα ' . $theme['priority'] . '/' . self::PRIORITY_MAX . '] ' . $theme['title'];
             if ( '' !== $theme['expires'] ) {
@@ -298,33 +310,38 @@ class PressHub_AI_Editorial_Agenda {
                 $line .= "\n  Πλαισίωση: " . str_replace( "\n", "\n  ", $theme['notes'] );
             }
             $theme_lines[] = $line;
+            $titles[]      = (string) $theme['title'];
         }
 
-        $compose = static function ( array $lines, string $guide ) use ( $header, $footer ): string {
-            $body = $header;
+        $compose = static function ( array $lines, string $guide ): string {
+            $body = '';
             if ( ! empty( $lines ) ) {
                 $body .= "Θέματα:\n" . implode( "\n", $lines ) . "\n";
             }
             if ( '' !== $guide ) {
                 $body .= "Μόνιμες συντακτικές οδηγίες:\n" . $guide . "\n";
             }
-            return $body . $footer;
+            return $body;
         };
 
-        $text = $compose( $theme_lines, $guidance );
-        while ( self::strlen_u( $text ) > $budget && ! empty( $theme_lines ) ) {
-            array_pop( $theme_lines );
-            $text = $compose( $theme_lines, $guidance );
+        $left_out = [];
+        $body     = $compose( $theme_lines, $guidance );
+        while ( self::strlen_u( $body ) > $budget && ! empty( $theme_lines ) ) {
+            $need = self::strlen_u( (string) array_pop( $theme_lines ) );
+            array_unshift( $left_out, [ 'item' => (string) array_pop( $titles ), 'reason' => 'no_room', 'limit' => $budget, 'needed' => $need ] );
+            $body = $compose( $theme_lines, $guidance );
         }
-        if ( self::strlen_u( $text ) > $budget && '' !== $guidance ) {
-            $room     = $budget - self::strlen_u( $compose( [], '' ) ) - 40;
+        if ( self::strlen_u( $body ) > $budget && '' !== $guidance ) {
+            $full     = self::strlen_u( $guidance );
+            $room     = $budget - self::strlen_u( $compose( [], ' ' ) ) - 2;
             $guidance = $room > 40 ? self::clip( $guidance, $room ) . '…' : '';
-            $text     = $compose( [], $guidance );
+            $left_out[] = [ 'item' => 'guidance', 'reason' => '' === $guidance ? 'no_room' : 'clipped', 'limit' => $budget, 'needed' => $full, 'kept' => self::strlen_u( $guidance ) ];
+            $body     = $compose( [], $guidance );
         }
-        if ( self::strlen_u( $text ) > $budget || ( empty( $theme_lines ) && '' === $guidance ) ) {
-            return '';
+        if ( self::strlen_u( $body ) > $budget || ( empty( $theme_lines ) && '' === $guidance ) ) {
+            return [ 'text' => '', 'left_out' => $left_out ];
         }
-        return $text;
+        return [ 'text' => $header . $body . $footer, 'left_out' => $left_out ];
     }
 
     /**
@@ -345,21 +362,24 @@ class PressHub_AI_Editorial_Agenda {
                 $budget = 1500;
             }
             $agenda = $budget > 0 ? self::get() : self::empty_agenda();
-            $block  = self::render( $agenda, $budget );
+            $report = self::render_report( $agenda, $budget );
+            $block  = $report['text'];
+            class_exists( 'PressHub_AI_Knowledge_Cuts' ) && PressHub_AI_Knowledge_Cuts::log( 'editorial_agenda', $action, $report['left_out'] );
 
             if ( $has_placeholder ) {
                 $out = str_replace( self::PLACEHOLDER, $block, $sys_prompt );
             } elseif ( '' !== $block ) {
                 $out = rtrim( $sys_prompt ) . "\n\n" . $block;
             } else {
-                return $sys_prompt;
+                $out = $sys_prompt;
             }
 
-            if ( '' !== $block ) {
+            if ( '' !== $block || ! empty( $report['left_out'] ) ) {
                 self::$last_applied = [
                     'version'       => (int) $agenda['version'],
                     'action'        => $action,
                     'chars'         => self::strlen_u( $block ),
+                    'left_out'      => $report['left_out'],
                     'original_hash' => md5( $sys_prompt ),
                     'prompt'        => $out,
                 ];

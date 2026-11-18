@@ -245,6 +245,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-memory-context-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-editor.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-editorial-agenda.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-stakeholders.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-knowledge-cuts.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-policy-fiches.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-fiches-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-help-admin.php';

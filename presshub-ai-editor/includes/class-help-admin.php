@@ -301,7 +301,7 @@ class PressHub_AI_Help_Admin {
         if ( '' !== $social_full ) {
             $html .= self::p( sprintf(
                 /* translators: 1: characters left for a fiche in social copy, 2: length of the example's framing */
-                __( 'Social copy has room for about %1$d characters of fiche after the fixed instructions, and the example\'s framing is %2$d characters, so it is sent in full:', 'presshub-ai-editor' ),
+                __( 'Social copy has room for about %1$d characters of fiche (the fixed instructions around the fiches are not counted), and the example\'s framing is %2$d characters, so it is sent in full:', 'presshub-ai-editor' ),
                 $social_room,
                 self::strlen_u( (string) PressHub_AI_Policy_Fiches::example_fiche()['framing'] )
             ) );
@@ -309,7 +309,7 @@ class PressHub_AI_Help_Admin {
         } elseif ( '' !== ( $social_first = self::sample_policy_block( 'social_copy_facebook', true ) ) ) {
             $html .= self::p( sprintf(
                 /* translators: 1: characters left for a fiche in social copy, 2: length of the example's framing */
-                __( 'Social copy has room for about %1$d characters of fiche after the fixed instructions. The example\'s framing is %2$d characters, so the full example would be left out of social copy. Below, the same fiche with only its first framing rule:', 'presshub-ai-editor' ),
+                __( 'Social copy has room for about %1$d characters of fiche (the fixed instructions around the fiches are not counted). The example\'s framing is %2$d characters, so the full example would be left out of social copy. Below, the same fiche with only its first framing rule:', 'presshub-ai-editor' ),
                 $social_room,
                 self::strlen_u( (string) PressHub_AI_Policy_Fiches::example_fiche()['framing'] )
             ) );
@@ -317,7 +317,7 @@ class PressHub_AI_Help_Admin {
         } else {
             $html .= self::p( sprintf(
                 /* translators: %d: characters left for a fiche in social copy */
-                __( 'Social copy has room for about %d characters of fiche after the fixed instructions, too little even for the example\'s first framing rule, so social copy would get no policy fiche:', 'presshub-ai-editor' ),
+                __( 'Social copy has room for about %d characters of fiche, too little even for the example\'s first framing rule, so social copy would get no policy fiche:', 'presshub-ai-editor' ),
                 $social_room
             ) );
             $html .= self::pre( '' );
@@ -487,6 +487,7 @@ class PressHub_AI_Help_Admin {
         $html .= self::ul( [
             __( 'They are instructions, not guarantees. The AI usually follows them, but it can still miss a rule or misread a fiche. The QA gate and a human read before publishing remain necessary.', 'presshub-ai-editor' ),
             __( 'They add text to every call that gets them, which costs tokens and time. The budgets keep this bounded; Usage & logs shows the cost.', 'presshub-ai-editor' ),
+            __( 'Each task has a character limit per kind of knowledge (Settings → Editorial knowledge → Advanced). The limit counts the themes and fiches themselves, not the fixed instructions around them. Whatever does not fit is left out or shortened, and that is never silent: the call\'s generation record lists every theme, person and fiche left out under "Left out because of limits", with how much room it needed, and the log notes it too.', 'presshub-ai-editor' ),
             __( 'They are only as good as what is in them. An outdated role, an expired theme without an end date or an unchecked "fact" is passed on as confidently as a correct one.', 'presshub-ai-editor' ),
             __( 'They do not reach the AI calls that only extract or classify (see the table), nor image and speech generation.', 'presshub-ai-editor' ),
         ] );
@@ -503,7 +504,7 @@ class PressHub_AI_Help_Admin {
             __( 'At most 3 fiches per task; with several busy files, the less mentioned ones are left out. The podcast never gets facts or open questions, and social copy and shorts get only the framing. A fiche too long for its task is sent with fewer parts (down to principles and framing), and in social copy it is left out.', 'presshub-ai-editor' ),
             sprintf(
                 /* translators: 1: characters for social copy, 2: characters for shorts */
-                __( 'The small tasks have little room once the fixed instructions are in: about %1$d characters for a fiche\'s title and framing in social copy and %2$d in the TikTok short plan, all fiches together. A fiche whose title and framing do not fit is not sent there at all; the Policies page warns you.', 'presshub-ai-editor' ),
+                __( 'The small tasks have little room: %1$d characters for the fiches\' titles and framing in social copy and %2$d in the TikTok short plan, all fiches together (the fixed instructions around them are not counted). A fiche whose title and framing do not fit is not sent there at all; the Policies page warns you, and the call\'s generation record lists it under "Left out because of limits".', 'presshub-ai-editor' ),
                 self::policy_room( 'social_copy_facebook' ),
                 self::policy_room( 'social_tiktok_shorts' )
             ),
@@ -592,18 +593,14 @@ class PressHub_AI_Help_Admin {
     }
 
     /**
-     * Characters left for one fiche's own text in a task, after the fixed
-     * instructions that open and close the policy block. 0 when none.
+     * Characters the fiches get in a task: its budget, since the fixed
+     * instructions that open and close the policy block are not counted.
+     * 0 when the task gets none.
      */
     public static function policy_room( string $action ): int {
-        $budget = PressHub_AI_Policy_Fiches::budget_for( $action );
-        if ( $budget <= 0 ) {
-            return 0;
-        }
-        $probe = PressHub_AI_Policy_Fiches::normalize( array_merge( PressHub_AI_Policy_Fiches::empty_fiche( 'x' ), [ 'status' => 'published', 'framing' => 'x' ] ) );
-        $block = PressHub_AI_Policy_Fiches::render( [ 'probe' => [ 'count' => 1, 'fiche' => $probe ] ], $action, 100000 )['text'];
-        $own   = PressHub_AI_Policy_Fiches::render_fiche( $probe, [ 'framing' ] );
-        return max( 0, $budget - ( self::strlen_u( (string) $block ) - self::strlen_u( $own ) ) );
+        // The budget counts the fiches' own text only; the fixed header and
+        // footer are not charged to it (2.52.0).
+        return PressHub_AI_Policy_Fiches::budget_for( $action );
     }
 
     private static function strlen_u( string $s ): int {

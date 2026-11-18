@@ -177,7 +177,18 @@ sh_check( 'apply: no names in the material sends nothing', 'SYS' === $S::apply( 
 $hits  = $S::find_in_text( $material );
 $small = $S::render( $hits, 300 );
 $len   = function_exists( 'mb_strlen' ) ? 'mb_strlen' : 'strlen';
-sh_check( 'render: within a small budget', '' === $small || $len( $small ) <= 300 );
+$sh_body = static function ( string $block ) use ( $len ): int {
+    return '' === $block ? 0 : $len( implode( "\n", array_slice( explode( "\n", $block ), 2, -1 ) ) ) + 1;
+};
+sh_check( 'render: within a small budget (header not charged)', '' === $small || $sh_body( $small ) <= 300 );
+$fullp = $S::render_report( $hits, 100000 );
+sh_check( 'report: nothing recorded when everything fits', '' !== $fullp['text'] && [] === $fullp['left_out'] );
+$need  = $sh_body( $fullp['text'] );
+$cut   = $S::render_report( $hits, $need - 1 );
+sh_check( 'report: a cut is recorded', ! empty( $cut['left_out'] ) && in_array( $cut['left_out'][0]['reason'], [ 'shortened', 'no_room' ], true ) && $need - 1 === $cut['left_out'][0]['limit'] );
+sh_check( 'report: the full block fits a budget of its content length', $fullp['text'] === $S::render( $hits, $need ) );
+$none  = $S::render_report( $hits, 5 );
+sh_check( 'report: nobody fits, nothing sent, everyone recorded', '' === $none['text'] && count( $none['left_out'] ) === count( $hits ) && 'no_room' === $none['left_out'][0]['reason'] );
 sh_check( 'render: zero budget', '' === $S::render( $hits, 0 ) );
 
 $S::save_edit( 'αννιτα-δημητριου', [ 'excluded' => true ] );
@@ -193,6 +204,17 @@ $cfg  = is_array( $rec['config'] ?? null ) ? $rec['config'] : json_decode( (stri
 sh_check( 'record: system prompt as sent', $sent === $rec['system_prompt'] );
 sh_check( 'record: fiches in config', [ 'νικοσ-χριστοδουλιδησ' ] === ( $cfg['stakeholders'] ?? null ) && ( $cfg['stakeholders_chars'] ?? 0 ) > 0 );
 sh_check( 'record: cleared', null === $S::last_applied() );
+
+// Recorder: a cut is stored with the call even when nothing was sent.
+update_option( 'presshub_ai_stakeholders_budgets', array_merge( $S::BUDGETS, [ 'briefing_curation' => 5 ] ) );
+$t0   = PressHub_AI_Generation_Recorder::begin_call();
+$sent = $S::apply( 'ΑΡΧΙΚΟ', $material, 'briefing_curation' );
+$rid  = PressHub_AI_Generation_Recorder::finish_call( $t0, 'briefing_text', null, 'ΑΡΧΙΚΟ', $material, 'OK' );
+$rec  = PressHub_AI_Generation_Recorder::get( (int) $rid );
+$cfg  = is_array( $rec['config'] ?? null ) ? $rec['config'] : json_decode( (string) ( $rec['config'] ?? '' ), true );
+sh_check( 'record: nothing fits, prompt unchanged', 'ΑΡΧΙΚΟ' === $sent && 'ΑΡΧΙΚΟ' === $rec['system_prompt'] );
+sh_check( 'record: the people left out are stored', ! empty( $cfg['stakeholders_left_out'] ) && 'no_room' === $cfg['stakeholders_left_out'][0]['reason'] && [] === ( $cfg['stakeholders'] ?? null ) );
+delete_option( 'presshub_ai_stakeholders_budgets' );
 
 $A = 'PressHub_AI_Editorial_Agenda';
 $A::save( [ [ 'title' => 'Κυπριακό', 'priority' => 5 ] ], '', 1, '' );

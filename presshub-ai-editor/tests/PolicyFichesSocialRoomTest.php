@@ -57,7 +57,9 @@ psr_check( 'budget: social defaults are 1200', 1200 === PressHub_AI_Policy_Fiche
 psr_check( 'room: the worked example fits social copy in full', '' !== PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook' ) );
 psr_check( 'room: the worked example fits the shorts plan in full', '' !== PressHub_AI_Help_Admin::sample_policy_block( 'social_tiktok_shorts' ) );
 
-psr_check( 'room: a positive budget too small for any fiche gives nothing, not a bare header', '' === (string) PressHub_AI_Policy_Fiches::render( $set, 'social_copy_facebook', 150 )['text'] );
+psr_check( 'room: a positive budget too small for any fiche gives nothing, not a bare header', '' === (string) PressHub_AI_Policy_Fiches::render( $set, 'social_copy_facebook', 10 )['text'] );
+$cut_rep = PressHub_AI_Policy_Fiches::render( $set, 'social_copy_facebook', 10 );
+psr_check( 'report: the fiche that did not fit is recorded with what it needed', 1 === count( $cut_rep['left_out'] ) && 'no_room' === $cut_rep['left_out'][0]['reason'] && 10 === $cut_rep['left_out'][0]['room'] && $cut_rep['left_out'][0]['needed'] > 10 );
 
 // Help page with a budget too small even for the first framing rule.
 update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 200 ] ) );

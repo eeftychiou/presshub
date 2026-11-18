@@ -97,10 +97,19 @@ ea_check( 'render: guidance included', false !== strpos( $full, 'Δίνουμε 
 ea_check( 'render: zero budget sends nothing', '' === $A::render( $A::get(), 0, $today ) );
 
 $len   = function_exists( 'mb_strlen' ) ? 'mb_strlen' : 'strlen';
-$tight = $A::render( $A::get(), $len( $full ) - 10, $today );
+$body_of = static function ( string $block ) use ( $len ): int {
+    $start = mb_strpos( $block, 'Θέματα:' );
+    $start = false === $start ? mb_strpos( $block, 'Μόνιμες' ) : $start;
+    return false === $start ? 0 : $len( mb_substr( $block, $start, mb_strpos( $block, '=== ΤΕΛΟΣ ΑΤΖΕΝΤΑΣ ===' ) - $start ) );
+};
+$content = $body_of( $full );
+$tight   = $A::render( $A::get(), $content - 10, $today );
 ea_check( 'render: budget drops the lowest priority first', '' !== $tight && false === strpos( $tight, 'Λιγότερο σημαντικό' ) && false !== strpos( $tight, 'Κυπριακό' ) );
-ea_check( 'render: stays within budget', $len( $tight ) <= $len( $full ) - 10 );
-$tiny = $A::render( $A::get(), 420, $today );
+ea_check( 'render: themes and guidance stay within budget (header not charged)', $body_of( $tight ) <= $content - 10 );
+ea_check( 'render: the full content fits a budget of exactly its length', $full === $A::render( $A::get(), $content, $today ) );
+$rep = $A::render_report( $A::get(), $content - 10, $today );
+ea_check( 'report: the dropped theme is recorded with its size', 1 === count( $rep['left_out'] ) && 'no_room' === $rep['left_out'][0]['reason'] && false !== strpos( $rep['left_out'][0]['item'], 'Λιγότερο σημαντικό' ) && $rep['left_out'][0]['needed'] > 0 && $content - 10 === $rep['left_out'][0]['limit'] );
+ea_check( 'report: nothing recorded when everything fits', [] === $A::render_report( $A::get(), 100000, $today )['left_out'] );
 ea_check( 'render: very small budget keeps clipped guidance or nothing', '' === $tiny || $len( $tiny ) <= 420 );
 
 // 3. apply
