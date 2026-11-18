@@ -70,7 +70,6 @@ class PressHub_Settings_Sections {
     const KEY_SECTIONS = [
         'presshub_ai_remove_github_token'          => 'connections',
         'presshub_ai_remove_google_cloud_api_key'  => 'connections',
-        'presshub_social_github_token'             => 'connections',
         // #247: every secret is in Connections.
         'presshub_ai_briefing_tts_api_key'         => 'connections',
         'presshub_ai_remove_briefing_tts_api_key'  => 'connections',
