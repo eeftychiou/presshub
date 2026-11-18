@@ -922,6 +922,15 @@ jQuery(document).ready(function($) {
                 );
                 renderSeoReview(response.data.seo || null);
                 renderGateResult(response.data.gate || null);
+                // The QA gate panel at the top of the box shows this review
+                // too: redraw it, and drop the scorecard copy once it does.
+                if (typeof window.presshubQaGatePanelRefresh === 'function') {
+                    window.presshubQaGatePanelRefresh(function(html) {
+                        if (html) {
+                            $('#presshub-ai-scorecard-results').empty();
+                        }
+                    });
+                }
 
                 // ME-8 / F-29: tell the journalist what happened to the
                 // post status, derived from the server response.
