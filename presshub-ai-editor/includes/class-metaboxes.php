@@ -39,7 +39,7 @@ class PressHub_AI_Metaboxes {
 
     public function render_metabox( $post ) {
         $scorecard = get_post_meta( $post->ID, '_presshub_ai_scorecard', true );
-        // QA gate verdicts, history and "Publish anyway" (2.51.0), first in the box.
+        // QA gate verdicts, history and "Publish anyway" (2.50.0), first in the box.
         $gate_panel = class_exists( 'PressHub_AI_QA_Held_Admin' ) ? PressHub_AI_QA_Held_Admin::metabox_slot( (int) $post->ID ) : '';
         // The gate panel already shows the latest editorial and legal result.
         $show_legacy_scorecard = false === strpos( $gate_panel, 'presshub-qa-gate-panel' );

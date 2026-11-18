@@ -523,7 +523,7 @@ list( $subject, $body ) = ( function () {
 pg_check( false !== strpos( $body, 'EDITORIAL: 40 / 100' ) && false !== strpos( $body, 'could not run' ), 'the error email keeps the editorial block' );
 echo "  [16] podcasts, held briefings, roundups and emails: OK\n";
 
-// 17. Held by QA list, Posts column, editor panel (2.51.0) and the PR 2 follow-ups.
+// 17. Held by QA list, Posts column, editor panel (2.50.0) and the PR 2 follow-ups.
 pg_reset( [ 'presshub_ai_seo_review_enabled' => 0 ] );
 $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
 pg_reply( array_merge( $clean, [ 'score' => 40, 'libel_risk' => 'High', 'legal_concerns' => 'Ισχυρισμός χωρίς πηγή.', 'legal_issues' => [ [ 'type' => 'defamation', 'quote' => 'είναι απατεώνας', 'severity' => 'High', 'fix' => 'Αφαίρεσε τον χαρακτηρισμό.' ] ] ] ) );

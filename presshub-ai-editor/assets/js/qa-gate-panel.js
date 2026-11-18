@@ -5,7 +5,7 @@
  *   - after "Run AI Editorial Review" (admin.js calls
  *     window.presshubQaGatePanelRefresh()).
  *
- * @since 2.51.0
+ * @since 2.50.0
  */
 ( function () {
 	'use strict';

@@ -18,7 +18,7 @@
  * holds it (hold or error).
  *
  * @package PressHub_AI_Editor
- * @since 2.51.0
+ * @since 2.50.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
