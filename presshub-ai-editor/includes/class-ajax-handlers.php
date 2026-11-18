@@ -49,6 +49,7 @@ class PressHub_AI_Ajax_Handlers {
         // AJAX Settings Save
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
         add_action( 'wp_ajax_presshub_ai_save_settings_section', [ $this, 'save_settings_section' ] );
+        add_action( 'wp_ajax_presshub_dismiss_settings_whats_new', [ $this, 'dismiss_settings_whats_new' ] );
         // Dynamic AI Providers Manager AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_save_provider', [ $this, 'save_provider' ] );
         add_action( 'wp_ajax_presshub_ai_test_source', [ $this, 'test_source' ] );
@@ -1930,9 +1931,28 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             $GLOBALS['presshub_ai_save_post_data'] = $post_data;
-            // #233: the registry decides which options belong to this tab, so a
-            // tab's Save never writes (or zeroes) another tab's options.
-            $result      = PressHub_Settings_Registry::save_posted( 'ai', $tab, $post_data );
+            if ( class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab ) ) {
+                // #246: one Settings section, across both option groups. Social
+                // sanitizers read their "_present" / "_remove" markers from $_POST.
+                $with_social = current_user_can( PressHub_Capabilities::social() );
+                $defs        = PressHub_Settings_Sections::definitions();
+                if ( ! empty( $defs[ $tab ]['social'] ) && ! $with_social ) {
+                    wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub Social settings.', 'presshub-ai-editor' ) ], 403 );
+                }
+                foreach ( $post_data as $k => $v ) {
+                    if ( is_string( $k ) && ! isset( $_POST[ $k ] ) ) {
+                        $_POST[ $k ] = $v;
+                    }
+                }
+                $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
+            } else {
+                // #233: the registry decides which options belong to this tab, so a
+                // tab's Save never writes (or zeroes) another tab's options.
+                if ( '' !== $tab && ! PressHub_Settings_Registry::options_map( 'ai', $tab ) ) {
+                    wp_send_json_error( [ 'message' => __( 'Unknown settings section.', 'presshub-ai-editor' ) ], 400 );
+                }
+                $result = PressHub_Settings_Registry::save_posted( 'ai', $tab, $post_data );
+            }
             $saved_keys  = $result['saved_keys'];
             $saved_count = $result['count'];
 
@@ -1980,6 +2000,16 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
             ],
         ] );
+    }
+
+    /** Remembers, per user, that the "What's new in settings" panel was dismissed (#246). */
+    public function dismiss_settings_whats_new(): void {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+        if ( ! PressHub_Capabilities::current_user_can_manage() ) {
+            wp_send_json_error( [ 'message' => __( 'Insufficient permissions.', 'presshub-ai-editor' ) ], 403 );
+        }
+        update_user_meta( get_current_user_id(), PressHub_Settings_Registry::WHATS_NEW_META, 1 );
+        wp_send_json_success( [ 'dismissed' => true ] );
     }
 
     /**

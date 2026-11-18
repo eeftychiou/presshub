@@ -465,7 +465,7 @@ if ( ! function_exists( 'check_admin_referer' ) ) {
 
 if ( ! function_exists( 'wp_send_json_error' ) ) {
     function wp_send_json_error( $data = null, $status_code = null, $options = 0 ) {
-        $GLOBALS['JSON_RESPONSES'][] = [ 'success' => false, 'data' => $data ];
+        $GLOBALS['JSON_RESPONSES'][] = [ 'success' => false, 'data' => $data, 'status' => $status_code ];
         // Mirror WP's behavior: wp_send_json_error calls wp_die() internally.
         throw new RuntimeException( 'wp_send_json_error: ' . ( is_string( $data ) ? $data : wp_json_encode( $data ) ) );
     }
@@ -867,6 +867,8 @@ if ( ! function_exists( 'wp_unslash' ) ) {
 if ( ! function_exists( 'add_settings_section' ) ) {
     function add_settings_section( $id, $title, $callback, $page ) {
         $GLOBALS['SECTIONS'][ $page ][] = [ 'id' => $id, 'title' => $title, 'callback' => $callback ];
+        // Same shape as WordPress, for renderers that print one section at a time.
+        $GLOBALS['wp_settings_sections'][ $page ][ $id ] = [ 'id' => $id, 'title' => $title, 'callback' => $callback ];
         return true;
     }
 }
@@ -897,6 +899,18 @@ if ( ! function_exists( 'do_settings_fields' ) ) {
             echo '</td>';
             echo '</tr>';
         }
+    }
+}
+
+if ( ! function_exists( 'untrailingslashit' ) ) {
+    function untrailingslashit( $value ) {
+        return rtrim( (string) $value, '/\\' );
+    }
+}
+
+if ( ! function_exists( 'wp_nonce_url' ) ) {
+    function wp_nonce_url( $actionurl, $action = -1, $name = '_wpnonce' ) {
+        return $actionurl . ( false === strpos( (string) $actionurl, '?' ) ? '?' : '&' ) . $name . '=' . wp_create_nonce( $action );
     }
 }
 

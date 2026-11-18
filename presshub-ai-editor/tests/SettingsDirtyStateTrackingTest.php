@@ -14,6 +14,7 @@ require_once __DIR__ . '/../includes/class-provider-defaults.php';
 require_once __DIR__ . '/../includes/class-provider-store.php';
 require_once __DIR__ . '/../includes/class-settings-render.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsDirtyStateTrackingTest
 {
@@ -27,9 +28,7 @@ class SettingsDirtyStateTrackingTest
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
 
         $renderer = new PressHub_AI_Settings_Render();
-        ob_start();
-        $renderer->render_settings_page();
-        $html = ob_get_clean();
+        $html = presshub_test_render_all_sections();
 
         // 1.1 Sticky save bar unsaved badge element
         if ( false === strpos( $html, 'id="presshub-sticky-unsaved-badge"' ) && false === strpos( $html, 'class="presshub-sticky-unsaved-badge"' ) ) {

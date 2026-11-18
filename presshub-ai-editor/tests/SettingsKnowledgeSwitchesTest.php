@@ -12,6 +12,7 @@ require_once __DIR__ . '/wp-action-wrapper.php';
 require_once __DIR__ . '/wordpress-stubs.php';
 defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER', true );
 require_once __DIR__ . '/../presshub-ai-editor.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsKnowledgeSwitchesTest {
 
@@ -132,10 +133,8 @@ class SettingsKnowledgeSwitchesTest {
         // 6. The tab renders every switch.
         $GLOBALS['OPTIONS_STORE']     = [];
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
-        ob_start();
-        ( new PressHub_AI_Settings_Render() )->render_settings_page();
-        $html = (string) ob_get_clean();
-        if ( false === strpos( $html, 'id="presshub-tab-pane-knowledge"' ) || false === strpos( $html, 'data-tab="knowledge"' ) ) {
+        $html = presshub_test_render_all_sections();
+        if ( false === strpos( $html, 'id="presshub-tab-pane-editorial-knowledge"' ) || false === strpos( $html, 'data-active-tab="editorial-knowledge"' ) ) {
             $failures[] = 'The Editorial knowledge tab and its Save button should render.';
         }
         foreach ( PressHub_Settings_Registry::for_tab( 'ai', 'knowledge' ) as $key => $e ) {

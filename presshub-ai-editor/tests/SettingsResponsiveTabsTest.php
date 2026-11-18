@@ -1,13 +1,20 @@
 <?php
 /**
- * Test suite for Issue #13: Responsive Settings Navigation Tabs.
+ * Settings section list on every screen size (#13, reworked for #246).
+ *
+ * Since #246 the Settings page is one section per page load, so the section
+ * list is plain links (aria-current on the open one, no role="tab"), with a
+ * <select> of the same sections on narrow screens.
  *
  * Verifies:
- * 1. Semantic HTML markup for responsive tab container & mobile select dropdown.
- * 2. Accessibility attributes (WCAG 2.1 tap targets, roles, aria-selected, aria-controls).
- * 3. Mobile dropdown selector options and values matching the tab panes.
- * 4. Responsive CSS rules in admin.css (flexbox, horizontal scroll, media queries, 44px touch targets).
- * 5. JavaScript synchronization in admin.js between nav tabs, mobile select, and URL hash.
+ * 1. The section list: one link per visible section, aria-current="page" on
+ *    the open one only, no tab roles.
+ * 2. The narrow-screen <select>: labelled, one option per section, the open
+ *    one selected, values are the section URLs.
+ * 3. Responsive CSS in settings.css: the select replaces the list below
+ *    960px and touch targets are 44px high below 782px.
+ * 4. settings-page.js navigates on change and asks first when there are
+ *    unsaved changes.
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
@@ -16,126 +23,72 @@ require_once __DIR__ . '/../includes/class-provider-defaults.php';
 require_once __DIR__ . '/../includes/class-provider-store.php';
 require_once __DIR__ . '/../includes/class-settings-render.php';
 require_once __DIR__ . '/../includes/class-settings.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsResponsiveTabsTest
 {
     public static function run(): void {
         $failures = [];
 
-        // -------------------------------------------------------------
-        // Case 1: Render Settings Page output contains responsive navigation wrapper
-        // -------------------------------------------------------------
-        $GLOBALS['OPTIONS_STORE'] = [];
+        $GLOBALS['OPTIONS_STORE']     = [];
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
-        
-        $settings_render = new PressHub_AI_Settings_Render();
-        ob_start();
-        $settings_render->render_settings_page();
-        $html = ob_get_clean();
 
-        if ( false === strpos( $html, 'presshub-settings-nav-container' ) ) {
-            $failures[] = "Settings page HTML missing responsive nav container (.presshub-settings-nav-container).";
-        }
+        $slugs = PressHub_Settings_Sections::slugs();
+        foreach ( $slugs as $current ) {
+            $html = presshub_test_render_section( $current );
 
-        if ( false === strpos( $html, 'presshub-mobile-tab-select-wrap' ) ) {
-            $failures[] = "Settings page HTML missing mobile tab select wrap (.presshub-mobile-tab-select-wrap).";
-        }
+            // Case 1: the section list.
+            if ( false === strpos( $html, '<nav class="presshub-settings-nav"' ) || false === strpos( $html, 'aria-label="Settings sections"' ) ) {
+                $failures[] = "{$current}: the section list should be a labelled <nav>.";
+            }
+            if ( false !== strpos( $html, 'role="tab"' ) || false !== strpos( $html, 'role="tablist"' ) || false !== strpos( $html, 'role="tabpanel"' ) ) {
+                $failures[] = "{$current}: the section list must not use tab roles.";
+            }
+            if ( 1 !== substr_count( $html, 'aria-current="page"' ) ) {
+                $failures[] = "{$current}: exactly one link should carry aria-current=\"page\"; got " . substr_count( $html, 'aria-current="page"' );
+            }
+            if ( ! preg_match( '/<a href="[^"]*section=' . preg_quote( $current, '/' ) . '"[^>]*data-section="' . preg_quote( $current, '/' ) . '" aria-current="page"/', $html ) ) {
+                $failures[] = "{$current}: aria-current should sit on the link to the open section.";
+            }
+            foreach ( $slugs as $slug ) {
+                if ( ! preg_match( '/<a href="[^"]*section=' . preg_quote( $slug, '/' ) . '"[^>]*class="presshub-settings-nav-link/', $html ) ) {
+                    $failures[] = "{$current}: the section list is missing a link to {$slug}.";
+                }
+            }
 
-        if ( false === strpos( $html, 'id="presshub-mobile-tab-select"' ) || false === strpos( $html, 'class="presshub-mobile-tab-select"' ) ) {
-            $failures[] = "Settings page HTML missing mobile select dropdown (#presshub-mobile-tab-select / .presshub-mobile-tab-select).";
-        }
-
-        // -------------------------------------------------------------
-        // Case 2: Mobile Select contains all 6 navigation tabs
-        // -------------------------------------------------------------
-        $expected_tabs = [
-            'providers',
-            'coauthor',
-            'briefing',
-            'copilot',
-            'advanced',
-        ];
-
-        foreach ( $expected_tabs as $tab_key ) {
-            $pattern = '/<option[^>]*value=["\']' . preg_quote( $tab_key, '/' ) . '["\']/i';
-            if ( ! preg_match( $pattern, $html ) ) {
-                $failures[] = "Mobile tab select dropdown is missing option for tab '{$tab_key}'.";
+            // Case 2: the narrow-screen select.
+            if ( false === strpos( $html, 'for="presshub-settings-section-select"' ) || false === strpos( $html, 'id="presshub-settings-section-select"' ) ) {
+                $failures[] = "{$current}: the section <select> should render with a label.";
+            }
+            foreach ( $slugs as $slug ) {
+                if ( ! preg_match( '/<option value="[^"]*section=' . preg_quote( $slug, '/' ) . '"/', $html ) ) {
+                    $failures[] = "{$current}: the section <select> is missing an option for {$slug}.";
+                }
+            }
+            if ( ! preg_match( '/<option value="[^"]*section=' . preg_quote( $current, '/' ) . '" selected="selected"/', $html ) ) {
+                $failures[] = "{$current}: the open section should be selected in the <select>.";
             }
         }
 
-        // -------------------------------------------------------------
-        // Case 3: Accessibility Attributes (ARIA roles, labels, controls)
-        // -------------------------------------------------------------
-        if ( false === strpos( $html, 'aria-label=' ) && false === strpos( $html, 'for="presshub-mobile-tab-select"' ) ) {
-            $failures[] = "Mobile select dropdown missing accessible label or aria-label attribute.";
+        // Case 3: responsive CSS.
+        $css = (string) file_get_contents( dirname( __DIR__ ) . '/assets/css/settings.css' );
+        $narrow = (string) strstr( (string) strstr( $css, '@media (max-width: 960px)' ), '@media (max-width: 782px)', true );
+        if ( false === strpos( $narrow, 'presshub-settings-nav-list { display: none; }' ) || false === strpos( $narrow, 'presshub-settings-nav-select-wrap { display: block;' ) ) {
+            $failures[] = 'settings.css should swap the section list for the <select> below 960px.';
+        }
+        if ( ! preg_match( '/@media \(max-width: 782px\)[^@]*min-height: 44px/s', $css ) ) {
+            $failures[] = 'settings.css should give touch targets a 44px min-height below 782px.';
         }
 
-        if ( false === strpos( $html, 'role="tab"' ) ) {
-            $failures[] = "Desktop/tablet nav-tab elements missing role=\"tab\" attribute.";
+        // Case 4: the select navigates, behind the unsaved-changes guard.
+        $js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/js/settings-page.js' );
+        if ( false === strpos( $js, "'#presshub-settings-section-select'" ) || false === strpos( $js, 'confirmLeave()' ) ) {
+            $failures[] = 'settings-page.js should navigate on section <select> change, after the unsaved-changes guard.';
         }
 
-        if ( false === strpos( $html, 'aria-selected=' ) ) {
-            $failures[] = "Desktop/tablet nav-tab elements missing aria-selected attribute.";
-        }
-
-        if ( false === strpos( $html, 'aria-controls=' ) ) {
-            $failures[] = "Desktop/tablet nav-tab elements missing aria-controls attribute.";
-        }
-
-        // -------------------------------------------------------------
-        // Case 4: Responsive CSS in admin.css
-        // -------------------------------------------------------------
-        $css_file = dirname( __DIR__ ) . '/assets/admin.css';
-        if ( ! file_exists( $css_file ) ) {
-            $failures[] = "admin.css file not found at {$css_file}.";
-        } else {
-            $css_content = file_get_contents( $css_file );
-
-            // Check for flex container and overflow scroll
-            if ( false === strpos( $css_content, 'overflow-x' ) ) {
-                $failures[] = "admin.css missing 'overflow-x' property for responsive horizontal scroll.";
-            }
-
-            // Check for media queries
-            if ( false === strpos( $css_content, '@media' ) || false === strpos( $css_content, '782px' ) ) {
-                $failures[] = "admin.css missing mobile media query breakpoint (max-width: 782px).";
-            }
-
-            // Check for mobile tab selector styles
-            if ( false === strpos( $css_content, '.presshub-mobile-tab-select' ) ) {
-                $failures[] = "admin.css missing styles for .presshub-mobile-tab-select.";
-            }
-
-            // Check for WCAG 2.1 minimum 44px tap target height
-            if ( false === strpos( $css_content, '44px' ) ) {
-                $failures[] = "admin.css missing 44px min-height or height rule for WCAG 2.1 touch targets.";
-            }
-        }
-
-        // -------------------------------------------------------------
-        // Case 5: JS Synchronization in admin.js
-        // -------------------------------------------------------------
-        $js_file = dirname( __DIR__ ) . '/assets/admin.js';
-        if ( ! file_exists( $js_file ) ) {
-            $failures[] = "admin.js file not found at {$js_file}.";
-        } else {
-            $js_content = file_get_contents( $js_file );
-
-            if ( false === strpos( $js_content, 'presshub-mobile-tab-select' ) ) {
-                $failures[] = "admin.js missing synchronization logic for #presshub-mobile-tab-select.";
-            }
-
-            if ( false === strpos( $js_content, 'aria-selected' ) ) {
-                $failures[] = "admin.js missing aria-selected attribute update during tab switching.";
-            }
-        }
-
-        // -------------------------------------------------------------
-        // Report results
-        // -------------------------------------------------------------
         if ( $failures ) {
             fwrite( STDERR, "FAIL\n" );
-            foreach ( $failures as $f ) {
+            foreach ( array_unique( $failures ) as $f ) {
                 fwrite( STDERR, "  - {$f}\n" );
             }
             exit( 1 );

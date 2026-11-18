@@ -237,11 +237,12 @@ class PressHub_Settings_Transfer {
     }
 
     public static function settings_url( array $args = [] ): string {
-        $url = admin_url( 'admin.php?page=presshub-ai' );
+        // #246: export and import sit in Settings → Site & system → Diagnostics.
+        $url = admin_url( 'admin.php?page=presshub-ai&section=site-system' );
         if ( $args && function_exists( 'add_query_arg' ) ) {
             $url = add_query_arg( $args, $url );
         }
-        return $url . '#advanced';
+        return $url . '#diagnostics';
     }
 
     public static function export_url(): string {

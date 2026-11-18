@@ -22,6 +22,7 @@ require_once __DIR__ . '/../includes/class-settings-storage.php';
 require_once __DIR__ . '/../includes/class-settings-render.php';
 require_once __DIR__ . '/../includes/class-settings.php';
 require_once __DIR__ . '/../includes/class-ajax-handlers.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsPerTabAjaxSaveTest
 {
@@ -520,27 +521,26 @@ class SettingsPerTabAjaxSaveTest
         $settings = new PressHub_AI_Settings();
         $settings->register_settings();
         $renderer = new PressHub_AI_Settings_Render();
-        ob_start();
-        $renderer->render_settings_page();
-        $html = ob_get_clean();
+        $html = presshub_test_render_all_sections();
 
-        $expected_tab_buttons = [
-            'coauthor' => 'Save AI Co-Author Settings',
-            'briefing' => 'Save Daily Briefing Settings',
-            'copilot'  => 'Save AI Copilot Settings',
-            'advanced' => 'Save Advanced Settings',
-        ];
-
-        foreach ( $expected_tab_buttons as $tab => $btn_label ) {
-            $pattern = '/class="[^"]*presshub-tab-save-btn[^"]*"[^>]*data-tab="' . preg_quote( $tab, '/' ) . '"/i';
-            if ( ! preg_match( $pattern, $html ) ) {
-                $failures[] = "Rendered settings page missing per-tab save button for tab: {$tab}";
+        // #246: each section page has exactly one Save, a real submit button
+        // (no-JS fallback), in the save bar that names the section it saves.
+        foreach ( PressHub_Settings_Sections::slugs() as $slug ) {
+            $page = presshub_test_render_section( $slug );
+            // The main form only: Site & system also prints the import/export forms after it.
+            $start = (int) strpos( $page, 'id="presshub-ai-settings-form"' );
+            $page  = substr( $page, $start, (int) strpos( $page, '</form>', $start ) - $start );
+            // Buttons bound to another form (form="…", the settings import) do not save this section.
+            $own = preg_match_all( '/<(?:button|input)\b(?![^>]*\bform=)[^>]*type="submit"/', $page );
+            if ( 1 !== $own ) {
+                $failures[] = "Section {$slug} should render exactly one submit button; got {$own}";
             }
-        }
-
-        // Verify fallback submit wrap is also present for non-JS
-        if ( false === strpos( $html, 'presshub-settings-submit-wrap' ) ) {
-            $failures[] = 'Rendered settings page missing fallback presshub-settings-submit-wrap.';
+            if ( false === strpos( $page, 'id="presshub-sticky-save-btn"' ) || false === strpos( $page, 'data-active-tab="' . $slug . '"' ) ) {
+                $failures[] = "Section {$slug} is missing its Save button in the save bar.";
+            }
+            if ( false === strpos( $page, 'Save ' . esc_html( PressHub_Settings_Sections::label( $slug ) ) ) ) {
+                $failures[] = "Section {$slug} Save button should name the section.";
+            }
         }
 
         // Verify hidden input fallbacks for briefing checkboxes (Issue #107)

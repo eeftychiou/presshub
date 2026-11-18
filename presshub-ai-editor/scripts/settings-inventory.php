@@ -17,6 +17,11 @@ if ( ! function_exists( 'apply_filters' ) ) {
         return $value;
     }
 }
+if ( ! function_exists( '__' ) ) {
+    function __( $text, $domain = 'default' ) {
+        return $text;
+    }
+}
 
 require_once dirname( __DIR__ ) . '/includes/class-settings-registry.php';
 
@@ -26,22 +31,24 @@ require_once dirname( __DIR__ ) . '/includes/class-settings-registry.php';
 function presshub_settings_inventory_markdown(): string {
     $all = PressHub_Settings_Registry::all();
 
-    $pages = [
-        'ai'     => 'PressHub → Settings',
-        'social' => 'PressHub → Social settings',
-    ];
-    $counts = [];
-    foreach ( $all as $e ) {
-        $p = $e['page'];
-        $t = $e['tab'];
-        $counts[ $p ]['total']  = ( $counts[ $p ]['total'] ?? 0 ) + 1;
-        $counts[ $p ]['tabs'][ $t ] = ( $counts[ $p ]['tabs'][ $t ] ?? 0 ) + 1;
+    // #246: one Settings page in sections; options are listed by the section
+    // that shows them, with the old page and tab they were stored under.
+    $by_section = [];
+    $counts     = [];
+    foreach ( $all as $key => $e ) {
+        $section = PressHub_Settings_Sections::section_of( (string) $key, $e );
+        $by_section[ $section ][ $key ] = $e;
+        $counts[ $section ]['total'] = ( $counts[ $section ]['total'] ?? 0 ) + 1;
         if ( empty( $e['rendered'] ) ) {
-            $counts[ $p ]['hidden'] = ( $counts[ $p ]['hidden'] ?? 0 ) + 1;
+            $counts[ $section ]['hidden'] = ( $counts[ $section ]['hidden'] ?? 0 ) + 1;
         }
         if ( ! empty( $e['secret'] ) ) {
-            $counts[ $p ]['secret'] = ( $counts[ $p ]['secret'] ?? 0 ) + 1;
+            $counts[ $section ]['secret'] = ( $counts[ $section ]['secret'] ?? 0 ) + 1;
         }
+    }
+    $sections = PressHub_Settings_Sections::slugs();
+    if ( isset( $by_section[''] ) ) {
+        $sections[] = '';
     }
     $unused = PressHub_Settings_Registry::unused();
 
@@ -49,54 +56,55 @@ function presshub_settings_inventory_markdown(): string {
     $md .= "> Generated from `presshub-ai-editor/includes/settings-registry-data.php` by\n";
     $md .= "> `php presshub-ai-editor/scripts/settings-inventory.php`. Do not edit by hand:\n";
     $md .= "> change the registry and run the script. CI fails when this file is stale.\n\n";
+    $md .= "Every option belongs to one section of PressHub → Settings (`admin.php?page=presshub-ai&section=<slug>`), and that section's Save writes it. The Stored as column gives the option's former page and tab (`ai` options were on the AI settings page, `social` options on Social settings).\n\n";
     $md .= "## Summary\n\n";
-    $md .= "| Page | Options | Not shown on screen | Secrets |\n|---|---|---|---|\n";
-    foreach ( $pages as $p => $label ) {
-        $md .= sprintf( "| %s | %d | %d | %d |\n", $label, $counts[ $p ]['total'] ?? 0, $counts[ $p ]['hidden'] ?? 0, $counts[ $p ]['secret'] ?? 0 );
+    $md .= "| Section | Options | Not shown on screen | Secrets |\n|---|---|---|---|\n";
+    foreach ( $sections as $slug ) {
+        $md .= sprintf( "| %s | %d | %d | %d |\n", '' === $slug ? '**Not in a section**' : PressHub_Settings_Sections::label( $slug ) . ' (`' . $slug . '`)', $counts[ $slug ]['total'] ?? 0, $counts[ $slug ]['hidden'] ?? 0, $counts[ $slug ]['secret'] ?? 0 );
     }
     $md .= sprintf( "| **Total** | **%d** | | |\n\n", count( $all ) );
     $md .= sprintf( "**Scheduled for removal:** %d option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).\n\n", count( $unused ) );
 
-    foreach ( $pages as $p => $label ) {
-        $md .= "## {$label}\n\n";
-        $tabs = $counts[ $p ]['tabs'] ?? [];
-        foreach ( $tabs as $tab => $n ) {
-            $md .= "### Tab `{$tab}` ({$n})\n\n";
-            $md .= "| Option | Label | Type | Unit | Notes |\n|---|---|---|---|---|\n";
-            foreach ( PressHub_Settings_Registry::for_tab( $p, $tab ) as $key => $e ) {
-                if ( $e['tab'] !== $tab ) {
-                    continue;
-                }
-                $notes = [];
-                if ( empty( $e['rendered'] ) ) {
-                    $notes[] = 'not shown on screen';
-                }
-                if ( ! empty( $e['secret'] ) ) {
-                    $notes[] = 'secret, masked';
-                }
-                if ( ! empty( $e['removes'] ) ) {
-                    $notes[] = 'removes `' . $e['removes'] . '`';
-                }
-                if ( ! empty( $e['checkbox'] ) ) {
-                    $notes[] = 'checkbox';
-                }
-                if ( PressHub_Settings_Registry::STATUS_UNUSED === ( $e['status'] ?? '' ) ) {
-                    $notes[] = '**unused**';
-                }
-                if ( ! empty( $e['depends_on'] ) ) {
-                    $notes[] = 'needs `' . $e['depends_on'] . '` on';
-                }
-                if ( ! empty( $e['aliases'] ) && is_array( $e['aliases'] ) ) {
-                    $notes[] = 'was: ' . str_replace( [ '|', "\n" ], [ '\\|', ' ' ], implode( '; ', $e['aliases'] ) );
-                }
-                $label_txt = str_replace( [ '|', "\n" ], [ '\\|', ' ' ], (string) $e['label'] );
-                if ( function_exists( 'mb_strlen' ) && mb_strlen( $label_txt ) > 90 ) {
-                    $label_txt = mb_substr( $label_txt, 0, 87 ) . '…';
-                }
-                $md .= sprintf( "| `%s` | %s | %s | %s | %s |\n", $key, $label_txt, $e['type'] ?? 'string', str_replace( '|', '\\|', (string) ( $e['unit'] ?? '' ) ), implode( ', ', $notes ) );
-            }
-            $md .= "\n";
+    foreach ( $sections as $slug ) {
+        $rows = $by_section[ $slug ] ?? [];
+        $md  .= '' === $slug
+            ? "## Not in a section (" . count( $rows ) . ")\n\n"
+            : sprintf( "## %s (`%s`, %d)\n\n", PressHub_Settings_Sections::label( $slug ), $slug, count( $rows ) );
+        if ( ! $rows ) {
+            $md .= "None.\n\n";
+            continue;
         }
+        $md .= "| Option | Label | Type | Unit | Stored as | Notes |\n|---|---|---|---|---|---|\n";
+        foreach ( $rows as $key => $e ) {
+            $notes = [];
+            if ( empty( $e['rendered'] ) ) {
+                $notes[] = 'not shown on screen';
+            }
+            if ( ! empty( $e['secret'] ) ) {
+                $notes[] = 'secret, masked';
+            }
+            if ( ! empty( $e['removes'] ) ) {
+                $notes[] = 'removes `' . $e['removes'] . '`';
+            }
+            if ( ! empty( $e['checkbox'] ) ) {
+                $notes[] = 'checkbox';
+            }
+            if ( PressHub_Settings_Registry::STATUS_UNUSED === ( $e['status'] ?? '' ) ) {
+                $notes[] = '**unused**';
+            }
+            if ( ! empty( $e['depends_on'] ) ) {
+                $notes[] = 'needs `' . $e['depends_on'] . '` on';
+            }
+            if ( ! empty( $e['aliases'] ) && is_array( $e['aliases'] ) ) {
+                $notes[] = 'was: ' . str_replace( [ '|', "\n" ], [ '\\|', ' ' ], implode( '; ', $e['aliases'] ) );
+            }
+            $label_txt = str_replace( [ '|', "\n" ], [ '\\|', ' ' ], (string) $e['label'] );
+            if ( function_exists( 'mb_strlen' ) && mb_strlen( $label_txt ) > 90 ) {
+                $label_txt = mb_substr( $label_txt, 0, 87 ) . '…';
+            }
+            $md .= sprintf( "| `%s` | %s | %s | %s | %s | %s |\n", $key, $label_txt, $e['type'] ?? 'string', str_replace( '|', '\\|', (string) ( $e['unit'] ?? '' ) ), $e['page'] . ' / ' . $e['tab'], implode( ', ', $notes ) );
+        }
+        $md .= "\n";
     }
 
     $md .= presshub_settings_inventory_filters( $all );

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.41.2
+ * Version: 2.42.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -122,7 +122,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.41.2' );
+define( 'PRESSHUB_AI_VERSION', '2.42.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -497,7 +497,9 @@ add_action( 'plugins_loaded', 'presshub_ai_init' );
 add_action( 'admin_enqueue_scripts', function( string $hook_suffix ) {
     $is_post_edit     = in_array( $hook_suffix, [ 'post.php', 'post-new.php' ], true );
     $is_queue_page    = str_contains( $hook_suffix, 'presshub-social-queue' );
-    $is_settings_page = str_contains( $hook_suffix, 'presshub_social' ) || str_contains( $hook_suffix, 'presshub-social' );
+    $is_settings_page = str_contains( $hook_suffix, 'presshub_social' ) || str_contains( $hook_suffix, 'presshub-social' )
+        // #246: the Social settings are sections of PressHub → Settings.
+        || ( class_exists( 'PressHub_AI_Settings' ) && PressHub_AI_Settings::is_settings_hook( $hook_suffix ) );
 
     if ( ! $is_post_edit && ! $is_queue_page && ! $is_settings_page ) {
         return;
@@ -550,13 +552,6 @@ add_action( 'admin_enqueue_scripts', function( string $hook_suffix ) {
             true
         );
         wp_localize_script( 'presshub-social-settings', 'presshubSocial', $js_vars );
-        if ( str_contains( $hook_suffix, 'presshub-social-settings' ) && class_exists( 'PressHub_Settings_Registry' ) ) {
-            // #234: settings search, per-field defaults and the what's-new panel.
-            PressHub_Settings_Registry::ensure_registered();
-            wp_enqueue_style( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/css/settings-search.css', [], PRESSHUB_AI_VERSION );
-                wp_enqueue_script( 'presshub-settings-search', PRESSHUB_AI_URL . 'assets/js/settings-search.js', [ 'jquery' ], PRESSHUB_AI_VERSION, true );
-            wp_localize_script( 'presshub-settings-search', 'presshubSettingsIndex', PressHub_Settings_Registry::search_payload( 'social' ) );
-        }
     }
 } );
 

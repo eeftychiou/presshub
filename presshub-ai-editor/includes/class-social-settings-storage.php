@@ -1937,8 +1937,10 @@ class PressHub_Social_Settings_Storage {
             $value    = trim( $value );
             $existing = (string) get_option( $option_name, '' );
 
-            // Support explicit removal if requested.
-            if ( '__CLEAR__' === $value || ! empty( $_POST[ $option_name . '_remove' ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            // Support explicit removal if requested. A new secret typed in the
+            // same save wins over a "Remove" box left ticked (#281 review).
+            $is_new = '' !== $value && false === strpos( $value, '••••' );
+            if ( '__CLEAR__' === $value || ( ! $is_new && ! empty( $_POST[ $option_name . '_remove' ] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
                 return '';
             }
 

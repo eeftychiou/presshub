@@ -12,6 +12,7 @@ require_once __DIR__ . '/wp-action-wrapper.php';
 require_once __DIR__ . '/wordpress-stubs.php';
 defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER', true );
 require_once __DIR__ . '/../presshub-ai-editor.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsHiddenSurfacedTest {
 
@@ -26,21 +27,12 @@ class SettingsHiddenSurfacedTest {
 
     private static function render_page(): string {
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
-        $renderer = new PressHub_AI_Settings_Render();
-        ob_start();
-        $renderer->render_settings_page();
-        return (string) ob_get_clean();
+        return presshub_test_render_all_sections();
     }
 
     /** HTML of one tab pane. */
     private static function pane( string $html, string $tab ): string {
-        $start = strpos( $html, 'id="presshub-tab-pane-' . $tab . '"' );
-        if ( false === $start ) {
-            return '';
-        }
-        $next = strpos( $html, 'class="presshub-tab-pane"', $start + 10 );
-        $next = false === $next ? strlen( $html ) : strrpos( substr( $html, 0, $next ), '<div' );
-        return substr( $html, $start, $next - $start );
+        return presshub_test_tab_pane( $html, $tab );
     }
 
     public static function run(): void {

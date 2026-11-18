@@ -9,6 +9,7 @@ require_once __DIR__ . '/../includes/class-settings-registry.php';
 require_once __DIR__ . '/../includes/class-provider-defaults.php';
 require_once __DIR__ . '/../includes/class-provider-store.php';
 require_once __DIR__ . '/../includes/class-settings-render.php';
+require_once __DIR__ . '/settings-sections-helper.php';
 
 class SettingsFieldHelpRenderTest {
 

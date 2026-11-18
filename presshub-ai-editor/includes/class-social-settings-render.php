@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/class-capabilities.php';
+require_once __DIR__ . '/class-settings-sections.php';
 
 require_once __DIR__ . '/class-social-logger.php';
 require_once __DIR__ . '/class-social-settings-storage.php';
@@ -29,7 +30,9 @@ class PressHub_Social_Settings_Render {
     }
 
     /**
-     * Render the complete settings admin page.
+     * The Social settings page became sections of PressHub → Settings (#246).
+     * Kept for callers of the old page: it renders the Settings page, which
+     * opens the section named in the request.
      *
      * @return void
      */
@@ -37,87 +40,62 @@ class PressHub_Social_Settings_Render {
         if ( ! current_user_can( $this->settings_cap() ) ) {
             wp_die( esc_html__( 'You do not have permission to access PressHub Social settings.', 'presshub-social-autopost' ) );
         }
-
-        $active_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'general'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        $valid_tabs = [
-            'general'     => __( 'General & Engines', 'presshub-social-autopost' ),
-            'ai'          => __( 'AI Copywriter', 'presshub-social-autopost' ),
-            'credentials' => __( 'API Credentials', 'presshub-social-autopost' ),
-            'worker'      => __( 'Automation Worker', 'presshub-social-autopost' ),
-            'shorts'      => __( 'Shorts & Reels', 'presshub-social-autopost' ),
-            'queue'       => __( 'Queue & Alerts', 'presshub-social-autopost' ),
-            'prompts'     => __( 'Prompts & Templates', 'presshub-social-autopost' ),
-        ];
-
-        if ( ! array_key_exists( $active_tab, $valid_tabs ) ) {
-            $active_tab = 'general';
+        if ( ! class_exists( 'PressHub_AI_Settings_Render' ) ) {
+            require_once __DIR__ . '/class-settings-render.php';
         }
+        ( new PressHub_AI_Settings_Render() )->render_settings_page();
+    }
 
+    /**
+     * Prints the Settings API sections registered on one Social settings
+     * page ($wp_page, e.g. presshub_social_general), each with its title as a
+     * sub-heading, its intro callback and its fields. $only limits the output
+     * to those section ids; $except leaves those out.
+     *
+     * @param string   $wp_page Settings API page id.
+     * @param string[] $only    Section ids to print (empty: all).
+     * @param string[] $except  Section ids to skip.
+     */
+    public function render_settings_sections( string $wp_page, array $only = [], array $except = [] ): void {
+        global $wp_settings_sections;
+        $sections = isset( $wp_settings_sections[ $wp_page ] ) && is_array( $wp_settings_sections[ $wp_page ] ) ? $wp_settings_sections[ $wp_page ] : [];
+        foreach ( $sections as $id => $section ) {
+            if ( ( $only && ! in_array( $id, $only, true ) ) || in_array( $id, $except, true ) ) {
+                continue;
+            }
+            echo '<div class="presshub-settings-subgroup" id="' . esc_attr( 'wp-section-' . $id ) . '">';
+            if ( ! empty( $section['title'] ) ) {
+                echo '<h4 class="presshub-settings-subgroup-title">' . esc_html( (string) $section['title'] ) . '</h4>';
+            }
+            if ( ! empty( $section['callback'] ) && is_callable( $section['callback'] ) ) {
+                call_user_func( $section['callback'], $section );
+            }
+            echo '<table class="form-table" role="presentation"><tbody>';
+            if ( function_exists( 'do_settings_fields' ) ) {
+                do_settings_fields( $wp_page, $id );
+            }
+            echo '</tbody></table>';
+            echo '</div>';
+        }
+    }
+
+    /** Box that restores every Social prompt and template to its default file. */
+    public function render_prompts_reset_box(): void {
+        $url = wp_nonce_url(
+            add_query_arg( [ 'page' => PressHub_Settings_Sections::PAGE_SLUG, 'section' => 'social-publishing', 'action' => 'reset_prompts' ], admin_url( 'admin.php' ) ),
+            'presshub_social_reset_prompts'
+        );
         ?>
-        <div class="wrap presshub-social-settings-wrap">
-            <h1><?php echo esc_html__( 'PressHub — Social settings', 'presshub-social-autopost' ); ?></h1>
-
-            <?php
-            if ( isset( $_GET['message'] ) && 'prompts_reset' === $_GET['message'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-                echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'All prompts and templates have been successfully restored to asset defaults.', 'presshub-social-autopost' ) . '</p></div>';
-            }
-            if ( function_exists( 'settings_errors' ) ) {
-                settings_errors( 'presshub_social_options' );
-                // options.php files its "Settings saved." notice under "general",
-                // which WordPress only prints by itself on Settings-menu pages.
-                settings_errors( 'general' );
-            }
-            ?>
-
-            <nav class="nav-tab-wrapper presshub-social-nav-tabs" style="margin-bottom: 20px;">
-                <?php foreach ( $valid_tabs as $tab_id => $tab_title ) : ?>
-                    <a href="<?php echo esc_url( add_query_arg( [ 'page' => 'presshub-social-settings', 'tab' => $tab_id ], admin_url( 'admin.php' ) ) ); ?>"
-                       data-tab="<?php echo esc_attr( $tab_id ); ?>"
-                       class="nav-tab presshub-social-tab-link <?php echo $active_tab === $tab_id ? 'nav-tab-active' : ''; ?>"<?php echo $active_tab === $tab_id ? ' aria-current="page"' : ''; ?>>
-                        <?php echo esc_html( $tab_title ); ?>
-                    </a>
-                <?php endforeach; ?>
-            </nav>
-
-            <form method="post" action="options.php" id="presshub-social-settings-form">
-                <input type="hidden" name="presshub_social_form_full" value="1" />
-                <?php settings_fields( PressHub_Social_Settings_Storage::OPTION_GROUP ); ?>
-
-                <?php foreach ( $valid_tabs as $tab_id => $tab_title ) : ?>
-                    <div id="presshub-social-tab-pane-<?php echo esc_attr( $tab_id ); ?>"
-                         class="presshub-social-tab-pane"
-                         style="<?php echo $active_tab === $tab_id ? '' : 'display:none;'; ?>">
-                        <?php if ( 'shorts' === $tab_id ) { $this->render_shorts_readiness_notice(); } ?>
-                        <?php do_settings_sections( 'presshub_social_' . $tab_id ); ?>
-
-                        <?php if ( 'shorts' === $tab_id ) : ?>
-                            <details class="presshub-shorts-prompts" id="presshub-shorts-prompts" style="margin-top: 20px;">
-                                <summary style="cursor: pointer; font-weight: 600; font-size: 1.1em;"><?php echo esc_html__( 'Shorts prompts (script, image, narration, music)', 'presshub-social-autopost' ); ?></summary>
-                                <?php do_settings_sections( 'presshub_social_shorts_prompts' ); ?>
-                            </details>
-                        <?php endif; ?>
-
-                        <?php if ( 'prompts' === $tab_id ) : ?>
-                            <hr style="margin: 30px 0 20px;" />
-                            <div class="presshub-social-reset-box" style="background:#fff; border:1px solid #ccd0d4; padding:15px; border-radius:4px; max-width:800px; margin-bottom:20px;">
-                                <h3><?php echo esc_html__( 'Restore Prompts & Templates', 'presshub-social-autopost' ); ?></h3>
-                                <p class="description">
-                                    <?php echo esc_html__( 'Reset all prompt templates and static formats back to the official default files from assets/prompts/. Any customizations made in the fields above will be overwritten.', 'presshub-social-autopost' ); ?>
-                                </p>
-                                <p>
-                                    <a href="<?php echo esc_url( wp_nonce_url( add_query_arg( [ 'page' => 'presshub-social-settings', 'action' => 'reset_prompts' ], admin_url( 'admin.php' ) ), 'presshub_social_reset_prompts' ) ); ?>"
-                                       class="button button-secondary"
-                                       onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to restore all prompts to defaults? Your customized prompt changes will be lost.', 'presshub-social-autopost' ) ); ?>');">
-                                        <?php echo esc_html__( 'Reset All Prompts to Defaults', 'presshub-social-autopost' ); ?>
-                                    </a>
-                                </p>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-
-                <?php submit_button(); ?>
-            </form>
+        <div class="presshub-social-reset-box">
+            <h4><?php echo esc_html__( 'Restore Prompts & Templates', 'presshub-social-autopost' ); ?></h4>
+            <p class="description">
+                <?php echo esc_html__( 'Reset all prompt templates and static formats back to the official default files from assets/prompts/. Any customizations made in the fields above will be overwritten.', 'presshub-social-autopost' ); ?>
+            </p>
+            <p>
+                <a href="<?php echo esc_url( $url ); ?>" class="button button-secondary presshub-confirm-link" data-confirm="<?php echo esc_attr__( 'Are you sure you want to restore all prompts to defaults? Your customized prompt changes will be lost.', 'presshub-social-autopost' ); ?>">
+                    <?php echo esc_html__( 'Reset All Prompts to Defaults', 'presshub-social-autopost' ); ?>
+                </a>
+            </p>
         </div>
         <?php
     }
@@ -140,7 +118,7 @@ class PressHub_Social_Settings_Render {
     public function render_enabled_platforms_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_enabled_platforms();
         echo '<input type="hidden" name="presshub_social_enabled_platforms_present" value="1" />';
-        echo '<div style="display:flex; flex-direction:column; gap:8px; max-width:650px;">';
+        echo '<div class="ph-display-flex ph-flex-direction-column ph-gap-8px ph-max-width-650px">';
         foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $platform ) {
             $is_checked    = in_array( $platform, $enabled, true );
             $is_configured = PressHub_Social_Settings_Storage::is_platform_configured( $platform );
@@ -149,18 +127,18 @@ class PressHub_Social_Settings_Render {
 
             $session_ok    = PressHub_Social_Settings_Storage::is_platform_session_active( $platform );
             $badge = ( $is_configured && ! $session_ok )
-                ? '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#fff3cd; color:#856404;">' . esc_html__( '⏸ Session inactive — jobs will wait', 'presshub-social-autopost' ) . '</span>'
+                ? '<span class="ph-display-inline-block ph-padding-2px-8px ph-font-size-11px ph-font-weight-600 ph-border-radius-3px ph-background-fff3cd ph-color-856404">' . esc_html__( '⏸ Session inactive — jobs will wait', 'presshub-social-autopost' ) . '</span>'
                 : ( $is_configured
-                ? '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#d4edda; color:#155724;">' . esc_html__( '✓ Configured', 'presshub-social-autopost' ) . '</span>'
-                : '<span style="display:inline-block; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#f8d7da; color:#721c24;">' . esc_html__( '⚠ Not Configured', 'presshub-social-autopost' ) . '</span>' );
+                ? '<span class="ph-display-inline-block ph-padding-2px-8px ph-font-size-11px ph-font-weight-600 ph-border-radius-3px ph-background-d4edda ph-color-155724">' . esc_html__( '✓ Configured', 'presshub-social-autopost' ) . '</span>'
+                : '<span class="ph-display-inline-block ph-padding-2px-8px ph-font-size-11px ph-font-weight-600 ph-border-radius-3px ph-background-f8d7da ph-color-721c24">' . esc_html__( '⚠ Not Configured', 'presshub-social-autopost' ) . '</span>' );
 
-            echo '<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#fff; border:1px solid #ccd0d4; border-radius:4px;">';
-            echo '<label style="font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px;">';
+            echo '<div class="ph-display-flex ph-align-items-center ph-justify-content-space-between ph-padding-8px-12px ph-background-fff ph-border-1px-solid-ccd0d4 ph-border-radius-4px">';
+            echo '<label class="ph-font-weight-600 ph-font-size-13px ph-cursor-pointer ph-display-flex ph-align-items-center ph-gap-8px">';
             echo '<input type="checkbox" name="presshub_social_enabled_platforms[]" value="' . esc_attr( $platform ) . '" ' . checked( $is_checked, true, false ) . ' /> ';
             echo esc_html( ucfirst( $platform ) );
             echo '</label>';
-            echo '<div style="display:flex; align-items:center; gap:10px;">';
-            echo '<span style="font-size:12px; color:#666;">' . esc_html( $engine_label ) . '</span>';
+            echo '<div class="ph-display-flex ph-align-items-center ph-gap-10px">';
+            echo '<span class="ph-font-size-12px ph-color-666">' . esc_html( $engine_label ) . '</span>';
             echo $badge;
             echo '</div>';
             echo '</div>';
@@ -195,12 +173,12 @@ class PressHub_Social_Settings_Render {
 
         $session_ok    = PressHub_Social_Settings_Storage::is_platform_session_active( $platform );
         $badge_html = ( $is_configured && ! $session_ok )
-            ? '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#fff3cd; color:#856404;">' . esc_html__( '⏸ Session inactive — jobs will wait', 'presshub-social-autopost' ) . '</span>'
+            ? '<span class="ph-display-inline-block ph-margin-left-10px ph-padding-2px-8px ph-font-size-11px ph-font-weight-600 ph-border-radius-3px ph-background-fff3cd ph-color-856404">' . esc_html__( '⏸ Session inactive — jobs will wait', 'presshub-social-autopost' ) . '</span>'
             : ( $is_configured
-            ? '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#d4edda; color:#155724;">' . esc_html__( '✓ Configured', 'presshub-social-autopost' ) . '</span>'
-            : '<span style="display:inline-block; margin-left:10px; padding:2px 8px; font-size:11px; font-weight:600; border-radius:3px; background:#f8d7da; color:#721c24;">' . esc_html__( '⚠ Not Configured — posts will not be queued', 'presshub-social-autopost' ) . '</span>' );
+            ? '<span class="ph-display-inline-block ph-margin-left-10px ph-padding-2px-8px ph-font-size-11px ph-font-weight-600 ph-border-radius-3px ph-background-d4edda ph-color-155724">' . esc_html__( '✓ Configured', 'presshub-social-autopost' ) . '</span>'
+            : '<span class="ph-display-inline-block ph-margin-left-10px ph-padding-2px-8px ph-font-size-11px ph-font-weight-600 ph-border-radius-3px ph-background-f8d7da ph-color-721c24">' . esc_html__( '⚠ Not Configured — posts will not be queued', 'presshub-social-autopost' ) . '</span>' );
         ?>
-        <div style="display:flex; align-items:center;">
+        <div class="ph-display-flex ph-align-items-center">
             <select id="<?php echo esc_attr( $opt_name ); ?>" name="<?php echo esc_attr( $opt_name ); ?>">
                 <option value="api" <?php selected( $current, 'api' ); ?>><?php echo esc_html__( 'Official REST API', 'presshub-social-autopost' ); ?></option>
                 <option value="automation" <?php selected( $current, 'automation' ); ?>><?php echo esc_html__( 'Automation Worker (Playwright Headless)', 'presshub-social-autopost' ); ?></option>
@@ -316,10 +294,10 @@ class PressHub_Social_Settings_Render {
         $desc        = $args['desc'] ?? '';
         $placeholder = $args['placeholder'] ?? '';
         ?>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div class="ph-display-flex ph-align-items-center ph-gap-10px ph-flex-wrap-wrap">
             <input type="password" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $masked ); ?>" class="regular-text" placeholder="<?php echo esc_attr( $placeholder ); ?>" autocomplete="new-password" />
             <?php if ( '' !== $raw ) : ?>
-                <label style="color:#a00; font-size:12px;">
+                <label class="ph-color-a00 ph-font-size-12px">
                     <input type="checkbox" name="<?php echo esc_attr( $option . '_remove' ); ?>" value="1" />
                     <?php echo esc_html__( 'Clear / Revoke Stored Secret', 'presshub-social-autopost' ); ?>
                 </label>
@@ -356,7 +334,7 @@ class PressHub_Social_Settings_Render {
         <?php $push_only = ! empty( $args['push_only'] ); ?>
         <input type="number" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $val ); ?>" min="<?php echo esc_attr( $min ); ?>" max="<?php echo esc_attr( $max ); ?>" step="<?php echo esc_attr( $step ); ?>" class="small-text<?php echo $push_only ? ' presshub-push-only' : ''; ?>"<?php echo $push_only ? $this->push_only_attrs( $option ) : ''; ?> />
         <?php if ( ! empty( $args['unit'] ) ) : ?>
-            <span style="margin-left:4px;"><?php echo esc_html( $args['unit'] ); ?></span>
+            <span class="ph-margin-left-4px"><?php echo esc_html( $args['unit'] ); ?></span>
         <?php endif; ?>
         <?php if ( $push_only ) { $this->render_push_only_reason( $option ); } ?>
         <?php if ( '' !== $desc ) : ?>
@@ -406,7 +384,7 @@ class PressHub_Social_Settings_Render {
         $rows   = $args['rows'] ?? 6;
         $desc   = $args['desc'] ?? '';
         ?>
-        <textarea id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" rows="<?php echo esc_attr( $rows ); ?>" class="large-text code" style="width:100%; max-width:800px;"><?php echo esc_textarea( $val ); ?></textarea>
+        <textarea id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" rows="<?php echo esc_attr( $rows ); ?>" class="ph-width-100pct ph-max-width-800px large-text code"><?php echo esc_textarea( $val ); ?></textarea>
         <?php if ( '' !== $desc ) : ?>
             <p class="description"><?php echo esc_html( $desc ); ?></p>
         <?php endif; ?>
@@ -450,14 +428,18 @@ class PressHub_Social_Settings_Render {
     private function render_push_only_reason( string $field_id ): void {
         $pull = 'pull' === PressHub_Social_Settings_Storage::get_worker_mode();
         ?>
-        <span id="<?php echo esc_attr( $field_id ); ?>-push-reason" class="presshub-push-only-reason description" style="display:<?php echo $pull ? 'block' : 'none'; ?>; font-style: italic;"><?php echo esc_html__( 'Used only in Push mode.', 'presshub-social-autopost' ); ?></span>
+        <span id="<?php echo esc_attr( $field_id ); ?>-push-reason" class="ph-font-style-italic presshub-push-only-reason description<?php echo $pull ? '' : ' presshub-is-hidden'; ?>"><?php echo esc_html__( 'Used only in Push mode.', 'presshub-social-autopost' ); ?></span>
         <?php
     }
 
-    /** Link to a Social settings tab, optionally to a field on it. */
+    /**
+     * Link to where an old Social settings tab lives now (#246), optionally
+     * to a field in it.
+     */
     private function social_tab_url( string $tab, string $anchor = '' ): string {
-        $url = add_query_arg( [ 'page' => 'presshub-social-settings', 'tab' => $tab ], admin_url( 'admin.php' ) );
-        return $url . ( '' !== $anchor ? '#' . $anchor : '' );
+        $target = PressHub_Settings_Sections::legacy_target( 'social', $tab );
+        $slug   = $target ? $target['section'] : 'social-publishing';
+        return PressHub_Settings_Sections::url( $slug, '' !== $anchor ? $anchor : ( $target ? $target['anchor'] : '' ) );
     }
 
     /**
@@ -505,8 +487,8 @@ class PressHub_Social_Settings_Render {
             return;
         }
         ?>
-        <div class="notice notice-error inline presshub-shorts-readiness" style="margin: 10px 0 20px;">
-            <h3 style="margin: 0.8em 0 0.4em;">
+        <div class="ph-margin-10px-0-20px notice notice-error inline presshub-shorts-readiness">
+            <h3 class="ph-margin-0_8em-0-0_4em">
                 <?php
                 /* translators: %d: number of things to fix */
                 echo esc_html( sprintf( _n( 'Shorts can\'t run yet. %d thing to fix:', 'Shorts can\'t run yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) ) );
@@ -528,7 +510,7 @@ class PressHub_Social_Settings_Render {
             'TikTok'          => 'tiktok',
             'Instagram Reels' => 'instagram',
         ];
-        echo '<ul class="presshub-shorts-ready-list" style="margin: 0 0 8px;">';
+        echo '<ul class="ph-margin-0-0-8px presshub-shorts-ready-list">';
         foreach ( $rows as $label => $platform ) {
             $engine = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
             $ready  = $pull && 'automation' === $engine;
@@ -548,7 +530,7 @@ class PressHub_Social_Settings_Render {
     public function render_shorts_narration_intro(): void {
         $engine = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
         $label  = ( '' === $engine || 'gemini' === $engine || 0 === strpos( $engine, 'gemini' ) ) ? 'Gemini TTS' : 'Google Cloud TTS';
-        $url    = admin_url( 'admin.php?page=presshub-ai#briefing-voices' );
+        $url    = PressHub_Settings_Sections::url( 'daily-briefing', 'briefing-voices' );
         ?>
         <p>
             <?php echo esc_html__( 'Speech engine:', 'presshub-social-autopost' ); ?>
@@ -572,7 +554,7 @@ class PressHub_Social_Settings_Render {
         $secret = PressHub_Social_Settings_Storage::get_worker_secret();
         $masked = PressHub_Social_Logger::mask_secret( $secret );
         ?>
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div class="ph-display-flex ph-align-items-center ph-gap-10px">
             <input type="password" id="presshub_social_worker_secret" name="presshub_social_worker_secret" value="<?php echo esc_attr( $masked ); ?>" class="regular-text code" autocomplete="new-password" />
         </div>
         <p class="description"><?php echo esc_html__( 'Bearer secret token sent in X-Worker-Secret header to authenticate against the automation worker.', 'presshub-social-autopost' ); ?></p>
@@ -655,16 +637,16 @@ class PressHub_Social_Settings_Render {
         ?>
         <div class="presshub-social-music-library">
             <?php if ( empty( $status ) ) : ?>
-                <p><?php echo esc_html__( 'No moods: the TikTok Shorts: Music Prompts setting (Prompts tab) has no "mood: prompt" lines.', 'presshub-social-autopost' ); ?></p>
+                <p><?php echo esc_html__( 'No moods: the TikTok Shorts: Music Prompts setting (Social publishing › Shorts) has no "mood: prompt" lines.', 'presshub-social-autopost' ); ?></p>
             <?php else : ?>
-                <table class="widefat striped" style="max-width:800px;">
+                <table class="ph-max-width-800px widefat striped">
                     <tbody>
                     <?php foreach ( $status as $mood => $row ) : ?>
                         <tr>
-                            <td style="width:110px;"><strong><?php echo esc_html( $mood ); ?></strong><br /><span class="description"><?php echo esc_html( sprintf( '%d/%d', $row['have'], $row['need'] ) ); ?></span></td>
+                            <td class="ph-width-110px"><strong><?php echo esc_html( $mood ); ?></strong><br /><span class="description"><?php echo esc_html( sprintf( '%d/%d', $row['have'], $row['need'] ) ); ?></span></td>
                             <td>
                                 <?php foreach ( $row['tracks'] as $track ) : ?>
-                                    <audio controls preload="none" src="<?php echo esc_url( $track['url'] ); ?>" style="height:32px; margin:2px 6px 2px 0; vertical-align:middle;"></audio>
+                                    <audio controls preload="none" src="<?php echo esc_url( $track['url'] ); ?>" class="ph-height-32px ph-margin-2px-6px-2px-0 ph-vertical-align-middle"></audio>
                                 <?php endforeach; ?>
                                 <?php if ( empty( $row['tracks'] ) ) : ?>
                                     <span class="description"><?php echo esc_html__( 'Not generated yet.', 'presshub-social-autopost' ); ?></span>
@@ -675,15 +657,15 @@ class PressHub_Social_Settings_Render {
                     </tbody>
                 </table>
             <?php endif; ?>
-            <div class="presshub-social-music-row" style="margin-top:8px;">
+            <div class="ph-margin-top-8px presshub-social-music-row">
                 <button type="button" class="button button-secondary presshub-social-music-btn" data-reset="0">
                     <?php echo esc_html( $missing > 0 ? sprintf( __( 'Generate Music Tracks (%d missing)', 'presshub-social-autopost' ), $missing ) : __( 'Generate Music Tracks', 'presshub-social-autopost' ) ); ?>
                 </button>
                 <button type="button" class="button presshub-social-music-btn" data-reset="1">
                     <?php echo esc_html__( 'Replace All Tracks', 'presshub-social-autopost' ); ?>
                 </button>
-                <span class="spinner" style="float:none; margin:0 0 0 6px;"></span>
-                <span class="presshub-social-music-status" style="margin-left:8px; font-weight:600;"></span>
+                <span class="ph-float-none ph-margin-0-0-0-6px spinner"></span>
+                <span class="ph-margin-left-8px ph-font-weight-600 presshub-social-music-status"></span>
             </div>
             <p class="description"><?php echo esc_html__( 'Makes the instrumental tracks of each mood with Google Lyria (Gemini API key), one at a time, about 30 seconds each. Save changed prompts or settings first. Replace All Tracks deletes the current tracks and makes a new set. Lyria audio carries Google\'s SynthID watermark.', 'presshub-social-autopost' ); ?></p>
         </div>
@@ -709,13 +691,13 @@ class PressHub_Social_Settings_Render {
      */
     public function render_test_connection_button( string $platform ): void {
         ?>
-        <div class="presshub-social-test-row" style="margin-top:8px;">
+        <div class="ph-margin-top-8px presshub-social-test-row">
             <button type="button" class="button button-secondary presshub-social-test-btn" data-platform="<?php echo esc_attr( $platform ); ?>">
-                <span class="dashicons dashicons-update" style="line-height:1.4; vertical-align:middle; font-size:16px;"></span>
+                <span class="ph-line-height-1_4 ph-vertical-align-middle ph-font-size-16px dashicons dashicons-update"></span>
                 <?php echo esc_html( sprintf( __( 'Test %s Connection', 'presshub-social-autopost' ), ucfirst( $platform ) ) ); ?>
             </button>
-            <span class="spinner" style="float:none; margin:0 0 0 6px;"></span>
-            <span class="presshub-social-test-status" data-platform="<?php echo esc_attr( $platform ); ?>" style="margin-left:8px; font-weight:600;"></span>
+            <span class="ph-float-none ph-margin-0-0-0-6px spinner"></span>
+            <span class="ph-margin-left-8px ph-font-weight-600 presshub-social-test-status" data-platform="<?php echo esc_attr( $platform ); ?>"></span>
         </div>
         <?php
     }
