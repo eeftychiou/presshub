@@ -338,6 +338,24 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
+                                    <th scope="row"><?php echo esc_html__( 'Check posts editors publish', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_check_editors_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'Include Daily Briefing podcasts', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_include_podcasts_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'Include the Trending roundup', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_include_trending_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
                                     <th scope="row"><label for="presshub_ai_qa_min_score"><?php echo esc_html__( 'Minimum editorial score', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
                                         <?php $this->render_qa_min_score_field(); ?>
@@ -4402,6 +4420,45 @@ class PressHub_AI_Settings_Render {
         <p class="description">
             <?php echo esc_html__( 'Default: Enabled. When enabled, even if the briefing post status is set to "Publish immediately", it will only publish if it passes the QA review standard; otherwise it is held in Pending Review for editor inspection.', 'presshub-ai-editor' ); ?>
         </p>
+        <?php
+    }
+
+    /** Render "Check posts editors publish". */
+    public function render_qa_check_editors_field() {
+        $option = 'presshub_ai_qa_check_editors';
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_check_editors">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_check_editors" value="1" <?php checked( true, PressHub_AI_Settings_Storage::get_qa_check_editors() ); ?> />
+            <?php echo esc_html__( 'Check posts that editors and admins publish or schedule.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. Posts that editors and admins publish or schedule go through the QA gate too. A held post can be released with "Publish anyway" on PressHub → QA reviews, which records who released it and why.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "Include Daily Briefing podcasts". */
+    public function render_qa_include_podcasts_field() {
+        $option = 'presshub_ai_qa_include_podcasts';
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_include_podcasts">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_include_podcasts" value="1" <?php checked( true, PressHub_AI_Settings_Storage::get_qa_include_podcasts() ); ?> />
+            <?php echo esc_html__( 'Check Daily Briefing podcast posts before they publish.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. The podcast script and show notes get the editorial and legal checks and the post gets the measured SEO checks before the configured podcast status applies.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "Include the Trending roundup". */
+    public function render_qa_include_trending_field() {
+        $option = 'presshub_ai_qa_include_trending';
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_include_trending">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_include_trending" value="1" <?php checked( true, PressHub_AI_Settings_Storage::get_qa_include_trending() ); ?> />
+            <?php echo esc_html__( 'Check the Trending in Cyprus roundup before it publishes.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. The Trending in Cyprus summary and quoted posts get the legal check and the measured SEO checks; there is no editorial score for the roundup.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

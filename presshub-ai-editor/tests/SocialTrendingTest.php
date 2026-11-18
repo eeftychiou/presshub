@@ -64,6 +64,8 @@ function st_reset( array $opts = [] ) {
         'presshub_ai_social_trending_min_engagement'     => 10,
         'gmt_offset'                                     => 2,
         'presshub_ai_social_trending_summary_enabled'    => 0,
+        // The QA gate on the roundup is tested in PublishGateTest.
+        'presshub_ai_qa_include_trending'                => 0,
     ], $opts );
     $GLOBALS['TERMS']               = [];
     $GLOBALS['POSTS_STORE']         = [];
@@ -526,6 +528,27 @@ $GLOBALS['POST_META_STORE'][ 900 ][ $T::META_KEY ] = 'day:2026-11-14';
 $GLOBALS['WP_UPDATE_POST_CALLS'] = 0;
 ( new PressHub_AI_Workflow() )->enforce_editorial_workflow( 'publish', 'new', (object) [ 'ID' => 900, 'post_type' => 'post', 'post_content' => 'x' ] );
 st_check( 'workflow: roundup post not sent back to pending', 0 === $GLOBALS['WP_UPDATE_POST_CALLS'] );
+
+// QA gate on the roundup: reviewed on insert and when its set of posts
+// changes (summary on or off), not when only the numbers change.
+st_reset( [ 'presshub_ai_qa_include_trending' => 1, 'presshub_ai_qa_enabled' => 1, 'presshub_ai_social_trending_post_mode' => 'daily' ] );
+global $wpdb;
+$wpdb->tables = [];
+$qa_rows = function () { return PressHub_AI_QA_Review_Store::count(); };
+$GLOBALS['ST_NOW'] = $now;
+$plan = $T::get_worker_plan( false, $now );
+$res  = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 500, 60 ), st_post( 'tiktok', '72', 900, 30 ) ], [], $now );
+$gid  = (int) $res['post_id'];
+st_check( 'gate: new roundup is reviewed', 1 === $qa_rows() );
+st_check( 'gate: a roundup whose review cannot run is held', 'pending' === ( $GLOBALS['POSTS_STORE'][ $gid ]['post_status'] ?? '' ) );
+$GLOBALS['ST_NOW'] = $now + 7200;
+$plan = $T::get_worker_plan( true, $now + 7200 );
+$T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 900, 60 ), st_post( 'tiktok', '72', 1500, 30 ) ], [], $now + 7200 );
+st_check( 'gate: same posts with new numbers are not reviewed again; rows ' . $qa_rows(), 1 === $qa_rows() );
+$GLOBALS['ST_NOW'] = $now + 14400;
+$plan = $T::get_worker_plan( true, $now + 14400 );
+$T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 900, 60 ), st_post( 'x', '73', 2500, 30 ) ], [], $now + 14400 );
+st_check( 'gate: a new set of posts is reviewed again with the summary off; rows ' . $qa_rows(), 2 === $qa_rows() );
 
 // =========================================================================
 // 11. Briefing: trending posts as one harvest item

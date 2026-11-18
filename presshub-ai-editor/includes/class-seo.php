@@ -747,7 +747,7 @@ class PressHub_AI_SEO {
         return is_string( $host ) ? strtolower( (string) preg_replace( '/^www\./', '', $host ) ) : '';
     }
 
-    private static function max_tags(): int {
+    public static function max_tags(): int {
         return class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_seo_max_tags() : 8;
     }
 
