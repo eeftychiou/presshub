@@ -25,6 +25,27 @@ class PressHub_AI_Workflow {
         // Intercept transitions to ensure authors cannot publish without review
         add_action( 'transition_post_status', [ $this, 'enforce_editorial_workflow' ], 10, 3 );
         add_filter( 'rest_pre_insert_post', [ $this, 'remember_rest_terms' ], 10, 2 );
+        add_action( 'save_post_post', [ $this, 'remember_scheduler' ], 10, 2 );
+    }
+
+    /**
+     * Remember the last person to save a scheduled post. At go-live by cron
+     * the "Check posts editors publish" opt-out looks at them: an author's
+     * edit to a post an editor scheduled is still checked. REST saves do
+     * not always update _edit_last, so it is not relied on.
+     */
+    public function remember_scheduler( $post_id, $post = null ) {
+        $post_id = (int) $post_id;
+        if ( $post_id <= 0 || ! is_object( $post ) || 'future' !== ( $post->post_status ?? '' ) ) {
+            return;
+        }
+        if ( ( function_exists( 'wp_is_post_revision' ) && wp_is_post_revision( $post_id ) ) || ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) ) {
+            return;
+        }
+        $user = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+        if ( $user > 0 ) {
+            update_post_meta( $post_id, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, $user );
+        }
     }
 
     public function enforce_editorial_workflow( $new_status, $old_status, $post ) {
@@ -75,11 +96,7 @@ class PressHub_AI_Workflow {
             return;
         }
 
-        // Remember who scheduled it: REST saves do not always update _edit_last.
         $by_cron  = ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON );
-        if ( $schedules && ! $by_cron && function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 ) {
-            update_post_meta( $post->ID, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, (int) get_current_user_id() );
-        }
 
         // A scheduled post coming due is published by cron (user 0). It was
         // reviewed when it was scheduled, and the saved review is reused

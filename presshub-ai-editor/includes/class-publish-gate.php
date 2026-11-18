@@ -52,7 +52,7 @@ class PressHub_AI_Publish_Gate {
     /** Post meta: the status an automated post goes to once the gate passes it. */
     const META_TARGET_STATUS = '_presshub_gate_target_status';
 
-    /** Who scheduled the post: at go-live by cron, the editor opt-out looks at them. */
+    /** The last person to save the post while scheduled: at go-live by cron, the editor opt-out looks at them. */
     const META_SCHEDULED_BY = '_presshub_ai_gate_scheduled_by';
 
     /** Post meta: input hash of the version an editor released with "Publish anyway". */

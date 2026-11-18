@@ -1186,16 +1186,20 @@ class PressHub_AI_Social_Trending {
         $existing = (int) ( $map[ $key ] ?? 0 );
         $post     = $existing > 0 ? get_post( $existing ) : null;
         $update   = $post && 'trash' !== ( $post->post_status ?? '' );
-        $summary  = self::summary_for( $items, $update ? $existing : 0 );
-        $content  = self::build_content( $items, $now, $summary['text'] );
+        $new_set  = true;
         if ( $update ) {
             $prev_items = json_decode( (string) get_post_meta( $existing, self::META_ITEMS, true ), true );
             $new_set    = self::summary_hash( $items ) !== self::summary_hash( is_array( $prev_items ) ? $prev_items : [] );
             // A roundup the gate is holding keeps the text it was reviewed on
-            // until a new set of posts arrives, so "Publish anyway" still matches.
+            // until a new set of posts arrives, so "Publish anyway" still
+            // matches (and no summary is asked for).
             if ( ! $new_set && self::held_by_gate( $existing, $post ) ) {
                 return $existing;
             }
+        }
+        $summary  = self::summary_for( $items, $update ? $existing : 0 );
+        $content  = self::build_content( $items, $now, $summary['text'] );
+        if ( $update ) {
             // A new set of posts is not shown until the QA gate has read it.
             if ( $new_set && class_exists( 'PressHub_AI_Publish_Gate' ) && PressHub_AI_Publish_Gate::applies( 'trending' ) ) {
                 PressHub_AI_Publish_Gate::hold_for_review( $existing );
