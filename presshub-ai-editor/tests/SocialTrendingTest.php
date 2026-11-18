@@ -541,10 +541,12 @@ $res  = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 500, 60 
 $gid  = (int) $res['post_id'];
 st_check( 'gate: new roundup is reviewed', 1 === $qa_rows() );
 st_check( 'gate: a roundup whose review cannot run is held', 'pending' === ( $GLOBALS['POSTS_STORE'][ $gid ]['post_status'] ?? '' ) );
+$held_content = (string) ( $GLOBALS['POSTS_STORE'][ $gid ]['post_content'] ?? '' );
 $GLOBALS['ST_NOW'] = $now + 7200;
 $plan = $T::get_worker_plan( true, $now + 7200 );
 $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 900, 60 ), st_post( 'tiktok', '72', 1500, 30 ) ], [], $now + 7200 );
 st_check( 'gate: same posts with new numbers are not reviewed again; rows ' . $qa_rows(), 1 === $qa_rows() );
+st_check( 'gate: a held roundup keeps the text it was reviewed on, so Publish anyway still matches', $held_content === (string) ( $GLOBALS['POSTS_STORE'][ $gid ]['post_content'] ?? '' ) && 'pending' === ( $GLOBALS['POSTS_STORE'][ $gid ]['post_status'] ?? '' ) );
 $GLOBALS['ST_NOW'] = $now + 14400;
 $plan = $T::get_worker_plan( true, $now + 14400 );
 $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '71', 900, 60 ), st_post( 'x', '73', 2500, 30 ) ], [], $now + 14400 );

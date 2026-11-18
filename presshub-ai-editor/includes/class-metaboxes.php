@@ -39,8 +39,13 @@ class PressHub_AI_Metaboxes {
 
     public function render_metabox( $post ) {
         $scorecard = get_post_meta( $post->ID, '_presshub_ai_scorecard', true );
+        // QA gate verdicts, history and "Publish anyway" (2.50.0), first in the box.
+        $gate_panel = class_exists( 'PressHub_AI_QA_Held_Admin' ) ? PressHub_AI_QA_Held_Admin::metabox_slot( (int) $post->ID ) : '';
+        // The gate panel already shows the latest editorial and legal result.
+        $show_legacy_scorecard = false === strpos( $gate_panel, 'presshub-qa-gate-panel' );
         ?>
         <div class="presshub-ai-container">
+            <?php echo $gate_panel; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in metabox_html(). ?>
             <h3><?php echo esc_html__( 'Multi-Modal Source Material', 'presshub-ai-editor' ); ?></h3>
             <label for="presshub-ai-files"><?php echo esc_html__( 'Attach research files (PDF, DOCX, MP3, MP4, WAV, M4A)', 'presshub-ai-editor' ); ?></label>
             <input type="file" id="presshub-ai-files" multiple accept=".pdf,.docx,.mp3,.mp4,.wav,.m4a" style="margin-bottom: 10px; display: block;" />
@@ -68,7 +73,7 @@ class PressHub_AI_Metaboxes {
             <span id="presshub-ai-review-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
 
             <div id="presshub-ai-scorecard-results" style="margin-top: 15px;">
-                <?php if ( is_array( $scorecard ) && isset( $scorecard['score'] ) && is_numeric( $scorecard['score'] ) ) : ?>
+                <?php if ( $show_legacy_scorecard && is_array( $scorecard ) && isset( $scorecard['score'] ) && is_numeric( $scorecard['score'] ) ) : ?>
                     <?php
                     // ME-4 / F-23: color-coded tone classes mirror the
                     // admin.js renderer (red < 50, yellow 50-min_score, green >= min_score).

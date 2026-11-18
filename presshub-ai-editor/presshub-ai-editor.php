@@ -208,6 +208,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviewer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-review-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-publish-gate.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviews-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-held-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';
 if ( file_exists( PRESSHUB_AI_DIR . 'includes/class-log-exposure-check.php' ) ) {
@@ -457,6 +458,7 @@ function presshub_ai_init() {
     new PressHub_AI_Briefing_Admin();
     new PressHub_AI_Generation_Inspector();
     new PressHub_AI_QA_Reviews_Admin();
+    new PressHub_AI_QA_Held_Admin();
     new PressHub_AI_Memory_Editor();
     PressHub_AI_Editorial_Agenda::register_hooks();
     PressHub_AI_Stakeholders::register_hooks();

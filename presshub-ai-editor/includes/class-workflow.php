@@ -25,6 +25,27 @@ class PressHub_AI_Workflow {
         // Intercept transitions to ensure authors cannot publish without review
         add_action( 'transition_post_status', [ $this, 'enforce_editorial_workflow' ], 10, 3 );
         add_filter( 'rest_pre_insert_post', [ $this, 'remember_rest_terms' ], 10, 2 );
+        add_action( 'save_post_post', [ $this, 'remember_scheduler' ], 10, 2 );
+    }
+
+    /**
+     * Remember the last person to save a scheduled post. At go-live by cron
+     * the "Check posts editors publish" opt-out looks at them: an author's
+     * edit to a post an editor scheduled is still checked. REST saves do
+     * not always update _edit_last, so it is not relied on.
+     */
+    public function remember_scheduler( $post_id, $post = null ) {
+        $post_id = (int) $post_id;
+        if ( $post_id <= 0 || ! is_object( $post ) || 'future' !== ( $post->post_status ?? '' ) ) {
+            return;
+        }
+        if ( ( function_exists( 'wp_is_post_revision' ) && wp_is_post_revision( $post_id ) ) || ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) ) {
+            return;
+        }
+        $user = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+        if ( $user > 0 ) {
+            update_post_meta( $post_id, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, $user );
+        }
     }
 
     public function enforce_editorial_workflow( $new_status, $old_status, $post ) {
@@ -75,20 +96,22 @@ class PressHub_AI_Workflow {
             return;
         }
 
+        $by_cron  = ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON );
+
         // A scheduled post coming due is published by cron (user 0). It was
         // reviewed when it was scheduled, and the saved review is reused
         // unless the post or the gate settings changed since.
-        $by_cron  = ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON );
         $due      = $goes_live && 'future' === $old_status;
         if ( $by_cron && ( ! $due || $automated ) ) {
             return;
         }
 
         // Editors and admins are checked too, unless "Check posts editors publish" is off.
-        // At go-live by cron there is no user: look at who last saved the post.
+        // At go-live by cron there is no user: look at who scheduled it, else who last saved it.
         if ( ! PressHub_AI_Settings_Storage::get_qa_check_editors() ) {
             if ( $by_cron ) {
-                $last = (int) get_post_meta( $post->ID, '_edit_last', true );
+                $last = (int) get_post_meta( $post->ID, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, true );
+                $last = $last > 0 ? $last : (int) get_post_meta( $post->ID, '_edit_last', true );
                 $last = $last > 0 ? $last : (int) ( $post->post_author ?? 0 );
                 if ( $last > 0 && function_exists( 'user_can' ) && user_can( $last, 'edit_others_posts' ) ) {
                     return;
