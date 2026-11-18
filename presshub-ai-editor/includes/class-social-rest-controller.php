@@ -49,6 +49,16 @@ class PressHub_Social_REST_Controller {
 
         register_rest_route(
             self::REST_NAMESPACE,
+            '/worker/youtube/token',
+            [
+                'methods'             => 'POST',
+                'callback'            => [ __CLASS__, 'handle_youtube_token' ],
+                'permission_callback' => [ __CLASS__, 'verify_worker_secret' ],
+            ]
+        );
+
+        register_rest_route(
+            self::REST_NAMESPACE,
             '/worker/complete',
             [
                 'methods'             => 'POST',
@@ -252,6 +262,22 @@ class PressHub_Social_REST_Controller {
             }
         }
 
+        // YouTube jobs go only to a worker that reported it can upload them, and only
+        // while a channel is connected and the daily quota is not used up: otherwise they wait in the queue (Connections
+        // shows why) instead of failing on the worker. An older worker that sends no
+        // sessions (every platform) never gets them either.
+        $youtube_ok = in_array( 'youtube', $active_platforms, true ) && class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected() && 0 === PressHub_Social_YouTube::paused_until();
+        if ( ! $youtube_ok && in_array( 'youtube', $active_platforms, true ) ) {
+            $active_platforms = array_values( array_diff( $active_platforms, [ 'youtube' ] ) );
+            if ( empty( $active_platforms ) ) {
+                return [ 'ok' => true, 'jobs' => [] ];
+            }
+        } elseif ( empty( $active_platforms ) ) {
+            // No list means every platform but YouTube. Filter in the query, so waiting
+            // YouTube jobs at the front of the queue never crowd out the others.
+            $active_platforms = PressHub_Social_Settings_Storage::ENGINE_PLATFORMS;
+        }
+
         // A TikTok short is claimed only once its script and audio are prepared in the
         // background, so this request never waits on an LLM or TTS call. Unprepared shorts
         // are passed over (their preparation is rescheduled) and the query looks past them,
@@ -270,6 +296,10 @@ class PressHub_Social_REST_Controller {
                 break;
             }
             foreach ( $batch as $candidate ) {
+                if ( 'youtube' === ( $candidate['platform'] ?? '' ) && ! $youtube_ok ) {
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
                 if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) && ! PressHub_Social_TikTok_Shorts::is_ready( $candidate ) ) {
                     PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $candidate['post_id'] ?? 0 ) );
                     $skipped[] = (int) $candidate['id'];
@@ -404,6 +434,19 @@ class PressHub_Social_REST_Controller {
                 $job = $narrated;
             }
 
+            // A YouTube video gets its title, description and upload settings. The
+            // worker asks for an access token right before it uploads.
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_YouTube' ) ) {
+                $job['post_url'] = $post_url;
+                $upload          = PressHub_Social_YouTube::attach_upload( $job );
+                if ( is_wp_error( $upload ) ) {
+                    PressHub_Social_Logger::error( $upload->get_error_message(), [ 'job_id' => $job_id, 'error_code' => $upload->get_error_code() ] );
+                    PressHub_Social_Queue::mark_failed( $job_id, $upload->get_error_message(), [ 'error_code' => $upload->get_error_code() ] );
+                    continue;
+                }
+                $job = $upload;
+            }
+
             $job['post_title'] = $post_title;
             $job['post_url']   = $post_url;
             $job['site_name']  = $site_name;
@@ -415,6 +458,35 @@ class PressHub_Social_REST_Controller {
         return [
             'ok'   => true,
             'jobs' => $claimed_jobs,
+        ];
+    }
+
+    /**
+     * Handle POST /presshub-social/v1/worker/youtube/token
+     *
+     * A short-lived access token for the connected YouTube channel, asked for by the
+     * worker right before an upload. The refresh token and client secret stay here.
+     *
+     * @param WP_REST_Request|array $request
+     * @return array|WP_Error
+     */
+    public static function handle_youtube_token( $request ): array|WP_Error {
+        self::update_worker_presence( $request );
+        if ( ! class_exists( 'PressHub_Social_YouTube' ) ) {
+            return new WP_Error( 'youtube_unavailable', 'PressHub_Social_YouTube is not loaded.', [ 'status' => 500 ] );
+        }
+        // refresh: YouTube refused the cached token, so get a new one from Google.
+        $fresh = ! empty( self::get_param( $request, 'refresh', false ) );
+        $token = PressHub_Social_YouTube::access_token( false, $fresh );
+        if ( is_wp_error( $token ) ) {
+            PressHub_Social_Logger::error( 'YouTube access token for the worker failed: ' . $token->get_error_message(), [ 'error_code' => $token->get_error_code() ] );
+            return new WP_Error( $token->get_error_code(), $token->get_error_message(), [ 'status' => 409 ] );
+        }
+        return [
+            'ok'           => true,
+            'access_token' => $token['access_token'],
+            'expires_at'   => $token['expires_at'],
+            'expires_in'   => max( 0, $token['expires_at'] - time() ),
         ];
     }
 
@@ -460,6 +532,25 @@ class PressHub_Social_REST_Controller {
             PressHub_Social_Queue::mark_failed( $job_id, 'A TikTok short test render was reported as published; test renders must not be posted.', $metadata );
         } elseif ( 'published' === $status ) {
             PressHub_Social_Queue::mark_published( $job_id, $external_post_id, $external_post_url, $metadata );
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_playlist_error'] ) ) {
+                PressHub_Social_Logger::warning(
+                    sprintf( 'YouTube video %s (job #%d) is uploaded but not in the podcast playlist: %s', $external_post_id, $job_id, sanitize_text_field( (string) $metadata['youtube_playlist_error'] ) ),
+                    [ 'job_id' => $job_id, 'post_id' => (int) ( $job['post_id'] ?? 0 ) ]
+                );
+            }
+        } elseif ( 'youtube' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_YouTube' ) && in_array( (string) ( $metadata['youtube_error_reason'] ?? '' ), [ 'quota', 'auth' ], true ) ) {
+            // Nothing was uploaded and the job itself is fine: it waits instead of failing,
+            // and claims hand out no YouTube jobs until the quota resets or the channel is
+            // connected again.
+            $reason = '' !== $error ? $error : 'YouTube upload stopped.';
+            if ( 'quota' === $metadata['youtube_error_reason'] ) {
+                $until = PressHub_Social_YouTube::pause_for_quota( $reason );
+                PressHub_Social_Queue::defer_job( $job_id, max( 60, $until - time() ), sprintf( 'Waiting for the daily YouTube quota (until %s UTC): %s', gmdate( 'Y-m-d H:i', $until ), $reason ) );
+            } else {
+                PressHub_Social_YouTube::require_reconnect( $reason );
+                PressHub_Social_Queue::defer_job( $job_id, 0, 'Waiting for Connect YouTube (Settings → Connections): ' . $reason );
+            }
+            $status = 'deferred';
         } else {
             $status = 'failed';
             PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );

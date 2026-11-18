@@ -290,6 +290,9 @@ class PressHub_Social_Ajax_Handlers {
 
         if ( 'worker' === $platform ) {
             $res = PressHub_Social_Worker_Client::check_health();
+        } elseif ( 'youtube' === $platform && class_exists( 'PressHub_Social_YouTube' ) ) {
+            // YouTube is tested against the API: the sign-in lives here, not on the worker.
+            $res = PressHub_Social_YouTube::test_connection();
         } else {
             $engine = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_platform_engine' )
                 ? PressHub_Social_Settings_Storage::get_platform_engine( $platform )
@@ -337,6 +340,13 @@ class PressHub_Social_Ajax_Handlers {
 
         if ( $job_id <= 0 ) {
             wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-social-autopost' ) ], 400 );
+        }
+
+        $existing = PressHub_Social_Queue::get_job( $job_id );
+        if ( is_array( $existing ) && 'youtube' === ( $existing['platform'] ?? '' ) && class_exists( 'PressHub_Social_YouTube' ) && ! PressHub_Social_YouTube::can_retry( $existing ) ) {
+            wp_send_json_error( [ 'message' => 'published' === ( $existing['status'] ?? '' )
+                ? __( 'This video is already on YouTube. Retrying would upload it a second time. Delete it on YouTube first and use Re-post.', 'presshub-social-autopost' )
+                : __( 'This YouTube job is still uploading. Retry is offered once it has been stuck for 3 hours.', 'presshub-social-autopost' ) ], 409 );
         }
 
         $success = PressHub_Social_Queue::retry_job( $job_id );

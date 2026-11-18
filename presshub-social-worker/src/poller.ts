@@ -2,12 +2,14 @@ import { SessionManager, Platform } from './automation/session-manager';
 import { dispatchBrowserPost, PosterHandler, PostResult } from './automation/posters';
 import { generateCard, CardResult } from './media/card-generator';
 import { generateVideo, VideoResult } from './media/video-generator';
-import { generateShortVideo, ShortSegment, ShortVideoResult, GenerateShortOptions } from './media/short-video';
+import { generateShortVideo, ShortSegment, ShortVideoResult, GenerateShortOptions, siteEndCardLine, YOUTUBE_SHORT_MAX_SECONDS } from './media/short-video';
 import { WorkerLogger } from './logger';
 import fs from 'fs';
 import path from 'path';
 import { SocialMonitor } from './monitor/monitor-client';
 import { TrendingClient } from './trending/trending-client';
+import { uploadToYouTube, YouTubeUploadMeta, YouTubeUploadOptions, YouTubeUploadResult } from './youtube/uploader';
+import { findUpload, recordUpload } from './youtube/upload-log';
 
 export interface ClaimedJob {
   id: number | string;
@@ -41,6 +43,8 @@ export interface ClaimedJob {
     /** On-screen badge set by the site (e.g. the article's category); replaces ΕΙΔΗΣΗ n/N. */
     badge?: string;
   };
+  /** Set on YouTube jobs by WordPress: what to upload and how (title, description, playlist...). */
+  youtube?: YouTubeUploadMeta;
   /** AI post images for X and Facebook (all of them; media_url is the first). */
   media_urls?: string[];
   specs?: {
@@ -65,6 +69,12 @@ export interface PollerOptions {
   generateCardFn?: (params: any) => Promise<CardResult>;
   generateVideoFn?: (params: any) => Promise<VideoResult>;
   generateShortFn?: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
+  /** Uploads a rendered video to YouTube (tests inject a fake). */
+  youtubeUploadFn?: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
+  /** Tries of a YouTube "published" report (default 5) and the first wait between them (ms). */
+  reportTries?: number;
+  reportRetryDelayMs?: number;
+  reportSleepFn?: (ms: number) => Promise<void>;
   /** Social Monitor run alongside job polling (WordPress decides when a scan is due). */
   monitor?: SocialMonitor;
   /** Trending in Cyprus roundup reader, run after the monitor (WordPress decides when a run is due). */
@@ -99,6 +109,10 @@ export class PressHubPoller {
   private readonly generateCardFn: (params: any) => Promise<CardResult>;
   private readonly generateVideoFn: (params: any) => Promise<VideoResult>;
   private readonly generateShortFn: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
+  private readonly youtubeUploadFn: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
+  private readonly reportTries: number;
+  private readonly reportRetryDelayMs: number;
+  private readonly reportSleepFn: (ms: number) => Promise<void>;
   private readonly monitor?: SocialMonitor;
   private readonly trending?: TrendingClient;
   private scansRunning = false;
@@ -127,6 +141,10 @@ export class PressHubPoller {
     this.generateCardFn = options.generateCardFn || generateCard;
     this.generateVideoFn = options.generateVideoFn || generateVideo;
     this.generateShortFn = options.generateShortFn || generateShortVideo;
+    this.youtubeUploadFn = options.youtubeUploadFn || uploadToYouTube;
+    this.reportTries = Math.max(1, options.reportTries ?? 5);
+    this.reportRetryDelayMs = Math.max(0, options.reportRetryDelayMs ?? 2000);
+    this.reportSleepFn = options.reportSleepFn || ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     this.monitor = options.monitor;
     this.trending = options.trending;
   }
@@ -142,12 +160,51 @@ export class PressHubPoller {
       const verification = SessionManager.verifySession(platform, this.sessionsDir);
       statuses[platform] = Boolean(verification.valid);
     }
+    // YouTube needs no browser login here: this worker uploads through the API with a
+    // token from WordPress, which only hands out YouTube jobs while a channel is connected.
+    statuses.youtube = true;
 
     return statuses;
   }
 
   /**
+   * Folder of the local YouTube upload record. Not relative to the current folder, so a
+   * worker started from elsewhere still finds the record.
+   */
+  private uploadLogDir(): string {
+    return this.outputDir ? path.resolve(this.outputDir) : path.resolve(__dirname, '..', 'output');
+  }
+
+  /**
+   * Reports an uploaded YouTube video, trying a few times: a lost report would leave the
+   * job "processing" with the video already on YouTube.
+   */
+  private async reportYouTubePublished(job: ClaimedJob, videoId: string, url: string, kind: string, playlistItemId?: string, playlistError?: string): Promise<void> {
+    const payload = {
+      job_id: job.id,
+      status: 'published' as const,
+      external_post_id: videoId,
+      external_post_url: url,
+      metadata: {
+        youtube_kind: kind,
+        ...(playlistItemId ? { youtube_playlist_item_id: playlistItemId } : {}),
+        ...(playlistError ? { youtube_playlist_error: playlistError } : {})
+      }
+    };
+    for (let attempt = 1; attempt <= this.reportTries; attempt++) {
+      if (await this.reportComplete(payload)) {
+        return;
+      }
+      if (attempt < this.reportTries) {
+        await this.reportSleepFn(this.reportRetryDelayMs * 2 ** (attempt - 1));
+      }
+    }
+    WorkerLogger.error('Poller', `[Job #${job.id}] YouTube video ${url} is uploaded, but WordPress could not be told. It is reported again (not re-uploaded) when the job is handed out next.`);
+  }
+
+  /**
    * Reports job completion or failure back to the WordPress REST API endpoint.
+   * Resolves to whether WordPress accepted the report.
    */
   private async reportComplete(payload: {
     job_id: number | string;
@@ -156,7 +213,7 @@ export class PressHubPoller {
     external_post_url?: string;
     error?: string;
     metadata?: Record<string, any>;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const url = `${this.wpUrl}/wp-json/presshub-social/v1/worker/complete`;
     WorkerLogger.info('Poller', `Reporting '${payload.status}' status for job #${payload.job_id} to WordPress...`, payload);
     try {
@@ -177,11 +234,13 @@ export class PressHubPoller {
       } catch {}
       if (res && typeof res.ok === 'boolean' && !res.ok) {
         WorkerLogger.warn(`Poller`, `Failed to report complete for job #${payload.job_id} to ${url}: HTTP ${res.status}`, responseBody);
-      } else {
-        WorkerLogger.info(`Poller`, `Job #${payload.job_id} completion reported successfully (status: ${payload.status}).`, responseBody);
+        return false;
       }
+      WorkerLogger.info(`Poller`, `Job #${payload.job_id} completion reported successfully (status: ${payload.status}).`, responseBody);
+      return true;
     } catch (err: any) {
       WorkerLogger.error(`Poller`, `Failed to report complete to ${url}: ${err.message}`, err);
+      return false;
     }
   }
 
@@ -328,6 +387,9 @@ export class PressHubPoller {
 
       let succeeded = 0;
       let failed = 0;
+      // Set when a YouTube upload hits the daily quota or a refused sign-in: the other
+      // YouTube jobs of this batch would fail the same way, so they are not rendered.
+      let youtubeHalt: { reason: 'quota' | 'auth'; error: string } | null = null;
 
       for (const job of jobs) {
         const jobTag = `[Job #${job.id} - ${job.platform}]`;
@@ -362,6 +424,31 @@ export class PressHubPoller {
             continue;
           }
 
+          if (platform === 'youtube' && !job.test_render) {
+            // Already uploaded on an earlier claim (WordPress never heard back): report that
+            // video instead of uploading it a second time.
+            const done = findUpload(this.uploadLogDir(), this.wpUrl, job.id, job.post_id);
+            if (done) {
+              WorkerLogger.warn('Poller', `${jobTag} Already uploaded as ${done.url}; reporting it instead of uploading again.`);
+              const playlistError = done.playlistError
+                || (done.kind === 'episode' && !done.playlistItemId && job.youtube?.playlist_id ? 'The worker stopped before the video was added to the playlist.' : undefined);
+              await this.reportYouTubePublished(job, done.videoId, done.url, done.kind, done.playlistItemId, playlistError);
+              succeeded++;
+              continue;
+            }
+            if (youtubeHalt) {
+              WorkerLogger.warn('Poller', `${jobTag} Not rendered: an earlier YouTube upload in this batch stopped (${youtubeHalt.reason}).`);
+              await this.reportComplete({
+                job_id: job.id,
+                status: 'failed',
+                error: youtubeHalt.error,
+                metadata: { youtube_error_reason: youtubeHalt.reason }
+              });
+              failed++;
+              continue;
+            }
+          }
+
           let mediaPath: string | undefined;
           let mediaPaths: string[] | undefined;
           let downloadedImages: string[] = [];
@@ -372,17 +459,17 @@ export class PressHubPoller {
             copy.toLowerCase().includes('podcast')
           );
 
-          if ((platform === 'tiktok' || platform === 'instagram') && job.tiktok_short) {
+          if ((platform === 'tiktok' || platform === 'instagram' || platform === 'youtube') && job.tiktok_short) {
             // A short is rendered with synced captions over its own story images. It
             // never falls back to the podcast's featured image.
             const short = job.tiktok_short;
             if (!audioUrl) {
-              throw new Error(`${platform === 'instagram' ? 'Instagram Reel' : 'TikTok'} short has no audio_url.`);
+              throw new Error(`${platformLabel(platform)} short has no audio_url.`);
             }
             const images = Array.isArray(short.images) ? short.images.filter((u) => typeof u === 'string' && u !== '') : [];
             WorkerLogger.info(
               'Poller',
-              `${jobTag} Rendering ${platform === 'instagram' ? 'Instagram Reel' : 'TikTok'} short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns, ${short.music_url ? `${short.mood || 'music'} music` : 'no music'})...`
+              `${jobTag} Rendering ${platformLabel(platform)} short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns, ${short.music_url ? `${short.mood || 'music'} music` : 'no music'})...`
             );
             const video = await this.generateShortFn({
               audioUrl,
@@ -394,10 +481,18 @@ export class PressHubPoller {
               segments: Array.isArray(short.segments) ? short.segments : [],
               musicUrl: typeof short.music_url === 'string' && short.music_url !== '' ? short.music_url : undefined,
               musicVolume: typeof short.music_volume === 'number' ? short.music_volume : undefined,
+              ...(platform === 'youtube' ? { endCardLine: siteEndCardLine(this.wpUrl) } : {}),
               outputDir: this.outputDir
             });
             mediaPath = video?.filePath;
             WorkerLogger.info('Poller', `${jobTag} Short rendered at: ${mediaPath}`);
+            if (platform === 'youtube' && !job.test_render && Number(video?.duration) > YOUTUBE_SHORT_MAX_SECONDS) {
+              // Longer than 3 minutes, YouTube files it as a normal video, not a Short.
+              if (mediaPath) {
+                try { fs.unlinkSync(mediaPath); } catch {}
+              }
+              throw new Error(`The short is ${Math.round(Number(video.duration))}s long, over YouTube's ${YOUTUBE_SHORT_MAX_SECONDS}s limit for Shorts. Lower the words per short or raise the voice speed.`);
+            }
 
             if (job.test_render) {
               // Test render: keep the video for review and post nothing.
@@ -414,6 +509,32 @@ export class PressHubPoller {
               succeeded++;
               continue;
             }
+          } else if (platform === 'youtube') {
+            // A full podcast episode: the whole audio over the podcast's image, 16:9.
+            if (!job.youtube || job.youtube.kind !== 'episode') {
+              throw new Error('YouTube job is neither a short nor a podcast episode.');
+            }
+            if (!audioUrl) {
+              throw new Error('YouTube podcast episode has no audio_url.');
+            }
+            const width = job.youtube.width || 1920;
+            const height = job.youtube.height || 1080;
+            WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (${width}x${height}, full audio)...`);
+            const video = await this.generateVideoFn({
+              postId: Number(job.post_id) || 1,
+              title,
+              subtitle: '',
+              width,
+              height,
+              mediaUrl: imageUrl,
+              audioUrl,
+              isPodcast: true,
+              requireAudio: true,
+              siteName: job.site_name || 'PressHub.Cy',
+              outputDir: this.outputDir
+            });
+            mediaPath = video?.filePath;
+            WorkerLogger.info('Poller', `${jobTag} Episode rendered at: ${mediaPath}`);
           } else if (platform === 'tiktok') {
             const hasAudio = Boolean(audioUrl);
             WorkerLogger.info(
@@ -459,6 +580,67 @@ export class PressHubPoller {
             } else {
               WorkerLogger.warn('Poller', `${jobTag} No AI image could be downloaded; posting without images.`);
             }
+          }
+
+          if (platform === 'youtube') {
+            // Uploaded through the YouTube Data API, not a browser.
+            if (!job.youtube) {
+              throw new Error('YouTube job has no upload details from WordPress.');
+            }
+            WorkerLogger.info('Poller', `${jobTag} Uploading to YouTube (${job.youtube.kind}, ${job.youtube.privacy_status || 'public'})...`);
+            let upload: YouTubeUploadResult;
+            const ytMeta = job.youtube;
+            const remember = (videoId: string, url: string, playlistItemId?: string, playlistError?: string) => {
+              recordUpload(this.uploadLogDir(), this.wpUrl, job.id, {
+                videoId,
+                url,
+                kind: ytMeta.kind,
+                ...(job.post_id !== undefined && job.post_id !== null && String(job.post_id) !== '' ? { postId: String(job.post_id) } : {}),
+                playlistItemId,
+                playlistError,
+                uploadedAt: new Date().toISOString()
+              });
+            };
+            try {
+              upload = await this.youtubeUploadFn({
+                wpUrl: this.wpUrl,
+                workerSecret: this.workerSecret,
+                filePath: mediaPath || '',
+                meta: ytMeta,
+                fetchFn: this.fetchFn,
+                // Noted as soon as YouTube has the video, before the playlist insert.
+                onUploaded: (videoId, url) => remember(videoId, url)
+              });
+            } finally {
+              if (mediaPath) {
+                try { fs.unlinkSync(mediaPath); } catch {}
+              }
+            }
+            if (upload.success && upload.videoId) {
+              // Remember the video before telling WordPress, so a lost report never
+              // leads to a second upload when the job is handed out again.
+              try {
+                remember(upload.videoId, upload.url || '', upload.playlistItemId, upload.playlistError);
+              } catch (err: any) {
+                WorkerLogger.warn('Poller', `${jobTag} Could not save the local upload record: ${err.message}`);
+              }
+              await this.reportYouTubePublished(job, upload.videoId, upload.url || '', job.youtube.kind, upload.playlistItemId, upload.playlistError);
+              succeeded++;
+            } else {
+              const error = upload.error || 'YouTube upload failed';
+              WorkerLogger.warn('Poller', `${jobTag} YouTube upload failed: ${error}`);
+              if (upload.reason) {
+                youtubeHalt = { reason: upload.reason, error };
+              }
+              await this.reportComplete({
+                job_id: job.id,
+                status: 'failed',
+                error,
+                ...(upload.reason ? { metadata: { youtube_error_reason: upload.reason } } : {})
+              });
+              failed++;
+            }
+            continue;
           }
 
           WorkerLogger.info('Poller', `${jobTag} Dispatching browser automation poster...`);
@@ -604,6 +786,13 @@ export class PressHubPoller {
   public getRunningStatus(): boolean {
     return this.isRunning;
   }
+}
+
+/** Name of a shorts platform for log lines and errors. */
+export function platformLabel(platform: string): string {
+  if (platform === 'instagram') return 'Instagram Reel';
+  if (platform === 'youtube') return 'YouTube';
+  return 'TikTok';
 }
 
 /** Badge of a short: the site's own badge (an article's category), else ΕΙΔΗΣΗ n/N. */

@@ -67,6 +67,8 @@ class PressHub_Social_Metabox {
             'facebook'  => [ 'label' => 'Facebook Page', 'char_limit' => 2000 ],
             'instagram' => [ 'label' => 'Instagram', 'char_limit' => 2200 ],
             'tiktok'    => [ 'label' => 'TikTok', 'char_limit' => 2200 ],
+            // The YouTube copy is the video description (its own limit is 5000 bytes).
+            'youtube'   => [ 'label' => 'YouTube', 'char_limit' => 4500 ],
         ];
 
         // Nonce for security
@@ -120,7 +122,7 @@ class PressHub_Social_Metabox {
                         ? PressHub_Social_Settings_Storage::get_platform_engine( $slug )
                         : 'api';
                     $copy          = (string) get_post_meta( $post_id, '_presshub_social_copy_' . $slug, true );
-                    $badge_text    = ( 'automation' === $engine ) ? __( 'Browser Automation', 'presshub-social-autopost' ) : __( 'Official API', 'presshub-social-autopost' );
+                    $badge_text    = 'youtube' === $slug ? __( 'Videos only (YouTube API)', 'presshub-social-autopost' ) : ( ( 'automation' === $engine ) ? __( 'Browser Automation', 'presshub-social-autopost' ) : __( 'Official API', 'presshub-social-autopost' ) );
                     $badge_cls     = ( 'automation' === $engine ) ? 'badge-engine-automation' : 'badge-engine-api';
                     $card_style    = ! $is_ready ? 'opacity: 0.65;' : '';
                     $disabled_attr = ! $is_ready ? 'disabled="disabled"' : '';
@@ -139,6 +141,10 @@ class PressHub_Social_Metabox {
                                 <?php elseif ( ! $is_configured ) : ?>
                                     <span class="presshub-badge badge-engine-unconfigured" style="background:#d9534f; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
                                         <?php esc_html_e( 'Not Configured', 'presshub-social-autopost' ); ?>
+                                    </span>
+                                <?php elseif ( 'youtube' === $slug && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_podcast_enabled() ) : ?>
+                                    <span class="presshub-badge badge-engine-unconfigured" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
+                                        <?php esc_html_e( 'Shorts and episodes are off: nothing is uploaded', 'presshub-social-autopost' ); ?>
                                     </span>
                                 <?php elseif ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_session_active' ) && ! PressHub_Social_Settings_Storage::is_platform_session_active( $slug ) ) : ?>
                                     <span class="presshub-badge badge-engine-session-inactive" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
@@ -229,6 +235,12 @@ class PressHub_Social_Metabox {
                                             <a href="<?php echo esc_url( $job['external_post_url'] ); ?>" target="_blank" rel="noopener noreferrer" class="button button-small">
                                                 <?php esc_html_e( 'View Post ↗', 'presshub-social-autopost' ); ?>
                                             </a>
+                                            <?php $yt_playlist_error = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::playlist_error( $job ) : ''; ?>
+                                            <?php if ( '' !== $yt_playlist_error ) : ?>
+                                                <span class="presshub-error-preview" title="<?php echo esc_attr( $yt_playlist_error ); ?>">
+                                                    <?php esc_html_e( 'Not in the podcast playlist', 'presshub-social-autopost' ); ?>
+                                                </span>
+                                            <?php endif; ?>
                                         <?php elseif ( ! empty( $job['last_error'] ) ) : ?>
                                             <span class="presshub-error-preview" title="<?php echo esc_attr( $job['last_error'] ); ?>">
                                                 <?php echo esc_html( wp_trim_words( $job['last_error'], 8 ) ); ?>

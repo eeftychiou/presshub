@@ -1,0 +1,19 @@
+Write the description of a YouTube video made from the following article:
+
+Article Title: {title}
+Site: {site_name}
+Article Summary: {excerpt}
+Article Content:
+{content}
+
+Article URL: {url}
+
+Platform Instructions for YouTube:
+- Write in the same language as the article.
+- Open with one or two sentences that say what the story is about. The first 150 characters show in search results, so put the key fact there.
+- Follow with a short paragraph of the key points (2 to 4 sentences, no bullet symbols).
+- Add a line with a clear call-to-action to read the full story: {url}
+- End with 3 to 5 relevant hashtags on their own line.
+- Never use the characters < or >, because YouTube rejects them.
+- Keep the whole description under 4500 characters.
+- Output ONLY the final description text. No title, no commentary, no quotation marks around the text.

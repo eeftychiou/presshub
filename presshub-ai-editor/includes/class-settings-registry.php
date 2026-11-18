@@ -211,10 +211,16 @@ class PressHub_Settings_Registry {
                 'aliases'  => array_values( array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ),
                 'checkbox' => ! empty( $e['checkbox'] ),
             ];
-            if ( ! empty( $e['depends_on'] ) && is_string( $e['depends_on'] ) ) {
-                $parent            = self::get( $e['depends_on'] );
-                $row['depends_on'] = $e['depends_on'];
-                $row['depends_label'] = (string) ( $parent['label'] ?? $e['depends_on'] );
+            if ( ! empty( $e['depends_on'] ) && ( is_string( $e['depends_on'] ) || is_array( $e['depends_on'] ) ) ) {
+                // One switch, or a list of switches of which any one turns the field on.
+                $parents = array_values( array_filter( array_map( 'strval', (array) $e['depends_on'] ) ) );
+                $labels  = [];
+                foreach ( $parents as $pk ) {
+                    $parent   = self::get( $pk );
+                    $labels[] = (string) ( $parent['label'] ?? $pk );
+                }
+                $row['depends_on']    = 1 === count( $parents ) ? $parents[0] : $parents;
+                $row['depends_label'] = implode( '" or "', $labels );
             }
             $default = self::default_value( $key );
             if ( null === $default && isset( $registered[ $key ] ) && array_key_exists( 'default', $registered[ $key ] ) ) {

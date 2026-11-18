@@ -121,6 +121,10 @@ $GLOBALS['OPTIONS_STORE'] = [
     'presshub_ai_press_inbox_username'     => 'press@example.test',
     'presshub_ai_press_inbox_enabled'      => 1,
     'presshub_ai_configured_providers'     => [],
+    'presshub_social_youtube_client_id'     => '123-abc.apps.googleusercontent.com',
+    'presshub_social_youtube_client_secret' => 'GOCSPX-youtube-secret-777',
+    'presshub_social_youtube_refresh_token' => '1//youtube-refresh-888',
+    'presshub_social_youtube_channel'       => [ 'id' => 'UC123', 'title' => 'PressHub Cyprus Channel' ],
 ];
 PressHub_AI_Provider_Store::save_provider( [ 'id' => 'my-gemini', 'name' => 'My Gemini', 'type' => 'gemini', 'api_key' => 'AIza-secret-provider-key', 'default_model' => 'gemini-2.0-flash', 'enabled' => true ] );
 $GLOBALS['CAPTURE_FILTER']      = static function () { return new WP_Error( 'blocked', 'HTTP blocked by ConnectionsTest' ); };
@@ -156,6 +160,15 @@ foreach ( [ 'ai-providers', 'google-cloud', 'press-inbox', 'social-accounts', 'a
 $briefing = presshub_test_render_section( 'daily-briefing' );
 $check( false !== strpos( $briefing, 'name="presshub_ai_press_inbox_folder"' ) && false === strpos( $briefing, 'name="presshub_ai_press_inbox_host"' ), 'Daily Briefing should keep the press inbox folders, not its login.' );
 $check( false !== strpos( $briefing, 'section=connections#press-inbox' ) && false !== strpos( $html, 'section=daily-briefing#briefing-sources' ), 'The press inbox should link both ways.' );
+
+// YouTube: the sign-in row, with the redirect URI to paste into Google Cloud.
+$check( false !== strpos( $html, 'id="presshub-youtube-account"' ), 'Connections should hold the YouTube account row.' );
+$check( false !== strpos( $html, 'admin-post.php?action=presshub_social_youtube_oauth' ), 'Connections should show the YouTube redirect URI.' );
+$check( false !== strpos( $html, 'PressHub Cyprus Channel' ) && false !== strpos( $html, 'action=presshub_social_youtube_disconnect' ), 'A connected YouTube channel should show with Disconnect.' );
+$check( false !== strpos( $html, 'data-secret-for="presshub_social_youtube_client_secret"' ), 'The YouTube client secret should use the Replace key field.' );
+foreach ( [ 'GOCSPX-youtube-secret-777', '1//youtube-refresh-888' ] as $raw ) {
+    $check( false === strpos( $html, $raw ), "Connections should never print a YouTube secret ({$raw})." );
+}
 
 // ---------------------------------------------------------------------
 // 5. Replace key: no saved value on the page, one pattern everywhere.

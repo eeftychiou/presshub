@@ -80,6 +80,8 @@ export interface GenerateShortOptions {
   musicPath?: string;
   /** Music level under the voice, 0-1 (default 0.15). */
   musicVolume?: number;
+  /** Last line of the end card; default END_CARD_TEXT.bio (TikTok's "link in bio"). */
+  endCardLine?: string;
 }
 
 export interface ShortVideoResult {
@@ -124,6 +126,18 @@ export const END_CARD_TEXT = {
   follow: 'Ακολούθησε για την επόμενη ενημέρωση',
   bio: 'Ολόκληρη η ενημέρωση: λινκ στο bio',
 };
+
+/** End card line naming the site, for platforms without a "link in bio" (YouTube). */
+export function siteEndCardLine(siteUrl: string): string {
+  let host = '';
+  try {
+    host = new URL(siteUrl).hostname.replace(/^www\./i, '');
+  } catch {}
+  return `Ολόκληρη η ενημέρωση στο ${host || 'presshub.cy'}`;
+}
+
+/** YouTube files a vertical video as a Short only up to this length (seconds). */
+export const YOUTUBE_SHORT_MAX_SECONDS = 180;
 
 export function resolveFfmpegPath(): string {
   if (process.env.FFMPEG_PATH && process.env.FFMPEG_PATH.trim() !== '') {
@@ -337,6 +351,8 @@ export interface AssOptions {
   totalDuration: number;
   /** The logo image is overlaid by FFmpeg, so the site name is not written as text. */
   hasLogo?: boolean;
+  /** Last line of the end card; default END_CARD_TEXT.bio. */
+  endCardLine?: string;
 }
 
 /**
@@ -421,7 +437,7 @@ export function buildAssScript(opts: AssOptions): string {
     dialogue(4, endCardStart, total, 'EndTitle', `{\\pos(${cx},820)\\fad(200,0)\\fscx85\\fscy85\\t(0,200,\\fscx100\\fscy100)}${assEscape(opts.siteName)}`);
   }
   dialogue(4, endCardStart, total, 'EndLine', `{\\pos(${cx},970)\\fad(250,0)}${assEscape(END_CARD_TEXT.follow)}`);
-  dialogue(4, endCardStart, total, 'EndBio', `{\\pos(${cx},1070)\\fad(300,0)}${assEscape(END_CARD_TEXT.bio)}`);
+  dialogue(4, endCardStart, total, 'EndBio', `{\\pos(${cx},1070)\\fad(300,0)}${assEscape(opts.endCardLine || END_CARD_TEXT.bio)}`);
 
   return [...header, ...lines, ''].join('\n');
 }
@@ -738,6 +754,7 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       chunks,
       totalDuration: total,
       hasLogo: Boolean(logo),
+      endCardLine: options.endCardLine,
     });
     fs.writeFileSync(path.join(work, 'captions.ass'), ass, 'utf8');
     const shade = await shadeOverlay(work, width, height);

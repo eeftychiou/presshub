@@ -14,7 +14,7 @@ class PressHub_Social_Queue {
     /**
      * Allowed social platforms.
      */
-    public const VALID_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+    public const VALID_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok', 'youtube' ];
 
     /**
      * Allowed dispatch engines.
@@ -788,6 +788,8 @@ class PressHub_Social_Queue {
             : null;
         if ( is_array( $repost_meta ) ) {
             unset( $repost_meta['instagram_creation_id'], $repost_meta['instagram_container_started_at'] );
+            // A re-post is a new upload: the earlier video's results do not carry over.
+            unset( $repost_meta['youtube_playlist_error'], $repost_meta['youtube_playlist_item_id'], $repost_meta['youtube_kind'], $repost_meta['youtube_error_reason'] );
         }
 
         $new_job_data = [
