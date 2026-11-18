@@ -187,7 +187,7 @@ hp_check( 'example: policy blocks on the page', false !== strpos( $html, esc_htm
 // ---------------------------------------------------------------------
 update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 0 ] ) );
 hp_check( 'example: a 0 budget gives an empty example (the page says nothing is sent)', '' === PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook', true ) );
-update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 400 ] ) );
+update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 500 ] ) );
 $small_html = PressHub_AI_Help_Admin::build_page();
 hp_check( 'example: a small social budget falls back to the first framing rule', '' === PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook' ) && false !== strpos( $small_html, 'only its first framing rule' ) );
 delete_option( 'presshub_ai_policy_fiches_budgets' );

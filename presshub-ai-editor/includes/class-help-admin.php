@@ -306,14 +306,21 @@ class PressHub_AI_Help_Admin {
                 self::strlen_u( (string) PressHub_AI_Policy_Fiches::example_fiche()['framing'] )
             ) );
             $html .= self::pre( $social_full );
-        } else {
+        } elseif ( '' !== ( $social_first = self::sample_policy_block( 'social_copy_facebook', true ) ) ) {
             $html .= self::p( sprintf(
                 /* translators: 1: characters left for a fiche in social copy, 2: length of the example's framing */
                 __( 'Social copy has room for about %1$d characters of fiche after the fixed instructions. The example\'s framing is %2$d characters, so the full example would be left out of social copy. Below, the same fiche with only its first framing rule:', 'presshub-ai-editor' ),
                 $social_room,
                 self::strlen_u( (string) PressHub_AI_Policy_Fiches::example_fiche()['framing'] )
             ) );
-            $html .= self::pre( self::sample_policy_block( 'social_copy_facebook', true ) );
+            $html .= self::pre( $social_first );
+        } else {
+            $html .= self::p( sprintf(
+                /* translators: %d: characters left for a fiche in social copy */
+                __( 'Social copy has room for about %d characters of fiche after the fixed instructions, too little even for the example\'s first framing rule, so social copy would get no policy fiche:', 'presshub-ai-editor' ),
+                $social_room
+            ) );
+            $html .= self::pre( '' );
         }
         $html .= self::h3( __( 'How it changes the output', 'presshub-ai-editor' ) );
         $html .= self::effect(

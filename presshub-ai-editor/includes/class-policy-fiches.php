@@ -1638,7 +1638,12 @@ class PressHub_AI_Policy_Fiches {
         if ( preg_match( '/αγνόησε|ignore (?:all |the )?(?:previous|other) instructions/iu', $f['principles'] . ' ' . $f['framing'] ) ) {
             $out[] = __( 'The core tells the AI to ignore other instructions. Remove that: it can break the call\'s own rules.', 'presshub-ai-editor' );
         }
-        foreach ( [ 'podcast_script' => __( 'podcast', 'presshub-ai-editor' ), 'social_copy_' => __( 'social copy', 'presshub-ai-editor' ) ] as $action => $label ) {
+        $calls = [ 'podcast_script' => __( 'podcast', 'presshub-ai-editor' ), 'social_copy_' => __( 'social copy', 'presshub-ai-editor' ) ];
+        if ( self::budget_for( 'social_tiktok_shorts' ) !== self::budget_for( 'social_copy_' ) ) {
+            // Same budget and parts as social copy by default; warn separately only when an editor set it apart.
+            $calls['social_tiktok_shorts'] = __( 'TikTok short plan', 'presshub-ai-editor' );
+        }
+        foreach ( $calls as $action => $label ) {
             $hit = [ $f['slug'] => [ 'count' => 1, 'fiche' => $f ] ];
             if ( '' !== trim( $f['principles'] . $f['framing'] ) && '' === self::render( $hit, $action, self::budget_for( $action ) )['text'] ) {
                 /* translators: 1: call name, 2: character budget */

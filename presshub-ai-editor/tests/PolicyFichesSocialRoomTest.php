@@ -57,6 +57,24 @@ psr_check( 'budget: social defaults are 1200', 1200 === PressHub_AI_Policy_Fiche
 psr_check( 'room: the worked example fits social copy in full', '' !== PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook' ) );
 psr_check( 'room: the worked example fits the shorts plan in full', '' !== PressHub_AI_Help_Admin::sample_policy_block( 'social_tiktok_shorts' ) );
 
+psr_check( 'room: a positive budget too small for any fiche gives nothing, not a bare header', '' === (string) PressHub_AI_Policy_Fiches::render( $set, 'social_copy_facebook', 150 )['text'] );
+
+// Help page with a budget too small even for the first framing rule.
+update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 200 ] ) );
+$tiny = PressHub_AI_Help_Admin::build_page();
+psr_check( 'help: tiny budget says social copy gets no fiche', false !== strpos( $tiny, 'would get no policy fiche' ) && false === strpos( $tiny, 'only its first framing rule' ) );
+
+// Shorts warning only when its budget is set apart from social copy.
+$long = PressHub_AI_Policy_Fiches::normalize( array_merge(
+    PressHub_AI_Policy_Fiches::empty_fiche( 'Μακρύς' ),
+    [ 'status' => 'published', 'framing' => str_repeat( 'Οι αριθμοί αποδίδονται στην πηγή τους. ', 15 ) ]
+) );
+update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_tiktok_shorts' => 300 ] ) );
+$w = implode( "\n", PressHub_AI_Policy_Fiches::core_warnings( $long ) );
+psr_check( 'warnings: shorts warned when only its budget is lowered', false !== strpos( $w, 'TikTok short plan' ) && false === strpos( $w, 'social copy calls' ) );
+delete_option( 'presshub_ai_policy_fiches_budgets' );
+psr_check( 'warnings: no separate shorts warning at the defaults', false === strpos( implode( "\n", PressHub_AI_Policy_Fiches::core_warnings( $long ) ), 'TikTok short plan' ) );
+
 // 3. Migration.
 delete_option( 'presshub_ai_migrated_social_fiche_budgets' );
 update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 800, 'social_tiktok_shorts' => 650, 'podcast_script' => 800 ] ) );
@@ -66,6 +84,17 @@ psr_check( 'migration: stored 800 for social copy raised to 1200', 1200 === (int
 psr_check( 'migration: an editor-chosen value is kept', 650 === (int) $after['social_tiktok_shorts'] );
 psr_check( 'migration: other tasks untouched', 800 === (int) $after['podcast_script'] );
 psr_check( 'migration: flag set', '1' === get_option( 'presshub_ai_migrated_social_fiche_budgets' ) );
+delete_option( 'presshub_ai_migrated_social_fiche_budgets' );
+update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => '800', 'social_tiktok_shorts' => 800, 'podcast_script' => 0 ] ) );
+presshub_ai_migrate_social_fiche_budgets();
+$b = get_option( 'presshub_ai_policy_fiches_budgets' );
+psr_check( 'migration: shorts stored at 800 raised, string \'800\' raised', 1200 === (int) $b['social_tiktok_shorts'] && 1200 === (int) $b['social_copy_'] );
+psr_check( 'migration: an explicit 0 is kept', 0 === (int) $b['podcast_script'] );
+update_option( 'presshub_ai_policy_fiches_budgets', array_merge( $after, [ 'social_copy_' => 800 ] ) );
+update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 0 ] ) );
+delete_option( 'presshub_ai_migrated_social_fiche_budgets' );
+presshub_ai_migrate_social_fiche_budgets();
+psr_check( 'migration: an explicit 0 for social copy is kept', 0 === (int) get_option( 'presshub_ai_policy_fiches_budgets' )['social_copy_'] );
 update_option( 'presshub_ai_policy_fiches_budgets', array_merge( $after, [ 'social_copy_' => 800 ] ) );
 presshub_ai_migrate_social_fiche_budgets();
 psr_check( 'migration: runs once (a later 800 is the editor\'s choice)', 800 === (int) get_option( 'presshub_ai_policy_fiches_budgets' )['social_copy_'] );
