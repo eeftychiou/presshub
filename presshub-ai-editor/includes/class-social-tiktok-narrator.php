@@ -192,7 +192,7 @@ class PressHub_Social_TikTok_Narrator {
         ];
         if ( $job_id > 0 ) {
             PressHub_Social_Queue::update_job( $job_id, [
-                'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
+                'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : wp_json_encode( $metadata ),
             ] );
         }
 

@@ -640,7 +640,7 @@ class PressHub_AI_Token_Logger {
         $result = self::get_logs( $args );
         $rows   = $result['items'] ?? [];
 
-        $fp = fopen( 'php://temp', 'r+' );
+        $fp = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- in-memory php://temp stream used to build CSV output.
         fputcsv( $fp, [
             'id',
             'created_at',
@@ -677,7 +677,7 @@ class PressHub_AI_Token_Logger {
 
         rewind( $fp );
         $csv = stream_get_contents( $fp );
-        fclose( $fp );
+        fclose( $fp ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
 
         return (string) $csv;
     }

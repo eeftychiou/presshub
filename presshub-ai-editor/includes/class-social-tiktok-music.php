@@ -357,7 +357,7 @@ class PressHub_Social_TikTok_Music {
             }
             foreach ( (array) ( $step['content'] ?? [] ) as $block ) {
                 if ( is_array( $block ) && 'audio' === ( $block['type'] ?? '' ) && is_string( $block['data'] ?? null ) ) {
-                    $bytes = base64_decode( $block['data'], true );
+                    $bytes = base64_decode( $block['data'], true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
                     if ( false !== $bytes && '' !== $bytes ) {
                         return $bytes;
                     }

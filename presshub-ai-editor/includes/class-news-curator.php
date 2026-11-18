@@ -370,7 +370,7 @@ class PressHub_AI_News_Curator {
             // Defensive fallback: replicate the codepoints/3 heuristic so the
             // metric is always present even if the estimator is unavailable.
             $cp = function_exists( 'mb_strlen' )
-                ? (int) mb_strlen( strip_tags( $rendered ), 'UTF-8' )
+                ? (int) mb_strlen( strip_tags( $rendered ), 'UTF-8' ) // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
                 : (int) strlen( $rendered );
             self::$last_capped_tokens_estimate = $cp > 0 ? max( 1, intdiv( $cp, 3 ) ) : 0;
         }
@@ -401,7 +401,7 @@ class PressHub_AI_News_Curator {
             || in_array( $article['source_type'] ?? '', [ 'press_release', 'social_post' ], true ) ) {
             return $default;
         }
-        $host = strtolower( preg_replace( '/^www\./i', '', (string) parse_url( (string) ( $article['url'] ?? '' ), PHP_URL_HOST ) ) );
+        $host = strtolower( preg_replace( '/^www\./i', '', (string) wp_parse_url( (string) ( $article['url'] ?? '' ), PHP_URL_HOST ) ) );
         if ( '' === $host ) {
             return $default;
         }
@@ -438,7 +438,7 @@ class PressHub_AI_News_Curator {
             || in_array( $article['source_type'] ?? '', [ 'press_release', 'social_post' ], true ) ) {
             return '';
         }
-        $host = strtolower( preg_replace( '/^www\./i', '', (string) parse_url( (string) ( $article['url'] ?? '' ), PHP_URL_HOST ) ) );
+        $host = strtolower( preg_replace( '/^www\./i', '', (string) wp_parse_url( (string) ( $article['url'] ?? '' ), PHP_URL_HOST ) ) );
         if ( '' === $host ) {
             return '';
         }
@@ -716,7 +716,7 @@ class PressHub_AI_News_Curator {
                 'post_type'      => 'post',
                 'post_status'    => [ 'publish', 'pending', 'draft', 'future', 'private', 'any' ],
                 'posts_per_page' => 1,
-                'meta_query'     => [
+                'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded lookup of the plugin's own posts by meta key.
                     [
                         'key'     => '_presshub_briefing_date',
                         'value'   => $date,
@@ -767,7 +767,7 @@ class PressHub_AI_News_Curator {
         foreach ( $candidates as $file ) {
             $path = trailingslashit( $dir ) . $file;
             if ( file_exists( $path ) ) {
-                $content = @file_get_contents( $path );
+                $content = @file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
                 if ( false !== $content && '' !== trim( $content ) ) {
                     return $content;
                 }
@@ -1696,11 +1696,11 @@ class PressHub_AI_News_Curator {
             if ( function_exists( 'wp_mkdir_p' ) ) {
                 wp_mkdir_p( $dir );
             } else {
-                @mkdir( $dir, 0755, true );
+                wp_mkdir_p( $dir );
             }
         }
         $file_name = 'noon' === $edition ? 'briefing-text-noon.md' : 'briefing-text.md';
-        @file_put_contents( trailingslashit( $dir ) . $file_name, $response );
+        @file_put_contents( trailingslashit( $dir ) . $file_name, $response ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
 
         // 4. Convert Markdown to HTML
         $html_content = PressHub_AI_Markdown::to_html( $response );

@@ -172,7 +172,7 @@ class PressHub_Social_TikTok_Shorts {
         }
         $content = (string) preg_replace( '/<(script|style|audio|video|figure)\b[^>]*>.*?<\/\1>/isu', ' ', $content );
         $content = (string) preg_replace( '/<\/(p|h[1-6]|li|blockquote|div)>|<br\s*\/?>/iu', "\n", $content );
-        $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
+        $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
         $content = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
         $content = (string) preg_replace( '/[ \t]+/u', ' ', $content );
         $content = trim( (string) preg_replace( '/\s*\n\s*/u', "\n", $content ) );
@@ -632,7 +632,7 @@ class PressHub_Social_TikTok_Shorts {
                 'images_hash' => $images['hash'],
             ] );
             PressHub_Social_Queue::update_job( $job_id, [
-                'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
+                'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : wp_json_encode( $metadata ),
             ] );
             PressHub_Social_Logger::info( sprintf( 'TikTok short %d/%d prepared for job #%d (post #%d): "%s"', $index + 1, count( $plan['shorts'] ), $job_id, $post_id, $short['hook'] ) );
         }
@@ -725,7 +725,7 @@ class PressHub_Social_TikTok_Shorts {
         }
 
         $updated = PressHub_Social_Queue::update_job( $job_id, [
-            'metadata'   => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
+            'metadata'   => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : wp_json_encode( $metadata ),
             'post_copy'  => $copy,
             'last_error' => sprintf( 'Article short could not be made (%s); posted the classic way.', $error->get_error_message() ),
         ] );
@@ -814,7 +814,7 @@ class PressHub_Social_TikTok_Shorts {
         $post      = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         $title     = $post ? (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) ) : '';
         $excerpt   = $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '';
-        $excerpt   = trim( function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $excerpt ) : strip_tags( $excerpt ) );
+        $excerpt   = trim( function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $excerpt ) : strip_tags( $excerpt ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
         $category  = '';
         if ( function_exists( 'get_the_category' ) ) {
             $cats     = get_the_category( $post_id );

@@ -120,7 +120,7 @@ class PressHub_Social_Queue {
 
         $metadata_raw = $job_data['metadata'] ?? null;
         if ( is_array( $metadata_raw ) ) {
-            $metadata = function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata_raw ) : json_encode( $metadata_raw );
+            $metadata = function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata_raw ) : wp_json_encode( $metadata_raw );
         } elseif ( is_string( $metadata_raw ) ) {
             $metadata = $metadata_raw;
         } else {
@@ -447,7 +447,7 @@ class PressHub_Social_Queue {
             }
         }
         $merged   = array_merge( $merged, $meta );
-        $metadata = function_exists( 'wp_json_encode' ) ? wp_json_encode( $merged ) : json_encode( $merged );
+        $metadata = function_exists( 'wp_json_encode' ) ? wp_json_encode( $merged ) : wp_json_encode( $merged );
 
         if ( self::is_db_ready() ) {
             global $wpdb;
@@ -510,7 +510,7 @@ class PressHub_Social_Queue {
         if ( ! empty( $meta ) ) {
             $metadata_merged = array_merge( $metadata_merged, $meta );
         }
-        $metadata_json = function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata_merged ) : json_encode( $metadata_merged );
+        $metadata_json = function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata_merged ) : wp_json_encode( $metadata_merged );
 
         if ( $attempts < $max_attempts ) {
             // Schedule exponential backoff retry: base_delay * (2 ^ (attempts - 1))
@@ -829,7 +829,7 @@ class PressHub_Social_Queue {
         $data = [
             'status'     => 'cancelled',
             'last_error' => $note,
-            'metadata'   => function_exists( 'wp_json_encode' ) ? wp_json_encode( $meta ) : json_encode( $meta ),
+            'metadata'   => function_exists( 'wp_json_encode' ) ? wp_json_encode( $meta ) : wp_json_encode( $meta ),
             'updated_at' => $now,
         ];
 

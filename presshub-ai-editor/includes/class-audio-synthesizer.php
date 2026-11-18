@@ -287,7 +287,7 @@ class PressHub_AI_Audio_Synthesizer {
             return new WP_Error( 'no_api_key', __( 'Gemini API key is required to discover available TTS voices.', 'presshub-ai-editor' ) );
         }
 
-        $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . urlencode( $api_key );
+        $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . rawurlencode( $api_key );
         $referer  = function_exists( 'home_url' ) ? trailingslashit( home_url() ) : 'https://presshub.cy/';
         $headers  = [
             'x-goog-api-key' => $api_key,
@@ -434,7 +434,7 @@ class PressHub_AI_Audio_Synthesizer {
             return $cached;
         }
 
-        $decoded = json_decode( (string) file_get_contents( $path ), true );
+        $decoded = json_decode( (string) file_get_contents( $path ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
         if ( ! is_array( $decoded ) || ! isset( $decoded['engines'] ) || ! is_array( $decoded['engines'] ) ) {
             $cached = [ 'schema_version' => 0, 'engines' => [] ];
             return $cached;
@@ -777,7 +777,7 @@ class PressHub_AI_Audio_Synthesizer {
             $cache_file = $cache_dir . '/turn_' . $cache_key . '.' . $ext;
 
             if ( file_exists( $cache_file ) && filesize( $cache_file ) > 0 ) {
-                $cached_audio = @file_get_contents( $cache_file );
+                $cached_audio = @file_get_contents( $cache_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
                 if ( false !== $cached_audio && '' !== $cached_audio ) {
                     $this->last_turn_was_cache_hit = true;
                     if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -840,7 +840,7 @@ class PressHub_AI_Audio_Synthesizer {
             if ( ! is_dir( $dir ) && function_exists( 'wp_mkdir_p' ) ) {
                 wp_mkdir_p( $dir );
             }
-            @file_put_contents( $cache_file, $result, LOCK_EX );
+            @file_put_contents( $cache_file, $result, LOCK_EX ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
 
         return $result;
@@ -866,7 +866,7 @@ class PressHub_AI_Audio_Synthesizer {
                 $todo = ( $fileinfo->isDir() ? 'rmdir' : 'unlink' );
                 @$todo( $fileinfo->getRealPath() );
             }
-            @rmdir( $target_dir );
+            @rmdir( $target_dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
     }
 
@@ -895,7 +895,7 @@ class PressHub_AI_Audio_Synthesizer {
         }
 
         $filepath = trailingslashit( get_temp_dir() ) . $filename;
-        file_put_contents( $filepath, $binary_data );
+        file_put_contents( $filepath, $binary_data ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
 
         if ( defined( 'ABSPATH' ) ) {
             require_once ABSPATH . 'wp-admin/includes/image.php';
@@ -909,7 +909,7 @@ class PressHub_AI_Audio_Synthesizer {
         ];
 
         $attachment_id = media_handle_sideload( $file_array, $post_id, $title );
-        @unlink( $filepath );
+        wp_delete_file( $filepath );
 
         if ( is_wp_error( $attachment_id ) ) {
             return $attachment_id;
@@ -1109,7 +1109,7 @@ class PressHub_AI_Audio_Synthesizer {
             'post_status'      => [ 'publish', 'future', 'pending', 'draft' ],
             'numberposts'      => 1,
             'suppress_filters' => true,
-            'meta_query'       => [
+            'meta_query'       => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded lookup of the plugin's own posts by meta key.
                 [ 'key' => '_presshub_briefing_date', 'value' => $date ],
                 [ 'key' => '_presshub_briefing_type', 'value' => 'text' ],
                 [ 'key' => '_presshub_briefing_edition', 'value' => $edition ],
@@ -2058,13 +2058,13 @@ class PressHub_AI_Audio_Synthesizer {
             if ( function_exists( 'wp_mkdir_p' ) ) {
                 wp_mkdir_p( $snapshot_dir );
             } else {
-                @mkdir( $snapshot_dir, 0755, true );
+                wp_mkdir_p( $snapshot_dir );
             }
         }
         $ext = ( strlen( $stitched_audio ) >= 4 && 'RIFF' === substr( $stitched_audio, 0, 4 ) ) ? '.wav' : '.mp3';
         $audio_filename = ( 'noon' === $edition ) ? ( 'podcast-noon' . $ext ) : ( 'podcast' . $ext );
         $local_audio_path = trailingslashit( $snapshot_dir ) . $audio_filename;
-        @file_put_contents( $local_audio_path, $stitched_audio );
+        @file_put_contents( $local_audio_path, $stitched_audio ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
 
         // Sideload to Media Library
         $edition_slug = ( 'noon' === $edition ) ? '-noon' : '';
@@ -2242,7 +2242,7 @@ class PressHub_AI_Audio_Synthesizer {
         $needs_ffmpeg = $is_mp3;
 
         if ( ! $needs_ffmpeg ) {
-            $header = file_get_contents( $sfx_file, false, null, 0, 44 );
+            $header = file_get_contents( $sfx_file, false, null, 0, 44 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
             if ( strlen( $header ) >= 44 && 'RIFF' === substr( $header, 0, 4 ) ) {
                 $fmt_chunk = substr( $header, 12, 4 );
                 if ( 'fmt ' === $fmt_chunk ) {
@@ -2260,17 +2260,17 @@ class PressHub_AI_Audio_Synthesizer {
         if ( $needs_ffmpeg ) {
             $tmp_wav = wp_temp_dir() . '/sfx_tmp_' . uniqid() . '.wav';
             $cmd = 'ffmpeg -i ' . escapeshellarg( $sfx_file ) . ' -ar 24000 -ac 1 -c:a pcm_s16le -f wav -y ' . escapeshellarg( $tmp_wav ) . ' 2>&1';
-            @shell_exec( $cmd );
+            @shell_exec( $cmd ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec -- runs ffmpeg with escapeshellarg()-quoted arguments for audio post-processing.
             if ( file_exists( $tmp_wav ) ) {
-                $sfx_wav = file_get_contents( $tmp_wav );
-                @unlink( $tmp_wav );
+                $sfx_wav = file_get_contents( $tmp_wav ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
+                wp_delete_file( $tmp_wav );
             } else {
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::warning( 'PressHub AI: Failed to decode/resample SFX using ffmpeg.', [ 'sfx_file' => basename( $sfx_file ) ] );
                 }
             }
         } else {
-            $sfx_wav = file_get_contents( $sfx_file );
+            $sfx_wav = file_get_contents( $sfx_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
         }
 
         if ( ! empty( $sfx_wav ) && strlen( $sfx_wav ) >= 44 && 'RIFF' === substr( $sfx_wav, 0, 4 ) ) {

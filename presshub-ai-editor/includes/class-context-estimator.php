@@ -72,7 +72,7 @@ class PressHub_AI_Context_Estimator {
         }
         $text = (string) $text;
 
-        $text = strip_tags( $text );
+        $text = strip_tags( $text ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
         $text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 
         $text = trim( $text );
@@ -158,7 +158,7 @@ class PressHub_AI_Context_Estimator {
             return 0;
         }
         $text = (string) $text;
-        $codepoints = mb_strlen( strip_tags( $text ), 'UTF-8' );
+        $codepoints = mb_strlen( strip_tags( $text ), 'UTF-8' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
         if ( $codepoints <= 0 ) {
             return 0;
         }

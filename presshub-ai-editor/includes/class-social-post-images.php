@@ -327,7 +327,7 @@ class PressHub_Social_Post_Images {
         if ( 'ready' !== ( $state['state'] ?? '' ) ) {
             unset( $metadata[ self::JOB_META_KEY ]['images'] );
         }
-        $fields['metadata'] = function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata );
+        $fields['metadata'] = function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : wp_json_encode( $metadata );
         PressHub_Social_Queue::update_job( (int) ( $job['id'] ?? 0 ), $fields );
     }
 
@@ -439,7 +439,7 @@ class PressHub_Social_Post_Images {
         }
         $title   = (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) );
         $content = (string) ( is_object( $post ) ? ( $post->post_content ?? '' ) : ( $post['post_content'] ?? '' ) );
-        $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
+        $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
         $content = trim( (string) preg_replace( '/\s+/u', ' ', html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) );
         if ( mb_strlen( $content ) > self::CONTENT_LIMIT ) {
             $content = mb_substr( $content, 0, self::CONTENT_LIMIT ) . '...';

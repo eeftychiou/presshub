@@ -154,7 +154,7 @@ class PressHub_AI_Policy_Fiches {
     }
 
     private static function new_id(): string {
-        return substr( md5( uniqid( '', true ) . ( function_exists( 'wp_rand' ) ? wp_rand() : mt_rand() ) ), 0, 10 );
+        return substr( md5( uniqid( '', true ) . wp_rand() ), 0, 10 );
     }
 
     // ---------------------------------------------------------------------

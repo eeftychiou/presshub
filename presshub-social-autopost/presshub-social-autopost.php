@@ -78,7 +78,7 @@ register_deactivation_hook( __FILE__, [ 'PressHub_Social_Activator', 'deactivate
 /**
  * Register custom cron schedule interval.
  */
-add_filter( 'cron_schedules', function( array $schedules ): array {
+add_filter( 'cron_schedules', function( array $schedules ): array { // phpcs:ignore WordPress.WP.CronInterval.CronSchedulesInterval -- one-minute interval needed by the social queue worker.
     if ( ! isset( $schedules['presshub_social_interval'] ) ) {
         $schedules['presshub_social_interval'] = [
             'interval' => 60,

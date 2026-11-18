@@ -1251,7 +1251,7 @@ class PressHub_Social_Settings_Storage {
     }
 
     public static function sanitize_tiktok_narration_outro( $value ): string {
-        $val = function_exists( 'sanitize_text_field' ) ? sanitize_text_field( (string) $value ) : trim( strip_tags( (string) $value ) );
+        $val = function_exists( 'sanitize_text_field' ) ? sanitize_text_field( (string) $value ) : trim( strip_tags( (string) $value ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
         return trim( $val );
     }
 

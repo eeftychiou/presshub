@@ -77,7 +77,7 @@ class PressHub_AI_Imap_Stream_Transport {
         $len     = strlen( $data );
         $written = 0;
         while ( $written < $len ) {
-            $n = @fwrite( $this->stream, substr( $data, $written ) );
+            $n = @fwrite( $this->stream, substr( $data, $written ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
             if ( false === $n || 0 === $n ) {
                 return false;
             }
@@ -109,7 +109,7 @@ class PressHub_AI_Imap_Stream_Transport {
         }
         $buf = '';
         while ( strlen( $buf ) < $length ) {
-            $chunk = @fread( $this->stream, min( 65536, $length - strlen( $buf ) ) );
+            $chunk = @fread( $this->stream, min( 65536, $length - strlen( $buf ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
             if ( false === $chunk || '' === $chunk ) {
                 $meta = stream_get_meta_data( $this->stream );
                 if ( ! empty( $meta['timed_out'] ) || feof( $this->stream ) ) {
@@ -124,7 +124,7 @@ class PressHub_AI_Imap_Stream_Transport {
 
     public function close(): void {
         if ( $this->stream ) {
-            @fclose( $this->stream );
+            @fclose( $this->stream ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
         $this->stream = null;
     }
