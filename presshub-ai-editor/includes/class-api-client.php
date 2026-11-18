@@ -1230,6 +1230,10 @@ class PressHub_AI_API_Client {
     public function analyze_article_for_image_prompt( string $content, string $title = '', string $template = '', string $template_id = '' ) {
         $this->current_action = 'generate_image_prompt';
         $client = new self( 'image_prompt' );
+        // The call runs on $client, so the action goes there too. Without it the
+        // call ran as coauthor_draft and got the co-author's full policy fiches
+        // and agenda instead of the image prompt's short agenda.
+        $client->set_action( 'generate_image_prompt' );
 
         if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
             require_once __DIR__ . '/class-image-prompt-templates.php';
