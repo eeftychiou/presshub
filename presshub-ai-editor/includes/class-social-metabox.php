@@ -67,6 +67,8 @@ class PressHub_Social_Metabox {
             'facebook'  => [ 'label' => 'Facebook Page', 'char_limit' => 2000 ],
             'instagram' => [ 'label' => 'Instagram', 'char_limit' => 2200 ],
             'tiktok'    => [ 'label' => 'TikTok', 'char_limit' => 2200 ],
+            // The YouTube copy is the video description (its own limit is 5000 bytes).
+            'youtube'   => [ 'label' => 'YouTube', 'char_limit' => 4500 ],
         ];
 
         // Nonce for security
@@ -120,7 +122,7 @@ class PressHub_Social_Metabox {
                         ? PressHub_Social_Settings_Storage::get_platform_engine( $slug )
                         : 'api';
                     $copy          = (string) get_post_meta( $post_id, '_presshub_social_copy_' . $slug, true );
-                    $badge_text    = ( 'automation' === $engine ) ? __( 'Browser Automation', 'presshub-social-autopost' ) : __( 'Official API', 'presshub-social-autopost' );
+                    $badge_text    = 'youtube' === $slug ? __( 'Videos only (YouTube API)', 'presshub-social-autopost' ) : ( ( 'automation' === $engine ) ? __( 'Browser Automation', 'presshub-social-autopost' ) : __( 'Official API', 'presshub-social-autopost' ) );
                     $badge_cls     = ( 'automation' === $engine ) ? 'badge-engine-automation' : 'badge-engine-api';
                     $card_style    = ! $is_ready ? 'opacity: 0.65;' : '';
                     $disabled_attr = ! $is_ready ? 'disabled="disabled"' : '';

@@ -237,7 +237,7 @@ class PressHub_Social_Settings {
             'presshub_social_general'
         );
 
-        foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $platform ) {
+        foreach ( PressHub_Social_Settings_Storage::ENGINE_PLATFORMS as $platform ) {
             add_settings_field(
                 'presshub_social_engine_' . $platform,
                 ucfirst( $platform ) . ' ' . __( 'Engine', 'presshub-social-autopost' ),
@@ -412,6 +412,46 @@ class PressHub_Social_Settings {
             [ 'option' => 'presshub_social_tiktok_open_id' ]
         );
 
+        add_settings_section(
+            'presshub_social_youtube_sec',
+            __( 'YouTube (Google OAuth)', 'presshub-social-autopost' ),
+            '__return_empty_string',
+            'presshub_social_credentials'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_client_id',
+            __( 'YouTube OAuth Client ID', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_credentials',
+            'presshub_social_youtube_sec',
+            [
+                'option'      => 'presshub_social_youtube_client_id',
+                'placeholder' => '1234567890-abc.apps.googleusercontent.com',
+                'desc'        => __( 'Client ID of the "Web application" OAuth client in your Google Cloud project (APIs & Services → Credentials).', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_client_secret',
+            __( 'YouTube OAuth Client Secret', 'presshub-social-autopost' ),
+            [ $render, 'render_secret_field' ],
+            'presshub_social_credentials',
+            'presshub_social_youtube_sec',
+            [
+                'option' => 'presshub_social_youtube_client_secret',
+                'desc'   => __( 'Client secret of the same OAuth client. Kept secret and masked.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_account',
+            __( 'YouTube Channel', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_account_field' ],
+            'presshub_social_credentials',
+            'presshub_social_youtube_sec'
+        );
+
         // ------------------------------------------------------------------
         // Tab 4: Automation Worker
         // ------------------------------------------------------------------
@@ -474,6 +514,44 @@ class PressHub_Social_Settings {
         add_settings_section( 'presshub_social_shorts_script_sec', __( 'Schedule & script', 'presshub-social-autopost' ), '__return_empty_string', 'presshub_social_shorts' );
         add_settings_section( 'presshub_social_shorts_narration_sec', __( 'Narration', 'presshub-social-autopost' ), [ $render, 'render_shorts_narration_intro' ], 'presshub_social_shorts' );
         add_settings_section( 'presshub_social_shorts_music_sec', __( 'Music', 'presshub-social-autopost' ), '__return_empty_string', 'presshub_social_shorts' );
+        add_settings_section( 'presshub_social_shorts_youtube_sec', __( 'YouTube', 'presshub-social-autopost' ), '__return_empty_string', 'presshub_social_shorts' );
+
+        add_settings_field(
+            'presshub_social_youtube_podcast_enabled',
+            __( 'YouTube Podcast Episodes', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_podcast_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_podcast_playlist_id',
+            __( 'Podcast Playlist ID', 'presshub-social-autopost' ),
+            [ $render, 'render_text_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec',
+            [
+                'option'      => 'presshub_social_youtube_podcast_playlist_id',
+                'placeholder' => 'PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+                'desc'        => __( 'The playlist every episode is added to. Make the playlist in YouTube Studio, set it as a podcast there (Create → New podcast, or the playlist\'s Set as podcast), then paste its link or ID. Empty uploads the episodes without a playlist.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_privacy_status',
+            __( 'YouTube Visibility', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_privacy_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_category_id',
+            __( 'YouTube Category', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_category_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
         add_settings_section( 'presshub_social_shorts_prompts_sec', '', '__return_empty_string', 'presshub_social_shorts_prompts' );
 
         add_settings_field(
@@ -607,6 +685,14 @@ class PressHub_Social_Settings {
             'presshub_social_instagram_shorts_enabled',
             __( 'Instagram Reels (Shorts)', 'presshub-social-autopost' ),
             [ $render, 'render_instagram_shorts_enabled_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_where_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_shorts_enabled',
+            __( 'YouTube Shorts', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_shorts_enabled_field' ],
             'presshub_social_shorts',
             'presshub_social_shorts_where_sec'
         );
@@ -1046,12 +1132,15 @@ class PressHub_Social_Settings {
             'facebook'  => 'Facebook',
             'instagram' => 'Instagram',
             'tiktok'    => 'TikTok',
+            'youtube'   => 'YouTube',
         ];
         foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $platform ) {
             $label    = $platform_labels[ $platform ] ?? ucfirst( $platform );
             $use_note = 'tiktok' === $platform
                 ? __( ' Writes the caption of a normal TikTok post: an article, or the whole podcast when TikTok Shorts are off. Shorts write their own captions with the Shorts Script Prompt.', 'presshub-social-autopost' )
-                : '';
+                : ( 'youtube' === $platform
+                    ? __( ' Writes the description of a YouTube video: an article\'s short and a podcast episode. A podcast\'s shorts use their own captions.', 'presshub-social-autopost' )
+                    : '' );
             add_settings_field(
                 'presshub_social_prompt_' . $platform,
                 $label . ' ' . __( 'Caption Prompt', 'presshub-social-autopost' ),

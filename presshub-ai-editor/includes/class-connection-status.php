@@ -77,6 +77,8 @@ class PressHub_Connection_Status {
         'presshub_social_twitter_access_token' => [ 'social:twitter' ],
         'presshub_social_tiktok_access_token'  => [ 'social:tiktok' ],
         'presshub_social_tiktok_open_id'       => [ 'social:tiktok' ],
+        'presshub_social_youtube_client_id'    => [ 'social:youtube' ],
+        'presshub_social_youtube_client_secret' => [ 'social:youtube' ],
         'presshub_social_worker_secret'        => [ 'worker' ],
         'presshub_social_worker_url'           => [ 'worker' ],
         'presshub_social_worker_mode'          => [ 'worker' ],
@@ -119,7 +121,7 @@ class PressHub_Connection_Status {
             self::forget( $id );
         }
         if ( in_array( $option, self::WORKER_OPTIONS, true ) && class_exists( 'PressHub_Social_Settings_Storage' ) ) {
-            foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $p ) {
+            foreach ( PressHub_Social_Settings_Storage::ENGINE_PLATFORMS as $p ) {
                 if ( 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p ) ) {
                     self::forget( 'social:' . $p );
                 }

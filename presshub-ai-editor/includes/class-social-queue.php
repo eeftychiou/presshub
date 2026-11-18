@@ -14,7 +14,7 @@ class PressHub_Social_Queue {
     /**
      * Allowed social platforms.
      */
-    public const VALID_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+    public const VALID_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok', 'youtube' ];
 
     /**
      * Allowed dispatch engines.

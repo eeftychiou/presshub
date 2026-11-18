@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { SocialMonitor } from './monitor/monitor-client';
 import { TrendingClient } from './trending/trending-client';
+import { uploadToYouTube, YouTubeUploadMeta, YouTubeUploadOptions, YouTubeUploadResult } from './youtube/uploader';
 
 export interface ClaimedJob {
   id: number | string;
@@ -41,6 +42,8 @@ export interface ClaimedJob {
     /** On-screen badge set by the site (e.g. the article's category); replaces ΕΙΔΗΣΗ n/N. */
     badge?: string;
   };
+  /** Set on YouTube jobs by WordPress: what to upload and how (title, description, playlist...). */
+  youtube?: YouTubeUploadMeta;
   /** AI post images for X and Facebook (all of them; media_url is the first). */
   media_urls?: string[];
   specs?: {
@@ -65,6 +68,8 @@ export interface PollerOptions {
   generateCardFn?: (params: any) => Promise<CardResult>;
   generateVideoFn?: (params: any) => Promise<VideoResult>;
   generateShortFn?: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
+  /** Uploads a rendered video to YouTube (tests inject a fake). */
+  youtubeUploadFn?: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
   /** Social Monitor run alongside job polling (WordPress decides when a scan is due). */
   monitor?: SocialMonitor;
   /** Trending in Cyprus roundup reader, run after the monitor (WordPress decides when a run is due). */
@@ -99,6 +104,7 @@ export class PressHubPoller {
   private readonly generateCardFn: (params: any) => Promise<CardResult>;
   private readonly generateVideoFn: (params: any) => Promise<VideoResult>;
   private readonly generateShortFn: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
+  private readonly youtubeUploadFn: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
   private readonly monitor?: SocialMonitor;
   private readonly trending?: TrendingClient;
   private scansRunning = false;
@@ -127,6 +133,7 @@ export class PressHubPoller {
     this.generateCardFn = options.generateCardFn || generateCard;
     this.generateVideoFn = options.generateVideoFn || generateVideo;
     this.generateShortFn = options.generateShortFn || generateShortVideo;
+    this.youtubeUploadFn = options.youtubeUploadFn || uploadToYouTube;
     this.monitor = options.monitor;
     this.trending = options.trending;
   }
@@ -142,6 +149,9 @@ export class PressHubPoller {
       const verification = SessionManager.verifySession(platform, this.sessionsDir);
       statuses[platform] = Boolean(verification.valid);
     }
+    // YouTube needs no browser login here: this worker uploads through the API with a
+    // token from WordPress, which only hands out YouTube jobs while a channel is connected.
+    statuses.youtube = true;
 
     return statuses;
   }
@@ -372,17 +382,17 @@ export class PressHubPoller {
             copy.toLowerCase().includes('podcast')
           );
 
-          if ((platform === 'tiktok' || platform === 'instagram') && job.tiktok_short) {
+          if ((platform === 'tiktok' || platform === 'instagram' || platform === 'youtube') && job.tiktok_short) {
             // A short is rendered with synced captions over its own story images. It
             // never falls back to the podcast's featured image.
             const short = job.tiktok_short;
             if (!audioUrl) {
-              throw new Error(`${platform === 'instagram' ? 'Instagram Reel' : 'TikTok'} short has no audio_url.`);
+              throw new Error(`${platformLabel(platform)} short has no audio_url.`);
             }
             const images = Array.isArray(short.images) ? short.images.filter((u) => typeof u === 'string' && u !== '') : [];
             WorkerLogger.info(
               'Poller',
-              `${jobTag} Rendering ${platform === 'instagram' ? 'Instagram Reel' : 'TikTok'} short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns, ${short.music_url ? `${short.mood || 'music'} music` : 'no music'})...`
+              `${jobTag} Rendering ${platformLabel(platform)} short ${short.index + 1}${Number(short.count) > 0 ? `/${short.count}` : ''} (${images.length} story image(s), ${Array.isArray(short.segments) ? short.segments.length : 0} timed turns, ${short.music_url ? `${short.mood || 'music'} music` : 'no music'})...`
             );
             const video = await this.generateShortFn({
               audioUrl,
@@ -414,6 +424,31 @@ export class PressHubPoller {
               succeeded++;
               continue;
             }
+          } else if (platform === 'youtube') {
+            // A full podcast episode: the whole audio over the podcast's image, 16:9.
+            if (!job.youtube || job.youtube.kind !== 'episode') {
+              throw new Error('YouTube job is neither a short nor a podcast episode.');
+            }
+            if (!audioUrl) {
+              throw new Error('YouTube podcast episode has no audio_url.');
+            }
+            const width = job.youtube.width || 1920;
+            const height = job.youtube.height || 1080;
+            WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (${width}x${height}, full audio)...`);
+            const video = await this.generateVideoFn({
+              postId: Number(job.post_id) || 1,
+              title,
+              subtitle: '',
+              width,
+              height,
+              mediaUrl: imageUrl,
+              audioUrl,
+              isPodcast: true,
+              siteName: job.site_name || 'PressHub.Cy',
+              outputDir: this.outputDir
+            });
+            mediaPath = video?.filePath;
+            WorkerLogger.info('Poller', `${jobTag} Episode rendered at: ${mediaPath}`);
           } else if (platform === 'tiktok') {
             const hasAudio = Boolean(audioUrl);
             WorkerLogger.info(
@@ -459,6 +494,47 @@ export class PressHubPoller {
             } else {
               WorkerLogger.warn('Poller', `${jobTag} No AI image could be downloaded; posting without images.`);
             }
+          }
+
+          if (platform === 'youtube') {
+            // Uploaded through the YouTube Data API, not a browser.
+            if (!job.youtube) {
+              throw new Error('YouTube job has no upload details from WordPress.');
+            }
+            WorkerLogger.info('Poller', `${jobTag} Uploading to YouTube (${job.youtube.kind}, ${job.youtube.privacy_status || 'public'})...`);
+            let upload: YouTubeUploadResult;
+            try {
+              upload = await this.youtubeUploadFn({
+                wpUrl: this.wpUrl,
+                workerSecret: this.workerSecret,
+                filePath: mediaPath || '',
+                meta: job.youtube,
+                fetchFn: this.fetchFn
+              });
+            } finally {
+              if (mediaPath) {
+                try { fs.unlinkSync(mediaPath); } catch {}
+              }
+            }
+            if (upload.success) {
+              await this.reportComplete({
+                job_id: job.id,
+                status: 'published',
+                external_post_id: upload.videoId || '',
+                external_post_url: upload.url || '',
+                metadata: {
+                  youtube_kind: job.youtube.kind,
+                  ...(upload.playlistItemId ? { youtube_playlist_item_id: upload.playlistItemId } : {}),
+                  ...(upload.playlistError ? { youtube_playlist_error: upload.playlistError } : {})
+                }
+              });
+              succeeded++;
+            } else {
+              WorkerLogger.warn('Poller', `${jobTag} YouTube upload failed: ${upload.error}`);
+              await this.reportComplete({ job_id: job.id, status: 'failed', error: upload.error || 'YouTube upload failed' });
+              failed++;
+            }
+            continue;
           }
 
           WorkerLogger.info('Poller', `${jobTag} Dispatching browser automation poster...`);
@@ -604,6 +680,13 @@ export class PressHubPoller {
   public getRunningStatus(): boolean {
     return this.isRunning;
   }
+}
+
+/** Name of a shorts platform for log lines and errors. */
+export function platformLabel(platform: string): string {
+  if (platform === 'instagram') return 'Instagram Reel';
+  if (platform === 'youtube') return 'YouTube';
+  return 'TikTok';
 }
 
 /** Badge of a short: the site's own badge (an article's category), else ΕΙΔΗΣΗ n/N. */

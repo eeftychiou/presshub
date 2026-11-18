@@ -290,6 +290,9 @@ class PressHub_Social_Ajax_Handlers {
 
         if ( 'worker' === $platform ) {
             $res = PressHub_Social_Worker_Client::check_health();
+        } elseif ( 'youtube' === $platform && class_exists( 'PressHub_Social_YouTube' ) ) {
+            // YouTube is tested against the API: the sign-in lives here, not on the worker.
+            $res = PressHub_Social_YouTube::test_connection();
         } else {
             $engine = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_platform_engine' )
                 ? PressHub_Social_Settings_Storage::get_platform_engine( $platform )

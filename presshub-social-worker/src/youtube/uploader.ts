@@ -1,0 +1,298 @@
+import fs from 'fs';
+import { WorkerLogger } from '../logger';
+
+/**
+ * YouTube uploads through the YouTube Data API v3.
+ *
+ * WordPress keeps the Google sign-in (client secret and refresh token) and writes each
+ * video's metadata at claim time (`job.youtube`). Right before an upload the worker asks
+ * WordPress for a short-lived access token (POST /worker/youtube/token), then:
+ *   1. starts a resumable upload session (videos.insert, uploadType=resumable),
+ *   2. sends the file in chunks, asking for the received range again after a failed chunk,
+ *   3. adds a podcast episode to its playlist (playlistItems.insert).
+ * A Short is a normal upload: YouTube files any vertical video of three minutes or less
+ * as a Short by itself.
+ */
+
+export interface YouTubeUploadMeta {
+  kind: 'short' | 'episode';
+  title: string;
+  description: string;
+  tags?: string[];
+  category_id?: string;
+  privacy_status?: 'public' | 'unlisted' | 'private';
+  contains_synthetic_media?: boolean;
+  made_for_kids?: boolean;
+  default_language?: string;
+  default_audio_language?: string;
+  playlist_id?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface YouTubeUploadResult {
+  success: boolean;
+  videoId?: string;
+  url?: string;
+  playlistItemId?: string;
+  playlistError?: string;
+  error?: string;
+}
+
+export interface YouTubeUploadOptions {
+  wpUrl: string;
+  workerSecret: string;
+  filePath: string;
+  meta: YouTubeUploadMeta;
+  fetchFn?: typeof fetch;
+  /** Bytes per chunk; a multiple of 256 KiB as the API requires. */
+  chunkSize?: number;
+  /** Tries per chunk before the upload fails. */
+  maxChunkTries?: number;
+  /** Wait between chunk tries (ms), doubled each time. */
+  retryDelayMs?: number;
+  sleepFn?: (ms: number) => Promise<void>;
+}
+
+const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos';
+const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
+const CHUNK_UNIT = 256 * 1024;
+/** 8 MiB: large enough to be quick, small enough that a failed chunk costs little. */
+export const DEFAULT_CHUNK_SIZE = 32 * CHUNK_UNIT;
+export const DEFAULT_MAX_CHUNK_TRIES = 5;
+export const DEFAULT_RETRY_DELAY_MS = 2000;
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Asks WordPress for an access token of the connected YouTube channel. */
+export async function fetchYouTubeToken(wpUrl: string, workerSecret: string, fetchFn: typeof fetch = globalThis.fetch): Promise<string> {
+  const url = `${wpUrl.replace(/\/+$/, '')}/wp-json/presshub-social/v1/worker/youtube/token`;
+  const res = await fetchFn(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-PressHub-Secret': workerSecret,
+      Authorization: `Bearer ${workerSecret}`
+    },
+    body: '{}'
+  });
+  let body: any = null;
+  try {
+    body = await res.json();
+  } catch {}
+  if (!res.ok || !body || typeof body.access_token !== 'string' || body.access_token === '') {
+    const msg = body && typeof body.message === 'string' ? body.message : `HTTP ${res.status}`;
+    throw new Error(`WordPress gave no YouTube access token: ${msg}`);
+  }
+  return body.access_token;
+}
+
+/** The videos.insert request body (snippet and status) for a job's metadata. */
+export function buildVideoResource(meta: YouTubeUploadMeta): Record<string, any> {
+  const snippet: Record<string, any> = {
+    title: meta.title,
+    description: meta.description || '',
+    categoryId: meta.category_id || '25'
+  };
+  if (Array.isArray(meta.tags) && meta.tags.length > 0) snippet.tags = meta.tags;
+  if (meta.default_language) snippet.defaultLanguage = meta.default_language;
+  if (meta.default_audio_language) snippet.defaultAudioLanguage = meta.default_audio_language;
+  return {
+    snippet,
+    status: {
+      privacyStatus: meta.privacy_status || 'public',
+      selfDeclaredMadeForKids: Boolean(meta.made_for_kids),
+      containsSyntheticMedia: meta.contains_synthetic_media !== false,
+      embeddable: true
+    }
+  };
+}
+
+function apiError(status: number, body: any): string {
+  const err = body && body.error;
+  const reason = err && Array.isArray(err.errors) && err.errors[0] ? err.errors[0].reason : '';
+  const message = (err && err.message) || `HTTP ${status}`;
+  if (reason === 'quotaExceeded' || reason === 'uploadLimitExceeded') {
+    return `YouTube upload limit reached for today (${reason}): ${message}`;
+  }
+  return reason ? `${message} (${reason})` : message;
+}
+
+async function readJson(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Reads bytes [start, end) of a file. */
+function readChunk(filePath: string, start: number, end: number): Buffer {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(end - start);
+    let read = 0;
+    while (read < buf.length) {
+      const n = fs.readSync(fd, buf, read, buf.length - read, start + read);
+      if (n <= 0) break;
+      read += n;
+    }
+    return read === buf.length ? buf : buf.subarray(0, read);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** Next byte to send from a 308 response's Range header ("bytes=0-1234"), or 0. */
+export function nextOffsetFromRange(range: string | null | undefined): number {
+  const m = /bytes=\d+-(\d+)/.exec(String(range || ''));
+  return m ? Number(m[1]) + 1 : 0;
+}
+
+/**
+ * Uploads a rendered video and, for an episode, adds it to the podcast playlist.
+ * A failed playlist insert does not fail the upload: the video is on YouTube.
+ */
+export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<YouTubeUploadResult> {
+  const fetchFn = options.fetchFn || globalThis.fetch;
+  const sleep = options.sleepFn || defaultSleep;
+  const chunkSize = Math.max(CHUNK_UNIT, Math.floor((options.chunkSize || DEFAULT_CHUNK_SIZE) / CHUNK_UNIT) * CHUNK_UNIT);
+  const maxTries = Math.max(1, options.maxChunkTries || DEFAULT_MAX_CHUNK_TRIES);
+  const baseDelay = Math.max(0, options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
+  const { meta, filePath } = options;
+
+  if (!filePath || !fs.existsSync(filePath)) {
+    return { success: false, error: 'No rendered video file to upload to YouTube.' };
+  }
+  if (!meta || !meta.title) {
+    return { success: false, error: 'The YouTube job has no title.' };
+  }
+  const total = fs.statSync(filePath).size;
+  if (total <= 0) {
+    return { success: false, error: 'The rendered video file is empty.' };
+  }
+
+  let token: string;
+  try {
+    token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn);
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+
+  // 1. Start the resumable session.
+  const startedAt = Date.now();
+  const initRes = await fetchFn(`${UPLOAD_URL}?uploadType=resumable&part=snippet,status`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': 'video/mp4',
+      'X-Upload-Content-Length': String(total)
+    },
+    body: JSON.stringify(buildVideoResource(meta))
+  });
+  if (!initRes.ok) {
+    const error = apiError(initRes.status, await readJson(initRes));
+    WorkerLogger.error('YouTube', `Upload session refused: ${error}`, { http_code: initRes.status });
+    return { success: false, error: `YouTube refused the upload: ${error}` };
+  }
+  const sessionUrl = initRes.headers.get('location');
+  if (!sessionUrl) {
+    return { success: false, error: 'YouTube returned no upload session address.' };
+  }
+  WorkerLogger.info('YouTube', `Uploading ${meta.kind} "${meta.title}" (${(total / 1048576).toFixed(1)} MB)...`);
+
+  // 2. Send the file chunk by chunk.
+  let offset = 0;
+  let tries = 0;
+  let video: any = null;
+  while (video === null) {
+    const end = Math.min(total, offset + chunkSize);
+    let res: Response | null = null;
+    let failure = '';
+    try {
+      res = await fetchFn(sessionUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'video/mp4',
+          'Content-Length': String(end - offset),
+          'Content-Range': `bytes ${offset}-${end - 1}/${total}`
+        },
+        body: readChunk(filePath, offset, end)
+      });
+    } catch (err: any) {
+      failure = err.message;
+    }
+
+    if (res && (res.status === 200 || res.status === 201)) {
+      video = (await readJson(res)) || {};
+      break;
+    }
+    if (res && res.status === 308) {
+      offset = nextOffsetFromRange(res.headers.get('range'));
+      tries = 0;
+      continue;
+    }
+    if (res && res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+      const error = apiError(res.status, await readJson(res));
+      WorkerLogger.error('YouTube', `Upload refused: ${error}`, { http_code: res.status });
+      return { success: false, error: `YouTube refused the upload: ${error}` };
+    }
+
+    tries++;
+    if (res) failure = `HTTP ${res.status}`;
+    if (tries >= maxTries) {
+      return { success: false, error: `YouTube upload failed after ${tries} tries at byte ${offset} of ${total}: ${failure}` };
+    }
+    const wait = baseDelay * 2 ** (tries - 1);
+    WorkerLogger.warn('YouTube', `Chunk at byte ${offset} failed (${failure}); try ${tries + 1}/${maxTries} in ${wait} ms.`);
+    await sleep(wait);
+    // Ask what YouTube has received, and continue from there.
+    try {
+      const status = await fetchFn(sessionUrl, {
+        method: 'PUT',
+        headers: { 'Content-Length': '0', 'Content-Range': `bytes */${total}` }
+      });
+      if (status.status === 200 || status.status === 201) {
+        video = (await readJson(status)) || {};
+        break;
+      }
+      if (status.status === 308) {
+        offset = nextOffsetFromRange(status.headers.get('range'));
+      }
+    } catch {}
+  }
+
+  const videoId = String(video?.id || '');
+  if (!videoId) {
+    return { success: false, error: 'YouTube finished the upload but returned no video ID.' };
+  }
+  const url = meta.kind === 'short' ? `https://www.youtube.com/shorts/${videoId}` : `https://www.youtube.com/watch?v=${videoId}`;
+  WorkerLogger.info('YouTube', `Uploaded ${meta.kind} ${url} in ${Math.round((Date.now() - startedAt) / 1000)}s.`);
+  const result: YouTubeUploadResult = { success: true, videoId, url };
+
+  // 3. An episode goes into the podcast playlist.
+  if (meta.kind === 'episode' && meta.playlist_id) {
+    try {
+      const res = await fetchFn(`${PLAYLIST_ITEMS_URL}?part=snippet`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify({
+          snippet: { playlistId: meta.playlist_id, resourceId: { kind: 'youtube#video', videoId } }
+        })
+      });
+      const body = await readJson(res);
+      if (res.ok) {
+        result.playlistItemId = String(body?.id || '');
+        WorkerLogger.info('YouTube', `Added ${videoId} to playlist ${meta.playlist_id}.`);
+      } else {
+        result.playlistError = apiError(res.status, body);
+        WorkerLogger.warn('YouTube', `Video ${videoId} is uploaded but could not be added to playlist ${meta.playlist_id}: ${result.playlistError}`);
+      }
+    } catch (err: any) {
+      result.playlistError = err.message;
+      WorkerLogger.warn('YouTube', `Video ${videoId} is uploaded but could not be added to playlist ${meta.playlist_id}: ${err.message}`);
+    }
+  }
+  return result;
+}

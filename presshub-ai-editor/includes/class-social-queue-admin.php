@@ -96,6 +96,7 @@ class PressHub_Social_Queue_Admin {
                         <option value="facebook" <?php selected( $current_platform, 'facebook' ); ?>><?php esc_html_e( 'Facebook', 'presshub-social-autopost' ); ?></option>
                         <option value="instagram" <?php selected( $current_platform, 'instagram' ); ?>><?php esc_html_e( 'Instagram', 'presshub-social-autopost' ); ?></option>
                         <option value="tiktok" <?php selected( $current_platform, 'tiktok' ); ?>><?php esc_html_e( 'TikTok', 'presshub-social-autopost' ); ?></option>
+                        <option value="youtube" <?php selected( $current_platform, 'youtube' ); ?>><?php esc_html_e( 'YouTube', 'presshub-social-autopost' ); ?></option>
                     </select>
 
                     <select name="status">

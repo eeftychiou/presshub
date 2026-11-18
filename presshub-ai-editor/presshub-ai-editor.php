@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.47.0
+ * Version: 2.48.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -122,7 +122,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.47.0' );
+define( 'PRESSHUB_AI_VERSION', '2.48.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -227,7 +227,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-image-library.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-post-images.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-shorts.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-music.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-youtube.php';
 PressHub_Social_TikTok_Shorts::register_hooks();
+PressHub_Social_YouTube::register_hooks();
 PressHub_Social_Post_Images::register_hooks();
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-worker-client.php';

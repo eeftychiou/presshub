@@ -163,6 +163,13 @@ class PressHub_Social_Dispatcher {
                 ? PressHub_Social_Settings_Storage::get_platform_engine( $platform )
                 : 'api';
 
+            // YouTube only gets videos: the shorts (as YouTube Shorts) and, for a podcast
+            // post, the full episode for the podcast playlist. Anything else is not posted there.
+            if ( 'youtube' === $platform ) {
+                $job_ids = array_merge( $job_ids, self::enqueue_youtube( $post_id, $engine, $media_url, $media_type, $base_time + ( $index * $interval ) ) );
+                continue;
+            }
+
             // Podcast posts can go to TikTok and Instagram as several short videos, one per top story.
             // Their copy is written with the short when the worker claims the job.
             // Articles go there as one short each, with the platform's usual AI caption as its
@@ -268,6 +275,75 @@ class PressHub_Social_Dispatcher {
             PressHub_Social_Post_Images::schedule_prepare( $post_id );
         }
 
+        return $job_ids;
+    }
+
+    /**
+     * Queue a post's YouTube videos: its shorts when YouTube Shorts are on, and the full
+     * episode of a podcast post when podcast episodes are on. The description is the
+     * YouTube post copy (an editor's copy, else the AI copywriter's); a podcast short
+     * uses its own caption.
+     *
+     * @return array<int> Enqueued job IDs.
+     */
+    private static function enqueue_youtube( int $post_id, string $engine, ?string $media_url, ?string $media_type, int $start_time ): array {
+        $job_ids = [];
+
+        $copy_for = static function () use ( $post_id ): array {
+            $copy_meta = get_post_meta( $post_id, '_presshub_social_copy_youtube', true );
+            $copy      = is_string( $copy_meta ) ? trim( $copy_meta ) : '';
+            if ( '' !== $copy ) {
+                return [ $copy, null ];
+            }
+            $generated = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, 'youtube' );
+            if ( is_wp_error( $generated ) ) {
+                return [ '', $generated->get_error_message() ];
+            }
+            return [ (string) $generated, null ];
+        };
+
+        if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::should_split( $post_id, $engine, 'youtube' ) ) {
+            $short_copy = null;
+            if ( PressHub_Social_TikTok_Shorts::SOURCE_ARTICLE === PressHub_Social_TikTok_Shorts::source_type( $post_id ) ) {
+                [ $short_copy, $copy_error ] = $copy_for();
+                if ( null !== $copy_error ) {
+                    PressHub_Social_Logger::warning( sprintf( 'YouTube description for the article short of post #%d failed (%s); the short\'s own caption is used.', $post_id, $copy_error ) );
+                }
+            } else {
+                PressHub_Social_TikTok_Shorts::cancel_superseded( $post_id, 'youtube' );
+            }
+            foreach ( PressHub_Social_TikTok_Shorts::build_jobs( $post_id, $engine, $media_url, $media_type, $start_time, false, 'youtube', $short_copy ) as $short_job ) {
+                $job_id = PressHub_Social_Queue::enqueue( $short_job );
+                if ( is_wp_error( $job_id ) ) {
+                    PressHub_Social_Logger::error( sprintf( 'Failed to enqueue YouTube short for post #%d: %s', $post_id, $job_id->get_error_message() ) );
+                } elseif ( $job_id > 0 ) {
+                    $job_ids[] = $job_id;
+                    PressHub_Social_Logger::info( sprintf( 'Enqueued YouTube short job #%d for post #%d (scheduled: %s)', $job_id, $post_id, $short_job['scheduled_at'] ) );
+                }
+            }
+            PressHub_Social_TikTok_Shorts::schedule_prepare( $post_id );
+        }
+
+        if ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::wants_episode( $post_id ) ) {
+            [ $copy, $copy_error ] = $copy_for();
+            $failed_error = null;
+            if ( null !== $copy_error ) {
+                $failed_error = $copy_error;
+                $copy         = sprintf( '[AI Copy Generation Failed: %s]', $copy_error );
+            }
+            $job    = PressHub_Social_YouTube::episode_job( $post_id, $copy, $media_url, $media_type, gmdate( 'Y-m-d H:i:s', $start_time ), $failed_error );
+            $job_id = PressHub_Social_Queue::enqueue( $job );
+            if ( is_wp_error( $job_id ) ) {
+                PressHub_Social_Logger::error( sprintf( 'Failed to enqueue YouTube podcast episode for post #%d: %s', $post_id, $job_id->get_error_message() ) );
+            } elseif ( $job_id > 0 ) {
+                $job_ids[] = $job_id;
+                PressHub_Social_Logger::info( sprintf( 'Enqueued YouTube podcast episode job #%d for post #%d (scheduled: %s%s)', $job_id, $post_id, $job['scheduled_at'], $failed_error ? ', description failed' : '' ) );
+            }
+        }
+
+        if ( empty( $job_ids ) ) {
+            PressHub_Social_Logger::info( sprintf( 'Post #%d is not posted to YouTube: it gets only shorts (YouTube Shorts off, or no short for this post) and podcast episodes (podcast episodes off, or not a podcast post).', $post_id ) );
+        }
         return $job_ids;
     }
 

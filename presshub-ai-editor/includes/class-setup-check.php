@@ -75,7 +75,15 @@ class PressHub_Setup_Check {
                 if ( $auto ) {
                     $automation[] = $p;
                 }
-                if ( ! PressHub_Social_Settings_Storage::is_platform_configured( $p ) ) {
+                if ( 'youtube' === $p && ! PressHub_Social_Settings_Storage::is_platform_configured( $p ) ) {
+                    if ( ! ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected() ) ) {
+                        $add( __( 'YouTube is switched on, but no YouTube channel is connected.', 'presshub-ai-editor' ), 'social-accounts', __( 'Connect YouTube', 'presshub-ai-editor' ) );
+                    } elseif ( ! $pull ) {
+                        $add( __( 'YouTube is switched on, but uploads need the worker in Pull mode.', 'presshub-ai-editor' ), 'automation-worker', __( 'Change worker mode', 'presshub-ai-editor' ) );
+                    } else {
+                        $add( __( 'YouTube is switched on, but the worker has not said it can upload to YouTube yet. Update and restart the worker.', 'presshub-ai-editor' ), 'automation-worker', __( 'Check the worker', 'presshub-ai-editor' ) );
+                    }
+                } elseif ( ! PressHub_Social_Settings_Storage::is_platform_configured( $p ) ) {
                     if ( $auto ) {
                         /* translators: %s: platform name */
                         $add( sprintf( __( '%s is switched on, but the worker has not reported a login for it.', 'presshub-ai-editor' ), $label ), 'automation-worker', __( 'Check the worker', 'presshub-ai-editor' ) );
@@ -151,7 +159,8 @@ class PressHub_Setup_Check {
         if ( 0 === strpos( $id, 'social:' ) && $social ) {
             $p = substr( $id, 7 );
             if ( PressHub_Social_Settings_Storage::is_platform_enabled( $p ) ) {
-                $auto = 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p );
+                // YouTube's sign-in is in Social platform accounts, not on the worker.
+                $auto = 'youtube' !== $p && 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p );
                 return [ 'label' => self::platform_label( $p ), 'anchor' => $auto ? 'automation-worker' : 'social-accounts' ];
             }
         }
