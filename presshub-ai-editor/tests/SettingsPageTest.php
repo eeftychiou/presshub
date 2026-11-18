@@ -98,6 +98,7 @@ class SettingsPageTest
             'presshub_ai_log_file_retention_days',
             'presshub_ai_token_log_retention_days',
             'presshub_ai_audit_log_retention_days',
+            'presshub_ai_backup_keep',
             'presshub_ai_social_meta_enabled',
             'presshub_ai_social_meta_all_posts',
             'presshub_ai_remove_google_cloud_api_key',

@@ -17,8 +17,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 71 | 5 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
-| Site & system (`site-system`) | 14 | 0 | 0 |
-| **Total** | **308** | | |
+| Site & system (`site-system`) | 15 | 0 | 0 |
+| **Total** | **309** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -351,7 +351,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_social_trending_max_per_account` | Trending posts per account | integer | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 | `presshub_ai_social_trending_share_after_hour` | Publish trending roundups from (hour) | integer | hour | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 
-## Site & system (`site-system`, 14)
+## Site & system (`site-system`, 15)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -366,6 +366,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_log_file_retention_days` | Log File Retention (days) | integer | days | ai / advanced |  |
 | `presshub_ai_token_log_retention_days` | Token Log Retention (days) | integer | days | ai / advanced |  |
 | `presshub_ai_audit_log_retention_days` | Audit Log Retention (days) | integer | days | ai / advanced |  |
+| `presshub_ai_backup_keep` | Backups to keep | integer | backups | ai / advanced |  |
 | `presshub_ai_social_meta_enabled` | Enable Social Metadata (OpenGraph & Twitter Cards) | boolean |  | ai / advanced | checkbox |
 | `presshub_ai_social_meta_all_posts` | Enable for All Published Posts | boolean |  | ai / advanced | checkbox |
 | `presshub_ai_memory_retention_days` | Memory Retention Window (days) | integer | days | ai / knowledge | needs `presshub_ai_memory_enabled` on |

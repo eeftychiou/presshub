@@ -327,6 +327,11 @@ php dev-env/scripts/reset-db.php
    - Context budgets count the content only (themes, fiches, people), never the fixed instructions around a block, so the number an editor sets is the room the content gets.
    - A new limit on content follows the same rule; reviews check it. Tests: `KnowledgeCutsTest.php`.
 
+14. **Backups before updates (PressHub → Backups, #296)**:
+   - `PressHub_AI_Update_Backup` saves every `presshub_*` option, every `{prefix}presshub_*` table and the plugin folder before WordPress replaces the plugin. A new table must use the `{prefix}presshub_` name so it is backed up and restored; a new option must start with `presshub_`.
+   - A migration in a new version may rely on the backup being there, but never on it being restorable into the new schema: a restore puts back the old version's `CREATE TABLE` and rows, and the old plugin files with them.
+   - Never write into the plugin folder during a restore when it is a link (dev-env junction); `plugin_dir_is_linked()` guards this. Restore steps are in `docs/backups.md`.
+
 ## 🔒 Security & Hardening Standards
 
 All code contributions must strictly adhere to WordPress security best practices:

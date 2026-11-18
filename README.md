@@ -54,6 +54,9 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
+### 0. 🛟 Backup before every update (`PressHub_AI_Update_Backup`, 2.53.0)
+Before WordPress updates PressHub, the plugin saves its settings (`presshub_*` options), its database tables (`{prefix}presshub_*`) and the plugin files it is about to replace to `wp-content/presshub-backups/` (deny-all, newest 5 kept, see **Settings → Site & system → Logging & retention**). If the backup fails, the update is stopped. **PressHub → Backups** lists them, takes one by hand and restores one (a backup of the current state is taken first). Restore steps and the manual fallback are in `docs/backups.md`.
+
 ### 1. 📰 Automated Daily Briefing Pipeline (Morning Edition & Noon News Update)
 - **Autonomous News Harvester (`PressHub_AI_News_Harvester`)**: Concurrently scrapes and processes articles from configured RSS feeds and direct web URLs. Features domain politeness delays, per-domain concurrency limits, total execution time budgets, lead-article extraction, and HTML sanitization. Manages edition-partitioned raw snapshots (`raw-articles.json` vs `raw-articles-noon.json`).
 - **Press Release Inbox (`PressHub_AI_Press_Release_Inbox`, `PressHub_AI_Imap_Client`, `PressHub_AI_Mime_Parser`)**: Before each harvest, reads a dedicated mailbox (e.g. `press@presshub.cy`) over IMAP with a pure-PHP client, turns each email into a press-release article (Word attachments read locally, PDF and scanned images read by Gemini), and moves it to a processed folder. The curator attributes press releases to their sender and fences them against prompt injection. The mailbox login (server, user name, password, Test connection) is under PressHub → Settings → Connections → Press inbox; folders, allowed senders and limits are under Daily Briefing → Sources & harvesting. See `architecture.md` §4.26.

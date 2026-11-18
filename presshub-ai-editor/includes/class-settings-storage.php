@@ -217,6 +217,12 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
             'default'           => 90,
         ] );
+        // #296: how many pre-update backups PressHub → Backups keeps.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_backup_keep', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_backup_keep' ],
+            'type'              => 'integer',
+            'default'           => 5,
+        ] );
 
         // Settings-First: Social & OpenGraph metadata master toggle and scope.
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_meta_enabled', [
@@ -990,6 +996,32 @@ class PressHub_AI_Settings_Storage {
      */
     public static function get_audit_log_retention_days(): int {
         return self::sanitize_audit_log_retention_days( get_option( 'presshub_ai_audit_log_retention_days', 90 ) );
+    }
+
+    /**
+     * Sanitize backup_keep (#296): how many backups to keep.
+     * Non-numeric input falls back to the default of 5; numeric input is clamped to 1-20.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_backup_keep( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 5;
+        }
+        return max( 1, min( 20, (int) $value ) );
+    }
+
+    /**
+     * backup_keep: backups PressHub keeps (default 5, clamped 1-20).
+     *
+     * @return int
+     */
+    public static function get_backup_keep(): int {
+        return self::sanitize_backup_keep( get_option( 'presshub_ai_backup_keep', 5 ) );
     }
 
     public static function sanitize_model( $value, $provider = 'openai' ) {
