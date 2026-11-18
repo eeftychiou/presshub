@@ -171,7 +171,7 @@ class PressHub_AI_Help_Admin {
             __( 'People fiches: for the people named in the material, their current role, party and latest stated positions.', 'presshub-ai-editor' ),
             __( 'Policy fiches: for the policy files mentioned in the material, the newsroom\'s principles, framing rules, checked facts and the claims to watch.', 'presshub-ai-editor' ),
         ] );
-        $html .= self::p( __( 'The articles still decide what happened today. The editorial knowledge decides how it is selected, ordered, titled and framed, and what the AI must not repeat as fact. Each block has a size limit per task (in characters); when the material is long, the least important part is dropped first.', 'presshub-ai-editor' ) );
+        $html .= self::p( __( 'The articles still decide what happened today. The editorial knowledge decides how it is selected, ordered, titled and framed, and what the AI must not repeat as fact. Each block has its own size limit per task (in characters). When a block is longer than its limit, its least important part is dropped first. Memory is also shrunk when the articles alone come close to the model\'s limit; the other blocks only follow their own limit.', 'presshub-ai-editor' ) );
         $html .= self::h3( __( 'Which AI task gets what', 'presshub-ai-editor' ) );
         $html .= self::p( __( 'Read from the current settings. A number is the most characters of that block the task can receive; a dash means the task never gets it.', 'presshub-ai-editor' ) );
         $html .= self::table(
@@ -183,19 +183,29 @@ class PressHub_AI_Help_Admin {
         return self::section( 'overview', $html );
     }
 
-    /** Rows of the "which task gets what" table. */
-    public static function matrix_rows(): array {
-        $tasks = [
+    /**
+     * The AI tasks in the table: the action each call sets (exactly as in
+     * set_action() / current_action) => label. HelpPageTest checks that every
+     * key is a real action in the code.
+     */
+    public static function tasks(): array {
+        return [
             'briefing_curation'     => __( 'Daily briefing text (morning and noon)', 'presshub-ai-editor' ),
             'podcast_script'        => __( 'Podcast script', 'presshub-ai-editor' ),
             'coauthor_draft'        => __( 'Co-author draft in the post editor', 'presshub-ai-editor' ),
             'copilot_chat'          => __( 'Co-pilot chat in the post editor', 'presshub-ai-editor' ),
-            'coauthor_scorecard'    => __( 'QA gate review before publishing', 'presshub-ai-editor' ),
+            'coauthor_scorecard'    => __( 'QA gate: editorial and legal review', 'presshub-ai-editor' ),
+            'seo_review'            => __( 'QA gate: SEO check', 'presshub-ai-editor' ),
+            'generate_post_seo'     => __( 'SEO tags, meta description and focus keyphrase', 'presshub-ai-editor' ),
             'social_copy_facebook'  => __( 'Social post copy (X, Facebook, Instagram, TikTok)', 'presshub-ai-editor' ),
             'social_tiktok_shorts'  => __( 'TikTok short and Reel plan', 'presshub-ai-editor' ),
-            'seo_meta'              => __( 'SEO title and description', 'presshub-ai-editor' ),
             'generate_image_prompt' => __( 'Featured image prompt', 'presshub-ai-editor' ),
         ];
+    }
+
+    /** Rows of the "which task gets what" table. */
+    public static function matrix_rows(): array {
+        $tasks     = self::tasks();
         $memory_on = PressHub_AI_Settings_Storage::get_memory_enabled();
         $memory    = [
             'briefing_curation' => PressHub_AI_Settings_Storage::get_memory_briefing_budget_chars(),
@@ -221,8 +231,12 @@ class PressHub_AI_Help_Admin {
         $html  = self::p( __( 'The agenda is one short page that you keep up to date: up to 12 running themes, each with a priority from 1 to 5, optional framing notes and an optional end date, plus standing guidance for the whole newsroom (up to 2,000 characters). The last 20 saved versions are kept, so you can see what changed.', 'presshub-ai-editor' ) );
         $html .= self::h3( __( 'How it is used', 'presshub-ai-editor' ) );
         $html .= self::ul( [
-            __( 'It is added to the instructions of every editorial AI task listed in the table above: the briefing, podcast, co-author, co-pilot, social copy, shorts, SEO and the image prompt. It is not matched against the material: it goes to these tasks whether or not today\'s articles mention its themes.', 'presshub-ai-editor' ),
-            __( 'Themes are sent highest priority first. A theme past its end date is no longer sent. When a task has little room (an SEO title gets 600 characters), the lowest-priority themes are dropped first and the standing guidance is shortened last.', 'presshub-ai-editor' ),
+            __( 'It is added to the instructions of every AI task that has an agenda number in the table above: the briefing, podcast, co-author, co-pilot, social copy, shorts, the QA gate\'s SEO check and the image prompt. It is not matched against the material: it goes to these tasks whether or not today\'s articles mention its themes. The SEO tags and meta description, and the QA gate\'s editorial and legal review, do not get it.', 'presshub-ai-editor' ),
+            sprintf(
+                /* translators: %d: characters */
+                __( 'Themes are sent highest priority first. A theme past its end date is no longer sent. When a task has little room (social copy gets %d characters), the lowest-priority themes are dropped first and the standing guidance is shortened last.', 'presshub-ai-editor' ),
+                PressHub_AI_Editorial_Agenda::budget_for( 'social_copy_facebook' )
+            ),
             __( 'The AI is told to use the agenda for choosing, ordering and framing stories, and not to invent news about a theme that is not in the material.', 'presshub-ai-editor' ),
             __( 'After each weekly memory rollup, PressHub suggests new themes from the stories that are still open. A suggestion waits on the agenda page until you accept or dismiss it; it is never applied on its own.', 'presshub-ai-editor' ),
             __( 'It does not depend on the editorial memory switch: an agenda you saved is sent even when memory is off. To stop it, remove its themes and guidance, or set a task\'s agenda budget to 0.', 'presshub-ai-editor' ),
@@ -344,7 +358,12 @@ class PressHub_AI_Help_Admin {
             __( 'A rule that applies to every story (headline style, how to cite polls) goes in the agenda\'s standing guidance. A rule about one subject goes in that subject\'s fiche, so it does not take room in every other call.', 'presshub-ai-editor' ),
             __( 'A disputed claim, a figure or a source link always goes in a policy fiche. The agenda has no claims register and no facts.', 'presshub-ai-editor' ),
             __( 'For a big running story, use both: an agenda theme with priority 5 and an end date to push it up, and a policy fiche for the wording. Keep the agenda note to one line and let the fiche carry the detail.', 'presshub-ai-editor' ),
-            __( 'Social copy and SEO get only a short agenda (800 and 600 characters) and only the framing of a fiche. Rules that must reach social posts belong in the fiche\'s framing.', 'presshub-ai-editor' ),
+            sprintf(
+                /* translators: 1: agenda characters for social copy, 2: characters of fiche text left in social copy */
+                __( 'Social copy gets only a short agenda (%1$d characters) and only the framing of a fiche, with room for about %2$d characters of title and framing. Rules that must reach social posts belong in the agenda\'s standing guidance or, kept short, in the fiche\'s framing. The SEO tags and meta description get neither.', 'presshub-ai-editor' ),
+                PressHub_AI_Editorial_Agenda::budget_for( 'social_copy_facebook' ),
+                self::policy_room( 'social_copy_facebook' )
+            ),
         ] );
         return self::section( 'choose', $html );
     }
@@ -403,7 +422,7 @@ class PressHub_AI_Help_Admin {
         $html  .= self::ul( [
             __( 'About 30 seconds after a briefing text post is created or updated, one AI call turns it into a daily digest: the day\'s stories, each with a stable key, a title, a one- or two-sentence development and a status (new, developing or resolved). It sees the last 7 days\' story keys, so a running story keeps its key.', 'presshub-ai-editor' ),
             __( 'When a podcast script is saved, its opening and closing lines are stored in that day\'s digest, without another AI call.', 'presshub-ai-editor' ),
-            __( 'Once a week, each completed week with digests gets a weekly rollup: a short narrative of the week and its open stories, built only from that week\'s digests.', 'presshub-ai-editor' ),
+            __( 'Once a week, each completed week with digests gets a weekly rollup: a short narrative of the week and its stories (new, developing and resolved), built from that week\'s digests and the previous week\'s narrative, for continuity. Agenda suggestions use only its stories that are not resolved.', 'presshub-ai-editor' ),
             __( 'If the AI returns something invalid twice, the digest is marked failed and the Hub shows a notice with a retry button. Nothing half-built is stored.', 'presshub-ai-editor' ),
         ] );
         $html  .= self::h3( __( 'How memory is used', 'presshub-ai-editor' ) );

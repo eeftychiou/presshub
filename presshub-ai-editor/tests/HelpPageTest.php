@@ -111,9 +111,35 @@ $social = $by['Social post copy (X, Facebook, Instagram, TikTok)'] ?? [];
 hp_check( 'matrix: social copy gets framing only', false !== strpos( (string) ( $social[4] ?? '' ), '(framing)' ) );
 hp_check( 'matrix: social copy gets no people', '—' === ( $social[3] ?? '' ) );
 hp_check( 'matrix: social copy gets no memory', '—' === ( $social[1] ?? '' ) );
-$qa = $by['QA gate review before publishing'] ?? [];
+$qa = $by['QA gate: editorial and legal review'] ?? [];
 hp_check( 'matrix: QA gate gets no agenda', '—' === ( $qa[2] ?? '' ) );
 hp_check( 'matrix: QA gate gets framing and claims', false !== strpos( (string) ( $qa[4] ?? '' ), 'framing, claims' ) );
+$seo_check = $by['QA gate: SEO check'] ?? [];
+hp_check( 'matrix: QA SEO check gets the agenda', '—' !== ( $seo_check[2] ?? '—' ) );
+hp_check( 'matrix: QA SEO check gets no policy fiches', '—' === ( $seo_check[4] ?? '' ) );
+$seo_meta = $by['SEO tags, meta description and focus keyphrase'] ?? [];
+hp_check( 'matrix: post SEO row present', 5 === count( $seo_meta ) );
+hp_check( 'matrix: post SEO gets nothing', [ '—', '—', '—', '—' ] === array_slice( $seo_meta, 1 ) );
+
+// Every task key is an action the code really sets (exact literal, or a prefix the code builds on).
+$src = '';
+foreach ( glob( dirname( __DIR__ ) . '/includes/*.php' ) as $f ) {
+    if ( basename( $f ) !== 'class-help-admin.php' ) {
+        $src .= file_get_contents( $f );
+    }
+}
+foreach ( array_keys( PressHub_AI_Help_Admin::tasks() ) as $action ) {
+    $real = false !== strpos( $src, "'" . $action . "'" );
+    if ( ! $real && preg_match( '/^([a-z_]+_)[a-z]+$/', $action, $m ) ) {
+        $real = false !== strpos( $src, "'" . $m[1] . "' ." );
+    }
+    hp_check( "matrix: action {$action} is set somewhere in the code", $real );
+}
+
+// The page prose does not hard-code agenda budgets: changing them changes the text.
+update_option( 'presshub_ai_editorial_agenda_budgets', array_merge( PressHub_AI_Editorial_Agenda::BUDGETS, [ 'social_copy_' => 777 ] ) );
+hp_check( 'prose: social agenda budget read live', false !== strpos( PressHub_AI_Help_Admin::build_page(), '(social copy gets 777 characters)' ) );
+delete_option( 'presshub_ai_editorial_agenda_budgets' );
 
 update_option( 'presshub_ai_editorial_agenda_budgets', array_merge( PressHub_AI_Editorial_Agenda::BUDGETS, [ 'briefing_curation' => 0 ] ) );
 $by = [];
@@ -158,15 +184,43 @@ hp_check( 'example: policy blocks on the page', false !== strpos( $html, esc_htm
 // ---------------------------------------------------------------------
 // 5-6. Status lines, no writes, escaping.
 // ---------------------------------------------------------------------
+hp_check( 'status: agenda not written yet', false !== strpos( PressHub_AI_Help_Admin::build_page(), 'Not written yet' ) );
 update_option( PressHub_AI_Stakeholders::OPTION, [
     'x' => PressHub_AI_Stakeholders::normalize( [ 'name' => 'Δοκιμή <script>alert(1)</script> Δοκιμαστής', 'locked' => true ] ),
+] );
+PressHub_AI_Editorial_Agenda::save( [ [ 'title' => 'Θέμα <b>Ζχψ</b>', 'priority' => 5 ], [ 'title' => 'Παλιό', 'priority' => 2, 'expires' => '2000-01-01' ] ], 'Οδηγία' );
+update_option( PressHub_AI_Policy_Fiches::OPTION, [
+    'a' => PressHub_AI_Policy_Fiches::normalize( array_merge( PressHub_AI_Policy_Fiches::empty_fiche( 'Στεγαστικό σχέδιο' ), [ 'status' => 'published' ] ) ),
+    'b' => PressHub_AI_Policy_Fiches::normalize( PressHub_AI_Policy_Fiches::empty_fiche( 'Συνταξιοδοτική μεταρρύθμιση' ) ),
 ] );
 $before = $GLOBALS['OPTIONS_STORE'];
 $html   = PressHub_AI_Help_Admin::build_page();
 hp_check( 'status: people counts shown', false !== strpos( $html, '1 fiches, 1 locked, 0 excluded.' ) );
-hp_check( 'status: agenda not written yet', false !== strpos( $html, 'Not written yet' ) );
+hp_check( 'status: agenda version and live themes', false !== strpos( $html, 'Version 1, 1 theme that has not expired.' ) );
+hp_check( 'status: published and draft policy fiches', false !== strpos( $html, '1 published (sent to the AI), 1 drafts (never sent).' ) );
 hp_check( 'no writes: options unchanged by rendering', $before === $GLOBALS['OPTIONS_STORE'] );
-hp_check( 'escaping: no raw script tag', false === strpos( $html, '<script>' ) );
+hp_check( 'status: stored names and titles are not printed', false === strpos( $html, 'Δοκιμαστής' ) && false === strpos( $html, 'Ζχψ' ) );
+hp_check( 'escaping: no raw stored markup', false === strpos( $html, '<script>' ) && false === strpos( $html, '<b>Ζχψ' ) );
+
+update_option( 'presshub_ai_policy_fiches_enabled', 0 );
+update_option( 'presshub_ai_stakeholders_enabled', 0 );
+$html = PressHub_AI_Help_Admin::build_page();
+hp_check( 'status: switches off are shown', substr_count( $html, 'Off: not sent to the AI.' ) >= 2 );
+$by = [];
+foreach ( PressHub_AI_Help_Admin::matrix_rows() as $r ) {
+    $by[ $r[0] ] = $r;
+}
+hp_check( 'matrix: people switch off shows a dash', '—' === ( $by['Daily briefing text (morning and noon)'][3] ?? '' ) );
+hp_check( 'matrix: policy switch off shows a dash', '—' === ( $by['Daily briefing text (morning and noon)'][4] ?? '' ) );
+delete_option( 'presshub_ai_policy_fiches_enabled' );
+delete_option( 'presshub_ai_stakeholders_enabled' );
+
+// url() and wiring in the plugin bootstrap.
+hp_check( 'url: Help page URL', false !== strpos( PressHub_AI_Help_Admin::url(), 'page=presshub-ai-help' ) );
+hp_check( 'url: with anchor', '#presshub-help-limits' === substr( PressHub_AI_Help_Admin::url( 'presshub-help-limits' ), -strlen( '#presshub-help-limits' ) ) );
+$boot = file_get_contents( dirname( __DIR__ ) . '/presshub-ai-editor.php' );
+hp_check( 'wiring: class file is loaded', false !== strpos( $boot, "includes/class-help-admin.php'" ) );
+hp_check( 'wiring: page is created in presshub_ai_init()', (bool) preg_match( '/function presshub_ai_init\(\).*?new PressHub_AI_Help_Admin\(\);/s', $boot ) );
 
 if ( $failures > 0 ) {
     echo "HelpPageTest: {$failures} of {$checks} checks failed\n";
