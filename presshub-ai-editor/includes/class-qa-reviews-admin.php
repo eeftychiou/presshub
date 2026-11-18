@@ -105,6 +105,10 @@ class PressHub_AI_QA_Reviews_Admin {
         echo '<p><label for="presshub-qa-override-reason">' . esc_html__( 'Reason', 'presshub-ai-editor' ) . '</label><br />';
         echo '<textarea name="reason" id="presshub-qa-override-reason" rows="3" cols="60" required="required"></textarea></p>';
         submit_button( __( 'Publish anyway', 'presshub-ai-editor' ), 'primary', 'submit', false );
+        $back = function_exists( 'get_edit_post_link' ) ? (string) get_edit_post_link( $post_id ) : '';
+        if ( '' !== $back ) {
+            echo ' <a class="button" href="' . esc_url( $back ) . '">' . esc_html__( 'Cancel, back to the post', 'presshub-ai-editor' ) . '</a>';
+        }
         echo '</form></div>';
     }
 
