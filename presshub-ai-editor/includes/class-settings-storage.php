@@ -2584,6 +2584,11 @@ class PressHub_AI_Settings_Storage {
             } else {
                 $final = substr( $value, 0, 512 );
             }
+            if ( $final !== $existing ) {
+                // #247: the last mailbox test no longer applies.
+                require_once __DIR__ . '/class-connection-status.php';
+                PressHub_Connection_Status::forget( 'press_inbox' );
+            }
             update_option( $option, $final, false );
             return $final;
         } finally {

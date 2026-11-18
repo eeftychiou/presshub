@@ -40,7 +40,7 @@ class PressHub_Settings_Sections {
     /** Old tab of each former settings page => section that holds its options. */
     const TAB_SECTIONS = [
         'ai'     => [
-            'providers'        => 'ai-models',
+            'providers'        => 'connections',
             'copilot'          => 'ai-models',
             'coauthor'         => 'writing-qa',
             'images'           => 'writing-qa',
@@ -71,6 +71,18 @@ class PressHub_Settings_Sections {
         'presshub_ai_remove_github_token'          => 'connections',
         'presshub_ai_remove_google_cloud_api_key'  => 'connections',
         'presshub_social_github_token'             => 'connections',
+        // #247: every secret is in Connections.
+        'presshub_ai_briefing_tts_api_key'         => 'connections',
+        'presshub_ai_remove_briefing_tts_api_key'  => 'connections',
+        // #247: the press inbox login is in Connections; folders and filters stay in Daily Briefing.
+        'presshub_ai_press_inbox_host'             => 'connections',
+        'presshub_ai_press_inbox_port'             => 'connections',
+        'presshub_ai_press_inbox_encryption'       => 'connections',
+        'presshub_ai_press_inbox_verify_ssl'       => 'connections',
+        'presshub_ai_press_inbox_username'         => 'connections',
+        'presshub_ai_press_inbox_password'         => 'connections',
+        'presshub_ai_remove_press_inbox_password'  => 'connections',
+        'presshub_ai_press_inbox_timeout'          => 'connections',
         // Site & system → Logging & retention keeps all six retention periods in one table.
         'presshub_ai_memory_retention_days'        => 'site-system',
     ];
@@ -81,7 +93,7 @@ class PressHub_Settings_Sections {
      */
     const LEGACY_TARGETS = [
         'ai'     => [
-            'providers'        => [ 'ai-models', 'ai-providers' ],
+            'providers'        => [ 'connections', 'ai-providers' ],
             'copilot'          => [ 'ai-models', 'copilot' ],
             'coauthor'         => [ 'writing-qa', '' ],
             'coauthor-drafting' => [ 'writing-qa', 'drafting' ],
@@ -133,22 +145,22 @@ class PressHub_Settings_Sections {
         return [
             'connections'         => [
                 'label'         => __( 'Connections', 'presshub-ai-editor' ),
-                'intro'         => __( 'Accounts and services PressHub signs in to: social platforms, the automation worker, Google Cloud and plugin updates.', 'presshub-ai-editor' ),
+                'intro'         => __( 'Every key, password and account PressHub signs in with, whether each one works, and what to fix first.', 'presshub-ai-editor' ),
                 'groups'        => [
+                    'ai-providers'      => __( 'AI providers', 'presshub-ai-editor' ),
+                    'google-cloud'      => __( 'Google Cloud', 'presshub-ai-editor' ),
+                    'press-inbox'       => __( 'Press inbox', 'presshub-ai-editor' ),
                     'social-accounts'   => __( 'Social platform accounts', 'presshub-ai-editor' ),
                     'automation-worker' => __( 'Automation worker', 'presshub-ai-editor' ),
-                    'google-cloud'      => __( 'Google Cloud', 'presshub-ai-editor' ),
                     'plugin-updates'    => __( 'Plugin updates', 'presshub-ai-editor' ),
-                    'connection-tests'  => __( 'Connection tests', 'presshub-ai-editor' ),
                 ],
                 'social_groups' => [ 'social-accounts', 'automation-worker' ],
             ],
             'ai-models'           => [
                 'label'  => __( 'AI models', 'presshub-ai-editor' ),
-                'intro'  => __( 'The AI providers PressHub can call, their keys and default models, and the model behind the Copilot.', 'presshub-ai-editor' ),
+                'intro'  => __( 'The model behind the Copilot and the research assistant. AI provider keys are in Connections.', 'presshub-ai-editor' ),
                 'groups' => [
-                    'ai-providers' => __( 'AI providers', 'presshub-ai-editor' ),
-                    'copilot'      => __( 'Copilot & research assistant', 'presshub-ai-editor' ),
+                    'copilot' => __( 'Copilot & research assistant', 'presshub-ai-editor' ),
                 ],
             ],
             'writing-qa'          => [

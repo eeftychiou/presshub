@@ -2059,6 +2059,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             ] );
         }
 
+        // #247: its settings changed, so its last test no longer says anything.
+        require_once __DIR__ . '/class-connection-status.php';
+        PressHub_Connection_Status::forget( 'provider:' . sanitize_key( (string) $provider_id ) );
+
         wp_send_json_success( [
             'message'  => sprintf( __( 'Provider "%s" saved successfully.', 'presshub-ai-editor' ), $provider['name'] ?? $provider_id ),
             'id'       => $provider_id,
@@ -2087,6 +2091,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         if ( ! $deleted ) {
             wp_send_json_error( [ 'message' => __( 'Provider not found or could not be deleted.', 'presshub-ai-editor' ) ] );
         }
+
+        require_once __DIR__ . '/class-connection-status.php';
+        PressHub_Connection_Status::forget( 'provider:' . sanitize_key( $provider_id ) );
 
         wp_send_json_success( [
             'message'     => __( 'Provider deleted successfully.', 'presshub-ai-editor' ),
@@ -2135,10 +2142,21 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $latency_ms = max( 1, (int) round( ( microtime( true ) - $start_time ) * 1000 ) );
 
+        // #247: a test of a saved provider (not of unsaved modal fields) is the
+        // status Connections shows until the next test.
+        $saved_id = empty( $_POST['provider_data'] ) && isset( $provider_id ) && '' !== (string) $provider_id ? (string) $provider_id : '';
+        $status   = '';
+        if ( '' !== $saved_id ) {
+            require_once __DIR__ . '/class-connection-status.php';
+            PressHub_Connection_Status::record( 'provider:' . sanitize_key( $saved_id ), ! is_wp_error( $result ), is_wp_error( $result ) ? $result->get_error_message() : __( 'Connected', 'presshub-ai-editor' ) );
+            $status = PressHub_Connection_Status::render_pill( 'provider:' . sanitize_key( $saved_id ) );
+        }
+
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( [
                 'message'    => $result->get_error_message(),
                 'latency_ms' => $latency_ms,
+                'status'     => $status,
             ] );
         }
 
@@ -2146,6 +2164,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'message'    => __( 'API Connection Successful!', 'presshub-ai-editor' ),
             'response'   => is_string( $result ) ? $result : 'OK',
             'latency_ms' => $latency_ms,
+            'status'     => $status,
         ] );
     }
 
@@ -2845,6 +2864,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
         $inbox  = new PressHub_AI_Press_Release_Inbox();
         $result = $inbox->test_connection();
+        require_once __DIR__ . '/class-connection-status.php';
+        PressHub_Connection_Status::record( 'press_inbox', ! empty( $result['success'] ), (string) ( $result['message'] ?? '' ) );
+        $result['status'] = PressHub_Connection_Status::render_pill( 'press_inbox' );
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info( 'Press release inbox connection test: ' . ( $result['success'] ? 'ok' : 'failed' ), [ 'message' => $result['message'] ] );
         }

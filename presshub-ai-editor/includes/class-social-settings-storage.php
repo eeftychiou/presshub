@@ -1915,6 +1915,28 @@ class PressHub_Social_Settings_Storage {
     // ------------------------------------------------------------------
 
     /**
+     * A secret was replaced or removed: its last test result no longer
+     * applies (#247), so Connections shows "Not checked yet" until the next
+     * test.
+     */
+    private static function forget_connection_status( string $option_name ): void {
+        $checks = [
+            'presshub_social_meta_access_token'    => [ 'social:facebook', 'social:instagram' ],
+            'presshub_social_twitter_bearer_token' => [ 'social:twitter' ],
+            'presshub_social_twitter_access_token' => [ 'social:twitter' ],
+            'presshub_social_tiktok_access_token'  => [ 'social:tiktok' ],
+            'presshub_social_worker_secret'        => [ 'worker' ],
+        ];
+        if ( empty( $checks[ $option_name ] ) ) {
+            return;
+        }
+        require_once __DIR__ . '/class-connection-status.php';
+        foreach ( $checks[ $option_name ] as $id ) {
+            PressHub_Connection_Status::forget( $id );
+        }
+    }
+
+    /**
      * Sanitize a secret token or key. Preserves the existing value if the incoming
      * value is empty or masked, preventing accidental overwriting.
      *
@@ -1941,6 +1963,9 @@ class PressHub_Social_Settings_Storage {
             // same save wins over a "Remove" box left ticked (#281 review).
             $is_new = '' !== $value && false === strpos( $value, '••••' );
             if ( '__CLEAR__' === $value || ( ! $is_new && ! empty( $_POST[ $option_name . '_remove' ] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+                if ( '' !== $existing ) {
+                    self::forget_connection_status( $option_name );
+                }
                 return '';
             }
 
@@ -1951,7 +1976,11 @@ class PressHub_Social_Settings_Storage {
 
             $value = wp_strip_all_tags( $value );
             $value = preg_replace( '/[\r\n\t]+/', '', $value );
-            return trim( $value );
+            $value = trim( $value );
+            if ( $value !== $existing ) {
+                self::forget_connection_status( $option_name );
+            }
+            return $value;
         } finally {
             unset( self::$sanitizing_secrets[ $option_name ] );
         }

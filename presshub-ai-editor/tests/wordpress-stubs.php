@@ -135,7 +135,12 @@ if ( ! function_exists( 'update_option' ) ) {
 
 if ( ! function_exists( 'delete_option' ) ) {
     function delete_option( $key ) {
+        $existed = array_key_exists( $key, $GLOBALS['OPTIONS_STORE'] ?? [] );
         unset( $GLOBALS['OPTIONS_STORE'][ $key ] );
+        // As in WordPress, "delete_option_{$key}" fires only when the option existed.
+        if ( $existed && function_exists( 'do_action' ) ) {
+            do_action( 'delete_option_' . $key, $key );
+        }
         return true;
     }
 }
