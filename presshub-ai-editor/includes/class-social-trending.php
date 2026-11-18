@@ -1163,6 +1163,18 @@ class PressHub_AI_Social_Trending {
     /**
      * @return int|WP_Error
      */
+    /** Whether the QA gate is holding this roundup in Pending Review. */
+    private static function held_by_gate( int $post_id, $post ): bool {
+        if ( ! class_exists( 'PressHub_AI_Publish_Gate' ) || 'pending' !== ( $post->post_status ?? '' ) ) {
+            return false;
+        }
+        if ( '' === (string) get_post_meta( $post_id, PressHub_AI_Publish_Gate::META_TARGET_STATUS, true ) ) {
+            return false;
+        }
+        $review = get_post_meta( $post_id, PressHub_AI_Publish_Gate::META_REVIEW, true );
+        return is_array( $review ) && PressHub_AI_Publish_Gate::holds( $review );
+    }
+
     public static function upsert_post( array $items, int $now, string $run_id ) {
         $key     = self::post_key( $now, $run_id );
         $map     = get_option( self::OPTION_POSTS, [] );
@@ -1179,6 +1191,11 @@ class PressHub_AI_Social_Trending {
         if ( $update ) {
             $prev_items = json_decode( (string) get_post_meta( $existing, self::META_ITEMS, true ), true );
             $new_set    = self::summary_hash( $items ) !== self::summary_hash( is_array( $prev_items ) ? $prev_items : [] );
+            // A roundup the gate is holding keeps the text it was reviewed on
+            // until a new set of posts arrives, so "Publish anyway" still matches.
+            if ( ! $new_set && self::held_by_gate( $existing, $post ) ) {
+                return $existing;
+            }
             // A new set of posts is not shown until the QA gate has read it.
             if ( $new_set && class_exists( 'PressHub_AI_Publish_Gate' ) && PressHub_AI_Publish_Gate::applies( 'trending' ) ) {
                 PressHub_AI_Publish_Gate::hold_for_review( $existing );

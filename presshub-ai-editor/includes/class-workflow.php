@@ -75,20 +75,26 @@ class PressHub_AI_Workflow {
             return;
         }
 
+        // Remember who scheduled it: REST saves do not always update _edit_last.
+        $by_cron  = ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON );
+        if ( $schedules && ! $by_cron && function_exists( 'get_current_user_id' ) && get_current_user_id() > 0 ) {
+            update_post_meta( $post->ID, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, (int) get_current_user_id() );
+        }
+
         // A scheduled post coming due is published by cron (user 0). It was
         // reviewed when it was scheduled, and the saved review is reused
         // unless the post or the gate settings changed since.
-        $by_cron  = ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON );
         $due      = $goes_live && 'future' === $old_status;
         if ( $by_cron && ( ! $due || $automated ) ) {
             return;
         }
 
         // Editors and admins are checked too, unless "Check posts editors publish" is off.
-        // At go-live by cron there is no user: look at who last saved the post.
+        // At go-live by cron there is no user: look at who scheduled it, else who last saved it.
         if ( ! PressHub_AI_Settings_Storage::get_qa_check_editors() ) {
             if ( $by_cron ) {
-                $last = (int) get_post_meta( $post->ID, '_edit_last', true );
+                $last = (int) get_post_meta( $post->ID, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, true );
+                $last = $last > 0 ? $last : (int) get_post_meta( $post->ID, '_edit_last', true );
                 $last = $last > 0 ? $last : (int) ( $post->post_author ?? 0 );
                 if ( $last > 0 && function_exists( 'user_can' ) && user_can( $last, 'edit_others_posts' ) ) {
                     return;

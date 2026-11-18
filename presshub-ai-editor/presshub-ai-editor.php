@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.48.0
+ * Version: 2.49.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -122,7 +122,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.48.0' );
+define( 'PRESSHUB_AI_VERSION', '2.49.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -173,6 +173,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviewer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-review-store.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-publish-gate.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviews-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-held-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';
 if ( file_exists( PRESSHUB_AI_DIR . 'includes/class-log-exposure-check.php' ) ) {
@@ -420,6 +421,7 @@ function presshub_ai_init() {
     new PressHub_AI_Briefing_Admin();
     new PressHub_AI_Generation_Inspector();
     new PressHub_AI_QA_Reviews_Admin();
+    new PressHub_AI_QA_Held_Admin();
     new PressHub_AI_Memory_Editor();
     PressHub_AI_Editorial_Agenda::register_hooks();
     PressHub_AI_Stakeholders::register_hooks();

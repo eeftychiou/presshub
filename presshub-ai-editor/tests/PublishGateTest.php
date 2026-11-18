@@ -17,6 +17,7 @@ require_once __DIR__ . '/../includes/class-settings-storage.php';
 require_once __DIR__ . '/../includes/class-seo.php';
 require_once __DIR__ . '/../includes/class-publish-gate.php';
 require_once __DIR__ . '/../includes/class-qa-reviews-admin.php';
+require_once __DIR__ . '/../includes/class-qa-held-admin.php';
 require_once __DIR__ . '/../includes/class-audit-logger.php';
 require_once __DIR__ . '/../includes/class-workflow.php';
 
@@ -521,6 +522,76 @@ list( $subject, $body ) = ( function () {
 } )();
 pg_check( false !== strpos( $body, 'EDITORIAL: 40 / 100' ) && false !== strpos( $body, 'could not run' ), 'the error email keeps the editorial block' );
 echo "  [16] podcasts, held briefings, roundups and emails: OK\n";
+
+// 17. Held by QA list, Posts column, editor panel (2.49.0) and the PR 2 follow-ups.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0 ] );
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
+pg_reply( array_merge( $clean, [ 'score' => 40, 'libel_risk' => 'High', 'legal_concerns' => 'Ισχυρισμός χωρίς πηγή.', 'legal_issues' => [ [ 'type' => 'defamation', 'quote' => 'είναι απατεώνας', 'severity' => 'High', 'fix' => 'Αφαίρεσε τον χαρακτηρισμό.' ] ] ] ) );
+$mk( 1001, 'pending', 'publish' );
+PressHub_AI_Publish_Gate::release( 1001, 'briefing', 'briefing_morning' );
+pg_reply( $clean );
+$mk( 1002, 'pending', 'publish' );
+PressHub_AI_Publish_Gate::release( 1002, 'briefing', 'briefing_noon' ); // passes and goes live
+$mk( 1003, 'pending', '' ); // pending for another reason, never reviewed
+$GLOBALS['GET_POSTS_RESULT'] = array_map( function ( $id ) { return (object) $GLOBALS['POSTS_STORE'][ $id ]; }, [ 1001, 1002, 1003 ] );
+$held = PressHub_AI_QA_Held_Admin::held_posts();
+pg_check( 1 === count( $held ) && 1001 === (int) $held[0]['post']->ID, 'only the post the gate is holding is listed' );
+$table = PressHub_AI_QA_Held_Admin::render_table( $held );
+pg_check( false !== strpos( $table, 'editorial 40/80' ) && false !== strpos( $table, 'legal High' ), 'the list says what failed: ' . PressHub_AI_QA_Held_Admin::failed_summary( $held[0]['review'] ) );
+pg_check( false !== strpos( $table, 'override=1001' ) && false !== strpos( $table, 'Publish anyway' ), 'the list links to Publish anyway' );
+$GLOBALS['CURRENT_USER_CAPS'] = [];
+pg_check( false === strpos( PressHub_AI_QA_Held_Admin::render_table( $held ), 'Publish anyway' ), 'no Publish anyway without the editor capability' );
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
+pg_check( false !== strpos( PressHub_AI_QA_Held_Admin::notice_html( 2 ), '2 posts are held' ) && false !== strpos( PressHub_AI_QA_Held_Admin::notice_html( 2 ), 'presshub-ai-qa-held' ), 'the notice counts held posts and links to the list' );
+
+$badges = PressHub_AI_QA_Held_Admin::badges( get_post_meta( 1001, PressHub_AI_Publish_Gate::META_REVIEW, true ) );
+pg_check( false !== strpos( $badges, 'presshub-qa-badge-fail" title="Editorial: failed 40/80"' ), 'the editorial badge is red with the score' );
+pg_check( false !== strpos( $badges, 'title="Legal: failed High"' ) && false !== strpos( $badges, 'presshub-qa-badge-skip" title="SEO: not checked"' ), 'legal shows the risk, SEO not checked' );
+$cols = PressHub_AI_QA_Held_Admin::add_column( [ 'cb' => '', 'title' => 'Title', 'author' => 'Author' ] );
+pg_check( [ 'cb', 'title', 'presshub_qa', 'author' ] === array_keys( $cols ), 'the QA column sits after the title' );
+ob_start();
+PressHub_AI_QA_Held_Admin::render_column( 'presshub_qa', 1003 );
+pg_check( false !== strpos( (string) ob_get_clean(), 'Not reviewed' ), 'an unreviewed post shows a dash' );
+
+$panel = PressHub_AI_QA_Held_Admin::metabox_html( 1001 );
+pg_check( false !== strpos( $panel, 'Held for review' ) && false !== strpos( $panel, 'Editorial: 40/100 (minimum 80)' ), 'the editor panel shows the verdict and the editorial score' );
+pg_check( false !== strpos( $panel, 'είναι απατεώνας' ) && false !== strpos( $panel, 'Αφαίρεσε τον χαρακτηρισμό.' ), 'the editor panel lists the legal issues with their fixes' );
+pg_check( false !== strpos( $panel, 'override=1001' ) && false !== strpos( $panel, 'Review history' ), 'the editor panel has Publish anyway and the history' );
+$panel = PressHub_AI_QA_Held_Admin::metabox_html( 1002 );
+pg_check( false !== strpos( $panel, 'Passed' ) && false === strpos( $panel, 'override=' ), 'a passed post has no Publish anyway' );
+pg_check( '' === PressHub_AI_QA_Held_Admin::metabox_html( 1003 ), 'no panel for a post the gate never reviewed' );
+PressHub_AI_Publish_Gate::publish_anyway( 1001, 'Ελέγχθηκε από νομικό.' );
+pg_check( false !== strpos( PressHub_AI_QA_Held_Admin::metabox_html( 1001 ), 'Published anyway: Ελέγχθηκε από νομικό.' ), 'the history shows the Publish anyway reason' );
+$GLOBALS['GET_POSTS_RESULT'] = [];
+
+// The SEO fix keeps the saved keyphrase and description it does not set.
+pg_reset( [ 'presshub_ai_seo_auto_enabled' => 1, 'presshub_ai_qa_seo_min_score' => 95 ] );
+pg_reply( array_merge( $clean, [ 'seo' => [ 'seo_score' => 70, 'focus_keyphrase' => 'άλλο', 'summary' => '', 'suggestions' => [], 'suggested_tags' => [ 'Στέγαση' ], 'suggested_meta_description' => '' ] ] ) );
+$GLOBALS['POSTS_STORE'][1010] = [ 'ID' => 1010, 'post_title' => $good_seo_input['title'], 'post_content' => $good_seo_input['content'], 'post_excerpt' => 'Υπάρχει', 'post_type' => 'post', 'post_status' => 'draft', 'post_author' => 0 ];
+$GLOBALS['POST_META_STORE'][1010][ PressHub_AI_SEO::META_SEO ] = [ 'tags' => [], 'meta_description' => 'Η αποθηκευμένη περιγραφή.', 'focus_keyphrase' => 'στέγαση' ];
+PressHub_AI_Publish_Gate::review_post( (object) $GLOBALS['POSTS_STORE'][1010], 'author_publish', [ 'seo_input' => array_merge( $good_seo_input, [ 'post_id' => 1010, 'tags' => [], 'featured_image_id' => 55 ] ), 'force' => true ] );
+$meta = get_post_meta( 1010, PressHub_AI_SEO::META_SEO, true );
+pg_check( 'στέγαση' === ( $meta['focus_keyphrase'] ?? '' ) && 'Η αποθηκευμένη περιγραφή.' === ( $meta['meta_description'] ?? '' ) && [ 'Στέγαση' ] === ( $meta['tags'] ?? null ), 'the SEO fix keeps the saved keyphrase and description: ' . json_encode( $meta, JSON_UNESCAPED_UNICODE ) );
+
+// Who scheduled a post decides the editor opt-out at go-live, not _edit_last.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0, 'presshub_ai_qa_check_editors' => 0 ] );
+$wf = new PressHub_AI_Workflow();
+$GLOBALS['PG_USER_CAPS'] = [ 9 => [ 'edit_others_posts' ] ];
+$GLOBALS['CURRENT_USER_ID'] = 9;
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
+$mk( 1020, 'future', '' );
+$wf->enforce_editorial_workflow( 'future', 'draft', (object) $GLOBALS['POSTS_STORE'][1020] );
+pg_check( 9 === (int) get_post_meta( 1020, PressHub_AI_Publish_Gate::META_SCHEDULED_BY, true ), 'scheduling remembers who scheduled' );
+$GLOBALS['POST_META_STORE'][1020]['_edit_last'] = 3; // a REST save by someone else, or not updated
+$GLOBALS['CURRENT_USER_ID'] = 0;
+$GLOBALS['CURRENT_USER_CAPS'] = [];
+$GLOBALS['WP_DOING_CRON'] = true;
+$GLOBALS['PG_CALLS'] = 0;
+pg_reply( array_merge( $clean, [ 'score' => 30 ] ) );
+$wf->enforce_editorial_workflow( 'publish', 'future', (object) array_merge( $GLOBALS['POSTS_STORE'][1020], [ 'post_status' => 'publish' ] ) );
+pg_check( 0 === $GLOBALS['PG_CALLS'], 'an editor-scheduled post goes live unreviewed with editor checks off' );
+$GLOBALS['WP_DOING_CRON'] = false;
+echo "  [17] held list, column, editor panel, SEO meta, scheduled by: OK\n";
 
 if ( $GLOBALS['PG_FAILURES'] > 0 ) {
     echo "PublishGateTest: {$GLOBALS['PG_FAILURES']} failure(s)\n";

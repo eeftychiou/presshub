@@ -61,6 +61,13 @@ class PressHub_AI_Metaboxes {
 
             <hr />
 
+            <?php
+            // QA gate verdicts, history and "Publish anyway" (2.49.0).
+            if ( class_exists( 'PressHub_AI_QA_Held_Admin' ) ) {
+                echo PressHub_AI_QA_Held_Admin::metabox_html( (int) $post->ID ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in metabox_html().
+            }
+            ?>
+
             <h3><?php echo esc_html__( 'Editorial Scorecard', 'presshub-ai-editor' ); ?></h3>
             <button type="button" id="presshub-ai-run-review" class="button" data-post-id="<?php echo esc_attr( $post->ID ); ?>">
                 <?php echo esc_html__( 'Run AI Editorial Review', 'presshub-ai-editor' ); ?>

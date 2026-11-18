@@ -6,6 +6,7 @@
  *   ├─ Daily Briefing Hub        admin.php?page=presshub-ai-briefing-hub
  *   ├─ Generation records        admin.php?page=presshub-ai-generation-records
  *   ├─ QA reviews                admin.php?page=presshub-ai-qa-reviews
+ *   ├─ Held by QA                admin.php?page=presshub-ai-qa-held
  *   ├─ Social Queue              admin.php?page=presshub-social-queue
  *   ├─ Memory                    admin.php?page=presshub-ai-memory
  *   ├─ Editorial agenda          admin.php?page=presshub-ai-agenda
@@ -55,6 +56,7 @@ class PressHub_Admin_Menu {
         'presshub-ai-briefing-hub',
         'presshub-ai-generation-records',
         'presshub-ai-qa-reviews',
+        'presshub-ai-qa-held',
         'presshub-social-queue',
         'presshub-ai-memory',
         'presshub-ai-agenda',

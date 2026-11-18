@@ -52,6 +52,9 @@ class PressHub_AI_Publish_Gate {
     /** Post meta: the status an automated post goes to once the gate passes it. */
     const META_TARGET_STATUS = '_presshub_gate_target_status';
 
+    /** Who scheduled the post: at go-live by cron, the editor opt-out looks at them. */
+    const META_SCHEDULED_BY = '_presshub_ai_gate_scheduled_by';
+
     /** Post meta: input hash of the version an editor released with "Publish anyway". */
     const META_OVERRIDE = '_presshub_ai_gate_override';
 
@@ -583,11 +586,24 @@ class PressHub_AI_Publish_Gate {
             return null;
         }
 
+        $before = get_post_meta( $post_id, PressHub_AI_SEO::META_SEO, true );
+        $before = is_array( $before ) ? $before : [];
         PressHub_AI_SEO::apply_post_seo( $post_id, [
             'tags'             => $set_tags ? $tags : [],
             'meta_description' => $set_excerpt ? $description : '',
-            'focus_keyphrase'  => (string) ( $review['focus_keyphrase'] ?? '' ),
+            'focus_keyphrase'  => '' !== (string) ( $before['focus_keyphrase'] ?? '' ) ? '' : (string) ( $review['focus_keyphrase'] ?? '' ),
         ], $set_excerpt, $set_tags );
+        if ( $before ) {
+            // apply_post_seo() rewrites the whole SEO meta: keep what this fix did not set.
+            $after = get_post_meta( $post_id, PressHub_AI_SEO::META_SEO, true );
+            $after = is_array( $after ) ? $after : [];
+            foreach ( [ 'tags', 'meta_description', 'focus_keyphrase' ] as $field ) {
+                if ( empty( $after[ $field ] ) && ! empty( $before[ $field ] ) ) {
+                    $after[ $field ] = $before[ $field ];
+                }
+            }
+            update_post_meta( $post_id, PressHub_AI_SEO::META_SEO, $after );
+        }
         if ( $set_excerpt ) {
             $input['excerpt'] = $description;
         }
