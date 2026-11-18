@@ -1233,34 +1233,6 @@ class PressHub_AI_News_Curator {
             $post_status = 'pending';
         }
 
-        // Automated AI QA Review pre-publication evaluation
-        $qa_result = null;
-        $qa_enabled = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_qa_enabled();
-        $qa_include_briefings = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_qa_include_briefings();
-
-        if ( $qa_enabled && $qa_include_briefings && class_exists( 'PressHub_AI_QA_Reviewer' ) ) {
-            require_once __DIR__ . '/class-publish-gate.php';
-            $qa_result = PressHub_AI_Publish_Gate::review_content( $story_content, 'briefing', 'noon' === $edition ? 'briefing_noon' : 'briefing_morning' );
-            if ( PressHub_AI_Publish_Gate::holds( $qa_result ) ) {
-                if ( 'publish' === $post_status ) {
-                    $post_status = 'pending';
-                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                        PressHub_AI_Logger::warning(
-                            sprintf(
-                                'Daily Briefing text story failed AI QA review (score: %d/100, threshold: %d). Post status overridden to pending.',
-                                (int) ( $qa_result['score'] ?? 0 ),
-                                PressHub_AI_Settings_Storage::get_qa_min_score()
-                            ),
-                            [
-                                'qa_result' => $qa_result,
-                                'date'      => $date,
-                            ]
-                        );
-                    }
-                }
-            }
-        }
-
         // Ensure content is valid HTML
         $html_content = PressHub_AI_Markdown::to_html( $story_content );
 
@@ -1291,6 +1263,11 @@ class PressHub_AI_News_Curator {
             $postarr['post_category'] = $post_category;
         }
 
+        // QA gate: a briefing set to publish is saved as pending and released
+        // by the gate once its tags, excerpt, links and image are in place.
+        require_once __DIR__ . '/class-publish-gate.php';
+        $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'briefing' );
+
         $post_id = wp_insert_post( $postarr, true );
 
         if ( is_wp_error( $post_id ) ) {
@@ -1307,12 +1284,6 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_briefing_date', $date );
         update_post_meta( $post_id, '_presshub_briefing_type', 'text' );
         update_post_meta( $post_id, '_presshub_briefing_edition', $edition );
-
-        if ( ! empty( $qa_result ) ) {
-            // Scorecard meta, the latest review and a row in PressHub → QA reviews.
-            $qa_result = PressHub_AI_Publish_Gate::attach( $qa_result, $post_id );
-            PressHub_AI_Publish_Gate::notify( $post_id, $qa_result );
-        }
 
         // Issue #65 — stash the prefix/date-format state used to compose
         // this title so downstream observers (token log, integration
@@ -1416,6 +1387,10 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_source_context_type', (string) $source_context['type'] );
         update_post_meta( $post_id, '_presshub_source_context_count', (int) $source_context['count'] );
         update_post_meta( $post_id, '_presshub_source_context_preset', (string) $source_context['preset'] );
+
+        // QA gate on the finished post (editorial, legal and SEO), then the
+        // configured status unless it is held. Saved in PressHub → QA reviews.
+        PressHub_AI_Publish_Gate::release( $post_id, 'briefing', 'noon' === $edition ? 'briefing_noon' : 'briefing_morning' );
 
         // Issue #134: schedule daily memory digest construction
         if ( class_exists( 'PressHub_AI_Memory_Digest_Builder' ) ) {

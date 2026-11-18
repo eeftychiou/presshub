@@ -12,13 +12,13 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 |---|---|---|---|
 | Connections (`connections`) | 42 | 18 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
-| Writing & QA (`writing-qa`) | 20 | 0 | 0 |
+| Writing & QA (`writing-qa`) | 23 | 0 | 0 |
 | Daily Briefing (`daily-briefing`) | 75 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 71 | 5 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
 | Site & system (`site-system`) | 14 | 0 | 0 |
-| **Total** | **305** | | |
+| **Total** | **308** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -111,7 +111,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_ai_timeout` | Social copy timeout (s) | integer | s | social / ai | was: Request Timeout |
 | `presshub_social_tiktok_shorts_music_model` | Music Model | string |  | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on |
 
-## Writing & QA (`writing-qa`, 20)
+## Writing & QA (`writing-qa`, 23)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -127,6 +127,9 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_coauthor_max_source_chars` | Max Source Material Characters | integer | characters | ai / coauthor |  |
 | `presshub_ai_qa_enabled` | Enable QA Review System | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_qa_include_briefings` | Include Daily Briefings | integer |  | ai / coauthor | checkbox |
+| `presshub_ai_qa_check_editors` | Check posts editors publish | integer |  | ai / coauthor | checkbox |
+| `presshub_ai_qa_include_podcasts` | Include Daily Briefing podcasts | integer |  | ai / coauthor | checkbox |
+| `presshub_ai_qa_include_trending` | Include the Trending roundup | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_qa_min_score` | Minimum editorial score | integer | points | ai / coauthor | was: Minimum Passing Score; Minimum passing QA score |
 | `presshub_ai_qa_notify_editor` | Notify Editor on Failures | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_qa_editor_email` | Editor Notification Email | string |  | ai / coauthor |  |

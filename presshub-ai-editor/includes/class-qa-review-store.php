@@ -30,6 +30,9 @@ class PressHub_AI_QA_Review_Store {
     /** Results of one check. */
     const RESULTS = [ 'pass', 'fail', 'skip', 'error' ];
 
+    /** What was reviewed. */
+    const CONTEXTS = [ 'post', 'briefing', 'podcast', 'trending' ];
+
     /** The three checks, as column prefixes. */
     const CHECKS = [ 'editorial', 'legal', 'seo' ];
 
@@ -115,7 +118,7 @@ class PressHub_AI_QA_Review_Store {
                 'created_at'          => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
                 'post_id'             => max( 0, (int) ( $gate['post_id'] ?? 0 ) ),
                 'trigger_type'        => substr( sanitize_key( (string) ( $gate['trigger'] ?? '' ) ), 0, 32 ),
-                'context'             => 'briefing' === ( $gate['context'] ?? 'post' ) ? 'briefing' : 'post',
+                'context'             => self::pick( (string) ( $gate['context'] ?? 'post' ), self::CONTEXTS, 'post' ),
                 'verdict'             => self::pick( (string) ( $gate['verdict'] ?? '' ), self::VERDICTS, 'error' ),
                 'content_hash'        => substr( (string) ( $gate['content_hash'] ?? '' ), 0, 32 ),
                 'user_id'             => function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0,
@@ -141,6 +144,23 @@ class PressHub_AI_QA_Review_Store {
             self::log_failure( 'QA review could not be saved: ' . $t->getMessage(), (int) ( $gate['post_id'] ?? 0 ) );
             return null;
         }
+    }
+
+    /**
+     * Write a "Publish anyway" override on a review row: who released the
+     * post, when and why.
+     */
+    public static function record_override( int $id, string $reason ): bool {
+        global $wpdb;
+        if ( $id <= 0 || ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
+            return false;
+        }
+        $ok = $wpdb->update( self::get_table_name(), [
+            'override_user_id' => function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0,
+            'override_reason'  => mb_substr( $reason, 0, 1000 ),
+            'override_at'      => function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' ),
+        ], [ 'id' => $id ] );
+        return false !== $ok;
     }
 
     /** One review with its details decoded, or null. */
@@ -226,7 +246,7 @@ class PressHub_AI_QA_Review_Store {
         $details        = json_decode( (string) ( $row['details_json'] ?? '' ), true );
         $row['details'] = is_array( $details ) ? $details : [];
         unset( $row['details_json'] );
-        foreach ( [ 'id', 'post_id', 'user_id' ] as $k ) {
+        foreach ( [ 'id', 'post_id', 'user_id', 'override_user_id' ] as $k ) {
             $row[ $k ] = (int) ( $row[ $k ] ?? 0 );
         }
         return $row;

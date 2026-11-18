@@ -287,6 +287,9 @@ class SettingsPageTest
             'presshub_ai_qa_legal_fail_risk',
             'presshub_ai_qa_seo_action',
             'presshub_ai_qa_seo_min_score',
+            'presshub_ai_qa_check_editors',
+            'presshub_ai_qa_include_podcasts',
+            'presshub_ai_qa_include_trending',
             // #236 — Editorial QA's own model (empty: same as Co-author)
             'presshub_ai_qa_provider',
             'presshub_ai_qa_model',
@@ -385,6 +388,9 @@ class SettingsPageTest
             'presshub_ai_qa_legal_fail_risk',
             'presshub_ai_qa_seo_action',
             'presshub_ai_qa_seo_min_score',
+            'presshub_ai_qa_check_editors',
+            'presshub_ai_qa_include_podcasts',
+            'presshub_ai_qa_include_trending',
         ] as $qa_field ) {
             if ( false === strpos( $html, 'name="' . $qa_field . '"' ) ) {
                 $failures[] = "render_settings_page() should output {$qa_field} input.";

@@ -1295,6 +1295,11 @@ class PressHub_AI_Audio_Synthesizer {
             $postarr['post_category'] = $post_category;
         }
 
+        // QA gate: a podcast set to publish is saved as pending and released
+        // by the gate once its tags, excerpt and image are in place.
+        require_once __DIR__ . '/class-publish-gate.php';
+        $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'podcast' );
+
         $post_id = wp_insert_post( $postarr, true );
 
         if ( is_wp_error( $post_id ) ) {
@@ -1355,6 +1360,10 @@ class PressHub_AI_Audio_Synthesizer {
         if ( class_exists( 'PressHub_AI_SEO' ) ) {
             PressHub_AI_SEO::auto_optimize_post( $post_id, $title, $transcript, 'podcast' );
         }
+
+        // QA gate on the show notes and the spoken script (editorial and
+        // legal) and the post (measured SEO checks), then the configured status.
+        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning' );
 
         return $post_id;
     }
@@ -1467,6 +1476,11 @@ class PressHub_AI_Audio_Synthesizer {
                 }
             }
         }
+
+        // QA gate on the new script: a held podcast is released when it now
+        // passes, and a live one that now fails goes back to Pending Review.
+        require_once __DIR__ . '/class-publish-gate.php';
+        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning' );
 
         return $post_id;
     }

@@ -320,10 +320,11 @@ class PressHub_AI_QA_Reviewer {
         $blocks  = [];
 
         $ed = (array) ( $checks['editorial'] ?? [] );
-        if ( 'error' === ( $ed['result'] ?? '' ) ) {
+        if ( 'error' === $verdict || 'error' === ( $ed['result'] ?? '' ) ) {
             $failed[] = __( 'review could not run', 'presshub-ai-editor' );
-            $blocks[] = sprintf( "The QA review could not run (%s), so the post was held until someone reviews it.\n%s", (string) ( $ed['error'] ?? 'error' ), (string) ( $ed['feedback'] ?? '' ) );
-        } elseif ( 'fail' === ( $ed['result'] ?? '' ) ) {
+            $blocks[] = sprintf( "The QA review could not run (%s), so the post was held until someone reviews it.\n%s", (string) ( $ed['error'] ?? $gate['error'] ?? 'error' ), (string) ( $ed['feedback'] ?? '' ) );
+        }
+        if ( 'fail' === ( $ed['result'] ?? '' ) ) {
             $failed[] = sprintf( 'editorial %d/%d', (int) $ed['score'], (int) $ed['threshold'] );
             $blocks[] = sprintf( "EDITORIAL: %d / 100 (minimum %d)\n%s", (int) $ed['score'], (int) $ed['threshold'], (string) ( $ed['feedback'] ?? '' ) );
         }
@@ -359,7 +360,12 @@ class PressHub_AI_QA_Reviewer {
             $blocks[] = implode( "\n", $lines );
         }
 
-        $what = 'briefing' === $context ? __( 'Daily Briefing', 'presshub-ai-editor' ) : __( 'Article', 'presshub-ai-editor' );
+        $whats = [
+            'briefing' => __( 'Daily Briefing', 'presshub-ai-editor' ),
+            'podcast'  => __( 'Podcast', 'presshub-ai-editor' ),
+            'trending' => __( 'Trending roundup', 'presshub-ai-editor' ),
+        ];
+        $what = $whats[ $context ] ?? __( 'Article', 'presshub-ai-editor' );
         $subject = sprintf(
             '[%s] %s %s: %s (%s)',
             $site_name,
@@ -374,9 +380,12 @@ class PressHub_AI_QA_Reviewer {
                 ? __( 'Published; please review the warnings below', 'presshub-ai-editor' )
                 : __( 'Not published yet; please review the warnings below before publishing', 'presshub-ai-editor' ) );
         $reviews_url = function_exists( 'admin_url' ) ? admin_url( 'admin.php?page=presshub-ai-qa-reviews&post_id=' . $post_id ) : '';
+        $override    = $held && function_exists( 'admin_url' )
+            ? "\n\n" . __( 'Publish anyway (editors and admins, with a reason):', 'presshub-ai-editor' ) . "\n" . admin_url( 'admin.php?page=presshub-ai-qa-reviews&override=' . $post_id )
+            : '';
 
         $body = sprintf(
-            "%s\n\n--------------------------------------------------\nArticle: %s\nAuthor: %s\nStatus: %s\n--------------------------------------------------\n\n%s\n\nReview and edit the post here:\n%s\n\nAll QA reviews of this post:\n%s\n\n--\nPressHub QA gate",
+            "%s\n\n--------------------------------------------------\nArticle: %s\nAuthor: %s\nStatus: %s\n--------------------------------------------------\n\n%s\n\nReview and edit the post here:\n%s\n\nAll QA reviews of this post:\n%s%s\n\n--\nPressHub QA gate",
             $held
                 ? __( 'This post did not pass the QA gate and was not published.', 'presshub-ai-editor' )
                 : ( $published
@@ -387,7 +396,8 @@ class PressHub_AI_QA_Reviewer {
             $status,
             implode( "\n\n", $blocks ),
             $edit_url,
-            $reviews_url
+            $reviews_url,
+            $override
         );
         return [ $subject, $body ];
     }
