@@ -931,7 +931,9 @@ class PressHub_Social_Settings_Storage {
         if ( 'youtube' === $platform ) {
             // The worker renders and uploads, so it needs Pull Mode, a worker that
             // reported it can upload to YouTube, and a connected YouTube account.
-            if ( 'pull' !== self::get_worker_mode() || ! class_exists( 'PressHub_Social_YouTube' ) || ! PressHub_Social_YouTube::is_connected() ) {
+            // Set up, not "uploading now": while Google refuses the sign-in (or the quota is
+            // used up) new posts are still queued and wait; only claims are held.
+            if ( 'pull' !== self::get_worker_mode() || ! class_exists( 'PressHub_Social_YouTube' ) || ! PressHub_Social_YouTube::is_set_up() ) {
                 return false;
             }
             $sessions = get_option( 'presshub_social_worker_sessions', [] );

@@ -167,9 +167,12 @@ export class PressHubPoller {
     return statuses;
   }
 
-  /** Folder of the local YouTube upload record. */
+  /**
+   * Folder of the local YouTube upload record. Not relative to the current folder, so a
+   * worker started from elsewhere still finds the record.
+   */
   private uploadLogDir(): string {
-    return this.outputDir || path.resolve(process.cwd(), 'output');
+    return this.outputDir ? path.resolve(this.outputDir) : path.resolve(__dirname, '..', 'output');
   }
 
   /**
@@ -384,6 +387,9 @@ export class PressHubPoller {
 
       let succeeded = 0;
       let failed = 0;
+      // Set when a YouTube upload hits the daily quota or a refused sign-in: the other
+      // YouTube jobs of this batch would fail the same way, so they are not rendered.
+      let youtubeHalt: { reason: 'quota' | 'auth'; error: string } | null = null;
 
       for (const job of jobs) {
         const jobTag = `[Job #${job.id} - ${job.platform}]`;
@@ -421,11 +427,24 @@ export class PressHubPoller {
           if (platform === 'youtube' && !job.test_render) {
             // Already uploaded on an earlier claim (WordPress never heard back): report that
             // video instead of uploading it a second time.
-            const done = findUpload(this.uploadLogDir(), this.wpUrl, job.id);
+            const done = findUpload(this.uploadLogDir(), this.wpUrl, job.id, job.post_id);
             if (done) {
               WorkerLogger.warn('Poller', `${jobTag} Already uploaded as ${done.url}; reporting it instead of uploading again.`);
-              await this.reportYouTubePublished(job, done.videoId, done.url, done.kind, done.playlistItemId, done.playlistError);
+              const playlistError = done.playlistError
+                || (done.kind === 'episode' && !done.playlistItemId && job.youtube?.playlist_id ? 'The worker stopped before the video was added to the playlist.' : undefined);
+              await this.reportYouTubePublished(job, done.videoId, done.url, done.kind, done.playlistItemId, playlistError);
               succeeded++;
+              continue;
+            }
+            if (youtubeHalt) {
+              WorkerLogger.warn('Poller', `${jobTag} Not rendered: an earlier YouTube upload in this batch stopped (${youtubeHalt.reason}).`);
+              await this.reportComplete({
+                job_id: job.id,
+                status: 'failed',
+                error: youtubeHalt.error,
+                metadata: { youtube_error_reason: youtubeHalt.reason }
+              });
+              failed++;
               continue;
             }
           }
@@ -570,13 +589,27 @@ export class PressHubPoller {
             }
             WorkerLogger.info('Poller', `${jobTag} Uploading to YouTube (${job.youtube.kind}, ${job.youtube.privacy_status || 'public'})...`);
             let upload: YouTubeUploadResult;
+            const ytMeta = job.youtube;
+            const remember = (videoId: string, url: string, playlistItemId?: string, playlistError?: string) => {
+              recordUpload(this.uploadLogDir(), this.wpUrl, job.id, {
+                videoId,
+                url,
+                kind: ytMeta.kind,
+                ...(job.post_id !== undefined && job.post_id !== null && String(job.post_id) !== '' ? { postId: String(job.post_id) } : {}),
+                playlistItemId,
+                playlistError,
+                uploadedAt: new Date().toISOString()
+              });
+            };
             try {
               upload = await this.youtubeUploadFn({
                 wpUrl: this.wpUrl,
                 workerSecret: this.workerSecret,
                 filePath: mediaPath || '',
-                meta: job.youtube,
-                fetchFn: this.fetchFn
+                meta: ytMeta,
+                fetchFn: this.fetchFn,
+                // Noted as soon as YouTube has the video, before the playlist insert.
+                onUploaded: (videoId, url) => remember(videoId, url)
               });
             } finally {
               if (mediaPath) {
@@ -587,14 +620,7 @@ export class PressHubPoller {
               // Remember the video before telling WordPress, so a lost report never
               // leads to a second upload when the job is handed out again.
               try {
-                recordUpload(this.uploadLogDir(), this.wpUrl, job.id, {
-                  videoId: upload.videoId,
-                  url: upload.url || '',
-                  kind: job.youtube.kind,
-                  playlistItemId: upload.playlistItemId,
-                  playlistError: upload.playlistError,
-                  uploadedAt: new Date().toISOString()
-                });
+                remember(upload.videoId, upload.url || '', upload.playlistItemId, upload.playlistError);
               } catch (err: any) {
                 WorkerLogger.warn('Poller', `${jobTag} Could not save the local upload record: ${err.message}`);
               }
@@ -603,6 +629,9 @@ export class PressHubPoller {
             } else {
               const error = upload.error || 'YouTube upload failed';
               WorkerLogger.warn('Poller', `${jobTag} YouTube upload failed: ${error}`);
+              if (upload.reason) {
+                youtubeHalt = { reason: upload.reason, error };
+              }
               await this.reportComplete({
                 job_id: job.id,
                 status: 'failed',

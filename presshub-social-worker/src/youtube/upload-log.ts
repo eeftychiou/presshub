@@ -11,6 +11,8 @@ export interface UploadRecord {
   videoId: string;
   url: string;
   kind: string;
+  /** WordPress post of the job; a record for another post (job IDs reused) is ignored. */
+  postId?: string;
   playlistItemId?: string;
   playlistError?: string;
   uploadedAt: string;
@@ -37,9 +39,16 @@ function readAll(dir: string): Record<string, UploadRecord> {
   }
 }
 
-export function findUpload(dir: string, wpUrl: string, jobId: number | string): UploadRecord | null {
+export function findUpload(dir: string, wpUrl: string, jobId: number | string, postId?: number | string): UploadRecord | null {
   const rec = readAll(dir)[key(wpUrl, jobId)];
-  return rec && typeof rec.videoId === 'string' && rec.videoId !== '' ? rec : null;
+  if (!rec || typeof rec.videoId !== 'string' || rec.videoId === '') {
+    return null;
+  }
+  const want = postId === undefined || postId === null ? '' : String(postId);
+  if (rec.postId && want !== '' && rec.postId !== want) {
+    return null;
+  }
+  return rec;
 }
 
 export function recordUpload(dir: string, wpUrl: string, jobId: number | string, rec: UploadRecord): void {
@@ -50,7 +59,8 @@ export function recordUpload(dir: string, wpUrl: string, jobId: number | string,
   }
   all[key(wpUrl, jobId)] = rec;
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = `${filePath(dir)}.tmp`;
+  // A name of its own, so two workers sharing the folder never write the same temp file.
+  const tmp = `${filePath(dir)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(all, null, 2), 'utf8');
   fs.renameSync(tmp, filePath(dir));
 }

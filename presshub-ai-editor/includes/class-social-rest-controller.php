@@ -475,7 +475,9 @@ class PressHub_Social_REST_Controller {
         if ( ! class_exists( 'PressHub_Social_YouTube' ) ) {
             return new WP_Error( 'youtube_unavailable', 'PressHub_Social_YouTube is not loaded.', [ 'status' => 500 ] );
         }
-        $token = PressHub_Social_YouTube::access_token();
+        // refresh: YouTube refused the cached token, so get a new one from Google.
+        $fresh = ! empty( self::get_param( $request, 'refresh', false ) );
+        $token = PressHub_Social_YouTube::access_token( false, $fresh );
         if ( is_wp_error( $token ) ) {
             PressHub_Social_Logger::error( 'YouTube access token for the worker failed: ' . $token->get_error_message(), [ 'error_code' => $token->get_error_code() ] );
             return new WP_Error( $token->get_error_code(), $token->get_error_message(), [ 'status' => 409 ] );

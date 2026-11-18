@@ -2502,6 +2502,13 @@ assert_equals( 'ya29.FRESH', $tok['access_token'] ?? '', 'A token about to expir
 $rest_tok = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
 assert_equals( 'ya29.FRESH', is_array( $rest_tok ) ? ( $rest_tok['access_token'] ?? '' ) : '', 'The worker gets an access token from the token route' );
 assert_false( str_contains( wp_json_encode( $rest_tok ), '1//REFRESH' ) || str_contains( wp_json_encode( $rest_tok ), 'GOCSPX' ), 'The token route never returns the refresh token or client secret' );
+set_transient( PressHub_Social_YouTube::ACCESS_TOKEN_TRANSIENT, [ 'access_token' => 'ya29.CACHED', 'expires_at' => time() + 3000 ], 3000 );
+$rest_cached = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
+assert_equals( 'ya29.CACHED', is_array( $rest_cached ) ? ( $rest_cached['access_token'] ?? '' ) : '', 'The token route hands out the cached token while it has time left' );
+$fresh_req = new WP_REST_Request( 'POST', '/worker/youtube/token' );
+$fresh_req->set_param( 'refresh', true );
+$rest_fresh = PressHub_Social_REST_Controller::handle_youtube_token( $fresh_req );
+assert_equals( 'ya29.FRESH', is_array( $rest_fresh ) ? ( $rest_fresh['access_token'] ?? '' ) : '', 'refresh=true (YouTube refused the cached token) gets a new one from Google' );
 
 // Shorts: the same shorts as TikTok, as YouTube jobs.
 PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', true );
@@ -2594,6 +2601,8 @@ assert_false( PressHub_Social_YouTube::is_connected(), 'After Google refuses the
 assert_true( '' !== PressHub_Social_YouTube::reconnect_reason(), 'The refusal is kept so Connections can say why' );
 assert_equals( 'youtube_not_connected', ( fn( $t ) => is_wp_error( $t ) ? $t->get_error_code() : '' )( PressHub_Social_YouTube::access_token() ), 'No new refresh is tried until Connect YouTube again' );
 assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'After a refused sign-in no YouTube job is handed out' );
+assert_true( PressHub_Social_YouTube::is_set_up(), 'A refused sign-in is still set up (client and refresh token stored)' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' ), 'While Google refuses the sign-in, new posts are still queued for YouTube and wait' );
 $tok_route = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
 assert_true( is_wp_error( $tok_route ) && 409 === ( $tok_route->get_error_data()['status'] ?? 0 ) && 'youtube_not_connected' === $tok_route->get_error_code(), 'The token route answers 409 with the reason' );
 assert_false( str_contains( wp_json_encode( $tok_route->get_error_message() ), 'REVOKED' ), 'The token route error carries no token' );
@@ -2692,6 +2701,9 @@ update_option( 'presshub_social_worker_mode', 'pull' );
 $yt_host = function_exists( 'home_url' ) && wp_parse_url( home_url(), PHP_URL_HOST ) ? preg_replace( '/^www\./i', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) : 'presshub.cy';
 assert_equals( 'Ολόκληρο το άρθρο στο ' . $yt_host . '.', PressHub_Social_YouTube::youtube_cta( 'Ολόκληρο το άρθρο στο PressHub, λινκ στο bio.' ), 'TikTok\'s "link in bio" names the site on YouTube' );
 assert_equals( 'Ολόκληρη η ενημέρωση στο ' . $yt_host, PressHub_Social_YouTube::youtube_cta( 'Ολόκληρη η ενημέρωση: λινκ στο bio' ), 'The podcast short caption line too' );
+assert_equals( 'Ολόκληρο το άρθρο στο ' . $yt_host . '.', PressHub_Social_YouTube::youtube_cta( 'Ολόκληρο το άρθρο στο PressHub.cy, το λινκ στο bio.' ), '"στο PressHub.cy, το λινκ στο bio" names the site once' );
+assert_equals( 'Δείτε στο ' . $yt_host . ' τώρα', PressHub_Social_YouTube::youtube_cta( 'Δείτε τον σύνδεσμο στο βιογραφικό τώρα' ), '"σύνδεσμο στο βιογραφικό" too' );
+assert_equals( 'Η βιογραφία του', PressHub_Social_YouTube::youtube_cta( 'Η βιογραφία του' ), 'Other text is left alone' );
 assert_equals( 'Τιμές 3 5 ευρώ', PressHub_Social_YouTube::clean_title( 'Τιμές 3 < 5 ευρώ' ), 'A bare < does not cut the rest of the title' );
 assert_equals( [ 'κύπρος' ], PressHub_Social_YouTube::tags_from( 'Δείτε https://example.com/a#section και #κύπρος' ), 'A #anchor in a link is not a tag' );
 $yt_cta = PressHub_Social_YouTube::attach_upload( [ 'id' => 9, 'post_id' => 890, 'platform' => 'youtube', 'post_copy' => 'Λεζάντα. Ολόκληρη η ενημέρωση: λινκ στο bio #κύπρος', 'video_title' => 'H', 'post_url' => 'https://example.com/?p=890', 'tiktok_short' => [ 'index' => 0 ] ] );

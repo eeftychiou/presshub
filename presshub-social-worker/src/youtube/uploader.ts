@@ -62,6 +62,11 @@ export interface YouTubeUploadOptions {
   chunkTimeoutMs?: number;
   /** Timeout of the small JSON calls (ms). */
   requestTimeoutMs?: number;
+  /**
+   * Called as soon as YouTube has the video, before the playlist insert, so the caller
+   * can remember it even if the worker stops before the upload call returns.
+   */
+  onUploaded?: (videoId: string, url: string) => void;
 }
 
 const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos';
@@ -89,7 +94,7 @@ export class YouTubeAuthError extends Error {}
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Asks WordPress for an access token of the connected YouTube channel. */
-export async function fetchYouTubeToken(wpUrl: string, workerSecret: string, fetchFn: typeof fetch = globalThis.fetch, timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS): Promise<string> {
+export async function fetchYouTubeToken(wpUrl: string, workerSecret: string, fetchFn: typeof fetch = globalThis.fetch, timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS, fresh: boolean = false): Promise<string> {
   const url = `${wpUrl.replace(/\/+$/, '')}/wp-json/presshub-social/v1/worker/youtube/token`;
   const res = await fetchFn(url, withTimeout({
     method: 'POST',
@@ -98,7 +103,8 @@ export async function fetchYouTubeToken(wpUrl: string, workerSecret: string, fet
       'X-PressHub-Secret': workerSecret,
       Authorization: `Bearer ${workerSecret}`
     },
-    body: '{}'
+    // fresh: YouTube refused the cached token, so WordPress gets a new one from Google.
+    body: fresh ? '{"refresh":true}' : '{}'
   }, timeoutMs));
   let body: any = null;
   try {
@@ -141,7 +147,7 @@ export function buildVideoResource(meta: YouTubeUploadMeta): Record<string, any>
 export function stopReason(status: number, body: any): 'quota' | 'auth' | undefined {
   const err = body && body.error;
   const reason = err && Array.isArray(err.errors) && err.errors[0] ? String(err.errors[0].reason || '') : '';
-  if (reason === 'quotaExceeded' || reason === 'uploadLimitExceeded' || reason === 'dailyLimitExceeded' || (reason === 'rateLimitExceeded' && status === 403)) {
+  if (reason === 'quotaExceeded' || reason === 'uploadLimitExceeded' || reason === 'dailyLimitExceeded') {
     return 'quota';
   }
   if (status === 401) {
@@ -163,6 +169,19 @@ function apiError(status: number, body: any): string {
 /** A 5xx, 408 or 429 is worth another try; any other 4xx is a refusal. */
 function isRetryable(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
+}
+
+/**
+ * "Too many requests for now" (a 429, or a 403 with rateLimitExceeded): worth another
+ * try after a short wait, unlike the daily quota.
+ */
+export function isRateLimited(status: number, body: any): boolean {
+  const err = body && body.error;
+  const reason = err && Array.isArray(err.errors) && err.errors[0] ? String(err.errors[0].reason || '') : '';
+  if (reason === 'quotaExceeded' || reason === 'uploadLimitExceeded' || reason === 'dailyLimitExceeded') {
+    return false;
+  }
+  return status === 429 || reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded';
 }
 
 async function readJson(res: Response): Promise<any> {
@@ -232,6 +251,7 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
   // other refusal fails at once.
   const startedAt = Date.now();
   let sessionUrl = '';
+  let freshTokenTried = false;
   for (let attempt = 1; ; attempt++) {
     let initRes: Response | null = null;
     let failure = '';
@@ -256,11 +276,23 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
       }
       break;
     }
+    if (initRes && initRes.status === 401 && !freshTokenTried) {
+      // The cached token may have been revoked or expired early: ask WordPress for a
+      // new one once before treating the sign-in as refused.
+      freshTokenTried = true;
+      try {
+        token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn, requestTimeout, true);
+      } catch (err: any) {
+        return { success: false, error: err.message, ...(err instanceof YouTubeAuthError ? { reason: 'auth' as const } : {}) };
+      }
+      WorkerLogger.warn('YouTube', 'YouTube refused the access token (HTTP 401); trying once more with a new one.');
+      continue;
+    }
     if (initRes && (!isRetryable(initRes.status) || initRes.status === 429)) {
       const body = await readJson(initRes);
       const reason = stopReason(initRes.status, body);
-      if (isRetryable(initRes.status) && !reason) {
-        // A plain 429 (too many requests) is worth another try.
+      if (!reason && isRateLimited(initRes.status, body)) {
+        // Too many requests for now: worth another try after a wait.
       } else {
         const error = apiError(initRes.status, body);
         WorkerLogger.error('YouTube', `Upload session refused: ${error}`, { http_code: initRes.status });
@@ -316,10 +348,13 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
       res = null;
     } else if (res && !isRetryable(res.status)) {
       const body = await readJson(res);
-      const error = apiError(res.status, body);
       const reason = stopReason(res.status, body);
-      WorkerLogger.error('YouTube', `Upload refused: ${error}`, { http_code: res.status });
-      return { success: false, error: `YouTube refused the upload: ${error}`, ...(reason ? { reason } : {}) };
+      if (reason || !isRateLimited(res.status, body)) {
+        const error = apiError(res.status, body);
+        WorkerLogger.error('YouTube', `Upload refused: ${error}`, { http_code: res.status });
+        return { success: false, error: `YouTube refused the upload: ${error}`, ...(reason ? { reason } : {}) };
+      }
+      // Too many requests for now: retried below after a wait.
     }
 
     tries++;
@@ -353,6 +388,13 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
   const url = meta.kind === 'short' ? `https://www.youtube.com/shorts/${videoId}` : `https://www.youtube.com/watch?v=${videoId}`;
   WorkerLogger.info('YouTube', `Uploaded ${meta.kind} ${url} in ${Math.round((Date.now() - startedAt) / 1000)}s.`);
   const result: YouTubeUploadResult = { success: true, videoId, url };
+  if (options.onUploaded) {
+    try {
+      options.onUploaded(videoId, url);
+    } catch (err: any) {
+      WorkerLogger.warn('YouTube', `Could not note the uploaded video ${videoId}: ${err.message}`);
+    }
+  }
 
   // 3. An episode goes into the podcast playlist.
   if (meta.kind === 'episode' && meta.playlist_id) {

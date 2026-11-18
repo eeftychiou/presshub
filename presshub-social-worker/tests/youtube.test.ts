@@ -9,6 +9,7 @@ import {
   YouTubeUploadMeta
 } from '../src/youtube/uploader';
 import { findUpload, recordUpload } from '../src/youtube/upload-log';
+import { isRateLimited } from '../src/youtube/uploader';
 import { siteEndCardLine, buildAssScript } from '../src/media/short-video';
 import { PressHubPoller, ClaimedJob } from '../src/poller';
 
@@ -329,6 +330,79 @@ describe('YouTube uploader', () => {
     expect(playlistAuth).toBe('Bearer SECOND');
   });
 
+  test('a 401 on the upload session gets one fresh token before it counts as a refused sign-in', async () => {
+    const file = videoFile(1000);
+    const tokenBodies: string[] = [];
+    let inits = 0;
+    const fetchFn: any = async (url: string, init: any) => {
+      if (url.includes('/worker/youtube/token')) {
+        tokenBodies.push(init.body);
+        return response(200, { access_token: tokenBodies.length === 1 ? 'OLD' : 'NEW' });
+      }
+      if (url.includes('uploadType=resumable')) {
+        inits++;
+        return init.headers.Authorization === 'Bearer NEW'
+          ? response(200, {}, { Location: 'https://upload.test/s' })
+          : response(401, { error: { message: 'Invalid Credentials', errors: [{ reason: 'authError' }] } });
+      }
+      return response(200, { id: 'V401' });
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, sleepFn: async () => {} });
+    expect(res).toMatchObject({ success: true, videoId: 'V401' });
+    expect(tokenBodies).toEqual(['{}', '{"refresh":true}']);
+    expect(inits).toBe(2);
+
+    // Still refused with the new token: now it is a sign-in problem.
+    const always401: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      return response(401, { error: { message: 'Invalid Credentials', errors: [{ reason: 'authError' }] } });
+    };
+    const res2 = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn: always401, sleepFn: async () => {} });
+    expect(res2).toMatchObject({ success: false, reason: 'auth' });
+  });
+
+  test('rateLimitExceeded is a short wait and another try, not the daily quota', async () => {
+    expect(stopReason(403, { error: { errors: [{ reason: 'rateLimitExceeded' }] } })).toBeUndefined();
+    expect(isRateLimited(403, { error: { errors: [{ reason: 'rateLimitExceeded' }] } })).toBe(true);
+    expect(isRateLimited(403, { error: { errors: [{ reason: 'quotaExceeded' }] } })).toBe(false);
+    const file = videoFile(1000);
+    let inits = 0;
+    const waits: number[] = [];
+    const fetchFn: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      if (url.includes('uploadType=resumable')) {
+        inits++;
+        return inits === 1
+          ? response(403, { error: { message: 'Rate limit', errors: [{ reason: 'rateLimitExceeded' }] } })
+          : response(200, {}, { Location: 'https://upload.test/s' });
+      }
+      return response(200, { id: 'VRL' });
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, sleepFn: async (ms) => { waits.push(ms); } });
+    expect(res).toMatchObject({ success: true, videoId: 'VRL' });
+    expect(inits).toBe(2);
+    expect(waits).toHaveLength(1);
+  });
+
+  test('onUploaded is called as soon as YouTube has the video, before the playlist insert', async () => {
+    const file = videoFile(1000);
+    const order: string[] = [];
+    const fetchFn: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      if (url.includes('uploadType=resumable')) return response(200, {}, { Location: 'https://upload.test/s' });
+      if (url.includes('/playlistItems')) {
+        order.push('playlist');
+        return response(200, { id: 'PLI' });
+      }
+      return response(200, { id: 'VUP' });
+    };
+    await uploadToYouTube({
+      wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: episodeMeta, fetchFn,
+      onUploaded: (id, url) => order.push(`uploaded:${id}:${url}`)
+    });
+    expect(order).toEqual(['uploaded:VUP:https://www.youtube.com/watch?v=VUP', 'playlist']);
+  });
+
   test('every request has a timeout signal', async () => {
     const file = videoFile(1000);
     const signals: boolean[] = [];
@@ -353,6 +427,15 @@ describe('YouTube upload record and end card', () => {
     expect(findUpload(dir, 'https://b.test', 7)).toBeNull();
   });
 
+  test('a record for another post is ignored (job IDs reused), and no temp file is left', () => {
+    const dir = path.join(TEST_DIR, 'log-post');
+    recordUpload(dir, 'https://a.test', 9, { videoId: 'V9', url: 'u', kind: 'short', postId: '100', uploadedAt: new Date().toISOString() });
+    expect(findUpload(dir, 'https://a.test', 9, 100)?.videoId).toBe('V9');
+    expect(findUpload(dir, 'https://a.test', 9, '101')).toBeNull();
+    expect(findUpload(dir, 'https://a.test', 9)?.videoId).toBe('V9');
+    expect(fs.readdirSync(dir).filter((f) => f.endsWith('.tmp'))).toEqual([]);
+  });
+
   test('the YouTube end card names the site instead of "link in bio"', () => {
     expect(siteEndCardLine('https://www.presshub.cy/')).toBe('Ολόκληρη η ενημέρωση στο presshub.cy');
     const ass = buildAssScript({ hook: 'H', siteName: 'PressHub', chunks: [], totalDuration: 20, endCardLine: siteEndCardLine('https://presshub.cy') });
@@ -368,7 +451,7 @@ describe('Poller: YouTube jobs', () => {
     const uploads: any[] = [];
     const posted: any[] = [];
     const fetchFn: any = async (url: string, init: any) => {
-      if (url.endsWith('/worker/claim')) return response(200, { ok: true, jobs: [job] });
+      if (url.endsWith('/worker/claim')) return response(200, { ok: true, jobs: overrides.jobs || [job] });
       if (url.endsWith('/worker/complete')) {
         reports.push(JSON.parse(init.body));
         if (overrides.failReports && overrides.failReports > 0) {
@@ -400,6 +483,7 @@ describe('Poller: YouTube jobs', () => {
       },
       youtubeUploadFn: async (o: any) => {
         uploads.push(o);
+        if (overrides.uploadFn) return overrides.uploadFn(o);
         return overrides.uploadResult || { success: true, videoId: 'VID', url: 'https://www.youtube.com/watch?v=VID', playlistItemId: 'PLI' };
       },
       reportSleepFn: async () => {}
@@ -497,6 +581,34 @@ describe('Poller: YouTube jobs', () => {
     await again.poller.pollOnce();
     expect(again.uploads).toHaveLength(0);
     expect(again.reports[0]).toMatchObject({ job_id: 49, status: 'published', external_post_id: 'VID' });
+  });
+
+  test('the video is recorded when YouTube has it, so a crash before the playlist insert never uploads it twice', async () => {
+    const job: ClaimedJob = { id: 60, platform: 'youtube', post_id: 960, post_copy: 'x', audio_url: 'https://presshub.test/p.mp3', youtube: { ...episodeMeta } };
+    const crash = makePoller(job, {
+      uploadFn: async (o: any) => {
+        o.onUploaded('VCRASH', 'https://www.youtube.com/watch?v=VCRASH');
+        throw new Error('worker stopped');
+      }
+    });
+    await crash.poller.pollOnce();
+    const again = makePoller(job);
+    await again.poller.pollOnce();
+    expect(again.uploads).toHaveLength(0);
+    expect(again.reports[0]).toMatchObject({ job_id: 60, status: 'published', external_post_id: 'VCRASH' });
+    expect(again.reports[0].metadata.youtube_playlist_error).toContain('playlist');
+  });
+
+  test('after a quota stop the other YouTube jobs of the batch are not rendered', async () => {
+    const mk = (id: number): ClaimedJob => ({ id, platform: 'youtube', post_id: 1000 + id, post_copy: 'x', audio_url: 'https://presshub.test/p.mp3', youtube: { ...episodeMeta } });
+    const jobs = [mk(70), mk(71), mk(72)];
+    const t = makePoller(jobs[0], { jobs, uploadResult: { success: false, error: 'limit', reason: 'quota' } });
+    const stats = await t.poller.pollOnce();
+    expect(stats).toEqual({ claimed: 3, succeeded: 0, failed: 3 });
+    expect(t.uploads).toHaveLength(1);
+    expect(t.reports.map((r) => [r.job_id, r.status, r.metadata?.youtube_error_reason])).toEqual([
+      [70, 'failed', 'quota'], [71, 'failed', 'quota'], [72, 'failed', 'quota']
+    ]);
   });
 
   test('a failed upload is reported as failed with the reason', async () => {

@@ -138,6 +138,15 @@ class PressHub_Social_YouTube {
         return self::has_client() && '' !== self::get_refresh_token() && '' === self::reconnect_reason();
     }
 
+    /**
+     * Whether a channel was connected: an OAuth client and a stored sign-in, even one Google
+     * refuses for now. New posts are queued for YouTube while this holds, so a refused
+     * sign-in holds uploads (is_connected()) without dropping the posts made meanwhile.
+     */
+    public static function is_set_up(): bool {
+        return self::has_client() && '' !== self::get_refresh_token();
+    }
+
     /** Why the stored sign-in must be renewed (Google's refusal), or '' when it is fine. */
     public static function reconnect_reason(): string {
         return function_exists( 'get_option' ) ? trim( (string) get_option( self::NEEDS_RECONNECT_OPTION, '' ) ) : '';
@@ -425,7 +434,7 @@ class PressHub_Social_YouTube {
      *
      * @return array{access_token:string,expires_at:int}|WP_Error
      */
-    public static function access_token( bool $retry_refused = false ) {
+    public static function access_token( bool $retry_refused = false, bool $fresh = false ) {
         if ( ! self::has_client() ) {
             return new WP_Error( 'youtube_no_client', 'YouTube is not set up: the OAuth client ID or secret is empty (Settings → Connections → YouTube).' );
         }
@@ -437,7 +446,7 @@ class PressHub_Social_YouTube {
             return new WP_Error( 'youtube_not_connected', 'Google refused the stored YouTube sign-in (' . self::reconnect_reason() . '): click Connect YouTube in Settings → Connections.' );
         }
 
-        $cached = get_transient( self::ACCESS_TOKEN_TRANSIENT );
+        $cached = $fresh ? null : get_transient( self::ACCESS_TOKEN_TRANSIENT );
         if ( is_array( $cached ) && ! empty( $cached['access_token'] ) && (int) ( $cached['expires_at'] ?? 0 ) > time() + self::TOKEN_MARGIN ) {
             return [ 'access_token' => (string) $cached['access_token'], 'expires_at' => (int) $cached['expires_at'] ];
         }
@@ -793,7 +802,7 @@ class PressHub_Social_YouTube {
     public static function youtube_cta( string $text ): string {
         $host = function_exists( 'home_url' ) ? (string) wp_parse_url( home_url(), PHP_URL_HOST ) : '';
         $host = '' !== $host ? preg_replace( '/^www\./i', '', $host ) : 'presshub.cy';
-        $text = (string) preg_replace( '/(?:\s+στο\s+PressHub)?\s*[:,]?\s*(?:λινκ|link|σύνδεσμος|σύνδεσμο)\s+(?:στο|in)\s+(?:bio|βιογραφικό)\b/iu', ' στο ' . $host, $text );
+        $text = (string) preg_replace( '/(?:\s+στο\s+PressHub(?:\.cy)?)?\s*[:,]?\s*(?:(?:τον|το|ο)\s+)?(?:λινκ|link|σύνδεσμος|σύνδεσμο)\s+(?:στο|in)\s+(?:bio|βιογραφικό)\b/iu', ' στο ' . $host, $text );
         return (string) preg_replace( '/\blink in bio\b/iu', $host, $text );
     }
 
