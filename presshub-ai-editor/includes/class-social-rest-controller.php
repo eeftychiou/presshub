@@ -148,11 +148,14 @@ class PressHub_Social_REST_Controller {
         // Server header fallback
         if ( '' === $provided ) {
             if ( ! empty( $_SERVER['HTTP_X_PRESSHUB_SECRET'] ) ) {
-                $provided = (string) $_SERVER['HTTP_X_PRESSHUB_SECRET'];
+                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- shared secret compared with hash_equals(); sanitising would alter it.
+                $provided = (string) wp_unslash( $_SERVER['HTTP_X_PRESSHUB_SECRET'] );
             } elseif ( ! empty( $_SERVER['HTTP_X_WORKER_SECRET'] ) ) {
-                $provided = (string) $_SERVER['HTTP_X_WORKER_SECRET'];
+                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- shared secret compared with hash_equals(); sanitising would alter it.
+                $provided = (string) wp_unslash( $_SERVER['HTTP_X_WORKER_SECRET'] );
             } elseif ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
-                if ( preg_match( '/Bearer\s+(.+)$/i', (string) $_SERVER['HTTP_AUTHORIZATION'], $matches ) ) {
+                // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- bearer token is matched by regex and compared with hash_equals().
+                if ( preg_match( '/Bearer\s+(.+)$/i', (string) wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ), $matches ) ) {
                     $provided = trim( $matches[1] );
                 }
             }

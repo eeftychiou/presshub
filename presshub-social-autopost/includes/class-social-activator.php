@@ -63,6 +63,7 @@ class PressHub_Social_Activator {
         ) {$charset_collate};";
 
         if ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) ) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $wpdb->query( $sql );
         }
 

@@ -4390,6 +4390,7 @@ class PressHub_AI_Settings_Storage {
     }
 
     public static function sanitize_memory_enabled( $value ): int {
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing -- sanitize callback; the Settings API verifies the nonce before it runs.
         if ( null === $value && empty( $_POST['presshub_ai_memory_enabled_present'] ) && ! empty( $_POST ) ) {
             return self::get_memory_enabled() ? 1 : 0;
         }
@@ -4425,8 +4426,8 @@ class PressHub_AI_Settings_Storage {
         if ( null === $context_daily ) {
             if ( isset( $GLOBALS['presshub_ai_save_post_data']['presshub_ai_memory_daily_days'] ) ) {
                 $daily = self::sanitize_memory_daily_days( $GLOBALS['presshub_ai_save_post_data']['presshub_ai_memory_daily_days'] );
-            } elseif ( isset( $_POST['presshub_ai_memory_daily_days'] ) ) {
-                $daily = self::sanitize_memory_daily_days( $_POST['presshub_ai_memory_daily_days'] );
+            } elseif ( isset( $_POST['presshub_ai_memory_daily_days'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Settings API verifies the nonce before sanitize callbacks run.
+                $daily = self::sanitize_memory_daily_days( sanitize_text_field( wp_unslash( $_POST['presshub_ai_memory_daily_days'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
             }
         }
         if ( ! is_numeric( $value ) ) {

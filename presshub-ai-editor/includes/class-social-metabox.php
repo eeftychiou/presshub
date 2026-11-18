@@ -273,8 +273,7 @@ class PressHub_Social_Metabox {
         // Save selected platforms
         $platforms = [];
         if ( isset( $_POST['presshub_social_platforms'] ) && is_array( $_POST['presshub_social_platforms'] ) ) {
-            foreach ( $_POST['presshub_social_platforms'] as $p ) {
-                $sanitized = sanitize_key( $p );
+            foreach ( array_map( 'sanitize_key', (array) wp_unslash( $_POST['presshub_social_platforms'] ) ) as $sanitized ) {
                 if ( in_array( $sanitized, PressHub_Social_Queue::VALID_PLATFORMS, true ) ) {
                     if ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_ready' ) ) {
                         if ( ! PressHub_Social_Settings_Storage::is_platform_ready( $sanitized ) ) {

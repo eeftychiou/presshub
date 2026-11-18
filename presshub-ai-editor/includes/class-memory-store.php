@@ -138,7 +138,9 @@ class PressHub_AI_Memory_Store {
             dbDelta( $entries_sql );
             dbDelta( $links_sql );
         } elseif ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) ) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $wpdb->query( $entries_sql );
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $wpdb->query( $links_sql );
         }
 
@@ -447,6 +449,7 @@ class PressHub_AI_Memory_Store {
         // Check if an existing entry exists for (scope, period_start, edition)
         $existing = $wpdb->get_row(
             $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "SELECT * FROM {$entries_table} WHERE scope = %s AND period_start = %s AND edition = %s LIMIT 1",
                 $scope,
                 $period_start,
@@ -816,6 +819,7 @@ class PressHub_AI_Memory_Store {
         global $wpdb;
         $table = self::get_entries_table();
         $row = $wpdb->get_row(
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
             $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d LIMIT 1", $entry_id ),
             ARRAY_A
         );
@@ -834,6 +838,7 @@ class PressHub_AI_Memory_Store {
         $table = self::get_entries_table();
         $row   = $wpdb->get_row(
             $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "SELECT * FROM {$table} WHERE scope = 'daily' AND period_start = %s AND edition = %s LIMIT 1",
                 $date,
                 $edition
@@ -1064,6 +1069,7 @@ class PressHub_AI_Memory_Store {
         }
 
         $sql = "SELECT * FROM {$table} WHERE " . implode( ' AND ', $where ) . ' ORDER BY period_start ASC, edition ASC, id ASC';
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $rows = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ), ARRAY_A );
 
         return is_array( $rows ) ? $rows : [];
@@ -1080,6 +1086,7 @@ class PressHub_AI_Memory_Store {
         $table = self::get_entries_table();
         $row = $wpdb->get_row(
             $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "SELECT * FROM {$table} WHERE source_post_id = %d AND scope = 'daily' LIMIT 1",
                 $post_id
             ),
@@ -1099,6 +1106,7 @@ class PressHub_AI_Memory_Store {
         $table = self::get_entries_table();
         $row   = $wpdb->get_row(
             $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "SELECT * FROM {$table} WHERE scope = 'weekly' AND period_start = %s AND edition = '' LIMIT 1",
                 $week_start
             ),
@@ -1265,6 +1273,7 @@ class PressHub_AI_Memory_Store {
                 INNER JOIN {$links_table} l ON r.id = l.rollup_id
                 WHERE l.digest_id = %d AND r.scope = 'weekly' AND r.status = 'active'";
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $rows = $wpdb->get_results( $wpdb->prepare( $sql, $digest_id ), ARRAY_A );
         if ( empty( $rows ) ) {
             return 0;
@@ -1318,6 +1327,7 @@ class PressHub_AI_Memory_Store {
         // Check if there are daily digest entries pointing to this post
         $rows = $wpdb->get_results(
             $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "SELECT id FROM {$entries_table} WHERE source_post_id = %d AND scope = 'daily'",
                 $post_id
             ),
@@ -1372,6 +1382,7 @@ class PressHub_AI_Memory_Store {
         // Find entries where period_end < cutoff_date
         $rows = $wpdb->get_results(
             $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "SELECT id FROM {$entries_table} WHERE period_end < %s",
                 $cutoff_date
             ),

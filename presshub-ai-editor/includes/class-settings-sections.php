@@ -286,7 +286,7 @@ class PressHub_Settings_Sections {
     /** The section named in the request, or the first one the user can open. */
     public static function current(): string {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- navigation only.
-        $slug = isset( $_GET['section'] ) && is_scalar( $_GET['section'] ) ? strtolower( (string) $_GET['section'] ) : '';
+        $slug = isset( $_GET['section'] ) && is_scalar( $_GET['section'] ) ? strtolower( sanitize_key( wp_unslash( (string) $_GET['section'] ) ) ) : '';
         $slug = preg_replace( '/[^a-z0-9\-]/', '', $slug );
         if ( '' !== $slug && self::can_view( $slug ) ) {
             return $slug;
