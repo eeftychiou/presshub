@@ -1,0 +1,5 @@
+{excerpt}
+
+Read the full story at {site_name}: {url}
+
+{hashtags}

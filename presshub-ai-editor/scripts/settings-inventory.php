@@ -94,7 +94,7 @@ function presshub_settings_inventory_markdown(): string {
                 $notes[] = '**unused**';
             }
             if ( ! empty( $e['depends_on'] ) ) {
-                $notes[] = 'needs `' . $e['depends_on'] . '` on';
+                $notes[] = 'needs `' . implode( '` or `', (array) $e['depends_on'] ) . '` on';
             }
             if ( ! empty( $e['aliases'] ) && is_array( $e['aliases'] ) ) {
                 $notes[] = 'was: ' . str_replace( [ '|', "\n" ], [ '\\|', ' ' ], implode( '; ', $e['aliases'] ) );

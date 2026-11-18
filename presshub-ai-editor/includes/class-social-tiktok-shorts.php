@@ -50,6 +50,10 @@
  * article post (fallback_to_classic()) instead of failing, so the article is still posted.
  * A new podcast never cancels article shorts.
  *
+ * The same shorts go to Instagram Reels and YouTube Shorts (`PLATFORMS`). A YouTube short
+ * is uploaded by the worker with the YouTube Data API; a failed YouTube article short fails
+ * instead of falling back to a normal post, since YouTube takes only videos.
+ *
  * Zero-Silent-Fallback: an empty prompt, an invalid plan or a failed synthesis fails the
  * job; a short job is never posted as the full podcast or with its placeholder copy.
  *
@@ -202,9 +206,13 @@ class PressHub_Social_TikTok_Shorts {
      * but an unsupported engine, the full podcast is posted and a WARNING says why.
      */
     public static function should_split( int $post_id, string $engine, string $platform = 'tiktok' ): bool {
-        $enabled = 'instagram' === $platform
-            ? PressHub_Social_Settings_Storage::get_instagram_shorts_enabled()
-            : PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
+        if ( 'instagram' === $platform ) {
+            $enabled = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
+        } elseif ( 'youtube' === $platform ) {
+            $enabled = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+        } else {
+            $enabled = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
+        }
         if ( ! $enabled ) {
             return false;
         }
@@ -224,7 +232,7 @@ class PressHub_Social_TikTok_Shorts {
                 PressHub_Social_Logger::warning( sprintf(
                     'Article Shorts are on but post #%d goes to %s the classic way: shorts need the automation engine in Pull Mode (engine: %s, worker mode: %s).',
                     $post_id,
-                    'instagram' === $platform ? 'Instagram' : 'TikTok',
+                    self::platform_label( $platform ),
                     $engine,
                     PressHub_Social_Settings_Storage::get_worker_mode()
                 ) );
@@ -235,7 +243,7 @@ class PressHub_Social_TikTok_Shorts {
         if ( ! self::engine_supported( $engine ) ) {
             PressHub_Social_Logger::warning( sprintf(
                 '%s shorts are enabled but post #%d is posted as the full podcast: shorts need the automation engine in Pull Mode (engine: %s, worker mode: %s).',
-                'instagram' === $platform ? 'Instagram' : 'TikTok',
+                self::platform_label( $platform ),
                 $post_id,
                 $engine,
                 PressHub_Social_Settings_Storage::get_worker_mode()
@@ -268,7 +276,7 @@ class PressHub_Social_TikTok_Shorts {
         if ( ! $on || $post_id <= 0 ) {
             return [];
         }
-        $label     = 'instagram' === $platform ? 'Instagram Reel' : 'TikTok';
+        $label     = 'instagram' === $platform ? 'Instagram Reel' : self::platform_label( $platform );
         $cancelled = [];
         foreach ( PressHub_Social_Queue::query_jobs( [ 'status' => 'pending', 'platform' => $platform, 'limit' => 100 ] ) as $job ) {
             $job_post = (int) ( $job['post_id'] ?? 0 );
@@ -387,8 +395,17 @@ class PressHub_Social_TikTok_Shorts {
         wp_schedule_single_event( time() + max( 0, $delay ), self::PREPARE_HOOK, $args );
     }
 
+    /** Platforms that get the shorts. */
+    public const PLATFORMS = [ 'tiktok', 'instagram', 'youtube' ];
+
+    /** Name of a shorts platform for log lines. */
+    public static function platform_label( string $platform ): string {
+        $labels = [ 'tiktok' => 'TikTok', 'instagram' => 'Instagram', 'youtube' => 'YouTube' ];
+        return $labels[ $platform ] ?? ucfirst( $platform );
+    }
+
     public static function is_short_job( array $job ): bool {
-        if ( ! in_array( $job['platform'] ?? '', [ 'tiktok', 'instagram' ], true ) ) {
+        if ( ! in_array( $job['platform'] ?? '', self::PLATFORMS, true ) ) {
             return false;
         }
         $meta = self::decode_metadata( $job['metadata'] ?? null );
@@ -664,7 +681,8 @@ class PressHub_Social_TikTok_Shorts {
             foreach ( $failures as [ $job, $error ] ) {
                 $job_id = (int) ( $job['id'] ?? 0 );
                 // An article is still posted, the classic way, when its short cannot be made.
-                if ( self::is_article_job( $job ) && ! self::is_test_job( $job ) && self::fallback_to_classic( $job, $error, $attempts ) ) {
+                // YouTube has no classic post: only videos go there, so its short fails.
+                if ( self::is_article_job( $job ) && ! self::is_test_job( $job ) && 'youtube' !== ( $job['platform'] ?? '' ) && self::fallback_to_classic( $job, $error, $attempts ) ) {
                     continue;
                 }
                 $err    = self::fail( $job_id, $error );
@@ -737,7 +755,7 @@ class PressHub_Social_TikTok_Shorts {
         }
         PressHub_Social_Logger::warning( sprintf(
             '%s article short job #%d (post #%d) could not be prepared after %d runs (%s); it falls back to the classic article post.',
-            'instagram' === $platform ? 'Instagram' : 'TikTok',
+            self::platform_label( $platform ),
             $job_id,
             $post_id,
             $attempts,
@@ -772,7 +790,7 @@ class PressHub_Social_TikTok_Shorts {
         $script    = $article ? self::article_text( $post_id ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
-        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() );
+        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
@@ -877,6 +895,11 @@ class PressHub_Social_TikTok_Shorts {
             $topic   = trim( (string) ( $item['topic'] ?? '' ) );
             $hook    = trim( (string) ( $item['hook'] ?? '' ) );
             $script  = trim( (string) ( $item['script'] ?? '' ) );
+            // The audio is shared with YouTube Shorts, where "link in bio" means nothing:
+            // the closing line then names the site instead (also fine on TikTok).
+            if ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() ) {
+                $script = PressHub_Social_YouTube::youtube_cta( $script );
+            }
             $caption = trim( (string) preg_replace( '/[ \t]*\b(?:https?:\/\/|www\.)\S+/iu', '', (string) ( $item['caption'] ?? '' ) ) );
             if ( '' === $hook || '' === $script || '' === $caption ) {
                 return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'short %d is missing its hook, script or caption.', $i + 1 ) );

@@ -370,12 +370,18 @@
         if (e.section !== section || !e.depends_on) {
             return;
         }
-        var parents = controlsFor(e.depends_on);
+        // depends_on is one switch or a list of switches (any one on turns it on).
+        var parents = [];
+        $.each([].concat(e.depends_on), function (_, key) {
+            var found = controlsFor(key);
+            if (found.length) {
+                parents.push(found[0]);
+            }
+        });
         var mine = controlsFor(e.key);
         if (!parents.length || !mine.length) {
             return;
         }
-        var parent = parents[0];
         var reasonId = 'presshub-applies-' + e.key;
         var $reason = $('<p class="description presshub-applies-reason"></p>').attr('id', reasonId)
             .text((t.depends_reason || 'Used only when "%s" is on.').replace('%s', e.depends_label || e.depends_on));
@@ -384,7 +390,7 @@
         $anchor.after($reason);
 
         function apply() {
-            var on = switchIsOn(parent);
+            var on = parents.some(switchIsOn);
             $.each(mine, function (_, el) {
                 // Disabled fields are still sent on Save (admin.js reads every field).
                 el.disabled = !on;
@@ -401,7 +407,7 @@
             });
             $reason.prop('hidden', on);
         }
-        $(parent).on('change input', apply);
+        $(parents).on('change input', apply);
         apply();
     });
 
