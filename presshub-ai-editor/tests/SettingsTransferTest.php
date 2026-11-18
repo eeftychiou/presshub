@@ -68,7 +68,7 @@ class SettingsTransferTest {
             'presshub_ai_api_key'                 => 'AIzaSyEXAMPLEKEY000000000000000003kQ',
             'presshub_ai_github_token'            => 'ghp_EXAMPLETOKEN00000000000000000091',
             'presshub_social_meta_access_token'   => 'EAAGexampleMetaToken000000000000',
-            'presshub_social_github_token'        => 'ghp_OLDSOCIALTOKEN0000000000000042',
+            'presshub_social_twitter_bearer_token' => 'AAAAAAAAAAAAAAAAAAAAAexampleBearer0042',
         ];
         foreach ( $secret_values as $k => $v ) {
             $GLOBALS['OPTIONS_STORE'][ $k ] = $v;
@@ -156,8 +156,13 @@ class SettingsTransferTest {
                 $failures[] = "{$k} should be listed under Scheduled for removal.";
             }
         }
-        if ( false !== strpos( $html, $secret_values['presshub_social_github_token'] ) ) {
-            $failures[] = 'The removal list must mask the saved token.';
+        if ( false !== strpos( $html, $secret_values['presshub_social_twitter_bearer_token'] ) ) {
+            $failures[] = 'Settings must mask a saved token.';
+        }
+        // #237 removed everything that was on the list.
+        $removal = substr( $adv, (int) strpos( $adv, 'id="presshub-scheduled-for-removal"' ), 1200 );
+        if ( false === strpos( $removal, 'None.' ) ) {
+            $failures[] = 'Scheduled for removal should say None. after the clean-up release.';
         }
         if ( false === strpos( $adv, 'action=' . PressHub_Settings_Transfer::EXPORT_ACTION ) || false === strpos( $html, 'id="presshub-settings-import-form"' ) ) {
             $failures[] = 'Diagnostics should offer Export and Import.';
@@ -173,9 +178,9 @@ class SettingsTransferTest {
                 }
             }
         }
-        foreach ( array_keys( PressHub_Settings_Registry::unused() ) as $k ) {
+        foreach ( PressHub_Settings_Cleanup::removed_keys() as $k ) {
             if ( in_array( $k, $social_fields, true ) ) {
-                $failures[] = "{$k} is unused and should no longer be a field on its Social section.";
+                $failures[] = "{$k} was removed and should no longer be a field on its Social section.";
             }
         }
         if ( ! in_array( 'presshub_social_twitter_access_token', $social_fields, true ) ) {

@@ -121,13 +121,17 @@ class PressHub_Admin_Menu {
         );
     }
 
-    /** Usage & logs: today's Token & Usage Logs dashboard and the settings audit log. */
+    /** Usage & logs: the settings clean-up report (#237), today's Token & Usage Logs dashboard and the settings audit log. */
     public static function render_usage_page(): void {
         if ( ! PressHub_Capabilities::current_user_can_manage() ) {
             wp_die( esc_html__( 'You do not have permission to view PressHub usage and logs.', 'presshub-ai-editor' ) );
         }
         echo '<div class="wrap presshub-ai-settings-wrap presshub-usage-logs-wrap" id="presshub-usage-logs-page">';
         echo '<h1>' . esc_html( self::page_title( __( 'Usage & logs', 'presshub-ai-editor' ) ) ) . '</h1>';
+        // #237: the settings clean-up report, once a clean-up has run.
+        if ( class_exists( 'PressHub_Settings_Cleanup' ) ) {
+            PressHub_Settings_Cleanup::render_report();
+        }
         ( new PressHub_AI_Settings_Render() )->render_token_logs_tab();
         echo '</div>';
     }

@@ -351,6 +351,8 @@ All code contributions must strictly adhere to WordPress security best practices
 > **Secrets and connections (#247)**: a new key, token or password lives in **Settings → Connections** (`PressHub_Settings_Sections::KEY_SECTIONS` if its tab is elsewhere), renders with `PressHub_Secret_Field::render()` (never print the saved value; empty keeps it) and keeps a Remove box when clearing it is safe. A new connection test records its result with `PressHub_Connection_Status::record()` and returns `render_pill()` so the page can update; loading Connections must never call the remote service (`ConnectionsTest` mocks the HTTP API to fail). Anything that stops PressHub from working belongs in `PressHub_Setup_Check::problems()` with a link to its fix.
 >
 > **AI models (#236)**: a new AI task is one row in `PressHub_Model_Tasks::rows()` (its provider, model and parameter options, the module it resolves through, the kind of model it needs, and the feature that shows its read-only "Model: …" line). Do not add provider or model fields to a feature section; call `PressHub_Model_Tasks::feature_line()` there. A new model goes in `PressHub_Model_Catalog::MODELS` with its kind.
+>
+> **Removing a setting (#237)**: list it in the registry as `status => unused` first (it shows under Diagnostics → Scheduled for removal). When it goes, delete its registration, registry entry, fields and readers in one change, add it to `PressHub_Settings_Cleanup::REMOVED` with a report group, and bump `PressHub_Settings_Cleanup::VERSION` so the upgrade saves a copy and deletes the row. Settings API fields are only for the sections printed by `render_section_with_fields()`; other sections print their own rows.
 
 ### Rationale
 

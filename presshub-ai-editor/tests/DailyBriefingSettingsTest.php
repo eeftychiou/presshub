@@ -42,14 +42,12 @@ class DailyBriefingSettingsTest
         $settings = new PressHub_AI_Settings();
         $settings->register_settings();
 
-        $sections    = $GLOBALS['SECTIONS']['presshub-ai'] ?? [];
-        $section_ids = array_column( $sections, 'id' );
-        if ( ! in_array( 'presshub_ai_briefing', $section_ids, true ) ) {
-            $failures[] = 'presshub_ai_briefing section must be registered in presshub-ai page; got: ' . implode( ', ', $section_ids );
+        // #237: the Daily briefing section prints its own rows, so it registers
+        // no Settings API fields; its options must still be registered.
+        if ( ! empty( $GLOBALS['FIELDS']['presshub-ai']['presshub_ai_briefing'] ) ) {
+            $failures[] = 'presshub_ai_briefing should register no never-rendered settings fields.';
         }
-
-        $fields = $GLOBALS['FIELDS']['presshub-ai']['presshub_ai_briefing'] ?? [];
-        $field_ids = array_column( $fields, 'id' );
+        $registered    = PressHub_Settings_Registry::registered();
         $expected_fields = [
             'presshub_ai_briefing_sources',
             'presshub_ai_briefing_schedule_enabled',
@@ -82,14 +80,17 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_text_status',
             'presshub_ai_briefing_podcast_status',
             'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt_1',
-            'presshub_ai_briefing_podcast_prompt_2',
-            'presshub_ai_briefing_podcast_prompt_3',
         ];
 
         foreach ( $expected_fields as $expected_field ) {
-            if ( ! in_array( $expected_field, $field_ids, true ) ) {
-                $failures[] = "Field {$expected_field} is missing from presshub_ai_briefing section.";
+            if ( ! isset( $registered[ $expected_field ] ) ) {
+                $failures[] = "Option {$expected_field} should be registered.";
+            }
+        }
+        // #237: replaced by the per-style prompt studio and removed.
+        foreach ( [ 1, 2, 3 ] as $n ) {
+            if ( isset( $registered[ 'presshub_ai_briefing_podcast_prompt_' . $n ] ) ) {
+                $failures[] = "presshub_ai_briefing_podcast_prompt_{$n} was removed and must not be registered.";
             }
         }
 

@@ -161,13 +161,6 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
-    public function render_github_token_field(): void {
-        $this->render_secret_field( [
-            'option' => 'presshub_social_github_token',
-            'desc'   => __( 'Optional GitHub Personal Access Token (PAT) for automatic plugin updates if the repository is private. Automatically inherits the token from PressHub AI Editor if left blank.', 'presshub-social-autopost' ),
-        ] );
-    }
-
     public function render_platform_engine_field( array $args ): void {
         $platform      = $args['platform'] ?? 'twitter';
         $current       = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
@@ -208,72 +201,6 @@ class PressHub_Social_Settings_Render {
     public function render_model_line( array $args = [] ): void {
         require_once __DIR__ . '/class-model-tasks.php';
         echo PressHub_Model_Tasks::feature_line( (string) ( $args['task'] ?? '' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line().
-    }
-
-    public function render_ai_provider_field(): void {
-        $current = PressHub_Social_Settings_Storage::get_ai_provider();
-        ?>
-        <select id="presshub_social_ai_provider" name="presshub_social_ai_provider">
-            <option value="" <?php selected( $current, '' ); ?>><?php echo esc_html__( '— Automatic / First Enabled Provider —', 'presshub-social-autopost' ); ?></option>
-            <?php
-            if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
-                $providers = PressHub_AI_Provider_Store::get_all( true );
-                foreach ( $providers as $prov ) {
-                    $type = $prov['type'] ?? '';
-                    if ( empty( $prov['enabled'] ) || ( empty( $prov['api_key'] ) && 'ollama_local' !== $type ) ) {
-                        continue;
-                    }
-                    $id    = $prov['id'] ?? $type;
-                    $name  = $prov['name'] ?? ucfirst( $id );
-                    $model = $prov['default_model'] ?? '';
-                    $label = $name . ( '' !== $model ? ' (' . $model . ')' : '' );
-                    if ( class_exists( 'PressHub_Social_AI_Copywriter' ) && ! PressHub_Social_AI_Copywriter::is_text_provider( $prov ) ) {
-                        // Speech, image and music models cannot write copy. Only a saved choice
-                        // is still listed, marked, so the operator can see and change it.
-                        if ( $current !== $id ) {
-                            continue;
-                        }
-                        $label .= ' ' . __( '— not a text model, social copy uses the automatic provider', 'presshub-social-autopost' );
-                    }
-                    echo '<option value="' . esc_attr( $id ) . '" ' . selected( $current, $id, false ) . '>' . esc_html( $label ) . '</option>';
-                }
-            }
-            ?>
-        </select>
-        <p class="description"><?php echo esc_html__( 'Select which configured and enabled provider generates social copy, or leave empty to use the active default provider.', 'presshub-social-autopost' ); ?></p>
-        <?php
-    }
-
-    public function render_ai_model_field(): void {
-        $model = PressHub_Social_Settings_Storage::get_ai_model();
-        ?>
-        <input type="text" id="presshub_social_ai_model" name="presshub_social_ai_model" value="<?php echo esc_attr( $model ); ?>" class="regular-text" placeholder="e.g. gpt-4o, claude-3-5-sonnet-20240620" />
-        <p class="description"><?php echo esc_html__( 'Optional model override for social copy. Leave blank to use the provider record default model.', 'presshub-social-autopost' ); ?></p>
-        <?php
-    }
-
-    public function render_ai_temperature_field(): void {
-        $temp = get_option( 'presshub_social_ai_temperature', '0.7' );
-        ?>
-        <input type="number" step="0.01" min="0" max="2" id="presshub_social_ai_temperature" name="presshub_social_ai_temperature" value="<?php echo esc_attr( $temp ); ?>" class="small-text" />
-        <p class="description"><?php echo esc_html__( 'Creativity vs determinism (0.0 to 2.0). Default: 0.7. Leave blank to defer to provider default.', 'presshub-social-autopost' ); ?></p>
-        <?php
-    }
-
-    public function render_ai_max_tokens_field(): void {
-        $tokens = PressHub_Social_Settings_Storage::get_ai_max_tokens();
-        ?>
-        <input type="number" step="1" min="0" max="65536" id="presshub_social_ai_max_tokens" name="presshub_social_ai_max_tokens" value="<?php echo esc_attr( $tokens > 0 ? $tokens : '' ); ?>" class="small-text" placeholder="Default" />
-        <p class="description"><?php echo esc_html__( 'Maximum tokens for generated copy (64 to 65536). Enter 0 or leave empty to defer to provider default.', 'presshub-social-autopost' ); ?></p>
-        <?php
-    }
-
-    public function render_ai_timeout_field(): void {
-        $timeout = PressHub_Social_Settings_Storage::get_ai_timeout();
-        ?>
-        <input type="number" step="1" min="0" max="600" id="presshub_social_ai_timeout" name="presshub_social_ai_timeout" value="<?php echo esc_attr( $timeout > 0 ? $timeout : '' ); ?>" class="small-text" placeholder="Default" />
-        <p class="description"><?php echo esc_html__( 'Timeout in seconds for AI copy generation requests (10 to 600). Enter 0 or leave empty to defer to provider default.', 'presshub-social-autopost' ); ?></p>
-        <?php
     }
 
     // ------------------------------------------------------------------

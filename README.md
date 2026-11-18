@@ -241,6 +241,7 @@ Open **PressHub → Settings** (`admin.php?page=presshub-ai&section=<slug>`). Th
 - **Social publishing**: platforms, post copy and its prompts, images and video (including TikTok narration), Shorts, the queue.
 - **Social listening**: account monitoring and the Trending in Cyprus roundup.
 - **Site & system**: link previews (OpenGraph), logging and retention (log level, debug dumps, generation records and other retention periods), rate limits, diagnostics, and settings export and import.
+- **Clean-up (2.45.0)**: unused settings (a second GitHub token, three X OAuth1 keys and the old podcast prompts 1–3) are deleted on upgrade after a copy of all settings is saved; the report and the copy are on PressHub → Usage & logs.
 
 Old links (`?tab=…` of the former AI and Social settings pages) redirect to the section that holds the tab.
 

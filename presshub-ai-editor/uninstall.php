@@ -129,6 +129,12 @@ $presshub_ai_options = [
     'presshub_ai_policy_candidates',
     'presshub_ai_policy_alerts',
     'presshub_ai_policy_draft_state',
+    // Settings clean-up (#237): its bookkeeping and the pre-clean-up copy.
+    'presshub_settings_cleanup_version',
+    'presshub_settings_cleanup_report',
+    'presshub_settings_cleanup_export',
+    'presshub_settings_cleanup_notice',
+    'presshub_settings_cleanup_lock',
 ];
 
 foreach ( $presshub_ai_options as $presshub_ai_option ) {

@@ -229,16 +229,6 @@ class PressHub_Social_Settings {
             'presshub_social_general_sec'
         );
 
-        // #233: unused, listed under Advanced & System → Diagnostics → Scheduled for removal.
-        if ( ! PressHub_Settings_Registry::is_unused( 'presshub_social_github_token' ) ) {
-            add_settings_field(
-                'presshub_social_github_token',
-                __( 'GitHub Personal Access Token (Auto-Updates)', 'presshub-social-autopost' ),
-                [ $render, 'render_github_token_field' ],
-                'presshub_social_general',
-                'presshub_social_general_sec'
-            );
-        }
 
         add_settings_section(
             'presshub_social_engines_sec',
@@ -379,29 +369,7 @@ class PressHub_Social_Settings {
             [ 'option' => 'presshub_social_twitter_bearer_token' ]
         );
 
-        // #233: unused, listed under Advanced & System → Diagnostics → Scheduled for removal.
-        if ( ! PressHub_Settings_Registry::is_unused( 'presshub_social_twitter_api_key' ) ) {
-            add_settings_field(
-                'presshub_social_twitter_api_key',
-                __( 'Twitter API Key', 'presshub-social-autopost' ),
-                [ $render, 'render_secret_field' ],
-                'presshub_social_credentials',
-                'presshub_social_twitter_sec',
-                [ 'option' => 'presshub_social_twitter_api_key' ]
-            );
-        }
 
-        // #233: unused, listed under Advanced & System → Diagnostics → Scheduled for removal.
-        if ( ! PressHub_Settings_Registry::is_unused( 'presshub_social_twitter_api_secret' ) ) {
-            add_settings_field(
-                'presshub_social_twitter_api_secret',
-                __( 'Twitter API Secret', 'presshub-social-autopost' ),
-                [ $render, 'render_secret_field' ],
-                'presshub_social_credentials',
-                'presshub_social_twitter_sec',
-                [ 'option' => 'presshub_social_twitter_api_secret' ]
-            );
-        }
 
         add_settings_field(
             'presshub_social_twitter_access_token',
@@ -411,24 +379,10 @@ class PressHub_Social_Settings {
             'presshub_social_twitter_sec',
             [
                 'option'        => 'presshub_social_twitter_access_token',
-                'test_platform' => PressHub_Settings_Registry::is_unused( 'presshub_social_twitter_access_secret' ) ? 'twitter' : '',
+                'test_platform' => 'twitter',
             ]
         );
 
-        // #233: unused, listed under Advanced & System → Diagnostics → Scheduled for removal.
-        if ( ! PressHub_Settings_Registry::is_unused( 'presshub_social_twitter_access_secret' ) ) {
-            add_settings_field(
-                'presshub_social_twitter_access_secret',
-                __( 'Twitter Access Secret', 'presshub-social-autopost' ),
-                [ $render, 'render_secret_field' ],
-                'presshub_social_credentials',
-                'presshub_social_twitter_sec',
-                [
-                    'option'        => 'presshub_social_twitter_access_secret',
-                    'test_platform' => 'twitter',
-                ]
-            );
-        }
 
         add_settings_section(
             'presshub_social_tiktok_sec',

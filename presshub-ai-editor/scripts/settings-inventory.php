@@ -24,6 +24,7 @@ if ( ! function_exists( '__' ) ) {
 }
 
 require_once dirname( __DIR__ ) . '/includes/class-settings-registry.php';
+require_once dirname( __DIR__ ) . '/includes/class-settings-cleanup.php';
 
 /**
  * Builds the inventory markdown from the declared registry.
@@ -63,7 +64,7 @@ function presshub_settings_inventory_markdown(): string {
         $md .= sprintf( "| %s | %d | %d | %d |\n", '' === $slug ? '**Not in a section**' : PressHub_Settings_Sections::label( $slug ) . ' (`' . $slug . '`)', $counts[ $slug ]['total'] ?? 0, $counts[ $slug ]['hidden'] ?? 0, $counts[ $slug ]['secret'] ?? 0 );
     }
     $md .= sprintf( "| **Total** | **%d** | | |\n\n", count( $all ) );
-    $md .= sprintf( "**Scheduled for removal:** %d option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).\n\n", count( $unused ) );
+    $md .= sprintf( "**Scheduled for removal:** %d option(s). **Removed in %s (#237):** %d option(s); both lists are at the end.\n\n", count( $unused ), PressHub_Settings_Cleanup::REMOVED_IN, count( PressHub_Settings_Cleanup::REMOVED ) );
 
     foreach ( $sections as $slug ) {
         $rows = $by_section[ $slug ] ?? [];
@@ -117,6 +118,19 @@ function presshub_settings_inventory_markdown(): string {
         foreach ( $unused as $key => $e ) {
             $md .= sprintf( "| `%s` | %s / %s | %s |\n", $key, $e['page'], $e['tab'], str_replace( '|', '\\|', (string) ( $e['unused_reason'] ?? '' ) ) );
         }
+    }
+
+    // #237: what the clean-up deleted, and the evidence that nothing read it.
+    $evidence = [
+        'github'          => 'Plugin updates read `presshub_ai_github_token` only; `get_github_token()` in Social storage had no caller. On upgrade the value is copied into `presshub_ai_github_token` when that one is empty.',
+        'x_oauth1'        => 'No code read the X OAuth1 consumer key, consumer secret or access secret; posting to X uses the bearer token, the access token or the worker.',
+        'podcast_prompts' => '`resolve_podcast_prompt()` reads only the per-style options (`…_prompt_N_<style>`); the bare names were used as a prefix string, never read. Not shown on any section since #246.',
+    ];
+    $md .= sprintf( "\n## Removed in %s (#237)\n\n", PressHub_Settings_Cleanup::REMOVED_IN );
+    $md .= "Deleted on the first admin request after the upgrade, after a copy of all settings (no secrets) was saved; the report is on PressHub → Usage & logs. Reading one fires `_doing_it_wrong()` for one release.\n\n";
+    $md .= "| Option | Evidence it was unused |\n|---|---|\n";
+    foreach ( PressHub_Settings_Cleanup::REMOVED as $key => $meta ) {
+        $md .= sprintf( "| `%s` | %s |\n", $key, $evidence[ $meta['group'] ] ?? '' );
     }
     return $md;
 }
