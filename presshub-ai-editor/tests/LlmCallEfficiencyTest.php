@@ -122,7 +122,9 @@ le_check( 'fallback metadata: alt text from the description, title from the topi
 $P = 'PressHub_AI_Policy_Fiches';
 $S = 'PressHub_AI_Stakeholders';
 $GLOBALS['POSTS_STORE'][601] = [ 'ID' => 601, 'post_content' => '<p>Ενημέρωση για τις συντάξεις.</p>', 'post_date' => '2026-11-18 07:00:00', 'post_status' => 'publish' ];
-$hash = md5( 'Ενημέρωση για τις συντάξεις.' );
+update_post_meta( 601, '_presshub_briefing_date', '2026-11-18' );
+update_post_meta( 601, '_presshub_briefing_edition', 'morning' );
+$hash = md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|morning' );
 $GLOBALS['CAPTURED_REQUESTS'] = [];
 
 update_post_meta( 601, $P::META_SOURCE_HASH, $hash );
@@ -144,6 +146,19 @@ set_transient( 'presshub_ai_stakeholders_lock_601', time(), 600 );
 $S::handle_cron( 601 );
 le_check( 'stakeholder cron: a brief being processed is skipped', empty( $GLOBALS['CAPTURED_REQUESTS'] ) && '' === (string) get_post_meta( 601, $S::META_SOURCE_HASH, true ) );
 delete_transient( 'presshub_ai_stakeholders_lock_601' );
+
+// A changed edition is a new brief, not one already processed.
+update_post_meta( 601, $P::META_SOURCE_HASH, md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|noon' ) );
+add_filter( 'presshub_ai_policy_fiches_enabled', '__return_false' );
+$P::handle_update_cron( 601 );
+le_check( 'policy cron: a changed edition runs, and a skipped run saves no hash and clears the lock', md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|noon' ) === (string) get_post_meta( 601, $P::META_SOURCE_HASH, true ) && false === get_transient( 'presshub_ai_policy_update_lock_601' ) );
+remove_filter( 'presshub_ai_policy_fiches_enabled', '__return_false' );
+
+// A failed run (empty brief) saves no hash and clears the lock, so a retry can run.
+$GLOBALS['POSTS_STORE'][602] = [ 'ID' => 602, 'post_content' => '', 'post_date' => '2026-11-18 07:00:00', 'post_status' => 'publish' ];
+$P::handle_update_cron( 602 );
+$S::handle_cron( 602 );
+le_check( 'cron: a failed run saves no hash and clears the lock', '' === (string) get_post_meta( 602, $P::META_SOURCE_HASH, true ) && '' === (string) get_post_meta( 602, $S::META_SOURCE_HASH, true ) && false === get_transient( 'presshub_ai_policy_update_lock_602' ) && false === get_transient( 'presshub_ai_stakeholders_lock_602' ) );
 
 if ( $failures > 0 ) {
     echo "LlmCallEfficiencyTest: {$failures} of {$checks} checks failed\n";

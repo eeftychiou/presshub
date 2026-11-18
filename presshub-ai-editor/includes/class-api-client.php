@@ -1528,7 +1528,9 @@ class PressHub_AI_API_Client {
         // descriptive filename) so it can be found and reused later.
         $article_title   = (string) ( $context['title'] ?? '' );
         $article_content = (string) ( $context['content'] ?? '' );
-        if ( ( '' === trim( $article_title ) || '' === trim( $article_content ) ) && $post_id > 0 ) {
+        $plan_meta       = isset( $context['ai_metadata'] ) && false === $context['ai_metadata'];
+        // Plan-described images only need the title, so they skip the lookup when they have one.
+        if ( ( '' === trim( $article_title ) || ( ! $plan_meta && '' === trim( $article_content ) ) ) && $post_id > 0 ) {
             $post_ctx        = PressHub_AI_SEO::article_context_for_post( $post_id );
             $article_title   = '' !== trim( $article_title ) ? $article_title : $post_ctx['title'];
             $article_content = '' !== trim( $article_content ) ? $article_content : $post_ctx['content'];
@@ -1536,7 +1538,7 @@ class PressHub_AI_API_Client {
         // Social post images and TikTok short frames are described by the AI plan
         // that asked for them, so they pass 'ai_metadata' => false and get the
         // deterministic metadata from that description: one LLM call less per image.
-        if ( isset( $context['ai_metadata'] ) && false === $context['ai_metadata'] ) {
+        if ( $plan_meta ) {
             $described  = trim( (string) ( $context['description'] ?? '' ) );
             $media_meta = PressHub_AI_SEO::fallback_image_metadata( '' !== $described ? $described : $prompt, $article_title );
             $media_meta['source'] = 'plan';

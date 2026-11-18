@@ -85,7 +85,8 @@ class PressHub_AI_Stakeholders {
         // Same guard as the policy fiche update: overlapping WP-Cron requests can
         // run one event twice, and an unchanged brief needs no second extraction.
         $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
-        $hash = $post ? md5( trim( wp_strip_all_tags( (string) ( $post->post_content ?? '' ) ) ) ) : '';
+        // The hash covers everything the prompt is built from: the text, date and edition.
+        $hash = $post ? md5( trim( wp_strip_all_tags( (string) ( $post->post_content ?? '' ) ) ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_date', true ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_edition', true ) ) : '';
         $lock = 'presshub_ai_stakeholders_lock_' . $post_id;
         if ( '' !== $hash && (string) get_post_meta( $post_id, self::META_SOURCE_HASH, true ) === $hash ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
