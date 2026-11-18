@@ -379,7 +379,8 @@ class PressHub_AI_Podcast_Producer {
                     'host_count' => $host_count,
                 ] );
             }
-            throw new InvalidArgumentException( sprintf( __( 'No dialogue prompt configured for style "%1$s" and %2$d presenter(s). Please configure the prompt in PressHub -> Settings -> Daily Briefing Hub -> Podcast script.', 'presshub-ai-editor' ), $style, $host_count ) );
+            // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- caught and returned as JSON; escaping here would double-encode quotes in the message.
+            throw new InvalidArgumentException( sprintf( /* translators: 1: podcast style, 2: number of presenters */ __( 'No dialogue prompt configured for style "%1$s" and %2$d presenter(s). Please configure the prompt in PressHub -> Settings -> Daily Briefing Hub -> Podcast script.', 'presshub-ai-editor' ), $style, $host_count ) );
         }
 
         $base_prompt = apply_filters( 'presshub_ai_podcast_producer_system_prompt', $base_prompt );

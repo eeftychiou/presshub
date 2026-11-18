@@ -56,7 +56,7 @@ class PressHub_Social_Prompt_Loader {
         if ( str_contains( $clean_path, '..' ) ) {
             $error_msg = sprintf( 'Directory traversal detected in prompt path: %s', $relative_path );
             PressHub_Social_Logger::error( $error_msg, [ 'path' => $relative_path ] );
-            throw new InvalidArgumentException( $error_msg );
+            throw new InvalidArgumentException( esc_html( $error_msg ) );
         }
 
         if ( isset( self::$cache[ $clean_path ] ) ) {
@@ -71,7 +71,7 @@ class PressHub_Social_Prompt_Loader {
                 'relative_path' => $clean_path,
                 'full_path'     => $full_path,
             ] );
-            throw new RuntimeException( $error_msg );
+            throw new RuntimeException( esc_html( $error_msg ) );
         }
 
         $content = file_get_contents( $full_path );
@@ -81,7 +81,7 @@ class PressHub_Social_Prompt_Loader {
                 'relative_path' => $clean_path,
                 'full_path'     => $full_path,
             ] );
-            throw new RuntimeException( $error_msg );
+            throw new RuntimeException( esc_html( $error_msg ) );
         }
 
         self::$cache[ $clean_path ] = $content;

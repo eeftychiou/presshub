@@ -186,7 +186,7 @@ class PressHub_Social_Settings_Render {
                 <option value="api" <?php selected( $current, 'api' ); ?>><?php echo esc_html__( 'Official REST API', 'presshub-social-autopost' ); ?></option>
                 <option value="automation" <?php selected( $current, 'automation' ); ?>><?php echo esc_html__( 'Automation Worker (Playwright Headless)', 'presshub-social-autopost' ); ?></option>
             </select>
-            <?php echo $badge_html; ?>
+            <?php echo $badge_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- value is escaped markup built by this class. ?>
         </div>
         <p class="description">
             <?php

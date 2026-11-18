@@ -176,5 +176,5 @@ if ( PHP_SAPI === 'cli' && isset( $argv ) && realpath( $argv[0] ) === realpath( 
         exit( 0 );
     }
     file_put_contents( $target, $md );
-    echo 'Wrote ' . $target . ' (' . count( PressHub_Settings_Registry::all() ) . " options)\n";
+    echo 'Wrote ' . $target . ' (' . count( PressHub_Settings_Registry::all() ) . " options)\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI output, not rendered as HTML.
 }

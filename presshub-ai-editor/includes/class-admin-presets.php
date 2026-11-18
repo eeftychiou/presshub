@@ -90,7 +90,7 @@ class PressHub_AI_Admin_Presets {
 
     public function render_page() {
         if ( ! current_user_can( $this->settings_cap() ) ) {
-            wp_die( __( 'You do not have permission to access this page.', 'presshub-ai-editor' ) );
+            wp_die( esc_html__( 'You do not have permission to access this page.', 'presshub-ai-editor' ) );
         }
 
         $this->ensure_store();
@@ -235,7 +235,7 @@ class PressHub_AI_Admin_Presets {
                             <td><?php echo esc_html( isset( $term->name ) ? $term->name : $term->slug ); ?></td>
                             <td>
                                 <select class="presshub-org-default-select" data-scope="taxonomy" data-key="<?php echo esc_attr( $term->slug ); ?>">
-                                    <?php echo $this->org_default_options( $taxonomy_presets[ $term->slug ] ?? '', $org_options ); ?>
+                                    <?php echo $this->org_default_options( $taxonomy_presets[ $term->slug ] ?? '', $org_options ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- org_default_options() returns escaped <option> markup. ?>
                                 </select>
                             </td>
                         </tr>
@@ -258,7 +258,7 @@ class PressHub_AI_Admin_Presets {
                         <td><?php echo esc_html( $label ); ?></td>
                         <td>
                             <select class="presshub-org-default-select" data-scope="role" data-key="<?php echo esc_attr( $role ); ?>">
-                                <?php echo $this->org_default_options( $role_presets[ $role ] ?? '', $org_options ); ?>
+                                <?php echo $this->org_default_options( $role_presets[ $role ] ?? '', $org_options ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- org_default_options() returns escaped <option> markup. ?>
                             </select>
                         </td>
                     </tr>

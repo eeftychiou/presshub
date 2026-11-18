@@ -236,7 +236,7 @@ if ( file_put_contents( OUT_FILE, $out ) === false ) {
 }
 
 $count = count( $strings );
-echo "Wrote " . OUT_FILE . " (" . $count . " entries)\n";
+echo "Wrote " . OUT_FILE . " (" . $count . " entries)\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CLI output, not rendered as HTML.
 exit( 0 );
 
 // ---------------------------------------------------------------------------

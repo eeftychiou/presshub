@@ -128,7 +128,7 @@ class PressHub_Social_Metabox {
                     <div class="presshub-social-platform-card" data-platform="<?php echo esc_attr( $slug ); ?>" style="<?php echo esc_attr( $card_style ); ?>">
                         <div class="platform-card-header">
                             <label class="platform-toggle-label">
-                                <input type="checkbox" name="presshub_social_platforms[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( $is_checked ); ?> <?php echo $disabled_attr; ?> />
+                                <input type="checkbox" name="presshub_social_platforms[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( $is_checked ); ?> <?php echo $disabled_attr; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $disabled_attr is a fixed attribute string set in this method. ?> />
                                 <strong><?php echo esc_html( $data['label'] ); ?></strong>
                             </label>
                             <div style="display:flex; align-items:center; gap:6px;">
