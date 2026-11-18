@@ -36,7 +36,7 @@
  *   plugin.zip            the plugin folder, under presshub-ai-editor/
  *
  * @package PressHub_AI_Editor
- * @since 2.53.0
+ * @since 2.53.0 (follow-ups 2.53.1)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -58,6 +58,7 @@ class PressHub_AI_Update_Backup {
     const BACKUP_ACTION  = 'presshub_ai_backup_take';
     const RESTORE_ACTION = 'presshub_ai_backup_restore';
     const DELETE_ACTION  = 'presshub_ai_backup_delete';
+    const RECHECK_ACTION = 'presshub_ai_backup_recheck';
     const NOTICE_PREFIX  = 'presshub_ai_backup_notice_';
 
     /** Rows read or written per query. */
@@ -92,6 +93,7 @@ class PressHub_AI_Update_Backup {
         add_action( 'admin_post_' . self::BACKUP_ACTION, [ __CLASS__, 'handle_take' ] );
         add_action( 'admin_post_' . self::RESTORE_ACTION, [ __CLASS__, 'handle_restore' ] );
         add_action( 'admin_post_' . self::DELETE_ACTION, [ __CLASS__, 'handle_delete' ] );
+        add_action( 'admin_post_' . self::RECHECK_ACTION, [ __CLASS__, 'handle_recheck' ] );
         self::register_upgrader_hooks();
     }
 
@@ -512,15 +514,26 @@ class PressHub_AI_Update_Backup {
         return 0 === strpos( $table, $prefix ) && (bool) preg_match( '/^[A-Za-z0-9_]+$/', $table );
     }
 
-    /** Primary key columns of a table, for a stable row order. @return string[] */
-    private static function primary_key( string $table ): array {
+    /**
+     * Primary key columns of a table, for a stable row order. $int_key is set
+     * to the column when the key is one integer column (keyset paging).
+     *
+     * @return string[]
+     */
+    private static function primary_key( string $table, ?string &$int_key = null ): array {
         global $wpdb;
         $cols = (array) $wpdb->get_results( "SHOW COLUMNS FROM `{$table}`", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- validated table name.
-        $keys = [];
+        $keys    = [];
+        $types   = [];
+        $int_key = '';
         foreach ( $cols as $col ) {
             if ( 'PRI' === strtoupper( (string) ( $col['Key'] ?? '' ) ) && preg_match( '/^[A-Za-z0-9_]+$/', (string) $col['Field'] ) ) {
-                $keys[] = (string) $col['Field'];
+                $keys[]  = (string) $col['Field'];
+                $types[] = strtolower( (string) ( $col['Type'] ?? '' ) );
             }
+        }
+        if ( 1 === count( $keys ) && false !== strpos( $types[0], 'int' ) ) {
+            $int_key = $keys[0];
         }
         return $keys;
     }
@@ -537,10 +550,10 @@ class PressHub_AI_Update_Backup {
         if ( ! $gz ) {
             return new WP_Error( 'presshub_backup_write', __( 'A table file could not be written.', 'presshub-ai-editor' ) );
         }
-        $keys   = self::primary_key( $table );
+        $keyset = '';
+        $keys   = self::primary_key( $table, $keyset );
         // One integer key (every PressHub table): keyset paging, fast and stable while
         // rows are added. Otherwise LIMIT/OFFSET in key order.
-        $keyset = 1 === count( $keys ) ? $keys[0] : '';
         $order  = $keys ? ' ORDER BY `' . implode( '`, `', $keys ) . '`' : '';
         $count  = 0;
         $offset = 0;
@@ -789,7 +802,7 @@ class PressHub_AI_Update_Backup {
         }
 
         // Read every file of the backup before anything is deleted or dropped.
-        $checked = self::verify( $manifest );
+        $checked = self::verify( $manifest, $with_files );
         if ( is_wp_error( $checked ) ) {
             return new WP_Error( $checked->get_error_code(), sprintf(
                 /* translators: %s: what is wrong with the backup. */
@@ -869,11 +882,22 @@ class PressHub_AI_Update_Backup {
      *
      * @return true|WP_Error
      */
-    public static function verify( array $manifest ) {
+    public static function verify( array $manifest, bool $with_files = false ) {
         $dir   = self::backup_path( (string) ( $manifest['id'] ?? '' ) );
         $files = [ 'options.jsonl.gz' => (int) ( $manifest['options'] ?? 0 ) ];
+        if ( $with_files ) {
+            $zip = class_exists( 'ZipArchive' ) ? new ZipArchive() : null;
+            if ( ! $zip || ! is_readable( $dir . '/plugin.zip' ) || true !== $zip->open( $dir . '/plugin.zip' ) ) {
+                return new WP_Error( 'presshub_restore_file', __( 'The plugin zip is missing or cannot be opened.', 'presshub-ai-editor' ) );
+            }
+            $has_main = false !== $zip->locateName( self::PLUGIN_FOLDER . '/' . self::PLUGIN_MAIN );
+            $zip->close();
+            if ( ! $has_main ) {
+                return new WP_Error( 'presshub_restore_file', __( 'The plugin zip does not contain PressHub.', 'presshub-ai-editor' ) );
+            }
+        }
         foreach ( (array) ( $manifest['tables'] ?? [] ) as $suffix => $info ) {
-            if ( ! preg_match( '/^[A-Za-z0-9_]+$/', (string) $suffix ) ) {
+            if ( ! preg_match( '/^[A-Za-z0-9_]+$/', (string) $suffix ) || ! self::is_plugin_table( self::db_prefix() . $suffix ) ) {
                 return new WP_Error( 'presshub_restore_table', __( 'The backup lists a table with an invalid name.', 'presshub-ai-editor' ) );
             }
             if ( ! empty( $info['create'] ) && ! is_readable( $dir . '/tables/' . $suffix . '.sql' ) ) {
@@ -1200,17 +1224,22 @@ class PressHub_AI_Update_Backup {
      */
     public static function exposure( bool $force = false ): string {
         if ( ! $force ) {
-            $cached = get_transient( self::EXPOSURE_TRANSIENT );
+            $cached = get_transient( self::exposure_key() );
             if ( is_string( $cached ) && '' !== $cached ) {
                 return $cached;
             }
         }
         $state = self::check_exposure();
-        set_transient( self::EXPOSURE_TRANSIENT, $state, 12 * 3600 );
+        set_transient( self::exposure_key(), $state, 12 * 3600 );
         if ( 'exposed' === $state ) {
             PressHub_AI_Logger::warning( 'PressHub backup folder is publicly accessible over HTTP', [ 'dir' => self::base_dir() ] );
         }
         return $state;
+    }
+
+    /** The cached result belongs to one folder: moving it (PRESSHUB_AI_BACKUP_DIR) checks again. */
+    private static function exposure_key(): string {
+        return self::EXPOSURE_TRANSIENT . '_' . substr( md5( self::base_dir() ), 0, 12 );
     }
 
     private static function check_exposure(): string {
@@ -1219,7 +1248,8 @@ class PressHub_AI_Update_Backup {
         }
         $base    = wp_normalize_path( self::base_dir() );
         $content = wp_normalize_path( untrailingslashit( WP_CONTENT_DIR ) );
-        if ( 0 !== strpos( $base . '/', $content . '/' ) || ! function_exists( 'wp_remote_get' ) || ! function_exists( 'content_url' ) ) {
+        $windows = '\\' === DIRECTORY_SEPARATOR;
+        if ( 0 !== strpos( $windows ? strtolower( $base . '/' ) : $base . '/', $windows ? strtolower( $content . '/' ) : $content . '/' ) || ! function_exists( 'wp_remote_get' ) || ! function_exists( 'content_url' ) ) {
             return 'outside';
         }
         if ( true !== self::ensure_base_dir() ) {
@@ -1230,9 +1260,12 @@ class PressHub_AI_Update_Backup {
         if ( false === file_put_contents( $base . '/' . $name, $token ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
             return 'unverified';
         }
-        $url      = content_url( substr( $base, strlen( $content ) ) . '/' . $name );
-        $response = wp_remote_get( $url, [ 'timeout' => 5, 'redirection' => 0, 'sslverify' => false ] );
-        @unlink( $base . '/' . $name ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+        try {
+            $url      = content_url( substr( $base, strlen( $content ) ) . '/' . $name );
+            $response = wp_remote_get( $url, [ 'timeout' => 5, 'redirection' => 0, 'sslverify' => false ] );
+        } finally {
+            @unlink( $base . '/' . $name ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+        }
         if ( is_wp_error( $response ) ) {
             return 'unverified';
         }
@@ -1323,6 +1356,16 @@ class PressHub_AI_Update_Backup {
         $with_files = ! empty( $_POST['with_files'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked in guard().
         $result     = self::restore( $id, $with_files );
         if ( is_wp_error( $result ) ) {
+            $manifest = self::read_manifest( $id );
+            $old      = $manifest && version_compare( (string) ( $manifest['plugin_version'] ?? '' ), '2.53.0', '<' );
+            if ( $with_files && $old ) {
+                // The old files may already be in place, and they have no Backups page to show this.
+                wp_die(
+                    '<p>' . esc_html( $result->get_error_message() ) . '</p><p><a href="' . esc_url( admin_url( 'plugins.php' ) ) . '">' . esc_html__( 'Go to Plugins', 'presshub-ai-editor' ) . '</a></p>',
+                    esc_html__( 'PressHub restore stopped', 'presshub-ai-editor' ),
+                    [ 'response' => 500 ]
+                );
+            }
             self::finish( 'error', $result->get_error_message() );
         }
         $message = $result['files']
@@ -1345,6 +1388,17 @@ class PressHub_AI_Update_Backup {
         // A version older than this feature has no Backups page to come back to.
         $url = $result['files'] && version_compare( $result['version'], '2.53.0', '<' ) ? admin_url( 'plugins.php' ) : '';
         self::finish( 'success', $message, $url );
+    }
+
+    public static function handle_recheck(): void {
+        self::guard( self::RECHECK_ACTION );
+        $state = self::exposure( true );
+        if ( 'exposed' === $state ) {
+            self::finish( 'error', __( 'Checked again: the web server still hands out files from the backup folder.', 'presshub-ai-editor' ) );
+        }
+        self::finish( 'success', 'protected' === $state
+            ? __( 'Checked again: the backup folder is blocked from the web.', 'presshub-ai-editor' )
+            : __( 'Checked again: the web server did not hand out the test file.', 'presshub-ai-editor' ) );
     }
 
     public static function handle_delete(): void {
@@ -1398,10 +1452,14 @@ class PressHub_AI_Update_Backup {
                 number_format_i18n( (int) ( $backup['options'] ?? 0 ) )
             ),
             sprintf(
-                /* translators: 1: number of tables, 2: number of rows. */
-                _n( '%1$s table (%2$s rows)', '%1$s tables (%2$s rows)', count( (array) ( $backup['tables'] ?? [] ) ), 'presshub-ai-editor' ),
+                /* translators: 1: number of tables, 2: "5 rows". */
+                _n( '%1$s table (%2$s)', '%1$s tables (%2$s)', count( (array) ( $backup['tables'] ?? [] ) ), 'presshub-ai-editor' ),
                 number_format_i18n( count( (array) ( $backup['tables'] ?? [] ) ) ),
-                number_format_i18n( $rows )
+                sprintf(
+                    /* translators: %s: number of rows. */
+                    _n( '%s row', '%s rows', $rows, 'presshub-ai-editor' ),
+                    number_format_i18n( $rows )
+                )
             ),
         ];
         if ( $with_files && ! empty( $backup['plugin_zip'] ) ) {
@@ -1438,7 +1496,7 @@ class PressHub_AI_Update_Backup {
                 echo '</div>';
                 return;
             }
-            echo '<div class="notice notice-error"><p>' . esc_html__( 'That backup was not found or is incomplete.', 'presshub-ai-editor' ) . '</p></div>';
+            echo '<div class="notice notice-error" role="alert"><p>' . esc_html__( 'That backup was not found or is incomplete.', 'presshub-ai-editor' ) . '</p></div>';
         }
 
         self::render_intro( $can_act );
@@ -1461,7 +1519,21 @@ class PressHub_AI_Update_Backup {
         echo '<p class="description">' . esc_html__( 'Posts, pages, media and other plugins are not included: back those up with your host. The backups contain your API keys and tokens, so keep the folder private.', 'presshub-ai-editor' ) . '</p>';
         echo '<p class="description presshub-backups-folder">' . esc_html__( 'Folder:', 'presshub-ai-editor' ) . ' <code>' . esc_html( wp_normalize_path( self::base_dir() ) ) . '</code></p>';
         if ( $can_act && 'exposed' === self::exposure() ) {
-            echo '<div class="notice notice-error inline" role="alert"><p><strong>' . esc_html__( 'The web server hands out files from this folder.', 'presshub-ai-editor' ) . '</strong> ' . esc_html__( 'Anyone who guesses a backup name could download your settings and API keys. Block the folder in the web server (nginx ignores .htaccess), or move it outside the web root with PRESSHUB_AI_BACKUP_DIR in wp-config.php.', 'presshub-ai-editor' ) . '</p></div>';
+            echo '<div class="notice notice-error inline" role="alert"><p><strong>' . esc_html__( 'The web server hands out files from this folder.', 'presshub-ai-editor' ) . '</strong> ' . wp_kses(
+                sprintf(
+                    /* translators: 1: .htaccess, 2: PRESSHUB_AI_BACKUP_DIR, 3: wp-config.php */
+                    __( 'Anyone who guesses a backup name could download your settings and API keys. Block the folder in the web server (nginx ignores %1$s), or move it outside the web root with %2$s in %3$s.', 'presshub-ai-editor' ),
+                    '<code>.htaccess</code>',
+                    '<code>PRESSHUB_AI_BACKUP_DIR</code>',
+                    '<code>wp-config.php</code>'
+                ),
+                [ 'code' => [] ]
+            ) . '</p>';
+            echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><p>';
+            echo '<input type="hidden" name="action" value="' . esc_attr( self::RECHECK_ACTION ) . '" />';
+            wp_nonce_field( self::RECHECK_ACTION );
+            submit_button( __( 'Check again', 'presshub-ai-editor' ), 'secondary small', 'submit', false );
+            echo '</p></form></div>';
         }
         if ( $can_act ) {
             echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="presshub-backups-take">';
@@ -1478,7 +1550,9 @@ class PressHub_AI_Update_Backup {
         $backups = self::all();
         echo '<h2>' . esc_html__( 'Saved backups', 'presshub-ai-editor' ) . '</h2>';
         if ( ! $backups ) {
-            echo '<p>' . esc_html__( 'No backups yet. The first one is taken before the next PressHub update, or now with "Take a backup now".', 'presshub-ai-editor' ) . '</p>';
+            echo '<p>' . ( $can_act
+                ? esc_html__( 'No backups yet. The first one is taken before the next PressHub update, or now with "Take a backup now".', 'presshub-ai-editor' )
+                : esc_html__( 'No backups yet. The first one is taken before the next PressHub update.', 'presshub-ai-editor' ) ) . '</p>';
             return;
         }
         echo '<div class="presshub-backups-table-wrap"><table class="widefat striped presshub-backups-table">';
@@ -1496,10 +1570,10 @@ class PressHub_AI_Update_Backup {
             echo '<tr>';
             echo '<td>' . esc_html( self::format_time( (int) $backup['created_ts'] ) ) . '</td>';
             if ( ! $backup['complete'] ) {
-                echo '<td class="presshub-backups-col-version">—</td>';
+                echo '<td class="presshub-backups-col-version"><span aria-hidden="true">—</span><span class="screen-reader-text">' . esc_html__( 'Unknown', 'presshub-ai-editor' ) . '</span></td>';
                 echo '<td>' . esc_html__( 'Incomplete', 'presshub-ai-editor' ) . '</td>';
                 echo '<td>' . esc_html__( 'The backup did not finish. It is removed automatically.', 'presshub-ai-editor' ) . '</td>';
-                echo '<td class="presshub-backups-col-size">—</td>';
+                echo '<td class="presshub-backups-col-size"><span aria-hidden="true">—</span><span class="screen-reader-text">' . esc_html__( 'Unknown', 'presshub-ai-editor' ) . '</span></td>';
                 if ( $can_act ) {
                     echo '<td></td>';
                 }
@@ -1512,8 +1586,8 @@ class PressHub_AI_Update_Backup {
             echo '<td class="presshub-backups-col-size">' . esc_html( size_format( (int) ( $backup['bytes'] ?? 0 ) ) ) . '</td>';
             if ( $can_act ) {
                 echo '<td class="presshub-backups-actions">';
-                /* translators: %s: date and time the backup was taken. */
-                $which = '<span class="screen-reader-text"> ' . esc_html( sprintf( __( 'the backup from %s', 'presshub-ai-editor' ), self::format_time( (int) $backup['created_ts'] ) ) ) . '</span>';
+                /* translators: 1: date and time the backup was taken, 2: PressHub version, 3: why. Read after "Restore…" or "Delete…". */
+                $which = '<span class="screen-reader-text"> ' . esc_html( sprintf( __( '(%1$s, PressHub %2$s, %3$s)', 'presshub-ai-editor' ), self::format_time( (int) $backup['created_ts'] ), (string) $backup['plugin_version'], self::reason_label( $backup ) ) ) . '</span>';
                 echo '<a class="button button-secondary" href="' . esc_url( self::page_url( [ 'confirm' => $backup['id'] ] ) ) . '">' . esc_html__( 'Restore…', 'presshub-ai-editor' ) . $which . '</a> ';
                 echo '<a class="button-link button-link-delete presshub-backups-delete" href="' . esc_url( self::page_url( [ 'confirm' => $backup['id'], 'do' => 'delete' ] ) ) . '">' . esc_html__( 'Delete…', 'presshub-ai-editor' ) . $which . '</a>';
                 echo '</td>';

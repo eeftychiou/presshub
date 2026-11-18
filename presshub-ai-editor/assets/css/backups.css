@@ -42,6 +42,11 @@
     border-color: #b32d2e;
     color: #fff;
 }
+.presshub-backups-confirm .button.presshub-button-danger:active {
+    background: #8a2424;
+    border-color: #8a2424;
+    color: #fff;
+}
 .presshub-backups-confirm .button.presshub-button-danger:focus {
     box-shadow: 0 0 0 1px #fff, 0 0 0 3px #b32d2e;
 }
@@ -55,7 +60,7 @@
         white-space: normal;
     }
     .presshub-backups-actions .presshub-backups-delete {
-        display: block;
+        display: inline-block;
         margin: 4px 0 0;
         padding: 10px 2px;
         min-height: 24px;

@@ -124,6 +124,7 @@ ub_check( 'label: update with target', 'Before the update to 2.53.0' === $B::rea
 ub_check( 'label: update without target', 'Before an update' === $B::reason_label( [ 'reason' => 'update' ] ) );
 ub_check( 'label: before a restore', 'Before restoring 2.51.0' === $B::reason_label( [ 'reason' => 'before_restore', 'target_version' => '2.51.0' ] ) );
 ub_check( 'label: by hand', 'Taken by hand' === $B::reason_label( [ 'reason' => 'manual' ] ) );
+ub_check( 'contents: one row', '1 option, 1 table (1 row)' === $B::contents_label( [ 'options' => 1, 'tables' => [ 'a' => [ 'rows' => 1 ] ] ] ) );
 ub_check( 'contents: without files', '12 options, 1 table (3 rows)' === $B::contents_label( [ 'options' => 12, 'tables' => [ 'a' => [ 'rows' => 3 ] ], 'plugin_zip' => true ], false ) );
 ub_check( 'contents: counts and files', '12 options, 1 table (3 rows), plugin files' === $B::contents_label( [ 'options' => 12, 'tables' => [ 'a' => [ 'rows' => 3 ] ], 'plugin_zip' => true ] ) );
 
@@ -219,6 +220,21 @@ ub_check( 'verify: a file that is not gzip is refused', is_wp_error( $B::verify(
 ub_gz( $vdir . '/tables/presshub_ai_audit_logs.jsonl.gz', "{\"id\":\"1\"}\n{\"id\":\"2\"}\n" );
 unlink( $vdir . '/tables/presshub_ai_audit_logs.sql' );
 ub_check( 'verify: a missing table definition is refused', is_wp_error( $B::verify( $m ) ) );
+file_put_contents( $vdir . '/tables/presshub_ai_audit_logs.sql', 'CREATE TABLE `wp_presshub_ai_audit_logs` (id int)' );
+ub_check( 'verify: restoring files needs a plugin zip', is_wp_error( $B::verify( $m, true ) ) );
+$z = new ZipArchive();
+$z->open( $vdir . '/plugin.zip', ZipArchive::CREATE );
+$z->addFromString( 'other/readme.txt', 'x' );
+$z->close();
+ub_check( 'verify: a zip without PressHub is refused', is_wp_error( $B::verify( $m, true ) ) );
+$z = new ZipArchive();
+$z->open( $vdir . '/plugin.zip' );
+$z->addFromString( 'presshub-ai-editor/presshub-ai-editor.php', '<?php' );
+$z->close();
+ub_check( 'verify: a PressHub zip passes', true === $B::verify( $m, true ) );
+$bad = $m;
+$bad['tables'] = [ 'users' => [ 'rows' => 0, 'create' => false ] ];
+ub_check( 'verify: a table PressHub does not own is refused', is_wp_error( $B::verify( $bad ) ) );
 unlink( $vdir . '/options.jsonl.gz' );
 ub_check( 'verify: a missing options file is refused', is_wp_error( $B::verify( $m ) ) );
 $B::delete_dir( $vdir );
