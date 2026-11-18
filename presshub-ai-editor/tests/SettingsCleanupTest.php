@@ -245,6 +245,14 @@ class SettingsCleanupTest {
             $failures[] = 'A site with nothing to remove gets no notice.';
         }
 
+        // 13. Uninstall removes the clean-up rows, including the copy.
+        $uninstall = (string) file_get_contents( dirname( __DIR__ ) . '/uninstall.php' );
+        foreach ( [ PressHub_Settings_Cleanup::VERSION_OPTION, PressHub_Settings_Cleanup::REPORT_OPTION, PressHub_Settings_Cleanup::EXPORT_OPTION, PressHub_Settings_Cleanup::NOTICE_OPTION, PressHub_Settings_Cleanup::LOCK_OPTION ] as $opt ) {
+            if ( false === strpos( $uninstall, "'" . $opt . "'" ) ) {
+                $failures[] = "uninstall.php should delete {$opt}.";
+            }
+        }
+
         if ( $failures ) {
             echo "FAIL\n";
             foreach ( $failures as $f ) {
