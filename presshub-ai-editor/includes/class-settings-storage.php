@@ -600,6 +600,16 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'string',
         ] );
 
+        // #236: Editorial QA can run on its own model; empty = same as Co-author.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_provider', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_provider_id' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_model', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_model_string' ],
+            'type'              => 'string',
+        ] );
+
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_copilot_provider', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_provider_id' ],
             'type'              => 'string',

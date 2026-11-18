@@ -11,14 +11,14 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Section | Options | Not shown on screen | Secrets |
 |---|---|---|---|
 | Connections (`connections`) | 48 | 25 | 14 |
-| AI models (`ai-models`) | 5 | 0 | 0 |
-| Writing & QA (`writing-qa`) | 24 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 92 | 5 | 0 |
-| Editorial knowledge (`editorial-knowledge`) | 16 | 0 | 0 |
-| Social publishing (`social-publishing`) | 69 | 4 | 0 |
+| AI models (`ai-models`) | 37 | 0 | 0 |
+| Writing & QA (`writing-qa`) | 16 | 0 | 0 |
+| Daily Briefing (`daily-briefing`) | 78 | 5 | 0 |
+| Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
+| Social publishing (`social-publishing`) | 63 | 4 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
 | Site & system (`site-system`) | 14 | 0 | 0 |
-| **Total** | **300** | | |
+| **Total** | **302** | | |
 
 **Scheduled for removal:** 4 option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).
 
@@ -75,25 +75,54 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_tiktok_access_token` | TikTok Access Token | string |  | social / credentials | secret, masked |
 | `presshub_social_tiktok_open_id` | TikTok Creator Open ID | string |  | social / credentials |  |
 
-## AI models (`ai-models`, 5)
+## AI models (`ai-models`, 37)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
+| `presshub_ai_briefing_tts_engine` | Speech engine | string |  | ai / briefing | was: Voice Synthesis Engine |
+| `presshub_ai_briefing_tts_model` | Voice Generation AI Model | string |  | ai / briefing |  |
+| `presshub_ai_briefing_tts_timeout` | Speech AI timeout (s) | integer | s | ai / briefing | was: Speech AI Timeout (seconds) |
+| `presshub_ai_image_prompt_provider` | Article Analysis AI Provider | string |  | ai / images |  |
+| `presshub_ai_image_prompt_model` | Article Analysis Model Override | string |  | ai / images |  |
+| `presshub_ai_image_generation_provider` | Image Generation AI Provider | string |  | ai / images |  |
+| `presshub_ai_coauthor_provider` | Active Co-Author Provider | string |  | ai / coauthor |  |
+| `presshub_ai_coauthor_model` | Co-Author model override | string |  | ai / coauthor | was: Custom Model Override |
+| `presshub_ai_coauthor_temperature` | Co-Author temperature | number | ratio | ai / coauthor | was: Sampling Temperature |
+| `presshub_ai_coauthor_max_tokens` | Co-Author maximum output tokens | integer | tokens | ai / coauthor | was: Maximum Output Tokens |
+| `presshub_ai_coauthor_timeout` | Co-Author timeout (s) | integer | s | ai / coauthor | was: Request Timeout (seconds) |
+| `presshub_ai_qa_provider` | Editorial QA provider | string |  | ai / coauthor |  |
+| `presshub_ai_qa_model` | Editorial QA model | string |  | ai / coauthor |  |
 | `presshub_ai_copilot_provider` | Active Copilot Provider | string |  | ai / copilot |  |
 | `presshub_ai_copilot_model` | Copilot model override | string |  | ai / copilot | was: Custom Model Override |
 | `presshub_ai_copilot_temperature` | Copilot temperature | number | ratio | ai / copilot | was: Sampling Temperature |
 | `presshub_ai_copilot_max_tokens` | Copilot maximum output tokens | integer | tokens | ai / copilot | was: Maximum Output Tokens |
 | `presshub_ai_copilot_timeout` | Copilot timeout (s) | integer | s | ai / copilot | was: Request Timeout (seconds) |
+| `presshub_ai_briefing_text_provider` | Curator AI Provider | string |  | ai / briefing |  |
+| `presshub_ai_briefing_text_model` | Curator Model Override | string |  | ai / briefing |  |
+| `presshub_ai_briefing_text_temperature` | Curator temperature | number | ratio | ai / briefing | was: Briefing text temperature |
+| `presshub_ai_briefing_text_max_tokens` | Curator Maximum Output Tokens | integer | tokens | ai / briefing |  |
+| `presshub_ai_briefing_text_timeout` | Curator timeout (s) | integer | s | ai / briefing | was: Briefing text timeout |
+| `presshub_ai_briefing_podcast_provider` | Scriptwriter AI Provider | string |  | ai / briefing |  |
+| `presshub_ai_briefing_podcast_model` | Scriptwriter Model Override | string |  | ai / briefing |  |
+| `presshub_ai_briefing_podcast_temperature` | Scriptwriter temperature | number | ratio | ai / briefing | was: Briefing podcast temperature |
+| `presshub_ai_briefing_podcast_max_tokens` | Scriptwriter Maximum Output Tokens | integer | tokens | ai / briefing |  |
+| `presshub_ai_briefing_podcast_timeout` | Scriptwriter timeout (s) | integer | s | ai / briefing | was: Briefing podcast timeout |
+| `presshub_ai_briefing_podcast_tts_provider` | Speech AI Provider (logosAI) | string |  | ai / briefing |  |
+| `presshub_ai_briefing_memory_provider` | Memory Model Provider | string |  | ai / knowledge |  |
+| `presshub_ai_briefing_memory_model` | Memory Model Override | string |  | ai / knowledge |  |
+| `presshub_social_ai_provider` | AI Provider | string |  | social / ai |  |
+| `presshub_social_ai_model` | Model Override | string |  | social / ai |  |
+| `presshub_social_ai_temperature` | Temperature | string |  | social / ai |  |
+| `presshub_social_ai_max_tokens` | Social copy maximum tokens | integer | tokens | social / ai | was: Max Tokens |
+| `presshub_social_ai_timeout` | Social copy timeout (s) | integer | s | social / ai | was: Request Timeout |
+| `presshub_social_tiktok_shorts_music_model` | Music Model | string |  | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on |
 
-## Writing & QA (`writing-qa`, 24)
+## Writing & QA (`writing-qa`, 16)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
 | `presshub_ai_fetch_urls` | Fetch source URLs before prompting | boolean |  | ai / coauthor | checkbox, was: Fetch and extract source URLs server-side before prompting (recommended — models cannot browse web pages). |
 | `presshub_ai_image_feature_enabled` | Generate featured images | integer |  | ai / images | checkbox, was: Enable Feature |
-| `presshub_ai_image_prompt_provider` | Article Analysis AI Provider | string |  | ai / images |  |
-| `presshub_ai_image_prompt_model` | Article Analysis Model Override | string |  | ai / images |  |
-| `presshub_ai_image_generation_provider` | Image Generation AI Provider | string |  | ai / images |  |
 | `presshub_ai_image_aspect_ratio` | Default Aspect Ratio | string |  | ai / images |  |
 | `presshub_ai_image_analysis_prompt` | Article Analysis Prompt Template | string |  | ai / images |  |
 | `presshub_ai_image_metadata_enabled` | AI Image Metadata | integer |  | ai / coauthor | checkbox |
@@ -101,11 +130,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_seo_enhance_enabled` | Daily Briefing SEO Structure | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_seo_max_tags` | Tags per post | integer | tags | ai / coauthor | was: Maximum Tags per Post |
 | `presshub_ai_seo_review_enabled` | SEO Score in Editorial Review | integer |  | ai / coauthor | checkbox |
-| `presshub_ai_coauthor_provider` | Active Co-Author Provider | string |  | ai / coauthor |  |
-| `presshub_ai_coauthor_model` | Co-Author model override | string |  | ai / coauthor | was: Custom Model Override |
-| `presshub_ai_coauthor_temperature` | Co-Author temperature | number | ratio | ai / coauthor | was: Sampling Temperature |
-| `presshub_ai_coauthor_max_tokens` | Co-Author maximum output tokens | integer | tokens | ai / coauthor | was: Maximum Output Tokens |
-| `presshub_ai_coauthor_timeout` | Co-Author timeout (s) | integer | s | ai / coauthor | was: Request Timeout (seconds) |
 | `presshub_ai_coauthor_max_source_chars` | Max Source Material Characters | integer | characters | ai / coauthor |  |
 | `presshub_ai_qa_enabled` | Enable QA Review System | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_qa_include_briefings` | Include Daily Briefings | integer |  | ai / coauthor | checkbox |
@@ -114,13 +138,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_editor_email` | Editor Notification Email | string |  | ai / coauthor |  |
 | `presshub_ai_qa_article_prompt` | Article QA Review Prompt Template | string |  | ai / coauthor |  |
 
-## Daily Briefing (`daily-briefing`, 92)
+## Daily Briefing (`daily-briefing`, 78)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
-| `presshub_ai_briefing_tts_engine` | Speech engine | string |  | ai / briefing | was: Voice Synthesis Engine |
-| `presshub_ai_briefing_tts_model` | Voice Generation AI Model | string |  | ai / briefing |  |
-| `presshub_ai_briefing_tts_timeout` | Speech AI timeout (s) | integer | s | ai / briefing | was: Speech AI Timeout (seconds) |
 | `presshub_ai_briefing_sources` | News Source URLs | array |  | ai / briefing |  |
 | `presshub_ai_briefing_schedule_enabled` | Enable Scheduled Briefing Hub | integer |  | ai / briefing | checkbox |
 | `presshub_ai_briefing_harvest_time` | Morning Harvest Time | string |  | ai / briefing | needs `presshub_ai_briefing_schedule_enabled` on |
@@ -188,17 +209,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_podcast_prompt_2` | Podcast Dialogue System Prompt (2 Hosts) | string |  | ai / briefing | not shown on screen |
 | `presshub_ai_briefing_podcast_prompt_3` | Podcast Dialogue System Prompt (3 Hosts) | string |  | ai / briefing | not shown on screen |
 | `presshub_ai_qa_briefing_prompt` | Daily Briefing QA Review Prompt Template | string |  | ai / briefing |  |
-| `presshub_ai_briefing_text_provider` | Curator AI Provider | string |  | ai / briefing |  |
-| `presshub_ai_briefing_text_model` | Curator Model Override | string |  | ai / briefing |  |
-| `presshub_ai_briefing_text_temperature` | Curator temperature | number | ratio | ai / briefing | was: Briefing text temperature |
-| `presshub_ai_briefing_text_max_tokens` | Curator Maximum Output Tokens | integer | tokens | ai / briefing |  |
-| `presshub_ai_briefing_text_timeout` | Curator timeout (s) | integer | s | ai / briefing | was: Briefing text timeout |
-| `presshub_ai_briefing_podcast_provider` | Scriptwriter AI Provider | string |  | ai / briefing |  |
-| `presshub_ai_briefing_podcast_model` | Scriptwriter Model Override | string |  | ai / briefing |  |
-| `presshub_ai_briefing_podcast_temperature` | Scriptwriter temperature | number | ratio | ai / briefing | was: Briefing podcast temperature |
-| `presshub_ai_briefing_podcast_max_tokens` | Scriptwriter Maximum Output Tokens | integer | tokens | ai / briefing |  |
-| `presshub_ai_briefing_podcast_timeout` | Scriptwriter timeout (s) | integer | s | ai / briefing | was: Briefing podcast timeout |
-| `presshub_ai_briefing_podcast_tts_provider` | Speech AI Provider (logosAI) | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_style` | Active Dialogue Style | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_prompt_1_default_greek_chat` | Briefing podcast prompt 1 default greek chat | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_prompt_2_default_greek_chat` | Briefing podcast prompt 2 default greek chat | string |  | ai / briefing |  |
@@ -211,7 +221,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_podcast_prompt_3_conversational_news_reporting` | Briefing podcast prompt 3 conversational news reporting | string |  | ai / briefing |  |
 | `presshub_ai_podcast_show_notes_enabled` | Podcast show notes | integer |  | ai / briefing | checkbox |
 
-## Editorial knowledge (`editorial-knowledge`, 16)
+## Editorial knowledge (`editorial-knowledge`, 14)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -220,8 +230,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_memory_background_days` | Background Memory Window (days) | integer | days | ai / knowledge | needs `presshub_ai_memory_enabled` on |
 | `presshub_ai_memory_briefing_budget_chars` | Briefing Memory Budget (chars) | integer | characters | ai / knowledge | needs `presshub_ai_memory_enabled` on |
 | `presshub_ai_memory_podcast_budget_chars` | Podcast Memory Budget (chars) | integer | characters | ai / knowledge | needs `presshub_ai_memory_enabled` on |
-| `presshub_ai_briefing_memory_provider` | Memory Model Provider | string |  | ai / knowledge |  |
-| `presshub_ai_briefing_memory_model` | Memory Model Override | string |  | ai / knowledge |  |
 | `presshub_ai_policy_fiches_enabled` | Policy fiches in AI calls | integer |  | ai / knowledge | checkbox, needs `presshub_ai_memory_enabled` on |
 | `presshub_ai_stakeholders_enabled` | People fiches in AI calls | integer |  | ai / knowledge | checkbox, needs `presshub_ai_memory_enabled` on |
 | `presshub_ai_claim_check_enabled` | Claim checks in curation | integer |  | ai / knowledge | checkbox |
@@ -232,7 +240,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_stakeholders_budgets` | People fiche context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters | ai / knowledge |  |
 
-## Social publishing (`social-publishing`, 69)
+## Social publishing (`social-publishing`, 63)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -247,11 +255,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_engine_facebook` | Facebook Engine | string |  | social / general |  |
 | `presshub_social_engine_instagram` | Instagram Engine | string |  | social / general |  |
 | `presshub_social_engine_tiktok` | Tiktok Engine | string |  | social / general |  |
-| `presshub_social_ai_provider` | AI Provider | string |  | social / ai |  |
-| `presshub_social_ai_model` | Model Override | string |  | social / ai |  |
-| `presshub_social_ai_temperature` | Temperature | string |  | social / ai |  |
-| `presshub_social_ai_max_tokens` | Social copy maximum tokens | integer | tokens | social / ai | was: Max Tokens |
-| `presshub_social_ai_timeout` | Social copy timeout (s) | integer | s | social / ai | was: Request Timeout |
 | `presshub_social_max_attempts` | Max Retry Attempts | integer | attempts | social / queue |  |
 | `presshub_social_dispatch_interval` | Dispatch interval (s) | integer | s | social / queue | was: Dispatch Interval |
 | `presshub_social_batch_size` | Batch Size | integer | posts | social / queue |  |
@@ -285,7 +288,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_tiktok_shorts_music_enabled` | Shorts Background Music | boolean |  | social / shorts | checkbox |
 | `presshub_social_tiktok_shorts_music_volume` | Music volume (%) | integer | % | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on, was: Music Volume |
 | `presshub_social_tiktok_shorts_music_tracks` | Music Tracks per Mood | integer | tracks | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on |
-| `presshub_social_tiktok_shorts_music_model` | Music Model | string |  | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on |
 | `presshub_social_alert_email_enabled` | Enable Failure Email Alerts | boolean |  | social / queue | checkbox |
 | `presshub_social_alert_email_address` | Alert Recipient Email | string |  | social / queue |  |
 | `presshub_social_prompt_system` | System Prompt (All Platforms) | string |  | social / prompts |  |

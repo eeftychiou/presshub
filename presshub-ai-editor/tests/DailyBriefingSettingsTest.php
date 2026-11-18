@@ -770,8 +770,9 @@ class DailyBriefingSettingsTest
         if ( false === strpos( $page_html, 'name="presshub_ai_briefing_tts_model"' ) ) {
             $failures[] = 'render_settings_page must render presshub_ai_briefing_tts_model input in Section 2.';
         }
-        if ( false === strpos( $page_html, 'Voice Generation AI Model' ) ) {
-            $failures[] = 'render_settings_page must render Voice Generation AI Model label in Section 2.';
+        // #236: the speech model is edited in its AI models row, labelled "Speech model ID".
+        if ( false === strpos( $page_html, 'Speech model ID' ) ) {
+            $failures[] = 'render_settings_page must render the Speech model ID label in AI models.';
         }
 
         // Issue #113: briefing TTS model helper & sanitizer

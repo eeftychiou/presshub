@@ -4076,6 +4076,9 @@ jQuery(document).ready(function($) {
                 resetPressInboxPasswordField();
 
                 var successMsg = (res.data && res.data.message) ? res.data.message : __('Settings saved successfully.', 'presshub-ai-editor');
+                if (res.data && Array.isArray(res.data.model_warnings) && res.data.model_warnings.length) {
+                    successMsg += ' ' + res.data.model_warnings.join(' ');
+                }
                 if (res.data && res.data.sources !== undefined) {
                     if (Array.isArray(res.data.sources)) {
                         presshubSourcesState = res.data.sources;
@@ -4101,7 +4104,11 @@ jQuery(document).ready(function($) {
                 $tabPane.prepend(noticeHtml);
                 $(document).trigger('presshub:settings-saved', [tabKey, res]);
 
-                if ($stickyStatus.length) {
+                var hasModelWarning = !!(res.data && Array.isArray(res.data.model_warnings) && res.data.model_warnings.length);
+                if ($stickyStatus.length && hasModelWarning) {
+                    // #236: an unknown model ID saved; the warning stays until the next save.
+                    $stickyStatus.removeClass('is-success is-error').text(__('Saved, with a warning on a model. See its row.', 'presshub-ai-editor'));
+                } else if ($stickyStatus.length) {
                     $stickyStatus.addClass('is-success').removeClass('is-error').text(__('Settings saved', 'presshub-ai-editor'));
                     setTimeout(function() {
                         if ($stickyStatus.hasClass('is-success')) {
@@ -4130,7 +4137,12 @@ jQuery(document).ready(function($) {
                 var err = (res && res.data && res.data.message) ? res.data.message : __('Failed to save settings.', 'presshub-ai-editor');
                 var errHtml = '<div class="notice notice-error is-dismissible presshub-settings-notice"><p>' + presshubEsc(err) + '</p></div>';
                 $tabPane.prepend(errHtml);
-                $(document).trigger('presshub:settings-save-failed', [tabKey, err]);
+                if (res && res.data && res.data.field_errors && $('#presshub-settings-error-summary').length) {
+                    // #236: the server refused a field (a model of the wrong type).
+                    $(document).trigger('presshub:settings-field-errors', [res.data.field_errors, err]);
+                } else {
+                    $(document).trigger('presshub:settings-save-failed', [tabKey, err]);
+                }
                 if ($stickyStatus.length) {
                     $stickyStatus.addClass('is-error').removeClass('is-success').text(__('Save failed', 'presshub-ai-editor'));
                 }

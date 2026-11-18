@@ -557,3 +557,32 @@ html:has(#presshub-settings-page) { scroll-padding-top: 90px; scroll-padding-bot
 .presshub-worker-logins { max-width: 520px; margin: 8px 0; }
 .presshub-worker-new-secret code { user-select: all; padding: 2px 6px; }
 .presshub-card-conn { margin: 0 16px 8px; }
+
+/* #236: AI models table and the read-only model line on each feature. */
+.presshub-model-default { margin: 0 0 12px; }
+.presshub-models-table { max-width: 1100px; }
+.presshub-models-table th[scope="row"] { width: 22%; vertical-align: top; }
+.presshub-models-table td { vertical-align: top; }
+.presshub-model-task { display: block; font-weight: 600; }
+.presshub-model-used-for,
+.presshub-model-provider .description,
+.presshub-model-model .description { display: block; font-weight: 400; margin-top: 2px; }
+.presshub-model-provider select,
+.presshub-model-choice { max-width: 100%; }
+.presshub-model-other { display: block; margin-top: 6px; }
+.presshub-model-other[hidden],
+.presshub-model-choice[hidden] { display: none; }
+.presshub-model-uses { color: #50575e; }
+.presshub-model-note { margin: 6px 0 0; padding: 4px 8px; border-left: 4px solid #dba617; background: #fcf9e8; }
+.presshub-model-note.is-error { border-left-color: #d63638; background: #fcf0f1; color: #8a1f1f; }
+.presshub-model-params { margin-top: 8px; }
+.presshub-model-params summary { cursor: pointer; }
+.presshub-model-params-fields p { margin: 6px 0; }
+.presshub-model-params-fields label { display: inline-block; min-width: 110px; }
+.presshub-model-line { margin: 0; }
+@media screen and (max-width: 782px) {
+    .presshub-models-table thead { display: none; }
+    .presshub-models-table tr,
+    .presshub-models-table th[scope="row"],
+    .presshub-models-table td { display: block; width: auto; }
+}

@@ -1931,6 +1931,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             $GLOBALS['presshub_ai_save_post_data'] = $post_data;
+            $model_warnings       = [];
+            $model_warning_fields = [];
             if ( class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab ) ) {
                 // #246: one Settings section, across both option groups. Social
                 // sanitizers read their "_present" / "_remove" markers from $_POST.
@@ -1944,6 +1946,21 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                         $_POST[ $k ] = $v;
                     }
                 }
+                // #236: a model known to be the wrong type for its task is refused
+                // before anything is written; an unknown one saves with a warning.
+                require_once __DIR__ . '/class-model-tasks.php';
+                $model_check = PressHub_Model_Tasks::validate( $post_data );
+                if ( $model_check['errors'] ) {
+                    wp_send_json_error( [
+                        'message'      => __( 'Not saved. A model does not fit its task; see the fields listed above.', 'presshub-ai-editor' ),
+                        'field_errors' => $model_check['errors'],
+                    ] );
+                }
+                $model_warnings       = [];
+                foreach ( $model_check['warnings'] as $opt => $msg ) {
+                    $model_warnings[] = PressHub_Model_Tasks::label_of( (string) $opt ) . ': ' . $msg;
+                }
+                $model_warning_fields = $model_check['warnings'];
                 $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
             } else {
                 // #233: the registry decides which options belong to this tab, so a
@@ -1990,9 +2007,11 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         wp_send_json_success( [
             'message'    => __( 'Settings saved successfully.', 'presshub-ai-editor' ),
             'tab'        => $tab,
-            'saved_keys' => $saved_keys,
-            'count'      => $saved_count,
-            'sources'    => PressHub_AI_Settings_Storage::get_briefing_sources(),
+            'saved_keys'     => $saved_keys,
+            'count'          => $saved_count,
+            'model_warnings' => $model_warnings,
+            'model_warning_fields' => (object) $model_warning_fields,
+            'sources'        => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'      => [
                 'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                 'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),

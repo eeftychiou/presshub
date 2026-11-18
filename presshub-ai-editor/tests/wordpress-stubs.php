@@ -123,6 +123,10 @@ if ( ! function_exists( 'update_option' ) ) {
      */
     function update_option( $key, $value, $autoload = null ) {
         $old_value = $GLOBALS['OPTIONS_STORE'][ $key ] ?? false;
+        // As in WordPress: "pre_update_option_{$key}" can change or refuse the new value.
+        if ( function_exists( 'apply_filters' ) ) {
+            $value = apply_filters( 'pre_update_option_' . $key, $value, $old_value, $key );
+        }
         $GLOBALS['OPTIONS_STORE'][ $key ] = $value;
         $GLOBALS['UPDATE_OPTION_CALLS'][] = [ $key, $value, $autoload ];
         if ( function_exists( 'do_action' ) ) {

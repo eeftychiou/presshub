@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.43.0
+ * Version: 2.44.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -122,7 +122,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.43.0' );
+define( 'PRESSHUB_AI_VERSION', '2.44.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -159,6 +159,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-settings-render.php';
 // #247: a changed login or secret forgets its last connection test.
 require_once PRESSHUB_AI_DIR . 'includes/class-connection-status.php';
 PressHub_Connection_Status::register_hooks();
+// #236: the AI models table; a model of the wrong type is never stored.
+require_once PRESSHUB_AI_DIR . 'includes/class-model-tasks.php';
+PressHub_Model_Tasks::register_hooks();
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-migration.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-image-prompt-templates.php';

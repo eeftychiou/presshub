@@ -204,6 +204,12 @@ class PressHub_Social_Settings_Render {
     // Field Renderers: AI Copywriter
     // ------------------------------------------------------------------
 
+    /** The read-only "Model: …" line of a task, linking to its row in AI models (#236). */
+    public function render_model_line( array $args = [] ): void {
+        require_once __DIR__ . '/class-model-tasks.php';
+        echo PressHub_Model_Tasks::feature_line( (string) ( $args['task'] ?? '' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line().
+    }
+
     public function render_ai_provider_field(): void {
         $current = PressHub_Social_Settings_Storage::get_ai_provider();
         ?>
@@ -520,12 +526,12 @@ class PressHub_Social_Settings_Render {
     public function render_shorts_narration_intro(): void {
         $engine = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : 'gemini';
         $label  = ( '' === $engine || 'gemini' === $engine || 0 === strpos( $engine, 'gemini' ) ) ? 'Gemini TTS' : 'Google Cloud TTS';
-        $url    = PressHub_Settings_Sections::url( 'daily-briefing', 'briefing-voices' );
+        $url    = PressHub_Settings_Sections::url( 'ai-models', 'model-speech' );
         ?>
         <p>
             <?php echo esc_html__( 'Speech engine:', 'presshub-social-autopost' ); ?>
             <strong><?php echo esc_html( $label ); ?></strong>
-            &mdash; <a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html__( 'change in Daily Briefing → Voices & audio', 'presshub-social-autopost' ); ?></a>
+            &mdash; <a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html__( 'change in AI models → Speech', 'presshub-social-autopost' ); ?></a>
         </p>
         <?php
     }

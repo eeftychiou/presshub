@@ -263,49 +263,20 @@ class PressHub_Social_Settings {
         // ------------------------------------------------------------------
         add_settings_section(
             'presshub_social_ai_sec',
-            __( 'AI Copywriter Model & Tuning', 'presshub-social-autopost' ),
+            __( 'AI Copywriter', 'presshub-social-autopost' ),
             '__return_empty_string',
             'presshub_social_ai'
         );
 
+        // #236: the provider, model and parameters are edited in Settings →
+        // AI models; this shows which model writes the copy, with a link.
         add_settings_field(
-            'presshub_social_ai_provider',
-            __( 'AI Provider', 'presshub-social-autopost' ),
-            [ $render, 'render_ai_provider_field' ],
+            'presshub_social_ai_model_line',
+            __( 'Model', 'presshub-social-autopost' ),
+            [ $render, 'render_model_line' ],
             'presshub_social_ai',
-            'presshub_social_ai_sec'
-        );
-
-        add_settings_field(
-            'presshub_social_ai_model',
-            __( 'Model Override', 'presshub-social-autopost' ),
-            [ $render, 'render_ai_model_field' ],
-            'presshub_social_ai',
-            'presshub_social_ai_sec'
-        );
-
-        add_settings_field(
-            'presshub_social_ai_temperature',
-            __( 'Temperature', 'presshub-social-autopost' ),
-            [ $render, 'render_ai_temperature_field' ],
-            'presshub_social_ai',
-            'presshub_social_ai_sec'
-        );
-
-        add_settings_field(
-            'presshub_social_ai_max_tokens',
-            __( 'Max Tokens', 'presshub-social-autopost' ),
-            [ $render, 'render_ai_max_tokens_field' ],
-            'presshub_social_ai',
-            'presshub_social_ai_sec'
-        );
-
-        add_settings_field(
-            'presshub_social_ai_timeout',
-            __( 'Request Timeout', 'presshub-social-autopost' ),
-            [ $render, 'render_ai_timeout_field' ],
-            'presshub_social_ai',
-            'presshub_social_ai_sec'
+            'presshub_social_ai_sec',
+            [ 'task' => 'social_copy' ]
         );
 
         add_settings_section(
@@ -877,17 +848,12 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
-            'presshub_social_tiktok_shorts_music_model',
-            __( 'Music Model', 'presshub-social-autopost' ),
-            [ $render, 'render_text_field' ],
+            'presshub_social_tiktok_shorts_music_model_line',
+            __( 'Music model', 'presshub-social-autopost' ),
+            [ $render, 'render_model_line' ],
             'presshub_social_shorts',
             'presshub_social_shorts_music_sec',
-            [
-                'option'      => 'presshub_social_tiktok_shorts_music_model',
-                'default'     => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL,
-                'placeholder' => PressHub_Social_Settings_Storage::DEFAULT_TIKTOK_SHORTS_MUSIC_MODEL,
-                'desc'        => __( 'Google Lyria model, called with the Gemini API key. lyria-3-clip-preview makes 30-second clips (looped under longer shorts); lyria-3.5 makes longer tracks. Changing it makes new tracks on the next Generate Music Tracks.', 'presshub-social-autopost' ),
-            ]
+            [ 'task' => 'music' ]
         );
 
         add_settings_field(

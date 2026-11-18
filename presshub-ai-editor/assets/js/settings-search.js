@@ -29,6 +29,13 @@
         if (!form) {
             return null;
         }
+        // AI models: the list shown in place of the model ID field (#236).
+        if (typeof window.PressHubModelControl === 'function') {
+            var model = window.PressHubModelControl(key);
+            if (model) {
+                return model;
+            }
+        }
         var el = document.getElementById(key);
         if (el && form.contains(el) && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) && el.type !== 'hidden') {
             return el;
@@ -126,7 +133,7 @@
             window.location.replace(data.legacy_hashes[hash]);
             return;
         }
-        var target = document.getElementById(hash);
+        var target = (typeof window.PressHubModelControl === 'function' && window.PressHubModelControl(hash)) || document.getElementById(hash);
         // A hidden input (sources, image pools) is found through fieldFor() below.
         if (target && target.type !== 'hidden' && document.getElementById('presshub-settings-main').contains(target)) {
             $(target).parents('details').attr('open', 'open');
