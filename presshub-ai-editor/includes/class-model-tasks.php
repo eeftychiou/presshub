@@ -220,6 +220,16 @@ class PressHub_Model_Tasks {
         return $out;
     }
 
+    /** Task name of the row that holds an option ('' when none). */
+    public static function label_of( string $option ): string {
+        foreach ( self::rows() as $row ) {
+            if ( in_array( $option, self::options( $row ), true ) ) {
+                return (string) $row['label'];
+            }
+        }
+        return '';
+    }
+
     /** Anchor of a row on AI models. */
     public static function anchor( string $id ): string {
         return 'model-' . str_replace( '_', '-', $id );
@@ -276,6 +286,24 @@ class PressHub_Model_Tasks {
             }
         }
         return null;
+    }
+
+    /**
+     * The provider record a row runs on: its own, else (Same as Co-author)
+     * the Co-author's, else the first enabled provider.
+     */
+    private static function effective_record( array $row, string $provider, array $post ): ?array {
+        if ( '' === $provider && ! empty( $row['same_as'] ) ) {
+            $same = self::rows()[ $row['same_as'] ]['provider'] ?? '';
+            if ( '' !== $same ) {
+                $provider = trim( (string) ( array_key_exists( $same, $post ) && is_scalar( $post[ $same ] ) ? self::unslash( $post[ $same ] ) : get_option( $same, '' ) ) );
+            }
+        }
+        if ( '' !== $provider ) {
+            return self::provider_record( $provider );
+        }
+        $enabled = class_exists( 'PressHub_AI_Provider_Store' ) ? PressHub_AI_Provider_Store::get_all( true ) : [];
+        return $enabled[0] ?? null;
     }
 
     /** The default model: the first enabled provider and its default model. */
@@ -368,14 +396,14 @@ class PressHub_Model_Tasks {
             if ( $p_new === $p_old && $m_new === $m_old ) {
                 continue;
             }
-            $record = self::provider_record( $p_new );
+            $record = self::effective_record( $row, $p_new, $post );
 
             if ( '' !== $m_new ) {
                 $check = PressHub_Model_Catalog::check( $row['kind'], $m_new, $record );
                 if ( 'blocked' === $check['status'] ) {
                     $errors[ $m_opt ] = $check['message'];
                 } elseif ( 'warning' === $check['status'] && $m_new !== $m_old ) {
-                    $warnings[ $m_opt ] = $row['label'] . ': ' . $check['message'];
+                    $warnings[ $m_opt ] = $check['message'];
                 }
                 continue;
             }
@@ -658,7 +686,7 @@ class PressHub_Model_Tasks {
             . ( '' !== $empty_label ? ' placeholder="' . esc_attr( $empty_label ) . '"' : '' );
         $note  = '';
         if ( '' !== $m_cur ) {
-            $record = self::provider_record( $p_cur );
+            $record = '' !== $p_cur ? self::provider_record( $p_cur ) : self::provider_record( $default_provider );
             $check  = PressHub_Model_Catalog::check( $kind, $m_cur, $record );
             if ( 'blocked' === $check['status'] ) {
                 $note = self::note( $m_opt . '-model-error', $check['message'], 'error' );

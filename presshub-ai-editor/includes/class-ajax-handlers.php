@@ -1956,7 +1956,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                         'field_errors' => $model_check['errors'],
                     ] );
                 }
-                $model_warnings       = array_values( $model_check['warnings'] );
+                $model_warnings       = [];
+                foreach ( $model_check['warnings'] as $opt => $msg ) {
+                    $model_warnings[] = PressHub_Model_Tasks::label_of( (string) $opt ) . ': ' . $msg;
+                }
                 $model_warning_fields = $model_check['warnings'];
                 $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
             } else {

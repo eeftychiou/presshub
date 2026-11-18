@@ -449,7 +449,7 @@
                 }
             });
             if (match) {
-                choice.value = match.value;
+                match.selected = true; // this option, not a same-named one in a hidden group
             } else {
                 choice.value = '__other';
             }

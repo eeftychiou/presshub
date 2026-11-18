@@ -293,6 +293,7 @@ class PressHub_Settings_Registry {
                 /* translators: %d: number of changed fields */
                 'unsaved_many'       => __( '%d unsaved changes', 'presshub-ai-editor' ),
                 'error_prefix'       => __( 'Error:', 'presshub-ai-editor' ),
+                'warning_prefix'     => __( 'Warning:', 'presshub-ai-editor' ),
                 'invalid_value'      => __( 'Enter a valid value.', 'presshub-ai-editor' ),
                 'not_saved'          => __( 'Not saved. Fix the fields listed above.', 'presshub-ai-editor' ),
                 'whats_new_title'    => __( "What's new in settings", 'presshub-ai-editor' ),

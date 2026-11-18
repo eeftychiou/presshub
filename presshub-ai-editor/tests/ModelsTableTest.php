@@ -200,7 +200,8 @@ $check( false !== strpos( (string) ( $r['data']['field_errors']['presshub_social
 $r = $save( [ 'presshub_social_ai_model' => 'brand-new-model-x' ] );
 $check( is_array( $r ) && true === $r['success'] && 'brand-new-model-x' === get_option( 'presshub_social_ai_model' ), 'An unknown model ID saves.' );
 $check( ! empty( $r['data']['model_warnings'] ) && false !== strpos( implode( ' ', $r['data']['model_warnings'] ), 'Social copy:' ), 'An unknown model ID comes back with a warning naming the row.' );
-$check( isset( ( (array) ( $r['data']['model_warning_fields'] ?? [] ) )['presshub_social_ai_model'] ), 'The warning comes back keyed by its field.' );
+$fields = (array) ( $r['data']['model_warning_fields'] ?? [] );
+$check( isset( $fields['presshub_social_ai_model'] ) && 0 === strpos( $fields['presshub_social_ai_model'], 'PressHub doesn' ), 'The warning comes back keyed by its field, without repeating the task name.' );
 
 $base_store( [ 'presshub_social_ai_model' => 'gemini-2.5-flash-preview-tts' ] );
 $r = $save( [ 'presshub_social_ai_model' => 'gemini-2.5-flash-preview-tts', 'presshub_ai_copilot_model' => 'gpt-4o' ] );
@@ -310,6 +311,12 @@ $check( ! empty( $fg[0] ) && false === strpos( $fg[0], "input.value = ''" ) && f
 
 // The provider's own default model is a known model (no false warning).
 $check( PressHub_Model_Catalog::is_known( 'llama-local-7b', [ 'default_model' => 'llama-local-7b' ] ), 'A provider\'s default model is known.' );
+// A row on Default checks against the default provider's own models (no false warning).
+$base_store( [ 'presshub_ai_configured_providers' => [ [ 'id' => 'local-llm', 'type' => 'ollama_local', 'name' => 'Local', 'enabled' => true, 'api_key' => '', 'default_model' => 'my-local-13b', 'available_models' => [ 'my-local-13b', 'my-local-70b' ] ] ] ] );
+$v = PressHub_Model_Tasks::validate( [ 'presshub_ai_copilot_provider' => '', 'presshub_ai_copilot_model' => 'my-local-70b' ] );
+$check( ! $v['errors'] && ! $v['warnings'], 'A model the default provider lists saves without a warning on a Default row.' );
+update_option( 'presshub_ai_copilot_model', 'my-local-70b' );
+$check( false === strpos( PressHub_Model_Tasks::render_table(), 'my-local-70b yet' ), 'No false warning is shown for it either.' );
 // Image generation offers only providers that can draw.
 $base_store( [ 'presshub_ai_configured_providers' => array_merge( $providers, [ [ 'id' => 'claude-main', 'type' => 'anthropic', 'name' => 'Claude', 'enabled' => true, 'api_key' => 'sk-ant-test-0000000000000000000000', 'default_model' => 'claude-3-5-haiku-20241022' ] ] ) ] );
 $table = PressHub_Model_Tasks::render_table();
