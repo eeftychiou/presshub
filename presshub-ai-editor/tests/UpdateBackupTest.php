@@ -221,6 +221,9 @@ ub_gz( $vdir . '/tables/presshub_ai_audit_logs.jsonl.gz', "{\"id\":\"1\"}\n{\"id
 unlink( $vdir . '/tables/presshub_ai_audit_logs.sql' );
 ub_check( 'verify: a missing table definition is refused', is_wp_error( $B::verify( $m ) ) );
 file_put_contents( $vdir . '/tables/presshub_ai_audit_logs.sql', 'CREATE TABLE `wp_presshub_ai_audit_logs` (id int)' );
+file_put_contents( $vdir . '/tables/presshub_ai_audit_logs.sql', '' );
+ub_check( 'verify: an empty table definition is refused', is_wp_error( $B::verify( $m ) ) );
+file_put_contents( $vdir . '/tables/presshub_ai_audit_logs.sql', 'CREATE TABLE `wp_presshub_ai_audit_logs` (id int)' );
 ub_check( 'verify: restoring files needs a plugin zip', is_wp_error( $B::verify( $m, true ) ) );
 $z = new ZipArchive();
 $z->open( $vdir . '/plugin.zip', ZipArchive::CREATE );

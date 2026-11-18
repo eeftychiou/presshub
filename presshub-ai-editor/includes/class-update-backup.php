@@ -84,6 +84,9 @@ class PressHub_AI_Update_Backup {
     /** Set while this class drives the upgrader, so its own hooks do not back up again. */
     private static $busy = false;
 
+    /** Whether this request already put plugin files back (a later failure then cannot use the Backups page). */
+    private static $files_restored = false;
+
     /** Backups taken in this request (one per request is enough). */
     private static $taken_this_request = '';
 
@@ -827,6 +830,7 @@ class PressHub_AI_Update_Backup {
             if ( is_wp_error( $files ) ) {
                 return self::restore_failed( $id, $safety['id'], $files );
             }
+            self::$files_restored = true;
         }
 
         $options = self::restore_options( $dir . '/options.jsonl.gz' );
@@ -900,7 +904,8 @@ class PressHub_AI_Update_Backup {
             if ( ! preg_match( '/^[A-Za-z0-9_]+$/', (string) $suffix ) || ! self::is_plugin_table( self::db_prefix() . $suffix ) ) {
                 return new WP_Error( 'presshub_restore_table', __( 'The backup lists a table with an invalid name.', 'presshub-ai-editor' ) );
             }
-            if ( ! empty( $info['create'] ) && ! is_readable( $dir . '/tables/' . $suffix . '.sql' ) ) {
+            $sql_file = $dir . '/tables/' . $suffix . '.sql';
+            if ( ! empty( $info['create'] ) && ( ! is_readable( $sql_file ) || ! preg_match( '/^\s*CREATE\s+TABLE\b/i', (string) file_get_contents( $sql_file, false, null, 0, 64 ) ) ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
                 return new WP_Error( 'presshub_restore_file', sprintf(
                     /* translators: %s: file name. */
                     __( 'The file %s is missing.', 'presshub-ai-editor' ),
@@ -1229,7 +1234,12 @@ class PressHub_AI_Update_Backup {
                 return $cached;
             }
         }
-        $state = self::check_exposure();
+        $state    = self::check_exposure();
+        $previous = get_transient( self::exposure_key() );
+        // A check that could not finish never clears an earlier "exposed".
+        if ( 'unverified' === $state && 'exposed' === $previous ) {
+            $state = 'exposed';
+        }
         set_transient( self::exposure_key(), $state, 12 * 3600 );
         if ( 'exposed' === $state ) {
             PressHub_AI_Logger::warning( 'PressHub backup folder is publicly accessible over HTTP', [ 'dir' => self::base_dir() ] );
@@ -1358,7 +1368,7 @@ class PressHub_AI_Update_Backup {
         if ( is_wp_error( $result ) ) {
             $manifest = self::read_manifest( $id );
             $old      = $manifest && version_compare( (string) ( $manifest['plugin_version'] ?? '' ), '2.53.0', '<' );
-            if ( $with_files && $old ) {
+            if ( self::$files_restored && $old ) {
                 // The old files may already be in place, and they have no Backups page to show this.
                 wp_die(
                     '<p>' . esc_html( $result->get_error_message() ) . '</p><p><a href="' . esc_url( admin_url( 'plugins.php' ) ) . '">' . esc_html__( 'Go to Plugins', 'presshub-ai-editor' ) . '</a></p>',
@@ -1396,9 +1406,13 @@ class PressHub_AI_Update_Backup {
         if ( 'exposed' === $state ) {
             self::finish( 'error', __( 'Checked again: the web server still hands out files from the backup folder.', 'presshub-ai-editor' ) );
         }
-        self::finish( 'success', 'protected' === $state
-            ? __( 'Checked again: the backup folder is blocked from the web.', 'presshub-ai-editor' )
-            : __( 'Checked again: the web server did not hand out the test file.', 'presshub-ai-editor' ) );
+        if ( 'protected' === $state ) {
+            self::finish( 'success', __( 'Checked again: the backup folder is blocked from the web.', 'presshub-ai-editor' ) );
+        }
+        if ( 'outside' === $state ) {
+            self::finish( 'success', __( 'Checked again: the backup folder is outside wp-content, so the web server does not serve it.', 'presshub-ai-editor' ) );
+        }
+        self::finish( 'warning', __( 'PressHub could not check whether the backup folder is blocked: the test request to this site did not answer. Check the folder by hand, or ask your host.', 'presshub-ai-editor' ) );
     }
 
     public static function handle_delete(): void {
@@ -1433,11 +1447,11 @@ class PressHub_AI_Update_Backup {
         }
     }
 
-    private static function format_time( int $ts ): string {
+    private static function format_time( int $ts, bool $seconds = false ): string {
         if ( function_exists( 'wp_date' ) ) {
-            return (string) wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $ts );
+            return (string) wp_date( get_option( 'date_format' ) . ' ' . ( $seconds ? 'H:i:s' : get_option( 'time_format' ) ), $ts );
         }
-        return gmdate( 'Y-m-d H:i', $ts );
+        return gmdate( $seconds ? 'Y-m-d H:i:s' : 'Y-m-d H:i', $ts );
     }
 
     /** "18 options, 7 tables (1,204 rows), plugin files". */
@@ -1485,8 +1499,10 @@ class PressHub_AI_Update_Backup {
         $notice = get_transient( self::notice_key() );
         if ( is_array( $notice ) && ! empty( $notice['message'] ) ) {
             delete_transient( self::notice_key() );
-            $error = 'error' === ( $notice['type'] ?? '' );
-            echo '<div class="notice ' . ( $error ? 'notice-error' : 'notice-success' ) . '" role="' . ( $error ? 'alert' : 'status' ) . '"><p>' . esc_html( (string) $notice['message'] ) . '</p></div>';
+            $type  = (string) ( $notice['type'] ?? '' );
+            $error = 'error' === $type;
+            $class = $error ? 'notice-error' : ( 'warning' === $type ? 'notice-warning' : 'notice-success' );
+            echo '<div class="notice ' . $class . '" role="' . ( $error ? 'alert' : 'status' ) . '"><p>' . esc_html( (string) $notice['message'] ) . '</p></div>';
         }
 
         if ( $can_act && '' !== $confirm && self::is_valid_id( $confirm ) ) {
@@ -1532,7 +1548,7 @@ class PressHub_AI_Update_Backup {
             echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><p>';
             echo '<input type="hidden" name="action" value="' . esc_attr( self::RECHECK_ACTION ) . '" />';
             wp_nonce_field( self::RECHECK_ACTION );
-            submit_button( __( 'Check again', 'presshub-ai-editor' ), 'secondary small', 'submit', false );
+            submit_button( __( 'Check again', 'presshub-ai-editor' ), 'secondary small', 'presshub-backups-recheck', false );
             echo '</p></form></div>';
         }
         if ( $can_act ) {
@@ -1585,12 +1601,12 @@ class PressHub_AI_Update_Backup {
             echo '<td>' . esc_html( self::contents_label( $backup ) ) . '</td>';
             echo '<td class="presshub-backups-col-size">' . esc_html( size_format( (int) ( $backup['bytes'] ?? 0 ) ) ) . '</td>';
             if ( $can_act ) {
-                echo '<td class="presshub-backups-actions">';
+                echo '<td class="presshub-backups-actions"><div class="presshub-backups-actions-inner">';
                 /* translators: 1: date and time the backup was taken, 2: PressHub version, 3: why. Read after "Restore…" or "Delete…". */
-                $which = '<span class="screen-reader-text"> ' . esc_html( sprintf( __( '(%1$s, PressHub %2$s, %3$s)', 'presshub-ai-editor' ), self::format_time( (int) $backup['created_ts'] ), (string) $backup['plugin_version'], self::reason_label( $backup ) ) ) . '</span>';
+                $which = '<span class="screen-reader-text"> ' . esc_html( sprintf( __( '(%1$s, PressHub %2$s, %3$s)', 'presshub-ai-editor' ), self::format_time( (int) $backup['created_ts'], true ), (string) $backup['plugin_version'], self::reason_label( $backup ) ) ) . '</span>';
                 echo '<a class="button button-secondary" href="' . esc_url( self::page_url( [ 'confirm' => $backup['id'] ] ) ) . '">' . esc_html__( 'Restore…', 'presshub-ai-editor' ) . $which . '</a> ';
                 echo '<a class="button-link button-link-delete presshub-backups-delete" href="' . esc_url( self::page_url( [ 'confirm' => $backup['id'], 'do' => 'delete' ] ) ) . '">' . esc_html__( 'Delete…', 'presshub-ai-editor' ) . $which . '</a>';
-                echo '</td>';
+                echo '</div></td>';
             }
             echo '</tr>';
         }
