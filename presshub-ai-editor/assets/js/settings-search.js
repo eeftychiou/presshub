@@ -29,6 +29,13 @@
         if (!form) {
             return null;
         }
+        // AI models: the list shown in place of the model ID field (#236).
+        if (typeof window.PressHubModelControl === 'function') {
+            var model = window.PressHubModelControl(key);
+            if (model) {
+                return model;
+            }
+        }
         var el = document.getElementById(key);
         if (el && form.contains(el) && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) && el.type !== 'hidden') {
             return el;

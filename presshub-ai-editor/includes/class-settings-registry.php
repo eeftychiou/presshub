@@ -264,7 +264,7 @@ class PressHub_Settings_Registry {
             'whats_new_dismissed' => $dismissed,
             'whats_new'           => [
                 __( 'PressHub AI and PressHub Social settings are now one Settings page. Pick a section on the left; each section has its own Save.', 'presshub-ai-editor' ),
-                __( 'Connections holds the social platform accounts, the automation worker, Google Cloud and plugin updates. AI models holds the provider grid and the Copilot model.', 'presshub-ai-editor' ),
+                __( 'Connections holds every key and account: AI providers, social platform accounts, the automation worker, Google Cloud and plugin updates. AI models shows in one table which model each AI task uses.', 'presshub-ai-editor' ),
                 __( 'Writing & QA brings together Co-author drafting, the QA gate, SEO & tags and Featured images. Social publishing holds everything from the old Social settings page except the accounts.', 'presshub-ai-editor' ),
                 __( 'Site & system shows every retention period in one table, with link previews, rate limits and diagnostics. Token & usage logs are on PressHub → Usage & logs.', 'presshub-ai-editor' ),
                 __( 'Leaving a section with unsaved changes asks first. Old links and bookmarks still work: they open the section that now holds the setting.', 'presshub-ai-editor' ),

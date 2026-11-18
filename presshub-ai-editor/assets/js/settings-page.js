@@ -229,14 +229,16 @@
         $summary[0].focus();
     }
 
-    $(document).on('presshub:settings-invalid', function (_, invalid) {
+    /** Marks each { el, msg } as invalid, next to the field and in the summary. */
+    function markFields(pairs) {
         clearErrors();
         var items = [];
-        $.each(invalid || [], function (i, el) {
+        $.each(pairs, function (i, pair) {
+            var el = pair.el;
             if (!el.id) {
                 el.id = 'presshub-field-' + (el.name || 'field').replace(/[^a-z0-9_-]/gi, '_') + '-' + i;
             }
-            var msg = el.validationMessage || t.invalid_value || 'Enter a valid value.';
+            var msg = pair.msg;
             var errId = el.id + '-presshub-error';
             var $err = $('<p class="presshub-field-error"></p>').attr('id', errId).text(msg);
             var $anchor = $(el).closest('label').length ? $(el).closest('label') : $(el);
@@ -247,6 +249,29 @@
         });
         showSummary(items);
         $('#presshub-sticky-status-msg').removeClass('is-success').addClass('is-error').text(t.not_saved || 'Not saved. Fix the fields listed above.');
+    }
+
+    $(document).on('presshub:settings-invalid', function (_, invalid) {
+        markFields($.map(invalid || [], function (el) {
+            return { el: el, msg: el.validationMessage || t.invalid_value || 'Enter a valid value.' };
+        }));
+    });
+
+    // #236: errors the server found (a model of the wrong type), keyed by option.
+    $(document).on('presshub:settings-field-errors', function (_, errors, message) {
+        var pairs = [];
+        $.each(errors || {}, function (key, msg) {
+            var el = modelControl(key) || document.getElementById(key);
+            if (el) {
+                pairs.push({ el: el, msg: String(msg) });
+            }
+        });
+        if (pairs.length) {
+            markFields(pairs);
+        } else {
+            clearErrors();
+            showSummary([{ id: '', text: String(message || '') }]);
+        }
     });
 
     $(document).on('presshub:settings-save-failed', function (_, tabKey, message) {
@@ -349,6 +374,71 @@
         }
         $(parent).on('change input', apply);
         apply();
+    });
+
+    // ------------------------------------------------------------------
+    // AI models (#236): a list of known models plus "Other model ID…",
+    // kept in step with the text field that is saved. Without JavaScript
+    // only the text field shows.
+    // ------------------------------------------------------------------
+    /** The visible control for a model option: its list, or its text field. */
+    function modelControl(key) {
+        var choice = document.querySelector('.presshub-model-choice[data-model-input="' + key + '"]');
+        if (!choice || choice.hidden) {
+            return null;
+        }
+        return choice.value === '__other' ? document.getElementById(key) : choice;
+    }
+    window.PressHubModelControl = modelControl;
+
+    function modelPicker(choice) {
+        var input = document.getElementById(choice.getAttribute('data-model-input'));
+        var wrap = input ? $(input).closest('.presshub-model-other') : $();
+        var providerSel = document.getElementById(choice.getAttribute('data-provider-select') || '');
+        if (!input) {
+            return;
+        }
+        function showOther(on) {
+            wrap.prop('hidden', !on);
+        }
+        function filterGroups() {
+            if (!providerSel) {
+                return;
+            }
+            var pid = providerSel.value || choice.getAttribute('data-default-provider') || '';
+            $(choice).find('optgroup').each(function () {
+                var mine = this.getAttribute('data-provider') === pid;
+                this.hidden = !mine;
+                $(this).find('option').prop('disabled', !mine);
+            });
+            var opt = choice.options[choice.selectedIndex];
+            if (opt && opt.disabled) {
+                choice.value = '';
+                if (input.value !== '') {
+                    input.value = '';
+                    $(input).trigger('input').trigger('change');
+                }
+            }
+        }
+        choice.hidden = false;
+        showOther(choice.value === '__other');
+        filterGroups();
+        $(choice).on('change', function () {
+            if (choice.value === '__other') {
+                showOther(true);
+                input.focus();
+                return;
+            }
+            showOther(false);
+            input.value = choice.value;
+            $(input).trigger('input').trigger('change');
+        });
+        if (providerSel) {
+            $(providerSel).on('change', filterGroups);
+        }
+    }
+    $('.presshub-model-choice').each(function () {
+        modelPicker(this);
     });
 
     // ------------------------------------------------------------------
