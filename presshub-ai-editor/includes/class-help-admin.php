@@ -482,7 +482,7 @@ class PressHub_AI_Help_Admin {
         $html .= self::ul( [
             __( 'Matching is by words, not meaning. If the material says "the 13th pension" and none of your aliases does, the pension fiche is not used. A broad alias can also bring a fiche into stories where it does not belong.', 'presshub-ai-editor' ),
             __( 'One word under 6 letters never matches on its own, so acronyms need a longer phrase.', 'presshub-ai-editor' ),
-            __( 'At most 3 fiches per task; with several busy files, the less mentioned ones are left out. Long fiches lose their facts and questions in the podcast, and everything but the framing in social copy.', 'presshub-ai-editor' ),
+            __( 'At most 3 fiches per task; with several busy files, the less mentioned ones are left out. The podcast never gets facts or open questions, and social copy and shorts get only the framing. A fiche too long for its task is sent with fewer parts (down to principles and framing), and in social copy it is left out.', 'presshub-ai-editor' ),
             sprintf(
                 /* translators: 1: characters for social copy, 2: characters for shorts */
                 __( 'The small tasks have little room once the fixed instructions are in: about %1$d characters for a fiche\'s title and framing in social copy and %2$d in the TikTok short plan, all fiches together. A fiche whose title and framing do not fit is not sent there at all; the Policies page warns you.', 'presshub-ai-editor' ),
