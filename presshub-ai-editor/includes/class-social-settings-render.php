@@ -14,6 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/class-capabilities.php';
 require_once __DIR__ . '/class-settings-sections.php';
+require_once __DIR__ . '/class-secret-field.php';
+require_once __DIR__ . '/class-connection-status.php';
+require_once __DIR__ . '/class-setup-check.php';
 
 require_once __DIR__ . '/class-social-logger.php';
 require_once __DIR__ . '/class-social-settings-storage.php';
@@ -288,23 +291,21 @@ class PressHub_Social_Settings_Render {
     }
 
     public function render_secret_field( array $args ): void {
-        $option      = $args['option'];
-        $raw         = (string) get_option( $option, '' );
-        $masked      = PressHub_Social_Logger::mask_secret( $raw );
-        $desc        = $args['desc'] ?? '';
-        $placeholder = $args['placeholder'] ?? '';
+        $option = $args['option'];
+        $raw    = (string) get_option( $option, '' );
+        $desc   = $args['desc'] ?? '';
+        // #247: one "Replace key" pattern for every secret. Empty keeps the
+        // saved value; "<option>_remove" still clears it.
+        PressHub_Secret_Field::render( [
+            'name'         => $option,
+            'masked'       => '' !== $raw ? PressHub_Social_Logger::mask_secret( $raw ) : '',
+            'remove_name'  => $option . '_remove',
+            'placeholder'  => (string) ( $args['placeholder'] ?? '' ) ?: null,
+            'describedby'  => '' !== $desc ? $option . '-desc' : '',
+        ] );
         ?>
-        <div class="ph-display-flex ph-align-items-center ph-gap-10px ph-flex-wrap-wrap">
-            <input type="password" id="<?php echo esc_attr( $option ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $masked ); ?>" class="regular-text" placeholder="<?php echo esc_attr( $placeholder ); ?>" autocomplete="new-password" />
-            <?php if ( '' !== $raw ) : ?>
-                <label class="ph-color-a00 ph-font-size-12px">
-                    <input type="checkbox" name="<?php echo esc_attr( $option . '_remove' ); ?>" value="1" />
-                    <?php echo esc_html__( 'Clear / Revoke Stored Secret', 'presshub-social-autopost' ); ?>
-                </label>
-            <?php endif; ?>
-        </div>
         <?php if ( '' !== $desc ) : ?>
-            <p class="description"><?php echo esc_html( $desc ); ?></p>
+            <p class="description" id="<?php echo esc_attr( $option . '-desc' ); ?>"><?php echo esc_html( $desc ); ?></p>
         <?php endif; ?>
         <?php
         if ( ! empty( $args['test_platform'] ) ) {
@@ -393,23 +394,12 @@ class PressHub_Social_Settings_Render {
 
     public function render_worker_mode_field(): void {
         $mode     = PressHub_Social_Settings_Storage::get_worker_mode();
-        $rest_url = function_exists( 'rest_url' )
-            ? rest_url( 'presshub-social/v1/worker/claim' )
-            : ( function_exists( 'home_url' ) ? home_url( '/wp-json/presshub-social/v1/worker/claim' ) : '/wp-json/presshub-social/v1/worker/claim' );
         ?>
         <select id="presshub_social_worker_mode" name="presshub_social_worker_mode">
             <option value="pull" <?php selected( $mode, 'pull' ); ?>><?php echo esc_html__( 'Pull Mode — Local Worker Polls WordPress via REST API (Recommended for Local PC)', 'presshub-social-autopost' ); ?></option>
             <option value="push" <?php selected( $mode, 'push' ); ?>><?php echo esc_html__( 'Push Mode — WordPress Connects Directly to Worker URL', 'presshub-social-autopost' ); ?></option>
         </select>
-        <p class="description">
-            <?php
-            printf(
-                /* translators: %s: REST claim endpoint URL */
-                esc_html__( 'In Pull Mode, your local worker polls WordPress for jobs and sends heartbeats. Endpoint URL: %s', 'presshub-social-autopost' ),
-                '<code>' . esc_html( $rest_url ) . '</code>'
-            );
-            ?>
-        </p>
+        <p class="description"><?php echo esc_html__( 'Pull: the worker on your PC asks this site for jobs and reports when it is running. Push: this site sends each job to the worker address below.', 'presshub-social-autopost' ); ?></p>
         <?php
     }
 
@@ -540,6 +530,73 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    /** Names of the platforms as people know them. */
+    public static function platform_label( string $platform ): string {
+        $labels = [
+            'twitter'   => 'X',
+            'facebook'  => 'Facebook',
+            'instagram' => 'Instagram',
+            'tiktok'    => 'TikTok',
+        ];
+        return $labels[ $platform ] ?? ucfirst( $platform );
+    }
+
+    /**
+     * Worker status from what the plugin already stores (#247): the last
+     * heartbeat and the login the worker reported for each platform. No
+     * request is made to the worker.
+     */
+    public function render_worker_status(): void {
+        $mode      = PressHub_Social_Settings_Storage::get_worker_mode();
+        $last_seen = (int) get_option( 'presshub_social_worker_last_seen', 0 );
+        $sessions  = get_option( 'presshub_social_worker_sessions', [] );
+        $sessions  = is_array( $sessions ) ? $sessions : [];
+        $online    = $last_seen > 0 && ( time() - $last_seen ) <= PressHub_Setup_Check::WORKER_ONLINE_SECONDS;
+        ?>
+        <div class="presshub-worker-status" id="presshub-worker-status">
+            <h3><?php echo esc_html__( 'Worker status', 'presshub-social-autopost' ); ?></h3>
+            <?php if ( 'pull' === $mode ) : ?>
+                <p>
+                    <span class="presshub-conn-pill <?php echo $online ? 'is-ok' : 'is-error'; ?>"><?php echo $online ? esc_html__( 'Running', 'presshub-social-autopost' ) : esc_html__( 'Not running', 'presshub-social-autopost' ); ?></span>
+                    <?php
+                    if ( $last_seen > 0 ) {
+                        /* translators: %s: time of the last heartbeat */
+                        echo ' ' . esc_html( sprintf( __( 'last heard from %s', 'presshub-social-autopost' ), PressHub_Connection_Status::time_label( $last_seen ) ) );
+                    } else {
+                        echo ' ' . esc_html__( 'never heard from yet', 'presshub-social-autopost' );
+                    }
+                    ?>
+                </p>
+            <?php else : ?>
+                <p><?php echo esc_html__( 'In Push mode this site calls the worker when it has a job. Use Test below to check that it answers.', 'presshub-social-autopost' ); ?></p>
+            <?php endif; ?>
+            <?php
+            $automation = array_values( array_filter( PressHub_Social_Settings_Storage::PLATFORMS, static function ( $p ) {
+                return 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p );
+            } ) );
+            if ( $automation ) :
+                ?>
+                <table class="widefat striped presshub-worker-logins">
+                    <caption class="screen-reader-text"><?php echo esc_html__( 'Logins on the worker', 'presshub-social-autopost' ); ?></caption>
+                    <thead><tr><th scope="col"><?php echo esc_html__( 'Platform', 'presshub-social-autopost' ); ?></th><th scope="col"><?php echo esc_html__( 'Login on the worker', 'presshub-social-autopost' ); ?></th></tr></thead>
+                    <tbody>
+                    <?php foreach ( $automation as $p ) :
+                        $known  = array_key_exists( $p, $sessions );
+                        $active = ! empty( $sessions[ $p ] );
+                        ?>
+                        <tr>
+                            <td><?php echo esc_html( self::platform_label( $p ) ); ?></td>
+                            <td><span class="presshub-conn-pill <?php echo $active ? 'is-ok' : ( $known ? 'is-error' : 'is-unknown' ); ?>"><?php echo $active ? esc_html__( 'Logged in', 'presshub-social-autopost' ) : ( $known ? esc_html__( 'Login needed', 'presshub-social-autopost' ) : esc_html__( 'Not reported yet', 'presshub-social-autopost' ) ); ?></span></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <p class="description"><?php echo esc_html__( 'The worker reports its logins with every heartbeat. To log in again, run the login step on the PC that runs the worker.', 'presshub-social-autopost' ); ?></p>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
     public function render_worker_url_field(): void {
         $url = PressHub_Social_Settings_Storage::get_worker_url();
         ?>
@@ -552,12 +609,23 @@ class PressHub_Social_Settings_Render {
 
     public function render_worker_secret_field(): void {
         $secret = PressHub_Social_Settings_Storage::get_worker_secret();
-        $masked = PressHub_Social_Logger::mask_secret( $secret );
+        // No Remove box: without a secret the worker cannot sign in at all.
+        PressHub_Secret_Field::render( [
+            'name'        => 'presshub_social_worker_secret',
+            'masked'      => '' !== $secret ? PressHub_Social_Logger::mask_secret( $secret ) : '',
+            'class'       => 'code',
+            'describedby' => 'presshub_social_worker_secret-desc',
+        ] );
         ?>
-        <div class="ph-display-flex ph-align-items-center ph-gap-10px">
-            <input type="password" id="presshub_social_worker_secret" name="presshub_social_worker_secret" value="<?php echo esc_attr( $masked ); ?>" class="regular-text code" autocomplete="new-password" />
-        </div>
-        <p class="description"><?php echo esc_html__( 'Bearer secret token sent in X-Worker-Secret header to authenticate against the automation worker.', 'presshub-social-autopost' ); ?></p>
+        <p class="description" id="presshub_social_worker_secret-desc"><?php echo esc_html__( 'The worker signs in with this secret. It must match PRESSHUB_WORKER_SECRET in the worker’s .env file.', 'presshub-social-autopost' ); ?></p>
+        <p class="presshub-worker-regenerate">
+            <button type="button" class="button" id="presshub-social-regenerate-secret"
+                data-confirm="<?php echo esc_attr__( 'Make a new worker secret? The worker stops posting until you paste the new secret into PRESSHUB_WORKER_SECRET in its .env file and restart it.', 'presshub-social-autopost' ); ?>">
+                <?php echo esc_html__( 'Regenerate secret', 'presshub-social-autopost' ); ?>
+            </button>
+            <span class="spinner ph-float-none"></span>
+            <span class="presshub-worker-new-secret" role="status" aria-live="polite"></span>
+        </p>
         <?php
     }
 
@@ -692,9 +760,10 @@ class PressHub_Social_Settings_Render {
     public function render_test_connection_button( string $platform ): void {
         ?>
         <div class="ph-margin-top-8px presshub-social-test-row">
+            <?php echo PressHub_Connection_Status::render_pill( 'worker' === $platform ? 'worker' : 'social:' . sanitize_key( $platform ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
             <button type="button" class="button button-secondary presshub-social-test-btn" data-platform="<?php echo esc_attr( $platform ); ?>">
                 <span class="ph-line-height-1_4 ph-vertical-align-middle ph-font-size-16px dashicons dashicons-update"></span>
-                <?php echo esc_html( sprintf( __( 'Test %s Connection', 'presshub-social-autopost' ), ucfirst( $platform ) ) ); ?>
+                <?php echo esc_html( 'worker' === $platform ? __( 'Test the worker', 'presshub-social-autopost' ) : sprintf( /* translators: %s: platform name */ __( 'Test %s', 'presshub-social-autopost' ), self::platform_label( $platform ) ) ); ?>
             </button>
             <span class="ph-float-none ph-margin-0-0-0-6px spinner"></span>
             <span class="ph-margin-left-8px ph-font-weight-600 presshub-social-test-status" data-platform="<?php echo esc_attr( $platform ); ?>"></span>

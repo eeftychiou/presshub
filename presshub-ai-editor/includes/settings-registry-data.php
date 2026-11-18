@@ -460,7 +460,7 @@ return [
     'checkbox' => false,
     'secret' => true,
     'type' => 'string',
-    'rendered' => false,
+    'rendered' => true,
     'status' => 'active',
   ],
   'presshub_ai_remove_briefing_tts_api_key' => [

@@ -813,6 +813,25 @@ class PressHub_Social_Meta_API_Client {
     }
 
     /**
+     * Unix time a Meta access token expires, from /debug_token (a token may
+     * inspect itself). 0 when it never expires or the lookup fails. Called
+     * only from a Test click, never on page load (#247).
+     */
+    public static function token_expires_at( string $token ): int {
+        if ( '' === $token ) {
+            return 0;
+        }
+        $url      = 'https://graph.facebook.com/' . self::GRAPH_API_VERSION . '/debug_token?input_token=' . rawurlencode( $token ) . '&access_token=' . rawurlencode( $token );
+        $response = wp_remote_get( $url, [ 'timeout' => 15 ] );
+        if ( is_wp_error( $response ) ) {
+            return 0;
+        }
+        $data = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+        $exp  = (int) ( $data['data']['expires_at'] ?? 0 );
+        return $exp > 0 ? $exp : 0;
+    }
+
+    /**
      * Test connection credentials for a given platform.
      *
      * @param string $platform
@@ -845,9 +864,11 @@ class PressHub_Social_Meta_API_Client {
                     return new WP_Error( 'fb_test_failed', $data['error']['message'] ?? 'Facebook validation failed.' );
                 }
                 return [
-                    'success'  => true,
-                    'platform' => 'facebook',
-                    'message'  => sprintf( __( 'Connected to Facebook Page: %s (ID: %s)', 'presshub-social-autopost' ), $data['name'] ?? '', $data['id'] ?? '' ),
+                    'success'    => true,
+                    'platform'   => 'facebook',
+                    'message'    => sprintf( __( 'Connected to Facebook Page: %s (ID: %s)', 'presshub-social-autopost' ), $data['name'] ?? '', $data['id'] ?? '' ),
+                    // #247: when the token expires (0 = never or unknown), shown in Connections.
+                    'expires_at' => self::token_expires_at( $token ),
                 ];
 
             case 'instagram':

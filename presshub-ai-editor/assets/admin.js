@@ -1376,52 +1376,87 @@ jQuery(document).ready(function($) {
      * removing it. Keeps the plain password out of the page.
      */
     function resetPressInboxPasswordField() {
-        var $pass = $('#presshub_ai_press_inbox_password');
-        var $remove = $('#presshub_ai_remove_press_inbox_password');
-        if (!$pass.length) {
-            resetSocialSecretFields();
-            return;
-        }
-        var typed = String($pass.val() || '');
-        var hasNew = typed !== '' && typed.indexOf('••••') === -1;
-        if (hasNew) {
-            $pass.val('••••••••');
-            $remove.prop('checked', false);
-        } else if ($remove.length && $remove.is(':checked')) {
-            $pass.val('');
-            $remove.prop('checked', false);
-            $remove.closest('label').hide();
-        }
         resetSocialSecretFields();
     }
 
     /**
-     * #246: Social secrets (Connections) after a successful save: a new value
-     * shows masked, a cleared one shows empty, and "Remove" is unticked so a
-     * secret typed later is not removed again.
+     * After a successful save, show every secret the way a page load would
+     * (#247): a new value as saved (masked), a removed one as "Not set", the
+     * input closed and emptied, and "Remove" unticked so a key typed later is
+     * not removed again. The saved value never comes back to the page.
      */
     function resetSocialSecretFields() {
-        $('#presshub-settings-page input[type="checkbox"][name$="_remove"], #presshub-settings-page input[type="checkbox"][name^="presshub_ai_remove_"]').each(function() {
-            var $remove = $(this);
-            var name = String($remove.attr('name') || '');
-            // Social: <option>_remove. AI: presshub_ai_remove_<x> clears presshub_ai_<x>.
-            var option = /^presshub_ai_remove_/.test(name) ? name.replace(/^presshub_ai_remove_/, 'presshub_ai_') : name.replace(/_remove$/, '');
-            var $field = $('[name="' + option + '"]');
-            if (!$field.length || !$field.is('input[type="password"]')) {
-                return;
-            }
-            var typed = String($field.val() || '');
-            var hasNew = typed !== '' && typed.indexOf('••••') === -1;
-            if (hasNew) {
-                $field.val('••••••••');
-                $remove.prop('checked', false);
-            } else if ($remove.is(':checked')) {
-                $field.val('');
-                $remove.prop('checked', false);
+        $('#presshub-settings-page .presshub-secret').each(function() {
+            var $box = $(this);
+            var $input = $box.find('.presshub-secret-edit input');
+            var $remove = $box.find('.presshub-secret-remove input[type="checkbox"]');
+            var $current = $box.find('.presshub-secret-current');
+            var $replace = $box.find('.presshub-secret-replace');
+            var typed = String($input.val() || '');
+            if (typed !== '') {
+                $current.addClass('code').text('•••••••• ' + __('(new key saved)', 'presshub-ai-editor'));
+                $replace.text($replace.data('replace-label') || __('Replace key', 'presshub-ai-editor'));
+            } else if ($remove.length && $remove.is(':checked')) {
+                $current.removeClass('code').text($current.data('empty-label') || __('Not set', 'presshub-ai-editor'));
+                $replace.text($replace.data('add-label') || __('Add key', 'presshub-ai-editor'));
                 $remove.closest('label').hide();
             }
+            $remove.prop('checked', false);
+            $input.val('');
+            closeSecretEdit($box, false);
         });
     }
+
+    // #247: one "Replace key" pattern for every secret. Without JS the input
+    // is simply shown; with JS it opens from the Replace key button.
+    function closeSecretEdit($box, focus) {
+        var $edit = $box.find('.presshub-secret-edit');
+        var $replace = $box.find('.presshub-secret-replace');
+        $edit.addClass('presshub-is-hidden');
+        $replace.prop('hidden', false).attr('aria-expanded', 'false');
+        if (focus) {
+            $replace.trigger('focus');
+        }
+    }
+    $('.presshub-secret').each(function() {
+        var $box = $(this);
+        $box.find('.presshub-secret-cancel').prop('hidden', false);
+        closeSecretEdit($box, false);
+    });
+    $(document).on('click', '.presshub-secret-replace', function(e) {
+        e.preventDefault();
+        var $box = $(this).closest('.presshub-secret');
+        $box.find('.presshub-secret-edit').removeClass('presshub-is-hidden');
+        $(this).prop('hidden', true).attr('aria-expanded', 'true');
+        $box.find('.presshub-secret-edit input').trigger('focus');
+    });
+    $(document).on('click', '.presshub-secret-cancel', function(e) {
+        e.preventDefault();
+        var $box = $(this).closest('.presshub-secret');
+        $box.find('.presshub-secret-edit input').val('').trigger('input');
+        closeSecretEdit($box, true);
+    });
+
+    /**
+     * #247: replace a connection's status pill (every copy on the page) with
+     * the one the test returned.
+     */
+    function presshubUpdateConnStatus(html) {
+        if (!html) {
+            return;
+        }
+        var $new = $($.parseHTML(String(html)));
+        var check = $new.attr('data-check');
+        if (!check) {
+            return;
+        }
+        $('.presshub-conn-status').filter(function() {
+            return $(this).attr('data-check') === check;
+        }).each(function() {
+            $(this).replaceWith($new.clone());
+        });
+    }
+    window.PressHubUpdateConnStatus = presshubUpdateConnStatus;
 
     function getTabFormSnapshot(tabKey) {
         var $tabPane = $('#presshub-tab-pane-' + tabKey);
@@ -2658,6 +2693,7 @@ jQuery(document).ready(function($) {
         }).done(function(res) {
             $btn.prop('disabled', false);
             $spinner.removeClass('is-active');
+            presshubUpdateConnStatus(res && res.data ? res.data.status : '');
             if (res && res.success) {
                 var latency = res.data.latency_ms ? ' (' + res.data.latency_ms + ' ms)' : '';
                 $result.html('<span style="color: #00a32a; font-weight: 600;">✓ ' + presshubEsc(res.data.message || 'Connected') + latency + '</span>').fadeIn();
@@ -3047,6 +3083,7 @@ jQuery(document).ready(function($) {
             data: { action: 'presshub_ai_test_press_inbox', nonce: presshubAI.nonce }
         }).done(function(res) {
             var ok = !!(res && res.success);
+            presshubUpdateConnStatus(res && res.data ? res.data.status : '');
             var msg = (res && res.data && res.data.message) ? res.data.message : (ok ? 'Connected.' : 'Connection test failed.');
             $result.html('<span style="color: ' + (ok ? '#00a32a' : '#d63638') + ';">' + (ok ? '✓ ' : '✗ ') + presshubEsc(msg) + '</span>');
         }).fail(function(xhr, status, error) {

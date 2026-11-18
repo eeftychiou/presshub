@@ -195,6 +195,48 @@
             step(reset);
         });
 
+        // #247: swap in the status pill a test returned (admin.js has the helper).
+        function updateConnStatus(html) {
+            if (html && typeof html === 'string' && window.PressHubUpdateConnStatus) {
+                window.PressHubUpdateConnStatus(html);
+            }
+        }
+
+        // #247: make a new worker secret. Shown once, so it can be copied into
+        // the worker's .env; the worker stops until it has the new secret.
+        $(document).on('click', '#presshub-social-regenerate-secret', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            if (!window.confirm(String($btn.data('confirm') || 'Make a new worker secret?'))) {
+                return;
+            }
+            var $wrap = $btn.closest('.presshub-worker-regenerate');
+            var $spinner = $wrap.find('.spinner');
+            var $out = $wrap.find('.presshub-worker-new-secret');
+            $btn.prop('disabled', true);
+            $spinner.addClass('is-active');
+            $out.empty();
+            $.post(ajaxurl, {
+                action: 'presshub_social_regenerate_worker_secret',
+                nonce: nonce
+            }).done(function (res) {
+                if (res && res.success && res.data && res.data.secret) {
+                    $out.append($('<span></span>').text(res.data.message + ' '), $('<code></code>').text(res.data.secret));
+                    var $box = $('.presshub-secret[data-secret-for="presshub_social_worker_secret"]');
+                    $box.find('.presshub-secret-current').addClass('code').text(res.data.masked || '••••••••');
+                    $box.find('.presshub-secret-edit input').val('');
+                } else {
+                    $out.text((res && res.data && res.data.message) ? res.data.message : 'Could not make a new secret.');
+                }
+            }).fail(function (xhr) {
+                var msg = (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) ? xhr.responseJSON.data.message : 'Could not make a new secret.';
+                $out.text(msg);
+            }).always(function () {
+                $btn.prop('disabled', false);
+                $spinner.removeClass('is-active');
+            });
+        });
+
         // Handle Test Connection Buttons
         $(document).on('click', '.presshub-social-test-btn, .presshub-btn-test-connection, [data-test-platform]', function (e) {
             e.preventDefault();
@@ -218,6 +260,7 @@
                     nonce: nonce,
                     platform: platform
                 }).done(function (res) {
+                    updateConnStatus(res && res.data ? (res.data.status_html || res.data.status) : '');
                     if (res && res.success) {
                         $status.css('color', '#007017').text('✓ ' + (res.data && res.data.message ? res.data.message : 'Connected'));
                     } else {
@@ -226,6 +269,9 @@
                     }
                 }).fail(function (xhr) {
                     var msg = 'HTTP Request Error';
+                    if (xhr.responseJSON && xhr.responseJSON.data) {
+                        updateConnStatus(xhr.responseJSON.data.status);
+                    }
                     if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
                         msg = xhr.responseJSON.data.message;
                     }

@@ -10,10 +10,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 
 | Section | Options | Not shown on screen | Secrets |
 |---|---|---|---|
-| Connections (`connections`) | 21 | 6 | 11 |
-| AI models (`ai-models`) | 22 | 17 | 1 |
+| Connections (`connections`) | 48 | 25 | 14 |
+| AI models (`ai-models`) | 5 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 24 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 102 | 8 | 2 |
+| Daily Briefing (`daily-briefing`) | 92 | 5 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 16 | 0 | 0 |
 | Social publishing (`social-publishing`) | 69 | 4 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
@@ -22,16 +22,43 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 
 **Scheduled for removal:** 4 option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).
 
-## Connections (`connections`, 21)
+## Connections (`connections`, 48)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
+| `presshub_ai_provider` | Active AI provider | string |  | ai / providers | not shown on screen, was: AI Provider |
+| `presshub_ai_api_key` | Legacy API key | string |  | ai / providers | not shown on screen, secret, masked, was: API Key |
+| `presshub_ai_remove_api_key` | Remove api key | boolean |  | ai / providers | not shown on screen, removes `presshub_ai_api_key` |
 | `presshub_ai_remove_google_cloud_api_key` | Remove google cloud api key | boolean |  | ai / advanced | not shown on screen, removes `presshub_ai_google_cloud_api_key` |
 | `presshub_ai_remove_github_token` | Remove github token | boolean |  | ai / advanced | not shown on screen, removes `presshub_ai_github_token` |
+| `presshub_ai_model_openai` | OpenAI model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Openai) |
+| `presshub_ai_temperature_openai` | OpenAI temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Openai) |
+| `presshub_ai_max_tokens_openai` | OpenAI maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Openai) |
+| `presshub_ai_timeout_openai` | OpenAI timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Openai) |
+| `presshub_ai_model_anthropic` | Anthropic model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Anthropic) |
+| `presshub_ai_temperature_anthropic` | Anthropic temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Anthropic) |
+| `presshub_ai_max_tokens_anthropic` | Anthropic maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Anthropic) |
+| `presshub_ai_timeout_anthropic` | Anthropic timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Anthropic) |
+| `presshub_ai_model_gemini` | Gemini model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Gemini) |
+| `presshub_ai_temperature_gemini` | Gemini temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Gemini) |
+| `presshub_ai_max_tokens_gemini` | Gemini maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Gemini) |
+| `presshub_ai_timeout_gemini` | Gemini timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Gemini) |
+| `presshub_ai_openai_org` | OpenAI Organization ID (optional) | string |  | ai / providers | not shown on screen |
+| `presshub_ai_anthropic_version` | Anthropic API Version | string |  | ai / providers | not shown on screen |
 | `presshub_ai_github_token` | GitHub Token (optional) | string |  | ai / advanced | secret, masked |
 | `presshub_ai_google_cloud_api_key` | Google Cloud API Key (Imagen/TTS) | string |  | ai / advanced | secret, masked |
 | `presshub_ai_gcloud_project_id` | Google Cloud Project ID (Imagen) | string |  | ai / advanced |  |
 | `presshub_ai_imagen_region` | Imagen Region | string |  | ai / advanced |  |
+| `presshub_ai_briefing_tts_api_key` | Speech Generation API Key (Google AI Studio / Gemini) | string |  | ai / briefing | secret, masked |
+| `presshub_ai_remove_briefing_tts_api_key` | Remove briefing tts api key | boolean |  | ai / briefing | not shown on screen, removes `presshub_ai_briefing_tts_api_key` |
+| `presshub_ai_press_inbox_host` | Mail server (IMAP host) | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
+| `presshub_ai_press_inbox_port` | Mail server port | string | port | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Port |
+| `presshub_ai_press_inbox_encryption` | Mail server encryption | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
+| `presshub_ai_press_inbox_verify_ssl` | Verify the mail server certificate | string |  | ai / briefing | checkbox, needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
+| `presshub_ai_press_inbox_username` | Mailbox Username | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
+| `presshub_ai_press_inbox_password` | Mailbox Password | string |  | ai / briefing | secret, masked, needs `presshub_ai_press_inbox_enabled` on |
+| `presshub_ai_remove_press_inbox_password` | Remove press inbox password | string |  | ai / briefing | not shown on screen, removes `presshub_ai_press_inbox_password` |
+| `presshub_ai_press_inbox_timeout` | Mail server timeout (s) | string | s | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
 | `presshub_social_github_token` | GitHub Personal Access Token (Auto-Updates) | string |  | social / general | not shown on screen, secret, masked, **unused** |
 | `presshub_social_worker_mode` | Worker Connection Mode | string |  | social / worker |  |
 | `presshub_social_worker_url` | Worker Service Endpoint | string |  | social / worker |  |
@@ -48,27 +75,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_tiktok_access_token` | TikTok Access Token | string |  | social / credentials | secret, masked |
 | `presshub_social_tiktok_open_id` | TikTok Creator Open ID | string |  | social / credentials |  |
 
-## AI models (`ai-models`, 22)
+## AI models (`ai-models`, 5)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
-| `presshub_ai_provider` | Active AI provider | string |  | ai / providers | not shown on screen, was: AI Provider |
-| `presshub_ai_api_key` | Legacy API key | string |  | ai / providers | not shown on screen, secret, masked, was: API Key |
-| `presshub_ai_remove_api_key` | Remove api key | boolean |  | ai / providers | not shown on screen, removes `presshub_ai_api_key` |
-| `presshub_ai_model_openai` | OpenAI model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Openai) |
-| `presshub_ai_temperature_openai` | OpenAI temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Openai) |
-| `presshub_ai_max_tokens_openai` | OpenAI maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Openai) |
-| `presshub_ai_timeout_openai` | OpenAI timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Openai) |
-| `presshub_ai_model_anthropic` | Anthropic model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Anthropic) |
-| `presshub_ai_temperature_anthropic` | Anthropic temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Anthropic) |
-| `presshub_ai_max_tokens_anthropic` | Anthropic maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Anthropic) |
-| `presshub_ai_timeout_anthropic` | Anthropic timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Anthropic) |
-| `presshub_ai_model_gemini` | Gemini model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Gemini) |
-| `presshub_ai_temperature_gemini` | Gemini temperature (legacy) | number | ratio | ai / providers | not shown on screen, was: Temperature (Gemini) |
-| `presshub_ai_max_tokens_gemini` | Gemini maximum output tokens (legacy) | integer | tokens | ai / providers | not shown on screen, was: Max Tokens (Gemini) |
-| `presshub_ai_timeout_gemini` | Gemini timeout (s) (legacy) | integer | s | ai / providers | not shown on screen, was: Timeout (Gemini) |
-| `presshub_ai_openai_org` | OpenAI Organization ID (optional) | string |  | ai / providers | not shown on screen |
-| `presshub_ai_anthropic_version` | Anthropic API Version | string |  | ai / providers | not shown on screen |
 | `presshub_ai_copilot_provider` | Active Copilot Provider | string |  | ai / copilot |  |
 | `presshub_ai_copilot_model` | Copilot model override | string |  | ai / copilot | was: Custom Model Override |
 | `presshub_ai_copilot_temperature` | Copilot temperature | number | ratio | ai / copilot | was: Sampling Temperature |
@@ -104,12 +114,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_editor_email` | Editor Notification Email | string |  | ai / coauthor |  |
 | `presshub_ai_qa_article_prompt` | Article QA Review Prompt Template | string |  | ai / coauthor |  |
 
-## Daily Briefing (`daily-briefing`, 102)
+## Daily Briefing (`daily-briefing`, 92)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
-| `presshub_ai_briefing_tts_api_key` | Speech Generation API Key (Google AI Studio / Gemini) | string |  | ai / briefing | not shown on screen, secret, masked |
-| `presshub_ai_remove_briefing_tts_api_key` | Remove briefing tts api key | boolean |  | ai / briefing | not shown on screen, removes `presshub_ai_briefing_tts_api_key` |
 | `presshub_ai_briefing_tts_engine` | Speech engine | string |  | ai / briefing | was: Voice Synthesis Engine |
 | `presshub_ai_briefing_tts_model` | Voice Generation AI Model | string |  | ai / briefing |  |
 | `presshub_ai_briefing_tts_timeout` | Speech AI timeout (s) | integer | s | ai / briefing | was: Speech AI Timeout (seconds) |
@@ -121,20 +129,12 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_noon_harvest_time` | Noon Harvest Time | string |  | ai / briefing | needs `presshub_ai_briefing_noon_schedule_enabled` on |
 | `presshub_ai_briefing_noon_generation_time` | Noon Generation Time | string |  | ai / briefing | needs `presshub_ai_briefing_noon_schedule_enabled` on |
 | `presshub_ai_press_inbox_enabled` | Read Press Release Inbox | string |  | ai / briefing | checkbox |
-| `presshub_ai_press_inbox_host` | Mail server (IMAP host) | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
-| `presshub_ai_press_inbox_port` | Mail server port | string | port | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Port |
-| `presshub_ai_press_inbox_encryption` | Mail server encryption | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
-| `presshub_ai_press_inbox_verify_ssl` | Verify the mail server certificate | string |  | ai / briefing | checkbox, needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
-| `presshub_ai_press_inbox_username` | Mailbox Username | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
-| `presshub_ai_press_inbox_password` | Mailbox Password | string |  | ai / briefing | secret, masked, needs `presshub_ai_press_inbox_enabled` on |
-| `presshub_ai_remove_press_inbox_password` | Remove press inbox password | string |  | ai / briefing | not shown on screen, removes `presshub_ai_press_inbox_password` |
 | `presshub_ai_press_inbox_folder` | Folders | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
 | `presshub_ai_press_inbox_processed_folder` | Move used emails to | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
 | `presshub_ai_press_inbox_allowed_senders` | Allowed Senders | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on |
 | `presshub_ai_press_inbox_max_messages` | Press releases per harvest | string | messages | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
 | `presshub_ai_press_inbox_max_age_hours` | Oldest press release read (h) | string | h | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
 | `presshub_ai_press_inbox_max_attachment_mb` | Largest attachment read (MB) | string | MB | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
-| `presshub_ai_press_inbox_timeout` | Mail server timeout (s) | string | s | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
 | `presshub_ai_press_inbox_extract_attachments` | Read press release attachments | string |  | ai / briefing | checkbox, needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
 | `presshub_ai_harvest_time_budget` | Harvest time budget (s) | integer | s | ai / briefing | was: Harvest Execution Time Budget (seconds) |
 | `presshub_ai_curation_max_articles` | Articles sent to the curator | integer | articles | ai / briefing | was: Maximum Articles Sent to Curation LLM |
