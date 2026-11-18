@@ -318,7 +318,7 @@ class PressHub_AI_Settings_Render {
         $this->group_start( 'qa-gate', $groups['qa-gate'] );
         ?>
 
-                        <p><?php echo __( 'Configure the automated quality-assurance review gate. When enabled, articles submitted for publication are automatically evaluated against editorial standards and blocked if they do not meet the minimum score.', 'presshub-ai-editor' ); ?></p>
+                        <p><?php echo esc_html__( 'Before a post is published, one AI review checks it three ways: editorial quality, legal risk and SEO. Each check has its own threshold. A failed editorial check holds the post in Pending Review; what a failed legal or SEO check does is set below. Every review is saved under PressHub → QA reviews.', 'presshub-ai-editor' ); ?></p>
                         <table class="form-table" role="presentation">
                             <tbody>
                                 <tr>
@@ -338,9 +338,21 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><label for="presshub_ai_qa_min_score"><?php echo __( 'Minimum Passing Score', 'presshub-ai-editor' ); ?></label></th>
+                                    <th scope="row"><label for="presshub_ai_qa_min_score"><?php echo esc_html__( 'Minimum editorial score', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
                                         <?php $this->render_qa_min_score_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_legal_action"><?php echo esc_html__( 'When the legal check fails', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_legal_action_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_legal_fail_risk"><?php echo esc_html__( 'Legal risk that fails the check', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_legal_fail_risk_field(); ?>
                                     </td>
                                 </tr>
                                 <tr>
@@ -396,9 +408,21 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><?php echo esc_html__( 'SEO Score in Editorial Review', 'presshub-ai-editor' ); ?></th>
+                                    <th scope="row"><?php echo esc_html__( 'SEO check at the QA gate', 'presshub-ai-editor' ); ?></th>
                                     <td>
                                         <?php $this->render_seo_review_enabled_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_seo_action"><?php echo esc_html__( 'When the SEO check fails', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_seo_action_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_seo_min_score"><?php echo esc_html__( 'Minimum SEO score', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_seo_min_score_field(); ?>
                                     </td>
                                 </tr>
                             </tbody>
@@ -4199,9 +4223,9 @@ class PressHub_AI_Settings_Render {
         <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
         <label for="presshub_ai_seo_review_enabled">
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_seo_review_enabled" value="1" <?php checked( true, $enabled ); ?> />
-            <?php echo esc_html__( 'Report a separate SEO Score with improvement suggestions when running the AI Editorial Review.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Score SEO in the QA review and act on a low score.', 'presshub-ai-editor' ); ?>
         </label>
-        <p class="description"><?php echo esc_html__( 'Default: Enabled. Checks headline, excerpt, tags, category, images and alt text, structure and links. The SEO score is advisory and never blocks publishing.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. Scores headline, excerpt, tags, category, images and alt text, structure and links in the QA review, and alerts the editor (or holds the post) when the score is below the minimum.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4391,8 +4415,62 @@ class PressHub_AI_Settings_Render {
         <input type="number" min="50" max="100" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_min_score" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <span class="description"><?php echo esc_html__( '/ 100', 'presshub-ai-editor' ); ?></span>
         <p class="description">
-            <?php echo esc_html__( 'Minimum score (50-100) required for publication. Articles scoring below this threshold are held in Pending Review. Default: 80.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Minimum editorial score (50-100) required for publication. Articles scoring below this threshold are held in Pending Review. Default: 80.', 'presshub-ai-editor' ); ?>
         </p>
+        <?php
+    }
+
+    /** Select of fixed choices, showing what is stored. */
+    private function render_choice_select( string $option, string $selected, array $choices ): void {
+        echo '<select name="' . self::esc_attr_safe( $option ) . '" id="' . self::esc_attr_safe( $option ) . '">';
+        foreach ( $choices as $value => $label ) {
+            echo '<option value="' . self::esc_attr_safe( $value ) . '"' . ( $value === $selected ? ' selected="selected"' : '' ) . '>' . esc_html( $label ) . '</option>';
+        }
+        echo '</select>';
+    }
+
+    /** Render "When the legal check fails". */
+    public function render_qa_legal_action_field() {
+        $this->render_choice_select( 'presshub_ai_qa_legal_action', PressHub_AI_Settings_Storage::get_qa_legal_action(), [
+            'alert' => __( 'Alert only: publish and email the editor', 'presshub-ai-editor' ),
+            'hold'  => __( 'Hold in Pending Review and email the editor', 'presshub-ai-editor' ),
+            'off'   => __( 'Off: skip the legal check', 'presshub-ai-editor' ),
+        ] );
+        ?>
+        <p class="description"><?php echo esc_html__( 'Default: Alert only. The legal check looks for defamation, unattributed allegations, privacy and personal data, minors and victims, hate speech and copied material. Alert only publishes and emails the editor; Hold keeps the post in Pending Review; Off skips the check.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "Legal risk that fails the check". */
+    public function render_qa_legal_fail_risk_field() {
+        $this->render_choice_select( 'presshub_ai_qa_legal_fail_risk', PressHub_AI_Settings_Storage::get_qa_legal_fail_risk(), [
+            'high'   => __( 'High only', 'presshub-ai-editor' ),
+            'medium' => __( 'Medium or High', 'presshub-ai-editor' ),
+        ] );
+        ?>
+        <p class="description"><?php echo esc_html__( 'Default: High only. The reviewer rates each post Low, Medium or High legal risk; this is the lowest rating that fails the legal check.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "When the SEO check fails". */
+    public function render_qa_seo_action_field() {
+        $this->render_choice_select( 'presshub_ai_qa_seo_action', PressHub_AI_Settings_Storage::get_qa_seo_action(), [
+            'alert' => __( 'Alert only: publish and email the editor', 'presshub-ai-editor' ),
+            'hold'  => __( 'Hold in Pending Review and email the editor', 'presshub-ai-editor' ),
+        ] );
+        ?>
+        <p class="description"><?php echo esc_html__( 'Default: Alert only. Alert only publishes and emails the editor with the suggestions; Hold keeps the post in Pending Review. A post with no headline or no featured image always fails the SEO check.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "Minimum SEO score". */
+    public function render_qa_seo_min_score_field() {
+        $option = 'presshub_ai_qa_seo_min_score';
+        $value  = PressHub_AI_Settings_Storage::get_qa_seo_min_score();
+        ?>
+        <input type="number" min="0" max="100" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_seo_min_score" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <span class="description"><?php echo esc_html__( '/ 100', 'presshub-ai-editor' ); ?></span>
+        <p class="description"><?php echo esc_html__( 'Default: 60. Lowest SEO score (0 - 100) that passes the SEO check. The score is the mean of the measured checks and the AI assessment.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

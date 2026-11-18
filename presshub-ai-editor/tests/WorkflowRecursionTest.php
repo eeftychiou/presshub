@@ -77,10 +77,28 @@ class WorkflowRecursionTest
 
         self::reset_world();
         self::grant_author_caps();
-        self::seed_post_meta( 42, [ 'score' => 90 ] );
+        self::seed_gate_review( 42, 'pass' );
         $count = self::simulate_unreviewed_publish();
         if ( $count !== 0 ) {
-            $failures[] = "High-score author should not be reverted (0 wp_update_post calls), got {$count}.";
+            $failures[] = "Author whose unchanged post passed the QA gate should not be reverted (0 wp_update_post calls), got {$count}.";
+        }
+
+        // A cached review that only alerts (legal or SEO warning) publishes too.
+        self::reset_world();
+        self::grant_author_caps();
+        self::seed_gate_review( 42, 'alert' );
+        $count = self::simulate_unreviewed_publish();
+        if ( $count !== 0 ) {
+            $failures[] = "An alert-only verdict must not revert the post, got {$count} wp_update_post calls.";
+        }
+
+        // A cached hold verdict reverts to pending.
+        self::reset_world();
+        self::grant_author_caps();
+        self::seed_gate_review( 42, 'hold' );
+        $count = self::simulate_unreviewed_publish();
+        if ( $count !== 1 ) {
+            $failures[] = "A hold verdict must revert the post once, got {$count} wp_update_post calls.";
         }
 
         // Antigravity C-5: non-'post' post types (research CPT, headless /
@@ -162,6 +180,17 @@ class WorkflowRecursionTest
 
     private static function seed_post_meta( int $post_id, array $scorecard ): void {
         $GLOBALS['POST_META_STORE'][ $post_id ]['_presshub_ai_scorecard'] = $scorecard;
+    }
+
+    /** A saved gate review for the post as it is published (same input hash). */
+    private static function seed_gate_review( int $post_id, string $verdict ): void {
+        $post = (object) [ 'ID' => $post_id, 'post_type' => 'post' ];
+        $GLOBALS['POST_META_STORE'][ $post_id ][ PressHub_AI_Publish_Gate::META_REVIEW ] = [
+            'verdict'      => $verdict,
+            'content_hash' => PressHub_AI_Publish_Gate::input_hash_for_post( $post ),
+            'checks'       => [ 'editorial' => [ 'result' => 'pass', 'score' => 90, 'threshold' => 80 ] ],
+            'context'      => 'post',
+        ];
     }
 
     /**

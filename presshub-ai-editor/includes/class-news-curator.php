@@ -1239,8 +1239,9 @@ class PressHub_AI_News_Curator {
         $qa_include_briefings = class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_qa_include_briefings();
 
         if ( $qa_enabled && $qa_include_briefings && class_exists( 'PressHub_AI_QA_Reviewer' ) ) {
-            $qa_result = PressHub_AI_QA_Reviewer::evaluate_content( $story_content, 'briefing' );
-            if ( ! empty( $qa_result ) && ! ( $qa_result['passed'] ?? false ) ) {
+            require_once __DIR__ . '/class-publish-gate.php';
+            $qa_result = PressHub_AI_Publish_Gate::review_content( $story_content, 'briefing', 'noon' === $edition ? 'briefing_noon' : 'briefing_morning' );
+            if ( PressHub_AI_Publish_Gate::holds( $qa_result ) ) {
                 if ( 'publish' === $post_status ) {
                     $post_status = 'pending';
                     if ( class_exists( 'PressHub_AI_Logger' ) ) {
@@ -1286,14 +1287,6 @@ class PressHub_AI_News_Curator {
             ],
         ];
 
-        if ( ! empty( $qa_result ) ) {
-            $postarr['meta_input']['_presshub_ai_scorecard']      = [
-                'score'    => $qa_result['score'] ?? 0,
-                'feedback' => $qa_result['feedback'] ?? '',
-            ];
-            $postarr['meta_input']['_presshub_ai_scorecard_hash'] = md5( trim( $story_content ) );
-        }
-
         if ( ! empty( $post_category ) ) {
             $postarr['post_category'] = $post_category;
         }
@@ -1316,15 +1309,9 @@ class PressHub_AI_News_Curator {
         update_post_meta( $post_id, '_presshub_briefing_edition', $edition );
 
         if ( ! empty( $qa_result ) ) {
-            update_post_meta( $post_id, '_presshub_ai_scorecard', [
-                'score'    => $qa_result['score'] ?? 0,
-                'feedback' => $qa_result['feedback'] ?? '',
-            ] );
-            update_post_meta( $post_id, '_presshub_ai_scorecard_hash', md5( trim( $story_content ) ) );
-
-            if ( ! ( $qa_result['passed'] ?? false ) && PressHub_AI_Settings_Storage::get_qa_notify_editor() ) {
-                PressHub_AI_QA_Reviewer::notify_editor_failure( $post_id, $qa_result, 'briefing' );
-            }
+            // Scorecard meta, the latest review and a row in PressHub → QA reviews.
+            $qa_result = PressHub_AI_Publish_Gate::attach( $qa_result, $post_id );
+            PressHub_AI_Publish_Gate::notify( $post_id, $qa_result );
         }
 
         // Issue #65 — stash the prefix/date-format state used to compose

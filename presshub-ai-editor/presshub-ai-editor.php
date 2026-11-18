@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.46.2
+ * Version: 2.47.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -122,7 +122,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.46.2' );
+define( 'PRESSHUB_AI_VERSION', '2.47.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -170,6 +170,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-seo.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviewer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-review-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-publish-gate.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviews-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';
 if ( file_exists( PRESSHUB_AI_DIR . 'includes/class-log-exposure-check.php' ) ) {
@@ -296,6 +299,7 @@ function presshub_ai_activate() {
     PressHub_AI_Audit_Logger::create_table();
     PressHub_AI_Memory_Store::create_tables();
     PressHub_AI_Generation_Recorder::create_table();
+    PressHub_AI_QA_Review_Store::create_table();
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
     }
@@ -415,6 +419,7 @@ function presshub_ai_init() {
     new PressHub_AI_Workflow();
     new PressHub_AI_Briefing_Admin();
     new PressHub_AI_Generation_Inspector();
+    new PressHub_AI_QA_Reviews_Admin();
     new PressHub_AI_Memory_Editor();
     PressHub_AI_Editorial_Agenda::register_hooks();
     PressHub_AI_Stakeholders::register_hooks();
@@ -465,6 +470,10 @@ function presshub_ai_init() {
         if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
         }
+    }
+
+    if ( class_exists( 'PressHub_AI_QA_Review_Store' ) ) {
+        PressHub_AI_QA_Review_Store::maybe_upgrade();
     }
 
     if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {

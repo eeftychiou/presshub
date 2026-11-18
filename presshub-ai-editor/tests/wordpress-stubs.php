@@ -1513,6 +1513,16 @@ if ( ! class_exists( 'PressHub_Test_WPDB' ) ) {
                 if ( preg_match( "/briefing_date <= '([^']+)'/", $where, $m ) ) {
                     if ( ( $row['briefing_date'] ?? '' ) > $m[1] ) return false;
                 }
+                // QA reviews (PressHub_AI_QA_Review_Store).
+                if ( preg_match( "/(?<![A-Za-z0-9_])post_id = (\d+)/", $where, $m ) ) {
+                    if ( (int) ( $row['post_id'] ?? 0 ) !== (int) $m[1] ) return false;
+                }
+                if ( preg_match( "/verdict = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row['verdict'] ?? '' ) !== $m[1] ) return false;
+                }
+                if ( preg_match( "/(editorial|legal|seo)_result = '([^']+)'/", $where, $m ) ) {
+                    if ( ( $row[ $m[1] . '_result' ] ?? '' ) !== $m[2] ) return false;
+                }
                 if ( preg_match( "/source_post_id = (\d+)/", $where, $m ) ) {
                     if ( (int) ( $row['source_post_id'] ?? 0 ) !== (int) $m[1] ) return false;
                 }
