@@ -861,10 +861,42 @@ class PressHub_AI_Policy_Fiches {
         wp_schedule_single_event( time() + 120, self::CRON_HOOK, [ $post_id ] );
     }
 
+    /** Post meta: hash of the brief text the fiches were last updated from. */
+    const META_SOURCE_HASH = '_presshub_policy_source_hash';
+
     public static function handle_update_cron( $post_id ): void {
-        $res = self::update_from_post( (int) $post_id );
-        if ( is_wp_error( $res ) && class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( 'Policy fiche update failed', [ 'post_id' => (int) $post_id, 'error' => $res->get_error_message() ] );
+        $post_id = (int) $post_id;
+        // WP-Cron can run the same event twice when two cron requests overlap
+        // (seen on 18/11: two identical updates 2.5 minutes apart). Skip a brief
+        // already processed, and one another request is processing right now.
+        $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+        // The hash covers everything the prompt is built from: the text, date and edition.
+        $hash = $post ? md5( trim( wp_strip_all_tags( (string) ( $post->post_content ?? '' ) ) ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_date', true ) . '|' . substr( (string) ( $post->post_date ?? '' ), 0, 10 ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_edition', true ) ) : '';
+        $lock = 'presshub_ai_policy_update_lock_' . $post_id;
+        if ( '' !== $hash && (string) get_post_meta( $post_id, self::META_SOURCE_HASH, true ) === $hash ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Policy fiche update skipped: this brief was already processed', [ 'post_id' => $post_id ] );
+            }
+            return;
+        }
+        if ( false !== get_transient( $lock ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Policy fiche update skipped: already running for this brief', [ 'post_id' => $post_id ] );
+            }
+            return;
+        }
+        set_transient( $lock, time(), 10 * MINUTE_IN_SECONDS );
+        try {
+            $res = self::update_from_post( $post_id );
+        } finally {
+            delete_transient( $lock );
+        }
+        if ( is_wp_error( $res ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( 'Policy fiche update failed', [ 'post_id' => $post_id, 'error' => $res->get_error_message() ] );
+            }
+        } elseif ( '' !== $hash && 'skipped' !== ( $res['status'] ?? '' ) ) {
+            update_post_meta( $post_id, self::META_SOURCE_HASH, $hash );
         }
     }
 

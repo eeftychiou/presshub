@@ -345,6 +345,59 @@ class PressHub_AI_Generation_Recorder {
     }
 
     /**
+     * Fold what call_provider() injected (editorial agenda, people fiches,
+     * policy fiches) into a record: the list of what went in goes on $config,
+     * and $sys_prompt becomes the prompt as it was actually sent when it is the
+     * one the caller passed in. Consumes (clears) the classes' last-applied
+     * state. Callers that store with record() call this right after their
+     * call_provider() so briefing and podcast records show the fiches too.
+     *
+     * @param mixed $sys_prompt System prompt as the caller built it.
+     * @param array $config     Record config to add the keys to.
+     * @return array{0:mixed,1:array} [ system prompt as sent, config ].
+     */
+    public static function apply_injected_context( $sys_prompt, array $config ): array {
+        // Issue #198: record the agenda version, and the system prompt as it was
+        // actually sent when the caller passed the prompt from before injection.
+        if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
+            $agenda = PressHub_AI_Editorial_Agenda::last_applied();
+            if ( is_array( $agenda ) ) {
+                $config['editorial_agenda_version'] = (int) $agenda['version'];
+                $config['editorial_agenda_chars']   = (int) $agenda['chars'];
+                if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $agenda['original_hash'] ) {
+                    $sys_prompt = $agenda['prompt'];
+                }
+            }
+            PressHub_AI_Editorial_Agenda::clear_last_applied();
+        }
+        // Issue #197: which stakeholder fiches went in (applied after the agenda).
+        if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
+            $fiches = PressHub_AI_Stakeholders::last_applied();
+            if ( is_array( $fiches ) ) {
+                $config['stakeholders']       = array_values( (array) $fiches['people'] );
+                $config['stakeholders_chars'] = (int) $fiches['chars'];
+                if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $fiches['original_hash'] ) {
+                    $sys_prompt = $fiches['prompt'];
+                }
+            }
+            PressHub_AI_Stakeholders::clear_last_applied();
+        }
+        // Policy fiches (applied after the people fiches).
+        if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+            $policy = PressHub_AI_Policy_Fiches::last_applied();
+            if ( is_array( $policy ) ) {
+                $config['policy_fiches']       = array_values( (array) $policy['fiches'] );
+                $config['policy_fiches_chars'] = (int) $policy['chars'];
+                if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $policy['original_hash'] ) {
+                    $sys_prompt = $policy['prompt'];
+                }
+            }
+            PressHub_AI_Policy_Fiches::clear_last_applied();
+        }
+        return [ $sys_prompt, $config ];
+    }
+
+    /**
      * Record one finished LLM call (success or error) with verbatim prompts and
      * response. Never throws; returns 0 when nothing was stored.
      *
@@ -365,43 +418,7 @@ class PressHub_AI_Generation_Recorder {
                 : [];
             $is_error    = is_wp_error( $result );
             $config      = self::build_client_config( $client, is_array( $extra['config'] ?? null ) ? $extra['config'] : [] );
-            // Issue #198: record the agenda version, and the system prompt as it was
-            // actually sent when the caller passed the prompt from before injection.
-            if ( class_exists( 'PressHub_AI_Editorial_Agenda' ) ) {
-                $agenda = PressHub_AI_Editorial_Agenda::last_applied();
-                if ( is_array( $agenda ) ) {
-                    $config['editorial_agenda_version'] = (int) $agenda['version'];
-                    $config['editorial_agenda_chars']   = (int) $agenda['chars'];
-                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $agenda['original_hash'] ) {
-                        $sys_prompt = $agenda['prompt'];
-                    }
-                }
-                PressHub_AI_Editorial_Agenda::clear_last_applied();
-            }
-            // Issue #197: which stakeholder fiches went in (applied after the agenda).
-            if ( class_exists( 'PressHub_AI_Stakeholders' ) ) {
-                $fiches = PressHub_AI_Stakeholders::last_applied();
-                if ( is_array( $fiches ) ) {
-                    $config['stakeholders']       = array_values( (array) $fiches['people'] );
-                    $config['stakeholders_chars'] = (int) $fiches['chars'];
-                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $fiches['original_hash'] ) {
-                        $sys_prompt = $fiches['prompt'];
-                    }
-                }
-                PressHub_AI_Stakeholders::clear_last_applied();
-            }
-            // Policy fiches (applied after the people fiches).
-            if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
-                $policy = PressHub_AI_Policy_Fiches::last_applied();
-                if ( is_array( $policy ) ) {
-                    $config['policy_fiches']       = array_values( (array) $policy['fiches'] );
-                    $config['policy_fiches_chars'] = (int) $policy['chars'];
-                    if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $policy['original_hash'] ) {
-                        $sys_prompt = $policy['prompt'];
-                    }
-                }
-                PressHub_AI_Policy_Fiches::clear_last_applied();
-            }
+            [ $sys_prompt, $config ] = self::apply_injected_context( $sys_prompt, $config );
             $user_id     = isset( $extra['user_id'] ) ? (int) $extra['user_id'] : ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 );
             if ( $user_id > 0 ) {
                 $config['user_id'] = $user_id;
