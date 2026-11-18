@@ -48,10 +48,16 @@ le_check( 'extras: zero counts left out', [] === $C::usage_extras( 'gemini', [ '
 le_check( 'extras: no usage block', [] === $C::usage_extras( 'openai', [] ) && [] === $C::usage_extras( 'gemini', null ) );
 
 // 2 + 3. A Gemini image-prompt call: action and usage metadata in the token log.
-update_option( 'presshub_ai_provider', 'gemini' );
-update_option( 'presshub_ai_api_key', 'test-key' );
-update_option( 'presshub_ai_gemini_api_key', 'test-key' );
-update_option( 'presshub_ai_image_prompt_provider', 'gemini' );
+// API keys live only on Connections providers (#237).
+PressHub_AI_Provider_Store::save_provider( [
+    'id'            => 'gemini-test',
+    'type'          => 'gemini',
+    'name'          => 'Gemini test',
+    'api_key'       => 'test-key',
+    'default_model' => 'gemini-2.5-flash',
+    'enabled'       => true,
+] );
+update_option( 'presshub_ai_image_prompt_provider', 'gemini-test' );
 $GLOBALS['CAPTURED_REQUESTS'] = [];
 $GLOBALS['CAPTURE_FILTER']    = function ( $existing, $req ) {
     [ $url ] = $req;

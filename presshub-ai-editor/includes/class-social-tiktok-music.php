@@ -404,7 +404,7 @@ class PressHub_Social_TikTok_Music {
         }
     }
 
-    /** The Gemini API key: the AI Editor's Gemini provider, then the legacy options. */
+    /** The Gemini API key: the AI Editor's Gemini provider (#237: legacy key options are not read). */
     private static function api_key(): string {
         if ( class_exists( 'PressHub_AI_API_Client' ) && method_exists( 'PressHub_AI_API_Client', 'lookup_provider_key_by_type' ) ) {
             $key = PressHub_AI_API_Client::lookup_provider_key_by_type( 'gemini' );
@@ -412,7 +412,6 @@ class PressHub_Social_TikTok_Music {
                 return $key;
             }
         }
-        $key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-        return '' !== $key ? $key : (string) get_option( 'presshub_ai_api_key', '' );
+        return '';
     }
 }

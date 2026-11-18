@@ -88,12 +88,6 @@ class PressHub_Social_Settings_Storage {
             'default'           => 'ai',
         ] );
 
-        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_github_token', [
-            'type'              => 'string',
-            'sanitize_callback' => [ __CLASS__, 'sanitize_github_token' ],
-            'default'           => '',
-        ] );
-
         // 2. Platform Engines
         foreach ( self::PLATFORMS as $platform ) {
             PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_engine_' . $platform, [
@@ -390,24 +384,9 @@ class PressHub_Social_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_bearer_token' ],
         ] );
 
-        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_api_key', [
-            'type'              => 'string',
-            'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_api_key' ],
-        ] );
-
-        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_api_secret', [
-            'type'              => 'string',
-            'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_api_secret' ],
-        ] );
-
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_access_token', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_access_token' ],
-        ] );
-
-        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_twitter_access_secret', [
-            'type'              => 'string',
-            'sanitize_callback' => [ __CLASS__, 'sanitize_twitter_access_secret' ],
         ] );
 
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_access_token', [
@@ -933,21 +912,6 @@ class PressHub_Social_Settings_Storage {
         }
         $sessions = get_option( 'presshub_social_worker_sessions', [] );
         return is_array( $sessions ) && ! empty( $sessions[ $platform ] );
-    }
-
-    /**
-     * Get list of all platforms configured for publishing.
-     *
-     * @return array<string>
-     */
-    public static function get_configured_platforms(): array {
-        $configured = [];
-        foreach ( self::PLATFORMS as $platform ) {
-            if ( self::is_platform_configured( $platform ) ) {
-                $configured[] = $platform;
-            }
-        }
-        return $configured;
     }
 
     /**
@@ -1706,36 +1670,12 @@ class PressHub_Social_Settings_Storage {
         return self::sanitize_secret( $value, 'presshub_social_twitter_bearer_token' );
     }
 
-    public static function get_twitter_api_key(): string {
-        return (string) get_option( 'presshub_social_twitter_api_key', '' );
-    }
-
-    public static function sanitize_twitter_api_key( $value ): string {
-        return self::sanitize_secret( $value, 'presshub_social_twitter_api_key' );
-    }
-
-    public static function get_twitter_api_secret(): string {
-        return (string) get_option( 'presshub_social_twitter_api_secret', '' );
-    }
-
-    public static function sanitize_twitter_api_secret( $value ): string {
-        return self::sanitize_secret( $value, 'presshub_social_twitter_api_secret' );
-    }
-
     public static function get_twitter_access_token(): string {
         return (string) get_option( 'presshub_social_twitter_access_token', '' );
     }
 
     public static function sanitize_twitter_access_token( $value ): string {
         return self::sanitize_secret( $value, 'presshub_social_twitter_access_token' );
-    }
-
-    public static function get_twitter_access_secret(): string {
-        return (string) get_option( 'presshub_social_twitter_access_secret', '' );
-    }
-
-    public static function sanitize_twitter_access_secret( $value ): string {
-        return self::sanitize_secret( $value, 'presshub_social_twitter_access_secret' );
     }
 
     public static function get_tiktok_access_token(): string {
@@ -1752,18 +1692,6 @@ class PressHub_Social_Settings_Storage {
 
     public static function sanitize_tiktok_open_id( $value ): string {
         return sanitize_text_field( (string) $value );
-    }
-
-    public static function get_github_token(): string {
-        $token = (string) get_option( 'presshub_social_github_token', '' );
-        if ( '' !== trim( $token ) ) {
-            return trim( $token );
-        }
-        return trim( (string) get_option( 'presshub_ai_github_token', '' ) );
-    }
-
-    public static function sanitize_github_token( $value ): string {
-        return self::sanitize_secret( $value, 'presshub_social_github_token' );
     }
 
     // ------------------------------------------------------------------

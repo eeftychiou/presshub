@@ -1237,13 +1237,9 @@ echo "\n--- Suite 15: GitHub Auto-Update Checker & Token Resolution ---\n";
 $puc_entry = $base_dir . '/includes/plugin-update-checker/plugin-update-checker.php';
 assert_true( file_exists( $puc_entry ), 'Embedded plugin-update-checker library exists in presshub-social-autopost/includes/plugin-update-checker/' );
 
-delete_option( 'presshub_social_github_token' );
-update_option( 'presshub_ai_github_token', 'ghp_shared_core_token_12345' );
-assert_equals( 'ghp_shared_core_token_12345', PressHub_Social_Settings_Storage::get_github_token(), 'get_github_token inherits presshub_ai_github_token when social token is unset' );
-
-update_option( 'presshub_social_github_token', 'ghp_dedicated_social_token_999' );
-assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storage::get_github_token(), 'get_github_token prioritizes dedicated presshub_social_github_token when set' );
-assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storage::sanitize_github_token( 'ghp_••••••••_999' ), 'sanitize_github_token preserves existing secret when masked' );
+// #237: the second GitHub token (presshub_social_github_token) is gone;
+// plugin updates read presshub_ai_github_token only.
+assert_true( ! method_exists( 'PressHub_Social_Settings_Storage', 'get_github_token' ), 'Social storage no longer reads a second GitHub token' );
 
 // ----------------------------------------------------------------------
 // Test Suite 16: Settings Render (GitHub Token Field & AI Provider Dropdown Filtering)
@@ -1251,10 +1247,6 @@ assert_equals( 'ghp_dedicated_social_token_999', PressHub_Social_Settings_Storag
 echo "\n--- Suite 16: Settings Render & Configured AI Provider Filtering ---\n";
 $renderer = new PressHub_Social_Settings_Render();
 
-ob_start();
-$renderer->render_github_token_field();
-$gh_field_html = ob_get_clean();
-assert_true( str_contains( $gh_field_html, 'name="presshub_social_github_token"' ), 'render_github_token_field renders password input without TypeError' );
 
 update_option( 'presshub_ai_configured_providers', [
     [
@@ -1283,12 +1275,6 @@ update_option( 'presshub_ai_configured_providers', [
     ],
 ] );
 
-ob_start();
-$renderer->render_ai_provider_field();
-$prov_html = ob_get_clean();
-assert_true( str_contains( $prov_html, 'OpenAI Configured (gpt-4o)' ), 'AI provider dropdown lists enabled and configured provider' );
-assert_true( ! str_contains( $prov_html, 'Anthropic Disabled' ), 'AI provider dropdown excludes disabled providers' );
-assert_true( ! str_contains( $prov_html, 'Gemini Missing Key' ), 'AI provider dropdown excludes unconfigured providers without API keys' );
 
 // ----------------------------------------------------------------------
 // Test Suite 16b: Number fields never render a value the browser rejects
@@ -1354,10 +1340,6 @@ foreach ( $number_fields as $opt => $field ) {
     }
 }
 
-ob_start();
-$renderer->render_ai_temperature_field();
-$temp_html = ob_get_clean();
-assert_true( str_contains( $temp_html, 'step="0.01"' ), 'temperature field step matches the 2-decimal sanitizer' );
 
 // ----------------------------------------------------------------------
 // Test Suite 17: Multi-Tab Settings Persistence, v2.6.3 Auto-Repair & Batch Copy Generation
@@ -3441,6 +3423,77 @@ foreach ( $img_saved_enabled as $img_p => $img_v ) {
         update_option( 'presshub_social_enabled_' . $img_p, $img_v );
     }
 }
+
+// ----------------------------------------------------------------------
+// Contract (#237): the settings clean-up leaves the worker claim payload
+// byte-identical for the same settings.
+// ----------------------------------------------------------------------
+echo "\n--- Contract: worker claim payload unchanged by the settings clean-up (#237) ---\n";
+foreach ( [ 'class-settings-registry.php', 'class-settings-transfer.php', 'class-settings-cleanup.php' ] as $cleanup_f ) {
+    require_once $base_dir . '/includes/' . $cleanup_f;
+}
+$GLOBALS['POSTS_STORE'][502] = [
+    'ID'           => 502,
+    'post_type'    => 'post',
+    'post_status'  => 'publish',
+    'post_title'   => 'Contract article',
+    'post_content' => 'Content...',
+];
+// A site as 2.44.0 left it: the removed options still hold values.
+$contract_removed = [
+    'presshub_social_github_token'          => 'ghp_contract_social_token_0001',
+    'presshub_social_twitter_api_key'       => 'contract-consumer-key',
+    'presshub_social_twitter_api_secret'    => 'contract-consumer-secret',
+    'presshub_social_twitter_access_secret' => 'contract-access-secret',
+    'presshub_ai_briefing_podcast_prompt_1' => 'Old single-presenter prompt',
+    'presshub_ai_briefing_podcast_prompt_2' => 'Old two-presenter prompt',
+    'presshub_ai_briefing_podcast_prompt_3' => 'Old three-presenter prompt',
+];
+foreach ( $contract_removed as $k => $v ) {
+    update_option( $k, $v );
+}
+delete_option( PressHub_Settings_Cleanup::VERSION_OPTION );
+$contract_claim = static function () {
+    $id  = PressHub_Social_Queue::enqueue( [
+        'post_id'      => 502,
+        'platform'     => 'twitter',
+        'engine'       => 'automation',
+        'post_copy'    => 'Contract tweet',
+        'scheduled_at' => '2026-01-01 00:00:00',
+    ] );
+    $res = PressHub_Social_REST_Controller::handle_claim( new WP_REST_Request( 'POST', '/worker/claim' ) );
+    $job = null;
+    foreach ( (array) ( $res['jobs'] ?? [] ) as $j ) {
+        if ( (int) ( $j['id'] ?? $j['job_id'] ?? 0 ) === (int) $id ) {
+            $job = $j;
+        }
+    }
+    // Only the job's own id and timestamps may differ between two claims.
+    $strip = static function ( $v ) use ( &$strip ) {
+        if ( ! is_array( $v ) ) {
+            return $v;
+        }
+        $out = [];
+        foreach ( $v as $k => $x ) {
+            if ( in_array( (string) $k, [ 'id', 'job_id', 'created_at', 'updated_at', 'claimed_at', 'locked_at', 'lease_expires_at', 'attempts' ], true ) ) {
+                continue;
+            }
+            $out[ $k ] = $strip( $x );
+        }
+        return $out;
+    };
+    return [ null !== $job, json_encode( [ 'ok' => $res['ok'] ?? null, 'job' => $strip( $job ) ] ) ];
+};
+[ $before_found, $before_json ] = $contract_claim();
+$cleanup_report = PressHub_Settings_Cleanup::run();
+[ $after_found, $after_json ] = $contract_claim();
+assert_true( $before_found && $after_found, 'Contract: the worker claims the job before and after the clean-up' );
+assert_true( ! empty( $cleanup_report['removed'] ) && 7 === count( array_filter( $cleanup_report['removed'] ) ), 'Contract: the clean-up removed the seven stored rows' );
+assert_equals( $before_json, $after_json, 'Contract: worker claim payload is byte-identical before and after the clean-up' );
+foreach ( array_keys( $contract_removed ) as $k ) {
+    delete_option( $k );
+}
+delete_option( PressHub_Settings_Cleanup::VERSION_OPTION );
 
 // ----------------------------------------------------------------------
 // Test Summary

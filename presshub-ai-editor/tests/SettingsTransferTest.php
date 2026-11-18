@@ -65,10 +65,10 @@ class SettingsTransferTest {
             $GLOBALS['OPTIONS_STORE'][ $k ] = $v;
         }
         $secret_values = [
-            'presshub_ai_api_key'                 => 'AIzaSyEXAMPLEKEY000000000000000003kQ',
+            'presshub_ai_google_cloud_api_key'    => 'AIzaSyEXAMPLEKEY000000000000000003kQ',
             'presshub_ai_github_token'            => 'ghp_EXAMPLETOKEN00000000000000000091',
             'presshub_social_meta_access_token'   => 'EAAGexampleMetaToken000000000000',
-            'presshub_social_github_token'        => 'ghp_OLDSOCIALTOKEN0000000000000042',
+            'presshub_social_twitter_bearer_token' => 'AAAAAAAAAAAAAAAAAAAAAexampleBearer0042',
         ];
         foreach ( $secret_values as $k => $v ) {
             $GLOBALS['OPTIONS_STORE'][ $k ] = $v;
@@ -121,11 +121,11 @@ class SettingsTransferTest {
         }
 
         // 3. Unregistered keys and secrets are skipped, and preview writes nothing.
-        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_ai_api_key' => 'keep-me', 'presshub_ai_pool_max_age_hours' => 48 ];
+        $GLOBALS['OPTIONS_STORE'] = [ 'presshub_ai_google_cloud_api_key' => 'keep-me', 'presshub_ai_pool_max_age_hours' => 48 ];
         $before  = $GLOBALS['OPTIONS_STORE'];
         $hostile = [
+            'presshub_ai_google_cloud_api_key' => 'stolen',
             'presshub_ai_api_key'            => 'stolen',
-            'presshub_ai_remove_api_key'     => '1',
             'siteurl'                        => 'https://evil.example',
             'presshub_ai_pool_max_age_hours' => '12',
         ];
@@ -137,7 +137,7 @@ class SettingsTransferTest {
             $failures[] = 'Preview should change only the registered non-secret option and skip the other three: ' . var_export( $preview, true );
         }
         PressHub_Settings_Transfer::apply( $hostile );
-        if ( 'keep-me' !== $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] || array_key_exists( 'siteurl', $GLOBALS['OPTIONS_STORE'] ) || 12 !== $GLOBALS['OPTIONS_STORE']['presshub_ai_pool_max_age_hours'] ) {
+        if ( 'keep-me' !== $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] || array_key_exists( 'siteurl', $GLOBALS['OPTIONS_STORE'] ) || 12 !== $GLOBALS['OPTIONS_STORE']['presshub_ai_pool_max_age_hours'] ) {
             $failures[] = 'Import must write only registered, non-secret options (through their sanitizers).';
         }
         foreach ( [ '{"format":"other","options":{}}', 'not json', '{"format":"presshub-settings","format_version":99,"options":{}}' ] as $bad ) {
@@ -156,8 +156,13 @@ class SettingsTransferTest {
                 $failures[] = "{$k} should be listed under Scheduled for removal.";
             }
         }
-        if ( false !== strpos( $html, $secret_values['presshub_social_github_token'] ) ) {
-            $failures[] = 'The removal list must mask the saved token.';
+        if ( false !== strpos( $html, $secret_values['presshub_social_twitter_bearer_token'] ) ) {
+            $failures[] = 'Settings must mask a saved token.';
+        }
+        // #237 removed everything that was on the list.
+        $removal = substr( $adv, (int) strpos( $adv, 'id="presshub-scheduled-for-removal"' ), 1200 );
+        if ( false === strpos( $removal, 'None.' ) ) {
+            $failures[] = 'Scheduled for removal should say None. after the clean-up release.';
         }
         if ( false === strpos( $adv, 'action=' . PressHub_Settings_Transfer::EXPORT_ACTION ) || false === strpos( $html, 'id="presshub-settings-import-form"' ) ) {
             $failures[] = 'Diagnostics should offer Export and Import.';
@@ -173,9 +178,9 @@ class SettingsTransferTest {
                 }
             }
         }
-        foreach ( array_keys( PressHub_Settings_Registry::unused() ) as $k ) {
+        foreach ( PressHub_Settings_Cleanup::removed_keys() as $k ) {
             if ( in_array( $k, $social_fields, true ) ) {
-                $failures[] = "{$k} is unused and should no longer be a field on its Social section.";
+                $failures[] = "{$k} was removed and should no longer be a field on its Social section.";
             }
         }
         if ( ! in_array( 'presshub_social_twitter_access_token', $social_fields, true ) ) {

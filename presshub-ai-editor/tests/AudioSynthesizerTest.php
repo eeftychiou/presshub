@@ -353,7 +353,7 @@ $GLOBALS['OPTIONS_STORE'] = [
     // These cases count TTS HTTP requests; keep the post-creation SEO call out of them.
     'presshub_ai_seo_auto_enabled'   => 0,
     'presshub_ai_provider'           => 'gemini',
-    'presshub_ai_gemini_api_key'     => 'test-gemini-key',
+    'presshub_ai_configured_providers' => presshub_test_provider_keys( 'test-gemini-key', [ 'gemini' ] ),
     'presshub_ai_model_gemini'       => 'gemini-3.7-flash',
     'presshub_ai_briefing_tts_model' => '',
 ];
@@ -935,7 +935,7 @@ $res_api_no_voice = $api_tts_test->synthesize_speech_via_gemini( 'Κείμενο
 as_check( 'fail_loudly: synthesize_speech_via_gemini with empty voice returns missing_tts_voice', is_wp_error( $res_api_no_voice ) && 'missing_tts_voice' === $res_api_no_voice->get_error_code() );
 
 // 14d: synthesize_speech_via_gemini retries on HTTP 429 and succeeds on next attempt
-$GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key']     = 'test-gemini-key';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']     = presshub_test_provider_keys( 'test-gemini-key', [ 'gemini' ] );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = 'gemini-2.5-flash-preview-tts';
 $retry_attempts = 0;
 $GLOBALS['CAPTURE_FILTER'] = function( $default, $req ) use ( &$retry_attempts ) {

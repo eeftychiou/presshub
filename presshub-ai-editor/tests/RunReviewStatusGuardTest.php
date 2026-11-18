@@ -171,7 +171,7 @@ class RunReviewStatusGuardTest
         $GLOBALS['CAPTURE_FILTER']     = null;
         $GLOBALS['CAPTURED_REQUESTS']  = [];
         $GLOBALS['OPTIONS_STORE']      = [
-            'presshub_ai_api_key'    => 'k',
+            'presshub_ai_configured_providers' => presshub_test_provider_keys( 'k' ),
             'presshub_ai_provider'   => 'openai',
         ];
         $GLOBALS['NONCE_VALID']        = true;

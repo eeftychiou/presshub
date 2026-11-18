@@ -1669,3 +1669,17 @@ if ( ! function_exists( 'esc_js' ) ) {
         return addslashes( htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ) );
     }
 }
+
+if ( ! function_exists( 'presshub_test_provider_keys' ) ) {
+    /**
+     * #237: API keys live only on Connections providers. Tests that used to
+     * set the old single key option seed one provider per type with that key.
+     */
+    function presshub_test_provider_keys( string $key, array $types = [ 'openai', 'anthropic', 'gemini' ] ): array {
+        $out = [];
+        foreach ( $types as $type ) {
+            $out[] = [ 'id' => $type . '-test', 'type' => $type, 'name' => ucfirst( $type ), 'enabled' => true, 'api_key' => $key ];
+        }
+        return $out;
+    }
+}

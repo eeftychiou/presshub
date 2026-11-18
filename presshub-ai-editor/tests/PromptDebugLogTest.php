@@ -80,7 +80,7 @@ pdl_check(
 // --- Case 3: generate_draft() wires the logger ----------------------------
 // Call through the real draft path: composed system prompt (base + preset)
 // and the template user prompt must reach the log action.
-$GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
 $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
     [ 'slug' => 'fact-check', 'name' => 'Fact-check everything', 'instruction_text' => 'After drafting, verify every factual claim against the provided sources: add a parenthetical citing the source paragraph, and flag any claim the sources do not support as [UNSOURCED].', 'enabled' => true ],
@@ -193,7 +193,7 @@ unset( $GLOBALS['UPLOAD_DIR'], $GLOBALS['OPTIONS_STORE']['presshub_ai_debug_prom
 
 // --- Case 5: classify_intent, generate_image, podcast_tts emit exactly 1 prompt_log each ---
 add_filter( 'presshub_ai_debug_prompts', '__return_true' );
-$GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key']       = 'test-key';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = array_merge( (array) ( $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] ?? [] ), [ [ 'id' => 'gemini-test', 'type' => 'gemini', 'name' => 'Gemini', 'enabled' => true, 'api_key' => 'test-key', 'default_model' => 'gemini-2.5-flash' ] ] );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model']   = 'gemini-2.5-flash-preview-tts';
 $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'test-gc-key';
 $api = new PressHub_AI_API_Client();
