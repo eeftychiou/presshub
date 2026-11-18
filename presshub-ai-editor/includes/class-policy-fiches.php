@@ -871,7 +871,7 @@ class PressHub_AI_Policy_Fiches {
         // already processed, and one another request is processing right now.
         $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         // The hash covers everything the prompt is built from: the text, date and edition.
-        $hash = $post ? md5( trim( wp_strip_all_tags( (string) ( $post->post_content ?? '' ) ) ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_date', true ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_edition', true ) ) : '';
+        $hash = $post ? md5( trim( wp_strip_all_tags( (string) ( $post->post_content ?? '' ) ) ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_date', true ) . '|' . substr( (string) ( $post->post_date ?? '' ), 0, 10 ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_edition', true ) ) : '';
         $lock = 'presshub_ai_policy_update_lock_' . $post_id;
         if ( '' !== $hash && (string) get_post_meta( $post_id, self::META_SOURCE_HASH, true ) === $hash ) {
             if ( class_exists( 'PressHub_AI_Logger' ) ) {

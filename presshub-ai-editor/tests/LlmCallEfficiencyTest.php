@@ -124,7 +124,7 @@ $S = 'PressHub_AI_Stakeholders';
 $GLOBALS['POSTS_STORE'][601] = [ 'ID' => 601, 'post_content' => '<p>Ενημέρωση για τις συντάξεις.</p>', 'post_date' => '2026-11-18 07:00:00', 'post_status' => 'publish' ];
 update_post_meta( 601, '_presshub_briefing_date', '2026-11-18' );
 update_post_meta( 601, '_presshub_briefing_edition', 'morning' );
-$hash = md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|morning' );
+$hash = md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|2026-11-18|morning' );
 $GLOBALS['CAPTURED_REQUESTS'] = [];
 
 update_post_meta( 601, $P::META_SOURCE_HASH, $hash );
@@ -148,11 +148,22 @@ le_check( 'stakeholder cron: a brief being processed is skipped', empty( $GLOBAL
 delete_transient( 'presshub_ai_stakeholders_lock_601' );
 
 // A changed edition is a new brief, not one already processed.
-update_post_meta( 601, $P::META_SOURCE_HASH, md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|noon' ) );
-add_filter( 'presshub_ai_policy_fiches_enabled', '__return_false' );
+update_post_meta( 601, $P::META_SOURCE_HASH, md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|2026-11-18|noon' ) );
+// The is_enabled() filter runs only inside update_from_post(), so counting it
+// shows whether the guard let the run through.
+$runs = 0;
+$off  = function () use ( &$runs ) { $runs++; return false; };
+add_filter( 'presshub_ai_policy_fiches_enabled', $off );
 $P::handle_update_cron( 601 );
-le_check( 'policy cron: a changed edition runs, and a skipped run saves no hash and clears the lock', md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|noon' ) === (string) get_post_meta( 601, $P::META_SOURCE_HASH, true ) && false === get_transient( 'presshub_ai_policy_update_lock_601' ) );
-remove_filter( 'presshub_ai_policy_fiches_enabled', '__return_false' );
+le_check( 'policy cron: a changed edition is not treated as processed', 1 === $runs );
+le_check( 'policy cron: a skipped run saves no hash and clears the lock', md5( 'Ενημέρωση για τις συντάξεις.|2026-11-18|2026-11-18|noon' ) === (string) get_post_meta( 601, $P::META_SOURCE_HASH, true ) && false === get_transient( 'presshub_ai_policy_update_lock_601' ) );
+remove_filter( 'presshub_ai_policy_fiches_enabled', $off );
+$runs = 0;
+add_filter( 'presshub_ai_policy_fiches_enabled', $off );
+update_post_meta( 601, $P::META_SOURCE_HASH, $hash );
+$P::handle_update_cron( 601 );
+le_check( 'policy cron: the same edition is skipped before the run', 0 === $runs );
+remove_filter( 'presshub_ai_policy_fiches_enabled', $off );
 
 // A failed run (empty brief) saves no hash and clears the lock, so a retry can run.
 $GLOBALS['POSTS_STORE'][602] = [ 'ID' => 602, 'post_content' => '', 'post_date' => '2026-11-18 07:00:00', 'post_status' => 'publish' ];
