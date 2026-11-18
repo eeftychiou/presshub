@@ -173,10 +173,13 @@ hp_check( 'example: agenda block is on the page', false !== strpos( $html, esc_h
 $people_block = PressHub_AI_Help_Admin::sample_people_block();
 hp_check( 'example: people block has the header', false !== strpos( $people_block, 'ΦΑΚΕΛΟΙ ΠΡΟΣΩΠΩΝ' ) && false !== strpos( $people_block, 'Υπουργός Εργασίας' ) );
 $policy_full   = PressHub_AI_Help_Admin::sample_policy_block( 'briefing_curation' );
-$policy_social = PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook', true );
-hp_check( 'example: the full worked example is too long for social copy (as the page says)', '' === PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook' ) );
+$policy_social = PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook' );
+hp_check( 'example: the full worked example fits social copy with the default budget', '' !== $policy_social );
+hp_check( 'example: social copy uses the short header', false !== strpos( $policy_social, 'Δεσμευτικοί κανόνες πλαισίωσης' ) && false === strpos( $policy_social, 'Τα επιβεβαιωμένα στοιχεία' ) );
+hp_check( 'limits: page says cuts are recorded and where', false !== strpos( $html, 'Left out because of limits' ) && false !== strpos( $html, 'not the fixed instructions around them' ) );
+hp_check( 'example: page says the social example is sent in full', false !== strpos( $html, 'so it is sent in full' ) );
 $room = PressHub_AI_Help_Admin::policy_room( 'social_copy_facebook' );
-hp_check( 'room: social copy room is below its budget and above 0', $room > 0 && $room < PressHub_AI_Policy_Fiches::budget_for( 'social_copy_facebook' ) );
+hp_check( 'room: social copy room is its whole budget (fixed instructions not counted)', $room === PressHub_AI_Policy_Fiches::budget_for( 'social_copy_facebook' ) && $room > 0 );
 hp_check( 'room: 0 for a task without policy fiches', 0 === PressHub_AI_Help_Admin::policy_room( 'generate_image_prompt' ) );
 hp_check( 'example: briefing policy block has principles and claims', false !== strpos( $policy_full, 'Αρχές:' ) && false !== strpos( $policy_full, 'Ισχυρισμοί προς έλεγχο:' ) );
 hp_check( 'example: social policy block has framing only', false !== strpos( $policy_social, 'Πλαισίωση:' ) && false === strpos( $policy_social, 'Αρχές:' ) && false === strpos( $policy_social, 'Ισχυρισμοί' ) );
@@ -185,6 +188,9 @@ hp_check( 'example: policy blocks on the page', false !== strpos( $html, esc_htm
 // ---------------------------------------------------------------------
 update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 0 ] ) );
 hp_check( 'example: a 0 budget gives an empty example (the page says nothing is sent)', '' === PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook', true ) );
+update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 300 ] ) );
+$small_html = PressHub_AI_Help_Admin::build_page();
+hp_check( 'example: a small social budget falls back to the first framing rule', '' === PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook' ) && false !== strpos( $small_html, 'only its first framing rule' ) );
 delete_option( 'presshub_ai_policy_fiches_budgets' );
 
 // 5-6. Status lines, no writes, escaping.
