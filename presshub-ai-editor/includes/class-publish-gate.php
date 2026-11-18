@@ -102,10 +102,11 @@ class PressHub_AI_Publish_Gate {
         }
 
         $gate = self::run( $content, $context, $post_id, $input );
-        if ( $post_id > 0 && ! empty( $gate['seo_fixed'] ) ) {
-            // The SEO fix changed the excerpt or tags: cache under the new version.
-            $hash = self::input_hash( self::seo_input_for( get_post( $post_id ), $opts ), $context, isset( $opts['content'] ) ? $content : '' );
+        if ( $post_id > 0 && isset( $gate['seo_input_after_fix'] ) ) {
+            // The SEO fix filled the excerpt or tags: cache under the fixed version.
+            $hash = self::input_hash( (array) $gate['seo_input_after_fix'], $context, isset( $opts['content'] ) ? $content : '' );
         }
+        unset( $gate['seo_input_after_fix'] );
         return self::save( $gate, $post_id, $trigger, $hash );
     }
 
@@ -253,6 +254,13 @@ class PressHub_AI_Publish_Gate {
         $review  = get_post_meta( $post_id, self::META_REVIEW, true );
         $review  = is_array( $review ) ? $review : [];
         $context = self::context( (string) ( $review['context'] ?? 'post' ) );
+        // Only a post the gate is holding, in the version it held.
+        if ( 'pending' !== ( $post->post_status ?? '' ) || ! $review || ! self::holds( $review ) ) {
+            return new WP_Error( 'presshub_qa_not_held', __( 'This post is not held by the QA gate.', 'presshub-ai-editor' ) );
+        }
+        if ( (string) ( $review['content_hash'] ?? '' ) !== self::input_hash_for_post( $post, $context ) ) {
+            return new WP_Error( 'presshub_qa_changed', __( 'The post changed after the QA gate held it. Publish it again so the gate reviews the new version.', 'presshub-ai-editor' ) );
+        }
         $target  = (string) get_post_meta( $post_id, self::META_TARGET_STATUS, true );
         if ( ! in_array( $target, [ 'publish', 'future', 'private' ], true ) ) {
             $target = ( isset( $post->post_date_gmt ) && strtotime( (string) $post->post_date_gmt . ' UTC' ) > time() ) ? 'future' : 'publish';
@@ -360,6 +368,8 @@ class PressHub_AI_Publish_Gate {
             if ( 'fail' === $seo['result'] && $post_id > 0 ) {
                 $fixed = self::fix_seo( $post_id, $seo, $seo_input );
                 if ( null !== $fixed ) {
+                    $seo_input = $fixed['input'];
+                    unset( $fixed['input'] );
                     $seo       = $fixed;
                     $seo_fixed = true;
                 }
@@ -387,15 +397,17 @@ class PressHub_AI_Publish_Gate {
             'legal_concerns' => (string) $eval['legal_concerns'],
             'passed'         => ! in_array( $verdict, [ 'hold', 'error' ], true ),
             'seo_fixed'      => $seo_fixed,
-        ];
+        ] + ( $seo_fixed ? [ 'seo_input_after_fix' => $seo_input ] : [] );
     }
 
     /**
      * The verdict from the check results and the configured actions.
      */
     public static function verdict( array $checks ): string {
-        if ( 'error' === ( $checks['editorial']['result'] ?? '' ) || 'error' === ( $checks['legal']['result'] ?? '' ) ) {
-            return 'error';
+        foreach ( [ 'editorial', 'legal', 'seo' ] as $key ) {
+            if ( 'error' === ( $checks[ $key ]['result'] ?? '' ) ) {
+                return 'error';
+            }
         }
         $actions = [];
         if ( 'fail' === ( $checks['editorial']['result'] ?? '' ) ) {
@@ -546,6 +558,7 @@ class PressHub_AI_Publish_Gate {
         $review['seo_score']    = null === ( $review['ai_score'] ?? null ) ? $checks['score'] : (int) round( ( $checks['score'] + (int) $review['ai_score'] ) / 2 );
         $result             = self::seo_result( $review );
         $result['fixed']    = array_values( array_filter( [ $set_excerpt ? 'excerpt' : '', $set_tags ? 'tags' : '' ] ) );
+        $result['input']    = $input;
         self::log( 'info', sprintf( 'QA gate: filled the missing %s of post #%d from the SEO review.', implode( ' and ', $result['fixed'] ), $post_id ), $post_id );
         return $result;
     }

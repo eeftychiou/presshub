@@ -68,7 +68,7 @@ class PressHub_AI_QA_Reviews_Admin {
         if ( ! self::can_override( $post_id ) ) {
             wp_die( esc_html__( 'You do not have permission to publish this post.', 'presshub-ai-editor' ) );
         }
-        $reason = (string) wp_unslash( $_POST['reason'] ?? '' );
+        $reason = isset( $_POST['reason'] ) && is_string( $_POST['reason'] ) ? (string) wp_unslash( $_POST['reason'] ) : '';
         $result = PressHub_AI_Publish_Gate::publish_anyway( $post_id, $reason );
         $args   = is_wp_error( $result )
             ? [ 'override' => $post_id, 'override_error' => $result->get_error_code() ]
@@ -89,8 +89,13 @@ class PressHub_AI_QA_Reviews_Admin {
             echo '<p>' . esc_html__( 'This post is not held by the QA gate.', 'presshub-ai-editor' ) . '</p></div>';
             return;
         }
-        if ( 'presshub_qa_no_reason' === $error ) {
-            echo '<div class="notice notice-error inline"><p>' . esc_html__( 'Say why the post is published despite the QA gate.', 'presshub-ai-editor' ) . '</p></div>';
+        $errors = [
+            'presshub_qa_no_reason'  => __( 'Say why the post is published despite the QA gate.', 'presshub-ai-editor' ),
+            'presshub_qa_changed'    => __( 'The post changed after the QA gate held it. Publish it again so the gate reviews the new version.', 'presshub-ai-editor' ),
+            'presshub_qa_not_held'   => __( 'This post is not held by the QA gate.', 'presshub-ai-editor' ),
+        ];
+        if ( isset( $errors[ $error ] ) ) {
+            echo '<div class="notice notice-error inline"><p>' . esc_html( $errors[ $error ] ) . '</p></div>';
         }
         echo '<p>' . esc_html__( 'The post is published as it is, without another review. Your name, the reason and the failed checks are saved on its QA review and in the audit log. If the post is edited afterwards, the gate checks it again.', 'presshub-ai-editor' ) . '</p>';
         echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';

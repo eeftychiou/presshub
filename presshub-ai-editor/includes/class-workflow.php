@@ -38,6 +38,15 @@ class PressHub_AI_Workflow {
             return;
         }
 
+        // A new post saved through REST had no ID when its terms were
+        // remembered: this first transition is that post's insert.
+        if ( isset( self::$rest_state[0] ) && ! empty( $post->ID ) ) {
+            if ( ! isset( self::$rest_state[ (int) $post->ID ] ) ) {
+                self::$rest_state[ (int) $post->ID ] = self::$rest_state[0];
+            }
+            unset( self::$rest_state[0] );
+        }
+
         // Automated posts (Daily Briefing text and podcast, the Trending
         // roundup) are reviewed by PressHub_AI_Publish_Gate::release() after
         // their tags, excerpt and image are in place, and the gate's own
@@ -70,8 +79,17 @@ class PressHub_AI_Workflow {
         }
 
         // Editors and admins are checked too, unless "Check posts editors publish" is off.
-        if ( ! $by_cron && current_user_can( 'edit_others_posts' ) && ! PressHub_AI_Settings_Storage::get_qa_check_editors() ) {
-            return;
+        // At go-live by cron there is no user: look at who last saved the post.
+        if ( ! PressHub_AI_Settings_Storage::get_qa_check_editors() ) {
+            if ( $by_cron ) {
+                $last = (int) get_post_meta( $post->ID, '_edit_last', true );
+                $last = $last > 0 ? $last : (int) ( $post->post_author ?? 0 );
+                if ( $last > 0 && function_exists( 'user_can' ) && user_can( $last, 'edit_others_posts' ) ) {
+                    return;
+                }
+            } elseif ( current_user_can( 'edit_others_posts' ) ) {
+                return;
+            }
         }
 
         // Released with "Publish anyway" and unchanged since.
@@ -143,10 +161,9 @@ class PressHub_AI_Workflow {
                 $input[ $key ] = (string) $post->$field;
             }
         }
-        $key   = isset( self::$rest_state[ $post_id ] ) ? $post_id : 0;
-        $state = self::$rest_state[ $key ] ?? [];
+        $state = self::$rest_state[ $post_id ] ?? [];
         // One request's terms are used once, never by a later save.
-        unset( self::$rest_state[ $key ] );
+        unset( self::$rest_state[ $post_id ] );
         if ( isset( $state['tags'] ) && function_exists( 'get_term' ) ) {
             $input['tags_from_request'] = true;
             $input['tags'] = [];

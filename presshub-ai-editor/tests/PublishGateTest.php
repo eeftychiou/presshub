@@ -26,6 +26,11 @@ if ( ! function_exists( 'delete_post_meta' ) ) {
         return true;
     }
 }
+if ( ! function_exists( 'user_can' ) ) {
+    function user_can( $user_id, $cap ) {
+        return in_array( $cap, $GLOBALS['PG_USER_CAPS'][ (int) $user_id ] ?? [], true );
+    }
+}
 if ( ! function_exists( 'wp_set_post_tags' ) ) {
     function wp_set_post_tags( $post_id, $tags = '', $append = false ) {
         $GLOBALS['PG_SET_TAGS'][ $post_id ] = (array) $tags;
@@ -378,6 +383,10 @@ $g = PressHub_AI_Publish_Gate::review_post( (object) $GLOBALS['POSTS_STORE'][608
 pg_check( [ 'excerpt', 'tags' ] === ( $g['checks']['seo']['fixed'] ?? [] ), 'the gate filled the excerpt and the tags: ' . json_encode( $g['checks']['seo']['fixed'] ?? null ) );
 pg_check( (int) $g['checks']['seo']['review']['checks_score'] > (int) $before['score'], 'the measured SEO score rose after the fix' );
 pg_check( [ 'Στέγαση', 'Λευκωσία' ] === ( $GLOBALS['PG_SET_TAGS'][608] ?? null ), 'the suggested tags were set on the post' );
+$fixed_input = array_merge( $bare, [ 'excerpt' => 'Το νέο σχέδιο στέγασης της κυβέρνησης για τη Λευκωσία, τι αλλάζει και ποιοι δικαιούνται βοήθεια από τον Ιανουάριο.', 'tags' => [ 'Στέγαση', 'Λευκωσία' ] ] );
+$calls = $GLOBALS['PG_CALLS'];
+$again = PressHub_AI_Publish_Gate::review_post( (object) $GLOBALS['POSTS_STORE'][608], 'scheduled_publish', [ 'seo_input' => $fixed_input ] );
+pg_check( ! empty( $again['cached'] ) && $calls === $GLOBALS['PG_CALLS'], 'the review is cached under the fixed version, so go-live does not review again' );
 $GLOBALS['PG_SET_TAGS'] = [];
 pg_reply( array_merge( $clean, [ 'seo' => [ 'seo_score' => 10, 'suggested_tags' => [ 'Χ' ], 'suggested_meta_description' => '' ] ] ) );
 $g = PressHub_AI_Publish_Gate::review_post( (object) $GLOBALS['POSTS_STORE'][608], 'author_publish', [ 'seo_input' => array_merge( $bare, [ 'tags_from_request' => true ] ), 'force' => true ] );
@@ -417,8 +426,31 @@ $wf->enforce_editorial_workflow( 'publish', 'future', (object) array_merge( $GLO
 pg_check( 'pending' === $GLOBALS['POSTS_STORE'][703]['post_status'] && 'scheduled_publish' === PressHub_AI_QA_Review_Store::for_post( 703 )[0]['trigger_type'], 'a scheduled post edited since and now failing is held at go-live' );
 $GLOBALS['WP_DOING_CRON'] = false;
 
+// With editor checks off, a post an editor scheduled is not held by cron at go-live.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_check_editors'] = 0;
+$GLOBALS['PG_USER_CAPS'] = [ 9 => [ 'edit_others_posts' ] ];
+$GLOBALS['PG_CALLS'] = 0;
+$mk( 704, 'publish', '' );
+$GLOBALS['POST_META_STORE'][704]['_edit_last'] = 9;
+$GLOBALS['WP_DOING_CRON'] = true;
+$wf->enforce_editorial_workflow( 'publish', 'future', (object) $GLOBALS['POSTS_STORE'][704] );
+pg_check( 0 === $GLOBALS['PG_CALLS'] && 'publish' === $GLOBALS['POSTS_STORE'][704]['post_status'], 'an editor-scheduled post goes live unreviewed when editor checks are off' );
+$GLOBALS['POST_META_STORE'][704]['_edit_last'] = 3; // an author
+pg_reply( array_merge( $clean, [ 'score' => 30 ] ) );
+$wf->enforce_editorial_workflow( 'publish', 'future', (object) $GLOBALS['POSTS_STORE'][704] );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][704]['post_status'], 'an author-scheduled post is still checked at go-live' );
+$GLOBALS['WP_DOING_CRON'] = false;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_check_editors'] = 1;
+
 // Publish anyway on the held editor post.
 $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
+$r = PressHub_AI_Publish_Gate::publish_anyway( 702, 'x' );
+pg_check( is_wp_error( $r ) && 'presshub_qa_not_held' === $r->get_error_code(), 'Publish anyway refuses a post that is not held' );
+$saved701 = $GLOBALS['POSTS_STORE'][701];
+$GLOBALS['POSTS_STORE'][701]['post_content'] = '<p>Αλλαγμένο μετά την κράτηση.</p>';
+$r = PressHub_AI_Publish_Gate::publish_anyway( 701, 'x' );
+pg_check( is_wp_error( $r ) && 'presshub_qa_changed' === $r->get_error_code() && 'pending' === $GLOBALS['POSTS_STORE'][701]['post_status'], 'Publish anyway refuses a version the gate did not review' );
+$GLOBALS['POSTS_STORE'][701] = $saved701;
 $r = PressHub_AI_Publish_Gate::publish_anyway( 701, '' );
 pg_check( is_wp_error( $r ), 'a reason is required' );
 $r = PressHub_AI_Publish_Gate::publish_anyway( 701, 'Επιβεβαιωμένο από τον αρχισυντάκτη.' );
@@ -433,6 +465,22 @@ $wf->enforce_editorial_workflow( 'publish', 'pending', (object) $GLOBALS['POSTS_
 pg_check( 0 === $GLOBALS['PG_CALLS'] && 'publish' === $GLOBALS['POSTS_STORE'][701]['post_status'], 'the released version is not held again' );
 $GLOBALS['CURRENT_USER_CAPS'] = [];
 echo "  [14] editors, schedules and Publish anyway: OK\n";
+
+// 15. Any check that errors makes the verdict an error.
+pg_check( 'error' === PressHub_AI_Publish_Gate::verdict( [ 'editorial' => [ 'result' => 'pass' ], 'legal' => [ 'result' => 'skip' ], 'seo' => [ 'result' => 'error' ] ] ), 'an SEO error is an error verdict' );
+
+// A new post created through REST: its terms move to its ID on its first transition and are not reused.
+pg_reset();
+$wf = new PressHub_AI_Workflow();
+$req = new class { public function get_param( $k ) { return 'tags' === $k ? [ 5 ] : null; } };
+$wf->remember_rest_terms( (object) [ 'post_type' => 'post' ], $req );
+$mk( 801, 'draft', '' );
+$wf->enforce_editorial_workflow( 'draft', 'new', (object) $GLOBALS['POSTS_STORE'][801] );
+$state = ( new ReflectionProperty( 'PressHub_AI_Workflow', 'rest_state' ) );
+$state->setAccessible( true );
+$st = $state->getValue();
+pg_check( ! isset( $st[0] ) && isset( $st[801] ), 'REST terms of a new post move to its ID and do not leak to the next post' );
+echo "  [15] verdict and REST terms: OK\n";
 
 if ( $GLOBALS['PG_FAILURES'] > 0 ) {
     echo "PublishGateTest: {$GLOBALS['PG_FAILURES']} failure(s)\n";

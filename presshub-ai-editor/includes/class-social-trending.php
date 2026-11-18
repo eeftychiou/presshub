@@ -1185,12 +1185,14 @@ class PressHub_AI_Social_Trending {
             if ( is_wp_error( $res ) ) {
                 return $res;
             }
+            $prev_items = json_decode( (string) get_post_meta( $existing, self::META_ITEMS, true ), true );
+            $new_set    = self::summary_hash( $items ) !== self::summary_hash( is_array( $prev_items ) ? $prev_items : [] );
             update_post_meta( $existing, self::META_ITEMS, $items_meta );
             self::save_summary_meta( $existing, $summary );
             self::maybe_set_featured_image( $existing, $items );
-            // A new set of posts (a new summary) is checked again; the
-            // numbers changing alone is not.
-            if ( ! empty( $summary['fresh'] ) ) {
+            // A new set of posts is checked again (whether or not the AI
+            // summary is on); the numbers changing alone is not.
+            if ( $new_set ) {
                 self::release_through_gate( $existing );
             }
             return $existing;
