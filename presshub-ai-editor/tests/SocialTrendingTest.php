@@ -626,6 +626,15 @@ st_check( 'summary: long replies capped', mb_strlen( $T::parse_summary( '{"summa
 st_check( 'front css: summary styled', false !== strpos( $T::front_css(), '.presshub-trending-summary' ) );
 $T::$summary_caller = null;
 
+// Roundups saved before 2.40.0: bare facebook.com/<id> plugin blocks become link cards on display.
+$legacy = '<div class="presshub-trending-embed presshub-trending-embed-facebook"><div class="fb-video" data-href="https://www.facebook.com/1786820783453934" data-width="500" data-show-text="true" data-lazy="true"><blockquote cite="https://www.facebook.com/1786820783453934" class="fb-xfbml-parse-ignore"><p><a href="https://www.facebook.com/1786820783453934">x</a></p></blockquote></div></div>'
+    . '<div class="presshub-trending-embed presshub-trending-embed-facebook"><div class="fb-video" data-href="https://www.facebook.com/reel/1026139433848847" data-width="500"></div></div>'
+    . '<div class="presshub-trending-embed presshub-trending-embed-facebook"><div class="fb-post" data-href="https://www.facebook.com/VoltCyprus/posts/pfbid0j9" data-width="500"></div></div>';
+$fixed = $T::filter_legacy_facebook_embeds( $legacy );
+st_check( 'legacy: bare Facebook link loses the plugin class, keeps its link', false !== strpos( $fixed, '<div class="presshub-trending-fb-link" data-href="https://www.facebook.com/1786820783453934"' ) && false !== strpos( $fixed, '<a href="https://www.facebook.com/1786820783453934">' ) );
+st_check( 'legacy: reel and posts links untouched', false !== strpos( $fixed, '<div class="fb-video" data-href="https://www.facebook.com/reel/1026139433848847"' ) && false !== strpos( $fixed, '<div class="fb-post" data-href="https://www.facebook.com/VoltCyprus/posts/pfbid0j9"' ) );
+st_check( 'legacy: other content untouched', '<div class="fb-video" data-href="https://www.facebook.com/123"></div>' === $T::filter_legacy_facebook_embeds( '<div class="fb-video" data-href="https://www.facebook.com/123"></div>' ) );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "{$failures} failure(s)\n" );
     exit( 1 );
