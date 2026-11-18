@@ -17,6 +17,26 @@ require_once __DIR__ . '/../includes/class-settings-storage.php';
 require_once __DIR__ . '/../includes/class-seo.php';
 require_once __DIR__ . '/../includes/class-publish-gate.php';
 require_once __DIR__ . '/../includes/class-qa-reviews-admin.php';
+require_once __DIR__ . '/../includes/class-audit-logger.php';
+require_once __DIR__ . '/../includes/class-workflow.php';
+
+if ( ! function_exists( 'delete_post_meta' ) ) {
+    function delete_post_meta( $post_id, $key, $value = '' ) {
+        unset( $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] );
+        return true;
+    }
+}
+if ( ! function_exists( 'user_can' ) ) {
+    function user_can( $user_id, $cap ) {
+        return in_array( $cap, $GLOBALS['PG_USER_CAPS'][ (int) $user_id ] ?? [], true );
+    }
+}
+if ( ! function_exists( 'wp_set_post_tags' ) ) {
+    function wp_set_post_tags( $post_id, $tags = '', $append = false ) {
+        $GLOBALS['PG_SET_TAGS'][ $post_id ] = (array) $tags;
+        return [];
+    }
+}
 
 $GLOBALS['PG_FAILURES'] = 0;
 $GLOBALS['PG_MAILS']    = [];
@@ -275,6 +295,232 @@ $xss = PressHub_AI_QA_Reviews_Admin::render_row( [
 pg_check( false === strpos( $xss, '<script>' ) && false === strpos( $xss, '<img' ), 'feedback is escaped on the QA reviews page' );
 pg_check( false !== strpos( $xss, 'Passed with alerts' ) && false !== strpos( $xss, 'High risk' ), 'row shows the verdict and the legal risk' );
 echo "  [10] admin page: OK\n";
+
+
+// 11. Coverage: automated posts are inserted pending and released by the gate.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0 ] );
+$arr = PressHub_AI_Publish_Gate::prepare_insert( [ 'post_status' => 'publish', 'post_title' => 't' ], 'briefing' );
+pg_check( 'pending' === $arr['post_status'] && 'publish' === $arr['meta_input'][ PressHub_AI_Publish_Gate::META_TARGET_STATUS ], 'prepare_insert keeps a publishing briefing pending' );
+$arr = PressHub_AI_Publish_Gate::prepare_insert( [ 'post_status' => 'draft' ], 'briefing' );
+pg_check( 'draft' === $arr['post_status'] && empty( $arr['meta_input'] ), 'a draft briefing is inserted as it is' );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_include_podcasts'] = 0;
+$arr = PressHub_AI_Publish_Gate::prepare_insert( [ 'post_status' => 'publish' ], 'podcast' );
+pg_check( 'publish' === $arr['post_status'], 'podcasts go straight to their status when the podcast check is off' );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_include_podcasts'] = 1;
+
+$mk = function ( int $id, string $status, string $target, array $extra = [] ) {
+    $GLOBALS['POSTS_STORE'][ $id ] = array_merge( [ 'ID' => $id, 'post_title' => 'Ενημέρωση', 'post_content' => '<p>Κείμενο ' . $id . '</p>', 'post_excerpt' => '', 'post_type' => 'post', 'post_status' => $status, 'post_author' => 0 ], $extra );
+    if ( '' !== $target ) {
+        $GLOBALS['POST_META_STORE'][ $id ][ PressHub_AI_Publish_Gate::META_TARGET_STATUS ] = $target;
+    }
+};
+pg_reply( $clean );
+$mk( 601, 'pending', 'publish' );
+$g = PressHub_AI_Publish_Gate::release( 601, 'briefing', 'briefing_morning' );
+pg_check( 'pass' === $g['verdict'] && 'publish' === $GLOBALS['POSTS_STORE'][601]['post_status'], 'a passing briefing is moved to publish' );
+pg_check( '' === (string) get_post_meta( 601, PressHub_AI_Publish_Gate::META_TARGET_STATUS, true ), 'the target status is cleared after release' );
+pg_check( 'briefing' === PressHub_AI_QA_Review_Store::for_post( 601 )[0]['context'], 'the release is saved in the history' );
+
+pg_reply( array_merge( $clean, [ 'score' => 40 ] ) );
+$mk( 602, 'pending', 'publish' );
+$g = PressHub_AI_Publish_Gate::release( 602, 'briefing', 'briefing_noon' );
+pg_check( 'hold' === $g['verdict'] && 'pending' === $GLOBALS['POSTS_STORE'][602]['post_status'], 'a failing briefing stays in Pending Review' );
+pg_check( 'publish' === get_post_meta( 602, PressHub_AI_Publish_Gate::META_TARGET_STATUS, true ), 'a held post keeps its target for Publish anyway' );
+pg_check( 1 === count( $GLOBALS['PG_MAILS'] ), 'the editor is alerted about the held briefing' );
+
+// The roundup: no editorial score, legal decides; a live roundup that fails goes back to pending.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0, 'presshub_ai_qa_legal_action' => 'hold' ] );
+pg_reply( array_merge( $risky, [ 'score' => 10 ] ) );
+$mk( 603, 'publish', '' );
+$g = PressHub_AI_Publish_Gate::release( 603, 'trending', 'trending_roundup' );
+pg_check( 'skip' === $g['checks']['editorial']['result'] && 'fail' === $g['checks']['legal']['result'], 'the roundup is judged on legal only, not the editorial score' );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][603]['post_status'] && 'publish' === get_post_meta( 603, PressHub_AI_Publish_Gate::META_TARGET_STATUS, true ), 'a live roundup that is held goes back to pending' );
+pg_reply( array_merge( $clean, [ 'score' => 10 ] ) );
+$mk( 604, 'pending', 'future', [ 'post_date' => '2030-01-01 08:00:00' ] );
+$g = PressHub_AI_Publish_Gate::release( 604, 'trending', 'trending_roundup' );
+pg_check( 'pass' === $g['verdict'] && 'future' === $GLOBALS['POSTS_STORE'][604]['post_status'], 'a low editorial score does not hold the roundup; it goes to its scheduled time' );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [];
+$GLOBALS['CAPTURE_FILTER'] = null;
+$mk( 605, 'pending', 'publish' );
+$g = PressHub_AI_Publish_Gate::release( 605, 'trending', 'trending_roundup' );
+pg_check( 'error' === $g['verdict'] && 'pending' === $GLOBALS['POSTS_STORE'][605]['post_status'], 'a roundup whose review cannot run is held' );
+$mail = end( $GLOBALS['PG_MAILS'] );
+pg_check( $mail && false !== strpos( $mail['subject'], 'Trending roundup' ) && false !== strpos( $mail['subject'], 'review could not run' ), 'the roundup error email says the review could not run: ' . ( $mail['subject'] ?? '' ) );
+
+// Off: the post goes straight to its status, no review.
+pg_reset( [ 'presshub_ai_qa_include_trending' => 0 ] );
+$mk( 606, 'pending', 'publish' );
+pg_check( null === PressHub_AI_Publish_Gate::release( 606, 'trending', 'trending_roundup' ) && 'publish' === $GLOBALS['POSTS_STORE'][606]['post_status'] && 0 === $GLOBALS['PG_CALLS'], 'with the roundup check off it is released unreviewed' );
+
+// Podcast: the script is reviewed with the show notes; SEO is measured only (one call).
+pg_reset();
+pg_reply( [ 'score' => 85, 'feedback' => 'ok', 'libel_risk' => 'Low', 'legal_concerns' => 'None identified', 'legal_issues' => [] ] );
+$mk( 607, 'pending', 'publish' );
+$g = PressHub_AI_Publish_Gate::release( 607, 'podcast', 'podcast_morning', [ 'content' => 'Σημειώσεις. Podcast script: Ο παρουσιαστής μιλά.' ] );
+pg_check( 1 === $GLOBALS['PG_CALLS'], 'a podcast costs one review call; got ' . $GLOBALS['PG_CALLS'] );
+pg_check( 'skip' !== $g['checks']['seo']['result'] && null === ( $g['checks']['seo']['review']['ai_score'] ?? null ), 'the podcast SEO check is the measured checks only' );
+pg_check( 'podcast' === PressHub_AI_QA_Review_Store::for_post( 607 )[0]['context'], 'podcast reviews are saved with their context' );
+echo "  [11] automated posts: OK\n";
+
+// 12. A review that cannot run marks SEO as an error, not a result.
+pg_reset();
+$GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [];
+$GLOBALS['CAPTURE_FILTER'] = null;
+$gate = PressHub_AI_Publish_Gate::run( 'text', 'post', 0, $good_seo_input );
+pg_check( 'error' === $gate['checks']['seo']['result'] && 'error' === $gate['verdict'], 'no SEO result when the review failed' );
+$row = PressHub_AI_QA_Reviews_Admin::render_row( [ 'id' => 9, 'post_id' => 0, 'created_at' => 'x', 'trigger_type' => 'author_publish', 'verdict' => 'error', 'editorial_result' => 'error', 'editorial_score' => null, 'editorial_threshold' => 80, 'legal_result' => 'error', 'legal_risk' => '', 'seo_result' => 'error', 'seo_score' => null, 'seo_threshold' => 60, 'details' => [ 'checks' => $gate['checks'] ] ] );
+pg_check( false !== strpos( $row, 'The legal check could not run' ), 'the Legal heading explains an error instead of standing empty' );
+echo "  [12] review errors: OK\n";
+
+// 13. SEO fix: the suggested excerpt and tags fill the empty fields, then the checks run again.
+pg_reset( [ 'presshub_ai_seo_auto_enabled' => 1, 'presshub_ai_qa_seo_min_score' => 95 ] );
+$GLOBALS['PG_SET_TAGS'] = [];
+pg_reply( array_merge( $clean, [ 'seo' => [ 'seo_score' => 70, 'focus_keyphrase' => 'στέγαση', 'summary' => '', 'suggestions' => [], 'suggested_tags' => [ 'Στέγαση', 'Λευκωσία' ], 'suggested_meta_description' => 'Το νέο σχέδιο στέγασης της κυβέρνησης για τη Λευκωσία, τι αλλάζει και ποιοι δικαιούνται βοήθεια από τον Ιανουάριο.' ] ] ) );
+$GLOBALS['POSTS_STORE'][608] = [ 'ID' => 608, 'post_title' => $good_seo_input['title'], 'post_content' => $good_seo_input['content'], 'post_excerpt' => '', 'post_type' => 'post', 'post_status' => 'draft', 'post_author' => 0 ];
+$bare = array_merge( $good_seo_input, [ 'post_id' => 608, 'excerpt' => '', 'tags' => [], 'featured_image_id' => 55 ] );
+$before = PressHub_AI_SEO::run_checks( $bare );
+$g = PressHub_AI_Publish_Gate::review_post( (object) $GLOBALS['POSTS_STORE'][608], 'author_publish', [ 'seo_input' => $bare, 'force' => true ] );
+pg_check( [ 'excerpt', 'tags' ] === ( $g['checks']['seo']['fixed'] ?? [] ), 'the gate filled the excerpt and the tags: ' . json_encode( $g['checks']['seo']['fixed'] ?? null ) );
+pg_check( (int) $g['checks']['seo']['review']['checks_score'] > (int) $before['score'], 'the measured SEO score rose after the fix' );
+pg_check( [ 'Στέγαση', 'Λευκωσία' ] === ( $GLOBALS['PG_SET_TAGS'][608] ?? null ), 'the suggested tags were set on the post' );
+$fixed_input = array_merge( $bare, [ 'excerpt' => 'Το νέο σχέδιο στέγασης της κυβέρνησης για τη Λευκωσία, τι αλλάζει και ποιοι δικαιούνται βοήθεια από τον Ιανουάριο.', 'tags' => [ 'Στέγαση', 'Λευκωσία' ] ] );
+$calls = $GLOBALS['PG_CALLS'];
+$again = PressHub_AI_Publish_Gate::review_post( (object) $GLOBALS['POSTS_STORE'][608], 'scheduled_publish', [ 'seo_input' => $fixed_input ] );
+pg_check( ! empty( $again['cached'] ) && $calls === $GLOBALS['PG_CALLS'], 'the review is cached under the fixed version, so go-live does not review again' );
+$GLOBALS['PG_SET_TAGS'] = [];
+pg_reply( array_merge( $clean, [ 'seo' => [ 'seo_score' => 10, 'suggested_tags' => [ 'Χ' ], 'suggested_meta_description' => '' ] ] ) );
+$g = PressHub_AI_Publish_Gate::review_post( (object) $GLOBALS['POSTS_STORE'][608], 'author_publish', [ 'seo_input' => array_merge( $bare, [ 'tags_from_request' => true ] ), 'force' => true ] );
+pg_check( empty( $GLOBALS['PG_SET_TAGS'] ), 'tags sent with the editor save are left alone' );
+echo "  [13] SEO fix: OK\n";
+
+// 14. Editors and scheduled posts, and Publish anyway.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0 ] );
+$wf = new PressHub_AI_Workflow();
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
+pg_reply( array_merge( $clean, [ 'score' => 40 ] ) );
+$mk( 701, 'publish', '' );
+$GLOBALS['WP_UPDATE_POST_CALLS'] = 0;
+$wf->enforce_editorial_workflow( 'publish', 'draft', (object) $GLOBALS['POSTS_STORE'][701] );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][701]['post_status'], 'an editor publish that fails is held' );
+pg_check( 'editor_publish' === PressHub_AI_QA_Review_Store::for_post( 701 )[0]['trigger_type'], 'the trigger says an editor published' );
+
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_check_editors'] = 0;
+$mk( 702, 'publish', '' );
+$wf->enforce_editorial_workflow( 'publish', 'draft', (object) $GLOBALS['POSTS_STORE'][702] );
+pg_check( 'publish' === $GLOBALS['POSTS_STORE'][702]['post_status'] && 0 === count( PressHub_AI_QA_Review_Store::for_post( 702 ) ), 'with editor checks off, editors are not reviewed' );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_check_editors'] = 1;
+
+// Scheduling is reviewed; going live by cron reuses that review when nothing changed.
+pg_reply( $clean );
+$GLOBALS['PG_CALLS'] = 0;
+$mk( 703, 'future', '' );
+$wf->enforce_editorial_workflow( 'future', 'draft', (object) $GLOBALS['POSTS_STORE'][703] );
+pg_check( 1 === $GLOBALS['PG_CALLS'] && 'future' === $GLOBALS['POSTS_STORE'][703]['post_status'], 'a scheduled post is reviewed when it is scheduled' );
+$GLOBALS['WP_DOING_CRON'] = true;
+$GLOBALS['CURRENT_USER_CAPS'] = [];
+$wf->enforce_editorial_workflow( 'publish', 'future', (object) array_merge( $GLOBALS['POSTS_STORE'][703], [ 'post_status' => 'publish' ] ) );
+pg_check( 1 === $GLOBALS['PG_CALLS'], 'going live unchanged reuses the saved review; calls: ' . $GLOBALS['PG_CALLS'] );
+pg_reply( array_merge( $clean, [ 'score' => 30 ] ) );
+$GLOBALS['POSTS_STORE'][703]['post_content'] = '<p>Άλλαξε πριν βγει.</p>';
+$wf->enforce_editorial_workflow( 'publish', 'future', (object) array_merge( $GLOBALS['POSTS_STORE'][703], [ 'post_status' => 'publish' ] ) );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][703]['post_status'] && 'scheduled_publish' === PressHub_AI_QA_Review_Store::for_post( 703 )[0]['trigger_type'], 'a scheduled post edited since and now failing is held at go-live' );
+$GLOBALS['WP_DOING_CRON'] = false;
+
+// With editor checks off, a post an editor scheduled is not held by cron at go-live.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_check_editors'] = 0;
+$GLOBALS['PG_USER_CAPS'] = [ 9 => [ 'edit_others_posts' ] ];
+$GLOBALS['PG_CALLS'] = 0;
+$mk( 704, 'publish', '' );
+$GLOBALS['POST_META_STORE'][704]['_edit_last'] = 9;
+$GLOBALS['WP_DOING_CRON'] = true;
+$wf->enforce_editorial_workflow( 'publish', 'future', (object) $GLOBALS['POSTS_STORE'][704] );
+pg_check( 0 === $GLOBALS['PG_CALLS'] && 'publish' === $GLOBALS['POSTS_STORE'][704]['post_status'], 'an editor-scheduled post goes live unreviewed when editor checks are off' );
+$GLOBALS['POST_META_STORE'][704]['_edit_last'] = 3; // an author
+pg_reply( array_merge( $clean, [ 'score' => 30 ] ) );
+$wf->enforce_editorial_workflow( 'publish', 'future', (object) $GLOBALS['POSTS_STORE'][704] );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][704]['post_status'], 'an author-scheduled post is still checked at go-live' );
+$GLOBALS['WP_DOING_CRON'] = false;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_check_editors'] = 1;
+
+// Publish anyway on the held editor post.
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
+$r = PressHub_AI_Publish_Gate::publish_anyway( 702, 'x' );
+pg_check( is_wp_error( $r ) && 'presshub_qa_not_held' === $r->get_error_code(), 'Publish anyway refuses a post that is not held' );
+$saved701 = $GLOBALS['POSTS_STORE'][701];
+$GLOBALS['POSTS_STORE'][701]['post_content'] = '<p>Αλλαγμένο μετά την κράτηση.</p>';
+$r = PressHub_AI_Publish_Gate::publish_anyway( 701, 'x' );
+pg_check( is_wp_error( $r ) && 'presshub_qa_changed' === $r->get_error_code() && 'pending' === $GLOBALS['POSTS_STORE'][701]['post_status'], 'Publish anyway refuses a version the gate did not review' );
+$GLOBALS['POSTS_STORE'][701] = $saved701;
+$r = PressHub_AI_Publish_Gate::publish_anyway( 701, '' );
+pg_check( is_wp_error( $r ), 'a reason is required' );
+$r = PressHub_AI_Publish_Gate::publish_anyway( 701, 'Επιβεβαιωμένο από τον αρχισυντάκτη.' );
+pg_check( true === $r && 'publish' === $GLOBALS['POSTS_STORE'][701]['post_status'], 'Publish anyway publishes the held post' );
+$hist = PressHub_AI_QA_Review_Store::for_post( 701 );
+pg_check( 'Επιβεβαιωμένο από τον αρχισυντάκτη.' === ( $hist[0]['override_reason'] ?? '' ), 'the reason is saved on the review row' );
+$audit = array_values( array_filter( $wpdb->tables[ PressHub_AI_Audit_Logger::get_table_name() ] ?? [], function ( $r ) { return 'qa_gate_override' === ( $r['event_type'] ?? '' ); } ) );
+pg_check( 1 === count( $audit ), 'a qa_gate_override event is in the audit log' );
+$GLOBALS['PG_CALLS'] = 0;
+$GLOBALS['WP_UPDATE_POST_CALLS'] = 0;
+$wf->enforce_editorial_workflow( 'publish', 'pending', (object) $GLOBALS['POSTS_STORE'][701] );
+pg_check( 0 === $GLOBALS['PG_CALLS'] && 'publish' === $GLOBALS['POSTS_STORE'][701]['post_status'], 'the released version is not held again' );
+$GLOBALS['CURRENT_USER_CAPS'] = [];
+echo "  [14] editors, schedules and Publish anyway: OK\n";
+
+// 15. Any check that errors makes the verdict an error.
+pg_check( 'error' === PressHub_AI_Publish_Gate::verdict( [ 'editorial' => [ 'result' => 'pass' ], 'legal' => [ 'result' => 'skip' ], 'seo' => [ 'result' => 'error' ] ] ), 'an SEO error is an error verdict' );
+
+// A new post created through REST: its terms move to its ID on its first transition and are not reused.
+pg_reset();
+$wf = new PressHub_AI_Workflow();
+$req = new class { public function get_param( $k ) { return 'tags' === $k ? [ 5 ] : null; } };
+$wf->remember_rest_terms( (object) [ 'post_type' => 'post' ], $req );
+$mk( 801, 'draft', '' );
+$wf->enforce_editorial_workflow( 'draft', 'new', (object) $GLOBALS['POSTS_STORE'][801] );
+$state = ( new ReflectionProperty( 'PressHub_AI_Workflow', 'rest_state' ) );
+$state->setAccessible( true );
+$st = $state->getValue();
+pg_check( ! isset( $st[0] ) && isset( $st[801] ), 'REST terms of a new post move to its ID and do not leak to the next post' );
+echo "  [15] verdict and REST terms: OK\n";
+
+// 16. Held podcasts can be released with Publish anyway; a hand publish of a held briefing is checked.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0 ] );
+pg_reply( array_merge( $clean, [ 'score' => 30 ] ) );
+$mk( 901, 'pending', 'publish' );
+$GLOBALS['POST_META_STORE'][901]['_presshub_briefing_type']  = 'podcast';
+$GLOBALS['POST_META_STORE'][901]['_presshub_podcast_script'] = '[SPEAKER_1]: Καλημέρα.';
+$g = PressHub_AI_Publish_Gate::release( 901, 'podcast', 'podcast_morning' );
+pg_check( 'hold' === $g['verdict'] && 'pending' === $GLOBALS['POSTS_STORE'][901]['post_status'], 'a failing podcast is held' );
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
+$r = PressHub_AI_Publish_Gate::publish_anyway( 901, 'Ελέγχθηκε.' );
+pg_check( true === $r && 'publish' === $GLOBALS['POSTS_STORE'][901]['post_status'], 'Publish anyway releases a held podcast: ' . ( is_wp_error( $r ) ? $r->get_error_code() : 'ok' ) );
+pg_check( PressHub_AI_Publish_Gate::is_overridden( (object) $GLOBALS['POSTS_STORE'][901], 'podcast' ), 'the released podcast version is recognised' );
+
+$mk( 902, 'pending', 'publish' );
+$GLOBALS['POST_META_STORE'][902]['_presshub_briefing_type'] = 'text';
+PressHub_AI_Publish_Gate::release( 902, 'briefing', 'briefing_morning' );
+$calls = $GLOBALS['PG_CALLS'];
+$GLOBALS['POSTS_STORE'][902]['post_status'] = 'publish';
+( new PressHub_AI_Workflow() )->enforce_editorial_workflow( 'publish', 'pending', (object) $GLOBALS['POSTS_STORE'][902] );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][902]['post_status'] && $calls === $GLOBALS['PG_CALLS'], 'a held briefing published by hand from the editor stays held (saved review reused)' );
+$GLOBALS['CURRENT_USER_CAPS'] = [];
+
+// A live roundup with a new set of posts is off line while it is reviewed.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0 ] );
+$mk( 903, 'publish', '' );
+PressHub_AI_Publish_Gate::hold_for_review( 903 );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][903]['post_status'] && 'publish' === get_post_meta( 903, PressHub_AI_Publish_Gate::META_TARGET_STATUS, true ), 'hold_for_review takes a live post off line and keeps its status' );
+pg_reply( $clean );
+PressHub_AI_Publish_Gate::release( 903, 'trending', 'trending_roundup' );
+pg_check( 'publish' === $GLOBALS['POSTS_STORE'][903]['post_status'], 'and release puts it back once it passes' );
+
+// The email of an error verdict still shows an editorial failure.
+list( $subject, $body ) = ( function () {
+    $m = new ReflectionMethod( 'PressHub_AI_QA_Reviewer', 'gate_email' );
+    $m->setAccessible( true );
+    return $m->invoke( null, [ 'verdict' => 'error', 'checks' => [ 'editorial' => [ 'result' => 'fail', 'score' => 40, 'threshold' => 80, 'feedback' => 'Αδύναμο.' ], 'legal' => [ 'result' => 'pass' ], 'seo' => [ 'result' => 'error' ] ] ], 'post', 'Site', 'Τίτλος', 'A', 'u', 1, false );
+} )();
+pg_check( false !== strpos( $body, 'EDITORIAL: 40 / 100' ) && false !== strpos( $body, 'could not run' ), 'the error email keeps the editorial block' );
+echo "  [16] podcasts, held briefings, roundups and emails: OK\n";
 
 if ( $GLOBALS['PG_FAILURES'] > 0 ) {
     echo "PublishGateTest: {$GLOBALS['PG_FAILURES']} failure(s)\n";

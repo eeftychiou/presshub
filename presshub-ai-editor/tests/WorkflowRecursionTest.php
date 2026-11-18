@@ -68,11 +68,21 @@ class WorkflowRecursionTest
             $failures[] = "Re-entry recursion: wp_update_post called {$GLOBALS['WP_UPDATE_POST_CALLS']} times (cap {$maxCalls}) — guard missing.";
         }
 
+        // Editors are checked too by default (2.48.0)...
         self::reset_world();
         self::grant_editor_caps();
         $count = self::simulate_unreviewed_publish();
+        if ( $count !== 1 ) {
+            $failures[] = "Editor publish should be held by the gate by default (1 wp_update_post call), got {$count}.";
+        }
+
+        // ...unless "Check posts editors publish" is off.
+        self::reset_world();
+        self::grant_editor_caps();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_check_editors'] = 0;
+        $count = self::simulate_unreviewed_publish();
         if ( $count !== 0 ) {
-            $failures[] = "Editor should bypass enforcement (0 wp_update_post calls), got {$count}.";
+            $failures[] = "Editor should bypass enforcement when editor checks are off (0 wp_update_post calls), got {$count}.";
         }
 
         self::reset_world();
@@ -118,22 +128,44 @@ class WorkflowRecursionTest
 
         // Automated Daily Briefing Hub posts (text briefing stories)
         // must bypass the editorial gate even without a scorecard.
+        // (2.48.0: they are reviewed by release() when created; one a person
+        // publishes by hand goes through the gate only while its include
+        // setting is on.)
+        self::reset_world();
+        self::grant_author_caps();
+        $GLOBALS['POST_META_STORE'][42]['_presshub_briefing_type'] = 'text';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_include_briefings'] = 0;
+        $count = self::simulate_unreviewed_publish();
+        if ( $count !== 0 ) {
+            $failures[] = "Briefing text post must bypass the gate when its check is off (0 wp_update_post calls), got {$count}.";
+        }
         self::reset_world();
         self::grant_author_caps();
         $GLOBALS['POST_META_STORE'][42]['_presshub_briefing_type'] = 'text';
         $count = self::simulate_unreviewed_publish();
-        if ( $count !== 0 ) {
-            $failures[] = "Briefing text post must bypass the editorial gate (0 wp_update_post calls), got {$count}.";
+        if ( $count !== 1 ) {
+            $failures[] = "Briefing text post published by hand must be held when its review cannot run (1 wp_update_post call), got {$count}.";
         }
 
         // Automated Daily Briefing Hub posts (podcast posts)
         // must bypass the editorial gate even without a scorecard.
+        // (2.48.0: they are reviewed by release() when created; one a person
+        // publishes by hand goes through the gate only while its include
+        // setting is on.)
+        self::reset_world();
+        self::grant_author_caps();
+        $GLOBALS['POST_META_STORE'][42]['_presshub_briefing_type'] = 'podcast';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_include_podcasts'] = 0;
+        $count = self::simulate_unreviewed_publish();
+        if ( $count !== 0 ) {
+            $failures[] = "Briefing podcast post must bypass the gate when its check is off (0 wp_update_post calls), got {$count}.";
+        }
         self::reset_world();
         self::grant_author_caps();
         $GLOBALS['POST_META_STORE'][42]['_presshub_briefing_type'] = 'podcast';
         $count = self::simulate_unreviewed_publish();
-        if ( $count !== 0 ) {
-            $failures[] = "Briefing podcast post must bypass the editorial gate (0 wp_update_post calls), got {$count}.";
+        if ( $count !== 1 ) {
+            $failures[] = "Briefing podcast post published by hand must be held when its review cannot run (1 wp_update_post call), got {$count}.";
         }
 
         // Cron executions (wp_doing_cron() === true) must bypass the gate.

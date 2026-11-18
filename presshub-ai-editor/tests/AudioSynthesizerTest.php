@@ -239,6 +239,7 @@ $GLOBALS['WP_INSERTED_POSTS'] = [];
 $GLOBALS['POST_META_STORE'] = [];
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_category'] = 42;
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_status'] = 'publish';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_include_podcasts'] = 0; // The podcast QA gate is tested in PublishGateTest.
 
 $test_transcript = "[Μαρία]: Καλημέρα σε όλους!\n[Νίκος]: Καλημέρα Μαρία!";
 $post_id = $synthesizer->create_podcast_post(
@@ -350,8 +351,9 @@ as_check( 'e2e: script without turns returns WP_Error', is_wp_error( $err_invali
 // =========================================================================
 
 $GLOBALS['OPTIONS_STORE'] = [
-    // These cases count TTS HTTP requests; keep the post-creation SEO call out of them.
+    // These cases count TTS HTTP requests; keep the post-creation SEO and QA calls out of them.
     'presshub_ai_seo_auto_enabled'   => 0,
+    'presshub_ai_qa_include_podcasts' => 0,
     'presshub_ai_provider'           => 'gemini',
     'presshub_ai_configured_providers' => presshub_test_provider_keys( 'test-gemini-key', [ 'gemini' ] ),
     'presshub_ai_model_gemini'       => 'gemini-3.7-flash',
