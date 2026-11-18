@@ -318,6 +318,9 @@ php dev-env/scripts/reset-db.php
    - People fiches reach the models only through `PressHub_AI_Stakeholders::apply()` in `call_provider()`, after the agenda. Do not inject them per caller. Only actions in `PressHub_AI_Stakeholders::BUDGETS` get them.
    - Automatic updates must respect the editor: never change a locked fiche, never overwrite name, role or party on an edited one, never send an excluded one.
 
+12. **Help page (PressHub → Help)**:
+   - `PressHub_AI_Help_Admin` explains the agenda, policy fiches, people fiches and memory to editors. When you change which actions get them, their budgets, the parts sent, the matching rules or a limit, update the page text in the same PR. The task table and the prompt examples are built from `budget_for()`, `parts_for()` and the real `render()` functions, so never hard-code a budget or a prompt header there. Tests: `HelpPageTest.php`.
+
 ## 🔒 Security & Hardening Standards
 
 All code contributions must strictly adhere to WordPress security best practices:

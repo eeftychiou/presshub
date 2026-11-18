@@ -63,6 +63,7 @@ function amc_build_menu(): array {
     PressHub_Admin_Menu::add_usage_page();
     ( new PressHub_AI_Settings() )->add_settings_page();
     ( new PressHub_AI_Admin_Presets() )->add_presets_submenu();
+    ( new PressHub_AI_Help_Admin() )->add_admin_menu();
     return $GLOBALS['SUBMENU_PAGES'][ PressHub_Admin_Menu::PARENT ] ?? [];
 }
 
@@ -98,6 +99,7 @@ $expected = [
     'presshub-ai-usage'              => 'Usage & logs',
     'presshub-ai'                    => 'Settings',
     'presshub-ai-presets'            => 'Presets',
+    'presshub-ai-help'               => 'Help',
 ];
 
 // ---------------------------------------------------------------------
