@@ -30,6 +30,7 @@ class PressHub_Social_Meta_API_Client {
             'instagram' => self::publish_instagram( $job ),
             'twitter'   => self::publish_twitter( $job ),
             'tiktok'    => self::publish_tiktok( $job ),
+            // translators: %s: social platform name
             default     => new WP_Error( 'unsupported_platform', sprintf( __( 'Unsupported platform for API client: %s', 'presshub-social-autopost' ), $platform ) ),
         };
     }
@@ -403,7 +404,8 @@ class PressHub_Social_Meta_API_Client {
                 return [
                     'success'  => true,
                     'platform' => 'facebook',
-                    'message'  => sprintf( __( 'Connected to Facebook Page: %s (ID: %s)', 'presshub-social-autopost' ), $data['name'] ?? '', $data['id'] ?? '' ),
+                    // translators: %1$s: page name, %2$s: page ID
+                    'message'  => sprintf( __( 'Connected to Facebook Page: %1$s (ID: %2$s)', 'presshub-social-autopost' ), $data['name'] ?? '', $data['id'] ?? '' ),
                 ];
 
             case 'instagram':
@@ -430,7 +432,8 @@ class PressHub_Social_Meta_API_Client {
                 return [
                     'success'  => true,
                     'platform' => 'instagram',
-                    'message'  => sprintf( __( 'Connected to Instagram Account: @%s (ID: %s)', 'presshub-social-autopost' ), $data['username'] ?? '', $data['id'] ?? '' ),
+                    // translators: %1$s: Instagram username, %2$s: account ID
+                    'message'  => sprintf( __( 'Connected to Instagram Account: @%1$s (ID: %2$s)', 'presshub-social-autopost' ), $data['username'] ?? '', $data['id'] ?? '' ),
                 ];
 
             case 'twitter':
@@ -454,6 +457,7 @@ class PressHub_Social_Meta_API_Client {
                 return [
                     'success'  => true,
                     'platform' => 'twitter',
+                    // translators: %s: Twitter/X username
                     'message'  => sprintf( __( 'Connected to Twitter/X user: @%s', 'presshub-social-autopost' ), $data['data']['username'] ?? 'authenticated' ),
                 ];
 

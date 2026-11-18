@@ -410,32 +410,44 @@ class PressHub_AI_Briefing_Admin {
                     // Issue #65 — Bug B: localized "WP Status: %s" label used
                     // by updateUIFromStatus() to refresh the subtitle after a
                     // curation completes without a page reload.
+                    // translators: %s: WordPress post status
                     'wp_status_label'    => __( 'WP Status: %s', 'presshub-ai-editor' ),
                     // Issue #79 — labels for the new stage-status boxes. The
                     // JS updateUIFromStatus() renderer uses these to compose
                     // timestamp chips, source chips, and audio stat pills.
+                    // translators: %s: date and time
                     'ts_attempted'       => __( 'Attempted: %s', 'presshub-ai-editor' ),
+                    // translators: %s: date and time
                     'ts_completed'       => __( 'Completed: %s', 'presshub-ai-editor' ),
+                    // translators: %s: duration in seconds
                     'ts_duration_sec'    => __( 'Duration: %ss', 'presshub-ai-editor' ),
+                    // translators: %s: formatted duration
                     'ts_duration_hms'    => __( 'Duration: %s', 'presshub-ai-editor' ),
                     'stage_in_progress'  => __( 'In Progress', 'presshub-ai-editor' ),
                     'stage_completed'    => __( 'Completed', 'presshub-ai-editor' ),
                     'stage_failed'       => __( 'Failed', 'presshub-ai-editor' ),
                     'stage_pending'      => __( 'Awaiting previous stage', 'presshub-ai-editor' ),
+                    // translators: %d: number of articles
                     'source_type_curated'=> __( 'All Harvested Articles (%d)', 'presshub-ai-editor' ),
+                    // translators: %d: number of selected articles
                     'source_type_filter' => __( 'Selected Articles Filter (%d)', 'presshub-ai-editor' ),
                     'source_type_manual' => __( 'Manual Notes / Uploads', 'presshub-ai-editor' ),
                     'script_mode_curated'=> __( 'Curated Morning Briefing', 'presshub-ai-editor' ),
                     'script_mode_harvest'=> __( 'Direct Harvested Articles', 'presshub-ai-editor' ),
+                    // translators: %s: number of minutes
                     'audio_duration'     => __( '%s min', 'presshub-ai-editor' ),
-                    'audio_filesize'     => __( '%s', 'presshub-ai-editor' ),
-                    'audio_format'       => __( '%s / %s Hz', 'presshub-ai-editor' ),
+                    'audio_filesize'     => '%s',
+                    // translators: %1$s: audio format, %2$s: sample rate
+                    'audio_format'       => __( '%1$s / %2$s Hz', 'presshub-ai-editor' ),
                     'audio_engine_ms_gemini'    => __( 'Gemini Multi-Speaker', 'presshub-ai-editor' ),
                     'audio_engine_solo_gemini'  => __( 'Gemini Single-Voice', 'presshub-ai-editor' ),
                     'audio_engine_google_cloud' => __( 'Google Cloud TTS', 'presshub-ai-editor' ),
+                    // translators: %d: number of topics
                     'audio_mode_topic'         => __( 'Topic-Stitched (%d topics)', 'presshub-ai-editor' ),
                     'audio_mode_single_pass'   => __( 'Single-Pass', 'presshub-ai-editor' ),
+                    // translators: %s: voice name
                     'voice_female_chip'  => __( '%s (Female)', 'presshub-ai-editor' ),
+                    // translators: %s: voice name
                     'voice_male_chip'    => __( '%s (Male)', 'presshub-ai-editor' ),
                     'voice_separator'    => __( ' + ', 'presshub-ai-editor' ),
                 ],
@@ -1077,7 +1089,7 @@ class PressHub_AI_Briefing_Admin {
                     <strong><?php echo esc_html__( 'Daily Memory Digest Notice', 'presshub-ai-editor' ); ?></strong>
                     <?php if ( $current_digest_failed ) : ?>
                         <p>
-                            <?php echo esc_html( sprintf( __( 'The daily memory digest for %s (%s) failed: %s', 'presshub-ai-editor' ), $date, $edition, $current_mem_digest['error_message'] ?? '' ) ); ?>
+                            <?php echo esc_html( sprintf( /* translators: %1$s: date, %2$s: edition, %3$s: error message */ __( 'The daily memory digest for %1$s (%2$s) failed: %3$s', 'presshub-ai-editor' ), $date, $edition, $current_mem_digest['error_message'] ?? '' ) ); ?>
                         </p>
                         <p class="presshub-alert-action-text">
                             <button type="button" class="button button-primary button-small" id="btn-retry-memory-digest" data-post-id="<?php echo esc_attr( $status['text_post_id'] ?? 0 ); ?>" data-date="<?php echo esc_attr( $date ); ?>" data-edition="<?php echo esc_attr( $edition ); ?>">
@@ -1086,7 +1098,7 @@ class PressHub_AI_Briefing_Admin {
                         </p>
                     <?php elseif ( ! empty( $failed_digests_list ) ) : ?>
                         <p>
-                            <?php echo esc_html( sprintf( __( 'There are %d failed daily memory digest(s) requiring attention:', 'presshub-ai-editor' ), count( $failed_digests_list ) ) ); ?>
+                            <?php echo esc_html( sprintf( /* translators: %d: number of failed digests */ __( 'There are %d failed daily memory digest(s) requiring attention:', 'presshub-ai-editor' ), count( $failed_digests_list ) ) ); ?>
                         </p>
                         <ul style="margin: 5px 0 10px 20px; list-style-type: disc;">
                             <?php foreach ( array_slice( $failed_digests_list, 0, 5 ) as $fitem ) : ?>
@@ -1217,7 +1229,7 @@ class PressHub_AI_Briefing_Admin {
                             <strong><span id="count-harvested-articles"><?php echo (int) $status['article_count']; ?></span></strong> <?php echo esc_html__( 'articles in daily pool', 'presshub-ai-editor' ); ?>
                         </p>
                         <?php if ( ! empty( $status['harvested_at'] ) ) : ?>
-                            <p class="card-subtext"><?php echo sprintf( esc_html__( 'Scraped: %s', 'presshub-ai-editor' ), esc_html( $status['harvested_at'] ) ); ?></p>
+                            <p class="card-subtext"><?php echo sprintf( /* translators: %s: date and time the article was scraped */ esc_html__( 'Scraped: %s', 'presshub-ai-editor' ), esc_html( $status['harvested_at'] ) ); ?></p>
                         <?php endif; ?>
 
                         <?php
@@ -1241,12 +1253,12 @@ class PressHub_AI_Briefing_Admin {
                             <div class="presshub-status-row">
                                 <?php if ( '' !== $harv_attempted ) : ?>
                                     <span class="presshub-timestamp-chip" title="<?php echo esc_attr__( 'Pipeline stage start timestamp', 'presshub-ai-editor' ); ?>">
-                                        ⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $harv_attempted ) ); ?>
+                                        ⏱ <?php echo esc_html( sprintf( /* translators: %s: date and time */ __( 'Attempted: %s', 'presshub-ai-editor' ), $harv_attempted ) ); ?>
                                     </span>
                                 <?php endif; ?>
                                 <?php if ( '' !== $harv_completed ) : ?>
                                     <span class="presshub-timestamp-chip" title="<?php echo esc_attr__( 'Pipeline stage completion timestamp', 'presshub-ai-editor' ); ?>">
-                                        ✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $harv_completed ) ); ?>
+                                        ✅ <?php echo esc_html( sprintf( /* translators: %s: date and time */ __( 'Completed: %s', 'presshub-ai-editor' ), $harv_completed ) ); ?>
                                     </span>
                                 <?php endif; ?>
                                 <?php if ( $harv_duration > 0 ) : ?>
@@ -1355,6 +1367,7 @@ class PressHub_AI_Briefing_Admin {
                                 // clear this is the post's position in the WP
                                 // editorial-review queue (pending/draft/publish),
                                 // not the pipeline step.
+                                // translators: %s: WordPress post status
                                 echo sprintf( esc_html__( 'WP Status: %s', 'presshub-ai-editor' ), '<code>' . esc_html( $status['text_post_status'] ) . '</code>' );
                                 ?>
                             </p>
@@ -1368,10 +1381,10 @@ class PressHub_AI_Briefing_Admin {
                             <?php else : ?>
                             <div class="presshub-status-row">
                                 <?php if ( '' !== $cur_attempted ) : ?>
-                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $cur_attempted ) ); ?></span>
+                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( /* translators: %s: date and time */ __( 'Attempted: %s', 'presshub-ai-editor' ), $cur_attempted ) ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( '' !== $cur_completed ) : ?>
-                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $cur_completed ) ); ?></span>
+                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( /* translators: %s: date and time */ __( 'Completed: %s', 'presshub-ai-editor' ), $cur_completed ) ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( $cur_duration_ms > 0 ) : ?>
                                     <span class="presshub-stat-pill">⏳ <?php echo esc_html( sprintf( '%01.1fs', $cur_duration_ms / 1000 ) ); ?></span>
@@ -1391,16 +1404,16 @@ class PressHub_AI_Briefing_Admin {
                                 }
                                 if ( '' !== $wp_status_label ) : ?>
                                     <span class="presshub-status-pill <?php echo esc_attr( $wp_status_cls ); ?>" id="presshub-curation-post-status-pill">
-                                        📰 <?php echo esc_html( sprintf( __( 'Post #%1$d · %2$s', 'presshub-ai-editor' ), (int) $status['text_post_id'], $wp_status_label ) ); ?>
+                                        📰 <?php echo esc_html( sprintf( /* translators: %1$d: post ID, %2$s: post status */ __( 'Post #%1$d · %2$s', 'presshub-ai-editor' ), (int) $status['text_post_id'], $wp_status_label ) ); ?>
                                     </span>
                                 <?php endif; ?>
                                 <?php if ( 'curated_briefing' === $tsc_type ) : ?>
                                     <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Source material fed to the LLM', 'presshub-ai-editor' ); ?>">
-                                        📦 <?php echo esc_html( sprintf( __( 'All Harvested Articles (%d)', 'presshub-ai-editor' ), max( 0, $tsc_count ) ) ); ?>
+                                        📦 <?php echo esc_html( sprintf( /* translators: %d: number of articles */ __( 'All Harvested Articles (%d)', 'presshub-ai-editor' ), max( 0, $tsc_count ) ) ); ?>
                                     </span>
                                 <?php elseif ( 'harvested_articles' === $tsc_type ) : ?>
                                     <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Source material fed to the LLM', 'presshub-ai-editor' ); ?>">
-                                        🔎 <?php echo esc_html( sprintf( __( 'Selected Articles Filter (%d)', 'presshub-ai-editor' ), max( 0, $tsc_count ) ) ); ?>
+                                        🔎 <?php echo esc_html( sprintf( /* translators: %d: number of selected articles */ __( 'Selected Articles Filter (%d)', 'presshub-ai-editor' ), max( 0, $tsc_count ) ) ); ?>
                                     </span>
                                 <?php elseif ( 'manual_notes' === $tsc_type ) : ?>
                                     <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Source material fed to the LLM', 'presshub-ai-editor' ); ?>">
@@ -1465,10 +1478,10 @@ class PressHub_AI_Briefing_Admin {
                             <?php else : ?>
                             <div class="presshub-status-row">
                                 <?php if ( '' !== $sc_attempted ) : ?>
-                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $sc_attempted ) ); ?></span>
+                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( /* translators: %s: date and time */ __( 'Attempted: %s', 'presshub-ai-editor' ), $sc_attempted ) ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( '' !== $sc_completed ) : ?>
-                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $sc_completed ) ); ?></span>
+                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( /* translators: %s: date and time */ __( 'Completed: %s', 'presshub-ai-editor' ), $sc_completed ) ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( $sc_duration > 0 ) : ?>
                                     <span class="presshub-stat-pill">⏳ <?php echo esc_html( sprintf( '%01.1fs', $sc_duration / 1000 ) ); ?></span>
@@ -1587,13 +1600,13 @@ class PressHub_AI_Briefing_Admin {
                             <?php else : ?>
                             <div class="presshub-status-row">
                                 <?php if ( '' !== $au_attempted ) : ?>
-                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( __( 'Attempted: %s', 'presshub-ai-editor' ), $au_attempted ) ); ?></span>
+                                    <span class="presshub-timestamp-chip">⏱ <?php echo esc_html( sprintf( /* translators: %s: date and time */ __( 'Attempted: %s', 'presshub-ai-editor' ), $au_attempted ) ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( '' !== $au_completed ) : ?>
                                     <?php if ( 'error' === $au_status ) : // Issue #154: a failed last run says so. ?>
-                                    <span class="presshub-timestamp-chip">❌ <?php echo esc_html( sprintf( __( 'Failed: %s', 'presshub-ai-editor' ), $au_completed ) ); ?></span>
+                                    <span class="presshub-timestamp-chip">❌ <?php echo esc_html( sprintf( /* translators: %s: number of failed items */ __( 'Failed: %s', 'presshub-ai-editor' ), $au_completed ) ); ?></span>
                                     <?php else : ?>
-                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( __( 'Completed: %s', 'presshub-ai-editor' ), $au_completed ) ); ?></span>
+                                    <span class="presshub-timestamp-chip">✅ <?php echo esc_html( sprintf( /* translators: %s: date and time */ __( 'Completed: %s', 'presshub-ai-editor' ), $au_completed ) ); ?></span>
                                     <?php endif; ?>
                                 <?php endif; ?>
                                 <?php if ( $au_duration_ms > 0 ) : ?>
@@ -1608,13 +1621,13 @@ class PressHub_AI_Briefing_Admin {
                             <?php endif; ?>
                             <div class="presshub-status-row" style="margin-top: 4px; flex-wrap: wrap;">
                                 <?php if ( '' !== $audio_min_secs ) : ?>
-                                    <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'Playback duration', 'presshub-ai-editor' ); ?>">⏱ <?php echo esc_html( sprintf( __( '%s min', 'presshub-ai-editor' ), $audio_min_secs ) ); ?></span>
+                                    <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'Playback duration', 'presshub-ai-editor' ); ?>">⏱ <?php echo esc_html( sprintf( /* translators: %s: number of minutes */ __( '%s min', 'presshub-ai-editor' ), $audio_min_secs ) ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( '' !== $audio_filesize_str ) : ?>
                                     <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'File size', 'presshub-ai-editor' ); ?>">📦 <?php echo esc_html( $audio_filesize_str ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( '' !== $au_format && $au_sample_rate > 0 ) : ?>
-                                    <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'Audio format & sample rate', 'presshub-ai-editor' ); ?>">🎚 <?php echo esc_html( sprintf( __( '%1$s / %2$s Hz', 'presshub-ai-editor' ), $au_format, number_format_i18n( $au_sample_rate ) ) ); ?></span>
+                                    <span class="presshub-stat-pill" title="<?php echo esc_attr__( 'Audio format & sample rate', 'presshub-ai-editor' ); ?>">🎚 <?php echo esc_html( sprintf( /* translators: %1$s: audio format, %2$s: sample rate */ __( '%1$s / %2$s Hz', 'presshub-ai-editor' ), $au_format, number_format_i18n( $au_sample_rate ) ) ); ?></span>
                                 <?php endif; ?>
                                 <?php if ( '' !== $audio_engine_label ) : ?>
                                     <span class="presshub-source-tag" title="<?php echo esc_attr__( 'Synthesis engine', 'presshub-ai-editor' ); ?>">⚙ <?php echo esc_html( $audio_engine_label ); ?></span>
@@ -1645,11 +1658,11 @@ class PressHub_AI_Briefing_Admin {
                                     }
                                     ?>
                                     <span class="presshub-status-pill <?php echo esc_attr( $pod_status_cls ); ?>" id="presshub-podcast-post-status-pill">
-                                        🎙 <?php echo esc_html( sprintf( __( 'Post #%1$d · %2$s', 'presshub-ai-editor' ), (int) $status['podcast_post_id'], $pod_status_label ) ); ?>
+                                        🎙 <?php echo esc_html( sprintf( /* translators: %1$d: post ID, %2$s: post status */ __( 'Post #%1$d · %2$s', 'presshub-ai-editor' ), (int) $status['podcast_post_id'], $pod_status_label ) ); ?>
                                     </span>
                                     <?php if ( ! empty( $status['audio_attachment_id'] ) ) : ?>
                                         <span class="presshub-status-pill" id="presshub-podcast-attachment-pill">
-                                            📎 <?php echo esc_html( sprintf( __( 'Attachment #%d', 'presshub-ai-editor' ), (int) $status['audio_attachment_id'] ) ); ?>
+                                            📎 <?php echo esc_html( sprintf( /* translators: %d: attachment ID */ __( 'Attachment #%d', 'presshub-ai-editor' ), (int) $status['audio_attachment_id'] ) ); ?>
                                         </span>
                                     <?php endif; ?>
                                 </div>
@@ -1793,8 +1806,8 @@ class PressHub_AI_Briefing_Admin {
                                     </div>
                                     <div class="inspector-card-meta">
                                         <span class="presshub-article-source-pill"><?php echo esc_html( $art_source ); ?></span>
-                                        <span class="presshub-article-words-pill"><?php echo sprintf( esc_html__( '%d words', 'presshub-ai-editor' ), $word_count ); ?></span>
-                                        <span class="presshub-article-tokens-pill"><?php echo sprintf( esc_html__( '~%d tokens', 'presshub-ai-editor' ), $token_count ); ?></span>
+                                        <span class="presshub-article-words-pill"><?php echo sprintf( /* translators: %d: number of words */ esc_html__( '%d words', 'presshub-ai-editor' ), $word_count ); ?></span>
+                                        <span class="presshub-article-tokens-pill"><?php echo sprintf( /* translators: %d: estimated number of tokens */ esc_html__( '~%d tokens', 'presshub-ai-editor' ), $token_count ); ?></span>
                                     </div>
                                     <div class="inspector-card-title">
                                         <label for="inspector-check-<?php echo esc_attr( $index ); ?>">
@@ -1814,7 +1827,7 @@ class PressHub_AI_Briefing_Admin {
                                 <div class="presshub-inspector-card-drawer" id="inspector-drawer-<?php echo esc_attr( $index ); ?>" style="display: none;">
                                     <div class="inspector-drawer-meta-bar">
                                         <div class="drawer-stats">
-                                            <span><strong><?php echo esc_html__( 'Length:', 'presshub-ai-editor' ); ?></strong> <?php echo sprintf( esc_html__( '%1$d words / %2$d characters', 'presshub-ai-editor' ), $word_count, $char_count ); ?></span>
+                                            <span><strong><?php echo esc_html__( 'Length:', 'presshub-ai-editor' ); ?></strong> <?php echo sprintf( /* translators: %1$d: number of words, %2$d: number of characters */ esc_html__( '%1$d words / %2$d characters', 'presshub-ai-editor' ), $word_count, $char_count ); ?></span>
                                             <?php if ( ! empty( $art_url ) ) : ?>
                                                 <span class="drawer-url"><strong><?php echo esc_html__( 'URL:', 'presshub-ai-editor' ); ?></strong> <a href="<?php echo esc_url( $art_url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $art_url ); ?></a></span>
                                             <?php endif; ?>

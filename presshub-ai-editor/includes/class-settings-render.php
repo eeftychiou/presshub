@@ -2103,7 +2103,7 @@ class PressHub_AI_Settings_Render {
             <div class="ph-display-flex ph-justify-content-space-between ph-align-items-center ph-margin-bottom-12px ph-flex-wrap-wrap ph-gap-10px presshub-sources-toolbar">
                 <div class="ph-display-flex ph-align-items-center ph-gap-8px">
                     <span id="presshub-sources-count-badge" class="presshub-badge">
-                        <?php echo sprintf( esc_html__( '%d Sources (%d Active)', 'presshub-ai-editor' ), $total_count, $active_count ); ?>
+                        <?php echo sprintf( /* translators: %1$d: total number of sources, %2$d: number of active sources */ esc_html__( '%1$d Sources (%2$d Active)', 'presshub-ai-editor' ), $total_count, $active_count ); ?>
                     </span>
                     <span class="ph-color-646970 ph-font-size-12px">
                         <?php echo esc_html__( 'Configure editorial outlets, RSS feeds, and multi-modal streams for daily morning harvesting.', 'presshub-ai-editor' ); ?>
@@ -2209,7 +2209,9 @@ class PressHub_AI_Settings_Render {
         $html .= '<td class="ph-vertical-align-middle">';
         $html .= '<span class="presshub-category-pill">' . $category . '</span>';
         $priority = PressHub_AI_Settings_Storage::sanitize_source_priority( $source['priority'] ?? PressHub_AI_Settings_Storage::SOURCE_PRIORITY_DEFAULT );
+        // translators: %d: maximum number of articles
         $html .= '<div class="ph-margin-top-4px"><span class="ph-font-size-11px ph-color-50575e ph-background-f0f0f1 ph-padding-2px-6px ph-border-radius-3px ph-display-inline-block presshub-source-quota">' . sprintf( esc_html__( 'Quota: %d articles', 'presshub-ai-editor' ), $max_articles ) . '</span>'
+            // translators: %d: priority from 1 to 5
             . ' <span class="ph-font-size-11px ph-color-50575e ph-background-f0f0f1 ph-padding-2px-6px ph-border-radius-3px ph-display-inline-block presshub-source-priority">' . sprintf( esc_html__( 'Priority: %d/5', 'presshub-ai-editor' ), $priority ) . '</span>'
             . self::alignment_badge_html( (string) ( $source['alignment'] ?? '' ) ) . '</div>';
         $html .= '</td>';
@@ -2644,7 +2646,7 @@ class PressHub_AI_Settings_Render {
         <h3><?php echo esc_html__( 'Export and import settings', 'presshub-ai-editor' ); ?></h3>
         <p class="description"><?php echo esc_html__( 'Download every PressHub setting (every Settings section) as a JSON file before a big change, and import it to go back. API keys, tokens and passwords are never written to the file; it lists them by name only, and import never changes them. The AI providers you set up (with their keys) are not in the file either, so add them again on a new site.', 'presshub-ai-editor' ); ?></p>
         <?php if ( 'done' === $state ) : ?>
-            <div class="notice notice-success inline"><p><?php echo self::esc_html_safe( sprintf( __( 'Import finished: %d settings changed.', 'presshub-ai-editor' ), isset( $_GET['presshub_import_count'] ) ? (int) $_GET['presshub_import_count'] : 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification ?></p></div>
+            <div class="notice notice-success inline"><p><?php echo self::esc_html_safe( sprintf( /* translators: %d: number of settings changed */ __( 'Import finished: %d settings changed.', 'presshub-ai-editor' ), isset( $_GET['presshub_import_count'] ) ? (int) $_GET['presshub_import_count'] : 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification ?></p></div>
         <?php elseif ( 'expired' === $state ) : ?>
             <div class="notice notice-warning inline"><p><?php echo esc_html__( 'Nothing was imported: the preview had expired. Choose the file again.', 'presshub-ai-editor' ); ?></p></div>
         <?php endif; ?>
@@ -2662,7 +2664,7 @@ class PressHub_AI_Settings_Render {
         <?php elseif ( $pending && isset( $pending['options'] ) && class_exists( $T ) ) : ?>
             <?php $preview = $T::preview( (array) $pending['options'] ); ?>
             <div class="ph-border-1px-solid-c3c4c7 ph-background-fff ph-padding-12px ph-margin-8px-0 presshub-import-preview">
-                <p><strong><?php echo self::esc_html_safe( sprintf( __( 'Import preview: %1$d settings would change, %2$d are already the same, %3$d are skipped.', 'presshub-ai-editor' ), count( $preview['changes'] ), $preview['unchanged'], count( $preview['skipped'] ) ) ); ?></strong></p>
+                <p><strong><?php echo self::esc_html_safe( sprintf( /* translators: %1$d: settings that would change, %2$d: settings already up to date, %3$d: settings skipped */ __( 'Import preview: %1$d settings would change, %2$d are already the same, %3$d are skipped.', 'presshub-ai-editor' ), count( $preview['changes'] ), $preview['unchanged'], count( $preview['skipped'] ) ) ); ?></strong></p>
                 <?php if ( $preview['changes'] ) : ?>
                     <table class="ph-max-width-100pct widefat striped">
                         <thead><tr><th><?php echo esc_html__( 'Setting', 'presshub-ai-editor' ); ?></th><th><?php echo esc_html__( 'Now', 'presshub-ai-editor' ); ?></th><th><?php echo esc_html__( 'After import', 'presshub-ai-editor' ); ?></th></tr></thead>
@@ -2976,7 +2978,7 @@ class PressHub_AI_Settings_Render {
                     <?php foreach ( $S::context_budget_options() as $option => $defaults ) : ?>
                         <?php $current = $S::get_context_budgets( $option, $defaults ); ?>
                         <tr>
-                            <th scope="row"><?php echo self::esc_html_safe( sprintf( __( '%s context per AI task (characters)', 'presshub-ai-editor' ), $budget_names[ $option ] ?? $option ) ); ?></th>
+                            <th scope="row"><?php echo self::esc_html_safe( sprintf( /* translators: %s: name of the AI task type */ __( '%s context per AI task (characters)', 'presshub-ai-editor' ), $budget_names[ $option ] ?? $option ) ); ?></th>
                             <td>
                                 <?php foreach ( $defaults as $task => $default ) : ?>
                                     <?php $field_id = $option . '_' . trim( $task, '_' ); ?>
@@ -2985,7 +2987,7 @@ class PressHub_AI_Settings_Render {
                                         <input type="number" min="0" max="20000" step="1" name="<?php echo self::esc_attr_safe( $option . '[' . $task . ']' ); ?>" id="<?php echo self::esc_attr_safe( $field_id ); ?>" value="<?php echo self::esc_attr_safe( (string) ( $current[ $task ] ?? $default ) ); ?>" class="ph-width-6em small-text" />
                                     </label>
                                 <?php endforeach; ?>
-                                <p class="description"><?php echo self::esc_html_safe( sprintf( __( 'Most characters of %s added to each kind of AI call. 0 leaves that task without them.', 'presshub-ai-editor' ), strtolower( $budget_names[ $option ] ?? $option ) ) ); ?></p>
+                                <p class="description"><?php echo self::esc_html_safe( sprintf( /* translators: %s: lowercase name of the AI call kind */ __( 'Most characters of %s added to each kind of AI call. 0 leaves that task without them.', 'presshub-ai-editor' ), strtolower( $budget_names[ $option ] ?? $option ) ) ); ?></p>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -3003,14 +3005,14 @@ class PressHub_AI_Settings_Render {
         $s_val = get_option( $s_opt, '' );
         ?>
         <tr>
-            <th scope="row"><label for="<?php echo self::esc_attr_safe( $t_opt ); ?>"><?php echo self::esc_html_safe( sprintf( __( '%s temperature', 'presshub-ai-editor' ), $role ) ); ?></label></th>
+            <th scope="row"><label for="<?php echo self::esc_attr_safe( $t_opt ); ?>"><?php echo self::esc_html_safe( sprintf( /* translators: %s: AI role label */ __( '%s temperature', 'presshub-ai-editor' ), $role ) ); ?></label></th>
             <td>
                 <input type="number" min="0" max="2" step="0.05" name="<?php echo self::esc_attr_safe( $t_opt ); ?>" id="<?php echo self::esc_attr_safe( $t_opt ); ?>" value="<?php echo self::esc_attr_safe( is_scalar( $t_val ) ? (string) $t_val : '' ); ?>" class="small-text" placeholder="<?php echo esc_attr__( 'provider', 'presshub-ai-editor' ); ?>" />
                 <p class="description"><?php echo __( 'How freely the model words its output, from 0 (most predictable) to 2. Leave empty to use the provider\'s temperature.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
         <tr>
-            <th scope="row"><label for="<?php echo self::esc_attr_safe( $s_opt ); ?>"><?php echo self::esc_html_safe( sprintf( __( '%s timeout (s)', 'presshub-ai-editor' ), $role ) ); ?></label></th>
+            <th scope="row"><label for="<?php echo self::esc_attr_safe( $s_opt ); ?>"><?php echo self::esc_html_safe( sprintf( /* translators: %s: AI role label */ __( '%s timeout (s)', 'presshub-ai-editor' ), $role ) ); ?></label></th>
             <td>
                 <input type="number" min="10" max="600" name="<?php echo self::esc_attr_safe( $s_opt ); ?>" id="<?php echo self::esc_attr_safe( $s_opt ); ?>" value="<?php echo self::esc_attr_safe( is_scalar( $s_val ) ? (string) $s_val : '' ); ?>" class="small-text" placeholder="<?php echo esc_attr__( 'provider', 'presshub-ai-editor' ); ?>" />
                 <p class="description"><?php echo __( 'Seconds to wait for the model before giving up (10 to 600). Leave empty to use the provider\'s timeout. Raise it if long runs time out.', 'presshub-ai-editor' ); ?></p>
@@ -4248,7 +4250,7 @@ class PressHub_AI_Settings_Render {
                     }
                     ?>
                     <div class="presshub-image-pool-item" data-id="<?php echo esc_attr( $id ); ?>">
-                        <img src="<?php echo esc_url( $thumb_url ); ?>" alt="<?php echo esc_attr( sprintf( __( 'Image #%d', 'presshub-ai-editor' ), $id ) ); ?>" />
+                        <img src="<?php echo esc_url( $thumb_url ); ?>" alt="<?php echo esc_attr( sprintf( /* translators: %d: image attachment ID */ __( 'Image #%d', 'presshub-ai-editor' ), $id ) ); ?>" />
                         <span class="presshub-image-pool-badge">#<?php echo esc_html( $id ); ?></span>
                         <button type="button" class="presshub-image-pool-remove" title="<?php echo esc_attr__( 'Remove image from pool', 'presshub-ai-editor' ); ?>" aria-label="<?php echo esc_attr__( 'Remove image', 'presshub-ai-editor' ); ?>">&times;</button>
                     </div>
@@ -4882,6 +4884,7 @@ class PressHub_AI_Settings_Render {
         <p class="ph-margin-bottom-8px description">
             <?php
             if ( $qa_enabled && $qa_briefings ) {
+                // translators: %d: minimum QA score
                 echo '<span class="ph-color-46b450 ph-vertical-align-middle dashicons dashicons-yes-alt"></span> <strong>' . esc_html__( 'Active', 'presshub-ai-editor' ) . '</strong> &mdash; ' . sprintf( esc_html__( 'Automated Daily Briefing posts are evaluated by the QA Reviewer and require a minimum score of %d/100 to publish.', 'presshub-ai-editor' ), (int) $min_score );
             } elseif ( $qa_enabled ) {
                 echo '<span class="ph-color-dba617 ph-vertical-align-middle dashicons dashicons-info"></span> <strong>' . esc_html__( 'Exempt from QA Gate', 'presshub-ai-editor' ) . '</strong> &mdash; ' . esc_html__( 'QA Gate is enabled for author posts, but Daily Briefings are currently set to bypass the gate.', 'presshub-ai-editor' );

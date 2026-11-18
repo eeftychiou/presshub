@@ -169,6 +169,7 @@ class PressHub_Social_Queue_Admin {
                             <?php foreach ( $jobs as $job ) :
                                 $job_id     = (int) $job['id'];
                                 $post_id    = (int) $job['post_id'];
+                                // translators: %d: post ID
                                 $post_title = get_the_title( $post_id ) ?: sprintf( __( 'Post #%d', 'presshub-social-autopost' ), $post_id );
                                 $status     = (string) ( $job['status'] ?? 'pending' );
                                 $engine     = (string) ( $job['engine'] ?? 'api' );

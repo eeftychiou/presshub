@@ -89,19 +89,21 @@ class PressHub_Social_Queue {
         $post_copy = isset( $job_data['post_copy'] ) ? trim( (string) $job_data['post_copy'] ) : '';
 
         if ( $post_id <= 0 ) {
-            return new WP_Error( 'invalid_post_id', __( 'A valid positive post_id is required.', 'presshub-social-autopost' ) );
+            return new WP_Error( 'invalid_post_id', __( 'A valid positive post_id is required.', 'presshub-ai-editor' ) );
         }
 
         if ( ! in_array( $platform, self::VALID_PLATFORMS, true ) ) {
-            return new WP_Error( 'invalid_platform', sprintf( __( 'Platform must be one of: %s', 'presshub-social-autopost' ), implode( ', ', self::VALID_PLATFORMS ) ) );
+            // translators: %s: comma-separated list of valid platforms
+            return new WP_Error( 'invalid_platform', sprintf( __( 'Platform must be one of: %s', 'presshub-ai-editor' ), implode( ', ', self::VALID_PLATFORMS ) ) );
         }
 
         if ( ! in_array( $engine, self::VALID_ENGINES, true ) ) {
-            return new WP_Error( 'invalid_engine', sprintf( __( 'Engine must be one of: %s', 'presshub-social-autopost' ), implode( ', ', self::VALID_ENGINES ) ) );
+            // translators: %s: comma-separated list of valid engines
+            return new WP_Error( 'invalid_engine', sprintf( __( 'Engine must be one of: %s', 'presshub-ai-editor' ), implode( ', ', self::VALID_ENGINES ) ) );
         }
 
         if ( '' === $post_copy ) {
-            return new WP_Error( 'empty_post_copy', __( 'Post copy content cannot be empty.', 'presshub-social-autopost' ) );
+            return new WP_Error( 'empty_post_copy', __( 'Post copy content cannot be empty.', 'presshub-ai-editor' ) );
         }
 
         $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
@@ -157,7 +159,7 @@ class PressHub_Social_Queue {
                 $inserted = $wpdb->insert( $table, $record );
             }
             if ( false === $inserted ) {
-                $db_err = $wpdb->last_error ?: __( 'Could not insert queue record into database.', 'presshub-social-autopost' );
+                $db_err = $wpdb->last_error ?: __( 'Could not insert queue record into database.', 'presshub-ai-editor' );
                 if ( class_exists( 'PressHub_Social_Logger' ) ) {
                     PressHub_Social_Logger::error(
                         'Database insert failed in PressHub_Social_Queue::enqueue: ' . $db_err,
@@ -740,7 +742,8 @@ class PressHub_Social_Queue {
     public static function repost_as_new_job( int $source_job_id, string $custom_copy = '' ): int|WP_Error {
         $source = self::get_job( $source_job_id );
         if ( ! $source ) {
-            return new WP_Error( 'job_not_found', sprintf( __( 'Source job #%d not found.', 'presshub-social-autopost' ), $source_job_id ) );
+            // translators: %d: ID of the original queue job
+            return new WP_Error( 'job_not_found', sprintf( __( 'Source job #%d not found.', 'presshub-ai-editor' ), $source_job_id ) );
         }
 
         $post_copy = trim( $custom_copy );
@@ -755,7 +758,7 @@ class PressHub_Social_Queue {
         }
 
         if ( '' === $post_copy ) {
-            return new WP_Error( 'empty_copy', __( 'Post copy content cannot be empty.', 'presshub-social-autopost' ) );
+            return new WP_Error( 'empty_copy', __( 'Post copy content cannot be empty.', 'presshub-ai-editor' ) );
         }
 
         if ( str_starts_with( ltrim( $post_copy ), '[AI Copy Generation Failed:' ) ) {
@@ -768,11 +771,11 @@ class PressHub_Social_Queue {
                 }
                 $regenerated_str = trim( (string) $regenerated );
                 if ( '' === $regenerated_str || str_starts_with( ltrim( $regenerated_str ), '[AI Copy Generation Failed:' ) ) {
-                    return new WP_Error( 'failed_copy_placeholder', __( 'Cannot repost a job whose AI copy generation failed.', 'presshub-social-autopost' ) );
+                    return new WP_Error( 'failed_copy_placeholder', __( 'Cannot repost a job whose AI copy generation failed.', 'presshub-ai-editor' ) );
                 }
                 $post_copy = $regenerated_str;
             } else {
-                return new WP_Error( 'failed_copy_placeholder', __( 'Cannot repost a job whose AI copy generation failed.', 'presshub-social-autopost' ) );
+                return new WP_Error( 'failed_copy_placeholder', __( 'Cannot repost a job whose AI copy generation failed.', 'presshub-ai-editor' ) );
             }
         }
 

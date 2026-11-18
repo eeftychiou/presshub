@@ -37,7 +37,7 @@ class PressHub_Social_Worker_Client {
             }
             return new WP_Error(
                 'missing_worker_config',
-                __( 'Social Worker URL or Secret is not configured in Settings.', 'presshub-social-autopost' )
+                __( 'Social Worker URL or Secret is not configured in Settings.', 'presshub-ai-editor' )
             );
         }
 
@@ -109,7 +109,7 @@ class PressHub_Social_Worker_Client {
         if ( empty( $secret ) ) {
             return new WP_Error(
                 'missing_worker_config',
-                __( 'Social Worker URL or Secret is not configured in Settings.', 'presshub-social-autopost' )
+                __( 'Social Worker URL or Secret is not configured in Settings.', 'presshub-ai-editor' )
             );
         }
 
@@ -119,12 +119,13 @@ class PressHub_Social_Worker_Client {
                 return [
                     'ok'      => true,
                     'status'  => 'healthy',
-                    'message' => sprintf( __( 'Local Pull Worker Online (last heartbeat %ds ago)', 'presshub-social-autopost' ), time() - $last_seen ),
+                    // translators: %d: seconds since the last worker heartbeat
+                    'message' => sprintf( __( 'Local Pull Worker Online (last heartbeat %ds ago)', 'presshub-ai-editor' ), time() - $last_seen ),
                 ];
             }
             return new WP_Error(
                 'worker_offline',
-                __( 'Pull mode active: waiting for local worker heartbeat. Start presshub-social-worker on your local machine.', 'presshub-social-autopost' )
+                __( 'Pull mode active: waiting for local worker heartbeat. Start presshub-social-worker on your local machine.', 'presshub-ai-editor' )
             );
         }
 
@@ -135,7 +136,7 @@ class PressHub_Social_Worker_Client {
 
         return [
             'success' => true,
-            'message' => __( 'Social Worker is healthy and responding.', 'presshub-social-autopost' ),
+            'message' => __( 'Social Worker is healthy and responding.', 'presshub-ai-editor' ),
             'data'    => $result,
         ];
     }
@@ -156,7 +157,7 @@ class PressHub_Social_Worker_Client {
         if ( empty( $secret ) ) {
             return new WP_Error(
                 'missing_worker_config',
-                __( 'Social Worker URL or Secret is not configured in Settings.', 'presshub-social-autopost' )
+                __( 'Social Worker URL or Secret is not configured in Settings.', 'presshub-ai-editor' )
             );
         }
 
@@ -165,7 +166,7 @@ class PressHub_Social_Worker_Client {
             if ( $last_seen <= 0 || ( time() - $last_seen ) > 180 ) {
                 return new WP_Error(
                     'worker_offline',
-                    __( 'Pull mode active: waiting for local worker heartbeat. Start presshub-social-worker on your local machine.', 'presshub-social-autopost' )
+                    __( 'Pull mode active: waiting for local worker heartbeat. Start presshub-social-worker on your local machine.', 'presshub-ai-editor' )
                 );
             }
 
@@ -174,13 +175,15 @@ class PressHub_Social_Worker_Client {
                 return [
                     'ok'      => true,
                     'valid'   => true,
-                    'message' => sprintf( __( 'Active %s session verified on local pull worker.', 'presshub-social-autopost' ), ucfirst( $platform ) ),
+                    // translators: %s: social platform name
+                    'message' => sprintf( __( 'Active %s session verified on local pull worker.', 'presshub-ai-editor' ), ucfirst( $platform ) ),
                 ];
             }
 
             return new WP_Error(
                 'session_missing',
-                sprintf( __( 'No active %s session reported by local worker. Run: npm run login -- %s', 'presshub-social-autopost' ), $platform, $platform )
+                // translators: %1$s: social platform name
+                sprintf( __( 'No active %1$s session reported by local worker. Run: npm run login -- %2$s', 'presshub-ai-editor' ), $platform, $platform )
             );
         }
 
@@ -197,8 +200,10 @@ class PressHub_Social_Worker_Client {
             'platform'      => $platform,
             'authenticated' => $is_authenticated,
             'message'       => $is_authenticated
-                ? sprintf( __( 'Browser automation session active for %s.', 'presshub-social-autopost' ), ucfirst( $platform ) )
-                : sprintf( __( 'No valid browser session found for %s on worker.', 'presshub-social-autopost' ), ucfirst( $platform ) ),
+                // translators: %s: social platform name
+                ? sprintf( __( 'Browser automation session active for %s.', 'presshub-ai-editor' ), ucfirst( $platform ) )
+                // translators: %s: social platform name
+                : sprintf( __( 'No valid browser session found for %s on worker.', 'presshub-ai-editor' ), ucfirst( $platform ) ),
             'data'          => $result,
         ];
     }
@@ -289,7 +294,7 @@ class PressHub_Social_Worker_Client {
             }
             return new WP_Error(
                 'failed_copy_placeholder',
-                __( 'Refusing to dispatch AI copy generation error placeholder to worker.', 'presshub-social-autopost' )
+                __( 'Refusing to dispatch AI copy generation error placeholder to worker.', 'presshub-ai-editor' )
             );
         }
 

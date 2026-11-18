@@ -120,7 +120,7 @@ class PressHub_Social_Metabox {
                                 name="presshub_social_copy_<?php echo esc_attr( $slug ); ?>"
                                 rows="4"
                                 class="large-text presshub-copy-textarea"
-                                placeholder="<?php echo esc_attr( sprintf( __( 'Custom %s copy... (Leave blank for AI generation on publish)', 'presshub-social-autopost' ), $data['label'] ) ); ?>"
+                                placeholder="<?php echo esc_attr( sprintf( /* translators: %s: social platform label */ __( 'Custom %s copy... (Leave blank for AI generation on publish)', 'presshub-social-autopost' ), $data['label'] ) ); ?>"
                             ><?php echo esc_textarea( $copy ); ?></textarea>
 
                             <div class="platform-card-footer">

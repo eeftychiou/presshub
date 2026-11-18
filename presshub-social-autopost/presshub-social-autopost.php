@@ -7,6 +7,7 @@
  * Author: PressHub Team
  * Author URI: https://presshub.ai
  * Text Domain: presshub-social-autopost
+ * Domain Path: /languages
  * License: GPL v2 or later
  *
  * @package PressHub_Social_Autopost

@@ -119,6 +119,7 @@ class PressHub_Social_Worker_Client {
                 return [
                     'ok'      => true,
                     'status'  => 'healthy',
+                    // translators: %d: seconds since the last worker heartbeat
                     'message' => sprintf( __( 'Local Pull Worker Online (last heartbeat %ds ago)', 'presshub-social-autopost' ), time() - $last_seen ),
                 ];
             }
@@ -174,13 +175,15 @@ class PressHub_Social_Worker_Client {
                 return [
                     'ok'      => true,
                     'valid'   => true,
+                    // translators: %s: social platform name
                     'message' => sprintf( __( 'Active %s session verified on local pull worker.', 'presshub-social-autopost' ), ucfirst( $platform ) ),
                 ];
             }
 
             return new WP_Error(
                 'session_missing',
-                sprintf( __( 'No active %s session reported by local worker. Run: npm run login -- %s', 'presshub-social-autopost' ), $platform, $platform )
+                // translators: %1$s: social platform name
+                sprintf( __( 'No active %1$s session reported by local worker. Run: npm run login -- %2$s', 'presshub-social-autopost' ), $platform, $platform )
             );
         }
 
@@ -197,7 +200,9 @@ class PressHub_Social_Worker_Client {
             'platform'      => $platform,
             'authenticated' => $is_authenticated,
             'message'       => $is_authenticated
+                // translators: %s: social platform name
                 ? sprintf( __( 'Browser automation session active for %s.', 'presshub-social-autopost' ), ucfirst( $platform ) )
+                // translators: %s: social platform name
                 : sprintf( __( 'No valid browser session found for %s on worker.', 'presshub-social-autopost' ), ucfirst( $platform ) ),
             'data'          => $result,
         ];

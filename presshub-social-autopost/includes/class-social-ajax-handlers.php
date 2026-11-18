@@ -136,6 +136,7 @@ class PressHub_Social_Ajax_Handlers {
         }
 
         wp_send_json_success( [
+            // translators: %d: number of queued posts
             'message' => sprintf( __( 'Successfully queued %d social post(s).', 'presshub-social-autopost' ), count( $job_ids ) ),
             'post_id' => $post_id,
             'job_ids' => $job_ids,
@@ -217,6 +218,7 @@ class PressHub_Social_Ajax_Handlers {
                     ] );
                 }
                 wp_send_json_error( [
+                    // translators: %s: error message
                     'message' => sprintf( __( 'Job retried but dispatch failed: %s', 'presshub-social-autopost' ), $dispatch_result->get_error_message() ),
                     'job_id'  => $job_id,
                 ], 400 );
@@ -295,7 +297,8 @@ class PressHub_Social_Ajax_Handlers {
         } else {
             $summary = PressHub_Social_Dispatcher::process_due_queue();
             wp_send_json_success( [
-                'message' => sprintf( __( 'Processed %d due job(s): %d succeeded, %d failed.', 'presshub-social-autopost' ), $summary['total_due'], $summary['succeeded'], $summary['failed'] ),
+                // translators: %1$d: number of due jobs, %2$d: number that succeeded, %3$d: number that failed
+                'message' => sprintf( __( 'Processed %1$d due job(s): %2$d succeeded, %3$d failed.', 'presshub-social-autopost' ), $summary['total_due'], $summary['succeeded'], $summary['failed'] ),
                 'summary' => $summary,
             ] );
         }
@@ -352,6 +355,7 @@ class PressHub_Social_Ajax_Handlers {
         update_post_meta( $post_id, '_presshub_social_copy_' . $platform, $new_copy_str );
 
         wp_send_json_success( [
+            // translators: %s: social platform name
             'message'  => sprintf( __( 'AI copy regenerated for %s.', 'presshub-social-autopost' ), ucfirst( $platform ) ),
             'job_id'   => $job_id,
             'post_id'  => $post_id,
@@ -438,12 +442,14 @@ class PressHub_Social_Ajax_Handlers {
         if ( $dispatch_now ) {
             $dispatch_result = PressHub_Social_Dispatcher::dispatch_job( $new_job_id );
             if ( is_wp_error( $dispatch_result ) ) {
+                // translators: %s: error message
                 $dispatch_message = sprintf( __( ' (Warning: dispatch encountered: %s)', 'presshub-social-autopost' ), $dispatch_result->get_error_message() );
             }
         }
 
         wp_send_json_success( [
-            'message'    => sprintf( __( 'New social post #%d created and queued.%s', 'presshub-social-autopost' ), $new_job_id, $dispatch_message ),
+            // translators: %1$d: queue job ID, %2$s: optional dispatch warning
+            'message'    => sprintf( __( 'New social post #%1$d created and queued.%2$s', 'presshub-social-autopost' ), $new_job_id, $dispatch_message ),
             'new_job_id' => $new_job_id,
             'source_id'  => $source_job_id,
         ] );

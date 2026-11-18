@@ -178,6 +178,7 @@ class PressHub_AI_Memory_Editor {
                 'diff_narrative'     => __( 'Rollup narrative', 'presshub-ai-editor' ),
                 'yes'                => __( 'yes', 'presshub-ai-editor' ),
                 'no'                 => __( 'no', 'presshub-ai-editor' ),
+                // translators: %s: number of stories
                 'stories_count'      => __( '%s stories', 'presshub-ai-editor' ),
                 'error_prefix'       => __( 'Error:', 'presshub-ai-editor' ),
             ],

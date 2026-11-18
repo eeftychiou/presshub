@@ -209,6 +209,7 @@ class PressHub_AI_QA_Reviewer {
         $libel_risk     = isset( $scorecard['libel_risk'] ) ? trim( (string) $scorecard['libel_risk'] ) : '';
         $legal_concerns = isset( $scorecard['legal_concerns'] ) ? trim( (string) $scorecard['legal_concerns'] ) : '';
         $edit_url       = admin_url( sprintf( 'post.php?post=%d&action=edit', $post_id ) );
+        // translators: %d: post ID
         $post_title     = ! empty( $post->post_title ) ? $post->post_title : sprintf( __( '(Post #%d)', 'presshub-ai-editor' ), $post_id );
         $site_name      = function_exists( 'wp_specialchars_decode' ) ? wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ) : get_option( 'blogname' );
 
@@ -227,6 +228,7 @@ class PressHub_AI_QA_Reviewer {
             $intro   = __( 'The automated Daily Briefing article failed the AI Editorial QA Review and has been held in Pending Review status.', 'presshub-ai-editor' );
         } else {
             $subject = sprintf( '[%s] Article QA Review Failed: %s', $site_name, $post_title );
+            // translators: %s: author name
             $intro   = sprintf( __( 'An article submitted by %s failed the AI Editorial QA Review and was blocked from immediate publication.', 'presshub-ai-editor' ), $author_name );
         }
 
