@@ -62,7 +62,7 @@ class PressHub_AI_Metaboxes {
             <hr />
 
             <?php
-            // QA gate verdicts, history and "Publish anyway" (2.49.0).
+            // QA gate verdicts, history and "Publish anyway" (2.51.0).
             if ( class_exists( 'PressHub_AI_QA_Held_Admin' ) ) {
                 echo PressHub_AI_QA_Held_Admin::metabox_html( (int) $post->ID ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in metabox_html().
             }
