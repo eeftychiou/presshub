@@ -615,7 +615,7 @@ class PressHub_AI_Stakeholders {
                     continue;
                 }
                 $block      = $head . "\n";
-                $left_out[] = [ 'item' => $key, 'reason' => 'shortened', 'parts' => [ 'bio', 'positions' ], 'limit' => $budget, 'needed' => $need ];
+                $left_out[] = [ 'item' => $key, 'reason' => 'shortened', 'parts' => array_values( array_filter( [ '' !== $f['bio'] ? 'bio' : '', ! empty( $f['positions'] ) ? 'positions' : '' ] ) ), 'limit' => $budget, 'needed' => $need ];
             }
             $body    .= $block;
             $people[] = $key;

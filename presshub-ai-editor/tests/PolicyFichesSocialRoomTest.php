@@ -77,6 +77,10 @@ psr_check( 'warnings: shorts warned when only its budget is lowered', false !== 
 delete_option( 'presshub_ai_policy_fiches_budgets' );
 psr_check( 'warnings: no separate shorts warning at the defaults', false === strpos( implode( "\n", PressHub_AI_Policy_Fiches::core_warnings( $long ) ), 'TikTok short plan' ) );
 
+$princ_only = PressHub_AI_Policy_Fiches::normalize( array_merge( PressHub_AI_Policy_Fiches::empty_fiche( 'Μόνο αρχές' ), [ 'status' => 'published', 'principles' => str_repeat( 'Αρχή που δεν φτάνει στα κοινωνικά. ', 100 ) ] ) );
+$pw = implode( "\n", PressHub_AI_Policy_Fiches::core_warnings( $princ_only ) );
+psr_check( 'warnings: no "too long" for framing-only tasks when the fiche has no framing', false === strpos( $pw, 'social copy calls' ) && false === strpos( $pw, 'TikTok short plan' ) && false === strpos( $pw, 'QA gate' ) );
+
 // 3. Migration.
 delete_option( 'presshub_ai_migrated_social_fiche_budgets' );
 update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 800, 'social_tiktok_shorts' => 650, 'podcast_script' => 800 ] ) );

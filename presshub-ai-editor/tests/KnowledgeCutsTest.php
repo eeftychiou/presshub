@@ -53,6 +53,7 @@ $lines = $C::describe( [
     [ 'item' => 'e', 'reason' => 'bogus' ],
 ] );
 kc_check( 'describe: one line per known reason, unknown dropped', 4 === count( $lines ) );
+kc_check( 'describe: no room without a room value', [ 'z: left out, needed 40 characters (limit 30)' ] === $C::describe( [ [ 'item' => 'z', 'reason' => 'no_room', 'limit' => 30, 'needed' => 40 ] ] ) );
 kc_check( 'describe: no room says needed, left and limit', false !== strpos( $lines[0], 'needed 300 characters, 100 left (limit 1200)' ) );
 kc_check( 'describe: shortened names the parts', false !== strpos( $lines[1], 'without facts, questions' ) );
 kc_check( 'describe: clipped says how much was kept', false !== strpos( $lines[2], 'cut to 500 of 900' ) );
@@ -91,9 +92,17 @@ $cfg = is_array( $rec['config'] ?? null ) ? $rec['config'] : json_decode( (strin
 kc_check( 'record: policy cut stored with the call', ! empty( $cfg['policy_fiches_left_out'] ) && $pslug === $cfg['policy_fiches_left_out'][0]['item'] && 20 === $cfg['policy_fiches_left_out'][0]['limit'] );
 kc_check( 'record: prompt as sent', 'SYS' === $rec['system_prompt'] );
 
+// The next call in the same request does not inherit the cut.
+delete_option( 'presshub_ai_policy_fiches_budgets' );
+$P::apply( 'SYS', 'Καιρός και αθλητικά.', 'social_copy_facebook' );
+kc_check( 'apply: a later call without cuts leaves no cut behind', null === $P::last_applied() );
+
 // 3. Inspector.
 $ins = PressHub_AI_Generation_Inspector::get_structured_record( (int) $rid );
 $html = is_array( $ins ) ? PressHub_AI_Generation_Inspector::render_tab( $ins, 'overview' ) : '';
+$esc_id = PressHub_AI_Generation_Recorder::record( [ 'kind' => 'generic', 'config' => [ 'policy_fiches_left_out' => [ [ 'item' => '<b>x</b>', 'reason' => 'no_room', 'limit' => 5, 'needed' => 9 ] ] ], 'system_prompt' => 'S', 'user_prompt' => 'U', 'response_text' => 'OK' ] );
+$esc_html = PressHub_AI_Generation_Inspector::render_tab( PressHub_AI_Generation_Inspector::get_structured_record( (int) $esc_id ), 'overview' );
+kc_check( 'inspector: item names are escaped', false === strpos( $esc_html, '<b>x</b>' ) && false !== strpos( $esc_html, '&lt;b&gt;x&lt;/b&gt;' ) );
 kc_check( 'inspector: "Left out because of limits" with the fiche', false !== strpos( $html, 'Left out because of limits' ) && false !== strpos( $html, esc_html( $pslug . ': left out' ) ) );
 $plain_id = PressHub_AI_Generation_Recorder::record( [ 'kind' => 'generic', 'config' => [], 'system_prompt' => 'S', 'user_prompt' => 'U', 'response_text' => 'OK' ] );
 $plain    = PressHub_AI_Generation_Inspector::get_structured_record( (int) $plain_id );
@@ -112,7 +121,24 @@ $rid2 = PressHub_AI_Generation_Recorder::finish_call( $t1, 'generic', null, 'SYS
 $rec2 = PressHub_AI_Generation_Recorder::get( (int) $rid2 );
 $cfg2 = is_array( $rec2['config'] ?? null ) ? $rec2['config'] : json_decode( (string) ( $rec2['config'] ?? '' ), true );
 kc_check( 'agenda: the dropped theme is in the record', ! empty( $cfg2['editorial_agenda_left_out'] ) && 'Δευτερεύον θέμα' === $cfg2['editorial_agenda_left_out'][0]['item'] );
+update_option( 'presshub_ai_editorial_agenda_budgets', array_merge( $A::BUDGETS, [ 'social_copy_' => 5 ] ) );
+$none = $A::apply( 'SYS', 'social_copy_facebook' );
+$last = $A::last_applied();
+kc_check( 'agenda: nothing fits, prompt unchanged, cut kept', 'SYS' === $none && is_array( $last ) && 0 === $last['chars'] && 2 === count( $last['left_out'] ) );
+$A::clear_last_applied();
 delete_option( 'presshub_ai_editorial_agenda_budgets' );
+
+// People: the maximum number per call is recorded.
+$S    = 'PressHub_AI_Stakeholders';
+$many = [];
+for ( $i = 0; $i < $S::MAX_INJECTED + 2; $i++ ) {
+    $many[ 'p' . $i ] = [ 'count' => 1, 'fiche' => [ 'name' => 'Πρόσωπο ' . $i, 'name_en' => '', 'role' => '', 'party' => '', 'bio' => '', 'positions' => [] ] ];
+}
+$rep = $S::render_report( $many, 100000 );
+kc_check( 'people: over the maximum recorded as max_items', $S::MAX_INJECTED === count( $rep['people'] ) && 2 === count( $rep['left_out'] ) && 'max_items' === $rep['left_out'][0]['reason'] );
+$one = [ 'p' => [ 'count' => 1, 'fiche' => [ 'name' => 'Πρόσωπο', 'name_en' => '', 'role' => 'Υπουργός', 'party' => '', 'bio' => '', 'positions' => [ [ 'date' => '2026-11-01', 'topic' => 'x', 'position' => str_repeat( 'θέση ', 30 ) ] ] ] ] ];
+$short = $S::render_report( $one, 40 );
+kc_check( 'people: shortened names only the parts it had', 1 === count( $short['left_out'] ) && 'shortened' === $short['left_out'][0]['reason'] && [ 'positions' ] === $short['left_out'][0]['parts'] );
 
 @unlink( $log_file );
 if ( $failures ) {

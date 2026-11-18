@@ -110,7 +110,12 @@ ea_check( 'render: the full content fits a budget of exactly its length', $full 
 $rep = $A::render_report( $A::get(), $content - 10, $today );
 ea_check( 'report: the dropped theme is recorded with its size', 1 === count( $rep['left_out'] ) && 'no_room' === $rep['left_out'][0]['reason'] && false !== strpos( $rep['left_out'][0]['item'], 'Λιγότερο σημαντικό' ) && $rep['left_out'][0]['needed'] > 0 && $content - 10 === $rep['left_out'][0]['limit'] );
 ea_check( 'report: nothing recorded when everything fits', [] === $A::render_report( $A::get(), 100000, $today )['left_out'] );
-ea_check( 'render: very small budget keeps clipped guidance or nothing', '' === $tiny || $len( $tiny ) <= 420 );
+$tiny = $A::render( $A::get(), 75, $today );
+ea_check( 'render: very small budget keeps clipped guidance or nothing', '' === $tiny || $body_of( $tiny ) <= 75 );
+$tiny_rep = $A::render_report( $A::get(), 75, $today );
+$tiny_last = $tiny_rep['left_out'][ count( $tiny_rep['left_out'] ) - 1 ] ?? [];
+ea_check( 'report: a very small budget records every theme and the guidance', count( $tiny_rep['left_out'] ) >= 2 && 'guidance' === ( $tiny_last['item'] ?? '' ) && 'clipped' === ( $tiny_last['reason'] ?? '' ) );
+ea_check( 'report: clipped guidance is sent within the budget', ( '' !== $tiny && ( $tiny_last['kept'] ?? 0 ) > 0 && ( $tiny_last['kept'] ?? 0 ) < ( $tiny_last['needed'] ?? 0 ) ) );
 
 // 3. apply
 ea_check( 'budget: curation', 3000 === $A::budget_for( 'briefing_curation' ) );

@@ -1682,7 +1682,8 @@ class PressHub_AI_Policy_Fiches {
             if ( self::budget_for( $action ) <= 0 ) {
                 continue; // switched off for that task, nothing to warn about
             }
-            if ( '' !== trim( $f['principles'] . $f['framing'] ) && '' === self::render( $hit, $action, self::budget_for( $action ) )['text'] ) {
+            $core = implode( '', array_map( static function ( $part ) use ( $f ) { return (string) $f[ $part ]; }, array_intersect( self::parts_for( $action ), [ 'principles', 'framing' ] ) ) );
+            if ( '' !== trim( $core ) && '' === self::render( $hit, $action, self::budget_for( $action ) )['text'] ) {
                 /* translators: 1: call name, 2: character budget */
                 $out[] = sprintf( __( 'Too long for the %1$s calls (room for %2$d characters): they skip this fiche. Shorten the principles and framing.', 'presshub-ai-editor' ), $label, self::budget_for( $action ) );
             }

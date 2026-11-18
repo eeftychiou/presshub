@@ -65,7 +65,7 @@ class PressHub_AI_Editorial_Agenda {
         'seo_'                  => 600,
     ];
 
-    /** @var array{version:int,action:string,chars:int,original_hash:string,prompt:string}|null */
+    /** @var array{version:int,action:string,chars:int,left_out:array,original_hash:string,prompt:string}|null */
     private static ?array $last_applied = null;
 
     // ---------------------------------------------------------------------
