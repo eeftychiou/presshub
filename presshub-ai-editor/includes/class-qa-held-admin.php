@@ -283,7 +283,11 @@ class PressHub_AI_QA_Held_Admin {
     /** A review-history time (stored in the site's time zone) in the site's format. */
     public static function format_local( string $mysql ): string {
         $ts = '' !== $mysql ? strtotime( $mysql . ' UTC' ) : false;
-        return false === $ts ? $mysql : gmdate( self::datetime_format(), $ts );
+        if ( false === $ts ) {
+            return $mysql;
+        }
+        // The stored wall time as it is (UTC keeps it from shifting), with translated month names.
+        return function_exists( 'wp_date' ) ? (string) wp_date( self::datetime_format(), $ts, new DateTimeZone( 'UTC' ) ) : gmdate( self::datetime_format(), $ts );
     }
 
     private static function datetime_format(): string {
@@ -563,29 +567,27 @@ class PressHub_AI_QA_Held_Admin {
         // Editorial.
         $ed = (array) ( $checks['editorial'] ?? [] );
         if ( 'skip' !== ( $ed['result'] ?? 'skip' ) ) {
-            $html .= '<p><strong>' . esc_html( $names['editorial'] . ': ' . self::check_text( 'editorial', $ed ) ) . '</strong>';
+            $html .= '<h4>' . esc_html( $names['editorial'] . ': ' . self::check_text( 'editorial', $ed ) ) . '</h4>';
             if ( '' !== (string) ( $ed['feedback'] ?? '' ) ) {
-                $html .= '<br />' . esc_html( (string) $ed['feedback'] );
+                $html .= '<p>' . esc_html( (string) $ed['feedback'] ) . '</p>';
             }
-            $html .= '</p>';
         }
 
         // Legal.
         $lg = (array) ( $checks['legal'] ?? [] );
         if ( 'skip' !== ( $lg['result'] ?? 'skip' ) ) {
-            $html    .= '<p><strong>' . esc_html( $names['legal'] . ': ' . self::check_text( 'legal', $lg ) ) . '</strong>';
+            $html    .= '<h4>' . esc_html( $names['legal'] . ': ' . self::check_text( 'legal', $lg ) ) . '</h4>';
             $concerns = trim( (string) ( $lg['concerns'] ?? '' ) );
             if ( '' !== $concerns && 'None identified' !== $concerns ) {
-                $html .= '<br />' . esc_html( $concerns );
+                $html .= '<p>' . esc_html( $concerns ) . '</p>';
             }
-            $html  .= '</p>';
             $issues = (array) ( $lg['issues'] ?? [] );
             if ( $issues ) {
                 $html .= '<ul class="presshub-qa-legal-issues">';
                 foreach ( $issues as $issue ) {
                     $html .= '<li><em>' . esc_html( sprintf( /* translators: %s: Low, Medium or High. */ __( '%s risk', 'presshub-ai-editor' ), self::risk_label( (string) ( $issue['severity'] ?? '' ) ) ) ) . '</em>';
                     if ( '' !== (string) ( $issue['quote'] ?? '' ) ) {
-                        $html .= ': “' . esc_html( (string) $issue['quote'] ) . '”';
+                        $html .= ': <q>' . esc_html( (string) $issue['quote'] ) . '</q>';
                     }
                     if ( '' !== (string) ( $issue['fix'] ?? '' ) ) {
                         $html .= '<br />' . esc_html__( 'Fix:', 'presshub-ai-editor' ) . ' ' . esc_html( (string) $issue['fix'] );
@@ -599,20 +601,23 @@ class PressHub_AI_QA_Held_Admin {
         // SEO.
         $seo = (array) ( $checks['seo'] ?? [] );
         if ( 'skip' !== ( $seo['result'] ?? 'skip' ) ) {
-            $html   .= '<p><strong>' . esc_html( $names['seo'] . ': ' . self::check_text( 'seo', $seo ) ) . '</strong>';
+            $html   .= '<h4>' . esc_html( $names['seo'] . ': ' . self::check_text( 'seo', $seo ) ) . '</h4>';
             $failing = [];
             foreach ( (array) ( $seo['review']['checks'] ?? [] ) as $c ) {
                 if ( 'fail' === ( $c['status'] ?? '' ) && '' !== (string) ( $c['label'] ?? '' ) ) {
                     $failing[] = (string) $c['label'];
                 }
             }
+            $lines = [];
             if ( $failing ) {
-                $html .= '<br />' . esc_html__( 'Failing:', 'presshub-ai-editor' ) . ' ' . esc_html( implode( ', ', $failing ) );
+                $lines[] = esc_html__( 'Failing:', 'presshub-ai-editor' ) . ' ' . esc_html( implode( ', ', $failing ) );
             }
             if ( ! empty( $seo['fixed'] ) ) {
-                $html .= '<br /><span class="description">' . esc_html__( 'The missing excerpt or tags were filled in automatically.', 'presshub-ai-editor' ) . '</span>';
+                $lines[] = '<span class="description">' . esc_html__( 'The missing excerpt or tags were filled in automatically.', 'presshub-ai-editor' ) . '</span>';
             }
-            $html .= '</p>';
+            if ( $lines ) {
+                $html .= '<p>' . implode( '<br />', $lines ) . '</p>';
+            }
         }
 
         if ( $held && PressHub_AI_QA_Reviews_Admin::can_override( $post_id ) ) {

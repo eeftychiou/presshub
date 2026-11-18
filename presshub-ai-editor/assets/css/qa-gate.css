@@ -47,7 +47,22 @@
 }
 
 .column-presshub_qa {
-	width: 110px;
+	width: 150px;
+	box-sizing: border-box;
+}
+
+.column-presshub_qa .presshub-qa-badges {
+	flex-wrap: nowrap;
+}
+
+@media screen and (max-width: 782px) {
+	.column-presshub_qa {
+		width: auto;
+	}
+
+	.column-presshub_qa .presshub-qa-badges {
+		flex-wrap: wrap;
+	}
 }
 
 /* Held by QA page. */
@@ -94,6 +109,7 @@
 
 /* Editor panel. */
 .presshub-qa-gate-panel {
+	color: #1d2327;
 	margin-bottom: 12px;
 	padding: 8px 12px;
 	border-left: 4px solid #c3c4c7;
@@ -118,6 +134,15 @@
 	margin-top: 4px;
 }
 
+.presshub-qa-gate-panel h4 {
+	margin: 10px 0 2px;
+	font-size: 13px;
+}
+
+.presshub-qa-gate-panel h4 + p {
+	margin-top: 2px;
+}
+
 .presshub-qa-gate-panel ul {
 	margin: 4px 0 8px 1.5em;
 	list-style: disc;
@@ -125,4 +150,22 @@
 
 .presshub-qa-gate-panel details summary {
 	cursor: pointer;
+}
+
+/* Publish anyway form (QA reviews page). */
+.presshub-qa-override textarea {
+	width: 100%;
+	max-width: 40em;
+	box-sizing: border-box;
+}
+
+.presshub-qa-override .button-primary {
+	background: #b32d2e;
+	border-color: #b32d2e;
+}
+
+.presshub-qa-override .button-primary:hover,
+.presshub-qa-override .button-primary:focus {
+	background: #8a2424;
+	border-color: #8a2424;
 }
