@@ -20,6 +20,18 @@
  * twice. The editorial and legal answers come from the same call, and so
  * does the AI half of the SEO score when the prompt asks for it.
  *
+ * Coverage (2.48.0): automated posts (Daily Briefing text and podcast,
+ * Trending roundup) are inserted as pending with the status they should end
+ * in kept in META_TARGET_STATUS (prepare_insert()), enriched with tags,
+ * excerpt and image, and only then reviewed and moved to that status by
+ * release(). Editors' posts and scheduled posts are checked by
+ * PressHub_AI_Workflow. A held post can be released with publish_anyway(),
+ * which is recorded on the review row and in the audit log.
+ *
+ * Contexts: post (articles), briefing, podcast (script and show notes,
+ * measured SEO checks only) and trending (legal and measured SEO checks,
+ * no editorial score).
+ *
  * @package PressHub_AI_Editor
  * @since 2.47.0
  */
@@ -36,6 +48,21 @@ class PressHub_AI_Publish_Gate {
 
     /** Post meta: the latest gate review (array, with its input hash). */
     const META_REVIEW = '_presshub_ai_gate_review';
+
+    /** Post meta: the status an automated post goes to once the gate passes it. */
+    const META_TARGET_STATUS = '_presshub_gate_target_status';
+
+    /** Post meta: input hash of the version an editor released with "Publish anyway". */
+    const META_OVERRIDE = '_presshub_ai_gate_override';
+
+    /** Review contexts. */
+    const CONTEXTS = [ 'post', 'briefing', 'podcast', 'trending' ];
+
+    /** Statuses release() may move a post to. */
+    const RELEASE_STATUSES = [ 'publish', 'future', 'pending', 'draft', 'private' ];
+
+    /** True while the gate itself changes a post's status, so the workflow gate does not review it again. */
+    private static $releasing = false;
 
     /** Risk levels in rising order. */
     const RISKS = [ 'Low', 'Medium', 'High' ];
@@ -61,10 +88,10 @@ class PressHub_AI_Publish_Gate {
      */
     public static function review_post( $post, string $trigger, array $opts = [] ): array {
         $post_id = is_object( $post ) && ! empty( $post->ID ) ? (int) $post->ID : 0;
-        $context = 'briefing' === ( $opts['context'] ?? 'post' ) ? 'briefing' : 'post';
+        $context = self::context( (string) ( $opts['context'] ?? 'post' ) );
         $input   = self::seo_input_for( $post, $opts );
         $content = isset( $opts['content'] ) ? (string) $opts['content'] : (string) ( $input['content'] ?? '' );
-        $hash    = self::input_hash( $input, $context );
+        $hash    = self::input_hash( $input, $context, isset( $opts['content'] ) ? $content : '' );
 
         if ( empty( $opts['force'] ) && $post_id > 0 ) {
             $cached = get_post_meta( $post_id, self::META_REVIEW, true );
@@ -75,6 +102,10 @@ class PressHub_AI_Publish_Gate {
         }
 
         $gate = self::run( $content, $context, $post_id, $input );
+        if ( $post_id > 0 && ! empty( $gate['seo_fixed'] ) ) {
+            // The SEO fix changed the excerpt or tags: cache under the new version.
+            $hash = self::input_hash( self::seo_input_for( get_post( $post_id ), $opts ), $context, isset( $opts['content'] ) ? $content : '' );
+        }
         return self::save( $gate, $post_id, $trigger, $hash );
     }
 
@@ -84,7 +115,7 @@ class PressHub_AI_Publish_Gate {
      * exist yet.
      */
     public static function review_content( string $content, string $context, string $trigger ): array {
-        $context = 'briefing' === $context ? 'briefing' : 'post';
+        $context = self::context( $context );
         $gate    = self::run( $content, $context, 0, null );
         $gate['trigger']      = $trigger;
         $gate['content_hash'] = md5( trim( $content ) );
@@ -119,7 +150,170 @@ class PressHub_AI_Publish_Gate {
 
     /** The hash a review of this post would be cached under. */
     public static function input_hash_for_post( $post, string $context = 'post' ): string {
-        return self::input_hash( self::seo_input_for( $post, [] ), 'briefing' === $context ? 'briefing' : 'post' );
+        return self::input_hash( self::seo_input_for( $post, [] ), self::context( $context ) );
+    }
+
+    // ------------------------------------------------------------------
+    // Coverage: which posts the gate checks, and releasing held posts
+    // ------------------------------------------------------------------
+
+    /** Whether the gate checks posts of this context (the QA switch and its include setting). */
+    public static function applies( string $context ): bool {
+        if ( ! PressHub_AI_Settings_Storage::get_qa_enabled() ) {
+            return false;
+        }
+        switch ( self::context( $context ) ) {
+            case 'briefing':
+                return PressHub_AI_Settings_Storage::get_qa_include_briefings();
+            case 'podcast':
+                return PressHub_AI_Settings_Storage::get_qa_include_podcasts();
+            case 'trending':
+                return PressHub_AI_Settings_Storage::get_qa_include_trending();
+            default:
+                return true;
+        }
+    }
+
+    /** Whether the gate is changing a post's status right now. */
+    public static function is_releasing(): bool {
+        return self::$releasing;
+    }
+
+    /**
+     * Before inserting an automated post: when the gate checks this context
+     * and the post would go live (publish or future), insert it as pending
+     * and remember the status for release().
+     */
+    public static function prepare_insert( array $postarr, string $context ): array {
+        $status = (string) ( $postarr['post_status'] ?? 'draft' );
+        if ( ! self::applies( $context ) || ! in_array( $status, [ 'publish', 'future' ], true ) ) {
+            return $postarr;
+        }
+        $postarr['post_status']                             = 'pending';
+        $postarr['meta_input']                              = (array) ( $postarr['meta_input'] ?? [] );
+        $postarr['meta_input'][ self::META_TARGET_STATUS ] = $status;
+        return $postarr;
+    }
+
+    /**
+     * Review an automated post once its tags, excerpt and image are in place,
+     * then move it to the status prepare_insert() kept, unless the verdict
+     * holds it. A post already live (an updated Trending roundup) that is
+     * held goes back to Pending Review. Alerts go to the editor either way.
+     *
+     * @param array $opts Passed to review_post() (content, force).
+     * @return array|null The gate result, or null when the gate does not check this context.
+     */
+    public static function release( int $post_id, string $context, string $trigger, array $opts = [] ): ?array {
+        $post = $post_id > 0 ? get_post( $post_id ) : null;
+        if ( ! $post ) {
+            return null;
+        }
+        $target = (string) get_post_meta( $post_id, self::META_TARGET_STATUS, true );
+
+        if ( ! self::applies( $context ) ) {
+            if ( '' !== $target ) {
+                self::move( $post_id, $target );
+                delete_post_meta( $post_id, self::META_TARGET_STATUS );
+            }
+            return null;
+        }
+
+        $gate = self::review_post( $post, $trigger, array_merge( $opts, [ 'context' => $context ] ) );
+        if ( self::holds( $gate ) ) {
+            if ( '' === $target && in_array( (string) $post->post_status, [ 'publish', 'future' ], true ) ) {
+                update_post_meta( $post_id, self::META_TARGET_STATUS, (string) $post->post_status );
+                self::move( $post_id, 'pending' );
+            }
+            self::log( 'warning', sprintf( 'QA gate held %s post #%d in Pending Review (%s).', $context, $post_id, $gate['verdict'] ), $post_id );
+        } elseif ( '' !== $target ) {
+            self::move( $post_id, $target );
+            delete_post_meta( $post_id, self::META_TARGET_STATUS );
+        }
+        self::notify( $post_id, $gate );
+        return $gate;
+    }
+
+    /**
+     * "Publish anyway": an editor releases a held post. The override is
+     * written on the latest review row and in the audit log, and the post goes
+     * to the status it was held from (publish when unknown).
+     *
+     * @return true|WP_Error
+     */
+    public static function publish_anyway( int $post_id, string $reason ) {
+        $post = $post_id > 0 ? get_post( $post_id ) : null;
+        if ( ! $post || 'post' !== ( $post->post_type ?? '' ) ) {
+            return new WP_Error( 'presshub_qa_no_post', __( 'That post does not exist.', 'presshub-ai-editor' ) );
+        }
+        $reason = trim( sanitize_textarea_field( $reason ) );
+        if ( '' === $reason ) {
+            return new WP_Error( 'presshub_qa_no_reason', __( 'Say why the post is published despite the QA gate.', 'presshub-ai-editor' ) );
+        }
+        $review  = get_post_meta( $post_id, self::META_REVIEW, true );
+        $review  = is_array( $review ) ? $review : [];
+        $context = self::context( (string) ( $review['context'] ?? 'post' ) );
+        $target  = (string) get_post_meta( $post_id, self::META_TARGET_STATUS, true );
+        if ( ! in_array( $target, [ 'publish', 'future', 'private' ], true ) ) {
+            $target = ( isset( $post->post_date_gmt ) && strtotime( (string) $post->post_date_gmt . ' UTC' ) > time() ) ? 'future' : 'publish';
+        }
+
+        $failed = [];
+        foreach ( (array) ( $review['checks'] ?? [] ) as $key => $check ) {
+            if ( in_array( $check['result'] ?? '', [ 'fail', 'error' ], true ) ) {
+                $failed[] = $key;
+            }
+        }
+        if ( ! empty( $review['review_id'] ) ) {
+            PressHub_AI_QA_Review_Store::record_override( (int) $review['review_id'], $reason );
+        }
+        update_post_meta( $post_id, self::META_OVERRIDE, self::input_hash_for_post( $post, $context ) );
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'qa_gate_override', 'post', (string) $post_id, [
+                'reason'    => $reason,
+                'verdict'   => (string) ( $review['verdict'] ?? '' ),
+                'failed'    => $failed,
+                'review_id' => (int) ( $review['review_id'] ?? 0 ),
+                'status'    => $target,
+            ] );
+        }
+        self::move( $post_id, $target );
+        delete_post_meta( $post_id, self::META_TARGET_STATUS );
+        self::log( 'info', sprintf( 'QA gate: post #%d published anyway (%s).', $post_id, $reason ), $post_id );
+        return true;
+    }
+
+    /** Whether an editor released this exact version with "Publish anyway". */
+    public static function is_overridden( $post, string $context = 'post' ): bool {
+        $post_id = is_object( $post ) ? (int) ( $post->ID ?? 0 ) : 0;
+        if ( $post_id <= 0 ) {
+            return false;
+        }
+        $saved = (string) get_post_meta( $post_id, self::META_OVERRIDE, true );
+        return '' !== $saved && $saved === self::input_hash_for_post( $post, $context );
+    }
+
+    /** Change a post's status without the workflow gate reviewing it again. */
+    private static function move( int $post_id, string $status ): void {
+        if ( ! in_array( $status, self::RELEASE_STATUSES, true ) ) {
+            return;
+        }
+        self::$releasing = true;
+        try {
+            wp_update_post( [ 'ID' => $post_id, 'post_status' => $status ] );
+        } finally {
+            self::$releasing = false;
+        }
+    }
+
+    private static function log( string $level, string $message, int $post_id ): void {
+        if ( class_exists( 'PressHub_AI_Logger' ) && method_exists( 'PressHub_AI_Logger', $level ) ) {
+            PressHub_AI_Logger::$level( $message, [ 'post_id' => $post_id ] );
+        }
+    }
+
+    private static function context( string $context ): string {
+        return in_array( $context, self::CONTEXTS, true ) ? $context : 'post';
     }
 
     // ------------------------------------------------------------------
@@ -138,24 +332,44 @@ class PressHub_AI_Publish_Gate {
         $seo_enabled = null !== $seo_input && PressHub_AI_Settings_Storage::get_seo_review_enabled() && class_exists( 'PressHub_AI_SEO' );
         $seo_checks  = $seo_enabled ? PressHub_AI_SEO::run_checks( $seo_input ) : null;
 
-        $template = 'briefing' === $context
-            ? PressHub_AI_Settings_Storage::get_qa_briefing_prompt()
-            : PressHub_AI_Settings_Storage::get_qa_article_prompt();
+        $context  = self::context( $context );
+        // Articles use the article prompt (editorial, legal and SEO); the
+        // automated news formats use the briefing prompt (editorial and legal).
+        $template = 'post' === $context
+            ? PressHub_AI_Settings_Storage::get_qa_article_prompt()
+            : PressHub_AI_Settings_Storage::get_qa_briefing_prompt();
         $template = strtr( $template, [
             '{title}'         => trim( (string) ( $seo_input['title'] ?? '' ) ),
             '{seo_facts}'     => $seo_checks ? PressHub_AI_SEO::facts_text( $seo_input, $seo_checks ) : '(not measured)',
             '{existing_tags}' => $seo_enabled ? PressHub_AI_SEO::existing_tags_text() : '(none)',
         ] );
 
-        $eval = PressHub_AI_QA_Reviewer::evaluate_content( $content, $context, $post_id, $template );
-        $raw  = is_array( $eval['raw'] ?? null ) ? $eval['raw'] : [];
+        $eval   = PressHub_AI_QA_Reviewer::evaluate_content( $content, 'post' === $context ? 'post' : 'briefing', $post_id, $template );
+        $raw    = is_array( $eval['raw'] ?? null ) ? $eval['raw'] : [];
+        $ai_ran = null === $eval['error'];
+
+        $seo_fixed = false;
+        if ( ! $seo_enabled ) {
+            $seo = [ 'result' => 'skip' ];
+        } elseif ( ! $ai_ran ) {
+            // The review did not run: the SEO result would only be half a score.
+            $seo = [ 'result' => 'error', 'action' => PressHub_AI_Settings_Storage::get_qa_seo_action() ];
+        } else {
+            // A second SEO call only for articles and briefings; podcasts and the roundup get the measured checks.
+            $seo = self::seo_check( $seo_checks, $raw, $seo_input, in_array( $context, [ 'post', 'briefing' ], true ) );
+            if ( 'fail' === $seo['result'] && $post_id > 0 ) {
+                $fixed = self::fix_seo( $post_id, $seo, $seo_input );
+                if ( null !== $fixed ) {
+                    $seo       = $fixed;
+                    $seo_fixed = true;
+                }
+            }
+        }
 
         $checks = [
-            'editorial' => self::editorial_check( $eval ),
+            'editorial' => 'trending' === $context ? [ 'result' => 'skip' ] : self::editorial_check( $eval ),
             'legal'     => self::legal_check( $eval, $raw ),
-            'seo'       => $seo_enabled
-                ? self::seo_check( $seo_checks, $raw, $seo_input, null === $eval['error'] )
-                : [ 'result' => 'skip' ],
+            'seo'       => $seo,
         ];
 
         $verdict = self::verdict( $checks );
@@ -172,6 +386,7 @@ class PressHub_AI_Publish_Gate {
             'libel_risk'     => (string) ( $checks['legal']['risk'] ?? $eval['libel_risk'] ),
             'legal_concerns' => (string) $eval['legal_concerns'],
             'passed'         => ! in_array( $verdict, [ 'hold', 'error' ], true ),
+            'seo_fixed'      => $seo_fixed,
         ];
     }
 
@@ -179,7 +394,7 @@ class PressHub_AI_Publish_Gate {
      * The verdict from the check results and the configured actions.
      */
     public static function verdict( array $checks ): string {
-        if ( 'error' === ( $checks['editorial']['result'] ?? '' ) ) {
+        if ( 'error' === ( $checks['editorial']['result'] ?? '' ) || 'error' === ( $checks['legal']['result'] ?? '' ) ) {
             return 'error';
         }
         $actions = [];
@@ -250,17 +465,22 @@ class PressHub_AI_Publish_Gate {
     /**
      * @param array $checks    PressHub_AI_SEO::run_checks() output.
      * @param array $raw       The scorecard JSON; its "seo" object is the AI half.
-     * @param bool  $ai_ran    Whether the scorecard call succeeded.
+     * @param bool  $ask_seo   Ask the SEO reviewer separately when the prompt has no SEO part.
      */
-    private static function seo_check( array $checks, array $raw, array $input, bool $ai_ran ): array {
+    private static function seo_check( array $checks, array $raw, array $input, bool $ask_seo ): array {
         $review = PressHub_AI_SEO::checks_result( $checks );
         if ( isset( $raw['seo'] ) && is_array( $raw['seo'] ) ) {
             $review = PressHub_AI_SEO::merge_ai_assessment( $review, $raw['seo'] );
-        } elseif ( $ai_ran ) {
+        } elseif ( $ask_seo ) {
             // A custom QA prompt without the SEO part: ask the SEO reviewer on its own.
             $review = PressHub_AI_SEO::review( $input );
         }
 
+        return self::seo_result( $review );
+    }
+
+    /** The SEO check from an SEO review: score against the minimum, plus the hard checks. */
+    private static function seo_result( array $review ): array {
         $hard_fail = [];
         foreach ( (array) $review['checks'] as $c ) {
             if ( in_array( $c['key'] ?? '', self::SEO_HARD_CHECKS, true ) && 'fail' === ( $c['status'] ?? '' ) ) {
@@ -278,6 +498,56 @@ class PressHub_AI_Publish_Gate {
             'hard_fail' => $hard_fail,
             'review'    => $review,
         ];
+    }
+
+    /**
+     * The automatic SEO fix: when the excerpt or the tags are what fails,
+     * apply the AI's suggested meta description and tags (from the same
+     * review, no extra call) and measure again. Only empty fields are filled,
+     * and only when "Automatic Tags & SEO" is on.
+     *
+     * @return array|null The SEO check after the fix, or null when nothing was fixed.
+     */
+    private static function fix_seo( int $post_id, array $seo, array $input ): ?array {
+        if ( ! PressHub_AI_Settings_Storage::get_seo_auto_enabled() ) {
+            return null;
+        }
+        $review  = (array) ( $seo['review'] ?? [] );
+        $failing = [];
+        foreach ( (array) ( $review['checks'] ?? [] ) as $c ) {
+            if ( 'fail' === ( $c['status'] ?? '' ) ) {
+                $failing[] = (string) ( $c['key'] ?? '' );
+            }
+        }
+        $description = (string) ( $review['suggested_meta_description'] ?? '' );
+        $tags        = (array) ( $review['suggested_tags'] ?? [] );
+        $set_excerpt = in_array( 'excerpt', $failing, true ) && '' === trim( (string) ( $input['excerpt'] ?? '' ) ) && '' !== $description;
+        // Tags sent with a block editor save are written after this review, so leave them to the editor.
+        $set_tags    = in_array( 'tags', $failing, true ) && empty( $input['tags'] ) && ! empty( $tags ) && empty( $input['tags_from_request'] );
+        if ( ! $set_excerpt && ! $set_tags ) {
+            return null;
+        }
+
+        PressHub_AI_SEO::apply_post_seo( $post_id, [
+            'tags'             => $set_tags ? $tags : [],
+            'meta_description' => $set_excerpt ? $description : '',
+            'focus_keyphrase'  => (string) ( $review['focus_keyphrase'] ?? '' ),
+        ], $set_excerpt, $set_tags );
+        if ( $set_excerpt ) {
+            $input['excerpt'] = $description;
+        }
+        if ( $set_tags ) {
+            $input['tags'] = array_values( array_map( 'strval', $tags ) );
+        }
+
+        $checks             = PressHub_AI_SEO::run_checks( $input );
+        $review['checks']   = $checks['checks'];
+        $review['checks_score'] = $checks['score'];
+        $review['seo_score']    = null === ( $review['ai_score'] ?? null ) ? $checks['score'] : (int) round( ( $checks['score'] + (int) $review['ai_score'] ) / 2 );
+        $result             = self::seo_result( $review );
+        $result['fixed']    = array_values( array_filter( [ $set_excerpt ? 'excerpt' : '', $set_tags ? 'tags' : '' ] ) );
+        self::log( 'info', sprintf( 'QA gate: filled the missing %s of post #%d from the SEO review.', implode( ' and ', $result['fixed'] ), $post_id ), $post_id );
+        return $result;
     }
 
     private static function legal_issues( array $raw_issues ): array {
@@ -377,7 +647,7 @@ class PressHub_AI_Publish_Gate {
         return $input;
     }
 
-    private static function input_hash( array $input, string $context ): string {
+    private static function input_hash( array $input, string $context, string $reviewed_text = '' ): string {
         $tags = array_map( 'strval', (array) ( $input['tags'] ?? [] ) );
         $cats = array_map( 'strval', (array) ( $input['categories'] ?? [] ) );
         sort( $tags );
@@ -391,6 +661,7 @@ class PressHub_AI_Publish_Gate {
             $cats,
             (int) ( $input['featured_image_id'] ?? 0 ),
             self::settings_fingerprint(),
+            '' === $reviewed_text ? '' : md5( trim( $reviewed_text ) ),
         ] ) );
     }
 

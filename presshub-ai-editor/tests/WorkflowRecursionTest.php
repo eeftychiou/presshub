@@ -68,11 +68,21 @@ class WorkflowRecursionTest
             $failures[] = "Re-entry recursion: wp_update_post called {$GLOBALS['WP_UPDATE_POST_CALLS']} times (cap {$maxCalls}) — guard missing.";
         }
 
+        // Editors are checked too by default (2.48.0)...
         self::reset_world();
         self::grant_editor_caps();
         $count = self::simulate_unreviewed_publish();
+        if ( $count !== 1 ) {
+            $failures[] = "Editor publish should be held by the gate by default (1 wp_update_post call), got {$count}.";
+        }
+
+        // ...unless "Check posts editors publish" is off.
+        self::reset_world();
+        self::grant_editor_caps();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_qa_check_editors'] = 0;
+        $count = self::simulate_unreviewed_publish();
         if ( $count !== 0 ) {
-            $failures[] = "Editor should bypass enforcement (0 wp_update_post calls), got {$count}.";
+            $failures[] = "Editor should bypass enforcement when editor checks are off (0 wp_update_post calls), got {$count}.";
         }
 
         self::reset_world();

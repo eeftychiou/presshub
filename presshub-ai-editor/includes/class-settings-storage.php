@@ -588,6 +588,13 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_qa_seo_min_score' ],
             'type'              => 'integer',
         ] );
+        // Publish gate coverage (2.48.0): which publish paths the gate checks.
+        foreach ( [ 'presshub_ai_qa_check_editors', 'presshub_ai_qa_include_podcasts', 'presshub_ai_qa_include_trending' ] as $gate_option ) {
+            PressHub_Settings_Registry::register( 'presshub_ai_options', $gate_option, [
+                'sanitize_callback' => [ __CLASS__, 'sanitize_qa_coverage_flag' ],
+                'type'              => 'integer',
+            ] );
+        }
 
         // #236: Editorial QA can run on its own model; empty = same as Co-author.
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_provider', [
@@ -2234,6 +2241,46 @@ class PressHub_AI_Settings_Storage {
     /** Minimum SEO score (0 - 100) the SEO check needs. Default: 60. */
     public static function get_qa_seo_min_score(): int {
         return self::sanitize_qa_seo_min_score( get_option( 'presshub_ai_qa_seo_min_score', self::default_qa_seo_min_score() ) );
+    }
+
+    /** Default of the three coverage switches below: on. */
+    public static function default_qa_coverage_flag(): int {
+        return 1;
+    }
+
+    /** A coverage switch: 1 or 0. Anything else falls back to the default. */
+    public static function sanitize_qa_coverage_flag( $value ): int {
+        if ( null === $value || '' === $value ) {
+            return 0; // An unticked checkbox posts the hidden "0" or nothing.
+        }
+        $value = is_string( $value ) ? strtolower( trim( wp_unslash( $value ) ) ) : $value;
+        if ( in_array( $value, [ 1, '1', true, 'on', 'yes' ], true ) ) {
+            return 1;
+        }
+        if ( in_array( $value, [ 0, '0', false, 'off', 'no' ], true ) ) {
+            return 0;
+        }
+        return self::default_qa_coverage_flag();
+    }
+
+    private static function qa_coverage_flag( string $option ): bool {
+        $value = get_option( $option, self::default_qa_coverage_flag() );
+        return 1 === self::sanitize_qa_coverage_flag( false === $value ? self::default_qa_coverage_flag() : $value );
+    }
+
+    /** Check posts that editors and admins publish. Default: on. */
+    public static function get_qa_check_editors(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_check_editors' );
+    }
+
+    /** Check Daily Briefing podcast posts. Default: on. */
+    public static function get_qa_include_podcasts(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_include_podcasts' );
+    }
+
+    /** Check the Trending in Cyprus roundup. Default: on. */
+    public static function get_qa_include_trending(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_include_trending' );
     }
 
     /**

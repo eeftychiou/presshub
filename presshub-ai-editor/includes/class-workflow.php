@@ -38,22 +38,13 @@ class PressHub_AI_Workflow {
             return;
         }
 
-        // Automated Daily Briefing Hub posts (text briefing stories & audio podcasts)
-        // are governed by their own settings (presshub_ai_briefing_text_status /
-        // presshub_ai_briefing_podcast_status), not by the co-pilot author scorecard gate.
-        if ( ! empty( get_post_meta( $post->ID, '_presshub_briefing_type', true ) ) ) {
-            return;
-        }
-
-        // The Trending in Cyprus social roundup is written by the worker / cron
-        // and follows its own "New posts are" setting.
-        if ( ! empty( get_post_meta( $post->ID, '_presshub_social_trending_key', true ) ) ) {
-            return;
-        }
-
-        // Cron and headless flows run without a logged-in user (user 0) where
-        // current_user_can() is unreliable. Never block scheduled/cron publishing.
-        if ( ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
+        // Automated posts (Daily Briefing text and podcast, the Trending
+        // roundup) are reviewed by PressHub_AI_Publish_Gate::release() after
+        // their tags, excerpt and image are in place, and the gate's own
+        // status changes must not be reviewed again here.
+        if ( PressHub_AI_Publish_Gate::is_releasing()
+            || ! empty( get_post_meta( $post->ID, '_presshub_briefing_type', true ) )
+            || ! empty( get_post_meta( $post->ID, '_presshub_social_trending_key', true ) ) ) {
             return;
         }
 
@@ -63,32 +54,58 @@ class PressHub_AI_Workflow {
             return;
         }
 
-        // If an author tries to publish directly, run the QA gate (editorial,
-        // legal and SEO checks) and hold the post when the verdict says so.
-        if ( 'publish' === $new_status && 'publish' !== $old_status ) {
-            // Allow editors/admins to bypass, but not authors
-            if ( current_user_can( 'edit_others_posts' ) || ! PressHub_AI_Settings_Storage::get_qa_enabled() ) {
-                return;
-            }
+        $goes_live = 'publish' === $new_status && 'publish' !== $old_status;
+        $schedules = 'future' === $new_status && 'future' !== $old_status;
+        if ( ( ! $goes_live && ! $schedules ) || ! PressHub_AI_Settings_Storage::get_qa_enabled() ) {
+            return;
+        }
 
-            $gate = PressHub_AI_Publish_Gate::review_post( $post, 'author_publish', [
-                'seo_input' => self::seo_input( $post ),
-            ] );
+        // A scheduled post coming due is published by cron (user 0). It was
+        // reviewed when it was scheduled, and the saved review is reused
+        // unless the post or the gate settings changed since.
+        $by_cron  = ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON );
+        $due      = $goes_live && 'future' === $old_status;
+        if ( $by_cron && ! $due ) {
+            return;
+        }
 
-            if ( PressHub_AI_Publish_Gate::holds( $gate ) ) {
-                self::$enforcing = true;
-                try {
-                    wp_update_post( [
-                        'ID'          => $post->ID,
-                        'post_status' => 'pending',
-                    ] );
-                    PressHub_AI_Publish_Gate::notify( (int) $post->ID, $gate );
-                } finally {
-                    self::$enforcing = false;
-                }
-            } elseif ( 'alert' === ( $gate['verdict'] ?? '' ) ) {
+        // Editors and admins are checked too, unless "Check posts editors publish" is off.
+        if ( ! $by_cron && current_user_can( 'edit_others_posts' ) && ! PressHub_AI_Settings_Storage::get_qa_check_editors() ) {
+            return;
+        }
+
+        // Released with "Publish anyway" and unchanged since.
+        if ( PressHub_AI_Publish_Gate::is_overridden( $post ) ) {
+            return;
+        }
+
+        if ( $due ) {
+            $trigger = 'scheduled_publish';
+        } elseif ( $schedules ) {
+            $trigger = current_user_can( 'edit_others_posts' ) ? 'editor_schedule' : 'author_schedule';
+        } else {
+            $trigger = current_user_can( 'edit_others_posts' ) ? 'editor_publish' : 'author_publish';
+        }
+
+        $gate = PressHub_AI_Publish_Gate::review_post( $post, $trigger, [
+            'seo_input' => self::seo_input( $post ),
+        ] );
+
+        if ( PressHub_AI_Publish_Gate::holds( $gate ) ) {
+            self::$enforcing = true;
+            try {
+                // Remember where it was going, so "Publish anyway" can send it there.
+                update_post_meta( $post->ID, PressHub_AI_Publish_Gate::META_TARGET_STATUS, $new_status );
+                wp_update_post( [
+                    'ID'          => $post->ID,
+                    'post_status' => 'pending',
+                ] );
                 PressHub_AI_Publish_Gate::notify( (int) $post->ID, $gate );
+            } finally {
+                self::$enforcing = false;
             }
+        } elseif ( 'alert' === ( $gate['verdict'] ?? '' ) ) {
+            PressHub_AI_Publish_Gate::notify( (int) $post->ID, $gate );
         }
     }
 
@@ -101,7 +118,7 @@ class PressHub_AI_Workflow {
      * @param WP_REST_Request $request
      */
     public function remember_rest_terms( $prepared_post, $request ) {
-        if ( is_object( $prepared_post ) && ! empty( $prepared_post->ID ) && is_object( $request ) && method_exists( $request, 'get_param' ) ) {
+        if ( is_object( $prepared_post ) && is_object( $request ) && method_exists( $request, 'get_param' ) ) {
             $state = [];
             foreach ( [ 'tags', 'categories', 'featured_media' ] as $key ) {
                 $value = $request->get_param( $key );
@@ -110,7 +127,8 @@ class PressHub_AI_Workflow {
                 }
             }
             if ( $state ) {
-                self::$rest_state[ (int) $prepared_post->ID ] = $state;
+                // A new post created straight as published has no ID yet: keep it under 0 for its insert.
+                self::$rest_state[ (int) ( $prepared_post->ID ?? 0 ) ] = $state;
             }
         }
         return $prepared_post;
@@ -125,8 +143,12 @@ class PressHub_AI_Workflow {
                 $input[ $key ] = (string) $post->$field;
             }
         }
-        $state = self::$rest_state[ $post_id ] ?? [];
+        $key   = isset( self::$rest_state[ $post_id ] ) ? $post_id : 0;
+        $state = self::$rest_state[ $key ] ?? [];
+        // One request's terms are used once, never by a later save.
+        unset( self::$rest_state[ $key ] );
         if ( isset( $state['tags'] ) && function_exists( 'get_term' ) ) {
+            $input['tags_from_request'] = true;
             $input['tags'] = [];
             foreach ( (array) $state['tags'] as $tid ) {
                 $term = get_term( (int) $tid, 'post_tag' );

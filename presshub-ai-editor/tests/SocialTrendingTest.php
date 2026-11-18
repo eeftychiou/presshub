@@ -64,6 +64,8 @@ function st_reset( array $opts = [] ) {
         'presshub_ai_social_trending_min_engagement'     => 10,
         'gmt_offset'                                     => 2,
         'presshub_ai_social_trending_summary_enabled'    => 0,
+        // The QA gate on the roundup is tested in PublishGateTest.
+        'presshub_ai_qa_include_trending'                => 0,
     ], $opts );
     $GLOBALS['TERMS']               = [];
     $GLOBALS['POSTS_STORE']         = [];

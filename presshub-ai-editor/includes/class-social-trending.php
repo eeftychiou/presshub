@@ -1188,6 +1188,11 @@ class PressHub_AI_Social_Trending {
             update_post_meta( $existing, self::META_ITEMS, $items_meta );
             self::save_summary_meta( $existing, $summary );
             self::maybe_set_featured_image( $existing, $items );
+            // A new set of posts (a new summary) is checked again; the
+            // numbers changing alone is not.
+            if ( ! empty( $summary['fresh'] ) ) {
+                self::release_through_gate( $existing );
+            }
             return $existing;
         }
 
@@ -1213,6 +1218,10 @@ class PressHub_AI_Social_Trending {
             $postarr['post_date_gmt'] = $held[1];
             self::log( 'info', sprintf( 'Social trending: roundup scheduled for %s (site time) so its social posts go out then.', $held[0] ) );
         }
+        // QA gate: saved as pending and released once the summary and image are in place.
+        if ( class_exists( 'PressHub_AI_Publish_Gate' ) ) {
+            $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'trending' );
+        }
         $id = wp_insert_post( $postarr, true );
         if ( is_wp_error( $id ) ) {
             return $id;
@@ -1227,7 +1236,20 @@ class PressHub_AI_Social_Trending {
         update_option( self::OPTION_POSTS, $map, false );
         self::save_summary_meta( (int) $id, $summary );
         self::maybe_set_featured_image( (int) $id, $items );
+        self::release_through_gate( (int) $id );
         return (int) $id;
+    }
+
+    /** Legal check of the summary and quoted posts plus the measured SEO checks; then the configured status. */
+    private static function release_through_gate( int $post_id ): void {
+        if ( ! class_exists( 'PressHub_AI_Publish_Gate' ) ) {
+            return;
+        }
+        try {
+            PressHub_AI_Publish_Gate::release( $post_id, 'trending', 'trending_roundup' );
+        } catch ( Throwable $t ) {
+            self::log( 'warning', 'Social trending: the QA gate could not run: ' . $t->getMessage() );
+        }
     }
 
     /* ------------------------------------------------------------------
