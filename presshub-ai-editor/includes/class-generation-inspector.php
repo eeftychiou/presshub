@@ -655,6 +655,22 @@ class PressHub_AI_Generation_Inspector {
         if ( isset( $config['editorial_agenda_version'] ) ) {
             $knowledge[ __( 'Editorial agenda', 'presshub-ai-editor' ) ] = 'v' . (int) $config['editorial_agenda_version'] . ' (' . (int) ( $config['editorial_agenda_chars'] ?? 0 ) . ' chars)';
         }
+        // Design principle: every cut a context limit made is shown with the call.
+        $cuts = [];
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            $labels = [
+                'editorial_agenda' => __( 'Editorial agenda', 'presshub-ai-editor' ),
+                'stakeholders'     => __( 'People fiches', 'presshub-ai-editor' ),
+                'policy_fiches'    => __( 'Policy fiches', 'presshub-ai-editor' ),
+            ];
+            foreach ( PressHub_AI_Knowledge_Cuts::CONFIG_KEYS as $kind => $key ) {
+                if ( ! empty( $config[ $key ] ) && is_array( $config[ $key ] ) ) {
+                    $cuts[ $labels[ $kind ] ] = [ 'html' => '<ul class="presshub-inspector-cuts">' . implode( '', array_map( static function ( $line ) {
+                        return '<li>' . esc_html( $line ) . '</li>';
+                    }, PressHub_AI_Knowledge_Cuts::describe( $config[ $key ] ) ) ) . '</ul>' ];
+                }
+            }
+        }
 
         $token_estimate = $inputs['token_estimate'] ?? ( $totals['capped_tokens_estimate'] ?? '' );
         $usage_rows     = [
@@ -676,6 +692,7 @@ class PressHub_AI_Generation_Inspector {
         return self::section_heading( __( 'Generation', 'presshub-ai-editor' ) ) . self::kv_table( $general )
             . self::section_heading( __( 'Request settings (as resolved)', 'presshub-ai-editor' ) ) . self::kv_table( $settings )
             . ( empty( $knowledge ) ? '' : self::section_heading( __( 'Editorial knowledge sent', 'presshub-ai-editor' ) ) . self::kv_table( $knowledge ) )
+            . ( empty( $cuts ) ? '' : self::section_heading( __( 'Left out because of limits', 'presshub-ai-editor' ) ) . self::kv_table( $cuts ) )
             . self::section_heading( __( 'Usage and truncation', 'presshub-ai-editor' ) ) . self::kv_table( $usage_rows );
     }
 

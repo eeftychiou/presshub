@@ -40,7 +40,7 @@ class SettingsKnowledgeSwitchesTest {
             'duplicate similarity 0.6'  => abs( PressHub_AI_Pool_Cleaner::DUPLICATE_SIMILAR - $S::get_pool_duplicate_similarity() ) < 0.0001,
             'trending 1 per account'    => 1 === PressHub_AI_Social_Trending::max_per_account(),
             'trending from 08:00'       => 8 === PressHub_AI_Social_Trending::share_after_hour(),
-            'policy budgets unchanged'  => PressHub_AI_Policy_Fiches::BUDGETS['podcast_script'] === PressHub_AI_Policy_Fiches::budget_for( 'podcast_script' ) && 800 === PressHub_AI_Policy_Fiches::budget_for( 'social_copy_facebook' ),
+            'policy budgets unchanged'  => PressHub_AI_Policy_Fiches::BUDGETS['podcast_script'] === PressHub_AI_Policy_Fiches::budget_for( 'podcast_script' ) && 1200 === PressHub_AI_Policy_Fiches::budget_for( 'social_copy_facebook' ),
             'people budgets unchanged'  => PressHub_AI_Stakeholders::BUDGETS['briefing_curation'] === PressHub_AI_Stakeholders::budget_for( 'briefing_curation' ),
             'agenda budgets unchanged'  => PressHub_AI_Editorial_Agenda::BUDGETS['seo_'] === PressHub_AI_Editorial_Agenda::budget_for( 'seo_tags' ),
         ];

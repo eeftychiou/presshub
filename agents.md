@@ -321,7 +321,13 @@ php dev-env/scripts/reset-db.php
 12. **Help page (PressHub → Help)**:
    - `PressHub_AI_Help_Admin` explains the agenda, policy fiches, people fiches and memory to editors. When you change which actions get them, their budgets, the parts sent, the matching rules or a limit, update the page text in the same PR. The task table and the prompt examples are built from `budget_for()`, `parts_for()` and the real `render()` functions, so never hard-code a budget or a prompt header there. Tests: `HelpPageTest.php`.
 
-13. **Backups before updates (PressHub → Backups, #296)**:
+13. **Cuts made by a limit are recorded (design principle)**:
+   - Whenever a limit (a character budget, a maximum count, a context window) cuts or leaves out content that would otherwise reach an AI call, the cut is recorded: what was cut, why (`no_room`, `shortened`, `clipped`, `max_items`), the limit and how much room the item needed. Never drop content silently.
+   - The editorial agenda, people fiches and policy fiches report their cuts from `render_report()` / `render()['left_out']`; `apply()` keeps them in `last_applied()['left_out']` even when nothing was sent, `PressHub_AI_Generation_Recorder::apply_injected_context()` stores them as `editorial_agenda_left_out`, `stakeholders_left_out` and `policy_fiches_left_out`, the generation inspector shows them under "Left out because of limits", and `PressHub_AI_Knowledge_Cuts::log()` writes one log line per call. Editorial memory records its cuts in the manifest's `trimmed` list.
+   - Context budgets count the content only (themes, fiches, people), never the fixed instructions around a block, so the number an editor sets is the room the content gets.
+   - A new limit on content follows the same rule; reviews check it. Tests: `KnowledgeCutsTest.php`.
+
+14. **Backups before updates (PressHub → Backups, #296)**:
    - `PressHub_AI_Update_Backup` saves every `presshub_*` option, every `{prefix}presshub_*` table and the plugin folder before WordPress replaces the plugin. A new table must use the `{prefix}presshub_` name so it is backed up and restored; a new option must start with `presshub_`.
    - A migration in a new version may rely on the backup being there, but never on it being restorable into the new schema: a restore puts back the old version's `CREATE TABLE` and rows, and the old plugin files with them.
    - Never write into the plugin folder during a restore when it is a link (dev-env junction); `plugin_dir_is_linked()` guards this. Restore steps are in `docs/backups.md`.

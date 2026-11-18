@@ -364,6 +364,9 @@ class PressHub_AI_Generation_Recorder {
             if ( is_array( $agenda ) ) {
                 $config['editorial_agenda_version'] = (int) $agenda['version'];
                 $config['editorial_agenda_chars']   = (int) $agenda['chars'];
+                if ( ! empty( $agenda['left_out'] ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    $config['editorial_agenda_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $agenda['left_out'] );
+                }
                 if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $agenda['original_hash'] ) {
                     $sys_prompt = $agenda['prompt'];
                 }
@@ -376,6 +379,9 @@ class PressHub_AI_Generation_Recorder {
             if ( is_array( $fiches ) ) {
                 $config['stakeholders']       = array_values( (array) $fiches['people'] );
                 $config['stakeholders_chars'] = (int) $fiches['chars'];
+                if ( ! empty( $fiches['left_out'] ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    $config['stakeholders_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $fiches['left_out'] );
+                }
                 if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $fiches['original_hash'] ) {
                     $sys_prompt = $fiches['prompt'];
                 }
@@ -388,6 +394,9 @@ class PressHub_AI_Generation_Recorder {
             if ( is_array( $policy ) ) {
                 $config['policy_fiches']       = array_values( (array) $policy['fiches'] );
                 $config['policy_fiches_chars'] = (int) $policy['chars'];
+                if ( ! empty( $policy['left_out'] ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    $config['policy_fiches_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $policy['left_out'] );
+                }
                 if ( is_string( $sys_prompt ) && md5( $sys_prompt ) === $policy['original_hash'] ) {
                     $sys_prompt = $policy['prompt'];
                 }

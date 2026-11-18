@@ -133,6 +133,10 @@ $presshub_ai_options = [
     'presshub_ai_policy_candidates',
     'presshub_ai_policy_alerts',
     'presshub_ai_policy_draft_state',
+    'presshub_ai_editorial_agenda_budgets',
+    'presshub_ai_stakeholders_budgets',
+    'presshub_ai_policy_fiches_budgets',
+    'presshub_ai_migrated_social_fiche_budgets',
     // Settings clean-up (#237): its bookkeeping and the pre-clean-up copy.
     'presshub_settings_cleanup_version',
     'presshub_settings_cleanup_report',
