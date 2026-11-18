@@ -2669,6 +2669,17 @@ assert_false( PressHub_Social_YouTube::can_retry( $pub ), 'Retry is not offered 
 assert_false( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'processing', 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ] ), 'A YouTube job that is uploading now cannot be retried' );
 assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'processing', 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - 4 * 3600 ) ] ), 'A YouTube job stuck for hours can be retried' );
 assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'failed' ] ), 'A failed YouTube job can be retried' );
+$repost_id = PressHub_Social_Queue::repost_as_new_job( $q_id );
+$repost    = is_int( $repost_id ) ? PressHub_Social_Queue::get_job( $repost_id ) : [];
+assert_equals( '', PressHub_Social_YouTube::playlist_error( (array) $repost ), 'A re-post does not inherit the earlier playlist error' );
+if ( is_int( $repost_id ) ) {
+    PressHub_Social_Queue::cancel_job( $repost_id );
+}
+update_option( PressHub_Social_YouTube::PAUSED_UNTIL_OPTION, time() + 3600 );
+PressHub_Social_YouTube::client_changed( 'a', 'b' );
+assert_equals( 0, PressHub_Social_YouTube::paused_until(), 'A new OAuth client is not held by the old project\'s quota pause' );
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+update_option( PressHub_Social_YouTube::CHANNEL_OPTION, [ 'id' => 'UC123', 'title' => 'PressHub Cyprus' ] );
 
 // Outside Pull mode a YouTube job fails at once.
 PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'pending' ] );

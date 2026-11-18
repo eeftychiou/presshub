@@ -196,6 +196,7 @@ class PressHub_Social_YouTube {
         delete_option( self::REFRESH_TOKEN_OPTION );
         delete_option( self::CHANNEL_OPTION );
         delete_option( self::NEEDS_RECONNECT_OPTION );
+        delete_option( self::PAUSED_UNTIL_OPTION );
         PressHub_Connection_Status::forget( self::CHECK_ID );
         PressHub_Social_Logger::warning( 'YouTube OAuth client changed: the stored sign-in was removed. Click Connect YouTube again.' );
     }
@@ -343,6 +344,8 @@ class PressHub_Social_YouTube {
 
         update_option( self::REFRESH_TOKEN_OPTION, $refresh, false );
         delete_option( self::NEEDS_RECONNECT_OPTION );
+        // Another channel or project has its own quota.
+        delete_option( self::PAUSED_UNTIL_OPTION );
         self::forget_access_token();
         self::cache_access_token( $access, (int) ( $tokens['expires_in'] ?? 0 ) );
         update_option( self::CHANNEL_OPTION, [ 'id' => $channel['id'], 'title' => $channel['title'], 'connected_at' => time() ], false );
@@ -374,6 +377,7 @@ class PressHub_Social_YouTube {
         delete_option( self::REFRESH_TOKEN_OPTION );
         delete_option( self::CHANNEL_OPTION );
         delete_option( self::NEEDS_RECONNECT_OPTION );
+        delete_option( self::PAUSED_UNTIL_OPTION );
         self::forget_access_token();
         PressHub_Connection_Status::forget( self::CHECK_ID );
         if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {

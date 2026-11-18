@@ -790,7 +790,7 @@ class PressHub_Social_TikTok_Shorts {
         $script    = $article ? self::article_text( $post_id ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
-        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() );
+        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {

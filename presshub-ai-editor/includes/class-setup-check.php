@@ -79,8 +79,11 @@ class PressHub_Setup_Check {
                     $yt        = class_exists( 'PressHub_Social_YouTube' );
                     $videos_on = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() || PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
                     if ( $yt && '' !== PressHub_Social_YouTube::reconnect_reason() ) {
+                        // With a YouTube video switch on, the Shorts check below says this.
+                        if ( ! $videos_on ) {
                         /* translators: %s: Google's error */
                         $add( sprintf( __( 'YouTube uploads stopped: Google refused the stored sign-in (%s). Connect YouTube again.', 'presshub-ai-editor' ), PressHub_Social_YouTube::reconnect_reason() ), 'social-accounts', __( 'Connect YouTube', 'presshub-ai-editor' ) );
+                        }
                     } elseif ( ! ( $yt && PressHub_Social_YouTube::is_connected() ) ) {
                         // With a YouTube video switch on, the Shorts check below says this.
                         if ( ! $videos_on ) {
