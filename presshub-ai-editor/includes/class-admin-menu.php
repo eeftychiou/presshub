@@ -13,7 +13,8 @@
  *   ├─ People                    admin.php?page=presshub-ai-people
  *   ├─ Usage & logs              admin.php?page=presshub-ai-usage
  *   ├─ Settings                  admin.php?page=presshub-ai&section=<slug>
- *   └─ Presets                   admin.php?page=presshub-ai-presets
+ *   ├─ Presets                   admin.php?page=presshub-ai-presets
+ *   └─ Help                      admin.php?page=presshub-ai-help
  *
  * Since 3b (#246) Settings holds both former settings pages in eight
  * sections, and the old Social settings URL redirects to its section.
@@ -63,6 +64,7 @@ class PressHub_Admin_Menu {
         self::USAGE_SLUG,
         'presshub-ai',
         'presshub-ai-presets',
+        'presshub-ai-help',
     ];
 
     public static function register_hooks(): void {
