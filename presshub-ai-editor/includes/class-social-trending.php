@@ -100,6 +100,7 @@ class PressHub_AI_Social_Trending {
         add_action( 'admin_post_' . self::RUN_ACTION, [ __CLASS__, 'handle_run_now' ] );
         add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_front_assets' ] );
         add_action( 'wp_body_open', [ __CLASS__, 'print_fb_root' ] );
+        add_filter( 'the_content', [ __CLASS__, 'filter_legacy_facebook_embeds' ], 9 );
         if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( self::CRON_HOOK ) ) {
             wp_schedule_event( time() + 300, 'hourly', self::CRON_HOOK );
         }
@@ -1567,6 +1568,30 @@ class PressHub_AI_Social_Trending {
     /* ------------------------------------------------------------------
      * Front end: embed scripts and card styling on roundup posts
      * ---------------------------------------------------------------- */
+
+    /**
+     * Roundups saved before 2.40.0 embedded Facebook reels as
+     * fb-video / fb-post with a bare facebook.com/<post id> link, which
+     * Facebook shows as "Video unavailable" with nothing to click. On display,
+     * such a block loses its plugin class, so the SDK leaves it alone and the
+     * quoted text with its "see the post on Facebook" link shows instead.
+     * Roundups written since then never contain a bare link.
+     */
+    public static function filter_legacy_facebook_embeds( $content ) {
+        $content = (string) $content;
+        if ( false === strpos( $content, 'presshub-trending-embed-facebook' ) ) {
+            return $content;
+        }
+        return self::unembed_bare_facebook_links( $content );
+    }
+
+    public static function unembed_bare_facebook_links( string $content ): string {
+        return (string) preg_replace(
+            '#<div class="fb-(?:video|post)" (data-href="https://(?:www\.|m\.|web\.)?facebook\.com/\d+/?")#',
+            '<div class="presshub-trending-fb-link" $1',
+            $content
+        );
+    }
 
     private static function is_roundup_view(): bool {
         if ( ! function_exists( 'is_singular' ) || ! is_singular( 'post' ) ) {
