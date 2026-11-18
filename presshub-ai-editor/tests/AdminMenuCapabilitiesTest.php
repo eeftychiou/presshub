@@ -56,6 +56,7 @@ function amc_build_menu(): array {
     $GLOBALS['SUBMENU_PAGES'] = [];
     PressHub_Admin_Menu::add_top_level();
     ( new PressHub_AI_Briefing_Admin() )->add_admin_menu();
+    ( new PressHub_AI_QA_Reviews_Admin() )->add_admin_menu();
     PressHub_Social_Settings::get_instance()->add_admin_menu();
     ( new PressHub_AI_Fiches_Admin() )->add_admin_menu();
     PressHub_Admin_Menu::add_usage_page();
@@ -86,6 +87,7 @@ function amc_ajax( callable $fn, array $post = [] ): ?array {
 $expected = [
     'presshub-ai-briefing-hub'       => 'Daily Briefing Hub',
     'presshub-ai-generation-records' => 'Generation records',
+    'presshub-ai-qa-reviews'         => 'QA reviews',
     'presshub-social-queue'          => 'Social Queue',
     'presshub-ai-memory'             => 'Memory',
     'presshub-ai-agenda'             => 'Editorial agenda',

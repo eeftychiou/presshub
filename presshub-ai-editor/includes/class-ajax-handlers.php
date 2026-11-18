@@ -288,58 +288,67 @@ class PressHub_AI_Ajax_Handlers {
 
         $this->enforce_rate_limit();
 
-        require_once __DIR__ . '/class-qa-reviewer.php';
-        $eval_result = PressHub_AI_QA_Reviewer::evaluate_content( $content, 'post', (int) $post_id );
+        require_once __DIR__ . '/class-seo.php';
+        require_once __DIR__ . '/class-publish-gate.php';
+        $seo_input = $this->collect_seo_review_input( (int) $post_id, $content );
+        $post      = $post_id ? get_post( $post_id ) : null;
+        if ( $post ) {
+            // The editor's unsaved title, excerpt and text are what gets reviewed.
+            $post               = clone $post;
+            $post->post_title   = $seo_input['title'];
+            $post->post_excerpt = $seo_input['excerpt'];
+            $post->post_content = $content;
+            $gate = PressHub_AI_Publish_Gate::review_post( $post, 'review_button', [
+                'force'     => true,
+                'seo_input' => $seo_input,
+                'content'   => $content,
+            ] );
+        } else {
+            $gate = PressHub_AI_Publish_Gate::run( $content, 'post', 0, $seo_input );
+        }
 
-        if ( ! empty( $eval_result['error'] ) ) {
-            $error_msg = ! empty( $eval_result['feedback'] ) ? $eval_result['feedback'] : __( 'AI QA review evaluation failed.', 'presshub-ai-editor' );
+        if ( 'error' === ( $gate['verdict'] ?? '' ) ) {
+            $error_msg = ! empty( $gate['feedback'] ) ? $gate['feedback'] : __( 'AI QA review evaluation failed.', 'presshub-ai-editor' );
             wp_send_json_error( $error_msg );
         }
 
         $scorecard = [
-            'score'          => $eval_result['score'],
-            'feedback'       => $eval_result['feedback'],
-            'libel_risk'     => $eval_result['libel_risk'] ?? 'Low',
-            'legal_concerns' => $eval_result['legal_concerns'] ?? 'None identified',
+            'score'          => $gate['score'],
+            'feedback'       => $gate['feedback'],
+            'libel_risk'     => $gate['libel_risk'] ?? 'Low',
+            'legal_concerns' => $gate['legal_concerns'] ?? 'None identified',
         ];
 
         $status_after = null;
-        if ( $post_id ) {
-            update_post_meta( $post_id, '_presshub_ai_scorecard', $scorecard );
-            update_post_meta( $post_id, '_presshub_ai_scorecard_hash', md5( trim( $content ) ) );
+        if ( $post ) {
+            $status_after = (string) ( $post->post_status ?? '' );
 
-            $post = get_post( $post_id );
-            if ( $post ) {
-                $status_after = $post->post_status;
-
-                $min_score = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_qa_min_score() : 80;
-
-                // High-1 guard: run_review() must never demote an
-                // already-published post. Only non-published posts are
-                // transitioned to 'pending' for editorial review.
-                if ( isset( $scorecard['score'] ) && intval( $scorecard['score'] ) >= $min_score
-                    && 'publish' !== $post->post_status ) {
-                    wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
-                    $status_after = 'pending';
-                }
+            // High-1 guard: run_review() must never demote an
+            // already-published post. Only non-published posts that pass
+            // the gate (or only raise alerts) move to 'pending' for
+            // editorial review.
+            if ( ! PressHub_AI_Publish_Gate::holds( $gate ) && 'publish' !== $status_after ) {
+                wp_update_post( [ 'ID' => $post_id, 'post_status' => 'pending' ] );
+                $status_after = 'pending';
             }
         }
 
-        // Separate, advisory SEO score (never affects the QA gate above).
-        $seo_review = null;
-        if ( class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_seo_review_enabled() ) {
-            require_once __DIR__ . '/class-seo.php';
-            $seo_review = PressHub_AI_SEO::review( $this->collect_seo_review_input( (int) $post_id, $content ) );
-            if ( $post_id ) {
-                update_post_meta( $post_id, PressHub_AI_SEO::META_SEO_REVIEW, $seo_review );
-            }
-        }
+        $seo_review = ( 'skip' !== ( $gate['checks']['seo']['result'] ?? 'skip' ) ) ? $gate['checks']['seo']['review'] : null;
 
         $this->record_rate_limit();
         // ME-8 / F-29: report the post status after the review so the UI
         // can tell the journalist what happened ('pending' = moved to
         // editorial review, 'publish' = left alone, null = no post).
-        wp_send_json_success( array_merge( $scorecard, [ 'status_after' => $status_after, 'seo' => $seo_review ] ) );
+        wp_send_json_success( array_merge( $scorecard, [
+            'status_after' => $status_after,
+            'seo'          => $seo_review,
+            'gate'         => [
+                'verdict'      => $gate['verdict'],
+                'legal'        => $gate['checks']['legal'] ?? [],
+                'seo_result'   => $gate['checks']['seo']['result'] ?? 'skip',
+                'seo_threshold' => $gate['checks']['seo']['threshold'] ?? null,
+            ],
+        ] ) );
     }
 
     /**

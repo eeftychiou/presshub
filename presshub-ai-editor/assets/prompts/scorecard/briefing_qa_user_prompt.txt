@@ -1,6 +1,19 @@
-Review this daily news briefing draft. Provide a JSON response with exactly two keys: 'score' (an integer 0-100 representing readiness) and 'feedback' (a 2-3 sentence critique).
+Review this daily news briefing before publication. Answer as two reviewers in one JSON object: an editor and a media lawyer. Write every text value in the SAME LANGUAGE as the briefing.
 
-Important: Do not dispute or penalize recent real-world events, breaking news, or reported deaths based on your static pre-training knowledge or cutoff date. Assess the briefing strictly on editorial synthesis, conciseness, coherence across multiple news items, reader engagement, clear topical transitions, and journalistic writing standards.
+1. Editorial review
+Judge editorial synthesis, conciseness, coherence across the news items, clear transitions between topics, reader engagement and journalistic writing standards.
 
-Briefing Draft:
+2. Legal review (Cyprus and EU media law and journalistic ethics)
+Look for, and quote, any sentence that presents an allegation of a crime or wrongdoing as fact or names a suspect without attribution, attacks a reputation without a source, reveals personal data without public interest (health, home address, the identity of a minor or of a victim of a sexual or violent crime), is hate speech, or copies another outlet's text without credit. A briefing summarises other outlets' reporting, so an allegation that is clearly attributed to its source is normally acceptable. Do not invent problems.
+
+Knowledge cutoff date: do not dispute or penalise recent real-world events, breaking news or reported deaths based on your training knowledge. Judge only how the briefing is written and attributed.
+
+Return a JSON object with exactly these keys:
+- "score": integer 0 to 100, editorial readiness for publication.
+- "feedback": a 2 to 3 sentence editorial critique.
+- "libel_risk": "Low", "Medium" or "High", the overall legal risk.
+- "legal_concerns": one or two sentences summarising the legal risk, or "None identified".
+- "legal_issues": an array, empty when there is no issue, of objects with "type" (one of "defamation", "presumption_of_innocence", "privacy", "minors_or_victims", "hate_speech", "copyright", "reporting_restriction", "other"), "quote" (the exact sentence), "severity" ("Low", "Medium" or "High") and "fix" (how to rewrite it).
+
+Briefing:
 {content}

@@ -12,13 +12,13 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 |---|---|---|---|
 | Connections (`connections`) | 40 | 18 | 8 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
-| Writing & QA (`writing-qa`) | 16 | 0 | 0 |
+| Writing & QA (`writing-qa`) | 20 | 0 | 0 |
 | Daily Briefing (`daily-briefing`) | 75 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 63 | 4 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
 | Site & system (`site-system`) | 14 | 0 | 0 |
-| **Total** | **291** | | |
+| **Total** | **295** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -109,7 +109,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_ai_timeout` | Social copy timeout (s) | integer | s | social / ai | was: Request Timeout |
 | `presshub_social_tiktok_shorts_music_model` | Music Model | string |  | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on |
 
-## Writing & QA (`writing-qa`, 16)
+## Writing & QA (`writing-qa`, 20)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -121,14 +121,18 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_seo_auto_enabled` | Automatic Tags & SEO | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_briefing_seo_enhance_enabled` | Daily Briefing SEO Structure | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_seo_max_tags` | Tags per post | integer | tags | ai / coauthor | was: Maximum Tags per Post |
-| `presshub_ai_seo_review_enabled` | SEO Score in Editorial Review | integer |  | ai / coauthor | checkbox |
+| `presshub_ai_seo_review_enabled` | SEO check at the QA gate | integer |  | ai / coauthor | checkbox, was: SEO Score in Editorial Review |
 | `presshub_ai_coauthor_max_source_chars` | Max Source Material Characters | integer | characters | ai / coauthor |  |
 | `presshub_ai_qa_enabled` | Enable QA Review System | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_qa_include_briefings` | Include Daily Briefings | integer |  | ai / coauthor | checkbox |
-| `presshub_ai_qa_min_score` | Minimum passing QA score | integer | points | ai / coauthor | was: Minimum Passing Score |
+| `presshub_ai_qa_min_score` | Minimum editorial score | integer | points | ai / coauthor | was: Minimum Passing Score; Minimum passing QA score |
 | `presshub_ai_qa_notify_editor` | Notify Editor on Failures | integer |  | ai / coauthor | checkbox |
 | `presshub_ai_qa_editor_email` | Editor Notification Email | string |  | ai / coauthor |  |
 | `presshub_ai_qa_article_prompt` | Article QA Review Prompt Template | string |  | ai / coauthor |  |
+| `presshub_ai_qa_legal_action` | When the legal check fails | string |  | ai / coauthor |  |
+| `presshub_ai_qa_legal_fail_risk` | Legal risk that fails the check | string |  | ai / coauthor |  |
+| `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
+| `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
 ## Daily Briefing (`daily-briefing`, 75)
 

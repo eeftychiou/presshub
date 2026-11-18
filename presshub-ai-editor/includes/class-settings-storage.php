@@ -571,6 +571,23 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_qa_prompt' ],
             'type'              => 'string',
         ] );
+        // Publish gate (2.47.0): legal and SEO checks beside the editorial score.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_legal_action', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_legal_action' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_legal_fail_risk', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_legal_fail_risk' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_seo_action', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_seo_action' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_seo_min_score', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_seo_min_score' ],
+            'type'              => 'integer',
+        ] );
 
         // #236: Editorial QA can run on its own model; empty = same as Co-author.
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_provider', [
@@ -2145,6 +2162,78 @@ class PressHub_AI_Settings_Storage {
             require_once __DIR__ . '/class-prompt-loader.php';
         }
         return PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
+    }
+
+    // ------------------------------------------------------------------
+    // Publish gate: legal and SEO checks (2.47.0)
+    // ------------------------------------------------------------------
+
+    /** What a failed legal check does: off, alert (publish and email) or hold (keep pending). */
+    const QA_LEGAL_ACTIONS = [ 'off', 'alert', 'hold' ];
+
+    /** What a failed SEO check does: alert (publish and email) or hold. */
+    const QA_SEO_ACTIONS = [ 'alert', 'hold' ];
+
+    /** Lowest legal risk that fails the legal check. */
+    const QA_LEGAL_FAIL_RISKS = [ 'high', 'medium' ];
+
+    public static function default_qa_legal_action(): string {
+        return 'alert';
+    }
+
+    public static function sanitize_qa_legal_action( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_LEGAL_ACTIONS, true ) ? $value : self::default_qa_legal_action();
+    }
+
+    /** Legal check action: 'off', 'alert' or 'hold'. Default: alert. */
+    public static function get_qa_legal_action(): string {
+        return self::sanitize_qa_legal_action( get_option( 'presshub_ai_qa_legal_action', self::default_qa_legal_action() ) );
+    }
+
+    public static function default_qa_legal_fail_risk(): string {
+        return 'high';
+    }
+
+    public static function sanitize_qa_legal_fail_risk( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_LEGAL_FAIL_RISKS, true ) ? $value : self::default_qa_legal_fail_risk();
+    }
+
+    /** Lowest legal risk that fails: 'high' (only High) or 'medium' (Medium or High). Default: high. */
+    public static function get_qa_legal_fail_risk(): string {
+        return self::sanitize_qa_legal_fail_risk( get_option( 'presshub_ai_qa_legal_fail_risk', self::default_qa_legal_fail_risk() ) );
+    }
+
+    public static function default_qa_seo_action(): string {
+        return 'alert';
+    }
+
+    public static function sanitize_qa_seo_action( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_SEO_ACTIONS, true ) ? $value : self::default_qa_seo_action();
+    }
+
+    /** SEO check action: 'alert' or 'hold'. Default: alert. */
+    public static function get_qa_seo_action(): string {
+        return self::sanitize_qa_seo_action( get_option( 'presshub_ai_qa_seo_action', self::default_qa_seo_action() ) );
+    }
+
+    public static function default_qa_seo_min_score(): int {
+        return 60;
+    }
+
+    /** Minimum SEO score, clamped to 0 - 100. */
+    public static function sanitize_qa_seo_min_score( $value ): int {
+        if ( '' === $value || null === $value ) {
+            return self::default_qa_seo_min_score();
+        }
+        return max( 0, min( 100, (int) wp_unslash( $value ) ) );
+    }
+
+    /** Minimum SEO score (0 - 100) the SEO check needs. Default: 60. */
+    public static function get_qa_seo_min_score(): int {
+        return self::sanitize_qa_seo_min_score( get_option( 'presshub_ai_qa_seo_min_score', self::default_qa_seo_min_score() ) );
     }
 
     /**
