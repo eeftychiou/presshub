@@ -4120,17 +4120,11 @@ jQuery(document).ready(function($) {
                 }
 
                 if (res.data && res.data.masks) {
-                    if (res.data.masks.api_key) {
-                        $('#presshub_ai_api_key').attr('placeholder', res.data.masks.api_key);
-                    }
                     if (res.data.masks.google_cloud_key) {
                         $('#presshub_ai_google_cloud_api_key').attr('placeholder', res.data.masks.google_cloud_key);
                     }
                     if (res.data.masks.github_token) {
                         $('#presshub_ai_github_token').attr('placeholder', res.data.masks.github_token);
-                    }
-                    if (res.data.masks.briefing_tts_key) {
-                        $('#presshub_ai_briefing_tts_api_key').attr('placeholder', res.data.masks.briefing_tts_key);
                     }
                 }
             } else {
@@ -4296,17 +4290,11 @@ jQuery(document).ready(function($) {
                 $('#presshub-ai-settings-tabs').before(noticeHtml);
 
                 if (res.data && res.data.masks) {
-                    if (res.data.masks.api_key) {
-                        $('#presshub_ai_api_key').attr('placeholder', res.data.masks.api_key);
-                    }
                     if (res.data.masks.google_cloud_key) {
                         $('#presshub_ai_google_cloud_api_key').attr('placeholder', res.data.masks.google_cloud_key);
                     }
                     if (res.data.masks.github_token) {
                         $('#presshub_ai_github_token').attr('placeholder', res.data.masks.github_token);
-                    }
-                    if (res.data.masks.briefing_tts_key) {
-                        $('#presshub_ai_briefing_tts_api_key').attr('placeholder', res.data.masks.briefing_tts_key);
                     }
                 }
             } else {

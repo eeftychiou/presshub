@@ -376,18 +376,17 @@ class PressHub_AI_Audio_Synthesizer {
             return $manifest_slice;
         }
 
-        $api_key = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_api_key() : '';
-        if ( '' === $api_key && class_exists( 'PressHub_AI_Provider_Store' ) ) {
-            $all_providers = PressHub_AI_Provider_Store::get_all( true );
-            foreach ( $all_providers as $p ) {
-                if ( ( $p['type'] ?? '' ) === 'gemini' && ! empty( $p['api_key'] ) ) {
-                    $api_key = (string) $p['api_key'];
-                    break;
-                }
+        // #237: the Speech provider chosen in AI models first, then any Gemini provider in Connections.
+        $api_key = '';
+        if ( class_exists( 'PressHub_AI_Provider_Store' ) && class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            $chosen = PressHub_AI_Settings_Storage::get_briefing_podcast_tts_provider();
+            $record = '' !== $chosen ? PressHub_AI_Provider_Store::get( $chosen ) : null;
+            if ( is_array( $record ) && 'gemini' === ( $record['type'] ?? '' ) && false === strpos( (string) ( $record['api_key'] ?? '' ), '•' ) ) {
+                $api_key = (string) ( $record['api_key'] ?? '' );
             }
         }
-        if ( '' === $api_key ) {
-            $api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
+        if ( '' === $api_key && class_exists( 'PressHub_AI_API_Client' ) ) {
+            $api_key = PressHub_AI_API_Client::lookup_provider_key_by_type( 'gemini' );
         }
         if ( '' === $api_key ) {
             return $manifest_slice;

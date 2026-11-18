@@ -6,6 +6,8 @@
 require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/wp-action-wrapper.php';
 require_once __DIR__ . '/../includes/class-settings-storage.php';
+require_once __DIR__ . '/../includes/class-provider-defaults.php';
+require_once __DIR__ . '/../includes/class-provider-store.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 require_once __DIR__ . '/../includes/class-ajax-handlers.php';
 
@@ -223,6 +225,8 @@ class InputLimitsTest
         self::reset();
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'manage_options', 'edit_others_posts' ];
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini'] = 'gemini-2.0-flash';
+        // The Connections provider's own model is what the test button uses.
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'][2]['default_model'] = 'gemini-2.0-flash';
         $_POST = [ 'provider' => 'gemini', 'nonce' => 'valid' ];
         $GLOBALS['CAPTURE_FILTER'] = function ( $prev, $ctx ) {
             [ $url ] = $ctx;
@@ -266,7 +270,7 @@ class InputLimitsTest
         $GLOBALS['WP_INSERTED_POSTS'] = [];
         $GLOBALS['WP_INSERT_POST_COUNTER'] = 100;
         $GLOBALS['OPTIONS_STORE'] = [
-            'presshub_ai_api_key'  => 'k',
+            'presshub_ai_configured_providers' => presshub_test_provider_keys( 'k' ),
             'presshub_ai_provider' => 'openai',
             // These cases inspect the draft / review request itself; keep the
             // follow-up SEO calls out of the captured traffic.

@@ -20,6 +20,8 @@ require_once __DIR__ . '/wordpress-stubs.php';
 require_once __DIR__ . '/../includes/class-preset-sanitizer.php';
 require_once __DIR__ . '/../includes/class-preset-store.php';
 require_once __DIR__ . '/../includes/class-preset-resolver.php';
+require_once __DIR__ . '/../includes/class-provider-defaults.php';
+require_once __DIR__ . '/../includes/class-provider-store.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 
 class InstructionCompositionTest
@@ -33,7 +35,7 @@ class InstructionCompositionTest
 
         // --- Case 1: no presets anywhere -> built-in only, no extra \n\n ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $api = new PressHub_AI_API_Client();
@@ -45,7 +47,7 @@ class InstructionCompositionTest
 
         // --- Case 2: plugin default only (via author's default slug) ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
@@ -61,7 +63,7 @@ class InstructionCompositionTest
 
         // --- Case 3: author default only ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
@@ -82,7 +84,7 @@ class InstructionCompositionTest
         // and the author default pointing at the author preset, only the
         // author text is composed (plugin text stays out of the body).
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
@@ -116,7 +118,7 @@ class InstructionCompositionTest
 
         // --- Case 5: per-request selection wins over author default ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
@@ -138,7 +140,7 @@ class InstructionCompositionTest
 
         // --- Case 6: '__none__' per-request disables presets entirely ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
@@ -154,7 +156,7 @@ class InstructionCompositionTest
 
         // --- Case 7: scorecard untouched (editorial gate invariant) ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
@@ -173,7 +175,7 @@ class InstructionCompositionTest
 
         // --- Case 8: classify-intent untouched ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [
@@ -192,7 +194,7 @@ class InstructionCompositionTest
 
         // --- Case 9: audio report untouched ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'gc-key';
         $GLOBALS['CURRENT_USER_ID'] = 7;
@@ -212,7 +214,7 @@ class InstructionCompositionTest
 
         // --- Case 10: oversized preset text truncated to 4,000 by sanitizer ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
@@ -229,7 +231,7 @@ class InstructionCompositionTest
 
         // --- Case 11: disabled author preset skipped even as default ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
@@ -245,7 +247,7 @@ class InstructionCompositionTest
 
         // --- Case 12: empty instruction_text skipped (no blank \n\n) ---
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
@@ -262,7 +264,7 @@ class InstructionCompositionTest
         // --- Case 13: 3-arg backward compatibility ---
         // (a) No presets configured: identical to pre-preset behaviour.
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $api = new PressHub_AI_API_Client();
@@ -274,7 +276,7 @@ class InstructionCompositionTest
         // (b) Author default configured: the omitted 4th arg ('' ) falls
         // back to the author's default — the documented contract.
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['USER_META_STORE'][7]['presshub_ai_author_presets'] = [
@@ -293,7 +295,7 @@ class InstructionCompositionTest
         //             presshub_ai_composed_system_prompt filter receives
         //             the full base + preset string.
         self::reset();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CURRENT_USER_ID'] = 7;
         $GLOBALS['OPTIONS_STORE']['presshub_ai_default_presets'] = [

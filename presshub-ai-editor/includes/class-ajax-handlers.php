@@ -1842,10 +1842,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $processed   = $result['saved_keys'];
             $saved_count = $result['count'];
 
-            $saved_key          = (string) get_option( 'presshub_ai_api_key', '' );
             $saved_gcloud       = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             $saved_github       = (string) get_option( 'presshub_ai_github_token', '' );
-            $saved_briefing_tts = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
 
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::info( sprintf( 'Settings successfully saved (%d options updated)', $saved_count ), [
@@ -1876,10 +1874,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'message' => sprintf( __( 'Settings saved successfully (%d options updated).', 'presshub-ai-editor' ), $saved_count ),
             'sources' => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'   => [
-                'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                 'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
                 'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
-                'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
             ],
         ] );
     }
@@ -1973,10 +1969,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $saved_keys  = $result['saved_keys'];
             $saved_count = $result['count'];
 
-            $saved_key          = (string) get_option( 'presshub_ai_api_key', '' );
             $saved_gcloud       = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             $saved_github       = (string) get_option( 'presshub_ai_github_token', '' );
-            $saved_briefing_tts = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
 
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::info( sprintf( 'Settings section "%s" successfully saved (%d options updated)', $tab, $saved_count ), [
@@ -2013,10 +2007,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'model_warning_fields' => (object) $model_warning_fields,
             'sources'        => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'      => [
-                'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                 'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
                 'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
-                'briefing_tts_key' => PressHub_AI_Settings::mask_key( $saved_briefing_tts ),
             ],
         ] );
     }

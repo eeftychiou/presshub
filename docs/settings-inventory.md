@@ -10,25 +10,23 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 
 | Section | Options | Not shown on screen | Secrets |
 |---|---|---|---|
-| Connections (`connections`) | 48 | 25 | 14 |
+| Connections (`connections`) | 40 | 18 | 8 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 16 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 78 | 5 | 0 |
+| Daily Briefing (`daily-briefing`) | 75 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 63 | 4 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
 | Site & system (`site-system`) | 14 | 0 | 0 |
-| **Total** | **302** | | |
+| **Total** | **291** | | |
 
-**Scheduled for removal:** 4 option(s), see the last section. They are still registered and keep their stored values until the clean-up phase (#237).
+**Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
-## Connections (`connections`, 48)
+## Connections (`connections`, 40)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
 | `presshub_ai_provider` | Active AI provider | string |  | ai / providers | not shown on screen, was: AI Provider |
-| `presshub_ai_api_key` | Legacy API key | string |  | ai / providers | not shown on screen, secret, masked, was: API Key |
-| `presshub_ai_remove_api_key` | Remove api key | boolean |  | ai / providers | not shown on screen, removes `presshub_ai_api_key` |
 | `presshub_ai_remove_google_cloud_api_key` | Remove google cloud api key | boolean |  | ai / advanced | not shown on screen, removes `presshub_ai_google_cloud_api_key` |
 | `presshub_ai_remove_github_token` | Remove github token | boolean |  | ai / advanced | not shown on screen, removes `presshub_ai_github_token` |
 | `presshub_ai_model_openai` | OpenAI model (legacy) | string |  | ai / providers | not shown on screen, was: Model (Openai) |
@@ -49,8 +47,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_google_cloud_api_key` | Google Cloud API Key (Imagen/TTS) | string |  | ai / advanced | secret, masked |
 | `presshub_ai_gcloud_project_id` | Google Cloud Project ID (Imagen) | string |  | ai / advanced |  |
 | `presshub_ai_imagen_region` | Imagen Region | string |  | ai / advanced |  |
-| `presshub_ai_briefing_tts_api_key` | Speech Generation API Key (Google AI Studio / Gemini) | string |  | ai / briefing | secret, masked |
-| `presshub_ai_remove_briefing_tts_api_key` | Remove briefing tts api key | boolean |  | ai / briefing | not shown on screen, removes `presshub_ai_briefing_tts_api_key` |
 | `presshub_ai_press_inbox_host` | Mail server (IMAP host) | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
 | `presshub_ai_press_inbox_port` | Mail server port | string | port | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Port |
 | `presshub_ai_press_inbox_encryption` | Mail server encryption | string |  | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Incoming Mail Server (IMAP) |
@@ -59,7 +55,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_press_inbox_password` | Mailbox Password | string |  | ai / briefing | secret, masked, needs `presshub_ai_press_inbox_enabled` on |
 | `presshub_ai_remove_press_inbox_password` | Remove press inbox password | string |  | ai / briefing | not shown on screen, removes `presshub_ai_press_inbox_password` |
 | `presshub_ai_press_inbox_timeout` | Mail server timeout (s) | string | s | ai / briefing | needs `presshub_ai_press_inbox_enabled` on, was: Inbox Limits |
-| `presshub_social_github_token` | GitHub Personal Access Token (Auto-Updates) | string |  | social / general | not shown on screen, secret, masked, **unused** |
 | `presshub_social_worker_mode` | Worker Connection Mode | string |  | social / worker |  |
 | `presshub_social_worker_url` | Worker Service Endpoint | string |  | social / worker |  |
 | `presshub_social_worker_secret` | Worker Secret Token | string |  | social / worker | secret, masked |
@@ -68,10 +63,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_meta_access_token` | Meta Page Access Token | string |  | social / credentials | secret, masked |
 | `presshub_social_instagram_account_id` | Instagram Account ID | string |  | social / credentials |  |
 | `presshub_social_twitter_bearer_token` | X bearer token | string |  | social / credentials | secret, masked, was: Twitter Bearer Token |
-| `presshub_social_twitter_api_key` | X API key (OAuth1) | string |  | social / credentials | not shown on screen, secret, masked, **unused**, was: Twitter API Key |
-| `presshub_social_twitter_api_secret` | X API secret (OAuth1) | string |  | social / credentials | not shown on screen, secret, masked, **unused**, was: Twitter API Secret |
 | `presshub_social_twitter_access_token` | X access token | string |  | social / credentials | secret, masked, was: Twitter Access Token |
-| `presshub_social_twitter_access_secret` | X access secret (OAuth1) | string |  | social / credentials | not shown on screen, secret, masked, **unused**, was: Twitter Access Secret |
 | `presshub_social_tiktok_access_token` | TikTok Access Token | string |  | social / credentials | secret, masked |
 | `presshub_social_tiktok_open_id` | TikTok Creator Open ID | string |  | social / credentials |  |
 
@@ -138,7 +130,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_editor_email` | Editor Notification Email | string |  | ai / coauthor |  |
 | `presshub_ai_qa_article_prompt` | Article QA Review Prompt Template | string |  | ai / coauthor |  |
 
-## Daily Briefing (`daily-briefing`, 78)
+## Daily Briefing (`daily-briefing`, 75)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -205,9 +197,6 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_podcast_include_text` | Include transcript in podcast post | integer |  | ai / briefing | checkbox, was: Include Transcript in Podcast Post |
 | `presshub_ai_briefing_podcast_status` | Podcast Post Status | string |  | ai / briefing |  |
 | `presshub_ai_briefing_text_prompt` | Curator System Prompt | string |  | ai / briefing |  |
-| `presshub_ai_briefing_podcast_prompt_1` | Podcast Dialogue System Prompt (1 Host) | string |  | ai / briefing | not shown on screen |
-| `presshub_ai_briefing_podcast_prompt_2` | Podcast Dialogue System Prompt (2 Hosts) | string |  | ai / briefing | not shown on screen |
-| `presshub_ai_briefing_podcast_prompt_3` | Podcast Dialogue System Prompt (3 Hosts) | string |  | ai / briefing | not shown on screen |
 | `presshub_ai_qa_briefing_prompt` | Daily Briefing QA Review Prompt Template | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_style` | Active Dialogue Style | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_prompt_1_default_greek_chat` | Briefing podcast prompt 1 default greek chat | string |  | ai / briefing |  |
@@ -432,9 +421,23 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 
 ## Scheduled for removal
 
-| Option | Page / tab | Why it is unused |
+None.
+
+## Removed in 2.45.0 and 2.46.0 (#237)
+
+Deleted on the first admin request after the upgrade, after a copy of all settings (no secrets) was saved; the report is on PressHub → Usage & logs. Reading one fires `_doing_it_wrong()` for one release.
+
+| Option | Removed in | Evidence it was unused |
 |---|---|---|
-| `presshub_social_github_token` | social / general | Plugin updates use the AI GitHub token (presshub_ai_github_token); get_github_token() in Social storage is never called. |
-| `presshub_social_twitter_api_key` | social / credentials | X OAuth1 consumer key: no code reads it. Posting to X uses the bearer token or the worker. |
-| `presshub_social_twitter_api_secret` | social / credentials | X OAuth1 consumer secret: no code reads it. |
-| `presshub_social_twitter_access_secret` | social / credentials | X OAuth1 access token secret: no code reads it. |
+| `presshub_social_github_token` | 2.45.0 | Plugin updates read `presshub_ai_github_token` only; `get_github_token()` in Social storage had no caller. On upgrade the value is copied into `presshub_ai_github_token` when that one is empty. |
+| `presshub_social_twitter_api_key` | 2.45.0 | No code read the X OAuth1 consumer key, consumer secret or access secret; posting to X uses the bearer token, the access token or the worker. |
+| `presshub_social_twitter_api_secret` | 2.45.0 | No code read the X OAuth1 consumer key, consumer secret or access secret; posting to X uses the bearer token, the access token or the worker. |
+| `presshub_social_twitter_access_secret` | 2.45.0 | No code read the X OAuth1 consumer key, consumer secret or access secret; posting to X uses the bearer token, the access token or the worker. |
+| `presshub_ai_briefing_podcast_prompt_1` | 2.45.0 | `resolve_podcast_prompt()` reads only the per-style options (`…_prompt_N_<style>`); the bare names were used as a prefix string, never read. Not shown on any section since #246. |
+| `presshub_ai_briefing_podcast_prompt_2` | 2.45.0 | `resolve_podcast_prompt()` reads only the per-style options (`…_prompt_N_<style>`); the bare names were used as a prefix string, never read. Not shown on any section since #246. |
+| `presshub_ai_briefing_podcast_prompt_3` | 2.45.0 | `resolve_podcast_prompt()` reads only the per-style options (`…_prompt_N_<style>`); the bare names were used as a prefix string, never read. Not shown on any section since #246. |
+| `presshub_ai_api_key` | 2.46.0 | Superseded by the per-provider keys in Connections. Read only as a fallback when a provider record had no key; on presshub.cy it was the same key as the main Gemini provider. On upgrade it is copied into a provider of the `presshub_ai_provider` type when none of that type has a key; a different key is kept unread for one release. |
+| `presshub_ai_remove_api_key` | 2.46.0 | The "Remove stored key" flag of the key above. |
+| `presshub_ai_gemini_api_key` | 2.46.0 | Never registered or shown; read only as a fallback after the Gemini provider record. Same upgrade rule (copied into the Gemini provider when it has no key). |
+| `presshub_ai_briefing_tts_api_key` | 2.46.0 | Speech resolves the provider chosen for Speech in AI models first (`resolve_gemini_api_key()`), then any Gemini provider; the separate key was a later fallback. On presshub.cy it was the same key as the "Google Gemini (3.8 Speech)" provider. Same upgrade rule. |
+| `presshub_ai_remove_briefing_tts_api_key` | 2.46.0 | The "Remove stored key" flag of the key above. |

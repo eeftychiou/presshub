@@ -661,7 +661,7 @@ class DailyBriefingAdminTest
         self::reset_world();
         $GLOBALS['NONCE_VALID'] = true;
         $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts' ];
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key'] = 'test-gemini-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-gemini-key', [ 'gemini' ] );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model'] = 'gemini-2.5-flash-preview-tts';
         $_POST['date']   = $test_date;
         $_POST['script'] = "[Μαρία]: Καλημέρα!\n[Νίκος]: Καλημέρα!";

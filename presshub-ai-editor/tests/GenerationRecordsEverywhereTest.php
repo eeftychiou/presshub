@@ -592,8 +592,10 @@ $titles = [];
 if ( ! function_exists( 'add_settings_field_titles_probe' ) ) {
     function add_settings_field_titles_probe() {}
 }
+// #237: the rows are printed by the Site & system renderer, which titles them.
+$src_render = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-settings-render.php' );
 $src_storage = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-settings-storage.php' );
-gre_check( 'settings: both fields are titled "Raw debug dump: …" with distinct labels (#233)', 1 === preg_match( "/add_settings_field\\( 'presshub_ai_debug_prompts', __\\( 'Raw debug dump: prompts'/", $src_storage ) && 1 === preg_match( "/add_settings_field\\( 'presshub_ai_log_tts_payloads', __\\( 'Raw debug dump: TTS payloads'/", $src_storage ) && false === strpos( $src_storage, 'Log AI Prompts & Responses' ) && false === strpos( $src_storage, "'Log TTS Payload Details'" ) );
+gre_check( 'settings: both fields are titled "Raw debug dump: …" with distinct labels (#233)', false !== strpos( $src_render, "esc_html__( 'Raw debug dump: prompts'" ) && false !== strpos( $src_render, "esc_html__( 'Raw debug dump: TTS payloads'" ) && false === strpos( $src_storage . $src_render, 'Log AI Prompts & Responses' ) && false === strpos( $src_storage . $src_render, "'Log TTS Payload Details'" ) );
 $render = new PressHub_AI_Settings_Render();
 ob_start();
 $render->render_debug_prompts_field();

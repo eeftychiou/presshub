@@ -43,7 +43,7 @@ class ProviderErrorLoggingTest
         foreach ( $cases as $provider => $cfg ) {
             foreach ( $modes as $mode ) {
                 $GLOBALS['OPTIONS_STORE'] = [
-                    'presshub_ai_api_key'            => 'k',
+                    'presshub_ai_configured_providers' => presshub_test_provider_keys( 'k' ),
                     'presshub_ai_provider'           => $provider,
                     'presshub_ai_log_level'          => 'DEBUG',
                     'presshub_ai_model_' . $provider => $cfg['model'],

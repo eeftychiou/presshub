@@ -220,7 +220,7 @@ class QAReviewerTest {
         // Case 5: Prompt template selection by context and custom prompt overrides
         // -------------------------------------------------------------
         self::reset_env();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']  = 'mock-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']  = presshub_test_provider_keys( 'mock-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
 
         $last_payload = null;
@@ -272,7 +272,7 @@ class QAReviewerTest {
         // Case 6: 4-Key Scoring Persistence and Libel Risk Clamping
         // -------------------------------------------------------------
         self::reset_env();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']  = 'mock-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']  = presshub_test_provider_keys( 'mock-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
 
         $GLOBALS['CAPTURE_FILTER'] = function( $existing, $req ) {

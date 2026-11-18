@@ -252,7 +252,8 @@ class PressHub_AI_API_Client {
             $legacy_type     = (string) get_option( 'presshub_ai_provider', 'openai' );
             $provider_record = PressHub_AI_Provider_Store::get_default_provider_record( $legacy_type );
             $provider_record['id'] = $legacy_type;
-            $provider_record['api_key'] = (string) get_option( 'presshub_ai_api_key', '' );
+            // #237: the legacy single key is no longer read; keys live in Connections.
+            $provider_record['api_key'] = self::lookup_provider_key_by_type( (string) ( $provider_record['type'] ?? $legacy_type ) );
             $provider_source = 'legacy_fallback:presshub_ai_provider';
         }
 
@@ -263,14 +264,12 @@ class PressHub_AI_API_Client {
         $headers     = $provider_record['headers'] ?? [];
         $api_key     = $provider_record['api_key'] ?? '';
 
-        // API Key fallback from legacy options if empty
+        // API key fallback (#237: only Connections; the legacy key options are not read).
         if ( empty( $api_key ) ) {
-            if ( 'gemini' === $type ) {
-                $api_key = (string) get_option( 'presshub_ai_gemini_api_key', get_option( 'presshub_ai_api_key', '' ) );
-            } elseif ( 'google_cloud_tts' === $type ) {
-                $api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', get_option( 'presshub_ai_briefing_tts_api_key', '' ) );
+            if ( 'google_cloud_tts' === $type ) {
+                $api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
             } else {
-                $api_key = (string) get_option( 'presshub_ai_api_key', '' );
+                $api_key = self::lookup_provider_key_by_type( (string) $type );
             }
         }
 
@@ -470,13 +469,12 @@ class PressHub_AI_API_Client {
         //   * Fresh installs that have migrated to the Provider Store get
         //     the active provider instead of falling through to defaults.
         //   * Existing installs (and tests) that still configure the legacy
-        //     `presshub_ai_provider` / `presshub_ai_api_key` options keep
+        //     `presshub_ai_provider` option keep
         //     their existing behavior — we never silently override an
         //     operator's existing configuration.
         if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
             $has_legacy_provider = (bool) get_option( 'presshub_ai_provider', '' );
-            $has_legacy_api_key  = (bool) get_option( 'presshub_ai_api_key', '' );
-            if ( ! $has_legacy_provider && ! $has_legacy_api_key ) {
+            if ( ! $has_legacy_provider ) {
                 $enabled = PressHub_AI_Provider_Store::get_all( true );
                 if ( ! empty( $enabled ) && is_array( $enabled ) ) {
                     $first_prov = $enabled[0];
@@ -507,15 +505,9 @@ class PressHub_AI_API_Client {
                     }
                     if ( empty( $this->google_cloud_api_key ) ) {
                         $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-                        if ( empty( $this->google_cloud_api_key ) ) {
-                            $this->google_cloud_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-                        }
                     }
                     if ( empty( $this->briefing_tts_api_key ) ) {
-                        $this->briefing_tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-                        if ( empty( $this->briefing_tts_api_key ) ) {
-                            $this->briefing_tts_api_key = $this->gemini_api_key;
-                        }
+                        $this->briefing_tts_api_key = $this->gemini_api_key;
                     }
                     return;
                 }
@@ -537,20 +529,11 @@ class PressHub_AI_API_Client {
             $this->model_source = 'class_defaults:PressHub_AI_Provider_Defaults';
         }
 
-        $this->api_key = get_option( 'presshub_ai_api_key' );
+        // #237: keys come from Connections only (the provider of this type).
+        $this->api_key              = self::lookup_provider_key_by_type( (string) $this->provider );
         $this->google_cloud_api_key = get_option( 'presshub_ai_google_cloud_api_key' );
-
-        $gemini_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-        if ( empty( $gemini_key ) ) {
-            $gemini_key = (string) get_option( 'presshub_ai_api_key', '' );
-        }
-        $this->gemini_api_key = $gemini_key;
-
-        $briefing_tts_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-        if ( empty( $briefing_tts_key ) ) {
-            $briefing_tts_key = $this->gemini_api_key;
-        }
-        $this->briefing_tts_api_key = $briefing_tts_key;
+        $this->gemini_api_key       = self::lookup_provider_key_by_type( 'gemini' );
+        $this->briefing_tts_api_key = $this->gemini_api_key;
 
         $this->model       = $this->resolve_model( $this->provider );
         $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $this->provider, PressHub_AI_Provider_Defaults::default_temperature() );
@@ -659,27 +642,12 @@ class PressHub_AI_API_Client {
         }
         if ( empty( $this->google_cloud_api_key ) ) {
             $this->google_cloud_api_key = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-            if ( empty( $this->google_cloud_api_key ) ) {
-                $this->google_cloud_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-            }
         }
         if ( empty( $this->gemini_api_key ) ) {
-            $gemini_key = self::lookup_provider_key_by_type( 'gemini' );
-            if ( '' !== $gemini_key ) {
-                $this->gemini_api_key = $gemini_key;
-            }
-        }
-        if ( empty( $this->gemini_api_key ) ) {
-            $this->gemini_api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-            if ( empty( $this->gemini_api_key ) ) {
-                $this->gemini_api_key = (string) get_option( 'presshub_ai_api_key', '' );
-            }
+            $this->gemini_api_key = self::lookup_provider_key_by_type( 'gemini' );
         }
         if ( empty( $this->briefing_tts_api_key ) ) {
-            $this->briefing_tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-            if ( empty( $this->briefing_tts_api_key ) ) {
-                $this->briefing_tts_api_key = $this->gemini_api_key;
-            }
+            $this->briefing_tts_api_key = $this->gemini_api_key;
         }
         return $this;
     }
@@ -717,17 +685,10 @@ class PressHub_AI_API_Client {
             }
         }
 
-        // If still empty, fall back to global options.
+        // If still empty, another Connections provider of the same type (#237:
+        // the legacy key options are no longer read).
         if ( empty( $this->api_key ) || false !== strpos( $this->api_key, '•' ) ) {
-            if ( 'gemini' === $this->provider ) {
-                $this->api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
-                if ( empty( $this->api_key ) ) {
-                    $this->api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-                }
-            }
-            if ( empty( $this->api_key ) ) {
-                $this->api_key = (string) get_option( 'presshub_ai_api_key', '' );
-            }
+            $this->api_key = self::lookup_provider_key_by_type( (string) $this->provider );
         }
 
         $this->model           = ! empty( $config['model'] ) ? $config['model'] : ( $config['default_model'] ?? '' );
@@ -958,6 +919,8 @@ class PressHub_AI_API_Client {
                     $provider = 'openai';
                 }
                 $this->provider    = $provider;
+                // #237: no Connections provider of this type, so no key.
+                $this->api_key     = self::lookup_provider_key_by_type( $provider );
                 $this->model       = $this->resolve_model( $provider );
                 $this->temperature = (float) get_option( 'presshub_ai_temperature_' . $provider, PressHub_AI_Provider_Defaults::default_temperature() );
                 $this->max_tokens  = (int) get_option( 'presshub_ai_max_tokens_' . $provider, PressHub_AI_Provider_Defaults::default_max_tokens() );
@@ -2103,17 +2066,11 @@ class PressHub_AI_API_Client {
         } elseif ( ! empty( $provider_record['api_key'] ) ) {
             $tts_api_key = $provider_record['api_key'];
         }
-        if ( empty( $tts_api_key ) && class_exists( 'PressHub_AI_Settings_Storage' ) && method_exists( 'PressHub_AI_Settings_Storage', 'get_briefing_tts_api_key' ) ) {
-            $tts_api_key = (string) PressHub_AI_Settings_Storage::get_briefing_tts_api_key();
-        }
-        if ( empty( $tts_api_key ) ) {
-            $tts_api_key = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-        }
         if ( empty( $tts_api_key ) ) {
             $tts_api_key = ! empty( $this->briefing_tts_api_key ) ? $this->briefing_tts_api_key : $this->gemini_api_key;
         }
         if ( empty( $tts_api_key ) ) {
-            $tts_api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
+            $tts_api_key = self::lookup_provider_key_by_type( 'gemini' );
         }
         return $tts_api_key;
     }
@@ -2530,7 +2487,7 @@ class PressHub_AI_API_Client {
         if ( empty( $tts_api_key ) ) {
             return new WP_Error(
                 'no_gemini_key',
-                __( 'Google AI Studio Gemini API key is missing. Please configure your Gemini Provider or Speech API Key.', 'presshub-ai-editor' ),
+                __( 'Google AI Studio Gemini API key is missing. Add a key to a Gemini provider in Settings → Connections.', 'presshub-ai-editor' ),
                 [
                     'endpoint_masked' => $masked_url,
                     'headers_masked'  => $headers_masked,
@@ -2695,7 +2652,7 @@ class PressHub_AI_API_Client {
         $tts_api_key = $this->resolve_gemini_api_key();
 
         if ( empty( $tts_api_key ) ) {
-            $err_msg = __( 'Google AI Studio Gemini API key is missing. Please configure your Gemini Provider in the AI Providers tab or enter a Speech API Key in Briefing Settings.', 'presshub-ai-editor' );
+            $err_msg = __( 'Google AI Studio Gemini API key is missing. Add a key to a Gemini provider in Settings → Connections.', 'presshub-ai-editor' );
             if ( class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error( '[LogosAI Speech] ' . $err_msg );
             }
@@ -3695,13 +3652,9 @@ class PressHub_AI_API_Client {
             }
         }
 
-        // Fallback to global options if still empty
+        // Another Connections provider of the same type if still empty (#237).
         if ( empty( $api_key ) || false !== strpos( $api_key, '•' ) ) {
-            if ( 'gemini' === $type ) {
-                $api_key = (string) get_option( 'presshub_ai_gemini_api_key', get_option( 'presshub_ai_api_key', '' ) );
-            } else {
-                $api_key = (string) get_option( 'presshub_ai_api_key', '' );
-            }
+            $api_key = self::lookup_provider_key_by_type( (string) $type );
         }
 
         if ( empty( $api_key ) && 'ollama_local' !== $type ) {

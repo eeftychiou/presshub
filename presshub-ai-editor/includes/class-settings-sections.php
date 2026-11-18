@@ -70,10 +70,7 @@ class PressHub_Settings_Sections {
     const KEY_SECTIONS = [
         'presshub_ai_remove_github_token'          => 'connections',
         'presshub_ai_remove_google_cloud_api_key'  => 'connections',
-        'presshub_social_github_token'             => 'connections',
         // #247: every secret is in Connections.
-        'presshub_ai_briefing_tts_api_key'         => 'connections',
-        'presshub_ai_remove_briefing_tts_api_key'  => 'connections',
         // #247: the press inbox login is in Connections; folders and filters stay in Daily Briefing.
         'presshub_ai_press_inbox_host'             => 'connections',
         'presshub_ai_press_inbox_port'             => 'connections',

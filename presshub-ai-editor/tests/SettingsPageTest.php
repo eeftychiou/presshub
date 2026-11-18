@@ -28,133 +28,43 @@ class SettingsPageTest
         $failures = [];
 
         // --- Case 1: sections registered with the expected ids, in order ---
+        // #237: only the sections printed field by field (render_section_with_fields)
+        // register Settings API sections and fields; the others print their own rows.
         self::reset_world();
         $settings = new PressHub_AI_Settings();
         $settings->register_settings();
         $sections    = $GLOBALS['SECTIONS']['presshub-ai'] ?? [];
         $section_ids = array_column( $sections, 'id' );
-        $expected    = [ 'presshub_ai_general', 'presshub_ai_providers', 'presshub_ai_media', 'presshub_ai_rate_limits', 'presshub_ai_logging', 'presshub_ai_briefing', 'presshub_ai_github', 'presshub_ai_social', 'presshub_ai_images' ];
+        $expected    = [ 'presshub_ai_media', 'presshub_ai_github', 'presshub_ai_social' ];
         if ( $section_ids !== $expected ) {
             $failures[] = 'Sections should be registered in order ' . implode( ', ', $expected ) . '; got: ' . implode( ', ', $section_ids );
-        }
-        foreach ( $expected as $section ) {
-            if ( ! in_array( $section, $section_ids, true ) ) {
-                $failures[] = "Missing section: {$section}";
-            }
         }
 
         // --- Case 2: fields land in the right sections ---
         $fields = $GLOBALS['FIELDS']['presshub-ai'] ?? [];
-
-        $general = array_column( $fields['presshub_ai_general'] ?? [], 'id' );
-        if ( ! in_array( 'presshub_ai_provider', $general, true ) ) {
-            $failures[] = 'presshub_ai_provider should be registered in presshub_ai_general; got: ' . implode( ', ', $general );
-        }
-        foreach ( [ 'presshub_ai_qa_enabled', 'presshub_ai_qa_min_score', 'presshub_ai_qa_notify_editor', 'presshub_ai_qa_editor_email', 'presshub_ai_qa_article_prompt' ] as $field ) {
-            if ( ! in_array( $field, $general, true ) ) {
-                $failures[] = "{$field} should be registered in presshub_ai_general; got: " . implode( ', ', $general );
-            }
-        }
-
-        $providers = array_column( $fields['presshub_ai_providers'] ?? [], 'id' );
-        foreach ( [
-            'presshub_ai_api_key',
-            'presshub_ai_model_openai',
-            'presshub_ai_model_anthropic',
-            'presshub_ai_model_gemini',
-            'presshub_ai_temperature_openai',
-            'presshub_ai_temperature_anthropic',
-            'presshub_ai_temperature_gemini',
-            'presshub_ai_max_tokens_openai',
-            'presshub_ai_max_tokens_anthropic',
-            'presshub_ai_max_tokens_gemini',
-            'presshub_ai_timeout_openai',
-            'presshub_ai_timeout_anthropic',
-            'presshub_ai_timeout_gemini',
-            'presshub_ai_openai_org',
-            'presshub_ai_anthropic_version',
-        ] as $field ) {
-            if ( ! in_array( $field, $providers, true ) ) {
-                $failures[] = "{$field} should be registered in presshub_ai_providers; got: " . implode( ', ', $providers );
-            }
+        if ( array_diff( array_keys( $fields ), $expected ) ) {
+            $failures[] = 'No settings fields outside the three printed sections; got: ' . implode( ', ', array_keys( $fields ) );
         }
 
         $github = array_column( $fields['presshub_ai_github'] ?? [], 'id' );
-        if ( ! in_array( 'presshub_ai_github_token', $github, true ) ) {
+        if ( [ 'presshub_ai_github_token' ] !== $github ) {
             $failures[] = 'presshub_ai_github_token should be registered in presshub_ai_github; got: ' . implode( ', ', $github );
         }
 
         $media = array_column( $fields['presshub_ai_media'] ?? [], 'id' );
-        foreach ( [ 'presshub_ai_google_cloud_api_key', 'presshub_ai_gcloud_project_id', 'presshub_ai_imagen_region' ] as $field ) {
-            if ( ! in_array( $field, $media, true ) ) {
-                $failures[] = "{$field} should be registered in presshub_ai_media; got: " . implode( ', ', $media );
-            }
-        }
-
-        $rate = array_column( $fields['presshub_ai_rate_limits'] ?? [], 'id' );
-        foreach ( [ 'presshub_ai_rate_limit_enabled', 'presshub_ai_rate_limit_per_hour', 'presshub_ai_rate_limit_window_seconds', 'presshub_ai_research_retention_days' ] as $field ) {
-            if ( ! in_array( $field, $rate, true ) ) {
-                $failures[] = "{$field} should be registered in presshub_ai_rate_limits; got: " . implode( ', ', $rate );
-            }
-        }
-
-        $logging = array_column( $fields['presshub_ai_logging'] ?? [], 'id' );
-        foreach ( [ 'presshub_ai_log_level', 'presshub_ai_debug_prompts', 'presshub_ai_log_tts_payloads', 'presshub_ai_generation_record_retention_days', 'presshub_ai_log_file_retention_days', 'presshub_ai_token_log_retention_days', 'presshub_ai_audit_log_retention_days' ] as $field ) {
-            if ( ! in_array( $field, $logging, true ) ) {
-                $failures[] = "{$field} should be registered in presshub_ai_logging; got: " . implode( ', ', $logging );
-            }
+        if ( [ 'presshub_ai_google_cloud_api_key', 'presshub_ai_gcloud_project_id', 'presshub_ai_imagen_region' ] !== $media ) {
+            $failures[] = 'presshub_ai_media should hold the three Google Cloud fields; got: ' . implode( ', ', $media );
         }
 
         $social_fields = array_column( $fields['presshub_ai_social'] ?? [], 'id' );
-        foreach ( [ 'presshub_ai_social_meta_enabled', 'presshub_ai_social_meta_all_posts' ] as $field ) {
-            if ( ! in_array( $field, $social_fields, true ) ) {
-                $failures[] = "{$field} should be registered in presshub_ai_social; got: " . implode( ', ', $social_fields );
-            }
-        }
-
-        $briefing = array_column( $fields['presshub_ai_briefing'] ?? [], 'id' );
-        foreach ( [
-            'presshub_ai_briefing_sources',
-            'presshub_ai_briefing_tts_engine',
-            'presshub_ai_briefing_schedule_enabled',
-            'presshub_ai_briefing_harvest_time',
-            'presshub_ai_briefing_generation_time',
-            'presshub_ai_harvest_time_budget',
-            'presshub_ai_briefing_text_preset',
-            'presshub_ai_briefing_podcast_preset',
-            'presshub_ai_briefing_target_duration',
-            // Issue #90 — host-name fields intentionally hidden from UI.
-            'presshub_ai_briefing_voice_female',
-            'presshub_ai_briefing_voice_male',
-            'presshub_ai_briefing_voice_speed',
-            'presshub_ai_briefing_voice_pitch',
-            'presshub_ai_briefing_tts_style',
-            'presshub_ai_briefing_tts_custom_style',
-            'presshub_ai_briefing_tts_payload_mode',
-            'presshub_ai_briefing_tts_system_instruction',
-            'presshub_ai_briefing_text_category',
-            'presshub_ai_briefing_podcast_category',
-            'presshub_ai_briefing_text_status',
-            'presshub_ai_briefing_podcast_status',
-            'presshub_ai_briefing_featured_image_ids',
-            'presshub_ai_briefing_podcast_include_text',
-            'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt_1',
-            'presshub_ai_briefing_podcast_prompt_2',
-            'presshub_ai_briefing_podcast_prompt_3',
-            'presshub_ai_qa_include_briefings',
-            'presshub_ai_qa_briefing_prompt',
-        ] as $field ) {
-            if ( ! in_array( $field, $briefing, true ) ) {
-                $failures[] = "{$field} should be registered in presshub_ai_briefing; got: " . implode( ', ', $briefing );
-            }
+        if ( [ 'presshub_ai_social_meta_enabled', 'presshub_ai_social_meta_all_posts' ] !== $social_fields ) {
+            $failures[] = 'presshub_ai_social should hold the two metadata fields; got: ' . implode( ', ', $social_fields );
         }
 
         // --- Case 3: every registered option has a callable sanitize callback ---
         $registered = $GLOBALS['REGISTERED_SETTINGS'] ?? [];
         $expected_options = [
             'presshub_ai_provider',
-            'presshub_ai_api_key',
             'presshub_ai_openai_org',
             'presshub_ai_anthropic_version',
             'presshub_ai_github_token',
@@ -190,11 +100,8 @@ class SettingsPageTest
             'presshub_ai_audit_log_retention_days',
             'presshub_ai_social_meta_enabled',
             'presshub_ai_social_meta_all_posts',
-            'presshub_ai_remove_api_key',
             'presshub_ai_remove_google_cloud_api_key',
             'presshub_ai_remove_github_token',
-            'presshub_ai_briefing_tts_api_key',
-            'presshub_ai_remove_briefing_tts_api_key',
             'presshub_ai_briefing_tts_engine',
             'presshub_ai_briefing_tts_model',
             'presshub_ai_briefing_tts_timeout',
@@ -313,9 +220,6 @@ class SettingsPageTest
             'presshub_ai_seo_review_enabled',
             'presshub_ai_briefing_podcast_include_text',
             'presshub_ai_briefing_text_prompt',
-            'presshub_ai_briefing_podcast_prompt_1',
-            'presshub_ai_briefing_podcast_prompt_2',
-            'presshub_ai_briefing_podcast_prompt_3',
             // Issue #90 — 11 new options (1 style selector + 9 per-style prompt overrides + 1 hidden host-name that we kept for legacy readers).
             'presshub_ai_briefing_podcast_style',
             'presshub_ai_briefing_podcast_prompt_1_default_greek_chat',
@@ -533,10 +437,10 @@ class SettingsPageTest
 
         // --- Case 7: masked API-key display (P4) ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-1234567890';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-1234567890';
         $settings = new PressHub_AI_Settings();
         ob_start();
-        $settings->render_api_key_field();
+        $settings->render_google_cloud_api_key_field();
         $html = ob_get_clean();
         if ( false === strpos( $html, '••••7890' ) ) {
             $failures[] = 'API key field should display the masked key (last 4 chars); got: ' . $html;
@@ -582,12 +486,10 @@ class SettingsPageTest
 
         // --- Case 9: "Remove stored key" checkboxes + retention field render ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']           = '«redacted:sk-…»';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_github_token']      = '«redacted:ghp-…»';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = '«redacted:gc-…»';
         $settings = new PressHub_AI_Settings();
         foreach ( [
-            'render_api_key_field'           => 'presshub_ai_remove_api_key',
             'render_github_token_field'      => 'presshub_ai_remove_github_token',
             'render_google_cloud_api_key_field' => 'presshub_ai_remove_google_cloud_api_key',
         ] as $renderer => $remove_flag ) {
@@ -598,14 +500,14 @@ class SettingsPageTest
                 $failures[] = "{$renderer} should render the {$remove_flag} checkbox; got: " . $html;
             }
         }
-        // Without a saved key the remove checkbox must not render.
+        // Without a saved key no masked value is shown.
         self::reset_world();
         $settings = new PressHub_AI_Settings();
         ob_start();
-        $settings->render_api_key_field();
+        $settings->render_google_cloud_api_key_field();
         $html = ob_get_clean();
-        if ( false !== strpos( $html, 'presshub_ai_remove_api_key' ) ) {
-            $failures[] = 'render_api_key_field() must not offer "Remove stored key" when no key is saved.';
+        if ( false !== strpos( $html, '••••' ) ) {
+            $failures[] = 'render_google_cloud_api_key_field() must not show a masked key when no key is saved.';
         }
         // Retention field renders with the default value and its option id.
         self::reset_world();
