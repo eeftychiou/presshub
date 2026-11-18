@@ -321,7 +321,9 @@ $GLOBALS['UNSCHEDULED_EVENTS'] = [];
 presshub_ai_disarm_synthesis_watchdog( '2026-11-13', 'morning' );
 trl_check( 'watchdog: disarm without a queued retry does nothing', [] === $GLOBALS['UNSCHEDULED_EVENTS'] );
 
-$src = (string) file_get_contents( dirname( __DIR__ ) . '/presshub-ai-editor.php' );
+// Normalise CRLF so the multi-line source search below also passes on a
+// Windows checkout with core.autocrlf=true.
+$src = str_replace( "\r\n", "\n", (string) file_get_contents( dirname( __DIR__ ) . '/presshub-ai-editor.php' ) );
 $step_fn = substr( $src, (int) strpos( $src, 'function presshub_ai_run_podcast_audio_step(' ) );
 $arm     = strpos( $step_fn, 'presshub_ai_arm_synthesis_watchdog( $date, $edition );' );
 $disarm  = strpos( $step_fn, 'presshub_ai_disarm_synthesis_watchdog( $date, $edition );', (int) $arm );
