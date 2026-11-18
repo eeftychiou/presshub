@@ -30,7 +30,7 @@ class PressHub_Social_Queue_Admin {
     public static function render_page(): void {
         $cap = PressHub_Capabilities::social();
         if ( ! current_user_can( $cap ) ) {
-            wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'presshub-social-autopost' ) );
+            wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'presshub-ai-editor' ) );
         }
 
         $current_status   = isset( $_GET['status'] ) ? sanitize_key( wp_unslash( $_GET['status'] ) ) : '';
@@ -58,30 +58,30 @@ class PressHub_Social_Queue_Admin {
         <div class="wrap presshub-social-admin-wrap" data-nonce="<?php echo esc_attr( $ajax_nonce ); ?>">
             <h1 class="wp-heading-inline">
                 <span class="dashicons dashicons-share" style="font-size:28px; width:28px; height:28px; vertical-align:middle; margin-right:6px;"></span>
-                <?php esc_html_e( 'PressHub — Social Queue', 'presshub-social-autopost' ); ?>
+                <?php esc_html_e( 'PressHub — Social Queue', 'presshub-ai-editor' ); ?>
             </h1>
 
             <!-- KPI Cards Section -->
             <div class="presshub-kpi-grid">
                 <div class="presshub-kpi-card kpi-total">
                     <span class="kpi-number"><?php echo esc_html( number_format_i18n( $stats['total'] ) ); ?></span>
-                    <span class="kpi-label"><?php esc_html_e( 'Total Jobs', 'presshub-social-autopost' ); ?></span>
+                    <span class="kpi-label"><?php esc_html_e( 'Total Jobs', 'presshub-ai-editor' ); ?></span>
                 </div>
                 <div class="presshub-kpi-card kpi-pending">
                     <span class="kpi-number"><?php echo esc_html( number_format_i18n( $stats['pending'] ) ); ?></span>
-                    <span class="kpi-label"><?php esc_html_e( 'Pending', 'presshub-social-autopost' ); ?></span>
+                    <span class="kpi-label"><?php esc_html_e( 'Pending', 'presshub-ai-editor' ); ?></span>
                 </div>
                 <div class="presshub-kpi-card kpi-processing">
                     <span class="kpi-number"><?php echo esc_html( number_format_i18n( $stats['processing'] ) ); ?></span>
-                    <span class="kpi-label"><?php esc_html_e( 'Processing', 'presshub-social-autopost' ); ?></span>
+                    <span class="kpi-label"><?php esc_html_e( 'Processing', 'presshub-ai-editor' ); ?></span>
                 </div>
                 <div class="presshub-kpi-card kpi-published">
                     <span class="kpi-number"><?php echo esc_html( number_format_i18n( $stats['published'] ) ); ?></span>
-                    <span class="kpi-label"><?php esc_html_e( 'Published', 'presshub-social-autopost' ); ?></span>
+                    <span class="kpi-label"><?php esc_html_e( 'Published', 'presshub-ai-editor' ); ?></span>
                 </div>
                 <div class="presshub-kpi-card kpi-failed">
                     <span class="kpi-number"><?php echo esc_html( number_format_i18n( $stats['failed'] ) ); ?></span>
-                    <span class="kpi-label"><?php esc_html_e( 'Failed', 'presshub-social-autopost' ); ?></span>
+                    <span class="kpi-label"><?php esc_html_e( 'Failed', 'presshub-ai-editor' ); ?></span>
                 </div>
             </div>
 
@@ -91,32 +91,32 @@ class PressHub_Social_Queue_Admin {
                     <input type="hidden" name="page" value="presshub-social-queue" />
 
                     <select name="platform">
-                        <option value=""><?php esc_html_e( 'All Platforms', 'presshub-social-autopost' ); ?></option>
-                        <option value="twitter" <?php selected( $current_platform, 'twitter' ); ?>><?php esc_html_e( 'Twitter / X', 'presshub-social-autopost' ); ?></option>
-                        <option value="facebook" <?php selected( $current_platform, 'facebook' ); ?>><?php esc_html_e( 'Facebook', 'presshub-social-autopost' ); ?></option>
-                        <option value="instagram" <?php selected( $current_platform, 'instagram' ); ?>><?php esc_html_e( 'Instagram', 'presshub-social-autopost' ); ?></option>
-                        <option value="tiktok" <?php selected( $current_platform, 'tiktok' ); ?>><?php esc_html_e( 'TikTok', 'presshub-social-autopost' ); ?></option>
+                        <option value=""><?php esc_html_e( 'All Platforms', 'presshub-ai-editor' ); ?></option>
+                        <option value="twitter" <?php selected( $current_platform, 'twitter' ); ?>><?php esc_html_e( 'Twitter / X', 'presshub-ai-editor' ); ?></option>
+                        <option value="facebook" <?php selected( $current_platform, 'facebook' ); ?>><?php esc_html_e( 'Facebook', 'presshub-ai-editor' ); ?></option>
+                        <option value="instagram" <?php selected( $current_platform, 'instagram' ); ?>><?php esc_html_e( 'Instagram', 'presshub-ai-editor' ); ?></option>
+                        <option value="tiktok" <?php selected( $current_platform, 'tiktok' ); ?>><?php esc_html_e( 'TikTok', 'presshub-ai-editor' ); ?></option>
                     </select>
 
                     <select name="status">
-                        <option value=""><?php esc_html_e( 'All Statuses', 'presshub-social-autopost' ); ?></option>
-                        <option value="pending" <?php selected( $current_status, 'pending' ); ?>><?php esc_html_e( 'Pending', 'presshub-social-autopost' ); ?></option>
-                        <option value="processing" <?php selected( $current_status, 'processing' ); ?>><?php esc_html_e( 'Processing', 'presshub-social-autopost' ); ?></option>
-                        <option value="published" <?php selected( $current_status, 'published' ); ?>><?php esc_html_e( 'Published', 'presshub-social-autopost' ); ?></option>
-                        <option value="failed" <?php selected( $current_status, 'failed' ); ?>><?php esc_html_e( 'Failed', 'presshub-social-autopost' ); ?></option>
-                        <option value="cancelled" <?php selected( $current_status, 'cancelled' ); ?>><?php esc_html_e( 'Cancelled', 'presshub-social-autopost' ); ?></option>
+                        <option value=""><?php esc_html_e( 'All Statuses', 'presshub-ai-editor' ); ?></option>
+                        <option value="pending" <?php selected( $current_status, 'pending' ); ?>><?php esc_html_e( 'Pending', 'presshub-ai-editor' ); ?></option>
+                        <option value="processing" <?php selected( $current_status, 'processing' ); ?>><?php esc_html_e( 'Processing', 'presshub-ai-editor' ); ?></option>
+                        <option value="published" <?php selected( $current_status, 'published' ); ?>><?php esc_html_e( 'Published', 'presshub-ai-editor' ); ?></option>
+                        <option value="failed" <?php selected( $current_status, 'failed' ); ?>><?php esc_html_e( 'Failed', 'presshub-ai-editor' ); ?></option>
+                        <option value="cancelled" <?php selected( $current_status, 'cancelled' ); ?>><?php esc_html_e( 'Cancelled', 'presshub-ai-editor' ); ?></option>
                     </select>
 
-                    <input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Filter', 'presshub-social-autopost' ); ?>" />
+                    <input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Filter', 'presshub-ai-editor' ); ?>" />
                     <?php if ( ! empty( $current_status ) || ! empty( $current_platform ) ) : ?>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=presshub-social-queue' ) ); ?>" class="button button-link"><?php esc_html_e( 'Reset Filters', 'presshub-social-autopost' ); ?></a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=presshub-social-queue' ) ); ?>" class="button button-link"><?php esc_html_e( 'Reset Filters', 'presshub-ai-editor' ); ?></a>
                     <?php endif; ?>
                 </form>
 
                 <div class="presshub-queue-actions">
                     <button type="button" class="button button-primary" id="btn-process-due-jobs">
                         <span class="dashicons dashicons-controls-play" style="vertical-align:middle;"></span>
-                        <?php esc_html_e( 'Process Due Jobs Now', 'presshub-social-autopost' ); ?>
+                        <?php esc_html_e( 'Process Due Jobs Now', 'presshub-ai-editor' ); ?>
                     </button>
                     <span class="spinner" id="process-due-spinner"></span>
                 </div>
@@ -127,29 +127,30 @@ class PressHub_Social_Queue_Admin {
                 <table class="wp-list-table widefat fixed striped presshub-admin-queue-table">
                     <thead>
                         <tr>
-                            <th style="width: 45px;"><?php esc_html_e( 'ID', 'presshub-social-autopost' ); ?></th>
-                            <th style="width: 130px;"><?php esc_html_e( 'Post Title', 'presshub-social-autopost' ); ?></th>
-                            <th style="width: 85px;"><?php esc_html_e( 'Platform', 'presshub-social-autopost' ); ?></th>
-                            <th style="width: 80px;"><?php esc_html_e( 'Engine', 'presshub-social-autopost' ); ?></th>
-                            <th style="width: 85px;"><?php esc_html_e( 'Status', 'presshub-social-autopost' ); ?></th>
-                            <th style="width: 65px;"><?php esc_html_e( 'Attempts', 'presshub-social-autopost' ); ?></th>
-                            <th><?php esc_html_e( 'Copy Preview', 'presshub-social-autopost' ); ?></th>
-                            <th style="width: 130px;"><?php esc_html_e( 'Scheduled / Dispatched', 'presshub-social-autopost' ); ?></th>
-                            <th style="width: 180px;"><?php esc_html_e( 'Actions / Link', 'presshub-social-autopost' ); ?></th>
+                            <th style="width: 45px;"><?php esc_html_e( 'ID', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 130px;"><?php esc_html_e( 'Post Title', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 85px;"><?php esc_html_e( 'Platform', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 80px;"><?php esc_html_e( 'Engine', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 85px;"><?php esc_html_e( 'Status', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 65px;"><?php esc_html_e( 'Attempts', 'presshub-ai-editor' ); ?></th>
+                            <th><?php esc_html_e( 'Copy Preview', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 130px;"><?php esc_html_e( 'Scheduled / Dispatched', 'presshub-ai-editor' ); ?></th>
+                            <th style="width: 180px;"><?php esc_html_e( 'Actions / Link', 'presshub-ai-editor' ); ?></th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if ( empty( $jobs ) ) : ?>
                             <tr>
                                 <td colspan="9" style="text-align:center; padding: 24px; color: #646970;">
-                                    <?php esc_html_e( 'No social queue jobs match the current criteria.', 'presshub-social-autopost' ); ?>
+                                    <?php esc_html_e( 'No social queue jobs match the current criteria.', 'presshub-ai-editor' ); ?>
                                 </td>
                             </tr>
                         <?php else : ?>
                             <?php foreach ( $jobs as $job ) :
                                 $job_id     = (int) $job['id'];
                                 $post_id    = (int) $job['post_id'];
-                                $post_title = get_the_title( $post_id ) ?: sprintf( __( 'Post #%d', 'presshub-social-autopost' ), $post_id );
+                                // translators: %d: post ID
+                                $post_title = get_the_title( $post_id ) ?: sprintf( __( 'Post #%d', 'presshub-ai-editor' ), $post_id );
                                 $status     = (string) ( $job['status'] ?? 'pending' );
                                 $engine     = (string) ( $job['engine'] ?? 'api' );
                                 $platform   = (string) ( $job['platform'] ?? 'twitter' );
@@ -195,17 +196,17 @@ class PressHub_Social_Queue_Admin {
                                     </td>
                                     <td>
                                         <?php if ( 'published' === $status && ! empty( $job['dispatched_at'] ) ) : ?>
-                                            <small><?php esc_html_e( 'Dispatched:', 'presshub-social-autopost' ); ?></small><br />
+                                            <small><?php esc_html_e( 'Dispatched:', 'presshub-ai-editor' ); ?></small><br />
                                             <code><?php echo esc_html( $job['dispatched_at'] ); ?></code>
                                         <?php else : ?>
-                                            <small><?php esc_html_e( 'Scheduled:', 'presshub-social-autopost' ); ?></small><br />
+                                            <small><?php esc_html_e( 'Scheduled:', 'presshub-ai-editor' ); ?></small><br />
                                             <code><?php echo esc_html( $job['scheduled_at'] ); ?></code>
                                         <?php endif; ?>
                                     </td>
                                     <td class="presshub-actions-cell">
                                         <?php if ( 'published' === $status && ! empty( $job['external_post_url'] ) ) : ?>
-                                            <a href="<?php echo esc_url( $job['external_post_url'] ); ?>" target="_blank" rel="noopener noreferrer" class="button button-small" title="<?php esc_attr_e( 'View live post on platform', 'presshub-social-autopost' ); ?>">
-                                                <?php esc_html_e( 'View ↗', 'presshub-social-autopost' ); ?>
+                                            <a href="<?php echo esc_url( $job['external_post_url'] ); ?>" target="_blank" rel="noopener noreferrer" class="button button-small" title="<?php esc_attr_e( 'View live post on platform', 'presshub-ai-editor' ); ?>">
+                                                <?php esc_html_e( 'View ↗', 'presshub-ai-editor' ); ?>
                                             </a>
                                         <?php endif; ?>
 
@@ -218,9 +219,9 @@ class PressHub_Social_Queue_Admin {
                                             data-status="<?php echo esc_attr( $status ); ?>"
                                             data-post-title="<?php echo esc_attr( $post_title ); ?>"
                                             data-full-copy="<?php echo esc_attr( $job['post_copy'] ); ?>"
-                                            title="<?php esc_attr_e( 'Modify copy and post again as a new job', 'presshub-social-autopost' ); ?>">
+                                            title="<?php esc_attr_e( 'Modify copy and post again as a new job', 'presshub-ai-editor' ); ?>">
                                             <span class="dashicons dashicons-edit"></span>
-                                            <?php esc_html_e( 'Edit / Re-post', 'presshub-social-autopost' ); ?>
+                                            <?php esc_html_e( 'Edit / Re-post', 'presshub-ai-editor' ); ?>
                                         </button>
 
                                         <!-- Regenerate AI Copy Button -->
@@ -228,25 +229,25 @@ class PressHub_Social_Queue_Admin {
                                             data-job-id="<?php echo esc_attr( $job_id ); ?>"
                                             data-post-id="<?php echo esc_attr( $post_id ); ?>"
                                             data-platform="<?php echo esc_attr( $platform ); ?>"
-                                            title="<?php esc_attr_e( 'Regenerate post copy using AI prompts', 'presshub-social-autopost' ); ?>">
+                                            title="<?php esc_attr_e( 'Regenerate post copy using AI prompts', 'presshub-ai-editor' ); ?>">
                                             <span class="dashicons dashicons-update"></span>
-                                            <?php esc_html_e( 'Regen AI', 'presshub-social-autopost' ); ?>
+                                            <?php esc_html_e( 'Regen AI', 'presshub-ai-editor' ); ?>
                                         </button>
 
                                         <?php if ( 'pending' === $status ) : ?>
-                                            <button type="button" class="button button-small button-primary btn-dispatch-now" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Dispatch this job now', 'presshub-social-autopost' ); ?>">
-                                                <?php esc_html_e( 'Dispatch', 'presshub-social-autopost' ); ?>
+                                            <button type="button" class="button button-small button-primary btn-dispatch-now" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Dispatch this job now', 'presshub-ai-editor' ); ?>">
+                                                <?php esc_html_e( 'Dispatch', 'presshub-ai-editor' ); ?>
                                             </button>
-                                            <button type="button" class="button button-small button-link-delete btn-cancel-job" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Cancel scheduled job', 'presshub-social-autopost' ); ?>">
-                                                <?php esc_html_e( 'Cancel', 'presshub-social-autopost' ); ?>
+                                            <button type="button" class="button button-small button-link-delete btn-cancel-job" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Cancel scheduled job', 'presshub-ai-editor' ); ?>">
+                                                <?php esc_html_e( 'Cancel', 'presshub-ai-editor' ); ?>
                                             </button>
                                         <?php endif; ?>
 
                                         <!-- Retry Button: Available for failed, cancelled, and published jobs -->
                                         <?php if ( 'failed' === $status || 'cancelled' === $status || 'published' === $status ) : ?>
-                                            <button type="button" class="button button-small button-secondary btn-retry-job" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Retry or re-post this job to social media', 'presshub-social-autopost' ); ?>">
+                                            <button type="button" class="button button-small button-secondary btn-retry-job" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Retry or re-post this job to social media', 'presshub-ai-editor' ); ?>">
                                                 <span class="dashicons dashicons-controls-repeat"></span>
-                                                <?php esc_html_e( 'Retry', 'presshub-social-autopost' ); ?>
+                                                <?php esc_html_e( 'Retry', 'presshub-ai-editor' ); ?>
                                             </button>
                                         <?php endif; ?>
                                     </td>
@@ -263,24 +264,24 @@ class PressHub_Social_Queue_Admin {
                     <div class="presshub-modal-header">
                         <h3 class="presshub-modal-title">
                             <span class="dashicons dashicons-edit" style="vertical-align:middle; margin-right:4px;"></span>
-                            <?php esc_html_e( 'Modify Social Post Copy & Preview', 'presshub-social-autopost' ); ?>
+                            <?php esc_html_e( 'Modify Social Post Copy & Preview', 'presshub-ai-editor' ); ?>
                         </h3>
-                        <button type="button" class="presshub-modal-close-btn" aria-label="<?php esc_attr_e( 'Close', 'presshub-social-autopost' ); ?>">&times;</button>
+                        <button type="button" class="presshub-modal-close-btn" aria-label="<?php esc_attr_e( 'Close', 'presshub-ai-editor' ); ?>">&times;</button>
                     </div>
                     <div class="presshub-modal-body">
                         <div class="presshub-modal-details-grid">
-                            <div><strong><?php esc_html_e( 'Job ID:', 'presshub-social-autopost' ); ?></strong> #<span id="modal-job-id-text"></span></div>
-                            <div><strong><?php esc_html_e( 'Platform:', 'presshub-social-autopost' ); ?></strong> <span id="modal-platform-text" class="platform-name"></span></div>
-                            <div><strong><?php esc_html_e( 'Status:', 'presshub-social-autopost' ); ?></strong> <span id="modal-status-text"></span></div>
+                            <div><strong><?php esc_html_e( 'Job ID:', 'presshub-ai-editor' ); ?></strong> #<span id="modal-job-id-text"></span></div>
+                            <div><strong><?php esc_html_e( 'Platform:', 'presshub-ai-editor' ); ?></strong> <span id="modal-platform-text" class="platform-name"></span></div>
+                            <div><strong><?php esc_html_e( 'Status:', 'presshub-ai-editor' ); ?></strong> <span id="modal-status-text"></span></div>
                             <div style="grid-column: 1 / -1;">
-                                <strong><?php esc_html_e( 'Article:', 'presshub-social-autopost' ); ?></strong> <span id="modal-title-text"></span>
+                                <strong><?php esc_html_e( 'Article:', 'presshub-ai-editor' ); ?></strong> <span id="modal-title-text"></span>
                             </div>
                         </div>
 
                         <div class="presshub-modal-editor-section">
                             <div class="presshub-modal-editor-header">
-                                <label for="modal-post-copy-input"><strong><?php esc_html_e( 'Post Copy / Preview:', 'presshub-social-autopost' ); ?></strong></label>
-                                <span class="presshub-modal-char-count"><span id="modal-char-counter">0</span> <?php esc_html_e( 'chars', 'presshub-social-autopost' ); ?></span>
+                                <label for="modal-post-copy-input"><strong><?php esc_html_e( 'Post Copy / Preview:', 'presshub-ai-editor' ); ?></strong></label>
+                                <span class="presshub-modal-char-count"><span id="modal-char-counter">0</span> <?php esc_html_e( 'chars', 'presshub-ai-editor' ); ?></span>
                             </div>
                             <textarea id="modal-post-copy-input" rows="7" class="widefat" style="font-size:13px; line-height:1.5; font-family:inherit;"></textarea>
                         </div>
@@ -291,16 +292,16 @@ class PressHub_Social_Queue_Admin {
                         <div class="presshub-modal-footer-left">
                             <button type="button" class="button button-secondary" id="modal-btn-regen-ai">
                                 <span class="dashicons dashicons-update" style="vertical-align:middle;"></span>
-                                <?php esc_html_e( 'Regenerate with AI', 'presshub-social-autopost' ); ?>
+                                <?php esc_html_e( 'Regenerate with AI', 'presshub-ai-editor' ); ?>
                             </button>
                         </div>
                         <div class="presshub-modal-footer-right">
-                            <button type="button" class="button button-secondary" id="modal-btn-save-existing" title="<?php esc_attr_e( 'Save changes to this existing job in the queue', 'presshub-social-autopost' ); ?>">
-                                <?php esc_html_e( 'Save to this Job', 'presshub-social-autopost' ); ?>
+                            <button type="button" class="button button-secondary" id="modal-btn-save-existing" title="<?php esc_attr_e( 'Save changes to this existing job in the queue', 'presshub-ai-editor' ); ?>">
+                                <?php esc_html_e( 'Save to this Job', 'presshub-ai-editor' ); ?>
                             </button>
-                            <button type="button" class="button button-primary" id="modal-btn-repost-new" title="<?php esc_attr_e( 'Create a new job with this modified copy and post it to social media', 'presshub-social-autopost' ); ?>">
+                            <button type="button" class="button button-primary" id="modal-btn-repost-new" title="<?php esc_attr_e( 'Create a new job with this modified copy and post it to social media', 'presshub-ai-editor' ); ?>">
                                 <span class="dashicons dashicons-share-alt" style="vertical-align:middle;"></span>
-                                <?php esc_html_e( 'Post Again as New Job', 'presshub-social-autopost' ); ?>
+                                <?php esc_html_e( 'Post Again as New Job', 'presshub-ai-editor' ); ?>
                             </button>
                         </div>
                     </div>

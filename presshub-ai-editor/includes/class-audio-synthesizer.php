@@ -310,6 +310,7 @@ class PressHub_AI_Audio_Synthesizer {
         if ( $code < 200 || $code >= 300 || ! is_array( $res_body ) ) {
             $msg = is_array( $res_body ) && isset( $res_body['error']['message'] )
                 ? $res_body['error']['message']
+                // translators: %d: HTTP status code
                 : sprintf( __( 'Google Gemini API returned HTTP %d while listing TTS models', 'presshub-ai-editor' ), $code );
             return new WP_Error( 'api_error', $msg );
         }
@@ -1692,7 +1693,8 @@ class PressHub_AI_Audio_Synthesizer {
             if ( empty( $stored ) ) {
                 return new WP_Error(
                     'no_script',
-                    sprintf( __( 'No podcast script found for date: %s (%s edition). Please generate a script first.', 'presshub-ai-editor' ), $date, $edition )
+                    // translators: %1$s: date, %2$s: edition
+                    sprintf( __( 'No podcast script found for date: %1$s (%2$s edition). Please generate a script first.', 'presshub-ai-editor' ), $date, $edition )
                 );
             }
             $script = $stored;

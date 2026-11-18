@@ -69,7 +69,7 @@ class PressHub_Social_REST_Controller {
         if ( '' === trim( $expected ) ) {
             return new WP_Error(
                 'missing_worker_secret',
-                __( 'Worker secret is not configured in WordPress settings.', 'presshub-social-autopost' ),
+                __( 'Worker secret is not configured in WordPress settings.', 'presshub-ai-editor' ),
                 [ 'status' => 401 ]
             );
         }
@@ -79,7 +79,7 @@ class PressHub_Social_REST_Controller {
         if ( '' === $provided || ! hash_equals( $expected, $provided ) ) {
             return new WP_Error(
                 'invalid_worker_secret',
-                __( 'Invalid worker secret.', 'presshub-social-autopost' ),
+                __( 'Invalid worker secret.', 'presshub-ai-editor' ),
                 [ 'status' => 403 ]
             );
         }
@@ -437,7 +437,7 @@ class PressHub_Social_REST_Controller {
         if ( $job_id <= 0 ) {
             return new WP_Error(
                 'invalid_job_id',
-                __( 'A valid positive job_id is required.', 'presshub-social-autopost' ),
+                __( 'A valid positive job_id is required.', 'presshub-ai-editor' ),
                 [ 'status' => 400 ]
             );
         }
@@ -449,7 +449,7 @@ class PressHub_Social_REST_Controller {
             if ( ! $is_test ) {
                 return new WP_Error(
                     'not_a_test_render',
-                    __( 'Only a TikTok short test render can be completed as test_rendered.', 'presshub-social-autopost' ),
+                    __( 'Only a TikTok short test render can be completed as test_rendered.', 'presshub-ai-editor' ),
                     [ 'status' => 400 ]
                 );
             }

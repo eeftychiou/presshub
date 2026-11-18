@@ -1528,6 +1528,7 @@ class PressHub_AI_News_Curator {
         if ( empty( $snapshot ) || empty( $snapshot['articles'] ) || ! is_array( $snapshot['articles'] ) ) {
             return new WP_Error(
                 'no_articles',
+                // translators: %s: date
                 sprintf( __( 'No harvested articles found for date: %s', 'presshub-ai-editor' ), $date )
             );
         }

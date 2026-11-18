@@ -280,7 +280,8 @@ class PressHub_Social_Dispatcher {
     public static function dispatch_job( int $job_id ): bool|WP_Error {
         $job = PressHub_Social_Queue::get_job( $job_id );
         if ( ! $job ) {
-            return new WP_Error( 'job_not_found', sprintf( __( 'Social job #%d not found.', 'presshub-social-autopost' ), $job_id ) );
+            // translators: %d: queue job ID
+            return new WP_Error( 'job_not_found', sprintf( __( 'Social job #%d not found.', 'presshub-ai-editor' ), $job_id ) );
         }
 
         // If already published, do not re-dispatch
@@ -297,7 +298,7 @@ class PressHub_Social_Dispatcher {
         $current_copy = (string) ( $job['post_copy'] ?? '' );
         if ( self::is_failed_copy_placeholder( $current_copy ) ) {
             if ( $post_id <= 0 || ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
-                $error = new WP_Error( 'failed_copy_placeholder', __( 'Cannot dispatch job with an AI copy generation failure placeholder.', 'presshub-social-autopost' ) );
+                $error = new WP_Error( 'failed_copy_placeholder', __( 'Cannot dispatch job with an AI copy generation failure placeholder.', 'presshub-ai-editor' ) );
                 PressHub_Social_Queue::mark_failed( $job_id, $error->get_error_message(), [ 'error_code' => 'failed_copy_placeholder' ] );
                 return $error;
             }
@@ -309,7 +310,7 @@ class PressHub_Social_Dispatcher {
             }
             $regenerated_str = trim( (string) $regenerated );
             if ( '' === $regenerated_str || self::is_failed_copy_placeholder( $regenerated_str ) ) {
-                $error = new WP_Error( 'failed_copy_placeholder', __( 'Regenerated copy is empty or invalid.', 'presshub-social-autopost' ) );
+                $error = new WP_Error( 'failed_copy_placeholder', __( 'Regenerated copy is empty or invalid.', 'presshub-ai-editor' ) );
                 PressHub_Social_Queue::mark_failed( $job_id, $error->get_error_message(), [ 'error_code' => 'failed_copy_placeholder' ] );
                 return $error;
             }
@@ -323,7 +324,7 @@ class PressHub_Social_Dispatcher {
             PressHub_Social_Post_Images::schedule_prepare( $post_id );
             return new WP_Error(
                 PressHub_Social_Post_Images::PENDING_CODE,
-                __( 'Job is waiting for its AI images and will be sent once they are ready.', 'presshub-social-autopost' )
+                __( 'Job is waiting for its AI images and will be sent once they are ready.', 'presshub-ai-editor' )
             );
         }
         $job = PressHub_Social_Queue::get_job( $job_id ) ?? $job;
@@ -342,7 +343,7 @@ class PressHub_Social_Dispatcher {
             ] );
             return new WP_Error(
                 'pull_mode_queued',
-                __( 'Job is queued in Pull Mode and will be picked up automatically by your local worker on its next poll.', 'presshub-social-autopost' )
+                __( 'Job is queued in Pull Mode and will be picked up automatically by your local worker on its next poll.', 'presshub-ai-editor' )
             );
         }
 

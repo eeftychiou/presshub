@@ -52,7 +52,7 @@ class PressHub_Social_Meta_API_Client {
             }
             return new WP_Error(
                 'failed_copy_placeholder',
-                __( 'Refusing to publish AI copy generation error placeholder.', 'presshub-social-autopost' )
+                __( 'Refusing to publish AI copy generation error placeholder.', 'presshub-ai-editor' )
             );
         }
 
@@ -63,7 +63,8 @@ class PressHub_Social_Meta_API_Client {
             'instagram' => self::publish_instagram( $job ),
             'twitter'   => self::publish_twitter( $job ),
             'tiktok'    => self::publish_tiktok( $job ),
-            default     => new WP_Error( 'unsupported_platform', sprintf( __( 'Unsupported platform for API client: %s', 'presshub-social-autopost' ), $platform ) ),
+            // translators: %s: social platform name
+            default     => new WP_Error( 'unsupported_platform', sprintf( __( 'Unsupported platform for API client: %s', 'presshub-ai-editor' ), $platform ) ),
         };
     }
 
@@ -88,7 +89,7 @@ class PressHub_Social_Meta_API_Client {
             }
             return new WP_Error(
                 'missing_facebook_credentials',
-                __( 'Facebook credentials not configured. Please set Meta Page ID and Access Token in Settings.', 'presshub-social-autopost' )
+                __( 'Facebook credentials not configured. Please set Meta Page ID and Access Token in Settings.', 'presshub-ai-editor' )
             );
         }
 
@@ -333,7 +334,7 @@ class PressHub_Social_Meta_API_Client {
             }
             return new WP_Error(
                 'missing_instagram_credentials',
-                __( 'Instagram credentials not configured. Please set Instagram Account ID and Meta Access Token in Settings.', 'presshub-social-autopost' )
+                __( 'Instagram credentials not configured. Please set Instagram Account ID and Meta Access Token in Settings.', 'presshub-ai-editor' )
             );
         }
 
@@ -344,7 +345,7 @@ class PressHub_Social_Meta_API_Client {
             }
             return new WP_Error(
                 'missing_instagram_media',
-                __( 'Instagram requires a public media URL (image or video). None was provided.', 'presshub-social-autopost' )
+                __( 'Instagram requires a public media URL (image or video). None was provided.', 'presshub-ai-editor' )
             );
         }
 
@@ -669,7 +670,7 @@ class PressHub_Social_Meta_API_Client {
 
         return new WP_Error(
             'instagram_container_timeout',
-            __( 'Instagram video container did not finish processing in time.', 'presshub-social-autopost' )
+            __( 'Instagram video container did not finish processing in time.', 'presshub-ai-editor' )
         );
     }
 
@@ -695,7 +696,7 @@ class PressHub_Social_Meta_API_Client {
             }
             return new WP_Error(
                 'missing_twitter_credentials',
-                __( 'Twitter credentials not configured. Please set Twitter Bearer or Access Token in Settings.', 'presshub-social-autopost' )
+                __( 'Twitter credentials not configured. Please set Twitter Bearer or Access Token in Settings.', 'presshub-ai-editor' )
             );
         }
 
@@ -757,7 +758,7 @@ class PressHub_Social_Meta_API_Client {
             }
             return new WP_Error(
                 'missing_tiktok_credentials',
-                __( 'TikTok credentials not configured. Please set TikTok Access Token and Open ID in Settings.', 'presshub-social-autopost' )
+                __( 'TikTok credentials not configured. Please set TikTok Access Token and Open ID in Settings.', 'presshub-ai-editor' )
             );
         }
 
@@ -851,7 +852,7 @@ class PressHub_Social_Meta_API_Client {
                     : '';
 
                 if ( empty( $page_id ) || empty( $token ) ) {
-                    return new WP_Error( 'missing_credentials', __( 'Meta Page ID and Access Token must be configured.', 'presshub-social-autopost' ) );
+                    return new WP_Error( 'missing_credentials', __( 'Meta Page ID and Access Token must be configured.', 'presshub-ai-editor' ) );
                 }
 
                 $url      = "https://graph.facebook.com/{$version}/{$page_id}?fields=id,name&access_token=" . rawurlencode( $token );
@@ -866,7 +867,8 @@ class PressHub_Social_Meta_API_Client {
                 return [
                     'success'    => true,
                     'platform'   => 'facebook',
-                    'message'    => sprintf( __( 'Connected to Facebook Page: %s (ID: %s)', 'presshub-social-autopost' ), $data['name'] ?? '', $data['id'] ?? '' ),
+                    // translators: %1$s: page name, %2$s: page ID
+                    'message'    => sprintf( __( 'Connected to Facebook Page: %1$s (ID: %2$s)', 'presshub-ai-editor' ), $data['name'] ?? '', $data['id'] ?? '' ),
                     // #247: when the token expires (0 = never or unknown), shown in Connections.
                     'expires_at' => self::token_expires_at( $token ),
                 ];
@@ -880,7 +882,7 @@ class PressHub_Social_Meta_API_Client {
                     : '';
 
                 if ( empty( $ig_id ) || empty( $token ) ) {
-                    return new WP_Error( 'missing_credentials', __( 'Instagram Account ID and Meta Access Token must be configured.', 'presshub-social-autopost' ) );
+                    return new WP_Error( 'missing_credentials', __( 'Instagram Account ID and Meta Access Token must be configured.', 'presshub-ai-editor' ) );
                 }
 
                 $url      = "https://graph.facebook.com/{$version}/{$ig_id}?fields=id,username&access_token=" . rawurlencode( $token );
@@ -895,7 +897,8 @@ class PressHub_Social_Meta_API_Client {
                 return [
                     'success'  => true,
                     'platform' => 'instagram',
-                    'message'  => sprintf( __( 'Connected to Instagram Account: @%s (ID: %s)', 'presshub-social-autopost' ), $data['username'] ?? '', $data['id'] ?? '' ),
+                    // translators: %1$s: Instagram username, %2$s: account ID
+                    'message'  => sprintf( __( 'Connected to Instagram Account: @%1$s (ID: %2$s)', 'presshub-ai-editor' ), $data['username'] ?? '', $data['id'] ?? '' ),
                     // #247: Instagram posts with the same Meta token, so it expires with it.
                     'expires_at' => self::token_expires_at( $token ),
                 ];
@@ -905,7 +908,7 @@ class PressHub_Social_Meta_API_Client {
                     ? PressHub_Social_Settings_Storage::get_twitter_bearer_token()
                     : '';
                 if ( empty( $bearer ) ) {
-                    return new WP_Error( 'missing_credentials', __( 'Twitter Bearer Token must be configured.', 'presshub-social-autopost' ) );
+                    return new WP_Error( 'missing_credentials', __( 'Twitter Bearer Token must be configured.', 'presshub-ai-editor' ) );
                 }
                 $response = wp_remote_get( 'https://api.twitter.com/2/users/me', [
                     'timeout' => 15,
@@ -921,7 +924,8 @@ class PressHub_Social_Meta_API_Client {
                 return [
                     'success'  => true,
                     'platform' => 'twitter',
-                    'message'  => sprintf( __( 'Connected to Twitter/X user: @%s', 'presshub-social-autopost' ), $data['data']['username'] ?? 'authenticated' ),
+                    // translators: %s: Twitter/X username
+                    'message'  => sprintf( __( 'Connected to Twitter/X user: @%s', 'presshub-ai-editor' ), $data['data']['username'] ?? 'authenticated' ),
                 ];
 
             case 'tiktok':
@@ -929,7 +933,7 @@ class PressHub_Social_Meta_API_Client {
                     ? PressHub_Social_Settings_Storage::get_tiktok_access_token()
                     : '';
                 if ( empty( $token ) ) {
-                    return new WP_Error( 'missing_credentials', __( 'TikTok Access Token must be configured.', 'presshub-social-autopost' ) );
+                    return new WP_Error( 'missing_credentials', __( 'TikTok Access Token must be configured.', 'presshub-ai-editor' ) );
                 }
                 $response = wp_remote_post( 'https://open.tiktokapis.com/v2/user/info/', [
                     'timeout' => 15,
@@ -948,11 +952,11 @@ class PressHub_Social_Meta_API_Client {
                 return [
                     'success'  => true,
                     'platform' => 'tiktok',
-                    'message'  => __( 'Connected to TikTok Content Posting API.', 'presshub-social-autopost' ),
+                    'message'  => __( 'Connected to TikTok Content Posting API.', 'presshub-ai-editor' ),
                 ];
 
             default:
-                return new WP_Error( 'invalid_platform', __( 'Unknown platform specified for connection test.', 'presshub-social-autopost' ) );
+                return new WP_Error( 'invalid_platform', __( 'Unknown platform specified for connection test.', 'presshub-ai-editor' ) );
         }
     }
 }

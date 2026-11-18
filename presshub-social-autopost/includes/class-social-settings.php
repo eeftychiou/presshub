@@ -706,7 +706,8 @@ class PressHub_Social_Settings {
                 [
                     'option' => 'presshub_social_prompt_' . $platform,
                     'rows'   => 5,
-                    'desc'   => sprintf( __( 'Prompt template for %s. Placeholders: {title}, {excerpt}, {content}, {url}, {site_name}%s.', 'presshub-social-autopost' ), ucfirst( $platform ), 'twitter' === $platform ? ', {max_chars}' : '' ),
+                    // translators: %1$s: social platform name, %2$s: optional extra placeholder for Twitter
+                    'desc'   => sprintf( __( 'Prompt template for %1$s. Placeholders: {title}, {excerpt}, {content}, {url}, {site_name}%2$s.', 'presshub-social-autopost' ), ucfirst( $platform ), 'twitter' === $platform ? ', {max_chars}' : '' ),
                 ]
             );
 

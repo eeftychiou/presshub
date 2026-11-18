@@ -43,18 +43,18 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $post_id  = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
         $platform = isset( $_POST['platform'] ) ? sanitize_key( wp_unslash( $_POST['platform'] ) ) : '';
 
         if ( $post_id <= 0 ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid post ID provided.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Invalid post ID provided.', 'presshub-ai-editor' ) ], 400 );
         }
 
         if ( ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
-            wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-social-autopost' ) ], 500 );
+            wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-ai-editor' ) ], 500 );
         }
 
         if ( ! empty( $platform ) ) {
@@ -99,12 +99,12 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( 'edit_posts' ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
         if ( $post_id <= 0 ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid post ID provided.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Invalid post ID provided.', 'presshub-ai-editor' ) ], 400 );
         }
 
         // Persist selected platforms if passed from metabox
@@ -145,12 +145,13 @@ class PressHub_Social_Ajax_Handlers {
         $job_ids = PressHub_Social_Dispatcher::enqueue_for_post( $post_id, $platforms );
         if ( empty( $job_ids ) ) {
             wp_send_json_error( [
-                'message' => __( 'No social jobs were enqueued. Please ensure at least one enabled and configured platform is selected.', 'presshub-social-autopost' ),
+                'message' => __( 'No social jobs were enqueued. Please ensure at least one enabled and configured platform is selected.', 'presshub-ai-editor' ),
             ], 400 );
         }
 
         wp_send_json_success( [
-            'message' => sprintf( __( 'Successfully queued %d social post(s).', 'presshub-social-autopost' ), count( $job_ids ) ),
+            // translators: %d: number of queued posts
+            'message' => sprintf( __( 'Successfully queued %d social post(s).', 'presshub-ai-editor' ), count( $job_ids ) ),
             'post_id' => $post_id,
             'job_ids' => $job_ids,
         ] );
@@ -167,7 +168,7 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $post_id = isset( $_POST['post_id'] ) ? (int) $_POST['post_id'] : 0;
@@ -179,7 +180,7 @@ class PressHub_Social_Ajax_Handlers {
         wp_send_json_success( [
             'message' => sprintf(
                 /* translators: %d: number of test shorts */
-                __( 'Queued %d test shorts. They are prepared with the real prompts, voices and images, then the worker saves the videos in its output folder under tiktok-short-tests (nothing is posted). Follow them in the Social Queue.', 'presshub-social-autopost' ),
+                __( 'Queued %d test shorts. They are prepared with the real prompts, voices and images, then the worker saves the videos in its output folder under tiktok-short-tests (nothing is posted). Follow them in the Social Queue.', 'presshub-ai-editor' ),
                 count( $ids )
             ),
             'job_ids' => $ids,
@@ -198,7 +199,7 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
         if ( function_exists( 'set_time_limit' ) ) {
             @set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- one Lyria call can take a minute or more.
@@ -218,10 +219,10 @@ class PressHub_Social_Ajax_Handlers {
             'url'       => $result['track']['url'] ?? '',
             'remaining' => (int) $result['remaining'],
             'message'   => '' === $result['mood']
-                ? __( 'Every mood has its tracks.', 'presshub-social-autopost' )
+                ? __( 'Every mood has its tracks.', 'presshub-ai-editor' )
                 : sprintf(
                     /* translators: 1: mood, 2: tracks still to make */
-                    __( 'Made a %1$s track. %2$d to go.', 'presshub-social-autopost' ),
+                    __( 'Made a %1$s track. %2$d to go.', 'presshub-ai-editor' ),
                     $result['mood'],
                     (int) $result['remaining']
                 ),
@@ -241,7 +242,7 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $secret = wp_generate_password( 32, false );
@@ -265,7 +266,7 @@ class PressHub_Social_Ajax_Handlers {
             'masked'      => PressHub_Social_Logger::mask_secret( $secret ),
             'status_html' => PressHub_Connection_Status::render_pill( 'worker' ),
             'card_html'   => $card,
-            'message' => __( 'New secret made. Copy it now into PRESSHUB_WORKER_SECRET in the worker’s .env file and restart the worker. It is not shown again.', 'presshub-social-autopost' ),
+            'message' => __( 'New secret made. Copy it now into PRESSHUB_WORKER_SECRET in the worker’s .env file and restart the worker. It is not shown again.', 'presshub-ai-editor' ),
         ] );
     }
 
@@ -279,13 +280,13 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $platform = isset( $_POST['platform'] ) ? sanitize_key( wp_unslash( $_POST['platform'] ) ) : '';
 
         if ( empty( $platform ) ) {
-            wp_send_json_error( [ 'message' => __( 'No platform specified for connection test.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'No platform specified for connection test.', 'presshub-ai-editor' ) ], 400 );
         }
 
         if ( 'worker' === $platform ) {
@@ -329,19 +330,19 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $job_id       = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
         $dispatch_now = ! empty( $_POST['dispatch_now'] );
 
         if ( $job_id <= 0 ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-ai-editor' ) ], 400 );
         }
 
         $success = PressHub_Social_Queue::retry_job( $job_id );
         if ( ! $success ) {
-            wp_send_json_error( [ 'message' => __( 'Could not reset job in queue.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Could not reset job in queue.', 'presshub-ai-editor' ) ], 400 );
         }
 
         if ( $dispatch_now ) {
@@ -349,7 +350,7 @@ class PressHub_Social_Ajax_Handlers {
             if ( is_wp_error( $dispatch_result ) ) {
                 if ( 'pull_mode_queued' === $dispatch_result->get_error_code() ) {
                     wp_send_json_success( [
-                        'message' => __( 'Job retried and queued for local worker.', 'presshub-social-autopost' ),
+                        'message' => __( 'Job retried and queued for local worker.', 'presshub-ai-editor' ),
                         'job_id'  => $job_id,
                     ] );
                 }
@@ -360,18 +361,19 @@ class PressHub_Social_Ajax_Handlers {
                     ] );
                 }
                 wp_send_json_error( [
-                    'message' => sprintf( __( 'Job retried but dispatch failed: %s', 'presshub-social-autopost' ), $dispatch_result->get_error_message() ),
+                    // translators: %s: error message
+                    'message' => sprintf( __( 'Job retried but dispatch failed: %s', 'presshub-ai-editor' ), $dispatch_result->get_error_message() ),
                     'job_id'  => $job_id,
                 ], 400 );
             }
             wp_send_json_success( [
-                'message' => __( 'Job retried and dispatched successfully.', 'presshub-social-autopost' ),
+                'message' => __( 'Job retried and dispatched successfully.', 'presshub-ai-editor' ),
                 'job_id'  => $job_id,
             ] );
         }
 
         wp_send_json_success( [
-            'message' => __( 'Job rescheduled for processing.', 'presshub-social-autopost' ),
+            'message' => __( 'Job rescheduled for processing.', 'presshub-ai-editor' ),
             'job_id'  => $job_id,
         ] );
     }
@@ -386,21 +388,21 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $job_id = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
         if ( $job_id <= 0 ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-ai-editor' ) ], 400 );
         }
 
         $success = PressHub_Social_Queue::cancel_job( $job_id );
         if ( ! $success ) {
-            wp_send_json_error( [ 'message' => __( 'Could not cancel job.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Could not cancel job.', 'presshub-ai-editor' ) ], 400 );
         }
 
         wp_send_json_success( [
-            'message' => __( 'Job cancelled.', 'presshub-social-autopost' ),
+            'message' => __( 'Job cancelled.', 'presshub-ai-editor' ),
             'job_id'  => $job_id,
         ] );
     }
@@ -415,7 +417,7 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $job_id = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
@@ -425,7 +427,7 @@ class PressHub_Social_Ajax_Handlers {
             if ( is_wp_error( $result ) ) {
                 if ( 'pull_mode_queued' === $result->get_error_code() ) {
                     wp_send_json_success( [
-                        'message' => __( 'Job is queued in Pull Mode and will be picked up by your local worker.', 'presshub-social-autopost' ),
+                        'message' => __( 'Job is queued in Pull Mode and will be picked up by your local worker.', 'presshub-ai-editor' ),
                         'job_id'  => $job_id,
                     ] );
                 }
@@ -438,13 +440,14 @@ class PressHub_Social_Ajax_Handlers {
                 wp_send_json_error( [ 'message' => $result->get_error_message(), 'job_id' => $job_id ], 400 );
             }
             wp_send_json_success( [
-                'message' => __( 'Job dispatched successfully.', 'presshub-social-autopost' ),
+                'message' => __( 'Job dispatched successfully.', 'presshub-ai-editor' ),
                 'job_id'  => $job_id,
             ] );
         } else {
             $summary = PressHub_Social_Dispatcher::process_due_queue();
             wp_send_json_success( [
-                'message' => sprintf( __( 'Processed %d due job(s): %d succeeded, %d failed.', 'presshub-social-autopost' ), $summary['total_due'], $summary['succeeded'], $summary['failed'] ),
+                // translators: %1$d: number of due jobs, %2$d: number that succeeded, %3$d: number that failed
+                'message' => sprintf( __( 'Processed %1$d due job(s): %2$d succeeded, %3$d failed.', 'presshub-ai-editor' ), $summary['total_due'], $summary['succeeded'], $summary['failed'] ),
                 'summary' => $summary,
             ] );
         }
@@ -460,24 +463,24 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $job_id = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
         if ( $job_id <= 0 ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-ai-editor' ) ], 400 );
         }
 
         $job = PressHub_Social_Queue::get_job( $job_id );
         if ( ! $job ) {
-            wp_send_json_error( [ 'message' => __( 'Job not found in queue.', 'presshub-social-autopost' ) ], 404 );
+            wp_send_json_error( [ 'message' => __( 'Job not found in queue.', 'presshub-ai-editor' ) ], 404 );
         }
 
         $post_id  = (int) ( $job['post_id'] ?? 0 );
         $platform = sanitize_key( (string) ( $job['platform'] ?? '' ) );
 
         if ( $post_id <= 0 || empty( $platform ) ) {
-            wp_send_json_error( [ 'message' => __( 'Job is missing post ID or platform.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Job is missing post ID or platform.', 'presshub-ai-editor' ) ], 400 );
         }
 
         // A TikTok short's copy belongs to its story: regenerating it means going back to
@@ -485,11 +488,11 @@ class PressHub_Social_Ajax_Handlers {
         if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job ) ) {
             $caption = PressHub_Social_TikTok_Shorts::generated_caption( $job );
             if ( '' === $caption ) {
-                wp_send_json_error( [ 'message' => __( 'This TikTok short is still being prepared; its caption is written with its script.', 'presshub-social-autopost' ) ], 400 );
+                wp_send_json_error( [ 'message' => __( 'This TikTok short is still being prepared; its caption is written with its script.', 'presshub-ai-editor' ) ], 400 );
             }
             PressHub_Social_Queue::update_job_copy( $job_id, $caption );
             wp_send_json_success( [
-                'message'  => __( 'TikTok short caption restored.', 'presshub-social-autopost' ),
+                'message'  => __( 'TikTok short caption restored.', 'presshub-ai-editor' ),
                 'job_id'   => $job_id,
                 'post_id'  => $post_id,
                 'platform' => $platform,
@@ -499,7 +502,7 @@ class PressHub_Social_Ajax_Handlers {
         }
 
         if ( ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
-            wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-social-autopost' ) ], 500 );
+            wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-ai-editor' ) ], 500 );
         }
 
         $new_copy = PressHub_Social_AI_Copywriter::generate_for_post( $post_id, $platform, true );
@@ -509,7 +512,7 @@ class PressHub_Social_Ajax_Handlers {
 
         $new_copy_str = trim( (string) $new_copy );
         if ( '' === $new_copy_str ) {
-            wp_send_json_error( [ 'message' => __( 'Generated copy was empty.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Generated copy was empty.', 'presshub-ai-editor' ) ], 400 );
         }
 
         // Update the queue record's copy
@@ -519,7 +522,8 @@ class PressHub_Social_Ajax_Handlers {
         update_post_meta( $post_id, '_presshub_social_copy_' . $platform, $new_copy_str );
 
         wp_send_json_success( [
-            'message'  => sprintf( __( 'AI copy regenerated for %s.', 'presshub-social-autopost' ), ucfirst( $platform ) ),
+            // translators: %s: social platform name
+            'message'  => sprintf( __( 'AI copy regenerated for %s.', 'presshub-ai-editor' ), ucfirst( $platform ) ),
             'job_id'   => $job_id,
             'post_id'  => $post_id,
             'platform' => $platform,
@@ -538,28 +542,28 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $job_id    = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
         $post_copy = isset( $_POST['post_copy'] ) ? sanitize_textarea_field( wp_unslash( $_POST['post_copy'] ) ) : '';
 
         if ( $job_id <= 0 ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Invalid job ID.', 'presshub-ai-editor' ) ], 400 );
         }
 
         if ( '' === trim( $post_copy ) ) {
-            wp_send_json_error( [ 'message' => __( 'Post copy cannot be empty.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Post copy cannot be empty.', 'presshub-ai-editor' ) ], 400 );
         }
 
         $job = PressHub_Social_Queue::get_job( $job_id );
         if ( ! $job ) {
-            wp_send_json_error( [ 'message' => __( 'Job not found.', 'presshub-social-autopost' ) ], 404 );
+            wp_send_json_error( [ 'message' => __( 'Job not found.', 'presshub-ai-editor' ) ], 404 );
         }
 
         $updated = PressHub_Social_Queue::update_job_copy( $job_id, $post_copy );
         if ( ! $updated ) {
-            wp_send_json_error( [ 'message' => __( 'Could not update post copy.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Could not update post copy.', 'presshub-ai-editor' ) ], 400 );
         }
 
         // A TikTok short's caption is its own; it is not the post's TikTok copy.
@@ -569,7 +573,7 @@ class PressHub_Social_Ajax_Handlers {
         }
 
         wp_send_json_success( [
-            'message'   => __( 'Job copy updated successfully.', 'presshub-social-autopost' ),
+            'message'   => __( 'Job copy updated successfully.', 'presshub-ai-editor' ),
             'job_id'    => $job_id,
             'post_copy' => $post_copy,
             'preview'   => wp_trim_words( $post_copy, 15 ),
@@ -587,7 +591,7 @@ class PressHub_Social_Ajax_Handlers {
         check_ajax_referer( 'presshub_social_nonce', 'nonce' );
 
         if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
-            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-ai-editor' ) ], 403 );
         }
 
         $source_job_id = isset( $_POST['job_id'] ) ? (int) $_POST['job_id'] : 0;
@@ -595,7 +599,7 @@ class PressHub_Social_Ajax_Handlers {
         $dispatch_now  = ! isset( $_POST['dispatch_now'] ) || ! empty( $_POST['dispatch_now'] );
 
         if ( $source_job_id <= 0 ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid source job ID.', 'presshub-social-autopost' ) ], 400 );
+            wp_send_json_error( [ 'message' => __( 'Invalid source job ID.', 'presshub-ai-editor' ) ], 400 );
         }
 
         $new_job_id = PressHub_Social_Queue::repost_as_new_job( $source_job_id, $custom_copy );
@@ -607,12 +611,14 @@ class PressHub_Social_Ajax_Handlers {
         if ( $dispatch_now ) {
             $dispatch_result = PressHub_Social_Dispatcher::dispatch_job( $new_job_id );
             if ( is_wp_error( $dispatch_result ) ) {
-                $dispatch_message = sprintf( __( ' (Warning: dispatch encountered: %s)', 'presshub-social-autopost' ), $dispatch_result->get_error_message() );
+                // translators: %s: error message
+                $dispatch_message = sprintf( __( ' (Warning: dispatch encountered: %s)', 'presshub-ai-editor' ), $dispatch_result->get_error_message() );
             }
         }
 
         wp_send_json_success( [
-            'message'    => sprintf( __( 'New social post #%d created and queued.%s', 'presshub-social-autopost' ), $new_job_id, $dispatch_message ),
+            // translators: %1$d: queue job ID, %2$s: optional dispatch warning
+            'message'    => sprintf( __( 'New social post #%1$d created and queued.%2$s', 'presshub-ai-editor' ), $new_job_id, $dispatch_message ),
             'new_job_id' => $new_job_id,
             'source_id'  => $source_job_id,
         ] );

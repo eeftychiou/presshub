@@ -379,6 +379,7 @@ class PressHub_AI_Podcast_Producer {
                     'host_count' => $host_count,
                 ] );
             }
+            // translators: %1$s: podcast style, %2$d: number of presenters
             throw new InvalidArgumentException( sprintf( __( 'No dialogue prompt configured for style "%1$s" and %2$d presenter(s). Please configure the prompt in PressHub -> Settings -> Daily Briefing Hub -> Podcast script.', 'presshub-ai-editor' ), $style, $host_count ) );
         }
 
@@ -888,6 +889,7 @@ class PressHub_AI_Podcast_Producer {
                 $script_parts[] = "[{$name}]: " . $turn['text'];
             }
             $topics[] = [
+                // translators: %d: section number
                 'title'  => sprintf( __( 'Ενότητα %d', 'presshub-ai-editor' ), $num ),
                 'script' => implode( "\n\n", $script_parts ),
                 'turns'  => $chunk_turns,
@@ -1113,7 +1115,8 @@ class PressHub_AI_Podcast_Producer {
             if ( empty( $briefing_content ) ) {
                 return new WP_Error(
                     'no_articles',
-                    sprintf( __( 'No harvested articles found for date: %s (%s edition)', 'presshub-ai-editor' ), $date, $edition )
+                    // translators: %1$s: date, %2$s: edition
+                    sprintf( __( 'No harvested articles found for date: %1$s (%2$s edition)', 'presshub-ai-editor' ), $date, $edition )
                 );
             }
         }

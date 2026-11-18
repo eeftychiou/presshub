@@ -183,7 +183,14 @@ if ( ! is_dir( OUT_DIR ) && ! mkdir( OUT_DIR, 0755, true ) && ! is_dir( OUT_DIR 
 }
 
 $now = gmdate( 'Y-m-d H:i' ) . '+0000';
+// Read the version from the plugin header so the catalogue never goes stale.
 $version = '1.1.0';
+if ( is_file( $root_php ) ) {
+    $header = (string) file_get_contents( $root_php, false, null, 0, 2048 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file in a CLI script.
+    if ( preg_match( '/^\s*\*\s*Version:\s*(\S+)/m', $header, $version_match ) ) {
+        $version = $version_match[1];
+    }
+}
 
 $out  = "msgid \"\"\n";
 $out .= "msgstr \"\"\n";
