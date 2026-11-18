@@ -360,6 +360,13 @@ $ig = PressHub_Social_Meta_API_Client::test_connection( 'instagram' );
 $check( is_array( $ig ) && 1900000000 === (int) ( $ig['expires_at'] ?? 0 ), 'An Instagram test should report when the Meta token expires.' );
 $GLOBALS['GET_RESPONSE_FILTER'] = static function () { return new WP_Error( 'blocked', 'blocked' ); };
 
+$GLOBALS['OPTIONS_STORE']['presshub_social_engine_twitter'] = 'automation';
+PressHub_Connection_Status::record( 'social:twitter', false, 'No session' );
+$save( [ 'presshub_social_worker_url' => 'http://127.0.0.1:4567' ] );
+$check( null === PressHub_Connection_Status::get( 'social:twitter' ), 'Changing the worker should forget the tests of platforms on the automation engine.' );
+$box_html = PressHub_Secret_Field::html( [ 'name' => 'x_key', 'masked' => '', 'remove_name' => 'x_key_remove' ] );
+$check( false !== strpos( $box_html, '<label class="presshub-secret-remove" hidden>' ), 'An empty key should carry a hidden Remove box, shown once a key is saved.' );
+
 $html2 = presshub_test_render_section( 'connections' );
 $check( false !== strpos( $html2, 'class="button presshub-conn-recheck-all"' ), 'Connections should offer "Recheck all connections".' );
 $check( false === strpos( PressHub_Setup_Check::render( true ), 'presshub-conn-recheck-all' ), 'The Hub box should not offer Recheck all (the tests are not on that page).' );

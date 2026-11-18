@@ -62,8 +62,10 @@ class PressHub_Secret_Field {
             $out .= '<span class="description presshub-secret-keep">' . esc_html__( 'Leave empty to keep the saved key.', 'presshub-ai-editor' ) . '</span>';
         }
         $out .= '</span>';
-        if ( $has && '' !== $remove_name ) {
-            $out .= '<label class="presshub-secret-remove"><input type="checkbox" name="' . esc_attr( $remove_name ) . '" id="' . esc_attr( $remove_name ) . '" value="1" /> '
+        // A key added later on this page can be removed without a reload, so
+        // the box is always there, hidden while nothing is saved.
+        if ( '' !== $remove_name ) {
+            $out .= '<label class="presshub-secret-remove"' . ( $has ? '' : ' hidden' ) . '><input type="checkbox" name="' . esc_attr( $remove_name ) . '" id="' . esc_attr( $remove_name ) . '" value="1" /> '
                 . esc_html( (string) ( $args['remove_label'] ?? __( 'Remove the saved key', 'presshub-ai-editor' ) ) ) . '</label>';
         }
         $out .= '</div>';

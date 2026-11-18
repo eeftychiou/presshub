@@ -80,7 +80,14 @@ class PressHub_Connection_Status {
         'presshub_social_worker_secret'        => [ 'worker' ],
         'presshub_social_worker_url'           => [ 'worker' ],
         'presshub_social_worker_mode'          => [ 'worker' ],
+        'presshub_social_engine_twitter'       => [ 'social:twitter' ],
+        'presshub_social_engine_facebook'      => [ 'social:facebook' ],
+        'presshub_social_engine_instagram'     => [ 'social:instagram' ],
+        'presshub_social_engine_tiktok'        => [ 'social:tiktok' ],
     ];
+
+    /** Worker settings: platforms on the automation engine are tested through the worker too. */
+    const WORKER_OPTIONS = [ 'presshub_social_worker_secret', 'presshub_social_worker_url', 'presshub_social_worker_mode' ];
 
     /**
      * Forget a check whenever one of its settings changes or is deleted
@@ -110,6 +117,13 @@ class PressHub_Connection_Status {
     public static function forget_for_option( string $option ): void {
         foreach ( self::WATCHED[ $option ] ?? [] as $id ) {
             self::forget( $id );
+        }
+        if ( in_array( $option, self::WORKER_OPTIONS, true ) && class_exists( 'PressHub_Social_Settings_Storage' ) ) {
+            foreach ( PressHub_Social_Settings_Storage::PLATFORMS as $p ) {
+                if ( 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p ) ) {
+                    self::forget( 'social:' . $p );
+                }
+            }
         }
     }
 

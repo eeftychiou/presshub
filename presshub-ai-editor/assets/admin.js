@@ -1403,7 +1403,7 @@ jQuery(document).ready(function($) {
             if (typed !== '' && typed.indexOf('••••') === -1) {
                 $current.addClass('code').text('•••••••• ' + __('(new key saved)', 'presshub-ai-editor'));
                 $replace.text($replace.data('replace-label') || __('Replace key', 'presshub-ai-editor'));
-                $remove.closest('label').show();
+                $remove.closest('label').prop('hidden', false).show();
             } else if ($remove.length && $remove.is(':checked')) {
                 $current.removeClass('code').text($current.data('empty-label') || __('Not set', 'presshub-ai-editor'));
                 $replace.text($replace.data('add-label') || __('Add key', 'presshub-ai-editor'));
