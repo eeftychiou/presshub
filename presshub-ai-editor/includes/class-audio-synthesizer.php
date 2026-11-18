@@ -1363,10 +1363,7 @@ class PressHub_AI_Audio_Synthesizer {
 
         // QA gate on the show notes and the spoken script (editorial and
         // legal) and the post (measured SEO checks), then the configured status.
-        $saved = get_post( $post_id );
-        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning', [
-            'content' => (string) ( $saved->post_content ?? '' ) . "\n\n" . __( 'Podcast script:', 'presshub-ai-editor' ) . "\n" . $this->strip_topic_markers( $transcript ),
-        ] );
+        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning' );
 
         return $post_id;
     }
@@ -1483,10 +1480,7 @@ class PressHub_AI_Audio_Synthesizer {
         // QA gate on the new script: a held podcast is released when it now
         // passes, and a live one that now fails goes back to Pending Review.
         require_once __DIR__ . '/class-publish-gate.php';
-        $saved = get_post( $post_id );
-        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning', [
-            'content' => (string) ( $saved->post_content ?? '' ) . "\n\n" . __( 'Podcast script:', 'presshub-ai-editor' ) . "\n" . $this->strip_topic_markers( $script ),
-        ] );
+        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning' );
 
         return $post_id;
     }

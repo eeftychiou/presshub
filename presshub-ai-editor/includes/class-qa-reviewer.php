@@ -323,7 +323,8 @@ class PressHub_AI_QA_Reviewer {
         if ( 'error' === $verdict || 'error' === ( $ed['result'] ?? '' ) ) {
             $failed[] = __( 'review could not run', 'presshub-ai-editor' );
             $blocks[] = sprintf( "The QA review could not run (%s), so the post was held until someone reviews it.\n%s", (string) ( $ed['error'] ?? $gate['error'] ?? 'error' ), (string) ( $ed['feedback'] ?? '' ) );
-        } elseif ( 'fail' === ( $ed['result'] ?? '' ) ) {
+        }
+        if ( 'fail' === ( $ed['result'] ?? '' ) ) {
             $failed[] = sprintf( 'editorial %d/%d', (int) $ed['score'], (int) $ed['threshold'] );
             $blocks[] = sprintf( "EDITORIAL: %d / 100 (minimum %d)\n%s", (int) $ed['score'], (int) $ed['threshold'], (string) ( $ed['feedback'] ?? '' ) );
         }

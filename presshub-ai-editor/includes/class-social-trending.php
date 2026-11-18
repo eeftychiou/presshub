@@ -1177,16 +1177,22 @@ class PressHub_AI_Social_Trending {
         $summary  = self::summary_for( $items, $update ? $existing : 0 );
         $content  = self::build_content( $items, $now, $summary['text'] );
         if ( $update ) {
+            $prev_items = json_decode( (string) get_post_meta( $existing, self::META_ITEMS, true ), true );
+            $new_set    = self::summary_hash( $items ) !== self::summary_hash( is_array( $prev_items ) ? $prev_items : [] );
+            // A new set of posts is not shown until the QA gate has read it.
+            if ( $new_set && class_exists( 'PressHub_AI_Publish_Gate' ) && PressHub_AI_Publish_Gate::applies( 'trending' ) ) {
+                PressHub_AI_Publish_Gate::hold_for_review( $existing );
+            }
+            $fresh_post = get_post( $existing );
             $res = wp_update_post( [
                 'ID'           => $existing,
                 'post_title'   => $title,
                 'post_content' => $content,
+                'post_status'  => (string) ( $fresh_post->post_status ?? $post->post_status ),
             ], true );
             if ( is_wp_error( $res ) ) {
                 return $res;
             }
-            $prev_items = json_decode( (string) get_post_meta( $existing, self::META_ITEMS, true ), true );
-            $new_set    = self::summary_hash( $items ) !== self::summary_hash( is_array( $prev_items ) ? $prev_items : [] );
             update_post_meta( $existing, self::META_ITEMS, $items_meta );
             self::save_summary_meta( $existing, $summary );
             self::maybe_set_featured_image( $existing, $items );

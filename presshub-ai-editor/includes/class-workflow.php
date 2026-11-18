@@ -47,13 +47,19 @@ class PressHub_AI_Workflow {
             unset( self::$rest_state[0] );
         }
 
+        // The gate's own status changes (release(), Publish anyway) are not reviewed again.
+        if ( PressHub_AI_Publish_Gate::is_releasing() ) {
+            return;
+        }
+
         // Automated posts (Daily Briefing text and podcast, the Trending
-        // roundup) are reviewed by PressHub_AI_Publish_Gate::release() after
-        // their tags, excerpt and image are in place, and the gate's own
-        // status changes must not be reviewed again here.
-        if ( PressHub_AI_Publish_Gate::is_releasing()
-            || ! empty( get_post_meta( $post->ID, '_presshub_briefing_type', true ) )
-            || ! empty( get_post_meta( $post->ID, '_presshub_social_trending_key', true ) ) ) {
+        // roundup) are reviewed by release() when they are created. A person
+        // publishing one by hand (a held briefing opened from the alert
+        // email) goes through the gate like any other post, in its context,
+        // when that context is checked; cron never re-reviews them.
+        $context   = PressHub_AI_Publish_Gate::context_for_post( $post );
+        $automated = 'post' !== $context;
+        if ( $automated && ! PressHub_AI_Publish_Gate::applies( $context ) ) {
             return;
         }
 
@@ -74,7 +80,7 @@ class PressHub_AI_Workflow {
         // unless the post or the gate settings changed since.
         $by_cron  = ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) || ( defined( 'DOING_CRON' ) && DOING_CRON );
         $due      = $goes_live && 'future' === $old_status;
-        if ( $by_cron && ! $due ) {
+        if ( $by_cron && ( ! $due || $automated ) ) {
             return;
         }
 
@@ -93,7 +99,7 @@ class PressHub_AI_Workflow {
         }
 
         // Released with "Publish anyway" and unchanged since.
-        if ( PressHub_AI_Publish_Gate::is_overridden( $post ) ) {
+        if ( PressHub_AI_Publish_Gate::is_overridden( $post, $context ) ) {
             return;
         }
 
@@ -107,6 +113,7 @@ class PressHub_AI_Workflow {
 
         $gate = PressHub_AI_Publish_Gate::review_post( $post, $trigger, [
             'seo_input' => self::seo_input( $post ),
+            'context'   => $context,
         ] );
 
         if ( PressHub_AI_Publish_Gate::holds( $gate ) ) {

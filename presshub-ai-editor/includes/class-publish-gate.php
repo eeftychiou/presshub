@@ -90,6 +90,9 @@ class PressHub_AI_Publish_Gate {
         $post_id = is_object( $post ) && ! empty( $post->ID ) ? (int) $post->ID : 0;
         $context = self::context( (string) ( $opts['context'] ?? 'post' ) );
         $input   = self::seo_input_for( $post, $opts );
+        if ( ! isset( $opts['content'] ) && 'podcast' === $context ) {
+            $opts['content'] = self::podcast_text( $post );
+        }
         $content = isset( $opts['content'] ) ? (string) $opts['content'] : (string) ( $input['content'] ?? '' );
         $hash    = self::input_hash( $input, $context, isset( $opts['content'] ) ? $content : '' );
 
@@ -151,7 +154,46 @@ class PressHub_AI_Publish_Gate {
 
     /** The hash a review of this post would be cached under. */
     public static function input_hash_for_post( $post, string $context = 'post' ): string {
-        return self::input_hash( self::seo_input_for( $post, [] ), self::context( $context ) );
+        $context = self::context( $context );
+        return self::input_hash( self::seo_input_for( $post, [] ), $context, 'podcast' === $context ? self::podcast_text( $post ) : '' );
+    }
+
+    /** The review context of a post: briefing, podcast or trending for automated posts, else post. */
+    public static function context_for_post( $post ): string {
+        $post_id = is_object( $post ) ? (int) ( $post->ID ?? 0 ) : 0;
+        if ( $post_id <= 0 ) {
+            return 'post';
+        }
+        $type = (string) get_post_meta( $post_id, '_presshub_briefing_type', true );
+        if ( 'podcast' === $type ) {
+            return 'podcast';
+        }
+        if ( '' !== $type ) {
+            return 'briefing';
+        }
+        return '' !== (string) get_post_meta( $post_id, '_presshub_social_trending_key', true ) ? 'trending' : 'post';
+    }
+
+    /** What a podcast review reads: the show notes and the spoken script. */
+    public static function podcast_text( $post ): string {
+        $post_id = is_object( $post ) ? (int) ( $post->ID ?? 0 ) : 0;
+        $script  = $post_id > 0 ? (string) get_post_meta( $post_id, '_presshub_podcast_script', true ) : '';
+        $notes   = is_object( $post ) ? (string) ( $post->post_content ?? '' ) : '';
+        return '' === trim( $script ) ? $notes : $notes . "\n\n" . __( 'Podcast script:', 'presshub-ai-editor' ) . "\n" . $script;
+    }
+
+    /**
+     * Take a live post off line while new content is written and reviewed
+     * (an updated Trending roundup): it goes to pending with its status kept
+     * for release().
+     */
+    public static function hold_for_review( int $post_id ): void {
+        $post = $post_id > 0 ? get_post( $post_id ) : null;
+        if ( ! $post || ! in_array( (string) ( $post->post_status ?? '' ), [ 'publish', 'future' ], true ) ) {
+            return;
+        }
+        update_post_meta( $post_id, self::META_TARGET_STATUS, (string) $post->post_status );
+        self::move( $post_id, 'pending' );
     }
 
     // ------------------------------------------------------------------
@@ -532,7 +574,8 @@ class PressHub_AI_Publish_Gate {
             }
         }
         $description = (string) ( $review['suggested_meta_description'] ?? '' );
-        $tags        = (array) ( $review['suggested_tags'] ?? [] );
+        // The same cleanup apply_post_seo() does, so the cached version matches the saved tags.
+        $tags        = PressHub_AI_SEO::normalize_tags( (array) ( $review['suggested_tags'] ?? [] ), PressHub_AI_SEO::max_tags() );
         $set_excerpt = in_array( 'excerpt', $failing, true ) && '' === trim( (string) ( $input['excerpt'] ?? '' ) ) && '' !== $description;
         // Tags sent with a block editor save are written after this review, so leave them to the editor.
         $set_tags    = in_array( 'tags', $failing, true ) && empty( $input['tags'] ) && ! empty( $tags ) && empty( $input['tags_from_request'] );

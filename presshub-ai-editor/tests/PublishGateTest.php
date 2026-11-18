@@ -482,6 +482,46 @@ $st = $state->getValue();
 pg_check( ! isset( $st[0] ) && isset( $st[801] ), 'REST terms of a new post move to its ID and do not leak to the next post' );
 echo "  [15] verdict and REST terms: OK\n";
 
+// 16. Held podcasts can be released with Publish anyway; a hand publish of a held briefing is checked.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0 ] );
+pg_reply( array_merge( $clean, [ 'score' => 30 ] ) );
+$mk( 901, 'pending', 'publish' );
+$GLOBALS['POST_META_STORE'][901]['_presshub_briefing_type']  = 'podcast';
+$GLOBALS['POST_META_STORE'][901]['_presshub_podcast_script'] = '[SPEAKER_1]: Καλημέρα.';
+$g = PressHub_AI_Publish_Gate::release( 901, 'podcast', 'podcast_morning' );
+pg_check( 'hold' === $g['verdict'] && 'pending' === $GLOBALS['POSTS_STORE'][901]['post_status'], 'a failing podcast is held' );
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_others_posts', 'edit_post' ];
+$r = PressHub_AI_Publish_Gate::publish_anyway( 901, 'Ελέγχθηκε.' );
+pg_check( true === $r && 'publish' === $GLOBALS['POSTS_STORE'][901]['post_status'], 'Publish anyway releases a held podcast: ' . ( is_wp_error( $r ) ? $r->get_error_code() : 'ok' ) );
+pg_check( PressHub_AI_Publish_Gate::is_overridden( (object) $GLOBALS['POSTS_STORE'][901], 'podcast' ), 'the released podcast version is recognised' );
+
+$mk( 902, 'pending', 'publish' );
+$GLOBALS['POST_META_STORE'][902]['_presshub_briefing_type'] = 'text';
+PressHub_AI_Publish_Gate::release( 902, 'briefing', 'briefing_morning' );
+$calls = $GLOBALS['PG_CALLS'];
+$GLOBALS['POSTS_STORE'][902]['post_status'] = 'publish';
+( new PressHub_AI_Workflow() )->enforce_editorial_workflow( 'publish', 'pending', (object) $GLOBALS['POSTS_STORE'][902] );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][902]['post_status'] && $calls === $GLOBALS['PG_CALLS'], 'a held briefing published by hand from the editor stays held (saved review reused)' );
+$GLOBALS['CURRENT_USER_CAPS'] = [];
+
+// A live roundup with a new set of posts is off line while it is reviewed.
+pg_reset( [ 'presshub_ai_seo_review_enabled' => 0 ] );
+$mk( 903, 'publish', '' );
+PressHub_AI_Publish_Gate::hold_for_review( 903 );
+pg_check( 'pending' === $GLOBALS['POSTS_STORE'][903]['post_status'] && 'publish' === get_post_meta( 903, PressHub_AI_Publish_Gate::META_TARGET_STATUS, true ), 'hold_for_review takes a live post off line and keeps its status' );
+pg_reply( $clean );
+PressHub_AI_Publish_Gate::release( 903, 'trending', 'trending_roundup' );
+pg_check( 'publish' === $GLOBALS['POSTS_STORE'][903]['post_status'], 'and release puts it back once it passes' );
+
+// The email of an error verdict still shows an editorial failure.
+list( $subject, $body ) = ( function () {
+    $m = new ReflectionMethod( 'PressHub_AI_QA_Reviewer', 'gate_email' );
+    $m->setAccessible( true );
+    return $m->invoke( null, [ 'verdict' => 'error', 'checks' => [ 'editorial' => [ 'result' => 'fail', 'score' => 40, 'threshold' => 80, 'feedback' => 'Αδύναμο.' ], 'legal' => [ 'result' => 'pass' ], 'seo' => [ 'result' => 'error' ] ] ], 'post', 'Site', 'Τίτλος', 'A', 'u', 1, false );
+} )();
+pg_check( false !== strpos( $body, 'EDITORIAL: 40 / 100' ) && false !== strpos( $body, 'could not run' ), 'the error email keeps the editorial block' );
+echo "  [16] podcasts, held briefings, roundups and emails: OK\n";
+
 if ( $GLOBALS['PG_FAILURES'] > 0 ) {
     echo "PublishGateTest: {$GLOBALS['PG_FAILURES']} failure(s)\n";
     exit( 1 );
