@@ -1023,6 +1023,10 @@ class PressHub_AI_Settings_Render {
         <table class="form-table" role="presentation">
             <tbody>
                 <tr>
+                    <th scope="row"><label for="presshub_ai_backup_keep"><?php echo esc_html__( 'Backups to keep', 'presshub-ai-editor' ); ?></label></th>
+                    <td><?php $this->render_backup_keep_field(); ?></td>
+                </tr>
+                <tr>
                     <th scope="row"><label for="presshub_ai_log_level"><?php echo esc_html__( 'Diagnostic Log Level', 'presshub-ai-editor' ); ?></label></th>
                     <td><?php $this->render_log_level_field(); ?></td>
                 </tr>
@@ -1982,6 +1986,15 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="number" min="7" max="365" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'How long token usage rows are kept before the daily cleanup deletes them. 7-365 days, default 60.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_backup_keep_field() {
+        $option = 'presshub_ai_backup_keep';
+        $value  = PressHub_AI_Settings_Storage::get_backup_keep();
+        ?>
+        <input type="number" min="1" max="20" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How many backups PressHub keeps. One is taken before every PressHub update (see PressHub → Backups); older ones are deleted. 1-20, default 5.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

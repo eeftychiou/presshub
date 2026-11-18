@@ -1,0 +1,38 @@
+/* PressHub → Backups (#296). WordPress core styles do most of the work. */
+.presshub-backups-take {
+    margin: 12px 0 8px;
+}
+.presshub-backups-table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+}
+.presshub-backups-table td {
+    vertical-align: middle;
+}
+.presshub-backups-actions {
+    white-space: nowrap;
+    text-align: right;
+}
+.presshub-backups-actions .button-link-delete {
+    margin-left: 8px;
+    vertical-align: middle;
+}
+.presshub-backups-confirm {
+    max-width: 640px;
+}
+.presshub-backups-folder code {
+    word-break: break-all;
+}
+@media screen and (max-width: 600px) {
+    .presshub-backups-table .presshub-backups-col-size,
+    .presshub-backups-table .presshub-backups-col-version {
+        display: none;
+    }
+    .presshub-backups-actions {
+        white-space: normal;
+    }
+    .presshub-backups-actions .button-link-delete {
+        display: inline-block;
+        margin: 6px 0 0;
+    }
+}

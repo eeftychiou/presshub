@@ -321,6 +321,11 @@ php dev-env/scripts/reset-db.php
 12. **Help page (PressHub → Help)**:
    - `PressHub_AI_Help_Admin` explains the agenda, policy fiches, people fiches and memory to editors. When you change which actions get them, their budgets, the parts sent, the matching rules or a limit, update the page text in the same PR. The task table and the prompt examples are built from `budget_for()`, `parts_for()` and the real `render()` functions, so never hard-code a budget or a prompt header there. Tests: `HelpPageTest.php`.
 
+13. **Backups before updates (PressHub → Backups, #296)**:
+   - `PressHub_AI_Update_Backup` saves every `presshub_*` option, every `{prefix}presshub_*` table and the plugin folder before WordPress replaces the plugin. A new table must use the `{prefix}presshub_` name so it is backed up and restored; a new option must start with `presshub_`.
+   - A migration in a new version may rely on the backup being there, but never on it being restorable into the new schema: a restore puts back the old version's `CREATE TABLE` and rows, and the old plugin files with them.
+   - Never write into the plugin folder during a restore when it is a link (dev-env junction); `plugin_dir_is_linked()` guards this. Restore steps are in `docs/backups.md`.
+
 ## 🔒 Security & Hardening Standards
 
 All code contributions must strictly adhere to WordPress security best practices:

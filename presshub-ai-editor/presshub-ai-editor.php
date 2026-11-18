@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.51.0
+ * Version: 2.53.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -122,7 +122,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.51.0' );
+define( 'PRESSHUB_AI_VERSION', '2.53.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -214,6 +214,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-stakeholders.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-policy-fiches.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-fiches-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-help-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-update-backup.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-transfer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-cleanup.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
@@ -431,6 +432,7 @@ function presshub_ai_init() {
     PressHub_AI_Policy_Fiches::register_hooks();
     new PressHub_AI_Fiches_Admin();
     new PressHub_AI_Help_Admin();
+    new PressHub_AI_Update_Backup();
     PressHub_Settings_Transfer::register_hooks();
     PressHub_Settings_Cleanup::register_hooks();
     new PressHub_AI_Social_Meta();
