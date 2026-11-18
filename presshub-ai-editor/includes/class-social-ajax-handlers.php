@@ -251,9 +251,20 @@ class PressHub_Social_Ajax_Handlers {
         // The worker's last heartbeat was signed with the old secret.
         delete_option( 'presshub_social_worker_last_seen' );
 
+        // The page swaps in the worker card and pill as they now are.
+        $card = '';
+        if ( class_exists( 'PressHub_Social_Settings_Render' ) || is_readable( __DIR__ . '/class-social-settings-render.php' ) ) {
+            require_once __DIR__ . '/class-social-settings-render.php';
+            ob_start();
+            ( new PressHub_Social_Settings_Render() )->render_worker_status();
+            $card = (string) ob_get_clean();
+        }
+
         wp_send_json_success( [
-            'secret'  => $secret,
-            'masked'  => PressHub_Social_Logger::mask_secret( $secret ),
+            'secret'      => $secret,
+            'masked'      => PressHub_Social_Logger::mask_secret( $secret ),
+            'status_html' => PressHub_Connection_Status::render_pill( 'worker' ),
+            'card_html'   => $card,
             'message' => __( 'New secret made. Copy it now into PRESSHUB_WORKER_SECRET in the worker’s .env file and restart the worker. It is not shown again.', 'presshub-social-autopost' ),
         ] );
     }

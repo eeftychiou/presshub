@@ -258,6 +258,12 @@ jQuery(document).ready(function($) {
             .css('display', 'none')
             .hide();
         $('body').removeClass('presshub-modal-open');
+        // Focus goes back to the button that opened the dialog.
+        var opener = $modal.data('presshub-opener');
+        $modal.removeData('presshub-opener');
+        if (opener && document.body.contains(opener) && typeof opener.focus === 'function') {
+            opener.focus();
+        }
     }
 
     function ensureDraftModal() {
@@ -1392,10 +1398,12 @@ jQuery(document).ready(function($) {
             var $remove = $box.find('.presshub-secret-remove input[type="checkbox"]');
             var $current = $box.find('.presshub-secret-current');
             var $replace = $box.find('.presshub-secret-replace');
-            var typed = String($input.val() || '');
-            if (typed !== '') {
+            // The server trims, so spaces alone keep the saved key.
+            var typed = $.trim(String($input.val() || ''));
+            if (typed !== '' && typed.indexOf('••••') === -1) {
                 $current.addClass('code').text('•••••••• ' + __('(new key saved)', 'presshub-ai-editor'));
                 $replace.text($replace.data('replace-label') || __('Replace key', 'presshub-ai-editor'));
+                $remove.closest('label').show();
             } else if ($remove.length && $remove.is(':checked')) {
                 $current.removeClass('code').text($current.data('empty-label') || __('Not set', 'presshub-ai-editor'));
                 $replace.text($replace.data('add-label') || __('Add key', 'presshub-ai-editor'));
@@ -1457,6 +1465,39 @@ jQuery(document).ready(function($) {
         });
     }
     window.PressHubUpdateConnStatus = presshubUpdateConnStatus;
+
+    // #247: "Recheck all" runs every Test on the page, one after another,
+    // so each service gets one request and the rate limits are respected.
+    $(document).on('click', '.presshub-conn-recheck-all', function(e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var $note = $btn.siblings('.presshub-conn-recheck-status');
+        var $tests = $('#presshub-settings-page').find('.presshub-test-provider-btn, #presshub-ai-test-press-inbox, .presshub-social-test-btn').filter(':visible');
+        if (!$tests.length) {
+            return;
+        }
+        $btn.prop('disabled', true);
+        var i = 0;
+        function next() {
+            if (i >= $tests.length) {
+                $btn.prop('disabled', false);
+                $note.text(__('All connections checked. Reload the page to update the setup check.', 'presshub-ai-editor'));
+                return;
+            }
+            var test = $tests.get(i++);
+            $note.text(sprintf(__('Checking %1$d of %2$d…', 'presshub-ai-editor'), i, $tests.length));
+            $(test).trigger('click');
+            var waited = 0;
+            var timer = setInterval(function() {
+                waited += 300;
+                if (!test.disabled || waited > 90000) {
+                    clearInterval(timer);
+                    next();
+                }
+            }, 300);
+        }
+        next();
+    });
 
     function getTabFormSnapshot(tabKey) {
         var $tabPane = $('#presshub-tab-pane-' + tabKey);
@@ -2352,10 +2393,13 @@ jQuery(document).ready(function($) {
             $('#provider-model-manual-wrap').hide();
         }
 
+        $modal.data('presshub-opener', document.activeElement);
         $modal.show().addClass('is-open');
         $('body').addClass('presshub-modal-open');
         $('#presshub-provider-discard-notice').hide();
         providerModalBaseline = getProviderModalSnapshot();
+        // Move focus into the dialog (#285 review).
+        $modal.find('input, select, textarea, button').filter(':visible:not(:disabled)').not('.presshub-modal-close').first().trigger('focus');
     }
 
     function closeProviderModal() {

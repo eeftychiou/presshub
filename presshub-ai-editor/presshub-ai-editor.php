@@ -156,6 +156,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-capabilities.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-admin-menu.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-storage.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-render.php';
+// #247: a changed login or secret forgets its last connection test.
+require_once PRESSHUB_AI_DIR . 'includes/class-connection-status.php';
+PressHub_Connection_Status::register_hooks();
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-migration.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-image-prompt-templates.php';

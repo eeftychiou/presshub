@@ -171,9 +171,12 @@ class PressHub_Setup_Check {
     public static function render( bool $compact = false ): string {
         $problems = self::problems();
         $id       = $compact ? 'presshub-setup-check-hub' : 'presshub-setup-check';
+        // On Connections: one button that runs every Test on the page.
+        $recheck  = $compact ? '' : '<p class="presshub-conn-recheck"><button type="button" class="button presshub-conn-recheck-all">' . esc_html__( 'Recheck all connections', 'presshub-ai-editor' ) . '</button> '
+            . '<span class="presshub-conn-recheck-status" role="status" aria-live="polite"></span></p>';
         if ( ! $problems ) {
             return '<div class="notice notice-success inline presshub-setup-check is-ok" id="' . esc_attr( $id ) . '"><h2 class="presshub-setup-check-title">' . esc_html__( 'Setup check', 'presshub-ai-editor' ) . '</h2><p>'
-                . esc_html__( 'Everything is connected.', 'presshub-ai-editor' ) . '</p></div>';
+                . esc_html__( 'Everything is connected.', 'presshub-ai-editor' ) . '</p>' . $recheck . '</div>';
         }
         $shown = $compact ? array_slice( $problems, 0, 3 ) : $problems;
         $out   = '<div class="notice notice-warning inline presshub-setup-check" id="' . esc_attr( $id ) . '">';
@@ -183,7 +186,7 @@ class PressHub_Setup_Check {
         foreach ( $shown as $p ) {
             $out .= '<li class="is-' . esc_attr( $p['level'] ) . '">' . esc_html( $p['text'] ) . ' <a href="' . esc_url( $p['url'] ) . '">' . esc_html( $p['link'] ) . '</a></li>';
         }
-        $out .= '</ul>';
+        $out .= '</ul>' . $recheck;
         if ( $compact ) {
             $out .= '<p><a href="' . esc_url( PressHub_Settings_Sections::url( 'connections' ) ) . '">' . esc_html__( 'Open Connections', 'presshub-ai-editor' ) . '</a></p>';
         }

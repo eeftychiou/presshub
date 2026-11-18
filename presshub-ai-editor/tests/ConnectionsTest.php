@@ -325,6 +325,53 @@ $items = PressHub_Setup_Check::problems();
 $check( 1 === count( $items ) && 'warning' === $items[0]['level'] && false !== strpos( $items[0]['text'], 'expires soon' ), 'A Facebook token expiring in 2 days should be the only item, as a warning; got ' . $texts() );
 
 // ---------------------------------------------------------------------
+// 7b. Review round 1 (#285): stale statuses, Instagram expiry, Recheck all,
+//     the worker card after Regenerate, Social "_remove" through a save.
+// ---------------------------------------------------------------------
+$GLOBALS['CURRENT_USER_CAPS'] = $ALL_CAPS;
+$GLOBALS['TRANSIENT_STORE']   = [];
+$GLOBALS['OPTIONS_STORE']['presshub_ai_press_inbox_password'] = 'mail-pass';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_press_inbox_host']     = 'mail.example.test';
+PressHub_Connection_Status::record( 'press_inbox', true, 'ok' );
+$save( [ 'presshub_ai_press_inbox_password' => '', 'presshub_ai_remove_press_inbox_password' => '1' ] );
+$check( null === PressHub_Connection_Status::get( 'press_inbox' ), 'Removing the mailbox password should forget the last mailbox test.' );
+PressHub_Connection_Status::record( 'press_inbox', true, 'ok' );
+$save( [ 'presshub_ai_press_inbox_host' => 'imap.other.test' ] );
+$check( null === PressHub_Connection_Status::get( 'press_inbox' ), 'Changing the mailbox server should forget the last mailbox test.' );
+PressHub_Connection_Status::record( 'press_inbox', true, 'ok' );
+$save( [ 'presshub_ai_press_inbox_host' => 'imap.other.test' ] );
+$check( null !== PressHub_Connection_Status::get( 'press_inbox' ), 'Saving the same server again should keep the last mailbox test.' );
+
+$GLOBALS['OPTIONS_STORE']['presshub_social_tiktok_access_token'] = 'tt-token';
+PressHub_Connection_Status::record( 'social:tiktok', true, 'ok' );
+$save( [ 'presshub_social_tiktok_access_token' => '', 'presshub_social_tiktok_access_token_remove' => '1' ] );
+$check( '' === (string) get_option( 'presshub_social_tiktok_access_token', '' ), 'A Social "_remove" box should clear its secret through the Connections save.' );
+$check( null === PressHub_Connection_Status::get( 'social:tiktok' ), 'Removing the TikTok token should forget its last test.' );
+
+$GLOBALS['OPTIONS_STORE']['presshub_social_instagram_account_id'] = '1789';
+$GLOBALS['OPTIONS_STORE']['presshub_social_meta_access_token']    = 'EAAB-ig';
+$GLOBALS['GET_RESPONSE_FILTER'] = static function ( $url ) {
+    if ( false !== strpos( $url, '/debug_token' ) ) {
+        return [ 'response' => [ 'code' => 200 ], 'body' => '{"data":{"expires_at":1900000000}}' ];
+    }
+    return [ 'response' => [ 'code' => 200 ], 'body' => '{"id":"1789","username":"presshub"}' ];
+};
+$ig = PressHub_Social_Meta_API_Client::test_connection( 'instagram' );
+$check( is_array( $ig ) && 1900000000 === (int) ( $ig['expires_at'] ?? 0 ), 'An Instagram test should report when the Meta token expires.' );
+$GLOBALS['GET_RESPONSE_FILTER'] = static function () { return new WP_Error( 'blocked', 'blocked' ); };
+
+$html2 = presshub_test_render_section( 'connections' );
+$check( false !== strpos( $html2, 'class="button presshub-conn-recheck-all"' ), 'Connections should offer "Recheck all connections".' );
+$check( false === strpos( PressHub_Setup_Check::render( true ), 'presshub-conn-recheck-all' ), 'The Hub box should not offer Recheck all (the tests are not on that page).' );
+$admin_js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/admin.js' );
+$check( false !== strpos( $admin_js, "'.presshub-conn-recheck-all'" ) && false !== strpos( $admin_js, '.presshub-test-provider-btn, #presshub-ai-test-press-inbox, .presshub-social-test-btn' ), 'Recheck all should run the Test buttons one after another.' );
+
+$GLOBALS['OPTIONS_STORE']['presshub_social_worker_mode'] = 'pull';
+$r = cnt_ajax( [ 'PressHub_Social_Ajax_Handlers', 'handle_regenerate_worker_secret' ], [] );
+$check( false !== strpos( (string) ( $r['data']['card_html'] ?? '' ), 'id="presshub-worker-status"' ) && false !== strpos( (string) ( $r['data']['card_html'] ?? '' ), 'Not running' ), 'Regenerate should return the worker card as it now is.' );
+$check( false !== strpos( (string) ( $r['data']['status_html'] ?? '' ), 'Not checked yet' ), 'Regenerate should return the worker pill as "Not checked yet".' );
+
+// ---------------------------------------------------------------------
 // 8. No developer details or unused secrets on the screen.
 // ---------------------------------------------------------------------
 $GLOBALS['CURRENT_USER_CAPS'] = $ALL_CAPS;

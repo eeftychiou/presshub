@@ -62,6 +62,57 @@ class PressHub_Connection_Status {
         return $entry;
     }
 
+    /** Options whose change makes a check's last result stale => check ids. */
+    const WATCHED = [
+        'presshub_ai_press_inbox_host'         => [ 'press_inbox' ],
+        'presshub_ai_press_inbox_port'         => [ 'press_inbox' ],
+        'presshub_ai_press_inbox_encryption'   => [ 'press_inbox' ],
+        'presshub_ai_press_inbox_verify_ssl'   => [ 'press_inbox' ],
+        'presshub_ai_press_inbox_username'     => [ 'press_inbox' ],
+        'presshub_ai_press_inbox_password'     => [ 'press_inbox' ],
+        'presshub_social_meta_page_id'         => [ 'social:facebook' ],
+        'presshub_social_meta_access_token'    => [ 'social:facebook', 'social:instagram' ],
+        'presshub_social_instagram_account_id' => [ 'social:instagram' ],
+        'presshub_social_twitter_bearer_token' => [ 'social:twitter' ],
+        'presshub_social_twitter_access_token' => [ 'social:twitter' ],
+        'presshub_social_tiktok_access_token'  => [ 'social:tiktok' ],
+        'presshub_social_tiktok_open_id'       => [ 'social:tiktok' ],
+        'presshub_social_worker_secret'        => [ 'worker' ],
+        'presshub_social_worker_url'           => [ 'worker' ],
+        'presshub_social_worker_mode'          => [ 'worker' ],
+    ];
+
+    /**
+     * Forget a check whenever one of its settings changes or is deleted
+     * (a removed password, a new host…), so its pill reads "Not checked
+     * yet" instead of an old "Connected".
+     */
+    public static function register_hooks(): void {
+        if ( ! function_exists( 'add_action' ) ) {
+            return;
+        }
+        foreach ( array_keys( self::WATCHED ) as $option ) {
+            $forget = static function () use ( $option ) {
+                self::forget_for_option( $option );
+            };
+            // WordPress fires update_option_* only on a real change; compare anyway.
+            $changed = static function ( $old = null, $new = null ) use ( $option ) {
+                if ( $old != $new ) { // phpcs:ignore Universal.Operators.StrictComparisons -- "1" and 1 are the same setting.
+                    self::forget_for_option( $option );
+                }
+            };
+            add_action( 'update_option_' . $option, $changed, 10, 2 );
+            add_action( 'add_option_' . $option, $forget, 10, 0 );
+            add_action( 'delete_option_' . $option, $forget, 10, 0 );
+        }
+    }
+
+    public static function forget_for_option( string $option ): void {
+        foreach ( self::WATCHED[ $option ] ?? [] as $id ) {
+            self::forget( $id );
+        }
+    }
+
     /** Forgets a check (its credential was removed or replaced). */
     public static function forget( string $id ): void {
         $all = self::all();

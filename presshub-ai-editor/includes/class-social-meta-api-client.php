@@ -896,6 +896,8 @@ class PressHub_Social_Meta_API_Client {
                     'success'  => true,
                     'platform' => 'instagram',
                     'message'  => sprintf( __( 'Connected to Instagram Account: @%s (ID: %s)', 'presshub-social-autopost' ), $data['username'] ?? '', $data['id'] ?? '' ),
+                    // #247: Instagram posts with the same Meta token, so it expires with it.
+                    'expires_at' => self::token_expires_at( $token ),
                 ];
 
             case 'twitter':

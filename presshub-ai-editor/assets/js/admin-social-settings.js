@@ -224,7 +224,13 @@
                     $out.append($('<span></span>').text(res.data.message + ' '), $('<code></code>').text(res.data.secret));
                     var $box = $('.presshub-secret[data-secret-for="presshub_social_worker_secret"]');
                     $box.find('.presshub-secret-current').addClass('code').text(res.data.masked || '••••••••');
-                    $box.find('.presshub-secret-edit input').val('');
+                    $box.find('.presshub-secret-edit input').val('').trigger('input');
+                    $box.find('.presshub-secret-edit').addClass('presshub-is-hidden');
+                    $box.find('.presshub-secret-replace').prop('hidden', false).attr('aria-expanded', 'false');
+                    updateConnStatus(res.data.status_html);
+                    if (res.data.card_html) {
+                        $('#presshub-worker-status').replaceWith($($.parseHTML(String(res.data.card_html))));
+                    }
                 } else {
                     $out.text((res && res.data && res.data.message) ? res.data.message : 'Could not make a new secret.');
                 }
