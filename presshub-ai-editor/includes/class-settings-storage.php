@@ -90,17 +90,9 @@ class PressHub_AI_Settings_Storage {
         ] );
 
         // --- Providers ---
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_api_key', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_api_key' ],
-            'type'              => 'string',
-        ] );
         // "Remove stored key" checkboxes: posting 1 deletes the secret so
         // a compromised key can be revoked through the UI (the masked
         // round-trip alone can never clear a key).
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_remove_api_key', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_remove_api_key' ],
-            'type'              => 'boolean',
-        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_remove_google_cloud_api_key', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_remove_google_cloud_api_key' ],
             'type'              => 'boolean',
@@ -179,14 +171,6 @@ class PressHub_AI_Settings_Storage {
         ] );
 
         // --- Daily Briefing & AI Podcast ---
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_api_key', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_api_key' ],
-            'type'              => 'string',
-        ] );
-        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_remove_briefing_tts_api_key', [
-            'sanitize_callback' => [ __CLASS__, 'sanitize_remove_briefing_tts_api_key' ],
-            'type'              => 'boolean',
-        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_engine', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_engine' ],
             'type'              => 'string',
@@ -846,10 +830,6 @@ class PressHub_AI_Settings_Storage {
         return substr( trim( $value ), 0, 10000 );
     }
 
-    public static function sanitize_api_key( $value ) {
-        return self::sanitize_secret( $value, 'presshub_ai_api_key' );
-    }
-
     public static function sanitize_google_cloud_api_key( $value ) {
         return self::sanitize_secret( $value, 'presshub_ai_google_cloud_api_key' );
     }
@@ -858,30 +838,18 @@ class PressHub_AI_Settings_Storage {
         return self::sanitize_secret( $value, 'presshub_ai_github_token' );
     }
 
-    public static function sanitize_briefing_tts_api_key( $value ) {
-        return self::sanitize_secret( $value, 'presshub_ai_briefing_tts_api_key' );
-    }
-
     /**
      * "Remove stored key" checkbox sanitizers: posting 1 deletes the
      * secret option outright (the only UI path that can clear a key, since
      * empty/masked posts preserve the saved value). The flag option itself
      * is stored as 0 either way.
      */
-    public static function sanitize_remove_api_key( $value ) {
-        return self::sanitize_remove_key( $value, 'presshub_ai_api_key' );
-    }
-
     public static function sanitize_remove_google_cloud_api_key( $value ) {
         return self::sanitize_remove_key( $value, 'presshub_ai_google_cloud_api_key' );
     }
 
     public static function sanitize_remove_github_token( $value ) {
         return self::sanitize_remove_key( $value, 'presshub_ai_github_token' );
-    }
-
-    public static function sanitize_remove_briefing_tts_api_key( $value ) {
-        return self::sanitize_remove_key( $value, 'presshub_ai_briefing_tts_api_key' );
     }
 
     private static function sanitize_remove_key( $value, $option_name ) {
@@ -4058,10 +4026,6 @@ class PressHub_AI_Settings_Storage {
     public static function get_briefing_tts_system_instruction(): string {
         $value = (string) get_option( 'presshub_ai_briefing_tts_system_instruction', '' );
         return '' !== trim( $value ) ? $value : self::default_briefing_tts_system_instruction();
-    }
-
-    public static function get_briefing_tts_api_key(): string {
-        return (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
     }
 
     public static function get_voice_speed(): float {

@@ -91,7 +91,7 @@ foreach ( PressHub_Settings_Registry::all() as $key => $e ) {
         $check( 'connections' === PressHub_Settings_Sections::section_of( (string) $key ), "Secret {$key} should be in Connections; it is in " . PressHub_Settings_Sections::section_of( (string) $key ) . '.' );
     }
 }
-$check( in_array( 'presshub_ai_briefing_tts_api_key', $secrets, true ), 'The speech key should be an active secret.' );
+$check( ! in_array( 'presshub_ai_briefing_tts_api_key', $secrets, true ), 'The separate speech key was removed in #237 and should not be a secret.' );
 foreach ( [ 'host', 'port', 'encryption', 'verify_ssl', 'username', 'password', 'timeout' ] as $f ) {
     $check( 'connections' === PressHub_Settings_Sections::section_of( 'presshub_ai_press_inbox_' . $f ), "The press inbox {$f} should be in Connections." );
 }
@@ -163,13 +163,13 @@ $check( false !== strpos( $briefing, 'section=connections#press-inbox' ) && fals
 foreach ( [ 'EAAB-secret-meta-token-12345', 'bearer-secret-67890', 'tiktok-secret-abcde', 'worker-secret-fghij-0000', 'ghp_secretgithubtoken999', 'AIza-secret-google-cloud', 'AIza-secret-speech-key', 'SuperSecretMailbox1', 'AIza-secret-provider-key' ] as $raw ) {
     $check( false === strpos( $html, $raw ), "Connections should never print a saved secret ({$raw})." );
 }
-foreach ( [ 'presshub_social_meta_access_token', 'presshub_social_twitter_bearer_token', 'presshub_social_tiktok_access_token', 'presshub_social_worker_secret', 'presshub_ai_github_token', 'presshub_ai_google_cloud_api_key', 'presshub_ai_briefing_tts_api_key', 'presshub_ai_press_inbox_password' ] as $name ) {
+foreach ( [ 'presshub_social_meta_access_token', 'presshub_social_twitter_bearer_token', 'presshub_social_tiktok_access_token', 'presshub_social_worker_secret', 'presshub_ai_github_token', 'presshub_ai_google_cloud_api_key', 'presshub_ai_press_inbox_password' ] as $name ) {
     $check( false !== strpos( $html, 'data-secret-for="' . $name . '"' ), "{$name} should use the Replace key field." );
     $check( false !== strpos( $html, 'name="' . $name . '" id="' . $name . '" value=""' ), "{$name} should post empty unless a new value is typed." );
 }
 $outside_modal = (string) preg_replace( '/<div[^>]+id="presshub-provider-modal".*/s', '', $html );
 $check( preg_match_all( '/<input type="password"/', $outside_modal ) === preg_match_all( '/<div class="presshub-secret" /', $outside_modal ), 'Every password input outside the provider modal should belong to a Replace key field.' );
-foreach ( [ 'presshub_ai_remove_github_token', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_briefing_tts_api_key', 'presshub_ai_remove_press_inbox_password', 'presshub_social_meta_access_token_remove' ] as $remove ) {
+foreach ( [ 'presshub_ai_remove_github_token', 'presshub_ai_remove_google_cloud_api_key', 'presshub_ai_remove_press_inbox_password', 'presshub_social_meta_access_token_remove' ] as $remove ) {
     $check( false !== strpos( $html, 'name="' . $remove . '"' ), "The remove box {$remove} should still be there." );
 }
 
@@ -178,14 +178,14 @@ $save = static function ( array $payload ) use ( $ajax ) {
 };
 $GLOBALS['OPTIONS_STORE']['presshub_ai_github_token']         = 'ghp_keep';
 $GLOBALS['OPTIONS_STORE']['presshub_ai_press_inbox_password'] = 'keep-pass';
-$GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_api_key'] = 'keep-tts';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'keep-tts';
 $GLOBALS['OPTIONS_STORE']['presshub_social_meta_access_token'] = 'keep-meta';
-$save( [ 'presshub_ai_github_token' => '', 'presshub_ai_press_inbox_password' => '', 'presshub_ai_briefing_tts_api_key' => '', 'presshub_social_meta_access_token' => '' ] );
-$check( 'ghp_keep' === get_option( 'presshub_ai_github_token' ) && 'keep-pass' === get_option( 'presshub_ai_press_inbox_password' ) && 'keep-tts' === get_option( 'presshub_ai_briefing_tts_api_key' ) && 'keep-meta' === get_option( 'presshub_social_meta_access_token' ), 'An empty Replace key field should keep every saved secret.' );
-$save( [ 'presshub_ai_github_token' => 'ghp_new', 'presshub_ai_press_inbox_password' => 'new-pass', 'presshub_ai_briefing_tts_api_key' => 'new-tts', 'presshub_social_meta_access_token' => 'new-meta' ] );
-$check( 'ghp_new' === get_option( 'presshub_ai_github_token' ) && 'new-pass' === get_option( 'presshub_ai_press_inbox_password' ) && 'new-tts' === get_option( 'presshub_ai_briefing_tts_api_key' ) && 'new-meta' === get_option( 'presshub_social_meta_access_token' ), 'A typed value should replace each secret.' );
-$save( [ 'presshub_ai_briefing_tts_api_key' => '', 'presshub_ai_remove_briefing_tts_api_key' => '1', 'presshub_ai_press_inbox_password' => '', 'presshub_ai_remove_press_inbox_password' => '1' ] );
-$check( '' === (string) get_option( 'presshub_ai_briefing_tts_api_key', '' ) && '' === (string) get_option( 'presshub_ai_press_inbox_password', '' ), 'Remove should still clear the speech key and the mailbox password.' );
+$save( [ 'presshub_ai_github_token' => '', 'presshub_ai_press_inbox_password' => '', 'presshub_ai_google_cloud_api_key' => '', 'presshub_social_meta_access_token' => '' ] );
+$check( 'ghp_keep' === get_option( 'presshub_ai_github_token' ) && 'keep-pass' === get_option( 'presshub_ai_press_inbox_password' ) && 'keep-tts' === get_option( 'presshub_ai_google_cloud_api_key' ) && 'keep-meta' === get_option( 'presshub_social_meta_access_token' ), 'An empty Replace key field should keep every saved secret.' );
+$save( [ 'presshub_ai_github_token' => 'ghp_new', 'presshub_ai_press_inbox_password' => 'new-pass', 'presshub_ai_google_cloud_api_key' => 'new-tts', 'presshub_social_meta_access_token' => 'new-meta' ] );
+$check( 'ghp_new' === get_option( 'presshub_ai_github_token' ) && 'new-pass' === get_option( 'presshub_ai_press_inbox_password' ) && 'new-tts' === get_option( 'presshub_ai_google_cloud_api_key' ) && 'new-meta' === get_option( 'presshub_social_meta_access_token' ), 'A typed value should replace each secret.' );
+$save( [ 'presshub_ai_google_cloud_api_key' => '', 'presshub_ai_remove_google_cloud_api_key' => '1', 'presshub_ai_press_inbox_password' => '', 'presshub_ai_remove_press_inbox_password' => '1' ] );
+$check( '' === (string) get_option( 'presshub_ai_google_cloud_api_key', '' ) && '' === (string) get_option( 'presshub_ai_press_inbox_password', '' ), 'Remove should still clear the Google Cloud key and the mailbox password.' );
 
 // ---------------------------------------------------------------------
 // 3. The status cache.
@@ -383,7 +383,7 @@ $check( false !== strpos( (string) ( $r['data']['status_html'] ?? '' ), 'Not che
 // ---------------------------------------------------------------------
 $GLOBALS['CURRENT_USER_CAPS'] = $ALL_CAPS;
 $check( false === strpos( $html, 'wp-json' ) && false === strpos( $html, 'presshub-social/v1' ), 'Connections should not show REST endpoint URLs.' );
-foreach ( [ 'presshub_social_twitter_api_key', 'presshub_social_twitter_api_secret', 'presshub_social_twitter_access_secret', 'presshub_social_github_token', 'presshub_ai_api_key' ] as $unused ) {
+foreach ( [ 'presshub_social_twitter_api_key', 'presshub_social_twitter_api_secret', 'presshub_social_twitter_access_secret', 'presshub_social_github_token', 'presshub_ai_api_key', 'presshub_ai_briefing_tts_api_key', 'presshub_ai_remove_briefing_tts_api_key' ] as $unused ) {
     $check( false === strpos( $html, 'name="' . $unused . '"' ), "Connections should not show the unused secret {$unused}." );
 }
 $css = (string) file_get_contents( dirname( __DIR__ ) . '/assets/css/settings.css' );

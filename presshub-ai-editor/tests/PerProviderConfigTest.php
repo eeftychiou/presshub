@@ -16,6 +16,8 @@
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
+require_once __DIR__ . '/../includes/class-provider-defaults.php';
+require_once __DIR__ . '/../includes/class-provider-store.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 
 class PerProviderConfigTest
@@ -25,7 +27,7 @@ class PerProviderConfigTest
 
         // --- Case 1: OpenAI uses its own model, temperature and timeout ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']            = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']            = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']           = 'openai';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai']       = 'gpt-4o-custom';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_openai'] = 0.2;
@@ -55,7 +57,7 @@ class PerProviderConfigTest
         // --- Case 2: Anthropic uses its own model, max_tokens, temperature,
         //             version header and default timeout ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']             = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']             = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']            = 'anthropic';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_anthropic']     = 'claude-3-5-sonnet-20240620';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_anthropic'] = 0.3;
@@ -87,7 +89,7 @@ class PerProviderConfigTest
 
         // --- Case 3: Anthropic version header defaults to 2023-06-01 ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']         = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']         = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']        = 'anthropic';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
@@ -100,7 +102,7 @@ class PerProviderConfigTest
         // --- Case 4: Gemini model in URL, temperature + maxOutputTokens in
         //             generationConfig, timeout ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']          = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']          = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']         = 'gemini';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini']     = 'gemini-1.5-pro-latest';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_gemini'] = 0.3;
@@ -132,7 +134,7 @@ class PerProviderConfigTest
 
         // --- Case 5: default timeouts per provider (default 300s) ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']   = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']   = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']  = 'openai';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
@@ -142,7 +144,7 @@ class PerProviderConfigTest
         }
 
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']   = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']   = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']  = 'gemini';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
@@ -153,7 +155,7 @@ class PerProviderConfigTest
 
         // --- Case 6: classify_intent forces temperature 0.0 (OpenAI body) ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']            = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']            = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']           = 'openai';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_openai'] = 0.7;
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
@@ -166,7 +168,7 @@ class PerProviderConfigTest
 
         // --- Case 7: classify_intent forces temperature 0.0 (Gemini generationConfig) ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']           = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']           = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']          = 'gemini';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_gemini'] = 0.9;
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
@@ -179,7 +181,7 @@ class PerProviderConfigTest
 
         // --- Case 8: audio-script generation forces temperature 0.0 (Gemini) ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']            = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']            = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']           = 'gemini';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'gc';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_temperature_gemini'] = 0.9;
@@ -217,7 +219,7 @@ class PerProviderConfigTest
 
         // --- Case 9: OpenAI-Organization header present when option set, absent otherwise ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']   = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']   = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']  = 'openai';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_openai_org'] = 'org-abc';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
@@ -228,7 +230,7 @@ class PerProviderConfigTest
         }
 
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']   = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']   = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']  = 'openai';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
@@ -249,9 +251,11 @@ class PerProviderConfigTest
 
         // --- Case 11: test_connection( $provider ) tests the GIVEN provider ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']       = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']       = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']      = 'openai'; // active provider
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini']  = 'gemini-2.0-flash';
+        // The Connections provider's own model is what the test button uses.
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'][2]['default_model'] = 'gemini-2.0-flash';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
         $result = $client->test_connection( 'gemini' );
@@ -264,7 +268,7 @@ class PerProviderConfigTest
         }
 
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']  = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']  = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
@@ -274,7 +278,7 @@ class PerProviderConfigTest
         }
 
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']  = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']  = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();
         $client = new PressHub_AI_API_Client();
@@ -296,7 +300,7 @@ class PerProviderConfigTest
         // --- Case 13: a model option with a leading 'models/' path is
         //             normalized so the URL never double-prefixes ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']      = 'k';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']      = presshub_test_provider_keys( 'k' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']     = 'gemini';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_gemini'] = 'models/gemini-2.0-flash';
         $GLOBALS['CAPTURE_FILTER'] = self::multi_provider_filter();

@@ -52,7 +52,6 @@ class DailyBriefingSettingsTest
             'presshub_ai_briefing_sources',
             'presshub_ai_briefing_schedule_enabled',
             'presshub_ai_briefing_tts_engine',
-            'presshub_ai_briefing_tts_api_key',
             'presshub_ai_briefing_tts_model',
             'presshub_ai_briefing_tts_timeout',
             'presshub_ai_briefing_harvest_time',
@@ -444,23 +443,11 @@ class DailyBriefingSettingsTest
             $failures[] = 'presshub_ai_execute_generation_cron function must exist.';
         }
 
-        // --- Case 14: Sanitization of speech generation API key & remove key flag ---
-        self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_api_key'] = 'AIzaSyExistingKey1234';
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '' ) !== 'AIzaSyExistingKey1234' ) {
-            $failures[] = 'empty briefing tts api key post should preserve existing key.';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '••••1234' ) !== 'AIzaSyExistingKey1234' ) {
-            $failures[] = 'masked briefing tts api key post should preserve existing key.';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_briefing_tts_api_key', '<script>AIzaSyNewKey5678</script>' ) !== 'AIzaSyNewKey5678' ) {
-            $failures[] = 'briefing tts api key should strip HTML tags.';
-        }
-        if ( self::sanitize( $cbs, 'presshub_ai_remove_briefing_tts_api_key', '1' ) !== 0 ) {
-            $failures[] = 'remove briefing tts api key flag should sanitize to 0.';
-        }
-        if ( array_key_exists( 'presshub_ai_briefing_tts_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
-            $failures[] = 'checking remove briefing tts api key should delete the option.';
+        // --- Case 14: #237 removed the separate speech key and its remove flag ---
+        foreach ( [ 'presshub_ai_briefing_tts_api_key', 'presshub_ai_remove_briefing_tts_api_key' ] as $gone ) {
+            if ( isset( $cbs[ $gone ] ) || isset( $registered[ $gone ] ) ) {
+                $failures[] = "{$gone} was removed in #237 and must no longer be registered.";
+            }
         }
 
         // --- Case 15: Harvest Execution Time Budget (clamping, options map, getter, render) ---

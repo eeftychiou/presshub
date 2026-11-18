@@ -56,27 +56,27 @@ class SettingsSanitizeTest
 
         // --- Case 2: API key HTML is stripped ---
         self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_api_key', '<script>alert(1)</script>' ) !== 'alert(1)' ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', '<script>alert(1)</script>' ) !== 'alert(1)' ) {
             $failures[] = "api key '<script>alert(1)</script>' should have HTML stripped.";
         }
 
         // --- Case 3: empty key post preserves the saved key ---
         self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-existing';
-        if ( self::sanitize( $cbs, 'presshub_ai_api_key', '' ) !== 'sk-existing' ) {
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-existing';
+        if ( self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', '' ) !== 'sk-existing' ) {
             $failures[] = "empty api key post should preserve the saved key.";
         }
 
         // --- Case 4: empty key post with no saved value stays empty ---
         self::reset_options();
-        if ( self::sanitize( $cbs, 'presshub_ai_api_key', '' ) !== '' ) {
+        if ( self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', '' ) !== '' ) {
             $failures[] = "empty api key post with no saved value should stay empty.";
         }
 
         // --- Case 5: masked value is never stored as a real key ---
         self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-1234567890';
-        if ( self::sanitize( $cbs, 'presshub_ai_api_key', '••••7890' ) !== 'sk-1234567890' ) {
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-1234567890';
+        if ( self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', '••••7890' ) !== 'sk-1234567890' ) {
             $failures[] = "a masked key post should preserve the saved key, not store the mask.";
         }
 
@@ -233,17 +233,17 @@ class SettingsSanitizeTest
 
         // --- Case 17: "Remove stored key" checkbox deletes the saved secret ---
         self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-to-remove';
-        if ( self::sanitize( $cbs, 'presshub_ai_remove_api_key', '1' ) !== 0 ) {
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-to-remove';
+        if ( self::sanitize( $cbs, 'presshub_ai_remove_google_cloud_api_key', '1' ) !== 0 ) {
             $failures[] = 'remove_api_key sanitize should store 0 for the flag option.';
         }
-        if ( array_key_exists( 'presshub_ai_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
-            $failures[] = 'checking "Remove stored key" must delete presshub_ai_api_key.';
+        if ( array_key_exists( 'presshub_ai_google_cloud_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'checking "Remove stored key" must delete presshub_ai_google_cloud_api_key.';
         }
         self::reset_options();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-keep';
-        self::sanitize( $cbs, 'presshub_ai_remove_api_key', '' );
-        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] ?? null ) !== 'sk-keep' ) {
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-keep';
+        self::sanitize( $cbs, 'presshub_ai_remove_google_cloud_api_key', '' );
+        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] ?? null ) !== 'sk-keep' ) {
             $failures[] = 'an unchecked remove flag must keep the saved key.';
         }
         self::reset_options();
@@ -280,12 +280,12 @@ class SettingsSanitizeTest
         // --- Case 19: secrets persist with autoload disabled ---
         self::reset_options();
         $GLOBALS['UPDATE_OPTION_AUTOLOAD'] = [];
-        self::sanitize( $cbs, 'presshub_ai_api_key', 'sk-new-value' );
-        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] ?? null ) !== 'sk-new-value' ) {
+        self::sanitize( $cbs, 'presshub_ai_google_cloud_api_key', 'sk-new-value' );
+        if ( ( $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] ?? null ) !== 'sk-new-value' ) {
             $failures[] = 'a new api key should be persisted by the sanitize path.';
         }
-        if ( array_key_exists( 'presshub_ai_api_key', $GLOBALS['UPDATE_OPTION_AUTOLOAD'] ) && false !== $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_api_key'] ) {
-            $failures[] = 'api key must be saved with autoload=false; got: ' . var_export( $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_api_key'] ?? null, true );
+        if ( array_key_exists( 'presshub_ai_google_cloud_api_key', $GLOBALS['UPDATE_OPTION_AUTOLOAD'] ) && false !== $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_google_cloud_api_key'] ) {
+            $failures[] = 'api key must be saved with autoload=false; got: ' . var_export( $GLOBALS['UPDATE_OPTION_AUTOLOAD']['presshub_ai_google_cloud_api_key'] ?? null, true );
         }
         // The masked round-trip also re-persists with autoload=false.
         self::reset_options();

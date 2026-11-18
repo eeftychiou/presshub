@@ -138,16 +138,6 @@ class PressHub_AI_Settings {
         $renderer->render_settings_page();
     }
 
-    /**
-     * Stand-alone render of the API key field. Used by SettingsPageTest
-     * and any caller that wants just the masked-key widget, not the
-     * whole settings page. Delegates to the render module.
-     */
-    public function render_api_key_field(): void {
-        $renderer = new PressHub_AI_Settings_Render();
-        $renderer->render_api_key_field();
-    }
-
     public function render_github_token_field(): void {
         $renderer = new PressHub_AI_Settings_Render();
         $renderer->render_github_token_field();

@@ -134,7 +134,7 @@ class SettingsHiddenSurfacedTest {
         // 4. The registry's "rendered" flag matches the page for every AI option.
         $GLOBALS['OPTIONS_STORE'] = [
             // Make conditionally shown fields appear (remove-key boxes need a stored key).
-            'presshub_ai_api_key' => 'AIzaSyEXAMPLEKEY000000000000000003kQ',
+            'presshub_ai_google_cloud_api_key' => 'AIzaSyEXAMPLEKEY000000000000000003kQ',
         ];
         $html = self::render_page();
         foreach ( PressHub_Settings_Registry::for_page( 'ai' ) as $key => $e ) {

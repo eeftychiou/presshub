@@ -65,7 +65,6 @@ class SettingsPageTest
         $registered = $GLOBALS['REGISTERED_SETTINGS'] ?? [];
         $expected_options = [
             'presshub_ai_provider',
-            'presshub_ai_api_key',
             'presshub_ai_openai_org',
             'presshub_ai_anthropic_version',
             'presshub_ai_github_token',
@@ -101,11 +100,8 @@ class SettingsPageTest
             'presshub_ai_audit_log_retention_days',
             'presshub_ai_social_meta_enabled',
             'presshub_ai_social_meta_all_posts',
-            'presshub_ai_remove_api_key',
             'presshub_ai_remove_google_cloud_api_key',
             'presshub_ai_remove_github_token',
-            'presshub_ai_briefing_tts_api_key',
-            'presshub_ai_remove_briefing_tts_api_key',
             'presshub_ai_briefing_tts_engine',
             'presshub_ai_briefing_tts_model',
             'presshub_ai_briefing_tts_timeout',
@@ -441,10 +437,10 @@ class SettingsPageTest
 
         // --- Case 7: masked API-key display (P4) ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'sk-1234567890';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = 'sk-1234567890';
         $settings = new PressHub_AI_Settings();
         ob_start();
-        $settings->render_api_key_field();
+        $settings->render_google_cloud_api_key_field();
         $html = ob_get_clean();
         if ( false === strpos( $html, '••••7890' ) ) {
             $failures[] = 'API key field should display the masked key (last 4 chars); got: ' . $html;
@@ -490,12 +486,10 @@ class SettingsPageTest
 
         // --- Case 9: "Remove stored key" checkboxes + retention field render ---
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']           = '«redacted:sk-…»';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_github_token']      = '«redacted:ghp-…»';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_google_cloud_api_key'] = '«redacted:gc-…»';
         $settings = new PressHub_AI_Settings();
         foreach ( [
-            'render_api_key_field'           => 'presshub_ai_remove_api_key',
             'render_github_token_field'      => 'presshub_ai_remove_github_token',
             'render_google_cloud_api_key_field' => 'presshub_ai_remove_google_cloud_api_key',
         ] as $renderer => $remove_flag ) {
@@ -506,14 +500,14 @@ class SettingsPageTest
                 $failures[] = "{$renderer} should render the {$remove_flag} checkbox; got: " . $html;
             }
         }
-        // Without a saved key the remove checkbox must not render.
+        // Without a saved key no masked value is shown.
         self::reset_world();
         $settings = new PressHub_AI_Settings();
         ob_start();
-        $settings->render_api_key_field();
+        $settings->render_google_cloud_api_key_field();
         $html = ob_get_clean();
-        if ( false !== strpos( $html, 'presshub_ai_remove_api_key' ) ) {
-            $failures[] = 'render_api_key_field() must not offer "Remove stored key" when no key is saved.';
+        if ( false !== strpos( $html, '••••' ) ) {
+            $failures[] = 'render_google_cloud_api_key_field() must not show a masked key when no key is saved.';
         }
         // Retention field renders with the default value and its option id.
         self::reset_world();
