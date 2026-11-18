@@ -82,9 +82,12 @@ class PressHub_AI_Policy_Fiches {
         'coauthor_draft'       => 2500,
         'copilot_chat'         => 2500,
         'coauthor_scorecard'   => 1500,
-        'social_tiktok_shorts' => 800,
-        'social_copy_'         => 800,
+        'social_tiktok_shorts' => 1200,
+        'social_copy_'         => 1200,
     ];
+
+    /** Social budgets before 2.52.0; a stored value still equal to this is raised once (see presshub_ai_migrate_social_fiche_budgets()). */
+    const OLD_SOCIAL_BUDGET = 800;
 
     /** Which parts each kind of call gets (see parts_for()). */
     const PARTS = [
@@ -743,6 +746,11 @@ class PressHub_AI_Policy_Fiches {
         if ( 'coauthor_scorecard' === $action ) {
             $header = "=== ΕΛΕΓΧΟΣ ΜΕ ΒΑΣΗ ΤΟΥΣ ΦΑΚΕΛΟΥΣ ΠΟΛΙΤΙΚΩΝ ===\n"
                 . "Έλεγξε επιπλέον αν το κείμενο παρουσιάζει ως γεγονός κάποιον από τους παρακάτω αμφισβητούμενους, μη ελεγμένους ή ανακριβείς ισχυρισμούς χωρίς απόδοση και χωρίς τον αντίλογο, ή αν παραβιάζει τους κανόνες πλαισίωσης. Αν ναι, μείωσε τη βαθμολογία και γράψε στο feedback ποιον ισχυρισμό ή κανόνα αφορά.\n";
+        } elseif ( self::PARTS['social'] === self::parts_for( $action ) ) {
+            // Framing only (social copy, shorts): a short header, so the small
+            // budget is left for the fiches themselves.
+            $header = "=== ΦΑΚΕΛΟΙ ΠΟΛΙΤΙΚΩΝ (συντακτική γραμμή) ===\n"
+                . "Δεσμευτικοί κανόνες πλαισίωσης του αρχισυντάκτη για τα θέματα πολιτικής του υλικού. Δεν είναι σημερινή είδηση.\n";
         } else {
             $header = "=== ΦΑΚΕΛΟΙ ΠΟΛΙΤΙΚΩΝ (συντακτική γραμμή) ===\n"
                 . "Οδηγίες του αρχισυντάκτη για τα θέματα πολιτικής που εμφανίζονται στο υλικό. Οι αρχές και οι κανόνες πλαισίωσης είναι δεσμευτικοί. Τα επιβεβαιωμένα στοιχεία μπορείς να τα χρησιμοποιείς ως υπόβαθρο. Τους αμφισβητούμενους και μη ελεγμένους ισχυρισμούς απόδωσέ τους σε όποιον τους διατυπώνει και δώσε τον αντίλογο. Τους ανακριβείς ισχυρισμούς μην τους αναπαράγεις ως αληθινούς. Τίποτα από τους φακέλους δεν είναι σημερινή είδηση αν δεν υπάρχει στο σημερινό υλικό.\n";

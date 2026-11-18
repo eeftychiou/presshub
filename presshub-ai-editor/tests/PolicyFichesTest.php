@@ -81,7 +81,7 @@ pf_check( 'match: drafts matched for updates', isset( $P::find_in_text( $materia
 pf_check( 'match: unrelated text', empty( $P::find_in_text( 'Καιρός και αθλητικά.' ) ) );
 
 // 3. Injection.
-pf_check( 'budget: per action and prefix', 3000 === $P::budget_for( 'briefing_curation' ) && 800 === $P::budget_for( 'social_copy_facebook' ) && 1500 === $P::budget_for( 'coauthor_scorecard' ) );
+pf_check( 'budget: per action and prefix', 3000 === $P::budget_for( 'briefing_curation' ) && 1200 === $P::budget_for( 'social_copy_facebook' ) && 1500 === $P::budget_for( 'coauthor_scorecard' ) );
 pf_check( 'budget: none for memory calls', 0 === $P::budget_for( 'memory_policy' ) && 0 === $P::budget_for( 'briefing_memory' ) && 0 === $P::budget_for( 'classify_intent' ) );
 pf_check( 'apply: unbudgeted action untouched', 'SYS' === $P::apply( 'SYS', $material, 'classify_intent' ) && null === $P::last_applied() );
 $out = $P::apply( 'SYS', $material, 'briefing_curation' );
@@ -316,7 +316,7 @@ $w = $P::core_warnings( $P::normalize( [
 $wt = implode( ' | ', $w );
 pf_check( 'warnings: short alias named', false !== strpos( $wt, 'never match on their own (one word under 6 letters): ΓεΣΥ' ) );
 pf_check( 'warnings: fact without link, date, ignore-instructions', false !== strpos( $wt, '1 confirmed fact has no link' ) && false !== strpos( $wt, 'mention a date' ) && false !== strpos( $wt, 'ignore other instructions' ) );
-pf_check( 'warnings: too long for podcast and social copy', false !== strpos( $wt, 'Too long for the podcast calls' ) && false !== strpos( $wt, 'Too long for the social copy calls (room for 800' ) );
+pf_check( 'warnings: too long for podcast and social copy', false !== strpos( $wt, 'Too long for the podcast calls' ) && false !== strpos( $wt, 'Too long for the social copy calls (room for 1200' ) );
 pf_check( 'warnings: none for a clean fiche', [] === $P::core_warnings( $P::normalize( [ 'title' => 'Συνταξιοδοτική μεταρρύθμιση', 'aliases' => [ 'συντάξεις' ], 'principles' => 'Ποιος αποφασίζει.', 'framing' => 'Οι κατηγορίες αποδίδονται.', 'facts' => [ [ 'text' => 'Στοιχείο', 'url' => 'https://example.test/a' ] ], 'status' => 'published' ] ) ) );
 $edit = $P::build_page( [ 'fiche' => 'δημοσια-υγεια' ] );
 pf_check( 'page: example placeholders in the core fields', false !== strpos( $edit, 'placeholder="Η κάλυψη ρωτά πάντα' ) && false !== strpos( $edit, 'placeholder="συντάξεις, συνταξιούχοι' ) );

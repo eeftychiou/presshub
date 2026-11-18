@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.49.0
+ * Version: 2.52.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -41,6 +41,41 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
     }
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
+
+/**
+ * 2.52.0: policy fiches in social copy and shorts got 800 characters, which
+ * after the block's instructions left too little room for a fiche, so most
+ * fiches were never sent there. The default is now 1,200 and the framing-only
+ * block has a short header. A saved budget that still equals the old default
+ * (the Editorial knowledge section saves every row) is raised to the new
+ * default; any other value was chosen by an editor and is kept. Runs once;
+ * guarded by the presshub_ai_migrated_social_fiche_budgets flag.
+ */
+if ( ! function_exists( 'presshub_ai_migrate_social_fiche_budgets' ) ) {
+    function presshub_ai_migrate_social_fiche_budgets() {
+        if ( '1' === get_option( 'presshub_ai_migrated_social_fiche_budgets', '0' ) || ! class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+            return;
+        }
+        $stored = get_option( 'presshub_ai_policy_fiches_budgets', [] );
+        if ( is_array( $stored ) && $stored ) {
+            $raised = [];
+            foreach ( [ 'social_copy_', 'social_tiktok_shorts' ] as $action ) {
+                if ( isset( $stored[ $action ] ) && PressHub_AI_Policy_Fiches::OLD_SOCIAL_BUDGET === (int) $stored[ $action ] ) {
+                    $stored[ $action ] = PressHub_AI_Policy_Fiches::BUDGETS[ $action ];
+                    $raised[]          = $action;
+                }
+            }
+            if ( $raised ) {
+                update_option( 'presshub_ai_policy_fiches_budgets', $stored );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::info( 'Policy fiche budgets for social copy raised to the new default', [ 'actions' => $raised, 'from' => PressHub_AI_Policy_Fiches::OLD_SOCIAL_BUDGET ] );
+                }
+            }
+        }
+        update_option( 'presshub_ai_migrated_social_fiche_budgets', '1', false );
+    }
+}
+add_action( 'admin_init', 'presshub_ai_migrate_social_fiche_budgets' );
 
 /**
  * #263 repair: earlier saves unslashed JSON-encoded briefing sources, which
@@ -122,7 +157,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.49.0' );
+define( 'PRESSHUB_AI_VERSION', '2.52.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 

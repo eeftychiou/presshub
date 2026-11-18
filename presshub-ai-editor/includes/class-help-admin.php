@@ -297,13 +297,24 @@ class PressHub_AI_Help_Admin {
         $html .= self::p( __( 'Built by the real policy code from the worked example on the Policies page (pension reform; the parts in brackets are placeholders), first for the daily briefing, then for social copy. The example is not saved.', 'presshub-ai-editor' ) );
         $html .= self::pre( self::sample_policy_block( 'briefing_curation' ) );
         $social_room = self::policy_room( 'social_copy_facebook' );
-        $html       .= self::p( sprintf(
-            /* translators: 1: characters left for a fiche in social copy, 2: length of the example's framing */
-            __( 'Social copy has room for about %1$d characters of fiche after the fixed instructions. The example\'s framing is %2$d characters, so the full example would be left out of social copy. Below, the same fiche with only its first framing rule:', 'presshub-ai-editor' ),
-            $social_room,
-            self::strlen_u( (string) PressHub_AI_Policy_Fiches::example_fiche()['framing'] )
-        ) );
-        $html .= self::pre( self::sample_policy_block( 'social_copy_facebook', true ) );
+        $social_full = self::sample_policy_block( 'social_copy_facebook' );
+        if ( '' !== $social_full ) {
+            $html .= self::p( sprintf(
+                /* translators: 1: characters left for a fiche in social copy, 2: length of the example's framing */
+                __( 'Social copy has room for about %1$d characters of fiche after the fixed instructions, and the example\'s framing is %2$d characters, so it is sent in full:', 'presshub-ai-editor' ),
+                $social_room,
+                self::strlen_u( (string) PressHub_AI_Policy_Fiches::example_fiche()['framing'] )
+            ) );
+            $html .= self::pre( $social_full );
+        } else {
+            $html .= self::p( sprintf(
+                /* translators: 1: characters left for a fiche in social copy, 2: length of the example's framing */
+                __( 'Social copy has room for about %1$d characters of fiche after the fixed instructions. The example\'s framing is %2$d characters, so the full example would be left out of social copy. Below, the same fiche with only its first framing rule:', 'presshub-ai-editor' ),
+                $social_room,
+                self::strlen_u( (string) PressHub_AI_Policy_Fiches::example_fiche()['framing'] )
+            ) );
+            $html .= self::pre( self::sample_policy_block( 'social_copy_facebook', true ) );
+        }
         $html .= self::h3( __( 'How it changes the output', 'presshub-ai-editor' ) );
         $html .= self::effect(
             __( 'Without the fiche, an article quoting the government that "Parliament is blocking the pension increase" can come out as «Η Βουλή μπλοκάρει την αύξηση των συντάξεων», in the newsroom\'s own voice, with "100 euro" and no limits.', 'presshub-ai-editor' ),
