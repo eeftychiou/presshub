@@ -689,9 +689,22 @@ jQuery(document).ready(function($) {
             alert: __('QA gate: this post can be published, but the editor will be alerted about the failed checks.', 'presshub-ai-editor'),
             hold: __('QA gate: this post will be held in Pending Review until the failed checks are fixed.', 'presshub-ai-editor')
         };
+        var checkNames = {
+            editorial: __('editorial', 'presshub-ai-editor'),
+            legal: __('legal', 'presshub-ai-editor'),
+            seo: __('SEO', 'presshub-ai-editor')
+        };
+        var failed = [];
+        for (var f = 0; f < (gate.failed || []).length; f++) {
+            failed.push(checkNames[gate.failed[f]] || gate.failed[f]);
+        }
         var html = '<div class="presshub-gate-result">';
         if (verdicts[gate.verdict]) {
-            html += '<p><strong>' + presshubEsc(verdicts[gate.verdict]) + '</strong></p>';
+            html += '<p><strong>' + presshubEsc(verdicts[gate.verdict]) + '</strong>';
+            if (failed.length && 'pass' !== gate.verdict) {
+                html += ' ' + presshubEsc(__('Failed checks: %s.', 'presshub-ai-editor').replace('%s', failed.join(', ')));
+            }
+            html += '</p>';
         }
         var issues = (gate.legal && gate.legal.issues) ? gate.legal.issues : [];
         if (issues.length) {

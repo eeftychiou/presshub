@@ -414,15 +414,15 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><label for="presshub_ai_qa_seo_min_score"><?php echo esc_html__( 'Minimum SEO score', 'presshub-ai-editor' ); ?></label></th>
-                                    <td>
-                                        <?php $this->render_qa_seo_min_score_field(); ?>
-                                    </td>
-                                </tr>
-                                <tr>
                                     <th scope="row"><label for="presshub_ai_qa_seo_action"><?php echo esc_html__( 'When the SEO check fails', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
                                         <?php $this->render_qa_seo_action_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_seo_min_score"><?php echo esc_html__( 'Minimum SEO score', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_seo_min_score_field(); ?>
                                     </td>
                                 </tr>
                             </tbody>

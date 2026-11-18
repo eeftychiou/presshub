@@ -44,7 +44,7 @@ class PressHub_AI_QA_Reviews_Admin {
     public static function verdict_label( string $verdict ): string {
         $labels = [
             'pass'  => __( 'Passed', 'presshub-ai-editor' ),
-            'alert' => __( 'Published with alerts', 'presshub-ai-editor' ),
+            'alert' => __( 'Passed with alerts', 'presshub-ai-editor' ),
             'hold'  => __( 'Held', 'presshub-ai-editor' ),
             'error' => __( 'Review failed to run', 'presshub-ai-editor' ),
         ];

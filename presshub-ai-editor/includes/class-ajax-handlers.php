@@ -347,6 +347,12 @@ class PressHub_AI_Ajax_Handlers {
                 'legal'        => $gate['checks']['legal'] ?? [],
                 'seo_result'   => $gate['checks']['seo']['result'] ?? 'skip',
                 'seo_threshold' => $gate['checks']['seo']['threshold'] ?? null,
+                'failed'       => array_keys( array_filter(
+                    (array) ( $gate['checks'] ?? [] ),
+                    static function ( $check ) {
+                        return in_array( $check['result'] ?? '', [ 'fail', 'error' ], true );
+                    }
+                ) ),
             ],
         ] ) );
     }

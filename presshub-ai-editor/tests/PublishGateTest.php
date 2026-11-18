@@ -247,7 +247,7 @@ $xss = PressHub_AI_QA_Reviews_Admin::render_row( [
     'details' => [ 'checks' => [ 'editorial' => [ 'feedback' => '<script>alert(1)</script>' ], 'legal' => [ 'result' => 'fail', 'issues' => [ [ 'severity' => 'High', 'type' => 'defamation', 'quote' => '<img src=x onerror=1>', 'fix' => 'f' ] ] ] ] ],
 ] );
 pg_check( false === strpos( $xss, '<script>' ) && false === strpos( $xss, '<img' ), 'feedback is escaped on the QA reviews page' );
-pg_check( false !== strpos( $xss, 'Published with alerts' ) && false !== strpos( $xss, 'High risk' ), 'row shows the verdict and the legal risk' );
+pg_check( false !== strpos( $xss, 'Passed with alerts' ) && false !== strpos( $xss, 'High risk' ), 'row shows the verdict and the legal risk' );
 echo "  [10] admin page: OK\n";
 
 if ( $GLOBALS['PG_FAILURES'] > 0 ) {
