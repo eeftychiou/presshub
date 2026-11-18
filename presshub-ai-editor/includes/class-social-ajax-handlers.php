@@ -22,6 +22,7 @@ class PressHub_Social_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_social_generate_copy', [ __CLASS__, 'handle_generate_copy' ] );
         add_action( 'wp_ajax_presshub_social_enqueue_post', [ __CLASS__, 'handle_enqueue_post' ] );
         add_action( 'wp_ajax_presshub_social_test_connection', [ __CLASS__, 'handle_test_connection' ] );
+        add_action( 'wp_ajax_presshub_social_regenerate_worker_secret', [ __CLASS__, 'handle_regenerate_worker_secret' ] );
         add_action( 'wp_ajax_presshub_social_retry_job', [ __CLASS__, 'handle_retry_job' ] );
         add_action( 'wp_ajax_presshub_social_cancel_job', [ __CLASS__, 'handle_cancel_job' ] );
         add_action( 'wp_ajax_presshub_social_dispatch_now', [ __CLASS__, 'handle_dispatch_now' ] );
@@ -228,6 +229,47 @@ class PressHub_Social_Ajax_Handlers {
     }
 
     /**
+     * AJAX handler: make a new worker secret (#247). The new secret is
+     * returned once so it can be copied into the worker's .env; the page
+     * shows only its masked form afterwards. The worker cannot sign in
+     * until it has the new secret.
+     * Capability: the Social capability.
+     *
+     * @return void
+     */
+    public static function handle_regenerate_worker_secret(): void {
+        check_ajax_referer( 'presshub_social_nonce', 'nonce' );
+
+        if ( ! current_user_can( PressHub_Capabilities::social() ) ) {
+            wp_send_json_error( [ 'message' => __( 'Permission denied.', 'presshub-social-autopost' ) ], 403 );
+        }
+
+        $secret = wp_generate_password( 32, false );
+        update_option( 'presshub_social_worker_secret', $secret );
+        require_once __DIR__ . '/class-connection-status.php';
+        PressHub_Connection_Status::forget( 'worker' );
+        // The worker's last heartbeat was signed with the old secret.
+        delete_option( 'presshub_social_worker_last_seen' );
+
+        // The page swaps in the worker card and pill as they now are.
+        $card = '';
+        if ( class_exists( 'PressHub_Social_Settings_Render' ) || is_readable( __DIR__ . '/class-social-settings-render.php' ) ) {
+            require_once __DIR__ . '/class-social-settings-render.php';
+            ob_start();
+            ( new PressHub_Social_Settings_Render() )->render_worker_status();
+            $card = (string) ob_get_clean();
+        }
+
+        wp_send_json_success( [
+            'secret'      => $secret,
+            'masked'      => PressHub_Social_Logger::mask_secret( $secret ),
+            'status_html' => PressHub_Connection_Status::render_pill( 'worker' ),
+            'card_html'   => $card,
+            'message' => __( 'New secret made. Copy it now into PRESSHUB_WORKER_SECRET in the worker’s .env file and restart the worker. It is not shown again.', 'presshub-social-autopost' ),
+        ] );
+    }
+
+    /**
      * AJAX handler: Test credentials or connection for a social platform or worker.
      * Capability: PressHub_Capabilities::social().
      *
@@ -260,9 +302,19 @@ class PressHub_Social_Ajax_Handlers {
             }
         }
 
+        // #247: the result is the status Connections shows until the next test.
+        require_once dirname( __DIR__ ) . '/includes/class-connection-status.php';
+        $check_id = 'worker' === $platform ? 'worker' : 'social:' . $platform;
         if ( is_wp_error( $res ) ) {
-            wp_send_json_error( [ 'message' => $res->get_error_message() ], 400 );
+            PressHub_Connection_Status::record( $check_id, false, $res->get_error_message() );
+            wp_send_json_error( [ 'message' => $res->get_error_message(), 'status' => PressHub_Connection_Status::render_pill( $check_id ) ], 400 );
         }
+        $ok = ! isset( $res['success'] ) || ! empty( $res['success'] );
+        if ( isset( $res['status'] ) && is_string( $res['status'] ) && in_array( $res['status'], [ 'error', 'offline', 'failed' ], true ) ) {
+            $ok = false;
+        }
+        PressHub_Connection_Status::record( $check_id, $ok, (string) ( $res['message'] ?? '' ), (int) ( $res['expires_at'] ?? 0 ) );
+        $res['status_html'] = PressHub_Connection_Status::render_pill( $check_id );
 
         wp_send_json_success( $res );
     }

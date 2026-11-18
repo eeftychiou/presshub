@@ -158,8 +158,21 @@ class PressHub_AI_API_Client {
      * @param string $module Module identifier.
      * @return array Resolved provider configuration array.
      */
-    public static function resolve_module_config( string $module ): array {
+    public static function resolve_module_config( string $module, bool $quiet = false ): array {
         $module = sanitize_key( $module );
+
+        // #236: Editorial QA runs on the Co-author settings unless its own
+        // provider or model is set. It always uses the Co-author parameters.
+        $prov_module  = $module;
+        $model_module = $module;
+        $param_module = $module;
+        if ( 'qa' === $module ) {
+            $qa_has_provider = '' !== trim( (string) get_option( 'presshub_ai_qa_provider', '' ) );
+            $qa_has_model    = '' !== trim( (string) get_option( 'presshub_ai_qa_model', '' ) );
+            $prov_module     = $qa_has_provider ? 'qa' : 'coauthor';
+            $model_module    = $qa_has_model ? 'qa' : ( $qa_has_provider ? '' : 'coauthor' );
+            $param_module    = 'coauthor';
+        }
 
         // 1. Get module-configured provider ID or engine
         $provider_id     = '';
@@ -180,9 +193,9 @@ class PressHub_AI_API_Client {
                 }
             }
         } else {
-            $provider_id = (string) get_option( "presshub_ai_{$module}_provider", '' );
+            $provider_id = (string) get_option( "presshub_ai_{$prov_module}_provider", '' );
             if ( '' !== $provider_id ) {
-                $provider_source = "module_option:presshub_ai_{$module}_provider";
+                $provider_source = "module_option:presshub_ai_{$prov_module}_provider";
             }
         }
         $provider_id = trim( $provider_id );
@@ -287,10 +300,10 @@ class PressHub_AI_API_Client {
                 $model_source = 'module_default:gemini_flash_image';
             }
         } else {
-            $opt_module_model = (string) get_option( "presshub_ai_{$module}_model", '' );
+            $opt_module_model = '' !== $model_module ? (string) get_option( "presshub_ai_{$model_module}_model", '' ) : '';
             if ( '' !== $opt_module_model ) {
                 $model        = $opt_module_model;
-                $model_source = "module_override:presshub_ai_{$module}_model";
+                $model_source = "module_override:presshub_ai_{$model_module}_model";
             }
 
             if ( '' === $model && $provider_id !== $type ) {
@@ -329,7 +342,7 @@ class PressHub_AI_API_Client {
         }
         $model = preg_replace( '#^models/#', '', $model );
 
-        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+        if ( ! $quiet && class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info(
                 sprintf(
                     '[API Client Resolution] Module: "%s" | Provider: "%s" (%s, ID: %s, source: %s) | Model: "%s" (source: %s)',
@@ -347,7 +360,7 @@ class PressHub_AI_API_Client {
         // 6. Temperature resolution: Module override -> Provider Store record -> Default
         $opt_temp = ( 'tts' === $module )
             ? get_option( 'presshub_ai_briefing_tts_temperature', null )
-            : get_option( "presshub_ai_{$module}_temperature", null );
+            : get_option( "presshub_ai_{$param_module}_temperature", null );
 
         if ( null !== $opt_temp && '' !== $opt_temp ) {
             $temperature = max( 0.0, min( 2.0, (float) $opt_temp ) );
@@ -360,7 +373,7 @@ class PressHub_AI_API_Client {
         // 7. Max Tokens resolution: Module override -> Provider Store record -> Default
         $opt_tokens = ( 'tts' === $module )
             ? get_option( 'presshub_ai_briefing_tts_max_tokens', null )
-            : get_option( "presshub_ai_{$module}_max_tokens", null );
+            : get_option( "presshub_ai_{$param_module}_max_tokens", null );
 
         if ( null !== $opt_tokens && '' !== $opt_tokens && (int) $opt_tokens >= 64 ) {
             $max_tokens = min( 65536, (int) $opt_tokens );
@@ -373,7 +386,7 @@ class PressHub_AI_API_Client {
         // 8. Timeout resolution: Module override -> Provider Store record -> Default
         $opt_timeout = ( 'tts' === $module )
             ? get_option( 'presshub_ai_briefing_tts_timeout', null )
-            : get_option( "presshub_ai_{$module}_timeout", null );
+            : get_option( "presshub_ai_{$param_module}_timeout", null );
 
         if ( null !== $opt_timeout && '' !== $opt_timeout && (int) $opt_timeout >= 10 ) {
             $timeout = max( 10, min( 600, (int) $opt_timeout ) );
@@ -431,7 +444,7 @@ class PressHub_AI_API_Client {
             return;
         }
 
-        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'briefing_memory', 'copilot', 'tts', 'podcast_tts', 'image_prompt', 'image_generation' ], true ) ) {
+        if ( is_string( $module_or_provider ) && in_array( $module_or_provider, [ 'coauthor', 'briefing_text', 'briefing_podcast', 'briefing_memory', 'copilot', 'tts', 'podcast_tts', 'image_prompt', 'image_generation', 'qa' ], true ) ) {
             $this->set_module( $module_or_provider );
             return;
         }
@@ -617,7 +630,7 @@ class PressHub_AI_API_Client {
             $this->current_action = 'briefing_memory';
         } elseif ( 'briefing_text' === $module ) {
             $this->current_action = 'briefing_curation';
-        } elseif ( 'coauthor' === $module ) {
+        } elseif ( 'coauthor' === $module || 'qa' === $module ) {
             $this->current_action = 'coauthor_draft';
         } elseif ( 'copilot' === $module ) {
             $this->current_action = 'copilot_chat';
@@ -2491,7 +2504,7 @@ class PressHub_AI_API_Client {
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::error( '[TTS] Missing required TTS model in test_synthesize_speech.' );
                 }
-                return new WP_Error( 'missing_tts_model', __( 'No Speech AI model configured. Please specify a TTS model in Daily Briefing Settings or configure a default model on your Gemini provider.', 'presshub-ai-editor' ) );
+                return new WP_Error( 'missing_tts_model', __( 'No Speech AI model configured. Please pick a speech model in Settings → AI models → Speech or configure a default model on your Gemini provider.', 'presshub-ai-editor' ) );
             }
         }
 

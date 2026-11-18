@@ -490,10 +490,17 @@ pr_check( 'curator: web article unchanged', false !== strpos( $rendered, "**Πη
 $GLOBALS['OPTIONS_STORE']['presshub_ai_press_inbox_password'] = 'SuperSecret123';
 $GLOBALS['OPTIONS_STORE']['presshub_ai_press_inbox_username'] = 'press@presshub.cy';
 ob_start();
-( new PressHub_AI_Settings_Render() )->render_press_inbox_rows();
+( new PressHub_AI_Settings_Render() )->render_press_inbox_login_rows();
 $html = ob_get_clean();
+ob_start();
+( new PressHub_AI_Settings_Render() )->render_press_inbox_rows();
+$sources_html = ob_get_clean();
+// #247: the login is in Connections, folders and filters stay in Daily Briefing.
+pr_check( 'render: login rows hold no folder fields', false === strpos( $html, 'name="presshub_ai_press_inbox_folder"' ) && false === strpos( $html, 'name="presshub_ai_press_inbox_enabled"' ) );
+pr_check( 'render: sources rows hold no login fields', false === strpos( $sources_html, 'name="presshub_ai_press_inbox_host"' ) && false === strpos( $sources_html, 'name="presshub_ai_press_inbox_password"' ) && false !== strpos( $sources_html, 'name="presshub_ai_press_inbox_folder"' ) );
+pr_check( 'render: links both ways', false !== strpos( $sources_html, 'section=connections#press-inbox' ) && false !== strpos( $html, 'section=daily-briefing#briefing-sources' ) );
 pr_check( 'render: fields present', false !== strpos( $html, 'name="presshub_ai_press_inbox_host"' ) && false !== strpos( $html, 'name="presshub_ai_press_inbox_username"' ) && false !== strpos( $html, 'id="presshub-ai-test-press-inbox"' ) );
-pr_check( 'render: password never printed', false === strpos( $html, 'SuperSecret123' ) && false !== strpos( $html, '••••••••' ) );
+pr_check( 'render: password never printed', false === strpos( $html, 'SuperSecret123' ) && false === strpos( $sources_html, 'SuperSecret123' ) && false !== strpos( $html, '••••••••' ) && false !== strpos( $html, 'name="presshub_ai_press_inbox_password" id="presshub_ai_press_inbox_password" value=""' ) );
 pr_check( 'render: remove-password option shown', false !== strpos( $html, 'presshub_ai_remove_press_inbox_password' ) );
 
 if ( $failures > 0 ) {

@@ -56,7 +56,7 @@ Built with a modular **Provider Store** (supporting OpenAI, Anthropic, Google Ge
 
 ### 1. 📰 Automated Daily Briefing Pipeline (Morning Edition & Noon News Update)
 - **Autonomous News Harvester (`PressHub_AI_News_Harvester`)**: Concurrently scrapes and processes articles from configured RSS feeds and direct web URLs. Features domain politeness delays, per-domain concurrency limits, total execution time budgets, lead-article extraction, and HTML sanitization. Manages edition-partitioned raw snapshots (`raw-articles.json` vs `raw-articles-noon.json`).
-- **Press Release Inbox (`PressHub_AI_Press_Release_Inbox`, `PressHub_AI_Imap_Client`, `PressHub_AI_Mime_Parser`)**: Before each harvest, reads a dedicated mailbox (e.g. `press@presshub.cy`) over IMAP with a pure-PHP client, turns each email into a press-release article (Word attachments read locally, PDF and scanned images read by Gemini), and moves it to a processed folder. The curator attributes press releases to their sender and fences them against prompt injection. Configured under PressHub → Settings → Daily Briefing → Sources & harvesting → Press Release Inbox (server, credentials, folders, allowed senders, limits, Test connection). See `architecture.md` §4.26.
+- **Press Release Inbox (`PressHub_AI_Press_Release_Inbox`, `PressHub_AI_Imap_Client`, `PressHub_AI_Mime_Parser`)**: Before each harvest, reads a dedicated mailbox (e.g. `press@presshub.cy`) over IMAP with a pure-PHP client, turns each email into a press-release article (Word attachments read locally, PDF and scanned images read by Gemini), and moves it to a processed folder. The curator attributes press releases to their sender and fences them against prompt injection. The mailbox login (server, user name, password, Test connection) is under PressHub → Settings → Connections → Press inbox; folders, allowed senders and limits are under Daily Briefing → Sources & harvesting. See `architecture.md` §4.26.
 - **Social Monitor (`PressHub_AI_Social_Monitor`)**: Reads the latest posts of X and TikTok accounts and Facebook Pages added as News Sources (types *X (Twitter) Account*, *TikTok Account* and *Facebook Page*) through the local social worker, which browses them with a separate reader account (no paid API). Videos are transcribed by Gemini. Posts join the news pool attributed to the account holder and fenced against prompt injection. Configured under PressHub → Settings → Social listening → Account monitoring. See `architecture.md` §4.27.
 - **Intelligent News Curator (`PressHub_AI_News_Curator`)**: Evaluates harvested candidate stories using LLM analysis. Employs semantic article deduplication to prevent repetitive coverage, enforces strict token context limits, and produces comprehensive bilingual (Greek and English) daily briefings.
   - **Noon News Update**: Re-scrapes sources at noon, automatically ingests the morning briefing post as reference context, and generates an updated noon briefing focusing on developments since morning.
@@ -233,10 +233,10 @@ php dev-env/scripts/query-db.php "SELECT provider, model, total_tokens, duration
 
 Open **PressHub → Settings** (`admin.php?page=presshub-ai&section=<slug>`). The page shows one section at a time, chosen from the list on the left (a drop-down on narrow screens), and each section has its own **Save**, which writes only that section. The search box above the list finds a setting by its name, help text or old name and opens the section that holds it. Every option and its section are listed in [`docs/settings-inventory.md`](docs/settings-inventory.md).
 
-- **Connections**: social accounts and their platform credentials, the automation worker (URL, secret, mode), Google Cloud, plugin update tokens, and connection tests.
-- **AI models**: AI providers (API keys are masked) and the AI Copilot model.
+- **Connections**: every key, password and account in one place: AI providers and the speech key, Google Cloud, the press inbox login, social platform accounts, the automation worker (mode, secret, heartbeat, logins, Regenerate secret) and the plugin update token. Each connection shows its last test result with the time it was checked; loading the page makes no remote request, and Test refreshes only what you clicked. A setup check at the top (also on the Daily Briefing Hub) lists what blocks PressHub from working, each with a link to its fix, or says "Everything is connected". Saved keys are never shown: Replace key opens an empty field, and leaving it empty keeps the saved key.
+- **AI models**: one table of which provider and model each AI task uses (Co-author, Editorial QA, Copilot, Briefing curator, Podcast script, Memory, Image prompt, Image generation, Social copy, Speech, Music), with the default model, each task's temperature, max tokens and timeout in its row, a list of known models per provider plus "Other model ID…", and a check that refuses a model of the wrong type (for example a speech model for social copy). Each feature shows the model it uses, with a link to its row.
 - **Writing & QA**: drafting, the editorial QA gate and its prompt, SEO, featured images, and a link to Presets.
-- **Daily Briefing**: schedule, sources and harvesting (including the Press Release Inbox), text story, podcast script, voices and audio, publishing.
+- **Daily Briefing**: schedule, sources and harvesting (including the Press Release Inbox folders and filters), text story, podcast script, voices and audio, publishing.
 - **Editorial knowledge**: policy and stakeholder fiches, editorial memory.
 - **Social publishing**: platforms, post copy and its prompts, images and video (including TikTok narration), Shorts, the queue.
 - **Social listening**: account monitoring and the Trending in Cyprus roundup.
@@ -326,10 +326,10 @@ php dev-env/bin/wp-cli.phar --path=dev-env/wordpress <command>
 2. In your WordPress admin dashboard, navigate to **Plugins → Add New → Upload Plugin**.
 3. Choose the downloaded zip file and click **Install Now**.
 4. Activate **PressHub AI Co-Pilot**.
-5. Navigate to **PressHub AI → Settings** to configure your provider API keys.
+5. Navigate to **PressHub → Settings → Connections** to add your AI provider keys. The setup check at the top lists anything that still needs attention.
 
 ### Automatic Updates
-The plugin embeds an integrated GitHub update checker. Releases published on the `main` branch with attached zip assets are automatically detected in WordPress. For private repositories, configure the optional GitHub Personal Access Token under **PressHub AI → Settings → Providers**.
+The plugin embeds an integrated GitHub update checker. Releases published on the `main` branch with attached zip assets are automatically detected in WordPress. For private repositories, configure the optional GitHub Personal Access Token under **PressHub → Settings → Connections → Plugin updates**.
 
 ### Reliable Background Scheduling (WP-Cron)
 For production sites, high-reliability background research and automated daily briefing harvesting should be bound to a system cron daemon rather than relying on web visitor traffic:

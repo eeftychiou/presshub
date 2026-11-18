@@ -40,7 +40,7 @@ class PressHub_AI_QA_Reviewer {
             ? PressHub_AI_Settings_Storage::get_qa_briefing_prompt()
             : PressHub_AI_Settings_Storage::get_qa_article_prompt();
 
-        $api       = new PressHub_AI_API_Client( 'coauthor' );
+        $api       = new PressHub_AI_API_Client( 'qa' );
         $scorecard = $api->generate_scorecard( $content, $template, $post_id );
 
         if ( is_wp_error( $scorecard ) ) {

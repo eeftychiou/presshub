@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/class-capabilities.php';
 require_once __DIR__ . '/class-settings-sections.php';
+require_once __DIR__ . '/class-setup-check.php';
 
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-news-curator.php';
@@ -1054,6 +1055,13 @@ class PressHub_AI_Briefing_Admin {
             </nav>
 
             <div id="presshub-briefing-notices" class="presshub-notices-container" aria-live="polite"></div>
+
+            <?php
+            // #247: the setup check, from stored data only (no remote request).
+            if ( PressHub_Settings_Sections::can_view( 'connections' ) ) {
+                echo PressHub_Setup_Check::render( true ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside.
+            }
+            ?>
 
             <!-- Daily Memory Digest Failed Alert Banner (Issue #134) -->
             <?php

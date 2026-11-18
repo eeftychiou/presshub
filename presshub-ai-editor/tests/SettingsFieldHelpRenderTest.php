@@ -16,8 +16,7 @@ class SettingsFieldHelpRenderTest {
     public static function run(): void {
         $failures = [];
         $keys     = [
-            'presshub_ai_briefing_text_model',
-            'presshub_ai_briefing_podcast_model',
+            // #236: the curator and scriptwriter models moved into the AI models table.
             'presshub_ai_press_inbox_username',
         ];
 

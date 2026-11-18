@@ -347,6 +347,10 @@ All code contributions must strictly adhere to WordPress security best practices
 > 6. A `render_<knob>_field()` method on the settings render class.
 >
 > Consumers must read the value via the storage helper, **not** via `get_option()` + `apply_filters()` defaults.
+>
+> **Secrets and connections (#247)**: a new key, token or password lives in **Settings → Connections** (`PressHub_Settings_Sections::KEY_SECTIONS` if its tab is elsewhere), renders with `PressHub_Secret_Field::render()` (never print the saved value; empty keeps it) and keeps a Remove box when clearing it is safe. A new connection test records its result with `PressHub_Connection_Status::record()` and returns `render_pill()` so the page can update; loading Connections must never call the remote service (`ConnectionsTest` mocks the HTTP API to fail). Anything that stops PressHub from working belongs in `PressHub_Setup_Check::problems()` with a link to its fix.
+>
+> **AI models (#236)**: a new AI task is one row in `PressHub_Model_Tasks::rows()` (its provider, model and parameter options, the module it resolves through, the kind of model it needs, and the feature that shows its read-only "Model: …" line). Do not add provider or model fields to a feature section; call `PressHub_Model_Tasks::feature_line()` there. A new model goes in `PressHub_Model_Catalog::MODELS` with its kind.
 
 ### Rationale
 

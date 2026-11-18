@@ -289,7 +289,7 @@ $redirects = [
     // #246: every old tab of both settings pages opens its section.
     [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'briefing' ], 'presshub-ai', 'daily-briefing', '', [] ],
     [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'images' ], 'presshub-ai', 'writing-qa', 'featured-images', [] ],
-    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'copilot' ], 'presshub-ai', 'ai-models', 'copilot', [] ],
+    [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'copilot' ], 'presshub-ai', 'ai-models', 'model-copilot', [] ],
     [ 'admin.php', [ 'page' => 'presshub-ai', 'tab' => 'advanced' ], 'presshub-ai', 'site-system', '', [] ],
     [ 'admin.php', [ 'page' => 'presshub-social-settings' ], 'presshub-ai', 'social-publishing', '', [] ],
     [ 'admin.php', [ 'page' => 'presshub-social-settings', 'tab' => 'credentials' ], 'presshub-ai', 'connections', 'social-accounts', [] ],
