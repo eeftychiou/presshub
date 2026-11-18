@@ -1637,6 +1637,12 @@ class PressHub_AI_News_Curator {
             $gen_usage = ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'get_last_llm_request' ) )
                 ? ( PressHub_AI_Token_Logger::get_last_llm_request() ?? [] )
                 : [];
+            // What call_provider() added to the system prompt (editorial agenda,
+            // people and policy fiches): the record keeps the prompt as sent
+            // and lists the fiches, like every other generation record.
+            $gen_injected = method_exists( 'PressHub_AI_Generation_Recorder', 'apply_injected_context' )
+                ? PressHub_AI_Generation_Recorder::apply_injected_context( $prompts['system_prompt'], [] )
+                : [ $prompts['system_prompt'], [] ];
             $record_id = (int) PressHub_AI_Generation_Recorder::record( [
                 'kind'          => 'briefing_text',
                 'briefing_date' => $date,
@@ -1644,21 +1650,21 @@ class PressHub_AI_News_Curator {
                 'status'        => is_wp_error( $response ) ? 'error' : 'success',
                 'error_message' => is_wp_error( $response ) ? $response->get_error_message() : '',
                 'memory'        => $this->last_memory_manifest(),
-                'config'        => PressHub_AI_Generation_Recorder::build_client_config(
+                'config'        => array_merge( PressHub_AI_Generation_Recorder::build_client_config(
                     $api_client,
                     [
                         'preset_id'          => $preset_id,
                         'edition'            => $edition,
                         'articles_placement' => $this->last_articles_placement(),
                     ]
-                ),
+                ), $gen_injected[1] ),
                 'inputs'        => [
                     'articles'             => $this->last_articles_breakdown(),
                     'totals'               => $curation_metadata,
                     'token_estimate'       => $this->last_capped_tokens_estimate(),
                     'selected_article_ids' => $selected_article_ids,
                 ],
-                'system_prompt' => $prompts['system_prompt'],
+                'system_prompt' => (string) $gen_injected[0],
                 'user_prompt'   => $prompts['user_prompt'],
                 'response_text' => is_wp_error( $response ) ? '' : (string) $response,
                 'usage'         => $gen_usage,
