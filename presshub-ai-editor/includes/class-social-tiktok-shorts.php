@@ -895,6 +895,11 @@ class PressHub_Social_TikTok_Shorts {
             $topic   = trim( (string) ( $item['topic'] ?? '' ) );
             $hook    = trim( (string) ( $item['hook'] ?? '' ) );
             $script  = trim( (string) ( $item['script'] ?? '' ) );
+            // The audio is shared with YouTube Shorts, where "link in bio" means nothing:
+            // the closing line then names the site instead (also fine on TikTok).
+            if ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() ) {
+                $script = PressHub_Social_YouTube::youtube_cta( $script );
+            }
             $caption = trim( (string) preg_replace( '/[ \t]*\b(?:https?:\/\/|www\.)\S+/iu', '', (string) ( $item['caption'] ?? '' ) ) );
             if ( '' === $hook || '' === $script || '' === $caption ) {
                 return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'short %d is missing its hook, script or caption.', $i + 1 ) );

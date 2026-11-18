@@ -263,15 +263,19 @@ class PressHub_Social_REST_Controller {
         }
 
         // YouTube jobs go only to a worker that reported it can upload them, and only
-        // while a channel is connected: otherwise they wait in the queue (Connections
+        // while a channel is connected and the daily quota is not used up: otherwise they wait in the queue (Connections
         // shows why) instead of failing on the worker. An older worker that sends no
         // sessions (every platform) never gets them either.
-        $youtube_ok = in_array( 'youtube', $active_platforms, true ) && class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected();
+        $youtube_ok = in_array( 'youtube', $active_platforms, true ) && class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected() && 0 === PressHub_Social_YouTube::paused_until();
         if ( ! $youtube_ok && in_array( 'youtube', $active_platforms, true ) ) {
             $active_platforms = array_values( array_diff( $active_platforms, [ 'youtube' ] ) );
             if ( empty( $active_platforms ) ) {
                 return [ 'ok' => true, 'jobs' => [] ];
             }
+        } elseif ( empty( $active_platforms ) ) {
+            // No list means every platform but YouTube. Filter in the query, so waiting
+            // YouTube jobs at the front of the queue never crowd out the others.
+            $active_platforms = PressHub_Social_Settings_Storage::ENGINE_PLATFORMS;
         }
 
         // A TikTok short is claimed only once its script and audio are prepared in the
@@ -526,6 +530,25 @@ class PressHub_Social_REST_Controller {
             PressHub_Social_Queue::mark_failed( $job_id, 'A TikTok short test render was reported as published; test renders must not be posted.', $metadata );
         } elseif ( 'published' === $status ) {
             PressHub_Social_Queue::mark_published( $job_id, $external_post_id, $external_post_url, $metadata );
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_playlist_error'] ) ) {
+                PressHub_Social_Logger::warning(
+                    sprintf( 'YouTube video %s (job #%d) is uploaded but not in the podcast playlist: %s', $external_post_id, $job_id, sanitize_text_field( (string) $metadata['youtube_playlist_error'] ) ),
+                    [ 'job_id' => $job_id, 'post_id' => (int) ( $job['post_id'] ?? 0 ) ]
+                );
+            }
+        } elseif ( 'youtube' === ( $job['platform'] ?? '' ) && class_exists( 'PressHub_Social_YouTube' ) && in_array( (string) ( $metadata['youtube_error_reason'] ?? '' ), [ 'quota', 'auth' ], true ) ) {
+            // Nothing was uploaded and the job itself is fine: it waits instead of failing,
+            // and claims hand out no YouTube jobs until the quota resets or the channel is
+            // connected again.
+            $reason = '' !== $error ? $error : 'YouTube upload stopped.';
+            if ( 'quota' === $metadata['youtube_error_reason'] ) {
+                $until = PressHub_Social_YouTube::pause_for_quota( $reason );
+                PressHub_Social_Queue::defer_job( $job_id, max( 60, $until - time() ), sprintf( 'Waiting for the daily YouTube quota (until %s UTC): %s', gmdate( 'Y-m-d H:i', $until ), $reason ) );
+            } else {
+                PressHub_Social_YouTube::require_reconnect( $reason );
+                PressHub_Social_Queue::defer_job( $job_id, 0, 'Waiting for Connect YouTube (Settings → Connections): ' . $reason );
+            }
+            $status = 'deferred';
         } else {
             $status = 'failed';
             PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );

@@ -432,6 +432,16 @@ class PressHub_Social_Dispatcher {
             return $error;
         }
 
+        // YouTube jobs (shorts and episodes) are only uploaded by the local worker in Pull
+        // Mode, which claims them with their upload metadata; nothing here can post them.
+        if ( 'youtube' === $platform ) {
+            $error = new WP_Error( 'youtube_needs_pull', sprintf( 'YouTube job #%d can only be uploaded by the local worker in Pull Mode (worker mode: %s).', $job_id, $worker_mode ) );
+            PressHub_Social_Logger::error( $error->get_error_message(), [ 'job_id' => $job_id ] );
+            PressHub_Social_Queue::mark_processing( $job_id );
+            PressHub_Social_Queue::mark_failed( $job_id, $error->get_error_message(), [ 'error_code' => 'youtube_needs_pull' ] );
+            return $error;
+        }
+
         // Transition job to processing
         PressHub_Social_Queue::mark_processing( $job_id );
 

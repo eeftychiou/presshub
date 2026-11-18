@@ -32,6 +32,12 @@ export interface YouTubeUploadMeta {
 
 export interface YouTubeUploadResult {
   success: boolean;
+  /**
+   * Why a failed upload failed, when nothing is wrong with the job itself: `quota` (the
+   * daily upload quota is used up) or `auth` (the sign-in was refused). WordPress then
+   * holds the job and pauses YouTube instead of failing it.
+   */
+  reason?: 'quota' | 'auth';
   videoId?: string;
   url?: string;
   playlistItemId?: string;
@@ -52,6 +58,10 @@ export interface YouTubeUploadOptions {
   /** Wait between chunk tries (ms), doubled each time. */
   retryDelayMs?: number;
   sleepFn?: (ms: number) => Promise<void>;
+  /** Timeout of one chunk PUT (ms). */
+  chunkTimeoutMs?: number;
+  /** Timeout of the small JSON calls (ms). */
+  requestTimeoutMs?: number;
 }
 
 const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos';
@@ -61,13 +71,27 @@ const CHUNK_UNIT = 256 * 1024;
 export const DEFAULT_CHUNK_SIZE = 32 * CHUNK_UNIT;
 export const DEFAULT_MAX_CHUNK_TRIES = 5;
 export const DEFAULT_RETRY_DELAY_MS = 2000;
+/** An 8 MiB chunk needs well under this even on a slow line; a stalled socket is cut off. */
+export const DEFAULT_CHUNK_TIMEOUT_MS = 5 * 60 * 1000;
+export const DEFAULT_REQUEST_TIMEOUT_MS = 60 * 1000;
+
+/** Adds an abort timeout to a request, so a stalled connection never hangs the worker. */
+function withTimeout(init: RequestInit, ms: number): RequestInit {
+  if (ms > 0 && typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
+    return { ...init, signal: (AbortSignal as any).timeout(ms) };
+  }
+  return init;
+}
+
+/** Thrown by fetchYouTubeToken when WordPress says the sign-in must be renewed. */
+export class YouTubeAuthError extends Error {}
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** Asks WordPress for an access token of the connected YouTube channel. */
-export async function fetchYouTubeToken(wpUrl: string, workerSecret: string, fetchFn: typeof fetch = globalThis.fetch): Promise<string> {
+export async function fetchYouTubeToken(wpUrl: string, workerSecret: string, fetchFn: typeof fetch = globalThis.fetch, timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS): Promise<string> {
   const url = `${wpUrl.replace(/\/+$/, '')}/wp-json/presshub-social/v1/worker/youtube/token`;
-  const res = await fetchFn(url, {
+  const res = await fetchFn(url, withTimeout({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -75,13 +99,18 @@ export async function fetchYouTubeToken(wpUrl: string, workerSecret: string, fet
       Authorization: `Bearer ${workerSecret}`
     },
     body: '{}'
-  });
+  }, timeoutMs));
   let body: any = null;
   try {
     body = await res.json();
   } catch {}
   if (!res.ok || !body || typeof body.access_token !== 'string' || body.access_token === '') {
     const msg = body && typeof body.message === 'string' ? body.message : `HTTP ${res.status}`;
+    const code = body && typeof body.code === 'string' ? body.code : '';
+    // Google refused the stored sign-in: no upload can work until Connect YouTube again.
+    if (code === 'youtube_invalid_grant' || code === 'youtube_not_connected') {
+      throw new YouTubeAuthError(`WordPress gave no YouTube access token: ${msg}`);
+    }
     throw new Error(`WordPress gave no YouTube access token: ${msg}`);
   }
   return body.access_token;
@@ -108,6 +137,19 @@ export function buildVideoResource(meta: YouTubeUploadMeta): Record<string, any>
   };
 }
 
+/** Why a refusal stops every upload for now (quota or sign-in), or undefined. */
+export function stopReason(status: number, body: any): 'quota' | 'auth' | undefined {
+  const err = body && body.error;
+  const reason = err && Array.isArray(err.errors) && err.errors[0] ? String(err.errors[0].reason || '') : '';
+  if (reason === 'quotaExceeded' || reason === 'uploadLimitExceeded' || reason === 'dailyLimitExceeded' || (reason === 'rateLimitExceeded' && status === 403)) {
+    return 'quota';
+  }
+  if (status === 401) {
+    return 'auth';
+  }
+  return undefined;
+}
+
 function apiError(status: number, body: any): string {
   const err = body && body.error;
   const reason = err && Array.isArray(err.errors) && err.errors[0] ? err.errors[0].reason : '';
@@ -116,6 +158,11 @@ function apiError(status: number, body: any): string {
     return `YouTube upload limit reached for today (${reason}): ${message}`;
   }
   return reason ? `${message} (${reason})` : message;
+}
+
+/** A 5xx, 408 or 429 is worth another try; any other 4xx is a refusal. */
+function isRetryable(status: number): boolean {
+  return status >= 500 || status === 408 || status === 429;
 }
 
 async function readJson(res: Response): Promise<any> {
@@ -159,6 +206,8 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
   const chunkSize = Math.max(CHUNK_UNIT, Math.floor((options.chunkSize || DEFAULT_CHUNK_SIZE) / CHUNK_UNIT) * CHUNK_UNIT);
   const maxTries = Math.max(1, options.maxChunkTries || DEFAULT_MAX_CHUNK_TRIES);
   const baseDelay = Math.max(0, options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
+  const chunkTimeout = options.chunkTimeoutMs ?? DEFAULT_CHUNK_TIMEOUT_MS;
+  const requestTimeout = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const { meta, filePath } = options;
 
   if (!filePath || !fs.existsSync(filePath)) {
@@ -174,31 +223,57 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
 
   let token: string;
   try {
-    token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn);
+    token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn, requestTimeout);
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, ...(err instanceof YouTubeAuthError ? { reason: 'auth' as const } : {}) };
   }
 
-  // 1. Start the resumable session.
+  // 1. Start the resumable session. A network error, 5xx, 408 or 429 is retried; any
+  // other refusal fails at once.
   const startedAt = Date.now();
-  const initRes = await fetchFn(`${UPLOAD_URL}?uploadType=resumable&part=snippet,status`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json; charset=UTF-8',
-      'X-Upload-Content-Type': 'video/mp4',
-      'X-Upload-Content-Length': String(total)
-    },
-    body: JSON.stringify(buildVideoResource(meta))
-  });
-  if (!initRes.ok) {
-    const error = apiError(initRes.status, await readJson(initRes));
-    WorkerLogger.error('YouTube', `Upload session refused: ${error}`, { http_code: initRes.status });
-    return { success: false, error: `YouTube refused the upload: ${error}` };
-  }
-  const sessionUrl = initRes.headers.get('location');
-  if (!sessionUrl) {
-    return { success: false, error: 'YouTube returned no upload session address.' };
+  let sessionUrl = '';
+  for (let attempt = 1; ; attempt++) {
+    let initRes: Response | null = null;
+    let failure = '';
+    try {
+      initRes = await fetchFn(`${UPLOAD_URL}?uploadType=resumable&part=snippet,status`, withTimeout({
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json; charset=UTF-8',
+          'X-Upload-Content-Type': 'video/mp4',
+          'X-Upload-Content-Length': String(total)
+        },
+        body: JSON.stringify(buildVideoResource(meta))
+      }, requestTimeout));
+    } catch (err: any) {
+      failure = err.message;
+    }
+    if (initRes && initRes.ok) {
+      sessionUrl = initRes.headers.get('location') || '';
+      if (!sessionUrl) {
+        return { success: false, error: 'YouTube returned no upload session address.' };
+      }
+      break;
+    }
+    if (initRes && (!isRetryable(initRes.status) || initRes.status === 429)) {
+      const body = await readJson(initRes);
+      const reason = stopReason(initRes.status, body);
+      if (isRetryable(initRes.status) && !reason) {
+        // A plain 429 (too many requests) is worth another try.
+      } else {
+        const error = apiError(initRes.status, body);
+        WorkerLogger.error('YouTube', `Upload session refused: ${error}`, { http_code: initRes.status });
+        return { success: false, error: `YouTube refused the upload: ${error}`, ...(reason ? { reason } : {}) };
+      }
+    }
+    if (initRes) failure = `HTTP ${initRes.status}`;
+    if (attempt >= maxTries) {
+      return { success: false, error: `YouTube upload session could not be started after ${attempt} tries: ${failure}` };
+    }
+    const wait = baseDelay * 2 ** (attempt - 1);
+    WorkerLogger.warn('YouTube', `Starting the upload session failed (${failure}); try ${attempt + 1}/${maxTries} in ${wait} ms.`);
+    await sleep(wait);
   }
   WorkerLogger.info('YouTube', `Uploading ${meta.kind} "${meta.title}" (${(total / 1048576).toFixed(1)} MB)...`);
 
@@ -211,7 +286,7 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
     let res: Response | null = null;
     let failure = '';
     try {
-      res = await fetchFn(sessionUrl, {
+      res = await fetchFn(sessionUrl, withTimeout({
         method: 'PUT',
         headers: {
           'Content-Type': 'video/mp4',
@@ -219,7 +294,7 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
           'Content-Range': `bytes ${offset}-${end - 1}/${total}`
         },
         body: readChunk(filePath, offset, end)
-      });
+      }, chunkTimeout));
     } catch (err: any) {
       failure = err.message;
     }
@@ -229,14 +304,22 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
       break;
     }
     if (res && res.status === 308) {
-      offset = nextOffsetFromRange(res.headers.get('range'));
-      tries = 0;
-      continue;
-    }
-    if (res && res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
-      const error = apiError(res.status, await readJson(res));
+      const next = nextOffsetFromRange(res.headers.get('range'));
+      if (next > offset) {
+        offset = next;
+        tries = 0;
+        continue;
+      }
+      // YouTube kept nothing of this chunk: count it as a failed try, so a stuck
+      // session ends instead of looping.
+      failure = `HTTP 308 without progress at byte ${offset}`;
+      res = null;
+    } else if (res && !isRetryable(res.status)) {
+      const body = await readJson(res);
+      const error = apiError(res.status, body);
+      const reason = stopReason(res.status, body);
       WorkerLogger.error('YouTube', `Upload refused: ${error}`, { http_code: res.status });
-      return { success: false, error: `YouTube refused the upload: ${error}` };
+      return { success: false, error: `YouTube refused the upload: ${error}`, ...(reason ? { reason } : {}) };
     }
 
     tries++;
@@ -249,10 +332,10 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
     await sleep(wait);
     // Ask what YouTube has received, and continue from there.
     try {
-      const status = await fetchFn(sessionUrl, {
+      const status = await fetchFn(sessionUrl, withTimeout({
         method: 'PUT',
         headers: { 'Content-Length': '0', 'Content-Range': `bytes */${total}` }
-      });
+      }, requestTimeout));
       if (status.status === 200 || status.status === 201) {
         video = (await readJson(status)) || {};
         break;
@@ -273,14 +356,21 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
 
   // 3. An episode goes into the podcast playlist.
   if (meta.kind === 'episode' && meta.playlist_id) {
+    // A long upload can outlast the first token; ask again (WordPress returns the cached
+    // one while it has time left) and keep the old one if that fails.
     try {
-      const res = await fetchFn(`${PLAYLIST_ITEMS_URL}?part=snippet`, {
+      token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn, requestTimeout);
+    } catch (err: any) {
+      WorkerLogger.warn('YouTube', `Could not refresh the access token before the playlist insert: ${err.message}`);
+    }
+    try {
+      const res = await fetchFn(`${PLAYLIST_ITEMS_URL}?part=snippet`, withTimeout({
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8' },
         body: JSON.stringify({
           snippet: { playlistId: meta.playlist_id, resourceId: { kind: 'youtube#video', videoId } }
         })
-      });
+      }, requestTimeout));
       const body = await readJson(res);
       if (res.ok) {
         result.playlistItemId = String(body?.id || '');

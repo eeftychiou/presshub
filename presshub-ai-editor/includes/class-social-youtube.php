@@ -40,6 +40,12 @@ class PressHub_Social_YouTube {
     const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
     const API_BASE   = 'https://www.googleapis.com/youtube/v3';
 
+    /** Set when Google refused the stored sign-in (invalid_grant): uploads stop until Connect again. */
+    const NEEDS_RECONNECT_OPTION = 'presshub_social_youtube_needs_reconnect';
+
+    /** Unix time until which uploads wait because the daily YouTube quota ran out. */
+    const PAUSED_UNTIL_OPTION = 'presshub_social_youtube_paused_until';
+
     /** Refresh token stored by the sign-in. Not a form field: only Connect and Disconnect change it. */
     const REFRESH_TOKEN_OPTION = 'presshub_social_youtube_refresh_token';
 
@@ -80,8 +86,11 @@ class PressHub_Social_YouTube {
     /** Lifetime of a sign-in attempt (state) in seconds. */
     const STATE_TTL = 900;
 
-    /** An access token this close to expiry (seconds) is refreshed instead of reused. */
-    const TOKEN_MARGIN = 300;
+    /**
+     * An access token this close to expiry (seconds) is refreshed instead of reused, so the
+     * worker gets at least 20 minutes for a long episode upload (Google tokens last 60).
+     */
+    const TOKEN_MARGIN = 1200;
 
     /**
      * Optional HTTP override for tests.
@@ -104,8 +113,8 @@ class PressHub_Social_YouTube {
         add_action( 'admin_post_' . self::CALLBACK_ACTION, [ __CLASS__, 'handle_callback' ] );
         add_action( 'admin_post_' . self::DISCONNECT_ACTION, [ __CLASS__, 'handle_disconnect' ] );
         // A new client means the old sign-in no longer works with it.
-        add_action( 'update_option_presshub_social_youtube_client_id', [ __CLASS__, 'forget_access_token' ], 10, 0 );
-        add_action( 'update_option_presshub_social_youtube_client_secret', [ __CLASS__, 'forget_access_token' ], 10, 0 );
+        add_action( 'update_option_presshub_social_youtube_client_id', [ __CLASS__, 'client_changed' ], 10, 2 );
+        add_action( 'update_option_presshub_social_youtube_client_secret', [ __CLASS__, 'client_changed' ], 10, 2 );
     }
 
     // ------------------------------------------------------------------
@@ -121,9 +130,74 @@ class PressHub_Social_YouTube {
         return function_exists( 'get_option' ) ? trim( (string) get_option( self::REFRESH_TOKEN_OPTION, '' ) ) : '';
     }
 
-    /** Whether uploads can run: an OAuth client and a signed-in channel. */
+    /**
+     * Whether uploads can run: an OAuth client, a signed-in channel, and a sign-in Google
+     * has not refused since.
+     */
     public static function is_connected(): bool {
-        return self::has_client() && '' !== self::get_refresh_token();
+        return self::has_client() && '' !== self::get_refresh_token() && '' === self::reconnect_reason();
+    }
+
+    /** Why the stored sign-in must be renewed (Google's refusal), or '' when it is fine. */
+    public static function reconnect_reason(): string {
+        return function_exists( 'get_option' ) ? trim( (string) get_option( self::NEEDS_RECONNECT_OPTION, '' ) ) : '';
+    }
+
+    /** Records that Google refused the stored sign-in, so claims stop handing out YouTube jobs. */
+    public static function require_reconnect( string $reason ): void {
+        $reason = '' !== trim( $reason ) ? trim( $reason ) : 'Google refused the stored YouTube sign-in.';
+        update_option( self::NEEDS_RECONNECT_OPTION, $reason, false );
+        self::forget_access_token();
+        PressHub_Connection_Status::record( self::CHECK_ID, false, $reason );
+        PressHub_Social_Logger::error( 'YouTube uploads stopped until the channel is connected again: ' . $reason );
+    }
+
+    /** Unix time until which YouTube uploads wait for the quota reset, or 0. */
+    public static function paused_until(): int {
+        $until = function_exists( 'get_option' ) ? (int) get_option( self::PAUSED_UNTIL_OPTION, 0 ) : 0;
+        return $until > time() ? $until : 0;
+    }
+
+    /**
+     * Pauses YouTube uploads until the daily quota resets (midnight Pacific Time, plus a
+     * few minutes), and returns that time.
+     */
+    public static function pause_for_quota( string $reason ): int {
+        $until = self::next_quota_reset();
+        update_option( self::PAUSED_UNTIL_OPTION, $until, false );
+        PressHub_Social_Logger::warning( sprintf( 'YouTube uploads paused until %s UTC (daily quota): %s', gmdate( 'Y-m-d H:i', $until ), $reason ) );
+        return $until;
+    }
+
+    /** Next midnight in America/Los_Angeles (YouTube's quota day), plus 5 minutes, as Unix time. */
+    public static function next_quota_reset( ?int $now = null ): int {
+        $now = $now ?? time();
+        try {
+            $tz   = new DateTimeZone( 'America/Los_Angeles' );
+            $next = ( new DateTimeImmutable( '@' . $now ) )->setTimezone( $tz )->modify( 'tomorrow' );
+            return $next->getTimestamp() + 300;
+        } catch ( Exception $e ) {
+            return $now + DAY_IN_SECONDS;
+        }
+    }
+
+    /**
+     * A changed OAuth client cannot use the old sign-in: forget it (and its channel), so
+     * Connections asks for Connect YouTube again instead of failing at upload time.
+     *
+     * @param mixed $old Previous value.
+     * @param mixed $new New value.
+     */
+    public static function client_changed( $old = null, $new = null ): void {
+        self::forget_access_token();
+        if ( trim( (string) $old ) === trim( (string) $new ) || '' === self::get_refresh_token() ) {
+            return;
+        }
+        delete_option( self::REFRESH_TOKEN_OPTION );
+        delete_option( self::CHANNEL_OPTION );
+        delete_option( self::NEEDS_RECONNECT_OPTION );
+        PressHub_Connection_Status::forget( self::CHECK_ID );
+        PressHub_Social_Logger::warning( 'YouTube OAuth client changed: the stored sign-in was removed. Click Connect YouTube again.' );
     }
 
     /** @return array{id?:string,title?:string,connected_at?:int} */
@@ -250,14 +324,27 @@ class PressHub_Social_YouTube {
             return new WP_Error( 'youtube_no_refresh_token', __( 'Google returned no refresh token. Remove PressHub from your Google account\'s third-party access and connect again.', 'presshub-social-autopost' ) );
         }
 
-        update_option( self::REFRESH_TOKEN_OPTION, $refresh, false );
-        self::cache_access_token( (string) ( $tokens['access_token'] ?? '' ), (int) ( $tokens['expires_in'] ?? 0 ) );
+        $access = trim( (string) ( $tokens['access_token'] ?? '' ) );
+        if ( '' === $access ) {
+            PressHub_Social_Logger::error( 'YouTube sign-in returned no access token.' );
+            return new WP_Error( 'youtube_no_access_token', __( 'Google returned no access token. Click Connect YouTube again.', 'presshub-social-autopost' ) );
+        }
 
-        $channel = self::fetch_channel();
+        // Read the channel with the new token before storing anything, so a sign-in with
+        // an account that has no channel (or a failed channels.list) leaves the previous
+        // connection, or none, exactly as it was.
+        $channel = self::fetch_channel( $access );
         if ( is_wp_error( $channel ) ) {
-            PressHub_Connection_Status::record( self::CHECK_ID, false, $channel->get_error_message() );
+            // Not revoked: Google revokes the whole grant, which would also end an earlier
+            // connection of the same account that is still stored here.
+            PressHub_Social_Logger::error( 'YouTube sign-in not saved: ' . $channel->get_error_message() );
             return $channel;
         }
+
+        update_option( self::REFRESH_TOKEN_OPTION, $refresh, false );
+        delete_option( self::NEEDS_RECONNECT_OPTION );
+        self::forget_access_token();
+        self::cache_access_token( $access, (int) ( $tokens['expires_in'] ?? 0 ) );
         update_option( self::CHANNEL_OPTION, [ 'id' => $channel['id'], 'title' => $channel['title'], 'connected_at' => time() ], false );
         PressHub_Connection_Status::record( self::CHECK_ID, true, sprintf( 'Connected to YouTube channel %s', $channel['title'] ) );
         if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
@@ -286,6 +373,7 @@ class PressHub_Social_YouTube {
         }
         delete_option( self::REFRESH_TOKEN_OPTION );
         delete_option( self::CHANNEL_OPTION );
+        delete_option( self::NEEDS_RECONNECT_OPTION );
         self::forget_access_token();
         PressHub_Connection_Status::forget( self::CHECK_ID );
         if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
@@ -333,13 +421,16 @@ class PressHub_Social_YouTube {
      *
      * @return array{access_token:string,expires_at:int}|WP_Error
      */
-    public static function access_token() {
+    public static function access_token( bool $retry_refused = false ) {
         if ( ! self::has_client() ) {
             return new WP_Error( 'youtube_no_client', 'YouTube is not set up: the OAuth client ID or secret is empty (Settings → Connections → YouTube).' );
         }
         $refresh = self::get_refresh_token();
         if ( '' === $refresh ) {
             return new WP_Error( 'youtube_not_connected', 'YouTube is not connected: click Connect YouTube in Settings → Connections.' );
+        }
+        if ( ! $retry_refused && '' !== self::reconnect_reason() ) {
+            return new WP_Error( 'youtube_not_connected', 'Google refused the stored YouTube sign-in (' . self::reconnect_reason() . '): click Connect YouTube in Settings → Connections.' );
         }
 
         $cached = get_transient( self::ACCESS_TOKEN_TRANSIENT );
@@ -354,7 +445,7 @@ class PressHub_Social_YouTube {
         if ( is_wp_error( $tokens ) ) {
             if ( 'youtube_invalid_grant' === $tokens->get_error_code() ) {
                 // The sign-in was revoked or expired (a Testing app's sign-in lasts 7 days).
-                PressHub_Connection_Status::record( self::CHECK_ID, false, $tokens->get_error_message() );
+                self::require_reconnect( $tokens->get_error_message() );
             }
             return $tokens;
         }
@@ -423,13 +514,16 @@ class PressHub_Social_YouTube {
      *
      * @return array{id:string,title:string}|WP_Error
      */
-    public static function fetch_channel() {
-        $token = self::access_token();
-        if ( is_wp_error( $token ) ) {
-            return $token;
+    public static function fetch_channel( string $access_token = '' ) {
+        if ( '' === $access_token ) {
+            $token = self::access_token();
+            if ( is_wp_error( $token ) ) {
+                return $token;
+            }
+            $access_token = (string) $token['access_token'];
         }
         $res = self::http( 'GET', self::API_BASE . '/channels?part=snippet&mine=true', [
-            'headers' => [ 'Authorization' => 'Bearer ' . $token['access_token'] ],
+            'headers' => [ 'Authorization' => 'Bearer ' . $access_token ],
         ] );
         if ( is_wp_error( $res ) ) {
             return new WP_Error( 'youtube_channel_http', 'Could not reach YouTube: ' . $res->get_error_message() );
@@ -447,10 +541,47 @@ class PressHub_Social_YouTube {
         return [ 'id' => (string) $item['id'], 'title' => (string) ( $item['snippet']['title'] ?? $item['id'] ) ];
     }
 
+    /**
+     * Checks that the podcast playlist exists on the connected channel (playlists.list, 1 unit).
+     *
+     * @return string|WP_Error The playlist title.
+     */
+    public static function check_playlist( string $playlist_id, string $channel_id = '' ) {
+        $token = self::access_token();
+        if ( is_wp_error( $token ) ) {
+            return $token;
+        }
+        $res = self::http( 'GET', self::API_BASE . '/playlists?part=snippet&id=' . rawurlencode( $playlist_id ), [
+            'headers' => [ 'Authorization' => 'Bearer ' . $token['access_token'] ],
+        ] );
+        if ( is_wp_error( $res ) ) {
+            return new WP_Error( 'youtube_playlist_http', 'Could not reach YouTube: ' . $res->get_error_message() );
+        }
+        $data = json_decode( (string) $res['body'], true );
+        if ( (int) $res['code'] >= 400 ) {
+            $msg = is_array( $data ) ? (string) ( $data['error']['message'] ?? '' ) : '';
+            return new WP_Error( 'youtube_playlist_failed', sprintf( 'YouTube refused to read the podcast playlist (HTTP %d): %s', (int) $res['code'], $msg ) );
+        }
+        $item = is_array( $data ) ? ( $data['items'][0] ?? null ) : null;
+        if ( ! is_array( $item ) ) {
+            return new WP_Error( 'youtube_playlist_missing', sprintf( 'The podcast playlist %s does not exist or is not visible to this channel. Check the Podcast Playlist ID under Shorts → YouTube.', $playlist_id ) );
+        }
+        $owner = (string) ( $item['snippet']['channelId'] ?? '' );
+        if ( '' !== $channel_id && '' !== $owner && $owner !== $channel_id ) {
+            return new WP_Error( 'youtube_playlist_other_channel', sprintf( 'The podcast playlist %s belongs to another channel, so episodes cannot be added to it.', $playlist_id ) );
+        }
+        return (string) ( $item['snippet']['title'] ?? $playlist_id );
+    }
+
     /** Test button on Connections: a fresh token and the channel name. */
     public static function test_connection(): array|WP_Error {
         self::forget_access_token();
-        $channel = self::fetch_channel();
+        // The test tries the stored sign-in even after a refusal, so it can clear one.
+        $token = self::access_token( true );
+        if ( is_wp_error( $token ) ) {
+            return $token;
+        }
+        $channel = self::fetch_channel( (string) $token['access_token'] );
         if ( is_wp_error( $channel ) ) {
             return $channel;
         }
@@ -458,9 +589,24 @@ class PressHub_Social_YouTube {
         if ( ( $stored['id'] ?? '' ) !== $channel['id'] || ( $stored['title'] ?? '' ) !== $channel['title'] ) {
             update_option( self::CHANNEL_OPTION, array_merge( $stored, $channel ), false );
         }
+        // The sign-in works again: a reconnect flag from an earlier refusal is stale.
+        delete_option( self::NEEDS_RECONNECT_OPTION );
         $message = sprintf( __( 'Connected to YouTube channel %s', 'presshub-social-autopost' ), $channel['title'] );
+
+        $playlist = PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id();
+        if ( '' !== $playlist && PressHub_Social_Settings_Storage::get_youtube_podcast_enabled() ) {
+            $check = self::check_playlist( $playlist, $channel['id'] );
+            if ( is_wp_error( $check ) ) {
+                return $check;
+            }
+            $message .= '. ' . sprintf( __( 'Podcast playlist: %s', 'presshub-social-autopost' ), $check );
+        }
         if ( 'pull' !== PressHub_Social_Settings_Storage::get_worker_mode() ) {
             $message .= ' ' . __( '(uploads need the worker in Pull mode)', 'presshub-social-autopost' );
+        }
+        $until = self::paused_until();
+        if ( $until > 0 ) {
+            $message .= ' ' . sprintf( __( '(uploads wait for the daily quota until %s UTC)', 'presshub-social-autopost' ), gmdate( 'Y-m-d H:i', $until ) );
         }
         return [ 'success' => true, 'platform' => 'youtube', 'message' => $message ];
     }
@@ -542,7 +688,7 @@ class PressHub_Social_YouTube {
             $video_title = $title;
         }
         $url         = (string) ( $job['post_url'] ?? ( $post_id > 0 && function_exists( 'get_permalink' ) ? (string) get_permalink( $post_id ) : '' ) );
-        $description = (string) ( $job['post_copy'] ?? '' );
+        $description = self::youtube_cta( (string) ( $job['post_copy'] ?? '' ) );
         if ( '' !== $url && false === strpos( $description, $url ) ) {
             $description = rtrim( $description ) . "\n\n" . $url;
         }
@@ -581,9 +727,38 @@ class PressHub_Social_YouTube {
         return $job;
     }
 
+    /** Seconds after which a YouTube job still "processing" counts as stuck (the worker stopped mid-upload). */
+    const STUCK_AFTER = 10800;
+
+    /** Why an uploaded episode is not in the podcast playlist, or ''. */
+    public static function playlist_error( array $job ): string {
+        if ( 'youtube' !== ( $job['platform'] ?? '' ) ) {
+            return '';
+        }
+        $meta = self::decode_metadata( $job['metadata'] ?? null );
+        return trim( (string) ( $meta['youtube_playlist_error'] ?? '' ) );
+    }
+
+    /**
+     * Whether Retry may run on a YouTube job. Not on a published one: that would upload the
+     * video a second time (delete it on YouTube and use Re-post instead). A processing job
+     * only once it has been stuck for STUCK_AFTER seconds.
+     */
+    public static function can_retry( array $job, ?int $now = null ): bool {
+        $status = (string) ( $job['status'] ?? '' );
+        if ( 'published' === $status ) {
+            return false;
+        }
+        if ( 'processing' === $status ) {
+            $since = strtotime( (string) ( $job['updated_at'] ?? '' ) . ' UTC' );
+            return false !== $since && ( $now ?? time() ) - $since >= self::STUCK_AFTER;
+        }
+        return in_array( $status, [ 'failed', 'cancelled' ], true );
+    }
+
     /** A title YouTube accepts: plain text, no < or >, one line, at most 100 characters. */
     public static function clean_title( string $title ): string {
-        $title = html_entity_decode( wp_strip_all_tags( $title ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+        $title = html_entity_decode( wp_strip_all_tags( self::protect_bare_lt( $title ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
         $title = trim( (string) preg_replace( '/\s+/u', ' ', str_replace( [ '<', '>' ], '', $title ) ) );
         if ( mb_strlen( $title, 'UTF-8' ) > self::TITLE_MAX_CHARS ) {
             $title = rtrim( mb_substr( $title, 0, self::TITLE_MAX_CHARS - 1, 'UTF-8' ) ) . '…';
@@ -593,12 +768,29 @@ class PressHub_Social_YouTube {
 
     /** A description YouTube accepts: no < or >, at most 5000 bytes. */
     public static function clean_description( string $text ): string {
-        $text = html_entity_decode( wp_strip_all_tags( $text ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+        $text = html_entity_decode( wp_strip_all_tags( self::protect_bare_lt( $text ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
         $text = trim( str_replace( [ '<', '>', "\r\n", "\r" ], [ '', '', "\n", "\n" ], $text ) );
         if ( strlen( $text ) > self::DESCRIPTION_MAX_BYTES ) {
             $text = rtrim( mb_strcut( $text, 0, self::DESCRIPTION_MAX_BYTES - 3, 'UTF-8' ) ) . '…';
         }
         return $text;
+    }
+
+    /** A "<" that does not open a tag (as in "3 < 5") is dropped, so strip_tags keeps the text after it. */
+    private static function protect_bare_lt( string $text ): string {
+        return (string) preg_replace( '/<(?![a-zA-Z\/!?])/u', '', $text );
+    }
+
+    /**
+     * TikTok's "link in bio" call to action, rewritten for YouTube, which shows the link in
+     * the description: "…: λινκ στο bio" / "…, λινκ στο bio" become "… στο presshub.cy"
+     * (the site's host).
+     */
+    public static function youtube_cta( string $text ): string {
+        $host = function_exists( 'home_url' ) ? (string) wp_parse_url( home_url(), PHP_URL_HOST ) : '';
+        $host = '' !== $host ? preg_replace( '/^www\./i', '', $host ) : 'presshub.cy';
+        $text = (string) preg_replace( '/(?:\s+στο\s+PressHub)?\s*[:,]?\s*(?:λινκ|link|σύνδεσμος|σύνδεσμο)\s+(?:στο|in)\s+(?:bio|βιογραφικό)\b/iu', ' στο ' . $host, $text );
+        return (string) preg_replace( '/\blink in bio\b/iu', $host, $text );
     }
 
     /**
@@ -608,7 +800,9 @@ class PressHub_Social_YouTube {
      * @return string[]
      */
     public static function tags_from( string $text ): array {
-        if ( ! preg_match_all( '/#([\p{L}\p{N}_]+)/u', $text, $m ) ) {
+        // URLs first: a "#section" anchor is not a hashtag.
+        $text = (string) preg_replace( '~\b(?:https?://|www\.)\S+~iu', ' ', $text );
+        if ( ! preg_match_all( '/(?<![\p{L}\p{N}_&\/])#([\p{L}\p{N}_]+)/u', $text, $m ) ) {
             return [];
         }
         $tags  = [];

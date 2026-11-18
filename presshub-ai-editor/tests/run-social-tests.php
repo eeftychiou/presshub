@@ -2420,8 +2420,9 @@ assert_equals( 2, count( $art_claim['jobs'] ), 'The TikTok short and the Instagr
 // YouTube: Shorts and podcast episodes through the YouTube Data API
 // ----------------------------------------------------------------------
 echo "\n--- YouTube ---\n";
-$yt_http = [];
-PressHub_Social_YouTube::set_http( function ( string $method, string $url, array $args ) use ( &$yt_http ) {
+$yt_http       = [];
+$yt_no_channel = false;
+PressHub_Social_YouTube::set_http( function ( string $method, string $url, array $args ) use ( &$yt_http, &$yt_no_channel ) {
     $yt_http[] = [ $method, $url, $args ];
     if ( str_contains( $url, 'oauth2.googleapis.com/token' ) ) {
         if ( 'refresh_token' === ( $args['body']['grant_type'] ?? '' ) && 'REVOKED' === ( $args['body']['refresh_token'] ?? '' ) ) {
@@ -2433,7 +2434,14 @@ PressHub_Social_YouTube::set_http( function ( string $method, string $url, array
         return [ 'code' => 200, 'body' => '{"access_token":"ya29.FRESH","expires_in":3599}' ];
     }
     if ( str_contains( $url, '/youtube/v3/channels' ) ) {
-        return [ 'code' => 200, 'body' => '{"items":[{"id":"UC123","snippet":{"title":"PressHub Cyprus"}}]}' ];
+        return $yt_no_channel
+            ? [ 'code' => 200, 'body' => '{"items":[]}' ]
+            : [ 'code' => 200, 'body' => '{"items":[{"id":"UC123","snippet":{"title":"PressHub Cyprus"}}]}' ];
+    }
+    if ( str_contains( $url, '/youtube/v3/playlists' ) ) {
+        return str_contains( $url, 'PLpodcastplaylist01' )
+            ? [ 'code' => 200, 'body' => '{"items":[{"id":"PLpodcastplaylist01","snippet":{"title":"Daily Briefing","channelId":"UC123"}}]}' ]
+            : [ 'code' => 200, 'body' => '{"items":[]}' ];
     }
     if ( str_contains( $url, '/revoke' ) ) {
         return [ 'code' => 200, 'body' => '' ];
@@ -2581,6 +2589,110 @@ PressHub_Social_YouTube::forget_access_token();
 $revoked = PressHub_Social_YouTube::access_token();
 assert_equals( 'youtube_invalid_grant', is_wp_error( $revoked ) ? $revoked->get_error_code() : '', 'A revoked sign-in is an invalid_grant error' );
 assert_true( empty( PressHub_Connection_Status::get( 'social:youtube' )['ok'] ), 'A revoked sign-in shows YouTube as not working' );
+
+assert_false( PressHub_Social_YouTube::is_connected(), 'After Google refuses the sign-in YouTube no longer counts as connected' );
+assert_true( '' !== PressHub_Social_YouTube::reconnect_reason(), 'The refusal is kept so Connections can say why' );
+assert_equals( 'youtube_not_connected', ( fn( $t ) => is_wp_error( $t ) ? $t->get_error_code() : '' )( PressHub_Social_YouTube::access_token() ), 'No new refresh is tried until Connect YouTube again' );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'After a refused sign-in no YouTube job is handed out' );
+$tok_route = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
+assert_true( is_wp_error( $tok_route ) && 409 === ( $tok_route->get_error_data()['status'] ?? 0 ) && 'youtube_not_connected' === $tok_route->get_error_code(), 'The token route answers 409 with the reason' );
+assert_false( str_contains( wp_json_encode( $tok_route->get_error_message() ), 'REVOKED' ), 'The token route error carries no token' );
+
+// A sign-in that cannot read a channel stores nothing and keeps the earlier state.
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//OLD' );
+delete_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION );
+update_option( PressHub_Social_YouTube::CHANNEL_OPTION, [ 'id' => 'UCOLD', 'title' => 'Old channel' ] );
+$yt_no_channel = true;
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE4', 7, 900 );
+$nochan = PressHub_Social_YouTube::complete_sign_in( 'STATE4', 'CODE', '', 7 );
+$yt_no_channel = false;
+assert_equals( 'youtube_no_channel', is_wp_error( $nochan ) ? $nochan->get_error_code() : '', 'A Google account without a channel fails the sign-in' );
+assert_equals( '1//OLD', PressHub_Social_YouTube::get_refresh_token(), 'A failed sign-in does not replace the stored sign-in' );
+assert_equals( 'UCOLD', PressHub_Social_YouTube::channel()['id'] ?? '', 'A failed sign-in keeps the stored channel' );
+
+// A sign-in clears an earlier refusal.
+update_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION, 'refused' );
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE5', 7, 900 );
+PressHub_Social_YouTube::complete_sign_in( 'STATE5', 'CODE', '', 7 );
+assert_true( PressHub_Social_YouTube::is_connected() && '' === PressHub_Social_YouTube::reconnect_reason(), 'Connect YouTube again clears the refusal' );
+
+// The test button checks the podcast playlist.
+update_option( 'presshub_social_youtube_podcast_enabled', true );
+$yt_test = PressHub_Social_YouTube::test_connection();
+assert_true( ! is_wp_error( $yt_test ) && str_contains( $yt_test['message'], 'Daily Briefing' ), 'Test names the podcast playlist' );
+update_option( 'presshub_social_youtube_podcast_playlist_id', 'PLmissingplaylist1' );
+$yt_test = PressHub_Social_YouTube::test_connection();
+assert_equals( 'youtube_playlist_missing', is_wp_error( $yt_test ) ? $yt_test->get_error_code() : '', 'Test fails on a playlist that does not exist' );
+update_option( 'presshub_social_youtube_podcast_playlist_id', 'PLpodcastplaylist01' );
+
+// Quota and sign-in refusals reported by the worker hold the job and pause YouTube.
+$q_id = (int) $yt_eps[0]['id'];
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_c = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_c->set_param( 'job_id', $q_id );
+$req_c->set_param( 'status', 'failed' );
+$req_c->set_param( 'error', 'YouTube upload limit reached for today (quotaExceeded)' );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'quota' ] );
+$done = PressHub_Social_REST_Controller::handle_complete( $req_c );
+$q_job = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'deferred', $done['status'] ?? '', 'A quota refusal is not a failure' );
+assert_equals( 'pending', $q_job['status'], 'The job waits for the quota reset' );
+assert_true( strtotime( $q_job['scheduled_at'] . ' UTC' ) >= PressHub_Social_YouTube::paused_until() - 5, 'The job is due after the quota reset' );
+assert_true( PressHub_Social_YouTube::paused_until() > time(), 'YouTube is paused until the reset' );
+PressHub_Social_Queue::update_job( $q_id, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'While paused no YouTube job is handed out' );
+$reset = PressHub_Social_YouTube::next_quota_reset( strtotime( '2026-11-18 20:00:00 UTC' ) );
+assert_equals( '2026-11-19 08:05', gmdate( 'Y-m-d H:i', $reset ), 'The quota resets at midnight Pacific Time' );
+delete_option( PressHub_Social_YouTube::PAUSED_UNTIL_OPTION );
+
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'auth' ] );
+$req_c->set_param( 'error', 'Invalid Credentials' );
+PressHub_Social_REST_Controller::handle_complete( $req_c );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $q_id )['status'], 'A refused sign-in also holds the job' );
+assert_false( PressHub_Social_YouTube::is_connected(), 'A refused sign-in reported by the worker stops YouTube uploads' );
+delete_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION );
+
+// A playlist error is kept and shown; Retry never re-uploads a published video.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_p = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_p->set_param( 'job_id', $q_id );
+$req_p->set_param( 'status', 'published' );
+$req_p->set_param( 'external_post_id', 'VID1' );
+$req_p->set_param( 'external_post_url', 'https://www.youtube.com/watch?v=VID1' );
+$req_p->set_param( 'metadata', [ 'youtube_kind' => 'episode', 'youtube_playlist_error' => 'Playlist not found.' ] );
+PressHub_Social_REST_Controller::handle_complete( $req_p );
+$pub = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'published', $pub['status'], 'An upload with a playlist error is published' );
+assert_equals( 'Playlist not found.', PressHub_Social_YouTube::playlist_error( $pub ), 'The playlist error stays on the job for the Queue screen' );
+assert_false( PressHub_Social_YouTube::can_retry( $pub ), 'Retry is not offered on a published YouTube video' );
+assert_false( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'processing', 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ] ), 'A YouTube job that is uploading now cannot be retried' );
+assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'processing', 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - 4 * 3600 ) ] ), 'A YouTube job stuck for hours can be retried' );
+assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'failed' ] ), 'A failed YouTube job can be retried' );
+
+// Outside Pull mode a YouTube job fails at once.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'pending' ] );
+update_option( 'presshub_social_worker_mode', 'push' );
+$push = PressHub_Social_Dispatcher::dispatch_job( $q_id );
+assert_equals( 'youtube_needs_pull', is_wp_error( $push ) ? $push->get_error_code() : '', 'A YouTube job is never dispatched in Push mode' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+
+// Text rules for YouTube.
+$yt_host = function_exists( 'home_url' ) && wp_parse_url( home_url(), PHP_URL_HOST ) ? preg_replace( '/^www\./i', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) : 'presshub.cy';
+assert_equals( 'Ολόκληρο το άρθρο στο ' . $yt_host . '.', PressHub_Social_YouTube::youtube_cta( 'Ολόκληρο το άρθρο στο PressHub, λινκ στο bio.' ), 'TikTok\'s "link in bio" names the site on YouTube' );
+assert_equals( 'Ολόκληρη η ενημέρωση στο ' . $yt_host, PressHub_Social_YouTube::youtube_cta( 'Ολόκληρη η ενημέρωση: λινκ στο bio' ), 'The podcast short caption line too' );
+assert_equals( 'Τιμές 3 5 ευρώ', PressHub_Social_YouTube::clean_title( 'Τιμές 3 < 5 ευρώ' ), 'A bare < does not cut the rest of the title' );
+assert_equals( [ 'κύπρος' ], PressHub_Social_YouTube::tags_from( 'Δείτε https://example.com/a#section και #κύπρος' ), 'A #anchor in a link is not a tag' );
+$yt_cta = PressHub_Social_YouTube::attach_upload( [ 'id' => 9, 'post_id' => 890, 'platform' => 'youtube', 'post_copy' => 'Λεζάντα. Ολόκληρη η ενημέρωση: λινκ στο bio #κύπρος', 'video_title' => 'H', 'post_url' => 'https://example.com/?p=890', 'tiktok_short' => [ 'index' => 0 ] ] );
+assert_false( str_contains( $yt_cta['youtube']['description'] ?? '', 'bio' ), 'A YouTube description never says "link in bio"' );
+
+// A new OAuth client drops the old sign-in.
+PressHub_Social_YouTube::client_changed( 'old-client.apps.googleusercontent.com', 'new-client.apps.googleusercontent.com' );
+assert_equals( '', PressHub_Social_YouTube::get_refresh_token(), 'A changed client ID forgets the sign-in' );
+assert_equals( [], PressHub_Social_YouTube::channel(), 'A changed client ID forgets the channel' );
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+PressHub_Social_YouTube::client_changed( 'same', 'same' );
+assert_equals( '1//REFRESH', PressHub_Social_YouTube::get_refresh_token(), 'Saving the same client keeps the sign-in' );
 
 // Disconnect forgets everything.
 PressHub_Social_YouTube::disconnect();

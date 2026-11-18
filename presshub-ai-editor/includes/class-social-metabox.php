@@ -142,6 +142,10 @@ class PressHub_Social_Metabox {
                                     <span class="presshub-badge badge-engine-unconfigured" style="background:#d9534f; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
                                         <?php esc_html_e( 'Not Configured', 'presshub-social-autopost' ); ?>
                                     </span>
+                                <?php elseif ( 'youtube' === $slug && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_podcast_enabled() ) : ?>
+                                    <span class="presshub-badge badge-engine-unconfigured" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
+                                        <?php esc_html_e( 'Shorts and episodes are off: nothing is uploaded', 'presshub-social-autopost' ); ?>
+                                    </span>
                                 <?php elseif ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_session_active' ) && ! PressHub_Social_Settings_Storage::is_platform_session_active( $slug ) ) : ?>
                                     <span class="presshub-badge badge-engine-session-inactive" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
                                         <?php esc_html_e( 'Session inactive — will post when the worker is back', 'presshub-social-autopost' ); ?>
@@ -231,6 +235,12 @@ class PressHub_Social_Metabox {
                                             <a href="<?php echo esc_url( $job['external_post_url'] ); ?>" target="_blank" rel="noopener noreferrer" class="button button-small">
                                                 <?php esc_html_e( 'View Post ↗', 'presshub-social-autopost' ); ?>
                                             </a>
+                                            <?php $yt_playlist_error = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::playlist_error( $job ) : ''; ?>
+                                            <?php if ( '' !== $yt_playlist_error ) : ?>
+                                                <span class="presshub-error-preview" title="<?php echo esc_attr( $yt_playlist_error ); ?>">
+                                                    <?php esc_html_e( 'Not in the podcast playlist', 'presshub-social-autopost' ); ?>
+                                                </span>
+                                            <?php endif; ?>
                                         <?php elseif ( ! empty( $job['last_error'] ) ) : ?>
                                             <span class="presshub-error-preview" title="<?php echo esc_attr( $job['last_error'] ); ?>">
                                                 <?php echo esc_html( wp_trim_words( $job['last_error'], 8 ) ); ?>

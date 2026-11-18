@@ -1377,6 +1377,10 @@ class PressHub_Social_Settings_Storage {
      * else is dropped.
      */
     public static function sanitize_youtube_podcast_playlist_id( $value ): string {
+        if ( null === $value ) {
+            // Not in this save (another section's form): keep the stored value.
+            return self::sanitize_youtube_podcast_playlist_id( (string) get_option( 'presshub_social_youtube_podcast_playlist_id', '' ) );
+        }
         $value = trim( (string) $value );
         if ( preg_match( '/[?&]list=([A-Za-z0-9_\-]+)/', $value, $m ) ) {
             $value = $m[1];
@@ -1390,6 +1394,9 @@ class PressHub_Social_Settings_Storage {
     }
 
     public static function sanitize_youtube_privacy_status( $value ): string {
+        if ( null === $value ) {
+            return self::sanitize_youtube_privacy_status( (string) get_option( 'presshub_social_youtube_privacy_status', 'public' ) );
+        }
         $value = sanitize_key( (string) $value );
         return in_array( $value, self::YOUTUBE_PRIVACY, true ) ? $value : 'public';
     }
@@ -1400,6 +1407,9 @@ class PressHub_Social_Settings_Storage {
     }
 
     public static function sanitize_youtube_category_id( $value ): int {
+        if ( null === $value ) {
+            return self::sanitize_youtube_category_id( (int) get_option( 'presshub_social_youtube_category_id', 25 ) );
+        }
         $value = (int) $value;
         return ( $value >= 1 && $value <= 44 ) ? $value : 25;
     }
@@ -1836,6 +1846,9 @@ class PressHub_Social_Settings_Storage {
     }
 
     public static function sanitize_youtube_client_id( $value ): string {
+        if ( null === $value ) {
+            return trim( sanitize_text_field( (string) get_option( 'presshub_social_youtube_client_id', '' ) ) );
+        }
         return trim( sanitize_text_field( (string) $value ) );
     }
 

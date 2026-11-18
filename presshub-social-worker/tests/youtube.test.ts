@@ -5,8 +5,11 @@ import {
   buildVideoResource,
   nextOffsetFromRange,
   fetchYouTubeToken,
+  stopReason,
   YouTubeUploadMeta
 } from '../src/youtube/uploader';
+import { findUpload, recordUpload } from '../src/youtube/upload-log';
+import { siteEndCardLine, buildAssScript } from '../src/media/short-video';
 import { PressHubPoller, ClaimedJob } from '../src/poller';
 
 const TEST_DIR = path.resolve(__dirname, 'tmp-youtube-test');
@@ -188,6 +191,175 @@ describe('YouTube uploader', () => {
     expect(res.success).toBe(true);
     expect(res.playlistError).toBe('Playlist not found. (playlistNotFound)');
   });
+
+  const shortMeta: YouTubeUploadMeta = { kind: 'short', title: 't', description: '' };
+  const noSleep = async () => {};
+
+  test('a 4xx on a chunk is a refusal: no retry', async () => {
+    const file = videoFile(1000);
+    let puts = 0;
+    const fetchFn: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      if (url.includes('uploadType=resumable')) return response(200, {}, { Location: 'https://upload.test/s' });
+      puts++;
+      return response(400, { error: { message: 'Bad video.', errors: [{ reason: 'invalidVideo' }] } });
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, sleepFn: noSleep });
+    expect(res).toMatchObject({ success: false, error: 'YouTube refused the upload: Bad video. (invalidVideo)' });
+    expect(res.reason).toBeUndefined();
+    expect(puts).toBe(1);
+  });
+
+  test('408 and 429 on a chunk are retried', async () => {
+    const file = videoFile(1000);
+    const codes = [408, 429];
+    const fetchFn: any = async (url: string, init: any) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      if (url.includes('uploadType=resumable')) return response(200, {}, { Location: 'https://upload.test/s' });
+      if (String(init.headers['Content-Range']).startsWith('bytes */')) return response(308, null, {});
+      const code = codes.shift();
+      return code ? response(code) : response(200, { id: 'OK1' });
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, sleepFn: noSleep });
+    expect(res).toMatchObject({ success: true, videoId: 'OK1' });
+  });
+
+  test('a chunk that keeps failing ends after the set tries', async () => {
+    const file = videoFile(1000);
+    const sleeps: number[] = [];
+    const fetchFn: any = async (url: string, init: any) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      if (url.includes('uploadType=resumable')) return response(200, {}, { Location: 'https://upload.test/s' });
+      if (String(init.headers['Content-Range']).startsWith('bytes */')) return response(308, null, {});
+      return response(503);
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, maxChunkTries: 3, retryDelayMs: 100, sleepFn: async (ms) => { sleeps.push(ms); } });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('after 3 tries at byte 0 of 1000: HTTP 503');
+    expect(sleeps).toEqual([100, 200]);
+  });
+
+  test('a 308 that moves nothing forward counts as a failed try instead of looping', async () => {
+    const file = videoFile(CHUNK + 10);
+    let puts = 0;
+    const fetchFn: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      if (url.includes('uploadType=resumable')) return response(200, {}, { Location: 'https://upload.test/s' });
+      puts++;
+      return response(308, null, {}); // no Range header: nothing received
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, chunkSize: CHUNK, maxChunkTries: 2, sleepFn: noSleep });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('HTTP 308 without progress at byte 0');
+    expect(puts).toBeLessThan(10);
+  });
+
+  test('starting the session retries a network error and a 5xx', async () => {
+    const file = videoFile(1000);
+    const init = ['throw', 500];
+    const fetchFn: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      if (url.includes('uploadType=resumable')) {
+        const next = init.shift();
+        if (next === 'throw') throw new Error('socket hang up');
+        if (next === 500) return response(500);
+        return response(200, {}, { Location: 'https://upload.test/s' });
+      }
+      return response(200, { id: 'V9' });
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, sleepFn: noSleep });
+    expect(res).toMatchObject({ success: true, videoId: 'V9' });
+  });
+
+  test('a session that cannot be started fails as a result, not an exception', async () => {
+    const file = videoFile(1000);
+    const fetchFn: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      throw new Error('ECONNRESET');
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, maxChunkTries: 2, sleepFn: noSleep });
+    expect(res).toMatchObject({ success: false });
+    expect(res.error).toContain('could not be started after 2 tries: ECONNRESET');
+  });
+
+  test('a session without a Location header fails', async () => {
+    const file = videoFile(1000);
+    const fetchFn: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      return response(200, {});
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn });
+    expect(res).toEqual({ success: false, error: 'YouTube returned no upload session address.' });
+  });
+
+  test('quota and sign-in refusals carry a reason so WordPress pauses YouTube', async () => {
+    expect(stopReason(403, { error: { errors: [{ reason: 'quotaExceeded' }] } })).toBe('quota');
+    expect(stopReason(400, { error: { errors: [{ reason: 'uploadLimitExceeded' }] } })).toBe('quota');
+    expect(stopReason(401, { error: { errors: [{ reason: 'authError' }] } })).toBe('auth');
+    expect(stopReason(400, { error: { errors: [{ reason: 'invalidTitle' }] } })).toBeUndefined();
+
+    const file = videoFile(1000);
+    const limit: any = async (url: string) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      return response(400, { error: { message: 'Upload limit.', errors: [{ reason: 'uploadLimitExceeded' }] } });
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn: limit });
+    expect(res).toMatchObject({ success: false, reason: 'quota' });
+
+    const refused: any = async () => response(409, { code: 'youtube_invalid_grant', message: 'Google refused.' });
+    const res2 = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn: refused });
+    expect(res2).toMatchObject({ success: false, reason: 'auth' });
+  });
+
+  test('the playlist insert asks WordPress for the token again', async () => {
+    const file = videoFile(1000);
+    const tokens = ['FIRST', 'SECOND'];
+    let playlistAuth = '';
+    const fetchFn: any = async (url: string, init: any) => {
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: tokens.shift() });
+      if (url.includes('uploadType=resumable')) return response(200, {}, { Location: 'https://upload.test/s' });
+      if (url.includes('/playlistItems')) {
+        playlistAuth = init.headers.Authorization;
+        return response(200, { id: 'PLI' });
+      }
+      return response(200, { id: 'V4' });
+    };
+    const res = await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: episodeMeta, fetchFn });
+    expect(res.playlistItemId).toBe('PLI');
+    expect(playlistAuth).toBe('Bearer SECOND');
+  });
+
+  test('every request has a timeout signal', async () => {
+    const file = videoFile(1000);
+    const signals: boolean[] = [];
+    const fetchFn: any = async (url: string, init: any) => {
+      signals.push(Boolean(init && init.signal));
+      if (url.includes('/worker/youtube/token')) return response(200, { access_token: 'T' });
+      if (url.includes('uploadType=resumable')) return response(200, {}, { Location: 'https://upload.test/s' });
+      return response(200, { id: 'V5' });
+    };
+    await uploadToYouTube({ wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn });
+    expect(signals.length).toBeGreaterThanOrEqual(3);
+    expect(signals.every(Boolean)).toBe(true);
+  });
+});
+
+describe('YouTube upload record and end card', () => {
+  test('a recorded upload is found again for the same site and job only', () => {
+    const dir = path.join(TEST_DIR, 'log');
+    recordUpload(dir, 'https://a.test/', 7, { videoId: 'V7', url: 'u', kind: 'short', uploadedAt: new Date().toISOString() });
+    expect(findUpload(dir, 'https://a.test', 7)?.videoId).toBe('V7');
+    expect(findUpload(dir, 'https://a.test', 8)).toBeNull();
+    expect(findUpload(dir, 'https://b.test', 7)).toBeNull();
+  });
+
+  test('the YouTube end card names the site instead of "link in bio"', () => {
+    expect(siteEndCardLine('https://www.presshub.cy/')).toBe('Ολόκληρη η ενημέρωση στο presshub.cy');
+    const ass = buildAssScript({ hook: 'H', siteName: 'PressHub', chunks: [], totalDuration: 20, endCardLine: siteEndCardLine('https://presshub.cy') });
+    expect(ass).toContain('στο presshub.cy');
+    expect(ass).not.toContain('bio');
+    expect(buildAssScript({ hook: 'H', siteName: 'PressHub', chunks: [], totalDuration: 20 })).toContain('λινκ στο bio');
+  });
 });
 
 describe('Poller: YouTube jobs', () => {
@@ -199,6 +371,10 @@ describe('Poller: YouTube jobs', () => {
       if (url.endsWith('/worker/claim')) return response(200, { ok: true, jobs: [job] });
       if (url.endsWith('/worker/complete')) {
         reports.push(JSON.parse(init.body));
+        if (overrides.failReports && overrides.failReports > 0) {
+          overrides.failReports--;
+          return response(503);
+        }
         return response(200, { ok: true });
       }
       return response(404);
@@ -214,7 +390,10 @@ describe('Poller: YouTube jobs', () => {
         posted.push(o);
         return { success: true, platform: o.platform } as any;
       },
-      generateShortFn: async () => ({ filePath: rendered }) as any,
+      generateShortFn: async (p: any) => {
+        overrides.shortParams = p;
+        return { filePath: rendered, duration: overrides.shortDuration ?? 40 } as any;
+      },
       generateVideoFn: async (p: any) => {
         overrides.videoParams = p;
         return { filePath: rendered, width: p.width, height: p.height, duration: 600 };
@@ -222,7 +401,8 @@ describe('Poller: YouTube jobs', () => {
       youtubeUploadFn: async (o: any) => {
         uploads.push(o);
         return overrides.uploadResult || { success: true, videoId: 'VID', url: 'https://www.youtube.com/watch?v=VID', playlistItemId: 'PLI' };
-      }
+      },
+      reportSleepFn: async () => {}
     });
     return { poller, reports, uploads, posted, overrides, rendered };
   }
@@ -247,7 +427,7 @@ describe('Poller: YouTube jobs', () => {
     const stats = await poller.pollOnce();
     expect(stats).toEqual({ claimed: 1, succeeded: 1, failed: 0 });
     expect(posted).toHaveLength(0);
-    expect(overrides.videoParams).toMatchObject({ width: 1920, height: 1080, audioUrl: 'https://presshub.test/podcast.mp3', isPodcast: true });
+    expect(overrides.videoParams).toMatchObject({ width: 1920, height: 1080, audioUrl: 'https://presshub.test/podcast.mp3', isPodcast: true, requireAudio: true });
     expect(uploads[0]).toMatchObject({ wpUrl: 'https://presshub.test', workerSecret: 'S', filePath: rendered, meta: job.youtube });
     expect(reports[0]).toMatchObject({ job_id: 41, status: 'published', external_post_id: 'VID', external_post_url: 'https://www.youtube.com/watch?v=VID', metadata: { youtube_kind: 'episode', youtube_playlist_item_id: 'PLI' } });
     expect(fs.existsSync(rendered)).toBe(false);
@@ -269,6 +449,54 @@ describe('Poller: YouTube jobs', () => {
     expect(posted).toHaveLength(0);
     expect(uploads[0].meta.kind).toBe('short');
     expect(reports[0].status).toBe('published');
+  });
+
+  test('a YouTube short ends on the site name, not "link in bio"', async () => {
+    const job: ClaimedJob = {
+      id: 45, platform: 'youtube', post_id: 891, post_copy: 'c', audio_url: 'https://presshub.test/s.wav',
+      tiktok_short: { index: 0, count: 1, segments: [], images: [] }, youtube: { kind: 'short', title: 'H', description: 'c' }
+    };
+    const { poller, overrides } = makePoller(job);
+    await poller.pollOnce();
+    expect(overrides.shortParams.endCardLine).toBe('Ολόκληρη η ενημέρωση στο presshub.test');
+  });
+
+  test('a short over 3 minutes fails instead of going up as a normal video', async () => {
+    const job: ClaimedJob = {
+      id: 46, platform: 'youtube', post_id: 892, post_copy: 'c', audio_url: 'https://presshub.test/s.wav',
+      tiktok_short: { index: 0, count: 1, segments: [], images: [] }, youtube: { kind: 'short', title: 'H', description: 'c' }
+    };
+    const { poller, overrides, reports, uploads } = makePoller(job, { shortDuration: 185 });
+    void overrides;
+    await poller.pollOnce();
+    expect(uploads).toHaveLength(0);
+    expect(reports[0].status).toBe('failed');
+    expect(reports[0].error).toContain("over YouTube's 180s limit");
+  });
+
+  test('a quota refusal is reported with its reason', async () => {
+    const job: ClaimedJob = { id: 47, platform: 'youtube', post_copy: '', audio_url: 'https://presshub.test/p.mp3', youtube: { ...episodeMeta } };
+    const { poller, reports } = makePoller(job, { uploadResult: { success: false, error: 'limit', reason: 'quota' } });
+    await poller.pollOnce();
+    expect(reports[0]).toMatchObject({ status: 'failed', error: 'limit', metadata: { youtube_error_reason: 'quota' } });
+  });
+
+  test('a lost report is retried, and a job handed out again is not uploaded twice', async () => {
+    const job: ClaimedJob = { id: 48, platform: 'youtube', post_id: 900, post_copy: 'x', audio_url: 'https://presshub.test/p.mp3', youtube: { ...episodeMeta } };
+    const first = makePoller(job, { failReports: 2 });
+    await first.poller.pollOnce();
+    expect(first.uploads).toHaveLength(1);
+    expect(first.reports.map((r) => r.status)).toEqual(['published', 'published', 'published']);
+
+    // Every report lost: the next claim of the same job reports the recorded video.
+    const job2: ClaimedJob = { ...job, id: 49 };
+    const lost = makePoller(job2, { failReports: 99 });
+    await lost.poller.pollOnce();
+    expect(lost.uploads).toHaveLength(1);
+    const again = makePoller(job2);
+    await again.poller.pollOnce();
+    expect(again.uploads).toHaveLength(0);
+    expect(again.reports[0]).toMatchObject({ job_id: 49, status: 'published', external_post_id: 'VID' });
   });
 
   test('a failed upload is reported as failed with the reason', async () => {

@@ -9,7 +9,7 @@
  * Keys per entry: page (ai|social), tab, section, label, help, type, checkbox,
  * secret, removes (remove-key flags), rendered, status (active|unused),
  * unused_reason, was_shown_on and last_read (unused options), unit,
- * aliases (earlier labels, for search), depends_on (the switch that turns
+ * aliases (earlier labels, for search), depends_on (the switch, or a list of switches any of which, that turns
  * this setting on),
  * default or default_callback.
  *
@@ -3878,7 +3878,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => true,
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_count' => [
     'page' => 'social',
@@ -3894,7 +3894,7 @@ return [
     'status' => 'active',
     'default' => 3,
     'unit' => 'shorts',
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_spacing_minutes' => [
     'page' => 'social',
@@ -3913,7 +3913,7 @@ return [
     'aliases' => [
       0 => 'Time Between Shorts',
     ],
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_max_words' => [
     'page' => 'social',
@@ -3929,7 +3929,7 @@ return [
     'status' => 'active',
     'default' => 130,
     'unit' => 'words',
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_images' => [
     'page' => 'social',
@@ -3945,7 +3945,7 @@ return [
     'status' => 'active',
     'default' => 3,
     'unit' => 'images',
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_caption_words' => [
     'page' => 'social',
@@ -3961,7 +3961,7 @@ return [
     'status' => 'active',
     'default' => 120,
     'unit' => 'words',
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_narrators' => [
     'page' => 'social',
@@ -3977,7 +3977,7 @@ return [
     'status' => 'active',
     'default' => 1,
     'unit' => 'narrators',
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_voice_1' => [
     'page' => 'social',
@@ -3992,7 +3992,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => 'Puck',
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_voice_2' => [
     'page' => 'social',
@@ -4007,7 +4007,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'default' => '',
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_voice_speed' => [
     'page' => 'social',
@@ -4026,7 +4026,7 @@ return [
     'aliases' => [
       0 => 'Short Voice Speed',
     ],
-    'depends_on' => 'presshub_social_tiktok_shorts_enabled',
+    'depends_on' => [ 'presshub_social_tiktok_shorts_enabled', 'presshub_social_instagram_shorts_enabled', 'presshub_social_youtube_shorts_enabled' ],
   ],
   'presshub_social_tiktok_shorts_music_enabled' => [
     'page' => 'social',

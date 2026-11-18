@@ -279,16 +279,16 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_youtube_podcast_playlist_id` | Podcast Playlist ID | string |  | social / shorts | needs `presshub_social_youtube_podcast_enabled` on |
 | `presshub_social_youtube_privacy_status` | YouTube Visibility | string |  | social / shorts |  |
 | `presshub_social_youtube_category_id` | YouTube Category | integer | category ID | social / shorts |  |
-| `presshub_social_tiktok_article_shorts_enabled` | Article Shorts | boolean |  | social / shorts | checkbox, needs `presshub_social_tiktok_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_count` | Shorts per Podcast | integer | shorts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_spacing_minutes` | Time between shorts (min) | integer | min | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on, was: Time Between Shorts |
-| `presshub_social_tiktok_shorts_max_words` | Short Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_images` | Story Images per Short | integer | images | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_caption_words` | Short Post Text Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_narrators` | Short Narrators | integer | narrators | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_voice_1` | Short Narrator Voice | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_voice_2` | Second Narrator Voice | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on |
-| `presshub_social_tiktok_shorts_voice_speed` | Short voice speed (%) | integer | % | social / shorts | needs `presshub_social_tiktok_shorts_enabled` on, was: Short Voice Speed |
+| `presshub_social_tiktok_article_shorts_enabled` | Article Shorts | boolean |  | social / shorts | checkbox, needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_count` | Shorts per Podcast | integer | shorts | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_spacing_minutes` | Time between shorts (min) | integer | min | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on, was: Time Between Shorts |
+| `presshub_social_tiktok_shorts_max_words` | Short Script Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_images` | Story Images per Short | integer | images | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_caption_words` | Short Post Text Length | integer | words | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_narrators` | Short Narrators | integer | narrators | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_voice_1` | Short Narrator Voice | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_voice_2` | Second Narrator Voice | string |  | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
+| `presshub_social_tiktok_shorts_voice_speed` | Short voice speed (%) | integer | % | social / shorts | needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on, was: Short Voice Speed |
 | `presshub_social_tiktok_shorts_music_enabled` | Shorts Background Music | boolean |  | social / shorts | checkbox |
 | `presshub_social_tiktok_shorts_music_volume` | Music volume (%) | integer | % | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on, was: Music Volume |
 | `presshub_social_tiktok_shorts_music_tracks` | Music Tracks per Mood | integer | tracks | social / shorts | needs `presshub_social_tiktok_shorts_music_enabled` on |

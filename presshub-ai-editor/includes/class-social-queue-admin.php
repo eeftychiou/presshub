@@ -187,6 +187,13 @@ class PressHub_Social_Queue_Admin {
                                         <div class="presshub-copy-preview" id="copy-preview-<?php echo esc_attr( $job_id ); ?>" title="<?php echo esc_attr( $job['post_copy'] ); ?>">
                                             <?php echo esc_html( wp_trim_words( $job['post_copy'], 15 ) ); ?>
                                         </div>
+                                        <?php $yt_playlist_error = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::playlist_error( $job ) : ''; ?>
+                                        <?php if ( '' !== $yt_playlist_error ) : ?>
+                                            <div class="presshub-error-msg" title="<?php echo esc_attr( $yt_playlist_error ); ?>">
+                                                <span class="dashicons dashicons-warning" style="font-size:14px; width:14px; height:14px; vertical-align:middle; color:#dba617;"></span>
+                                                <?php echo esc_html( sprintf( /* translators: %s: YouTube's error */ __( 'Uploaded, but not in the podcast playlist: %s', 'presshub-social-autopost' ), wp_trim_words( $yt_playlist_error, 10 ) ) ); ?>
+                                            </div>
+                                        <?php endif; ?>
                                         <?php if ( ! empty( $job['last_error'] ) ) : ?>
                                             <div class="presshub-error-msg" title="<?php echo esc_attr( $job['last_error'] ); ?>">
                                                 <span class="dashicons dashicons-warning" style="font-size:14px; width:14px; height:14px; vertical-align:middle; color:#d63638;"></span>
@@ -244,7 +251,12 @@ class PressHub_Social_Queue_Admin {
                                         <?php endif; ?>
 
                                         <!-- Retry Button: Available for failed, cancelled, and published jobs -->
-                                        <?php if ( 'failed' === $status || 'cancelled' === $status || 'published' === $status ) : ?>
+                                        <?php
+                                        $can_retry = ( 'youtube' === $platform && class_exists( 'PressHub_Social_YouTube' ) )
+                                            ? PressHub_Social_YouTube::can_retry( $job )
+                                            : ( 'failed' === $status || 'cancelled' === $status || 'published' === $status );
+                                        ?>
+                                        <?php if ( $can_retry ) : ?>
                                             <button type="button" class="button button-small button-secondary btn-retry-job" data-job-id="<?php echo esc_attr( $job_id ); ?>" title="<?php esc_attr_e( 'Retry or re-post this job to social media', 'presshub-social-autopost' ); ?>">
                                                 <span class="dashicons dashicons-controls-repeat"></span>
                                                 <?php esc_html_e( 'Retry', 'presshub-social-autopost' ); ?>

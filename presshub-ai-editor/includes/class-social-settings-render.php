@@ -404,7 +404,13 @@ class PressHub_Social_Settings_Render {
                 'link' => __( 'Change Instagram engine', 'presshub-social-autopost' ),
             ];
         }
-        if ( $youtube && ! ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected() ) ) {
+        if ( $youtube && class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason() ) {
+            $issues[] = [
+                'text' => __( 'YouTube is on, but Google refused the stored sign-in. Connect YouTube again.', 'presshub-social-autopost' ),
+                'url'  => PressHub_Settings_Sections::url( 'connections', 'presshub-youtube-account' ),
+                'link' => __( 'Connect YouTube', 'presshub-social-autopost' ),
+            ];
+        } elseif ( $youtube && ! ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected() ) ) {
             $issues[] = [
                 'text' => __( 'YouTube is on, but no YouTube channel is connected.', 'presshub-social-autopost' ),
                 'url'  => PressHub_Settings_Sections::url( 'connections', 'presshub-youtube-account' ),
@@ -431,7 +437,12 @@ class PressHub_Social_Settings_Render {
             <h3 class="ph-margin-0_8em-0-0_4em">
                 <?php
                 /* translators: %d: number of things to fix */
-                echo esc_html( sprintf( _n( 'Shorts can\'t run yet. %d thing to fix:', 'Shorts can\'t run yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) ) );
+                $only_episodes = ! PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_instagram_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+                echo esc_html( $only_episodes
+                    /* translators: %d: number of things to fix */
+                    ? sprintf( _n( 'YouTube podcast episodes can\'t be uploaded yet. %d thing to fix:', 'YouTube podcast episodes can\'t be uploaded yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) )
+                    /* translators: %d: number of things to fix */
+                    : sprintf( _n( 'Shorts can\'t run yet. %d thing to fix:', 'Shorts can\'t run yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) ) );
                 ?>
             </h3>
             <ol>
@@ -465,9 +476,21 @@ class PressHub_Social_Settings_Render {
         }
         $connected = class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected();
         $channel   = $connected ? (string) ( PressHub_Social_YouTube::channel()['title'] ?? '' ) : '';
-        echo '<li>YouTube: ' . ( $pull && $connected
+        $reported  = PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' );
+        if ( ! $connected ) {
+            $why = class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason()
+                ? __( '(Google refused the sign-in: connect YouTube again in Connections)', 'presshub-social-autopost' )
+                : __( '(connect a YouTube channel in Connections)', 'presshub-social-autopost' );
+        } elseif ( ! $pull ) {
+            $why = __( '(the worker must be in Pull mode)', 'presshub-social-autopost' );
+        } elseif ( ! $reported ) {
+            $why = __( '(the worker has not reported YouTube yet: update and restart it)', 'presshub-social-autopost' );
+        } else {
+            $why = '';
+        }
+        echo '<li>YouTube: ' . ( '' === $why
             ? '<strong>' . esc_html__( 'Ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html( sprintf( /* translators: %s: channel name */ __( '(channel %s, worker in Pull mode)', 'presshub-social-autopost' ), $channel ) )
-            : '<strong>' . esc_html__( 'Not ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html( $connected ? __( '(the worker must be in Pull mode)', 'presshub-social-autopost' ) : __( '(connect a YouTube channel in Connections)', 'presshub-social-autopost' ) ) ) . '</li>';
+            : '<strong>' . esc_html__( 'Not ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html( $why ) ) . '</li>';
         echo '</ul>';
     }
 
@@ -717,6 +740,13 @@ class PressHub_Social_Settings_Render {
                     ?>
                     <a class="button button-secondary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::disconnect_link() ); ?>"><?php echo esc_html__( 'Disconnect', 'presshub-social-autopost' ); ?></a>
                     <a class="button button-secondary" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect another channel', 'presshub-social-autopost' ); ?></a>
+                <?php elseif ( PressHub_Social_YouTube::has_client() && '' !== PressHub_Social_YouTube::reconnect_reason() ) : ?>
+                    <?php
+                    /* translators: 1: channel name, 2: Google's error */
+                    echo esc_html( sprintf( __( 'Uploads to %1$s stopped: Google refused the sign-in (%2$s).', 'presshub-social-autopost' ), (string) ( $channel['title'] ?? 'YouTube' ), PressHub_Social_YouTube::reconnect_reason() ) );
+                    ?>
+                    <a class="button button-primary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect YouTube again', 'presshub-social-autopost' ); ?></a>
+                    <a class="button button-secondary" href="<?php echo esc_url( PressHub_Social_YouTube::disconnect_link() ); ?>"><?php echo esc_html__( 'Disconnect', 'presshub-social-autopost' ); ?></a>
                 <?php elseif ( PressHub_Social_YouTube::has_client() ) : ?>
                     <?php echo esc_html__( 'No channel connected.', 'presshub-social-autopost' ); ?>
                     <a class="button button-primary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect YouTube', 'presshub-social-autopost' ); ?></a>
@@ -725,6 +755,12 @@ class PressHub_Social_Settings_Render {
                 <?php endif; ?>
             </p>
             <p class="description"><?php echo esc_html__( 'Connect signs in with Google as the YouTube channel. Use the Google account that owns the channel; for a Brand Account channel, pick the channel when Google asks.', 'presshub-social-autopost' ); ?></p>
+            <?php if ( $connected && PressHub_Social_YouTube::paused_until() > 0 ) : ?>
+                <p><strong><?php
+                /* translators: %s: UTC date and time */
+                echo esc_html( sprintf( __( 'The daily YouTube upload quota is used up. Uploads resume at %s UTC.', 'presshub-social-autopost' ), gmdate( 'Y-m-d H:i', PressHub_Social_YouTube::paused_until() ) ) );
+                ?></strong></p>
+            <?php endif; ?>
             <?php if ( $connected ) { $this->render_test_connection_button( 'youtube' ); } ?>
         </div>
         <?php
