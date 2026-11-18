@@ -1,8 +1,9 @@
 <?php
 /**
  * #233 step 4: the six settings that changed behaviour without a field on
- * screen are now shown in their Daily Briefing block, show their stored value
- * on first load, and save through the per-tab save.
+ * screen are shown, show their stored value on first load, and save through
+ * the per-tab save. #236 moved the five model settings among them into their
+ * rows of the AI models table; the podcast preset stays in Daily Briefing.
  *
  * Also checks the registry's "rendered" flag against the real AI settings
  * page: every AI option the registry says is rendered has a field there.
@@ -48,13 +49,16 @@ class SettingsHiddenSurfacedTest {
             'presshub_ai_briefing_podcast_temperature' => 1.1,
             'presshub_ai_briefing_podcast_timeout'     => 420,
         ];
-        $briefing = self::pane( self::render_page(), 'briefing' );
-        if ( '' === $briefing ) {
-            $failures[] = 'Briefing pane not found.';
+        $page     = self::render_page();
+        $briefing = self::pane( $page, 'briefing' );
+        $models   = self::pane( $page, 'ai-models' );
+        if ( '' === $briefing || '' === $models ) {
+            $failures[] = 'Briefing or AI models pane not found.';
         }
         foreach ( self::SURFACED as $key ) {
-            if ( false === strpos( $briefing, 'name="' . $key . '"' ) ) {
-                $failures[] = "{$key} has no field on the Daily Briefing tab.";
+            $home = 'presshub_ai_briefing_podcast_preset' === $key ? $briefing : $models;
+            if ( false === strpos( $home, 'name="' . $key . '"' ) ) {
+                $failures[] = "{$key} has no field in its section.";
             }
             $e = PressHub_Settings_Registry::get( $key );
             if ( empty( $e['rendered'] ) || 'briefing' !== $e['tab'] ) {
@@ -68,31 +72,37 @@ class SettingsHiddenSurfacedTest {
             'presshub_ai_briefing_podcast_timeout'     => '420',
         ];
         foreach ( $expect_values as $key => $v ) {
-            if ( ! preg_match( '/name="' . preg_quote( $key, '/' ) . '"[^>]*value="' . preg_quote( $v, '/' ) . '"/', $briefing ) ) {
+            if ( ! preg_match( '/name="' . preg_quote( $key, '/' ) . '"[^>]*value="' . preg_quote( $v, '/' ) . '"/', $models ) ) {
                 $failures[] = "{$key} should show its stored value {$v}.";
             }
         }
-        if ( ! preg_match( '/<option value="google_cloud"\s+selected/', $briefing ) ) {
-            $failures[] = 'Speech engine should show the stored engine (google_cloud) selected.';
-        }
-        // Order: curator tuning after curator tokens, speech engine before the speech provider.
-        $pos = static function ( $needle ) use ( $briefing ) {
-            $p = strpos( $briefing, $needle );
-            return false === $p ? -1 : $p;
+        $row = static function ( string $id ) use ( $models ): string {
+            $start = strpos( $models, 'id="model-' . $id . '"' );
+            if ( false === $start ) {
+                return '';
+            }
+            $end = strpos( $models, '<tr id="model-', $start + 10 );
+            return substr( $models, $start, false === $end ? null : $end - $start );
         };
-        if ( ! ( $pos( 'name="presshub_ai_briefing_text_max_tokens"' ) < $pos( 'name="presshub_ai_briefing_text_temperature"' )
-            && $pos( 'name="presshub_ai_briefing_text_temperature"' ) < $pos( 'name="presshub_ai_briefing_podcast_provider"' ) ) ) {
-            $failures[] = 'Curator temperature/timeout should sit in the curator model block.';
+        if ( ! preg_match( '/<option value="google_cloud"\s+selected/', $row( 'speech' ) ) ) {
+            $failures[] = 'Speech engine should show the stored engine (google_cloud) selected in the Speech row.';
         }
-        if ( ! ( $pos( 'name="presshub_ai_briefing_podcast_max_tokens"' ) < $pos( 'name="presshub_ai_briefing_podcast_temperature"' )
-            && $pos( 'name="presshub_ai_briefing_tts_engine"' ) < $pos( 'name="presshub_ai_briefing_podcast_tts_provider"' ) ) ) {
-            $failures[] = 'Scriptwriter tuning and the speech engine should sit in the podcast block, the engine before the speech provider.';
+        // Each parameter sits in its own task's row.
+        foreach ( [ 'briefing-text' => 'presshub_ai_briefing_text_', 'briefing-podcast' => 'presshub_ai_briefing_podcast_' ] as $id => $prefix ) {
+            foreach ( [ 'temperature', 'timeout', 'max_tokens' ] as $p ) {
+                if ( false === strpos( $row( $id ), 'name="' . $prefix . $p . '"' ) ) {
+                    $failures[] = "{$prefix}{$p} should sit in the {$id} row.";
+                }
+            }
+        }
+        if ( false === strpos( $row( 'speech' ), 'name="presshub_ai_briefing_tts_engine"' ) || false === strpos( $row( 'speech' ), 'name="presshub_ai_briefing_podcast_tts_provider"' ) ) {
+            $failures[] = 'The speech engine and the speech provider should sit in the Speech row.';
         }
 
         // 2. Empty never-saved fields render empty (provider value applies), not a made-up default.
         $GLOBALS['OPTIONS_STORE'] = [];
-        $briefing = self::pane( self::render_page(), 'briefing' );
-        if ( ! preg_match( '/name="presshub_ai_briefing_text_temperature"[^>]*value=""/', $briefing ) ) {
+        $models = self::pane( self::render_page(), 'ai-models' );
+        if ( ! preg_match( '/name="presshub_ai_briefing_text_temperature"[^>]*value=""/', $models ) ) {
             $failures[] = 'An unset curator temperature should render empty.';
         }
 

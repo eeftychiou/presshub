@@ -22,6 +22,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/class-capabilities.php';
 require_once __DIR__ . '/class-settings-sections.php';
+require_once __DIR__ . '/class-secret-field.php';
+require_once __DIR__ . '/class-connection-status.php';
+require_once __DIR__ . '/class-setup-check.php';
 
 require_once __DIR__ . '/class-provider-defaults.php';
 require_once __DIR__ . '/class-provider-store.php';
@@ -118,7 +121,7 @@ class PressHub_AI_Settings_Render {
             </div>
 
             <?php
-            if ( 'ai-models' === $section ) {
+            if ( 'connections' === $section ) {
                 $this->render_provider_modal();
             }
             if ( 'daily-briefing' === $section ) {
@@ -228,145 +231,79 @@ class PressHub_AI_Settings_Render {
     public function render_section_connections() {
         $groups = PressHub_Settings_Sections::visible_groups( 'connections' );
         $social = $this->social_render();
-        if ( $social && isset( $groups['social-accounts'] ) ) {
-            $this->group_start( 'social-accounts', $groups['social-accounts'], __( 'API credentials for the platforms that use the Official REST API engine.', 'presshub-ai-editor' ) );
-            $social->render_settings_sections( 'presshub_social_credentials' );
-            $this->group_end();
-        }
-        if ( $social && isset( $groups['automation-worker'] ) ) {
-            $this->group_start( 'automation-worker', $groups['automation-worker'], __( 'The Playwright worker that posts for platforms on the Automation engine.', 'presshub-ai-editor' ) );
-            $social->render_settings_sections( 'presshub_social_worker' );
-            $this->group_end();
-        }
+
+        // #247: what stops PressHub from working, from stored data only.
+        echo PressHub_Setup_Check::render(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside.
+
+        $this->group_start( 'ai-providers', $groups['ai-providers'], __( 'The AI services PressHub writes with. Test checks one provider and keeps the result until the next test.', 'presshub-ai-editor' ) );
+        $this->render_providers_grid();
+        ?>
+        <table class="form-table" role="presentation">
+            <tbody>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_briefing_tts_api_key"><?php echo esc_html__( 'Speech key (Google AI Studio)', 'presshub-ai-editor' ); ?></label></th>
+                    <td><?php $this->render_briefing_tts_api_key_field(); ?></td>
+                </tr>
+            </tbody>
+        </table>
+        <?php
+        $this->group_end();
+
         $this->group_start( 'google-cloud', $groups['google-cloud'] );
         $this->render_section_with_fields( 'presshub_ai_media', '' );
         $this->group_end();
 
-        $this->group_start( 'plugin-updates', $groups['plugin-updates'] );
-        $this->render_section_with_fields( 'presshub_ai_github', '' );
+        $this->group_start( 'press-inbox', $groups['press-inbox'], __( 'The mailbox press releases are read from. Folders, allowed senders and limits are in Daily Briefing.', 'presshub-ai-editor' ) );
+        ?>
+        <table class="form-table" role="presentation">
+            <tbody>
+                <?php $this->render_press_inbox_login_rows(); ?>
+            </tbody>
+        </table>
+        <?php
         $this->group_end();
 
-        $this->group_start( 'connection-tests', $groups['connection-tests'] );
-        ?>
-        <p><?php echo __( 'Verify connectivity with any configured provider. Each test uses its own rate-limit budget and logs activity in the Token Logger dashboard.', 'presshub-ai-editor' ); ?></p>
-                    <div class="ph-display-flex ph-gap-8px ph-align-items-center ph-flex-wrap-wrap">
-                        <button type="button" id="presshub-ai-test-api" class="button presshub-ai-test-api" data-provider=""><?php echo __( 'Test Active Provider', 'presshub-ai-editor' ); ?></button>
-                        <button type="button" class="button presshub-ai-test-api" data-provider="openai"><?php echo __( 'Test OpenAI', 'presshub-ai-editor' ); ?></button>
-                        <button type="button" class="button presshub-ai-test-api" data-provider="anthropic"><?php echo __( 'Test Anthropic', 'presshub-ai-editor' ); ?></button>
-                        <button type="button" class="button presshub-ai-test-api" data-provider="gemini"><?php echo __( 'Test Gemini', 'presshub-ai-editor' ); ?></button>
-                        <span id="presshub-ai-test-spinner" class="spinner" role="status"><span class="screen-reader-text"></span></span>
-                    </div>
-                    <div id="presshub-ai-test-result" class="ph-margin-top-15px ph-font-weight-bold"></div>
-        <?php
+        if ( $social && isset( $groups['social-accounts'] ) ) {
+            $this->group_start( 'social-accounts', $groups['social-accounts'], __( 'Accounts for the platforms that post through their official API.', 'presshub-ai-editor' ) );
+            $social->render_settings_sections( 'presshub_social_credentials' );
+            $this->group_end();
+        }
+        if ( $social && isset( $groups['automation-worker'] ) ) {
+            $this->group_start( 'automation-worker', $groups['automation-worker'], __( 'The worker on your PC that posts for platforms on the automation engine.', 'presshub-ai-editor' ) );
+            $social->render_worker_status();
+            $social->render_settings_sections( 'presshub_social_worker' );
+            $this->group_end();
+        }
+
+        $this->group_start( 'plugin-updates', $groups['plugin-updates'] );
+        $this->render_section_with_fields( 'presshub_ai_github', '' );
         $this->group_end();
     }
 
     public function render_section_ai_models() {
+        require_once __DIR__ . '/class-model-tasks.php';
         $groups = PressHub_Settings_Sections::visible_groups( 'ai-models' );
-        $this->group_start( 'ai-providers', $groups['ai-providers'] );
-        $this->render_providers_grid();
+        $this->group_start( PressHub_Model_Tasks::GROUP, $groups[ PressHub_Model_Tasks::GROUP ], __( 'Pick a provider and model for each task. A task on Default uses the default model. Open a row\'s settings for its temperature, max tokens and timeout.', 'presshub-ai-editor' ) );
+        echo PressHub_Model_Tasks::render_table(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in render_table().
         $this->group_end();
+    }
 
-        $this->group_start( 'copilot', $groups['copilot'], __( 'The AI provider, model and parameters behind the sidebar Copilot and the research agents.', 'presshub-ai-editor' ) );
-        ?>
-        <table class="form-table" role="presentation">
-                        <tbody>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_copilot_provider"><?php echo __( 'Active Copilot Provider', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_copilot_prov = (string) get_option( 'presshub_ai_copilot_provider', '' ); ?>
-                                    <select name="presshub_ai_copilot_provider" id="presshub_ai_copilot_provider" class="regular-text">
-                                        <?php echo self::get_active_providers_options( $cur_copilot_prov, __( '-- Use Active Provider Default --', 'presshub-ai-editor' ) ); ?>
-                                    </select>
-                                    <p class="description"><?php echo __( 'Select which AI provider powers sidebar chat and background deep-research tasks.', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_copilot_model"><?php echo __( 'Custom Model Override', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_copilot_model = (string) get_option( 'presshub_ai_copilot_model', '' ); ?>
-                                    <input type="text" name="presshub_ai_copilot_model" id="presshub_ai_copilot_model" value="<?php echo self::esc_attr_safe( $cur_copilot_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default model', 'presshub-ai-editor' ); ?>" />
-                                    <p class="description"><?php echo __( 'Optional specific model identifier for Copilot chat (e.g. gpt-4o, gemini-2.0-flash).', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_copilot_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_copilot_tokens = PressHub_AI_Settings_Storage::get_copilot_max_tokens(); ?>
-                                    <input type="number" min="64" max="65536" name="presshub_ai_copilot_max_tokens" id="presshub_ai_copilot_max_tokens" value="<?php echo $cur_copilot_tokens > 0 ? self::esc_attr_safe( (string) $cur_copilot_tokens ) : ''; ?>" class="small-text" placeholder="20000" />
-                                    <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_copilot_temperature"><?php echo __( 'Sampling Temperature', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_copilot_temp = get_option( 'presshub_ai_copilot_temperature', '0.7' ); ?>
-                                    <input type="number" min="0" max="2" step="0.05" name="presshub_ai_copilot_temperature" id="presshub_ai_copilot_temperature" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_temp ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'Sampling temperature for assistant chat (0.0 to 2.0). Default 0.7.', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_copilot_timeout"><?php echo __( 'Request Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_copilot_timeout = (int) get_option( 'presshub_ai_copilot_timeout', 300 ); ?>
-                                    <input type="number" min="10" max="300" name="presshub_ai_copilot_timeout" id="presshub_ai_copilot_timeout" value="<?php echo self::esc_attr_safe( (string) $cur_copilot_timeout ); ?>" class="small-text" />
-                                    <p class="description"><?php echo __( 'HTTP timeout for chat and research calls. Default 300s.', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-        <?php
-        $this->group_end();
+    /** The read-only "Model: …" line of a feature (#236). */
+    private function model_line( string $task ): string {
+        require_once __DIR__ . '/class-model-tasks.php';
+        return PressHub_Model_Tasks::feature_line( $task );
     }
 
     public function render_section_writing_qa() {
         $groups = PressHub_Settings_Sections::visible_groups( 'writing-qa' );
-        $this->group_start( 'drafting', $groups['drafting'], __( 'The AI engine, model and drafting behavior for drafts and article reviews in the editor.', 'presshub-ai-editor' ) );
+        $this->group_start( 'drafting', $groups['drafting'], __( 'How the Co-author drafts and reviews articles in the editor.', 'presshub-ai-editor' ) );
         ?>
 
                         <table class="form-table" role="presentation">
                             <tbody>
                                 <tr>
-                                    <th scope="row"><label for="presshub_ai_coauthor_provider"><?php echo __( 'Active Co-Author Provider', 'presshub-ai-editor' ); ?></label></th>
-                                    <td>
-                                        <?php $cur_coauthor_prov = (string) get_option( 'presshub_ai_coauthor_provider', '' ); ?>
-                                        <select name="presshub_ai_coauthor_provider" id="presshub_ai_coauthor_provider" class="regular-text">
-                                            <?php echo self::get_active_providers_options( $cur_coauthor_prov, __( '-- Use Active Provider Default --', 'presshub-ai-editor' ) ); ?>
-                                        </select>
-                                        <p class="description"><?php echo __( 'Select which AI provider powers drafting and scorecard evaluation in the editor metabox.', 'presshub-ai-editor' ); ?></p>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><label for="presshub_ai_coauthor_model"><?php echo __( 'Custom Model Override', 'presshub-ai-editor' ); ?></label></th>
-                                    <td>
-                                        <?php $cur_coauthor_model = (string) get_option( 'presshub_ai_coauthor_model', '' ); ?>
-                                        <input type="text" name="presshub_ai_coauthor_model" id="presshub_ai_coauthor_model" value="<?php echo self::esc_attr_safe( $cur_coauthor_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default model', 'presshub-ai-editor' ); ?>" />
-                                        <p class="description"><?php echo __( 'Optional specific model identifier for Co-Author (e.g. gpt-4o, claude-3-5-sonnet-20241022).', 'presshub-ai-editor' ); ?></p>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><label for="presshub_ai_coauthor_max_tokens"><?php echo __( 'Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
-                                    <td>
-                                        <?php $cur_coauthor_tokens = PressHub_AI_Settings_Storage::get_coauthor_max_tokens(); ?>
-                                        <input type="number" min="64" max="65536" name="presshub_ai_coauthor_max_tokens" id="presshub_ai_coauthor_max_tokens" value="<?php echo $cur_coauthor_tokens > 0 ? self::esc_attr_safe( (string) $cur_coauthor_tokens ) : ''; ?>" class="small-text" placeholder="20000" />
-                                        <p class="description"><?php echo __( 'Maximum number of tokens the model can generate in a single response (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><label for="presshub_ai_coauthor_temperature"><?php echo __( 'Sampling Temperature', 'presshub-ai-editor' ); ?></label></th>
-                                    <td>
-                                        <?php $cur_coauthor_temp = get_option( 'presshub_ai_coauthor_temperature', '0.7' ); ?>
-                                        <input type="number" min="0" max="2" step="0.05" name="presshub_ai_coauthor_temperature" id="presshub_ai_coauthor_temperature" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_temp ); ?>" class="small-text" />
-                                        <p class="description"><?php echo __( 'Creativity tuning for story drafting (0.0 to 2.0). Scorecards use deterministic 0.0.', 'presshub-ai-editor' ); ?></p>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><label for="presshub_ai_coauthor_timeout"><?php echo __( 'Request Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
-                                    <td>
-                                        <?php $cur_coauthor_timeout = (int) get_option( 'presshub_ai_coauthor_timeout', 300 ); ?>
-                                        <input type="number" min="10" max="300" name="presshub_ai_coauthor_timeout" id="presshub_ai_coauthor_timeout" value="<?php echo self::esc_attr_safe( (string) $cur_coauthor_timeout ); ?>" class="small-text" />
-                                        <p class="description"><?php echo __( 'HTTP timeout for draft generation requests. Default 300s.', 'presshub-ai-editor' ); ?></p>
-                                    </td>
+                                    <th scope="row"><?php echo esc_html__( 'Model', 'presshub-ai-editor' ); ?></th>
+                                    <td><?php echo $this->model_line( 'coauthor' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line(). ?></td>
                                 </tr>
                                 <tr>
                                     <th scope="row"><label for="presshub_ai_coauthor_max_source_chars"><?php echo __( 'Max Source Material Characters', 'presshub-ai-editor' ); ?></label></th>
@@ -393,6 +330,10 @@ class PressHub_AI_Settings_Render {
                         <p><?php echo __( 'Configure the automated quality-assurance review gate. When enabled, articles submitted for publication are automatically evaluated against editorial standards and blocked if they do not meet the minimum score.', 'presshub-ai-editor' ); ?></p>
                         <table class="form-table" role="presentation">
                             <tbody>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'Model', 'presshub-ai-editor' ); ?></th>
+                                    <td><?php echo $this->model_line( 'qa' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line(). ?></td>
+                                </tr>
                                 <tr>
                                     <th scope="row"><?php echo __( 'Enable QA Review System', 'presshub-ai-editor' ); ?></th>
                                     <td>
@@ -485,22 +426,8 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_image_prompt_provider"><?php echo __( 'Article Analysis AI Provider', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_image_prompt_provider_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_image_prompt_model"><?php echo __( 'Article Analysis Model Override', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_image_prompt_model_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_image_generation_provider"><?php echo __( 'Image Generation AI Provider', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_image_generation_provider_field(); ?>
-                                </td>
+                                <th scope="row"><?php echo esc_html__( 'Model', 'presshub-ai-editor' ); ?></th>
+                                <td><?php echo $this->model_line( 'image_prompt' ) . $this->model_line( 'image_generation' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line(). ?></td>
                             </tr>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_image_aspect_ratio"><?php echo __( 'Default Aspect Ratio', 'presshub-ai-editor' ); ?></label></th>
@@ -650,34 +577,10 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_qa_gate_notice(); ?>
                                 </td>
                             </tr>
-                            <tr class="presshub-subgroup-row"><th scope="row" colspan="2"><h4 class="ph-margin-1em-0-0"><?php echo esc_html__( 'Curator model', 'presshub-ai-editor' ); ?></h4></th></tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_provider"><?php echo __( 'Curator AI Provider', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_text_prov = (string) get_option( 'presshub_ai_briefing_text_provider', '' ); ?>
-                                    <select name="presshub_ai_briefing_text_provider" id="presshub_ai_briefing_text_provider" class="regular-text">
-                                        <?php echo self::get_active_providers_options( $cur_text_prov, __( '-- Use Active Provider Default --', 'presshub-ai-editor' ) ); ?>
-                                    </select>
-                                    <p class="description"><?php echo __( 'AI Provider responsible for filtering and summarizing morning news into article drafts.', 'presshub-ai-editor' ); ?></p>
-                                </td>
+                                <th scope="row"><?php echo esc_html__( 'Model', 'presshub-ai-editor' ); ?></th>
+                                <td><?php echo $this->model_line( 'briefing_text' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line(). ?></td>
                             </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_model"><?php echo __( 'Curator Model Override', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_text_model = (string) get_option( 'presshub_ai_briefing_text_model', '' ); ?>
-                                    <input type="text" name="presshub_ai_briefing_text_model" id="presshub_ai_briefing_text_model" value="<?php echo self::esc_attr_safe( $cur_text_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default', 'presshub-ai-editor' ); ?>" />
-                                    <?php self::registry_help( 'presshub_ai_briefing_text_model' ); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_text_max_tokens"><?php echo __( 'Curator Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_text_tokens = PressHub_AI_Settings_Storage::get_briefing_text_max_tokens(); ?>
-                                    <input type="number" min="64" max="65536" name="presshub_ai_briefing_text_max_tokens" id="presshub_ai_briefing_text_max_tokens" value="<?php echo $cur_text_tokens > 0 ? self::esc_attr_safe( (string) $cur_text_tokens ) : ''; ?>" class="small-text" placeholder="20000" />
-                                    <p class="description"><?php echo __( 'Maximum output tokens for news story curation (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <?php $this->render_module_tuning_rows( 'briefing_text', __( 'Curator', 'presshub-ai-editor' ) ); ?>
                         </tbody>
                     </table>
                     </section>
@@ -710,34 +613,10 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_briefing_podcast_style_field(); ?>
                                 </td>
                             </tr>
-                            <tr class="presshub-subgroup-row"><th scope="row" colspan="2"><h4 class="ph-margin-1em-0-0"><?php echo esc_html__( 'Scriptwriter model', 'presshub-ai-editor' ); ?></h4></th></tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_provider"><?php echo __( 'Scriptwriter AI Provider', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_pod_prov = (string) get_option( 'presshub_ai_briefing_podcast_provider', '' ); ?>
-                                    <select name="presshub_ai_briefing_podcast_provider" id="presshub_ai_briefing_podcast_provider" class="regular-text">
-                                        <?php echo self::get_active_providers_options( $cur_pod_prov, __( '-- Use Active Provider Default --', 'presshub-ai-editor' ) ); ?>
-                                    </select>
-                                    <p class="description"><?php echo __( 'AI Provider responsible for writing conversational podcast scripts.', 'presshub-ai-editor' ); ?></p>
-                                </td>
+                                <th scope="row"><?php echo esc_html__( 'Model', 'presshub-ai-editor' ); ?></th>
+                                <td><?php echo $this->model_line( 'briefing_podcast' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line(). ?></td>
                             </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_model"><?php echo __( 'Scriptwriter Model Override', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_pod_model = (string) get_option( 'presshub_ai_briefing_podcast_model', '' ); ?>
-                                    <input type="text" name="presshub_ai_briefing_podcast_model" id="presshub_ai_briefing_podcast_model" value="<?php echo self::esc_attr_safe( $cur_pod_model ); ?>" class="regular-text code" placeholder="<?php echo esc_attr__( 'Leave empty to use provider default', 'presshub-ai-editor' ); ?>" />
-                                    <?php self::registry_help( 'presshub_ai_briefing_podcast_model' ); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_max_tokens"><?php echo __( 'Scriptwriter Maximum Output Tokens', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_pod_tokens = PressHub_AI_Settings_Storage::get_briefing_podcast_max_tokens(); ?>
-                                    <input type="number" min="64" max="65536" name="presshub_ai_briefing_podcast_max_tokens" id="presshub_ai_briefing_podcast_max_tokens" value="<?php echo $cur_pod_tokens > 0 ? self::esc_attr_safe( (string) $cur_pod_tokens ) : ''; ?>" class="small-text" placeholder="20000" />
-                                    <p class="description"><?php echo __( 'Maximum output tokens for podcast script generation (64 - 65,536). Leave empty to use provider default (e.g. 20,000 / 60,000).', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <?php $this->render_module_tuning_rows( 'briefing_podcast', __( 'Scriptwriter', 'presshub-ai-editor' ) ); ?>
                         </tbody>
                     </table>
                     <?php $this->render_briefing_prompt_studio(); ?>
@@ -754,32 +633,8 @@ class PressHub_AI_Settings_Render {
                             $pitch_inactive   = ( 'legacy' === $cur_payload_mode );
                             ?>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_engine"><?php echo __( 'Speech engine', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_tts_engine_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_tts_provider"><?php echo __( 'Speech AI Provider (logosAI)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $cur_tts_prov = (string) get_option( 'presshub_ai_briefing_podcast_tts_provider', '' ); ?>
-                                    <select name="presshub_ai_briefing_podcast_tts_provider" id="presshub_ai_briefing_podcast_tts_provider" class="regular-text">
-                                        <?php echo self::get_speech_providers_options( $cur_tts_prov, __( '-- Use Active Gemini Provider --', 'presshub-ai-editor' ) ); ?>
-                                    </select>
-                                    <p class="description"><?php echo __( 'Select which AI provider powers neural speech generation (Google Gemini / AI Studio configured in the AI Providers tab).', 'presshub-ai-editor' ); ?></p>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_tts_model"><?php echo __( 'Voice Generation AI Model', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_tts_model_field(); ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                 <th scope="row"><label for="presshub_ai_briefing_tts_timeout"><?php echo __( 'Speech AI Timeout (seconds)', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_tts_timeout_field(); ?>
-                                </td>
+                                <th scope="row"><?php echo esc_html__( 'Model', 'presshub-ai-editor' ); ?></th>
+                                <td><?php echo $this->model_line( 'speech' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line(). ?></td>
                             </tr>
                             <?php $cur_host_count = PressHub_AI_Settings_Storage::get_briefing_host_count(); ?>
                             <tr id="presshub-host-female-row">
@@ -1369,7 +1224,6 @@ class PressHub_AI_Settings_Render {
                     $id          = $provider['id'] ?? '';
                     $name        = $provider['name'] ?? ucfirst( $id );
                     $type        = $provider['type'] ?? 'openai';
-                    $base_url    = $provider['base_url'] ?? '';
                     $model       = $provider['default_model'] ?? '';
                     $timeout     = $provider['timeout'] ?? 300;
                     $temp        = $provider['temperature'] ?? 0.7;
@@ -1396,12 +1250,6 @@ class PressHub_AI_Settings_Render {
                             <span class="presshub-meta-label"><?php echo __( 'Default Model:', 'presshub-ai-editor' ); ?></span>
                             <span class="presshub-meta-val code"><strong><?php echo esc_html( $model ?: '-' ); ?></strong></span>
                         </div>
-                        <?php if ( '' !== $base_url ) : ?>
-                        <div class="presshub-meta-row">
-                            <span class="presshub-meta-label"><?php echo __( 'Base URL:', 'presshub-ai-editor' ); ?></span>
-                            <span class="presshub-meta-val code" title="<?php echo esc_attr( $base_url ); ?>"><?php echo esc_html( strlen( $base_url ) > 32 ? substr( $base_url, 0, 30 ) . '…' : $base_url ); ?></span>
-                        </div>
-                        <?php endif; ?>
                         <div class="presshub-meta-row">
                             <span class="presshub-meta-label"><?php echo __( 'Tuning:', 'presshub-ai-editor' ); ?></span>
                             <span class="presshub-meta-val"><?php echo sprintf( 'Temp: %s | Max Output: %s | %ss', esc_html( (string) $temp ), esc_html( function_exists( 'number_format_i18n' ) ? number_format_i18n( $max_tokens ) : number_format( $max_tokens ) ), esc_html( (string) $timeout ) ); ?></span>
@@ -1410,6 +1258,11 @@ class PressHub_AI_Settings_Render {
                             <span class="presshub-meta-label"><?php echo __( 'Credentials:', 'presshub-ai-editor' ); ?></span>
                             <span class="presshub-meta-val"><?php echo $has_key ? '<span class="code">' . esc_html( self::mask_key( $provider['api_key'] ) ) . '</span>' : ( 'ollama_local' === $type ? esc_html__( 'Not required', 'presshub-ai-editor' ) : '<span class="ph-color-d63638 presshub-missing-key">' . esc_html__( 'No API Key set', 'presshub-ai-editor' ) . '</span>' ); ?></span>
                         </div>
+                    </div>
+
+                    <div class="presshub-meta-row presshub-card-conn">
+                        <span class="presshub-meta-label"><?php echo esc_html__( 'Status:', 'presshub-ai-editor' ); ?></span>
+                        <span class="presshub-meta-val"><?php echo PressHub_Connection_Status::render_pill( 'provider:' . ( function_exists( 'sanitize_key' ) ? sanitize_key( (string) $id ) : (string) $id ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
                     </div>
 
                     <div class="presshub-card-footer">
@@ -2096,31 +1949,27 @@ class PressHub_AI_Settings_Render {
 
     public function render_github_token_field() {
         $saved = (string) get_option( 'presshub_ai_github_token', '' );
-        $mask  = self::mask_key( $saved );
+        PressHub_Secret_Field::render( [
+            'name'        => 'presshub_ai_github_token',
+            'masked'      => '' !== $saved ? self::mask_key( $saved ) : '',
+            'remove_name' => 'presshub_ai_remove_github_token',
+            'describedby' => 'presshub_ai_github_token-desc',
+        ] );
         ?>
-        <input type="password" name="presshub_ai_github_token" id="presshub_ai_github_token" value="<?php echo self::esc_attr_safe( $mask ); ?>" placeholder="<?php echo self::esc_attr_safe( $mask ); ?>" class="regular-text" autocomplete="off" />
-        <p class="description"><?php echo __( 'GitHub Personal Access Token (PAT). Only required if the GitHub repository is private to enable automatic updates.', 'presshub-ai-editor' ); ?></p>
-        <?php if ( '' !== $mask ) : ?>
-            <label>
-                <input type="checkbox" name="presshub_ai_remove_github_token" id="presshub_ai_remove_github_token" value="1" />
-                <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
-            </label>
-        <?php endif; ?>
+        <p class="description" id="presshub_ai_github_token-desc"><?php echo esc_html__( 'Needed only when the plugin repository on GitHub is private, so that updates can be downloaded.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
     public function render_google_cloud_api_key_field() {
         $saved = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-        $mask  = self::mask_key( $saved );
+        PressHub_Secret_Field::render( [
+            'name'        => 'presshub_ai_google_cloud_api_key',
+            'masked'      => '' !== $saved ? self::mask_key( $saved ) : '',
+            'remove_name' => 'presshub_ai_remove_google_cloud_api_key',
+            'describedby' => 'presshub_ai_google_cloud_api_key-desc',
+        ] );
         ?>
-        <input type="password" name="presshub_ai_google_cloud_api_key" id="presshub_ai_google_cloud_api_key" value="<?php echo self::esc_attr_safe( $mask ); ?>" placeholder="<?php echo self::esc_attr_safe( $mask ); ?>" class="regular-text" autocomplete="off" />
-        <p class="description"><?php echo __( 'Required for Google Cloud Imagen and Text-to-Speech integration.', 'presshub-ai-editor' ); ?></p>
-        <?php if ( '' !== $mask ) : ?>
-            <label>
-                <input type="checkbox" name="presshub_ai_remove_google_cloud_api_key" id="presshub_ai_remove_google_cloud_api_key" value="1" />
-                <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
-            </label>
-        <?php endif; ?>
+        <p class="description" id="presshub_ai_google_cloud_api_key-desc"><?php echo esc_html__( 'Used for Google Cloud Imagen images and Google Cloud Text-to-Speech.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -3049,16 +2898,8 @@ class PressHub_AI_Settings_Render {
                     </td>
                 </tr>
                 <tr>
-                    <th scope="row"><label for="presshub_ai_briefing_memory_provider"><?php echo esc_html__( 'Memory Model Provider', 'presshub-ai-editor' ); ?></label></th>
-                    <td>
-                        <?php $this->render_briefing_memory_provider_field(); ?>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="presshub_ai_briefing_memory_model"><?php echo esc_html__( 'Memory Model Override', 'presshub-ai-editor' ); ?></label></th>
-                    <td>
-                        <?php $this->render_briefing_memory_model_field(); ?>
-                    </td>
+                    <th scope="row"><?php echo esc_html__( 'Model', 'presshub-ai-editor' ); ?></th>
+                    <td><?php echo $this->model_line( 'briefing_memory' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in feature_line(). ?></td>
                 </tr>
             </tbody>
         </table>
@@ -3230,37 +3071,30 @@ class PressHub_AI_Settings_Render {
 
     public function render_briefing_tts_api_key_field() {
         $saved = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-        $mask  = self::mask_key( $saved );
+        PressHub_Secret_Field::render( [
+            'name'        => 'presshub_ai_briefing_tts_api_key',
+            'masked'      => '' !== $saved ? self::mask_key( $saved ) : '',
+            'remove_name' => 'presshub_ai_remove_briefing_tts_api_key',
+            'describedby' => 'presshub_ai_briefing_tts_api_key-desc',
+        ] );
         ?>
-        <input type="password" name="presshub_ai_briefing_tts_api_key" id="presshub_ai_briefing_tts_api_key" value="<?php echo self::esc_attr_safe( $mask ); ?>" placeholder="<?php echo self::esc_attr_safe( $mask ); ?>" class="regular-text" autocomplete="off" />
-        <p class="description"><?php echo __( 'Dedicated Gemini / Google AI Studio API key used specifically for speech generation and podcast audio synthesis. If left empty, falls back to your main Gemini API key from the Providers tab.', 'presshub-ai-editor' ); ?></p>
-        <?php if ( '' !== $mask ) : ?>
-            <label>
-                <input type="checkbox" name="presshub_ai_remove_briefing_tts_api_key" id="presshub_ai_remove_briefing_tts_api_key" value="1" />
-                <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
-            </label>
-        <?php endif; ?>
+        <p class="description" id="presshub_ai_briefing_tts_api_key-desc"><?php echo esc_html__( 'A separate Google AI Studio key for the podcast and Shorts narration. When empty, the Gemini provider key is used.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
     /**
-     * Press release inbox (IMAP) rows for the Daily Briefing tab.
+     * Press release inbox rows for Daily Briefing → Sources: the on/off
+     * switch, folders and filtering. The mailbox login is in Connections
+     * (#247), linked both ways.
      */
     public function render_press_inbox_rows() {
         $enabled    = PressHub_AI_Settings_Storage::get_press_inbox_enabled();
-        $host       = PressHub_AI_Settings_Storage::get_press_inbox_host();
-        $port       = PressHub_AI_Settings_Storage::get_press_inbox_port();
-        $encryption = PressHub_AI_Settings_Storage::get_press_inbox_encryption();
-        $verify     = PressHub_AI_Settings_Storage::get_press_inbox_verify_ssl();
-        $username   = PressHub_AI_Settings_Storage::get_press_inbox_username();
-        $has_pass   = '' !== PressHub_AI_Settings_Storage::get_press_inbox_password();
         $folder     = PressHub_AI_Settings_Storage::get_press_inbox_folder();
         $processed  = PressHub_AI_Settings_Storage::get_press_inbox_processed_folder();
         $senders    = implode( "\n", PressHub_AI_Settings_Storage::get_press_inbox_allowed_senders() );
         $max_msgs   = PressHub_AI_Settings_Storage::get_press_inbox_max_messages();
         $max_age    = PressHub_AI_Settings_Storage::get_press_inbox_max_age_hours();
         $max_mb     = PressHub_AI_Settings_Storage::get_press_inbox_max_attachment_mb();
-        $timeout    = PressHub_AI_Settings_Storage::get_press_inbox_timeout();
         $extract    = PressHub_AI_Settings_Storage::get_press_inbox_extract_attachments();
         ?>
         <tr class="presshub-press-inbox-heading">
@@ -3273,33 +3107,10 @@ class PressHub_AI_Settings_Render {
             <td><label><input type="checkbox" name="presshub_ai_press_inbox_enabled" id="presshub_ai_press_inbox_enabled" value="1" <?php checked( $enabled ); ?> /> <?php echo esc_html__( 'Add emails from this mailbox to every morning and noon harvest', 'presshub-ai-editor' ); ?></label></td>
         </tr>
         <tr>
-            <th scope="row"><label for="presshub_ai_press_inbox_host"><?php echo esc_html__( 'Incoming Mail Server (IMAP)', 'presshub-ai-editor' ); ?></label></th>
+            <th scope="row"><?php echo esc_html__( 'Mailbox login', 'presshub-ai-editor' ); ?></th>
             <td>
-                <input type="text" name="presshub_ai_press_inbox_host" id="presshub_ai_press_inbox_host" value="<?php echo self::esc_attr_safe( $host ); ?>" class="regular-text code" placeholder="presshub.cy" />
-                <label for="presshub_ai_press_inbox_port" class="ph-margin-left-8px"><?php echo esc_html__( 'Port', 'presshub-ai-editor' ); ?></label>
-                <input type="number" min="1" max="65535" name="presshub_ai_press_inbox_port" id="presshub_ai_press_inbox_port" value="<?php echo self::esc_attr_safe( (string) $port ); ?>" class="small-text" />
-                <select name="presshub_ai_press_inbox_encryption" id="presshub_ai_press_inbox_encryption">
-                    <option value="ssl" <?php selected( $encryption, 'ssl' ); ?>><?php echo esc_html__( 'SSL/TLS (port 993)', 'presshub-ai-editor' ); ?></option>
-                    <option value="tls" <?php selected( $encryption, 'tls' ); ?>><?php echo esc_html__( 'STARTTLS (port 143)', 'presshub-ai-editor' ); ?></option>
-                    <option value="none" <?php selected( $encryption, 'none' ); ?>><?php echo esc_html__( 'None (not recommended)', 'presshub-ai-editor' ); ?></option>
-                </select>
-                <p><label><input type="checkbox" name="presshub_ai_press_inbox_verify_ssl" id="presshub_ai_press_inbox_verify_ssl" value="1" <?php checked( $verify ); ?> /> <?php echo esc_html__( 'Verify the server certificate (turn off only if the mail server uses a self-signed certificate)', 'presshub-ai-editor' ); ?></label></p>
-            </td>
-        </tr>
-        <tr>
-            <th scope="row"><label for="presshub_ai_press_inbox_username"><?php echo esc_html__( 'Mailbox Username', 'presshub-ai-editor' ); ?></label></th>
-            <td><input type="text" name="presshub_ai_press_inbox_username" id="presshub_ai_press_inbox_username" value="<?php echo self::esc_attr_safe( $username ); ?>" class="regular-text" autocomplete="off" placeholder="press@presshub.cy" />
-                <?php self::registry_help( 'presshub_ai_press_inbox_username' ); ?>
-            </td>
-        </tr>
-        <tr>
-            <th scope="row"><label for="presshub_ai_press_inbox_password"><?php echo esc_html__( 'Mailbox Password', 'presshub-ai-editor' ); ?></label></th>
-            <td>
-                <input type="password" name="presshub_ai_press_inbox_password" id="presshub_ai_press_inbox_password" value="<?php echo $has_pass ? '••••••••' : ''; ?>" class="regular-text" autocomplete="new-password" />
-                <p class="description"><?php echo esc_html__( 'Stored in the WordPress database and never shown again. Leave as is to keep the saved password.', 'presshub-ai-editor' ); ?></p>
-                <?php if ( $has_pass ) : ?>
-                    <label><input type="checkbox" name="presshub_ai_remove_press_inbox_password" id="presshub_ai_remove_press_inbox_password" value="1" /> <?php echo esc_html__( 'Remove stored password', 'presshub-ai-editor' ); ?></label>
-                <?php endif; ?>
+                <?php echo PressHub_Connection_Status::render_pill( 'press_inbox' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                <a href="<?php echo esc_url( PressHub_Settings_Sections::url( 'connections', 'press-inbox' ) ); ?>"><?php echo esc_html__( 'Server, user name and password are in Connections → Press inbox', 'presshub-ai-editor' ); ?></a>
             </td>
         </tr>
         <tr>
@@ -3325,17 +3136,74 @@ class PressHub_AI_Settings_Render {
                 <label><?php echo esc_html__( 'Max emails per harvest', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="100" name="presshub_ai_press_inbox_max_messages" id="presshub_ai_press_inbox_max_messages" value="<?php echo self::esc_attr_safe( (string) $max_msgs ); ?>" class="small-text" /></label>
                 &nbsp; <label><?php echo esc_html__( 'Ignore emails older than (hours)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="720" name="presshub_ai_press_inbox_max_age_hours" id="presshub_ai_press_inbox_max_age_hours" value="<?php echo self::esc_attr_safe( (string) $max_age ); ?>" class="small-text" /></label>
                 <br /><label><?php echo esc_html__( 'Max attachment size (MB)', 'presshub-ai-editor' ); ?> <input type="number" min="1" max="25" name="presshub_ai_press_inbox_max_attachment_mb" id="presshub_ai_press_inbox_max_attachment_mb" value="<?php echo self::esc_attr_safe( (string) $max_mb ); ?>" class="small-text" /></label>
-                &nbsp; <label><?php echo esc_html__( 'Connection timeout (seconds)', 'presshub-ai-editor' ); ?> <input type="number" min="5" max="120" name="presshub_ai_press_inbox_timeout" id="presshub_ai_press_inbox_timeout" value="<?php echo self::esc_attr_safe( (string) $timeout ); ?>" class="small-text" /></label>
                 <p><label><input type="checkbox" name="presshub_ai_press_inbox_extract_attachments" id="presshub_ai_press_inbox_extract_attachments" value="1" <?php checked( $extract ); ?> /> <?php echo esc_html__( 'Read attachments (PDF and images through Gemini, Word directly)', 'presshub-ai-editor' ); ?></label></p>
             </td>
         </tr>
+        <?php
+    }
+
+    /**
+     * The press inbox login for Connections (#247): server, user name,
+     * password, timeout and the connection test.
+     */
+    public function render_press_inbox_login_rows() {
+        $host       = PressHub_AI_Settings_Storage::get_press_inbox_host();
+        $port       = PressHub_AI_Settings_Storage::get_press_inbox_port();
+        $encryption = PressHub_AI_Settings_Storage::get_press_inbox_encryption();
+        $verify     = PressHub_AI_Settings_Storage::get_press_inbox_verify_ssl();
+        $username   = PressHub_AI_Settings_Storage::get_press_inbox_username();
+        $has_pass   = '' !== PressHub_AI_Settings_Storage::get_press_inbox_password();
+        $timeout    = PressHub_AI_Settings_Storage::get_press_inbox_timeout();
+        ?>
         <tr>
-            <th scope="row"><?php echo esc_html__( 'Test Mailbox', 'presshub-ai-editor' ); ?></th>
+            <th scope="row"><label for="presshub_ai_press_inbox_host"><?php echo esc_html__( 'Incoming Mail Server (IMAP)', 'presshub-ai-editor' ); ?></label></th>
             <td>
+                <input type="text" name="presshub_ai_press_inbox_host" id="presshub_ai_press_inbox_host" value="<?php echo self::esc_attr_safe( $host ); ?>" class="regular-text code" placeholder="presshub.cy" />
+                <label for="presshub_ai_press_inbox_port" class="ph-margin-left-8px"><?php echo esc_html__( 'Port', 'presshub-ai-editor' ); ?></label>
+                <input type="number" min="1" max="65535" name="presshub_ai_press_inbox_port" id="presshub_ai_press_inbox_port" value="<?php echo self::esc_attr_safe( (string) $port ); ?>" class="small-text" />
+                <select name="presshub_ai_press_inbox_encryption" id="presshub_ai_press_inbox_encryption">
+                    <option value="ssl" <?php selected( $encryption, 'ssl' ); ?>><?php echo esc_html__( 'SSL/TLS (port 993)', 'presshub-ai-editor' ); ?></option>
+                    <option value="tls" <?php selected( $encryption, 'tls' ); ?>><?php echo esc_html__( 'STARTTLS (port 143)', 'presshub-ai-editor' ); ?></option>
+                    <option value="none" <?php selected( $encryption, 'none' ); ?>><?php echo esc_html__( 'None (not recommended)', 'presshub-ai-editor' ); ?></option>
+                </select>
+                <p><label><input type="checkbox" name="presshub_ai_press_inbox_verify_ssl" id="presshub_ai_press_inbox_verify_ssl" value="1" <?php checked( $verify ); ?> /> <?php echo esc_html__( 'Verify the server certificate (turn off only if the mail server uses a self-signed certificate)', 'presshub-ai-editor' ); ?></label></p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_username"><?php echo esc_html__( 'Mailbox Username', 'presshub-ai-editor' ); ?></label></th>
+            <td><input type="text" name="presshub_ai_press_inbox_username" id="presshub_ai_press_inbox_username" value="<?php echo self::esc_attr_safe( $username ); ?>" class="regular-text" autocomplete="off" placeholder="press@presshub.cy" />
+                <?php self::registry_help( 'presshub_ai_press_inbox_username' ); ?>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_password"><?php echo esc_html__( 'Mailbox Password', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <?php
+                PressHub_Secret_Field::render( [
+                    'name'         => 'presshub_ai_press_inbox_password',
+                    'masked'       => $has_pass ? '••••••••' : '',
+                    'remove_name'  => 'presshub_ai_remove_press_inbox_password',
+                    'remove_label' => __( 'Remove the saved password', 'presshub-ai-editor' ),
+                    'placeholder'  => __( 'Type the new password', 'presshub-ai-editor' ),
+                    'replace_label' => __( 'Replace password', 'presshub-ai-editor' ),
+                    'add_label'     => __( 'Add password', 'presshub-ai-editor' ),
+                ] );
+                ?>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_press_inbox_timeout"><?php echo esc_html__( 'Connection timeout', 'presshub-ai-editor' ); ?></label></th>
+            <td><input type="number" min="5" max="120" name="presshub_ai_press_inbox_timeout" id="presshub_ai_press_inbox_timeout" value="<?php echo self::esc_attr_safe( (string) $timeout ); ?>" class="small-text" /> <?php echo esc_html__( 'seconds', 'presshub-ai-editor' ); ?></td>
+        </tr>
+        <tr>
+            <th scope="row"><?php echo esc_html__( 'Status', 'presshub-ai-editor' ); ?></th>
+            <td>
+                <?php echo PressHub_Connection_Status::render_pill( 'press_inbox' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 <button type="button" class="button" id="presshub-ai-test-press-inbox"><?php echo esc_html__( 'Test connection', 'presshub-ai-editor' ); ?></button>
                 <span class="ph-float-none spinner" id="presshub-ai-test-press-inbox-spinner"></span>
                 <span id="presshub-ai-test-press-inbox-result" role="status" aria-live="polite"></span>
                 <p class="description"><?php echo esc_html__( 'Uses the saved settings: save first if you changed anything. Nothing is moved or marked during the test.', 'presshub-ai-editor' ); ?></p>
+                <p><a href="<?php echo esc_url( PressHub_Settings_Sections::url( 'daily-briefing', 'briefing-sources' ) ); ?>"><?php echo esc_html__( 'Folders, allowed senders and limits are in Daily Briefing → Sources & harvesting', 'presshub-ai-editor' ); ?></a></p>
             </td>
         </tr>
         <?php

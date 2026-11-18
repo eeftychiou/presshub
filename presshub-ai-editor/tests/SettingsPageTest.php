@@ -378,6 +378,9 @@ class SettingsPageTest
             'presshub_ai_qa_editor_email',
             'presshub_ai_qa_article_prompt',
             'presshub_ai_qa_briefing_prompt',
+            // #236 — Editorial QA's own model (empty: same as Co-author)
+            'presshub_ai_qa_provider',
+            'presshub_ai_qa_model',
             // #233 — switches that were filter-only (Editorial knowledge tab, Briefing)
             'presshub_ai_policy_fiches_enabled',
             'presshub_ai_stakeholders_enabled',

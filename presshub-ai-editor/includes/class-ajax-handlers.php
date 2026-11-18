@@ -1931,6 +1931,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             $GLOBALS['presshub_ai_save_post_data'] = $post_data;
+            $model_warnings       = [];
+            $model_warning_fields = [];
             if ( class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab ) ) {
                 // #246: one Settings section, across both option groups. Social
                 // sanitizers read their "_present" / "_remove" markers from $_POST.
@@ -1944,6 +1946,21 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                         $_POST[ $k ] = $v;
                     }
                 }
+                // #236: a model known to be the wrong type for its task is refused
+                // before anything is written; an unknown one saves with a warning.
+                require_once __DIR__ . '/class-model-tasks.php';
+                $model_check = PressHub_Model_Tasks::validate( $post_data );
+                if ( $model_check['errors'] ) {
+                    wp_send_json_error( [
+                        'message'      => __( 'Not saved. A model does not fit its task; see the fields listed above.', 'presshub-ai-editor' ),
+                        'field_errors' => $model_check['errors'],
+                    ] );
+                }
+                $model_warnings       = [];
+                foreach ( $model_check['warnings'] as $opt => $msg ) {
+                    $model_warnings[] = PressHub_Model_Tasks::label_of( (string) $opt ) . ': ' . $msg;
+                }
+                $model_warning_fields = $model_check['warnings'];
                 $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
             } else {
                 // #233: the registry decides which options belong to this tab, so a
@@ -1990,9 +2007,11 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         wp_send_json_success( [
             'message'    => __( 'Settings saved successfully.', 'presshub-ai-editor' ),
             'tab'        => $tab,
-            'saved_keys' => $saved_keys,
-            'count'      => $saved_count,
-            'sources'    => PressHub_AI_Settings_Storage::get_briefing_sources(),
+            'saved_keys'     => $saved_keys,
+            'count'          => $saved_count,
+            'model_warnings' => $model_warnings,
+            'model_warning_fields' => (object) $model_warning_fields,
+            'sources'        => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'      => [
                 'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
                 'google_cloud_key' => PressHub_AI_Settings::mask_key( $saved_gcloud ),
@@ -2059,6 +2078,10 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             ] );
         }
 
+        // #247: its settings changed, so its last test no longer says anything.
+        require_once __DIR__ . '/class-connection-status.php';
+        PressHub_Connection_Status::forget( 'provider:' . sanitize_key( (string) $provider_id ) );
+
         wp_send_json_success( [
             'message'  => sprintf( __( 'Provider "%s" saved successfully.', 'presshub-ai-editor' ), $provider['name'] ?? $provider_id ),
             'id'       => $provider_id,
@@ -2087,6 +2110,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         if ( ! $deleted ) {
             wp_send_json_error( [ 'message' => __( 'Provider not found or could not be deleted.', 'presshub-ai-editor' ) ] );
         }
+
+        require_once __DIR__ . '/class-connection-status.php';
+        PressHub_Connection_Status::forget( 'provider:' . sanitize_key( $provider_id ) );
 
         wp_send_json_success( [
             'message'     => __( 'Provider deleted successfully.', 'presshub-ai-editor' ),
@@ -2135,10 +2161,21 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $latency_ms = max( 1, (int) round( ( microtime( true ) - $start_time ) * 1000 ) );
 
+        // #247: a test of a saved provider (not of unsaved modal fields) is the
+        // status Connections shows until the next test.
+        $saved_id = empty( $_POST['provider_data'] ) && isset( $provider_id ) && '' !== (string) $provider_id ? (string) $provider_id : '';
+        $status   = '';
+        if ( '' !== $saved_id ) {
+            require_once __DIR__ . '/class-connection-status.php';
+            PressHub_Connection_Status::record( 'provider:' . sanitize_key( $saved_id ), ! is_wp_error( $result ), is_wp_error( $result ) ? $result->get_error_message() : __( 'Connected', 'presshub-ai-editor' ) );
+            $status = PressHub_Connection_Status::render_pill( 'provider:' . sanitize_key( $saved_id ) );
+        }
+
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( [
                 'message'    => $result->get_error_message(),
                 'latency_ms' => $latency_ms,
+                'status'     => $status,
             ] );
         }
 
@@ -2146,6 +2183,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'message'    => __( 'API Connection Successful!', 'presshub-ai-editor' ),
             'response'   => is_string( $result ) ? $result : 'OK',
             'latency_ms' => $latency_ms,
+            'status'     => $status,
         ] );
     }
 
@@ -2845,6 +2883,9 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
         }
         $inbox  = new PressHub_AI_Press_Release_Inbox();
         $result = $inbox->test_connection();
+        require_once __DIR__ . '/class-connection-status.php';
+        PressHub_Connection_Status::record( 'press_inbox', ! empty( $result['success'] ), (string) ( $result['message'] ?? '' ) );
+        $result['status'] = PressHub_Connection_Status::render_pill( 'press_inbox' );
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::info( 'Press release inbox connection test: ' . ( $result['success'] ? 'ok' : 'failed' ), [ 'message' => $result['message'] ] );
         }

@@ -40,7 +40,7 @@ class PressHub_Settings_Sections {
     /** Old tab of each former settings page => section that holds its options. */
     const TAB_SECTIONS = [
         'ai'     => [
-            'providers'        => 'ai-models',
+            'providers'        => 'connections',
             'copilot'          => 'ai-models',
             'coauthor'         => 'writing-qa',
             'images'           => 'writing-qa',
@@ -71,6 +71,51 @@ class PressHub_Settings_Sections {
         'presshub_ai_remove_github_token'          => 'connections',
         'presshub_ai_remove_google_cloud_api_key'  => 'connections',
         'presshub_social_github_token'             => 'connections',
+        // #247: every secret is in Connections.
+        'presshub_ai_briefing_tts_api_key'         => 'connections',
+        'presshub_ai_remove_briefing_tts_api_key'  => 'connections',
+        // #247: the press inbox login is in Connections; folders and filters stay in Daily Briefing.
+        'presshub_ai_press_inbox_host'             => 'connections',
+        'presshub_ai_press_inbox_port'             => 'connections',
+        'presshub_ai_press_inbox_encryption'       => 'connections',
+        'presshub_ai_press_inbox_verify_ssl'       => 'connections',
+        'presshub_ai_press_inbox_username'         => 'connections',
+        'presshub_ai_press_inbox_password'         => 'connections',
+        'presshub_ai_remove_press_inbox_password'  => 'connections',
+        'presshub_ai_press_inbox_timeout'          => 'connections',
+        // #236: every model choice and its parameters are in the AI models table.
+        'presshub_ai_coauthor_provider'              => 'ai-models',
+        'presshub_ai_coauthor_model'                 => 'ai-models',
+        'presshub_ai_coauthor_temperature'           => 'ai-models',
+        'presshub_ai_coauthor_max_tokens'            => 'ai-models',
+        'presshub_ai_coauthor_timeout'               => 'ai-models',
+        'presshub_ai_qa_provider'                    => 'ai-models',
+        'presshub_ai_qa_model'                       => 'ai-models',
+        'presshub_ai_briefing_text_provider'         => 'ai-models',
+        'presshub_ai_briefing_text_model'            => 'ai-models',
+        'presshub_ai_briefing_text_temperature'      => 'ai-models',
+        'presshub_ai_briefing_text_max_tokens'       => 'ai-models',
+        'presshub_ai_briefing_text_timeout'          => 'ai-models',
+        'presshub_ai_briefing_podcast_provider'      => 'ai-models',
+        'presshub_ai_briefing_podcast_model'         => 'ai-models',
+        'presshub_ai_briefing_podcast_temperature'   => 'ai-models',
+        'presshub_ai_briefing_podcast_max_tokens'    => 'ai-models',
+        'presshub_ai_briefing_podcast_timeout'       => 'ai-models',
+        'presshub_ai_briefing_memory_provider'       => 'ai-models',
+        'presshub_ai_briefing_memory_model'          => 'ai-models',
+        'presshub_ai_image_prompt_provider'          => 'ai-models',
+        'presshub_ai_image_prompt_model'             => 'ai-models',
+        'presshub_ai_image_generation_provider'      => 'ai-models',
+        'presshub_social_ai_provider'                => 'ai-models',
+        'presshub_social_ai_model'                   => 'ai-models',
+        'presshub_social_ai_temperature'             => 'ai-models',
+        'presshub_social_ai_max_tokens'              => 'ai-models',
+        'presshub_social_ai_timeout'                 => 'ai-models',
+        'presshub_ai_briefing_podcast_tts_provider'  => 'ai-models',
+        'presshub_ai_briefing_tts_engine'            => 'ai-models',
+        'presshub_ai_briefing_tts_model'             => 'ai-models',
+        'presshub_ai_briefing_tts_timeout'           => 'ai-models',
+        'presshub_social_tiktok_shorts_music_model'  => 'ai-models',
         // Site & system → Logging & retention keeps all six retention periods in one table.
         'presshub_ai_memory_retention_days'        => 'site-system',
     ];
@@ -81,8 +126,8 @@ class PressHub_Settings_Sections {
      */
     const LEGACY_TARGETS = [
         'ai'     => [
-            'providers'        => [ 'ai-models', 'ai-providers' ],
-            'copilot'          => [ 'ai-models', 'copilot' ],
+            'providers'        => [ 'connections', 'ai-providers' ],
+            'copilot'          => [ 'ai-models', 'model-copilot' ],
             'coauthor'         => [ 'writing-qa', '' ],
             'coauthor-drafting' => [ 'writing-qa', 'drafting' ],
             'coauthor-qa'      => [ 'writing-qa', 'qa-gate' ],
@@ -133,22 +178,22 @@ class PressHub_Settings_Sections {
         return [
             'connections'         => [
                 'label'         => __( 'Connections', 'presshub-ai-editor' ),
-                'intro'         => __( 'Accounts and services PressHub signs in to: social platforms, the automation worker, Google Cloud and plugin updates.', 'presshub-ai-editor' ),
+                'intro'         => __( 'Every key, password and account PressHub signs in with, whether each one works, and what to fix first.', 'presshub-ai-editor' ),
                 'groups'        => [
+                    'ai-providers'      => __( 'AI providers', 'presshub-ai-editor' ),
+                    'google-cloud'      => __( 'Google Cloud', 'presshub-ai-editor' ),
+                    'press-inbox'       => __( 'Press inbox', 'presshub-ai-editor' ),
                     'social-accounts'   => __( 'Social platform accounts', 'presshub-ai-editor' ),
                     'automation-worker' => __( 'Automation worker', 'presshub-ai-editor' ),
-                    'google-cloud'      => __( 'Google Cloud', 'presshub-ai-editor' ),
                     'plugin-updates'    => __( 'Plugin updates', 'presshub-ai-editor' ),
-                    'connection-tests'  => __( 'Connection tests', 'presshub-ai-editor' ),
                 ],
                 'social_groups' => [ 'social-accounts', 'automation-worker' ],
             ],
             'ai-models'           => [
                 'label'  => __( 'AI models', 'presshub-ai-editor' ),
-                'intro'  => __( 'The AI providers PressHub can call, their keys and default models, and the model behind the Copilot.', 'presshub-ai-editor' ),
+                'intro'  => __( 'Which provider and model each AI task uses, in one table. AI provider keys are in Connections.', 'presshub-ai-editor' ),
                 'groups' => [
-                    'ai-providers' => __( 'AI providers', 'presshub-ai-editor' ),
-                    'copilot'      => __( 'Copilot & research assistant', 'presshub-ai-editor' ),
+                    'task-models' => __( 'Models by task', 'presshub-ai-editor' ),
                 ],
             ],
             'writing-qa'          => [

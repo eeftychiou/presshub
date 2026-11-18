@@ -526,3 +526,63 @@ html:has(#presshub-settings-page) { scroll-padding-top: 90px; scroll-padding-bot
 #presshub-usage-logs-page .ph-word-break-break-all { word-break: break-all; }
 #presshub-settings-page .ph-word-break-break-word,
 #presshub-usage-logs-page .ph-word-break-break-word { word-break: break-word; }
+
+/* ------------------------------------------------------------------
+ * #247 Connections: status pills, Replace key, setup check, worker.
+ * Pill text always names the state; the colours meet WCAG AA (4.5:1)
+ * for 12px text on their own background.
+ * ------------------------------------------------------------------ */
+.presshub-conn-status { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-right: 8px; }
+.presshub-conn-pill { display: inline-block; padding: 1px 8px; border: 1px solid currentColor; border-radius: 10px; font-size: 12px; font-weight: 600; line-height: 1.6; }
+.presshub-conn-pill.is-ok { background: #edf7ee; color: #1a4d23; }
+.presshub-conn-pill.is-warning { background: #fdf4e3; color: #6b4500; }
+.presshub-conn-pill.is-error { background: #fcf0f0; color: #8a1f1f; }
+.presshub-conn-pill.is-unknown { background: #f0f0f1; color: #3c434a; }
+.presshub-conn-checked { font-size: 12px; color: #50575e; }
+
+.presshub-secret { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.presshub-secret-current { color: #3c434a; }
+.presshub-secret-edit { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.presshub-secret-edit.presshub-is-hidden { display: none; }
+.presshub-secret-keep { font-size: 12px; }
+.presshub-secret-remove { flex-basis: 100%; font-size: 12px; color: #8a1f1f; }
+
+.presshub-setup-check { margin: 0 0 20px; padding: 8px 12px 12px; }
+.presshub-setup-check-title { margin: 6px 0 4px; font-size: 15px; }
+.presshub-setup-check-list { margin: 4px 0 0 18px; list-style: disc; }
+.presshub-setup-check-list li { margin-bottom: 4px; }
+
+.presshub-worker-status { margin: 0 0 16px; }
+.presshub-worker-status h3 { margin: 0 0 8px; font-size: 14px; }
+.presshub-worker-logins { max-width: 520px; margin: 8px 0; }
+.presshub-worker-new-secret code { user-select: all; padding: 2px 6px; }
+.presshub-card-conn { margin: 0 16px 8px; }
+
+/* #236: AI models table and the read-only model line on each feature. */
+.presshub-model-default { margin: 0 0 12px; }
+.presshub-models-table { max-width: 1100px; }
+.presshub-models-table th[scope="row"] { width: 22%; vertical-align: top; }
+.presshub-models-table td { vertical-align: top; }
+.presshub-model-task { display: block; font-weight: 600; }
+.presshub-model-used-for,
+.presshub-model-provider .description,
+.presshub-model-model .description { display: block; font-weight: 400; margin-top: 2px; }
+.presshub-model-provider select,
+.presshub-model-choice { max-width: 100%; }
+.presshub-model-other { display: block; margin-top: 6px; }
+.presshub-model-other[hidden],
+.presshub-model-choice[hidden] { display: none; }
+.presshub-model-uses { color: #50575e; }
+.presshub-model-note { margin: 6px 0 0; padding: 4px 8px; border-left: 4px solid #dba617; background: #fcf9e8; }
+.presshub-model-note.is-error { border-left-color: #d63638; background: #fcf0f1; color: #8a1f1f; }
+.presshub-model-params { margin-top: 8px; }
+.presshub-model-params summary { cursor: pointer; }
+.presshub-model-params-fields p { margin: 6px 0; }
+.presshub-model-params-fields label { display: inline-block; min-width: 110px; }
+.presshub-model-line { margin: 0; }
+@media screen and (max-width: 782px) {
+    .presshub-models-table thead { display: none; }
+    .presshub-models-table tr,
+    .presshub-models-table th[scope="row"],
+    .presshub-models-table td { display: block; width: auto; }
+}
