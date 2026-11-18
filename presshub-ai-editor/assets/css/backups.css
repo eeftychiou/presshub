@@ -1,4 +1,8 @@
 /* PressHub → Backups (#296). WordPress core styles do most of the work. */
+.presshub-backups-wrap > p,
+.presshub-backups-wrap > .notice.inline {
+    max-width: 60em;
+}
 .presshub-backups-take {
     margin: 12px 0 8px;
 }
@@ -11,10 +15,12 @@
 }
 .presshub-backups-actions {
     white-space: nowrap;
-    text-align: right;
+    text-align: end;
 }
-.presshub-backups-actions .button-link-delete {
-    margin-left: 8px;
+.presshub-backups-actions .presshub-backups-delete {
+    display: inline-block;
+    margin-inline-start: 8px;
+    padding: 6px 2px;
     vertical-align: middle;
 }
 .presshub-backups-confirm {
@@ -23,6 +29,23 @@
 .presshub-backups-folder code {
     word-break: break-all;
 }
+
+/* The destructive button on the Delete confirm: WordPress's red, not the blue primary. */
+.presshub-backups-confirm .button.presshub-button-danger {
+    background: #d63638;
+    border-color: #d63638;
+    color: #fff;
+}
+.presshub-backups-confirm .button.presshub-button-danger:hover,
+.presshub-backups-confirm .button.presshub-button-danger:focus {
+    background: #b32d2e;
+    border-color: #b32d2e;
+    color: #fff;
+}
+.presshub-backups-confirm .button.presshub-button-danger:focus {
+    box-shadow: 0 0 0 1px #fff, 0 0 0 3px #b32d2e;
+}
+
 @media screen and (max-width: 600px) {
     .presshub-backups-table .presshub-backups-col-size,
     .presshub-backups-table .presshub-backups-col-version {
@@ -31,8 +54,10 @@
     .presshub-backups-actions {
         white-space: normal;
     }
-    .presshub-backups-actions .button-link-delete {
-        display: inline-block;
-        margin: 6px 0 0;
+    .presshub-backups-actions .presshub-backups-delete {
+        display: block;
+        margin: 4px 0 0;
+        padding: 10px 2px;
+        min-height: 24px;
     }
 }

@@ -44,6 +44,9 @@ if ( ! function_exists( 'size_format' ) ) {
 if ( ! function_exists( 'get_site_transient' ) ) {
     function get_site_transient( $key ) { return $GLOBALS['SITE_TRANSIENTS'][ $key ] ?? false; }
 }
+if ( ! function_exists( 'wp_normalize_path' ) ) {
+    function wp_normalize_path( $path ) { return str_replace( '\\', '/', (string) $path ); }
+}
 if ( ! function_exists( 'home_url' ) ) {
     function home_url() { return 'http://example.test'; }
 }
@@ -121,7 +124,8 @@ ub_check( 'label: update with target', 'Before the update to 2.53.0' === $B::rea
 ub_check( 'label: update without target', 'Before an update' === $B::reason_label( [ 'reason' => 'update' ] ) );
 ub_check( 'label: before a restore', 'Before restoring 2.51.0' === $B::reason_label( [ 'reason' => 'before_restore', 'target_version' => '2.51.0' ] ) );
 ub_check( 'label: by hand', 'Taken by hand' === $B::reason_label( [ 'reason' => 'manual' ] ) );
-ub_check( 'contents: counts and files', '12 options, 1 tables (3 rows), plugin files' === $B::contents_label( [ 'options' => 12, 'tables' => [ 'a' => [ 'rows' => 3 ] ], 'plugin_zip' => true ] ) );
+ub_check( 'contents: without files', '12 options, 1 table (3 rows)' === $B::contents_label( [ 'options' => 12, 'tables' => [ 'a' => [ 'rows' => 3 ] ], 'plugin_zip' => true ], false ) );
+ub_check( 'contents: counts and files', '12 options, 1 table (3 rows), plugin files' === $B::contents_label( [ 'options' => 12, 'tables' => [ 'a' => [ 'rows' => 3 ] ], 'plugin_zip' => true ] ) );
 
 $GLOBALS['SITE_TRANSIENTS']['update_plugins'] = (object) [ 'response' => [
     'akismet/akismet.php'                      => (object) [ 'new_version' => '9.9' ],
@@ -186,6 +190,38 @@ ub_check( 'prune: the protected one is kept', in_array( $ids[1], $left, true ) )
 ub_check( 'prune: a crashed run is removed', ! in_array( $crashed, $left, true ) );
 ub_check( 'prune: a run in progress is kept', in_array( $fresh, $left, true ) );
 ub_check( 'prune: count', 4 === $removed );
+
+// ---------------------------------------------------------------------
+// 4b. verify(): a damaged backup is refused before anything is changed.
+// ---------------------------------------------------------------------
+function ub_gz( string $file, string $body ): void {
+    $gz = gzopen( $file, 'wb' );
+    gzwrite( $gz, $body );
+    gzclose( $gz );
+}
+$vid = '20261118-130000-v2.53.0-verify01';
+ub_make_backup( $vid, 2000, [ 'options' => 2, 'tables' => [ 'presshub_ai_audit_logs' => [ 'rows' => 2, 'create' => true ] ] ] );
+$vdir = $B::backup_path( $vid );
+ub_gz( $vdir . '/options.jsonl.gz', "{\"n\":\"presshub_a\",\"v\":\"1\",\"a\":\"yes\"}\n{\"n\":\"presshub_b\",\"v\":\"2\",\"a\":\"no\"}\n" );
+file_put_contents( $vdir . '/tables/presshub_ai_audit_logs.sql', 'CREATE TABLE `wp_presshub_ai_audit_logs` (id int)' );
+ub_gz( $vdir . '/tables/presshub_ai_audit_logs.jsonl.gz', "{\"id\":\"1\"}\n{\"id\":\"2\"}\n" );
+$m = $B::read_manifest( $vid );
+ub_check( 'verify: a whole backup passes', true === $B::verify( $m ) );
+ub_gz( $vdir . '/tables/presshub_ai_audit_logs.jsonl.gz', "{\"id\":\"1\"}\n" );
+$v = $B::verify( $m );
+ub_check( 'verify: a short table file is refused', is_wp_error( $v ) && false !== strpos( $v->get_error_message(), '1 rows instead of 2' ) );
+ub_gz( $vdir . '/tables/presshub_ai_audit_logs.jsonl.gz', "{\"id\":\"1\"}\n{\"id\":" );
+ub_check( 'verify: a line cut short is refused', is_wp_error( $B::verify( $m ) ) );
+ub_gz( $vdir . '/tables/presshub_ai_audit_logs.jsonl.gz', "{\"id\":\"1\"}\nnot json\n" );
+ub_check( 'verify: a bad line is refused', is_wp_error( $B::verify( $m ) ) );
+file_put_contents( $vdir . '/tables/presshub_ai_audit_logs.jsonl.gz', 'not gzip at all' );
+ub_check( 'verify: a file that is not gzip is refused', is_wp_error( $B::verify( $m ) ) );
+ub_gz( $vdir . '/tables/presshub_ai_audit_logs.jsonl.gz', "{\"id\":\"1\"}\n{\"id\":\"2\"}\n" );
+unlink( $vdir . '/tables/presshub_ai_audit_logs.sql' );
+ub_check( 'verify: a missing table definition is refused', is_wp_error( $B::verify( $m ) ) );
+unlink( $vdir . '/options.jsonl.gz' );
+ub_check( 'verify: a missing options file is refused', is_wp_error( $B::verify( $m ) ) );
+$B::delete_dir( $vdir );
 
 // ---------------------------------------------------------------------
 // 5. Linked plugin folder.
