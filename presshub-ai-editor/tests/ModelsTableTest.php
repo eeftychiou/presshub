@@ -200,6 +200,7 @@ $check( false !== strpos( (string) ( $r['data']['field_errors']['presshub_social
 $r = $save( [ 'presshub_social_ai_model' => 'brand-new-model-x' ] );
 $check( is_array( $r ) && true === $r['success'] && 'brand-new-model-x' === get_option( 'presshub_social_ai_model' ), 'An unknown model ID saves.' );
 $check( ! empty( $r['data']['model_warnings'] ) && false !== strpos( implode( ' ', $r['data']['model_warnings'] ), 'Social copy:' ), 'An unknown model ID comes back with a warning naming the row.' );
+$check( isset( ( (array) ( $r['data']['model_warning_fields'] ?? [] ) )['presshub_social_ai_model'] ), 'The warning comes back keyed by its field.' );
 
 $base_store( [ 'presshub_social_ai_model' => 'gemini-2.5-flash-preview-tts' ] );
 $r = $save( [ 'presshub_social_ai_model' => 'gemini-2.5-flash-preview-tts', 'presshub_ai_copilot_model' => 'gpt-4o' ] );
@@ -290,6 +291,49 @@ $check( false !== strpos( $shorts, 'section=ai-models#model-speech' ), 'The Shor
 $check( 'ai-models' === PressHub_Settings_Sections::LEGACY_TARGETS['ai']['copilot'][0] && 'model-copilot' === PressHub_Settings_Sections::LEGACY_TARGETS['ai']['copilot'][1], 'The old Copilot tab lands on its row.' );
 
 // ---------------------------------------------------------------------
+// 7b. Review round 1: the stored model is never lost on load.
+// ---------------------------------------------------------------------
+// Two Gemini providers share models: the stored speech model is selected in
+// the group of the provider the row runs on, not the first group that lists it.
+$base_store( [ 'presshub_ai_briefing_podcast_tts_provider' => 'gemini-voice', 'presshub_ai_briefing_tts_model' => 'gemini-2.5-flash-preview-tts' ] );
+$table  = PressHub_Model_Tasks::render_table();
+$speech = preg_match( '/<select id="presshub_ai_briefing_tts_model-choice".*?<\/select>/s', $table, $m ) ? $m[0] : '';
+$check( (bool) preg_match( '/<optgroup label="Gemini voice" data-provider="gemini-voice">(?:(?!<\/optgroup>).)*<option value="gemini-2.5-flash-preview-tts" selected="selected">/s', $speech ), 'The stored speech model is selected in its own provider\'s group.' );
+$check( 1 === substr_count( $speech, 'selected="selected"' ), 'Exactly one option is selected.' );
+// A stored model the active provider doesn't list shows as Other, value kept.
+$base_store( [ 'presshub_ai_coauthor_provider' => 'gemini-main', 'presshub_ai_qa_model' => 'o1' ] );
+$table = PressHub_Model_Tasks::render_table();
+$check( (bool) preg_match( '/id="presshub_ai_qa_model-choice"[\s\S]*?<option value="__other" selected="selected">/', $table ) && false !== strpos( $table, 'name="presshub_ai_qa_model" id="presshub_ai_qa_model" value="o1"' ), 'A QA model from another provider shows as Other, unchanged.' );
+$page_js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/js/settings-page.js' );
+preg_match( '/function filterGroups\(\) \{.*?\n        \}\n/s', $page_js, $fg );
+$check( ! empty( $fg[0] ) && false === strpos( $fg[0], "input.value = ''" ) && false === strpos( $fg[0], 'input.value =' ), 'Filtering the list by provider never changes the stored model.' );
+
+// The provider's own default model is a known model (no false warning).
+$check( PressHub_Model_Catalog::is_known( 'llama-local-7b', [ 'default_model' => 'llama-local-7b' ] ), 'A provider\'s default model is known.' );
+// Image generation offers only providers that can draw.
+$base_store( [ 'presshub_ai_configured_providers' => array_merge( $providers, [ [ 'id' => 'claude-main', 'type' => 'anthropic', 'name' => 'Claude', 'enabled' => true, 'api_key' => 'sk-ant-test-0000000000000000000000', 'default_model' => 'claude-3-5-haiku-20241022' ] ] ) ] );
+$table = PressHub_Model_Tasks::render_table();
+$img   = preg_match( '/<select name="presshub_ai_image_generation_provider".*?<\/select>/s', $table, $m ) ? $m[0] : '';
+$cop   = preg_match( '/<select name="presshub_ai_copilot_provider".*?<\/select>/s', $table, $m ) ? $m[0] : '';
+$check( false === strpos( $img, 'claude-main' ) && false !== strpos( $img, 'openai-main' ) && false !== strpos( $cop, 'claude-main' ), 'Image generation lists Gemini and OpenAI providers only; text rows list every provider.' );
+// A list posted as a model is refused, not cast.
+$check( isset( PressHub_Model_Tasks::validate( [ 'presshub_ai_copilot_model' => [ 'a', 'b' ] ] )['errors']['presshub_ai_copilot_model'] ), 'A non-scalar model is refused.' );
+// The save-path filters are registered from names alone, matching the rows.
+$from_rows = [];
+foreach ( PressHub_Model_Tasks::rows() as $row ) {
+    if ( '' !== $row['model'] ) {
+        $from_rows[ $row['model'] ] = $row['kind'];
+    }
+}
+$check( $from_rows == PressHub_Model_Tasks::MODEL_OPTIONS, 'MODEL_OPTIONS matches the model option and kind of every row.' );
+$tasks_src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-model-tasks.php' );
+preg_match( '/function register_hooks\(\).*?\n    \}\n/s', $tasks_src, $rh );
+$check( ! empty( $rh[0] ) && false === strpos( $rh[0], 'rows()' ) && false === strpos( $rh[0], '__(' ), 'register_hooks() runs at plugin load without translating anything.' );
+$check( false !== strpos( $tasks_src, 'resolve_ai_provider_config( true )' ), 'The table resolves Social copy quietly (no log line per page view).' );
+$cw_src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-social-ai-copywriter.php' );
+$check( false !== strpos( $cw_src, 'resolve_ai_provider_config( bool $quiet = false )' ) && false !== strpos( $cw_src, '$quiet || PressHub_Social_Logger::info(' ), 'The Social copy resolver can run without logging.' );
+
+// ---------------------------------------------------------------------
 // 8. Scripts.
 // ---------------------------------------------------------------------
 $admin_js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/admin.js' );
@@ -298,6 +342,10 @@ $check( false !== strpos( $admin_js, "trigger('presshub:settings-field-errors', 
 $check( false !== strpos( $page_js, "on('presshub:settings-field-errors'" ) && false !== strpos( $page_js, 'markFields(pairs)' ), 'settings-page.js marks each refused field and lists it in the summary.' );
 $check( false !== strpos( $page_js, "choice.value === '__other'" ), 'settings-page.js keeps the list and the model ID field in step.' );
 $check( false !== strpos( $admin_js, 'res.data.model_warnings' ), 'admin.js shows the unknown-model warnings after a save.' );
+$check( false !== strpos( $admin_js, 'Saved, with a warning on a model. See its row.' ) && false !== strpos( $page_js, 'model_warning_fields' ), 'An unknown model\'s warning shows at save time, on its row and in the status line.' );
+$check( false !== strpos( $page_js, "data-stored-invalid') === '1'" ), 'A clean save keeps the error mark on a stored wrong model.' );
+$search_js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/js/settings-search.js' );
+$check( false !== strpos( $search_js, 'window.PressHubModelControl(hash)' ), 'A search link to a model option focuses the visible list.' );
 
 if ( $failures ) {
     echo "FAIL\n";

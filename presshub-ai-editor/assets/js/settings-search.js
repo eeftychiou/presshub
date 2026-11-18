@@ -133,7 +133,7 @@
             window.location.replace(data.legacy_hashes[hash]);
             return;
         }
-        var target = document.getElementById(hash);
+        var target = (typeof window.PressHubModelControl === 'function' && window.PressHubModelControl(hash)) || document.getElementById(hash);
         // A hidden input (sources, image pools) is found through fieldFor() below.
         if (target && target.type !== 'hidden' && document.getElementById('presshub-settings-main').contains(target)) {
             $(target).parents('details').attr('open', 'open');

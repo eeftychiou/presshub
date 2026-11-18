@@ -4104,7 +4104,11 @@ jQuery(document).ready(function($) {
                 $tabPane.prepend(noticeHtml);
                 $(document).trigger('presshub:settings-saved', [tabKey, res]);
 
-                if ($stickyStatus.length) {
+                var hasModelWarning = !!(res.data && Array.isArray(res.data.model_warnings) && res.data.model_warnings.length);
+                if ($stickyStatus.length && hasModelWarning) {
+                    // #236: an unknown model ID saved; the warning stays until the next save.
+                    $stickyStatus.removeClass('is-success is-error').text(__('Saved, with a warning on a model. See its row.', 'presshub-ai-editor'));
+                } else if ($stickyStatus.length) {
                     $stickyStatus.addClass('is-success').removeClass('is-error').text(__('Settings saved', 'presshub-ai-editor'));
                     setTimeout(function() {
                         if ($stickyStatus.hasClass('is-success')) {

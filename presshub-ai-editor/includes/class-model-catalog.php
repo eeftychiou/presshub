@@ -174,7 +174,8 @@ class PressHub_Model_Catalog {
             }
         }
         if ( $provider ) {
-            foreach ( (array) ( $provider['available_models'] ?? [] ) as $m ) {
+            $own = array_merge( [ (string) ( $provider['default_model'] ?? '' ) ], (array) ( $provider['available_models'] ?? [] ) );
+            foreach ( $own as $m ) {
                 if ( strtolower( self::normalize( (string) $m ) ) === $model ) {
                     return true;
                 }

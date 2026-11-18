@@ -20,6 +20,20 @@ require_once __DIR__ . '/class-settings-sections.php';
 
 class PressHub_Model_Tasks {
 
+    /** Each row's model option and the kind of model it needs (matches rows(); ModelsTableTest checks). */
+    const MODEL_OPTIONS = [
+        'presshub_ai_coauthor_model'                => 'text',
+        'presshub_ai_qa_model'                      => 'text',
+        'presshub_ai_copilot_model'                 => 'text',
+        'presshub_ai_briefing_text_model'           => 'text',
+        'presshub_ai_briefing_podcast_model'        => 'text',
+        'presshub_ai_briefing_memory_model'         => 'text',
+        'presshub_ai_image_prompt_model'            => 'text',
+        'presshub_social_ai_model'                  => 'text',
+        'presshub_ai_briefing_tts_model'            => 'speech',
+        'presshub_social_tiktok_shorts_music_model' => 'music',
+    ];
+
     /** Group anchor of the table on AI models. */
     const GROUP = 'task-models';
 
@@ -134,7 +148,7 @@ class PressHub_Model_Tasks {
                 'used_for'  => __( 'Featured, Shorts and post images', 'presshub-ai-editor' ),
                 'kind'      => PressHub_Model_Catalog::IMAGE,
                 'provider'  => 'presshub_ai_image_generation_provider',
-                'providers' => 'text',
+                'providers' => 'image',
                 'model'     => '',
                 'params'    => [],
                 'module'    => 'image_generation',
@@ -237,6 +251,12 @@ class PressHub_Model_Tasks {
                 return 'gemini' === ( $p['type'] ?? '' );
             } ) );
         }
+        if ( 'image' === $row['providers'] ) {
+            // run_featured_image_generation() draws with Gemini or OpenAI only.
+            return array_values( array_filter( $all, static function ( $p ) {
+                return in_array( $p['type'] ?? '', [ 'gemini', 'openai' ], true );
+            } ) );
+        }
         return 'none' === $row['providers'] ? [] : $all;
     }
 
@@ -292,7 +312,7 @@ class PressHub_Model_Tasks {
                 if ( ! class_exists( 'PressHub_Social_AI_Copywriter' ) || ! class_exists( 'PressHub_Social_Settings_Storage' ) ) {
                     return [ 'provider' => '', 'model' => (string) get_option( $row['model'], '' ) ];
                 }
-                $cfg = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
+                $cfg = PressHub_Social_AI_Copywriter::resolve_ai_provider_config( true );
                 if ( is_wp_error( $cfg ) ) {
                     return [ 'provider' => '', 'model' => '' ];
                 }
@@ -339,6 +359,10 @@ class PressHub_Model_Tasks {
             }
             $p_old = '' !== $p_opt ? trim( (string) get_option( $p_opt, '' ) ) : '';
             $m_old = '' !== $m_opt ? PressHub_Model_Catalog::normalize( (string) get_option( $m_opt, '' ) ) : '';
+            if ( ( $p_in && ! is_scalar( $post[ $p_opt ] ) ) || ( $m_in && ! is_scalar( $post[ $m_opt ] ) ) ) {
+                $errors[ $m_in && ! is_scalar( $post[ $m_opt ] ) ? $m_opt : $p_opt ] = __( 'Enter a single model ID.', 'presshub-ai-editor' );
+                continue;
+            }
             $p_new = $p_in ? trim( (string) self::unslash( $post[ $p_opt ] ) ) : $p_old;
             $m_new = $m_in ? PressHub_Model_Catalog::normalize( (string) self::unslash( $post[ $m_opt ] ) ) : $m_old;
             if ( $p_new === $p_old && $m_new === $m_old ) {
@@ -382,12 +406,10 @@ class PressHub_Model_Tasks {
         if ( ! function_exists( 'add_filter' ) ) {
             return;
         }
-        foreach ( self::rows() as $row ) {
-            if ( '' === $row['model'] ) {
-                continue;
-            }
-            $kind = $row['kind'];
-            add_filter( 'pre_update_option_' . $row['model'], static function ( $value, $old_value ) use ( $kind ) {
+        // Runs at plugin load: option names and kinds only, nothing translated
+        // (labels before "init" load the text domain too early).
+        foreach ( self::MODEL_OPTIONS as $option => $kind ) {
+            add_filter( 'pre_update_option_' . $option, static function ( $value, $old_value ) use ( $kind ) {
                 $model = is_scalar( $value ) ? PressHub_Model_Catalog::normalize( (string) $value ) : '';
                 if ( '' === $model ) {
                     return $value;
@@ -609,13 +631,16 @@ class PressHub_Model_Tasks {
         if ( '' !== $empty_label ) {
             $html .= '<option value=""' . ( '' === $m_cur ? ' selected="selected"' : '' ) . '>' . esc_html( $empty_label ) . '</option>';
         }
+        // The stored model is selected only in the group of the provider the
+        // row runs on, so the browser's provider filter never hides it.
+        $active = 'music' === $row['module'] ? '' : ( '' !== $p_cur ? $p_cur : $default_provider );
         foreach ( $groups as $g ) {
             if ( ! $g['models'] ) {
                 continue;
             }
             $html .= '<optgroup label="' . esc_attr( $g['label'] ) . '" data-provider="' . esc_attr( $g['id'] ) . '">';
             foreach ( $g['models'] as $m ) {
-                $sel    = ! $listed && $m === $m_cur;
+                $sel    = ! $listed && $m === $m_cur && $g['id'] === $active;
                 $listed = $listed || $sel;
                 $html  .= '<option value="' . esc_attr( $m ) . '"' . ( $sel ? ' selected="selected"' : '' ) . '>' . esc_html( $m ) . '</option>';
             }
@@ -642,7 +667,7 @@ class PressHub_Model_Tasks {
             }
         }
         $html .= ' aria-describedby="' . esc_attr( $describe . ( '' !== $note ? ' ' . $m_opt . '-model-error' : '' ) ) . '"'
-            . ( '' !== $note && false !== strpos( $note, 'is-error' ) ? ' aria-invalid="true"' : '' ) . ' />';
+            . ( '' !== $note && false !== strpos( $note, 'is-error' ) ? ' aria-invalid="true" data-stored-invalid="1"' : '' ) . ' />';
         /* translators: %s: kind of model, e.g. "a text model" */
         $html .= ' <span class="description" id="' . esc_attr( $describe ) . '">' . esc_html( sprintf( __( 'Needs %s.', 'presshub-ai-editor' ), PressHub_Model_Catalog::kind_phrase( $kind ) ) )
             . ( '' !== $empty_label ? ' ' . esc_html__( 'Leave empty for the default.', 'presshub-ai-editor' ) : '' ) . '</span>';

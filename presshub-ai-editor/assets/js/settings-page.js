@@ -190,6 +190,10 @@
         $('.presshub-field-error').remove();
         $('[aria-invalid="true"]').each(function () {
             var $el = $(this);
+            // A stored wrong model keeps its error until it is changed (#236).
+            if ($el.attr('data-stored-invalid') === '1') {
+                return;
+            }
             $el.removeAttr('aria-invalid');
             var describedBy = ($el.attr('aria-describedby') || '').split(/\s+/).filter(function (id) {
                 return id && id.indexOf('-presshub-error') === -1;
@@ -279,10 +283,35 @@
         showSummary([{ id: '', text: String(message || '') }]);
     });
 
-    $(document).on('presshub:settings-saved', function () {
+    $(document).on('presshub:settings-saved', function (_, tabKey, res) {
         clearErrors();
         lastCount = -1;
         updateUnsaved();
+        // #236: an unknown model ID saved; say so on its row (admin.js says so in the status line).
+        var warnings = res && res.data && res.data.model_warning_fields;
+        if (warnings && typeof warnings === 'object' && !Array.isArray(warnings)) {
+            $.each(warnings, function (key, msg) {
+                var input = document.getElementById(key);
+                if (!input) {
+                    return;
+                }
+                var noteId = key + '-model-error';
+                $('#' + noteId).remove();
+                var $note = $('<p class="presshub-model-note is-warning"></p>').attr('id', noteId).text((t.warning_prefix || 'Warning:') + ' ' + String(msg));
+                $(input).closest('.presshub-model-other').after($note);
+                var ids = ($(input).attr('aria-describedby') || '').split(/\s+/).filter(function (id) { return id && id !== noteId; });
+                ids.push(noteId);
+                $(input).attr('aria-describedby', ids.join(' '));
+            });
+        }
+    });
+    // A changed model loses the error or warning shown for its stored value.
+    $(document).on('input change', '.presshub-model-other input', function () {
+        if (this.getAttribute('data-stored-invalid') === '1') {
+            this.removeAttribute('data-stored-invalid');
+            this.removeAttribute('aria-invalid');
+        }
+        $('#' + this.id + '-model-error').remove();
     });
 
     // An invalid field that becomes valid loses its message.
@@ -401,27 +430,32 @@
         function showOther(on) {
             wrap.prop('hidden', !on);
         }
+        // Shows the chosen provider's models and points the list at the stored
+        // value. It never changes the value: one the provider doesn't list
+        // shows as "Other model ID…" (#236 review).
         function filterGroups() {
-            if (!providerSel) {
-                return;
+            if (providerSel) {
+                var pid = providerSel.value || choice.getAttribute('data-default-provider') || '';
+                $(choice).find('optgroup').each(function () {
+                    var mine = this.getAttribute('data-provider') === pid;
+                    this.hidden = !mine;
+                    $(this).find('option').prop('disabled', !mine);
+                });
             }
-            var pid = providerSel.value || choice.getAttribute('data-default-provider') || '';
-            $(choice).find('optgroup').each(function () {
-                var mine = this.getAttribute('data-provider') === pid;
-                this.hidden = !mine;
-                $(this).find('option').prop('disabled', !mine);
-            });
-            var opt = choice.options[choice.selectedIndex];
-            if (opt && opt.disabled) {
-                choice.value = '';
-                if (input.value !== '') {
-                    input.value = '';
-                    $(input).trigger('input').trigger('change');
+            var match = null;
+            $(choice).find('option').each(function () {
+                if (!match && !this.disabled && this.value !== '__other' && this.value === input.value) {
+                    match = this;
                 }
+            });
+            if (match) {
+                choice.value = match.value;
+            } else {
+                choice.value = '__other';
             }
+            showOther(choice.value === '__other');
         }
         choice.hidden = false;
-        showOther(choice.value === '__other');
         filterGroups();
         $(choice).on('change', function () {
             if (choice.value === '__other') {

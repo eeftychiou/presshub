@@ -1931,7 +1931,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
 
             $GLOBALS['presshub_ai_save_post_data'] = $post_data;
-            $model_warnings = [];
+            $model_warnings       = [];
+            $model_warning_fields = [];
             if ( class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab ) ) {
                 // #246: one Settings section, across both option groups. Social
                 // sanitizers read their "_present" / "_remove" markers from $_POST.
@@ -1955,7 +1956,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                         'field_errors' => $model_check['errors'],
                     ] );
                 }
-                $model_warnings = array_values( $model_check['warnings'] );
+                $model_warnings       = array_values( $model_check['warnings'] );
+                $model_warning_fields = $model_check['warnings'];
                 $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
             } else {
                 // #233: the registry decides which options belong to this tab, so a
@@ -2005,6 +2007,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             'saved_keys'     => $saved_keys,
             'count'          => $saved_count,
             'model_warnings' => $model_warnings,
+            'model_warning_fields' => (object) $model_warning_fields,
             'sources'        => PressHub_AI_Settings_Storage::get_briefing_sources(),
             'masks'      => [
                 'api_key'          => PressHub_AI_Settings::mask_key( $saved_key ),
