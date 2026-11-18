@@ -13,6 +13,13 @@ if ( ! function_exists( '_doing_it_wrong' ) ) {
     }
 }
 
+$GLOBALS['TEST_DOING_AJAX'] = false;
+if ( ! function_exists( 'wp_doing_ajax' ) ) {
+    function wp_doing_ajax() {
+        return ! empty( $GLOBALS['TEST_DOING_AJAX'] );
+    }
+}
+
 $dir = __DIR__;
 require_once $dir . '/wordpress-stubs.php';
 require_once $dir . '/wp-action-wrapper.php';
@@ -195,7 +202,40 @@ class SettingsCleanupTest {
             $failures[] = 'The report should not claim a copy that did not happen.';
         }
 
-        // 10. A site with none of the removed options: nothing deleted, no notice.
+        // 10. Never deletes without the copy: a value JSON cannot encode.
+        self::seed();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_female'] = INF;
+        PressHub_Settings_Cleanup::maybe_run();
+        if ( ! array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) || array_key_exists( PressHub_Settings_Cleanup::EXPORT_OPTION, $GLOBALS['OPTIONS_STORE'] ) || PressHub_Settings_Cleanup::report() || array_key_exists( PressHub_Settings_Cleanup::VERSION_OPTION, $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'When the copy cannot be written, nothing may be deleted or reported.';
+        }
+        // Malformed UTF-8 is substituted, so it does not block the clean-up.
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_female'] = "El\xC3\x28ni";
+        PressHub_Settings_Cleanup::maybe_run();
+        if ( array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) || '' === (string) get_option( PressHub_Settings_Cleanup::EXPORT_OPTION, '' ) ) {
+            $failures[] = 'Malformed UTF-8 in one option should not stop the clean-up.';
+        }
+
+        // 11. Not on AJAX (Heartbeat), and not while another request holds the lock.
+        self::seed();
+        $GLOBALS['TEST_DOING_AJAX'] = true;
+        PressHub_Settings_Cleanup::maybe_run();
+        $GLOBALS['TEST_DOING_AJAX'] = false;
+        if ( ! array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'The clean-up must not run on an AJAX request.';
+        }
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::LOCK_OPTION ] = time() - 5;
+        PressHub_Settings_Cleanup::maybe_run();
+        if ( ! array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'The clean-up must wait while another request holds the lock.';
+        }
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::LOCK_OPTION ] = time() - PressHub_Settings_Cleanup::LOCK_TTL - 5;
+        PressHub_Settings_Cleanup::maybe_run();
+        if ( array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) || array_key_exists( PressHub_Settings_Cleanup::LOCK_OPTION, $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'A stale lock is taken over, and the lock is released afterwards.';
+        }
+
+        // 12. A site with none of the removed options: nothing deleted, no notice.
         $GLOBALS['OPTIONS_STORE'] = [ 'presshub_ai_provider' => 'openai' ];
         PressHub_Settings_Registry::reset();
         PressHub_Settings_Cleanup::run();

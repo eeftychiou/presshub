@@ -306,7 +306,7 @@ $base_store( [ 'presshub_ai_coauthor_provider' => 'gemini-main', 'presshub_ai_qa
 $table = PressHub_Model_Tasks::render_table();
 $check( (bool) preg_match( '/id="presshub_ai_qa_model-choice"[\s\S]*?<option value="__other" selected="selected">/', $table ) && false !== strpos( $table, 'name="presshub_ai_qa_model" id="presshub_ai_qa_model" value="o1"' ), 'A QA model from another provider shows as Other, unchanged.' );
 $page_js = (string) file_get_contents( dirname( __DIR__ ) . '/assets/js/settings-page.js' );
-preg_match( '/function filterGroups\(\) \{.*?\n        \}\n/s', $page_js, $fg );
+preg_match( '/function filterGroups\(\) \{.*?\r?\n        \}\r?\n/s', $page_js, $fg );
 $check( ! empty( $fg[0] ) && false === strpos( $fg[0], "input.value = ''" ) && false === strpos( $fg[0], 'input.value =' ), 'Filtering the list by provider never changes the stored model.' );
 
 // The provider's own default model is a known model (no false warning).
@@ -334,7 +334,7 @@ foreach ( PressHub_Model_Tasks::rows() as $row ) {
 }
 $check( $from_rows == PressHub_Model_Tasks::MODEL_OPTIONS, 'MODEL_OPTIONS matches the model option and kind of every row.' );
 $tasks_src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-model-tasks.php' );
-preg_match( '/function register_hooks\(\).*?\n    \}\n/s', $tasks_src, $rh );
+preg_match( '/function register_hooks\(\).*?\r?\n    \}\r?\n/s', $tasks_src, $rh );
 $check( ! empty( $rh[0] ) && false === strpos( $rh[0], 'rows()' ) && false === strpos( $rh[0], '__(' ), 'register_hooks() runs at plugin load without translating anything.' );
 $check( false !== strpos( $tasks_src, 'resolve_ai_provider_config( true )' ), 'The table resolves Social copy quietly (no log line per page view).' );
 $cw_src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-social-ai-copywriter.php' );

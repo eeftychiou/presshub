@@ -32,6 +32,10 @@ class PressHub_Settings_Cleanup {
     const REPORT_OPTION   = 'presshub_settings_cleanup_report';
     const EXPORT_OPTION   = 'presshub_settings_cleanup_export';
     const NOTICE_OPTION   = 'presshub_settings_cleanup_notice';
+    const LOCK_OPTION     = 'presshub_settings_cleanup_lock';
+
+    /** Seconds after which a lock left by a request that died is taken over. */
+    const LOCK_TTL = 600;
     const DOWNLOAD_ACTION = 'presshub_settings_cleanup_export';
     const NONCE           = 'presshub_settings_cleanup_export';
     const ANCHOR          = 'presshub-cleanup-report';
@@ -101,13 +105,65 @@ class PressHub_Settings_Cleanup {
     }
 
     public static function maybe_run(): void {
-        if ( (int) get_option( self::VERSION_OPTION, 0 ) >= self::VERSION ) {
+        if ( self::done() ) {
             return;
         }
         if ( ! class_exists( 'PressHub_Settings_Transfer' ) || ! class_exists( 'PressHub_Settings_Registry' ) ) {
             return;
         }
-        self::run();
+        // A page load runs it, not Heartbeat, other AJAX calls or cron.
+        if ( ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) || ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) ) {
+            return;
+        }
+        if ( ! self::acquire_lock() ) {
+            return;
+        }
+        try {
+            // Another request may have finished while this one waited for the lock.
+            if ( ! self::done( true ) ) {
+                self::run();
+            }
+        } finally {
+            delete_option( self::LOCK_OPTION );
+        }
+    }
+
+    /** Whether this clean-up already ran; $fresh skips the request's option cache. */
+    private static function done( bool $fresh = false ): bool {
+        if ( $fresh && function_exists( 'wp_cache_delete' ) ) {
+            wp_cache_delete( self::VERSION_OPTION, 'options' );
+            wp_cache_delete( 'notoptions', 'options' );
+            wp_cache_delete( 'alloptions', 'options' );
+        }
+        return (int) get_option( self::VERSION_OPTION, 0 ) >= self::VERSION;
+    }
+
+    /**
+     * One request at a time. add_option() is not atomic in WordPress (it
+     * upserts), so the lock row is inserted with INSERT IGNORE when $wpdb is
+     * there: only the request whose insert affected a row runs.
+     */
+    private static function acquire_lock(): bool {
+        global $wpdb;
+        $now = time();
+        if ( isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+            $inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')", self::LOCK_OPTION, (string) $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            if ( 1 === (int) $inserted ) {
+                return true;
+            }
+            $held = (int) $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", self::LOCK_OPTION ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            if ( $held > 0 && $now - $held < self::LOCK_TTL ) {
+                return false;
+            }
+            // A stale lock: take it over only if nobody else did first.
+            return 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", (string) $now, self::LOCK_OPTION, (string) $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        }
+        $held = (int) get_option( self::LOCK_OPTION, 0 );
+        if ( $held > 0 && $now - $held < self::LOCK_TTL ) {
+            return false;
+        }
+        update_option( self::LOCK_OPTION, $now, false );
+        return true;
     }
 
     /**
@@ -138,12 +194,14 @@ class PressHub_Settings_Cleanup {
                 }
             }
             $export['note'] = 'Saved by PressHub before the settings clean-up (#237).';
-            $json           = function_exists( 'wp_json_encode' )
-                ? wp_json_encode( $export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES )
-                : json_encode( $export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
-            $saved = is_string( $json ) && '' !== $json && update_option( self::EXPORT_OPTION, $json, false );
-            if ( ! $saved && get_option( self::EXPORT_OPTION ) !== $json ) {
-                // Never delete without the copy; try again on the next request.
+            $flags          = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE;
+            $json           = function_exists( 'wp_json_encode' ) ? wp_json_encode( $export, $flags ) : json_encode( $export, $flags );
+            // Never delete without the copy; try again on the next request.
+            if ( ! is_string( $json ) || '' === $json ) {
+                return [];
+            }
+            update_option( self::EXPORT_OPTION, $json, false );
+            if ( get_option( self::EXPORT_OPTION, '' ) !== $json ) {
                 return [];
             }
 
@@ -152,7 +210,7 @@ class PressHub_Settings_Cleanup {
             $copied = [];
             $social = trim( (string) ( $stored['presshub_social_github_token'] ?? '' ) );
             if ( '' !== $social && '' === trim( (string) get_option( self::GITHUB_TOKEN, '' ) ) ) {
-                update_option( self::GITHUB_TOKEN, $social );
+                update_option( self::GITHUB_TOKEN, $social, false );
                 $copied[] = 'presshub_social_github_token';
             }
 
