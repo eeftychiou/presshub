@@ -77,10 +77,40 @@ class PressHub_AI_Stakeholders {
         wp_schedule_single_event( time() + 60, self::CRON_HOOK, [ $post_id ] );
     }
 
+    /** Post meta: hash of the brief text the people were last extracted from. */
+    const META_SOURCE_HASH = '_presshub_stakeholders_source_hash';
+
     public static function handle_cron( $post_id ): void {
-        $res = self::extract_for_post( (int) $post_id );
-        if ( is_wp_error( $res ) && class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( 'Stakeholder extraction failed', [ 'post_id' => (int) $post_id, 'error' => $res->get_error_message() ] );
+        $post_id = (int) $post_id;
+        // Same guard as the policy fiche update: overlapping WP-Cron requests can
+        // run one event twice, and an unchanged brief needs no second extraction.
+        $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+        $hash = $post ? md5( trim( wp_strip_all_tags( (string) ( $post->post_content ?? '' ) ) ) ) : '';
+        $lock = 'presshub_ai_stakeholders_lock_' . $post_id;
+        if ( '' !== $hash && (string) get_post_meta( $post_id, self::META_SOURCE_HASH, true ) === $hash ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Stakeholder extraction skipped: this brief was already processed', [ 'post_id' => $post_id ] );
+            }
+            return;
+        }
+        if ( false !== get_transient( $lock ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Stakeholder extraction skipped: already running for this brief', [ 'post_id' => $post_id ] );
+            }
+            return;
+        }
+        set_transient( $lock, time(), 10 * MINUTE_IN_SECONDS );
+        try {
+            $res = self::extract_for_post( $post_id );
+        } finally {
+            delete_transient( $lock );
+        }
+        if ( is_wp_error( $res ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( 'Stakeholder extraction failed', [ 'post_id' => $post_id, 'error' => $res->get_error_message() ] );
+            }
+        } elseif ( '' !== $hash && 'skipped' !== ( $res['status'] ?? '' ) ) {
+            update_post_meta( $post_id, self::META_SOURCE_HASH, $hash );
         }
     }
 

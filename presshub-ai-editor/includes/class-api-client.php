@@ -1230,6 +1230,10 @@ class PressHub_AI_API_Client {
     public function analyze_article_for_image_prompt( string $content, string $title = '', string $template = '', string $template_id = '' ) {
         $this->current_action = 'generate_image_prompt';
         $client = new self( 'image_prompt' );
+        // The call runs on $client, so the action goes on $client too. Without it
+        // the call ran as `coauthor_draft`: logged under the wrong action and sent
+        // the co-author's agenda and policy-fiche blocks with every image prompt.
+        $client->set_action( 'generate_image_prompt' );
 
         if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
             require_once __DIR__ . '/class-image-prompt-templates.php';
@@ -1285,6 +1289,8 @@ class PressHub_AI_API_Client {
      * @param array  $context      Optional article context for the Media Library metadata:
      *                             ['title' => string, 'content' => string]. When omitted it is
      *                             read from $post_id (post text, or the podcast script).
+     *                             'ai_metadata' => false skips the metadata LLM call and builds
+     *                             it from 'description' (the image's own plan text) instead.
      * @return array|WP_Error Array with 'id', 'url', 'prompt' on success, WP_Error on failure.
      */
     public function generate_featured_image( string $prompt, string $aspect_ratio = '', int $post_id = 0, array $context = [] ) {
@@ -1551,7 +1557,16 @@ class PressHub_AI_API_Client {
             $article_title   = '' !== trim( $article_title ) ? $article_title : $post_ctx['title'];
             $article_content = '' !== trim( $article_content ) ? $article_content : $post_ctx['content'];
         }
-        $media_meta = PressHub_AI_SEO::generate_image_metadata( $prompt, $article_title, PressHub_AI_SEO::clean_text( $article_content ), $post_id );
+        // Social post images and TikTok short frames are described by the AI plan
+        // that asked for them, so they pass 'ai_metadata' => false and get the
+        // deterministic metadata from that description: one LLM call less per image.
+        if ( isset( $context['ai_metadata'] ) && false === $context['ai_metadata'] ) {
+            $described  = trim( (string) ( $context['description'] ?? '' ) );
+            $media_meta = PressHub_AI_SEO::fallback_image_metadata( '' !== $described ? $described : $prompt, $article_title );
+            $media_meta['source'] = 'plan';
+        } else {
+            $media_meta = PressHub_AI_SEO::generate_image_metadata( $prompt, $article_title, PressHub_AI_SEO::clean_text( $article_content ), $post_id );
+        }
         $trace['media_meta_source'] = (string) ( $media_meta['source'] ?? '' );
 
         // Sideload into WordPress Media Library
@@ -3196,6 +3211,55 @@ class PressHub_AI_API_Client {
     }
 
     /**
+     * Cache and reasoning token counts from a provider's usage block, for the
+     * token log's metadata. Only non-zero counts are returned, so rows without
+     * caching or thinking stay as they were.
+     *
+     * - Gemini: `cachedContentTokenCount` (implicit or explicit cache hits, part of
+     *   promptTokenCount) and `thoughtsTokenCount` (thinking tokens, billed as
+     *   output but NOT part of candidatesTokenCount).
+     * - OpenAI-compatible: `prompt_tokens_details.cached_tokens` and
+     *   `completion_tokens_details.reasoning_tokens`.
+     * - Anthropic: `cache_read_input_tokens` and `cache_creation_input_tokens`.
+     *
+     * @param string $format 'gemini', 'openai' or 'anthropic'.
+     * @param mixed  $body   Decoded response body.
+     * @return array<string,int>
+     */
+    public static function usage_extras( string $format, $body ): array {
+        if ( ! is_array( $body ) ) {
+            return [];
+        }
+        $map = [];
+        if ( 'gemini' === $format ) {
+            $u   = is_array( $body['usageMetadata'] ?? null ) ? $body['usageMetadata'] : [];
+            $map = [
+                'cached_tokens'   => $u['cachedContentTokenCount'] ?? 0,
+                'thoughts_tokens' => $u['thoughtsTokenCount'] ?? 0,
+            ];
+        } elseif ( 'openai' === $format ) {
+            $u   = is_array( $body['usage'] ?? null ) ? $body['usage'] : [];
+            $map = [
+                'cached_tokens'    => $u['prompt_tokens_details']['cached_tokens'] ?? 0,
+                'reasoning_tokens' => $u['completion_tokens_details']['reasoning_tokens'] ?? 0,
+            ];
+        } elseif ( 'anthropic' === $format ) {
+            $u   = is_array( $body['usage'] ?? null ) ? $body['usage'] : [];
+            $map = [
+                'cached_tokens'         => $u['cache_read_input_tokens'] ?? 0,
+                'cache_creation_tokens' => $u['cache_creation_input_tokens'] ?? 0,
+            ];
+        }
+        $out = [];
+        foreach ( $map as $key => $value ) {
+            if ( is_numeric( $value ) && (int) $value > 0 ) {
+                $out[ $key ] = (int) $value;
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Call a custom OpenAI-compatible chat completions endpoint.
      *
      * @param array|null  $provider_config Provider configuration record.
@@ -3310,7 +3374,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
+                PressHub_AI_Token_Logger::log_llm_request( $action, $provider_name, $model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, array_merge( $metadata, self::usage_extras( 'openai', $res_body ) ) );
             }
             return $res_body['choices'][0]['message']['content'];
         }
@@ -3390,7 +3454,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'openai', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, array_merge( $metadata, self::usage_extras( 'openai', $body ) ) );
             }
             return $body['choices'][0]['message']['content'];
         }
@@ -3482,7 +3546,7 @@ class PressHub_AI_API_Client {
             }
 
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'anthropic', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, array_merge( $metadata, self::usage_extras( 'anthropic', $body ) ) );
             }
             return $body['content'][0]['text'];
         }
@@ -3607,7 +3671,7 @@ class PressHub_AI_API_Client {
         $extracted_parts = ! empty( $answer_parts ) ? $answer_parts : $any_parts;
         if ( ! empty( $extracted_parts ) ) {
             if ( class_exists( 'PressHub_AI_Token_Logger' ) ) {
-                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, $metadata );
+                PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', $this->model, $prompt_tokens, $completion_tokens, $duration_ms, 'success', null, array_merge( $metadata, self::usage_extras( 'gemini', $body ) ) );
             }
             return implode( '', $extracted_parts );
         }
