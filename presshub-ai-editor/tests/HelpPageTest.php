@@ -55,6 +55,7 @@ hp_check( 'menu: page title follows the PressHub — pattern', 'PressHub — Hel
 hp_check( 'menu: uses the PressHub capability', PressHub_Capabilities::manage() === ( $row['capability'] ?? '' ) );
 hp_check( 'menu: Help is last in ORDER', 'presshub-ai-help' === PressHub_Admin_Menu::ORDER[ count( PressHub_Admin_Menu::ORDER ) - 1 ] );
 
+$GLOBALS['CURRENT_USER_CAPS'] = HP_EDITOR;
 $GLOBALS['ENQUEUED_STYLES'] = [];
 $help->enqueue_assets( 'presshub_page_presshub-ai-help' );
 $styles = $GLOBALS['ENQUEUED_STYLES'] ?? [];
@@ -182,6 +183,10 @@ hp_check( 'example: social policy block has framing only', false !== strpos( $po
 hp_check( 'example: policy blocks on the page', false !== strpos( $html, esc_html( $policy_full ) ) && false !== strpos( $html, esc_html( $policy_social ) ) );
 
 // ---------------------------------------------------------------------
+update_option( 'presshub_ai_policy_fiches_budgets', array_merge( PressHub_AI_Policy_Fiches::BUDGETS, [ 'social_copy_' => 0 ] ) );
+hp_check( 'example: a 0 budget gives an empty example (the page says nothing is sent)', '' === PressHub_AI_Help_Admin::sample_policy_block( 'social_copy_facebook', true ) );
+delete_option( 'presshub_ai_policy_fiches_budgets' );
+
 // 5-6. Status lines, no writes, escaping.
 // ---------------------------------------------------------------------
 hp_check( 'status: agenda not written yet', false !== strpos( PressHub_AI_Help_Admin::build_page(), 'Not written yet' ) );

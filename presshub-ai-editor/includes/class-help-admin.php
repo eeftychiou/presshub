@@ -56,7 +56,7 @@ class PressHub_AI_Help_Admin {
     }
 
     public function enqueue_assets( $hook ): void {
-        if ( ! PressHub_Admin_Menu::is_page_hook( (string) $hook, self::SLUG ) ) {
+        if ( ! PressHub_Admin_Menu::is_page_hook( (string) $hook, self::SLUG ) || ! current_user_can( self::capability() ) ) {
             return;
         }
         wp_enqueue_style( 'presshub-ai-help', PRESSHUB_AI_URL . 'assets/css/help.css', [], PRESSHUB_AI_VERSION );
@@ -243,7 +243,7 @@ class PressHub_AI_Help_Admin {
         ] );
         $html .= self::h3( __( 'What the AI receives (example)', 'presshub-ai-editor' ) );
         $html .= self::p( __( 'Built by the real agenda code from a sample agenda, for the daily briefing. The sample is not saved.', 'presshub-ai-editor' ) );
-        $html .= self::pre( PressHub_AI_Editorial_Agenda::render( self::sample_agenda(), PressHub_AI_Editorial_Agenda::budget_for( 'briefing_curation' ) ?: 3000 ) );
+        $html .= self::pre( PressHub_AI_Editorial_Agenda::render( self::sample_agenda(), PressHub_AI_Editorial_Agenda::budget_for( 'briefing_curation' ) ) );
         $html .= self::h3( __( 'How it changes the output', 'presshub-ai-editor' ) );
         $html .= self::effect(
             __( 'Without the agenda, the briefing orders the day\'s stories by what the articles stress most. A short statement on the Cyprus talks may sit in the middle, worded like the press release.', 'presshub-ai-editor' ),
@@ -554,7 +554,7 @@ class PressHub_AI_Help_Admin {
                 [ 'date' => '2026-11-10', 'topic' => 'συντάξεις', 'position' => 'Η αύξηση θα εξαρτηθεί από τον προϋπολογισμό.' ],
             ],
         ] );
-        return PressHub_AI_Stakeholders::render( [ 'sample' => [ 'count' => 2, 'fiche' => $fiche ] ], PressHub_AI_Stakeholders::budget_for( 'briefing_curation' ) ?: 2500 );
+        return PressHub_AI_Stakeholders::render( [ 'sample' => [ 'count' => 2, 'fiche' => $fiche ] ], PressHub_AI_Stakeholders::budget_for( 'briefing_curation' ) );
     }
 
     public static function sample_policy_block( string $action, bool $first_rule_only = false ): string {
@@ -569,7 +569,7 @@ class PressHub_AI_Help_Admin {
             'questions' => array_map( static function ( $q ) { return [ 'text' => (string) $q, 'status' => 'open' ]; }, (array) $data['questions'] ),
         ] ) );
         $budget = PressHub_AI_Policy_Fiches::budget_for( $action );
-        $out    = PressHub_AI_Policy_Fiches::render( [ 'sample' => [ 'count' => 1, 'fiche' => $fiche ] ], $action, $budget > 0 ? $budget : 3000 );
+        $out    = PressHub_AI_Policy_Fiches::render( [ 'sample' => [ 'count' => 1, 'fiche' => $fiche ] ], $action, $budget );
         return (string) $out['text'];
     }
 
