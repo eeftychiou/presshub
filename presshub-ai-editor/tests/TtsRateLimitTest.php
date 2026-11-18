@@ -79,7 +79,7 @@ function trl_reset( int $rpm = 0 ): void {
     $wpdb->auto_increments = [];
     PressHub_AI_Generation_Recorder::create_table();
     PressHub_AI_TTS_Rate_Limiter::reset( TRL_MODEL );
-    $GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key']                     = 'test-gemini-key';
+    $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']              = [ [ 'id' => 'gemini-test', 'type' => 'gemini', 'name' => 'Gemini', 'enabled' => true, 'api_key' => 'test-gemini-key', 'default_model' => 'gemini-2.5-flash' ] ];
     $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_model']                 = TRL_MODEL;
     $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_requests_per_minute']   = $rpm;
     $GLOBALS['CAPTURE_FILTER'] = 'trl_http';

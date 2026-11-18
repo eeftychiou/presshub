@@ -2,13 +2,16 @@
 /**
  * Settings clean-up (#237, settings overhaul phase 5).
  *
- * Removes the stored rows of settings that PressHub no longer reads, once,
- * on the first admin request after the upgrade:
+ * Removes the stored rows of settings that PressHub no longer reads, once per
+ * clean-up version, on the first admin page load after the upgrade:
  *
  *  1. Saves a copy of every setting (the #233 export format, without API keys
  *     or tokens) and keeps it downloadable from the clean-up report.
- *  2. Copies the second GitHub token into the AI GitHub token when that one is
- *     empty, so plugin updates keep their access (the one-release fallback).
+ *  2. Keeps what is still needed: the second GitHub token goes into the AI
+ *     GitHub token when that one is empty (2.45.0); an old API key goes into
+ *     a Connections provider when no provider of its type has a key (2.46.0).
+ *     An old key that differs from the one in Connections is kept, unread,
+ *     for one release and named in the report.
  *  3. Deletes the removed rows and writes a report: PressHub → Usage & logs.
  *  4. Shows a notice once to the next administrator.
  *
@@ -25,36 +28,50 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class PressHub_Settings_Cleanup {
 
-    /** Bump to run a new clean-up. */
-    const VERSION = 1;
+    /** Bump to run a new clean-up; each REMOVED entry names the version that removes it. */
+    const VERSION = 2;
 
     const VERSION_OPTION  = 'presshub_settings_cleanup_version';
     const REPORT_OPTION   = 'presshub_settings_cleanup_report';
+    /** The copy saved by clean-up 1; later ones add "_<version>". */
     const EXPORT_OPTION   = 'presshub_settings_cleanup_export';
     const NOTICE_OPTION   = 'presshub_settings_cleanup_notice';
     const LOCK_OPTION     = 'presshub_settings_cleanup_lock';
-
-    /** Seconds after which a lock left by a request that died is taken over. */
-    const LOCK_TTL = 600;
     const DOWNLOAD_ACTION = 'presshub_settings_cleanup_export';
     const NONCE           = 'presshub_settings_cleanup_export';
     const ANCHOR          = 'presshub-cleanup-report';
 
-    /** Release that removed the options, for _doing_it_wrong(). */
+    /** Seconds after which a lock left by a request that died is taken over. */
+    const LOCK_TTL = 600;
+
+    /** Release of each clean-up version, for _doing_it_wrong() and the report. */
+    const RELEASES = [
+        1 => '2.45.0',
+        2 => '2.46.0',
+    ];
+
+    /** Release that removed the first options (kept for callers of 2.45.0). */
     const REMOVED_IN = '2.45.0';
 
     /**
-     * Removed options => [ group, secret ]. Groups are the report rows.
+     * Removed options => [ group, secret, since (clean-up version), key_type ].
+     * key_type marks an old API key and the provider type it belongs to
+     * ('@provider' = the type in presshub_ai_provider). Groups are report rows.
      * Evidence for each is in docs/settings-inventory.md (#237).
      */
     const REMOVED = [
-        'presshub_social_github_token'          => [ 'group' => 'github', 'secret' => true ],
-        'presshub_social_twitter_api_key'       => [ 'group' => 'x_oauth1', 'secret' => true ],
-        'presshub_social_twitter_api_secret'    => [ 'group' => 'x_oauth1', 'secret' => true ],
-        'presshub_social_twitter_access_secret' => [ 'group' => 'x_oauth1', 'secret' => true ],
-        'presshub_ai_briefing_podcast_prompt_1' => [ 'group' => 'podcast_prompts', 'secret' => false ],
-        'presshub_ai_briefing_podcast_prompt_2' => [ 'group' => 'podcast_prompts', 'secret' => false ],
-        'presshub_ai_briefing_podcast_prompt_3' => [ 'group' => 'podcast_prompts', 'secret' => false ],
+        'presshub_social_github_token'            => [ 'group' => 'github', 'secret' => true, 'since' => 1 ],
+        'presshub_social_twitter_api_key'         => [ 'group' => 'x_oauth1', 'secret' => true, 'since' => 1 ],
+        'presshub_social_twitter_api_secret'      => [ 'group' => 'x_oauth1', 'secret' => true, 'since' => 1 ],
+        'presshub_social_twitter_access_secret'   => [ 'group' => 'x_oauth1', 'secret' => true, 'since' => 1 ],
+        'presshub_ai_briefing_podcast_prompt_1'   => [ 'group' => 'podcast_prompts', 'secret' => false, 'since' => 1 ],
+        'presshub_ai_briefing_podcast_prompt_2'   => [ 'group' => 'podcast_prompts', 'secret' => false, 'since' => 1 ],
+        'presshub_ai_briefing_podcast_prompt_3'   => [ 'group' => 'podcast_prompts', 'secret' => false, 'since' => 1 ],
+        'presshub_ai_api_key'                     => [ 'group' => 'legacy_api_key', 'secret' => true, 'since' => 2, 'key_type' => '@provider' ],
+        'presshub_ai_remove_api_key'              => [ 'group' => 'legacy_api_key', 'secret' => false, 'since' => 2 ],
+        'presshub_ai_gemini_api_key'              => [ 'group' => 'legacy_gemini_key', 'secret' => true, 'since' => 2, 'key_type' => 'gemini' ],
+        'presshub_ai_briefing_tts_api_key'        => [ 'group' => 'legacy_speech_key', 'secret' => true, 'since' => 2, 'key_type' => 'gemini' ],
+        'presshub_ai_remove_briefing_tts_api_key' => [ 'group' => 'legacy_speech_key', 'secret' => false, 'since' => 2 ],
     ];
 
     /** Plugin updates read this token; the second one is copied here if it is empty. */
@@ -80,32 +97,61 @@ class PressHub_Settings_Cleanup {
     /** Report rows: label, why it went, and what happened to it. */
     public static function groups(): array {
         return [
-            'github'          => [
+            'github'            => [
                 'label'  => __( 'Second GitHub token', 'presshub-ai-editor' ),
                 'reason' => __( 'Plugin updates use the AI GitHub token.', 'presshub-ai-editor' ),
             ],
-            'x_oauth1'        => [
+            'x_oauth1'          => [
                 'label'  => __( 'X OAuth1 keys (3)', 'presshub-ai-editor' ),
                 'reason' => __( 'Never read. Posting to X uses the bearer token, the access token or the worker.', 'presshub-ai-editor' ),
             ],
-            'podcast_prompts' => [
+            'podcast_prompts'   => [
                 'label'  => __( 'Podcast prompts 1–3', 'presshub-ai-editor' ),
                 'reason' => __( 'Replaced by the per-style prompt studio.', 'presshub-ai-editor' ),
+            ],
+            'legacy_api_key'    => [
+                'label'  => __( 'Old single API key', 'presshub-ai-editor' ),
+                'reason' => __( 'Each AI provider in Connections has its own key.', 'presshub-ai-editor' ),
+            ],
+            'legacy_gemini_key' => [
+                'label'  => __( 'Old Gemini key', 'presshub-ai-editor' ),
+                'reason' => __( 'The Gemini provider in Connections holds the key.', 'presshub-ai-editor' ),
+            ],
+            'legacy_speech_key' => [
+                'label'  => __( 'Separate speech key', 'presshub-ai-editor' ),
+                'reason' => __( 'Speech uses the key of the provider chosen for Speech in AI models.', 'presshub-ai-editor' ),
             ],
         ];
     }
 
     /** @return string[] */
-    public static function removed_keys(): array {
-        return array_keys( self::REMOVED );
+    public static function removed_keys( int $since = 0 ): array {
+        return array_keys( array_filter( self::REMOVED, static function ( $meta ) use ( $since ) {
+            return 0 === $since || (int) $meta['since'] === $since;
+        } ) );
     }
 
     public static function is_removed( string $key ): bool {
         return isset( self::REMOVED[ $key ] );
     }
 
+    /** Option that holds the pre-clean-up copy of one clean-up version. */
+    public static function export_option( int $version ): string {
+        return $version <= 1 ? self::EXPORT_OPTION : self::EXPORT_OPTION . '_' . $version;
+    }
+
+    /** The clean-up version this site has run (0: none). */
+    public static function done_version( bool $fresh = false ): int {
+        if ( $fresh && function_exists( 'wp_cache_delete' ) ) {
+            wp_cache_delete( self::VERSION_OPTION, 'options' );
+            wp_cache_delete( 'notoptions', 'options' );
+            wp_cache_delete( 'alloptions', 'options' );
+        }
+        return (int) get_option( self::VERSION_OPTION, 0 );
+    }
+
     public static function maybe_run(): void {
-        if ( self::done() ) {
+        if ( self::done_version() >= self::VERSION ) {
             return;
         }
         if ( ! class_exists( 'PressHub_Settings_Transfer' ) || ! class_exists( 'PressHub_Settings_Registry' ) ) {
@@ -120,22 +166,12 @@ class PressHub_Settings_Cleanup {
         }
         try {
             // Another request may have finished while this one waited for the lock.
-            if ( ! self::done( true ) ) {
+            if ( self::done_version( true ) < self::VERSION ) {
                 self::run();
             }
         } finally {
             delete_option( self::LOCK_OPTION );
         }
-    }
-
-    /** Whether this clean-up already ran; $fresh skips the request's option cache. */
-    private static function done( bool $fresh = false ): bool {
-        if ( $fresh && function_exists( 'wp_cache_delete' ) ) {
-            wp_cache_delete( self::VERSION_OPTION, 'options' );
-            wp_cache_delete( 'notoptions', 'options' );
-            wp_cache_delete( 'alloptions', 'options' );
-        }
-        return (int) get_option( self::VERSION_OPTION, 0 ) >= self::VERSION;
     }
 
     /**
@@ -167,16 +203,21 @@ class PressHub_Settings_Cleanup {
     }
 
     /**
-     * The clean-up itself. Returns the report it saved.
+     * The clean-up itself: every option removed after the version this site
+     * last ran. Returns the report it saved (empty when it stopped early).
      *
-     * @return array{time:int,version:string,removed:array<string,bool>,copied:string[],export_saved:bool}
+     * @return array{time:int,version:string,cleanup:int,removed:array<string,bool>,copied:array<string,string>,kept:string[],export_saved:bool}
      */
     public static function run(): array {
         self::$running = true;
         try {
+            $from    = self::done_version();
+            $keys    = array_keys( array_filter( self::REMOVED, static function ( $meta ) use ( $from ) {
+                return (int) $meta['since'] > $from;
+            } ) );
             $missing = new stdClass();
             $stored  = [];
-            foreach ( self::REMOVED as $key => $meta ) {
+            foreach ( $keys as $key ) {
                 $value = get_option( $key, $missing );
                 if ( $value !== $missing ) {
                     $stored[ $key ] = $value;
@@ -200,38 +241,55 @@ class PressHub_Settings_Cleanup {
             if ( ! is_string( $json ) || '' === $json ) {
                 return [];
             }
-            update_option( self::EXPORT_OPTION, $json, false );
-            if ( get_option( self::EXPORT_OPTION, '' ) !== $json ) {
+            $export_option = self::export_option( self::VERSION );
+            update_option( $export_option, $json, false );
+            if ( get_option( $export_option, '' ) !== $json ) {
                 return [];
             }
 
-            // 2. Keep plugin updates working: the second GitHub token is only
-            // copied when the one updates read is empty.
-            $copied = [];
+            // 2. Keep what is still needed.
+            $copied = []; // option => where it went.
+            $kept   = [];
             $social = trim( (string) ( $stored['presshub_social_github_token'] ?? '' ) );
             if ( '' !== $social && '' === trim( (string) get_option( self::GITHUB_TOKEN, '' ) ) ) {
                 update_option( self::GITHUB_TOKEN, $social, false );
-                $copied[] = 'presshub_social_github_token';
+                $copied['presshub_social_github_token'] = __( 'the GitHub token in Connections', 'presshub-ai-editor' );
+            }
+            foreach ( $stored as $key => $value ) {
+                if ( empty( self::REMOVED[ $key ]['key_type'] ) ) {
+                    continue;
+                }
+                $outcome = self::keep_api_key( $key, trim( (string) $value ) );
+                if ( 'kept' === $outcome ) {
+                    $kept[] = $key;
+                } elseif ( '' !== $outcome ) {
+                    $copied[ $key ] = $outcome;
+                }
             }
 
-            // 3. Delete the rows.
+            // 3. Delete the rows (an old key that differs from Connections stays one more release).
             $removed = [];
-            foreach ( self::removed_keys() as $key ) {
-                $removed[ $key ] = array_key_exists( $key, $stored );
+            foreach ( $keys as $key ) {
+                $removed[ $key ] = array_key_exists( $key, $stored ) && ! in_array( $key, $kept, true );
                 if ( $removed[ $key ] ) {
                     delete_option( $key );
                 }
             }
 
-            $report = [
+            $report  = [
                 'time'         => time(),
                 'version'      => defined( 'PRESSHUB_AI_VERSION' ) ? (string) PRESSHUB_AI_VERSION : '',
+                'cleanup'      => self::VERSION,
                 'removed'      => $removed,
                 'copied'       => $copied,
+                'kept'         => $kept,
                 'export_saved' => true,
             ];
-            update_option( self::REPORT_OPTION, $report, false );
-            update_option( self::NOTICE_OPTION, count( array_filter( $removed ) ) > 0 ? 1 : 0, false );
+            $reports = self::reports();
+            $reports[ self::VERSION ] = $report;
+            krsort( $reports );
+            update_option( self::REPORT_OPTION, [ 'runs' => $reports ], false );
+            update_option( self::NOTICE_OPTION, ( count( array_filter( $removed ) ) + count( $kept ) ) > 0 ? 1 : 0, false );
             update_option( self::VERSION_OPTION, self::VERSION, false );
             return $report;
         } finally {
@@ -239,18 +297,82 @@ class PressHub_Settings_Cleanup {
         }
     }
 
+    /**
+     * An old API key: '' when Connections already holds it (or it is empty),
+     * a description of where it was copied, or 'kept' when Connections holds
+     * a different key of that type (the row stays for one release, unread).
+     */
+    private static function keep_api_key( string $key, string $value ): string {
+        if ( '' === $value || false !== strpos( $value, '•' ) || ! class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            return '';
+        }
+        $type = (string) self::REMOVED[ $key ]['key_type'];
+        if ( '@provider' === $type ) {
+            $type = sanitize_key( (string) get_option( 'presshub_ai_provider', 'gemini' ) );
+            $type = '' !== $type ? $type : 'gemini';
+        }
+        $records  = PressHub_AI_Provider_Store::get_all( false );
+        $of_type  = [];
+        $has_key  = false;
+        foreach ( $records as $record ) {
+            if ( ! is_array( $record ) ) {
+                continue;
+            }
+            $record_key = trim( (string) ( $record['api_key'] ?? '' ) );
+            if ( '' !== $record_key && hash_equals( $record_key, $value ) ) {
+                return ''; // The same key is already in Connections.
+            }
+            if ( ( $record['type'] ?? '' ) === $type ) {
+                $of_type[] = $record;
+                $has_key   = $has_key || '' !== $record_key;
+            }
+        }
+        if ( $has_key ) {
+            return 'kept';
+        }
+        $target = $of_type[0] ?? null;
+        if ( null === $target ) {
+            $target            = PressHub_AI_Provider_Store::get_default_provider_record( $type );
+            $target['enabled'] = true;
+        }
+        $target['api_key'] = $value;
+        $id                = PressHub_AI_Provider_Store::save_provider( $target );
+        $saved             = PressHub_AI_Provider_Store::get( $id );
+        if ( ! is_array( $saved ) || trim( (string) ( $saved['api_key'] ?? '' ) ) !== $value ) {
+            return 'kept';
+        }
+        /* translators: %s: provider name in Connections */
+        return sprintf( __( 'the %s provider in Connections', 'presshub-ai-editor' ), (string) ( $saved['name'] ?? $type ) );
+    }
+
     /** pre_option_{removed} filter: a removed option was read. */
     public static function warn_removed_read( $pre, $option = '' ) {
         $option = (string) $option;
         if ( ! self::$running && '' !== $option && ! isset( self::$warned[ $option ] ) && function_exists( '_doing_it_wrong' ) ) {
             self::$warned[ $option ] = true;
+            $release = self::RELEASES[ (int) ( self::REMOVED[ $option ]['since'] ?? 1 ) ] ?? self::REMOVED_IN;
             _doing_it_wrong(
                 'get_option',
-                sprintf( 'PressHub removed the %s option in %s; it is no longer saved or read.', esc_html( $option ), self::REMOVED_IN ),
-                self::REMOVED_IN
+                sprintf( 'PressHub removed the %s option in %s; it is no longer saved or read.', esc_html( $option ), $release ),
+                $release
             );
         }
         return $pre;
+    }
+
+    /**
+     * Read a removed option without the _doing_it_wrong() notice: for the
+     * one-time migrations that turn an old value into its new place
+     * (PressHub_AI_Provider_Store::migrate_legacy_options()).
+     */
+    public static function read_removed( string $key, $default = false ) {
+        $was           = self::$running;
+        self::$running = true;
+        try {
+            return get_option( $key, $default );
+        } finally {
+            self::$running = $was;
+        }
     }
 
     /** Test helper. */
@@ -262,9 +384,32 @@ class PressHub_Settings_Cleanup {
     // Report, notice, download.
     // ------------------------------------------------------------------
 
+    /** Every clean-up report, newest first, keyed by clean-up version. */
+    public static function reports(): array {
+        $stored = get_option( self::REPORT_OPTION, null );
+        if ( ! is_array( $stored ) ) {
+            return [];
+        }
+        if ( isset( $stored['removed'] ) ) {
+            // Written by 2.45.0 (clean-up 1): one flat report.
+            $stored['cleanup'] = 1;
+            return [ 1 => $stored ];
+        }
+        $runs = [];
+        foreach ( (array) ( $stored['runs'] ?? [] ) as $v => $r ) {
+            if ( is_array( $r ) && isset( $r['removed'] ) ) {
+                $r['cleanup']     = (int) $v;
+                $runs[ (int) $v ] = $r;
+            }
+        }
+        krsort( $runs );
+        return $runs;
+    }
+
+    /** The latest clean-up report. */
     public static function report(): ?array {
-        $report = get_option( self::REPORT_OPTION, null );
-        return is_array( $report ) && isset( $report['removed'] ) ? $report : null;
+        $runs = self::reports();
+        return $runs ? reset( $runs ) : null;
     }
 
     /** Number of removed settings that had a saved value. */
@@ -278,8 +423,8 @@ class PressHub_Settings_Cleanup {
         return admin_url( 'admin.php?page=' . $slug ) . '#' . self::ANCHOR;
     }
 
-    public static function download_url(): string {
-        $url = admin_url( 'admin-post.php?action=' . self::DOWNLOAD_ACTION );
+    public static function download_url( int $cleanup = 1 ): string {
+        $url = admin_url( 'admin-post.php?action=' . self::DOWNLOAD_ACTION . '&cleanup=' . $cleanup );
         return function_exists( 'wp_nonce_url' ) ? wp_nonce_url( $url, self::NONCE ) : $url;
     }
 
@@ -289,27 +434,45 @@ class PressHub_Settings_Cleanup {
             return;
         }
         update_option( self::NOTICE_OPTION, 0, false );
-        $count = self::removed_count();
-        echo '<div class="notice notice-success is-dismissible presshub-cleanup-notice"><p><strong>';
+        $report = self::report();
+        $count  = self::removed_count( $report );
+        $kept   = count( (array) ( $report['kept'] ?? [] ) );
+        echo '<div class="notice ' . ( $kept ? 'notice-warning' : 'notice-success' ) . ' is-dismissible presshub-cleanup-notice"><p><strong>';
         /* translators: %d: number of removed settings */
         echo esc_html( sprintf( _n( 'PressHub cleaned up its settings: %d unused setting was removed.', 'PressHub cleaned up its settings: %d unused settings were removed.', $count, 'presshub-ai-editor' ), $count ) );
-        echo '</strong> ' . esc_html__( 'A copy of all settings was saved first. Nothing you use changed.', 'presshub-ai-editor' ) . '</p><p>';
-        echo '<a class="button" href="' . esc_url( self::report_url() ) . '">' . esc_html__( 'See the report', 'presshub-ai-editor' ) . '</a>';
-        echo '</p></div>';
+        echo '</strong> ' . esc_html__( 'A copy of all settings was saved first. Nothing you use changed.', 'presshub-ai-editor' );
+        if ( $kept ) {
+            echo ' ' . esc_html__( 'An old API key differs from the key in Connections and is no longer used; the report says which. Add it in Connections if you still need it.', 'presshub-ai-editor' );
+        }
+        echo '</p><p><a class="button" href="' . esc_url( self::report_url() ) . '">' . esc_html__( 'See the report', 'presshub-ai-editor' ) . '</a></p></div>';
     }
 
-    /** PressHub → Usage & logs → Clean-up report. Prints nothing before a clean-up ran. */
+    /** PressHub → Usage & logs → Clean-up report(s). Prints nothing before a clean-up ran. */
     public static function render_report(): void {
-        $report = self::report();
-        if ( ! $report ) {
+        $runs = self::reports();
+        if ( ! $runs ) {
             return;
         }
+        $first = true;
+        foreach ( $runs as $cleanup => $report ) {
+            self::render_one_report( (int) $cleanup, $report, $first );
+            $first = false;
+        }
+    }
+
+    private static function render_one_report( int $cleanup, array $report, bool $first ): void {
         $removed = (array) $report['removed'];
         $copied  = (array) ( $report['copied'] ?? [] );
-        $when    = function_exists( 'wp_date' ) ? wp_date( 'j M Y, H:i', (int) $report['time'] ) : gmdate( 'j M Y, H:i', (int) $report['time'] );
-        echo '<section class="presshub-cleanup-report" id="' . esc_attr( self::ANCHOR ) . '" aria-labelledby="' . esc_attr( self::ANCHOR ) . '-title">';
-        /* translators: %s: date and time of the clean-up */
-        echo '<h2 id="' . esc_attr( self::ANCHOR ) . '-title">' . esc_html( sprintf( __( 'Clean-up report (%s)', 'presshub-ai-editor' ), $when ) ) . '</h2>';
+        $kept    = (array) ( $report['kept'] ?? [] );
+        if ( array_values( $copied ) === $copied ) {
+            // 2.45.0 stored a list of copied options.
+            $copied = array_fill_keys( $copied, __( 'the GitHub token in Connections', 'presshub-ai-editor' ) );
+        }
+        $when = function_exists( 'wp_date' ) ? wp_date( 'j M Y, H:i', (int) $report['time'] ) : gmdate( 'j M Y, H:i', (int) $report['time'] );
+        $id   = $first ? self::ANCHOR : self::ANCHOR . '-' . $cleanup;
+        echo '<section class="presshub-cleanup-report" id="' . esc_attr( $id ) . '" aria-labelledby="' . esc_attr( $id ) . '-title">';
+        /* translators: 1: release, 2: date and time of the clean-up */
+        echo '<h2 id="' . esc_attr( $id ) . '-title">' . esc_html( sprintf( __( 'Clean-up report, %1$s (%2$s)', 'presshub-ai-editor' ), self::RELEASES[ $cleanup ] ?? (string) ( $report['version'] ?? '' ), $when ) ) . '</h2>';
         echo '<p class="description">' . esc_html__( 'PressHub no longer reads these settings, so their saved values were deleted. A copy of all settings was saved first.', 'presshub-ai-editor' ) . '</p>';
         echo '<table class="widefat striped presshub-cleanup-table"><thead><tr>';
         echo '<th scope="col">' . esc_html__( 'Setting', 'presshub-ai-editor' ) . '</th>';
@@ -317,14 +480,22 @@ class PressHub_Settings_Cleanup {
         echo '<th scope="col">' . esc_html__( 'Why', 'presshub-ai-editor' ) . '</th>';
         echo '</tr></thead><tbody>';
         foreach ( self::groups() as $group => $row ) {
-            $keys = array_keys( array_filter( self::REMOVED, static function ( $meta ) use ( $group ) {
-                return $meta['group'] === $group;
+            $keys = array_values( array_filter( array_keys( $removed ), static function ( $k ) use ( $group ) {
+                return ( self::REMOVED[ $k ]['group'] ?? '' ) === $group;
             } ) );
-            $had = array_values( array_filter( $keys, static function ( $k ) use ( $removed ) {
+            if ( ! $keys ) {
+                continue;
+            }
+            $had        = array_values( array_filter( $keys, static function ( $k ) use ( $removed ) {
                 return ! empty( $removed[ $k ] );
             } ) );
-            if ( array_intersect( $keys, $copied ) ) {
-                $result = __( 'Copied to the GitHub token in Connections, then removed', 'presshub-ai-editor' );
+            $group_kept = array_values( array_intersect( $keys, $kept ) );
+            $group_copy = array_intersect_key( $copied, array_flip( $keys ) );
+            if ( $group_kept ) {
+                $result = __( 'Kept for one more release, no longer used: it differs from the key in Connections. Add it there if you still need it.', 'presshub-ai-editor' );
+            } elseif ( $group_copy ) {
+                /* translators: %s: where the value went, e.g. "the Google Gemini provider in Connections" */
+                $result = sprintf( __( 'Copied to %s, then removed', 'presshub-ai-editor' ), (string) reset( $group_copy ) );
             } elseif ( $had ) {
                 $result = __( 'Removed', 'presshub-ai-editor' );
             } else {
@@ -332,14 +503,20 @@ class PressHub_Settings_Cleanup {
             }
             echo '<tr><td>' . esc_html( $row['label'] ) . '<details class="presshub-cleanup-details"><summary>' . esc_html__( 'Details', 'presshub-ai-editor' ) . '</summary><ul>';
             foreach ( $keys as $k ) {
-                $state = in_array( $k, $had, true ) ? __( 'saved value deleted', 'presshub-ai-editor' ) : __( 'was not saved', 'presshub-ai-editor' );
+                if ( in_array( $k, $group_kept, true ) ) {
+                    $state = __( 'kept, not read', 'presshub-ai-editor' );
+                } elseif ( in_array( $k, $had, true ) ) {
+                    $state = __( 'saved value deleted', 'presshub-ai-editor' );
+                } else {
+                    $state = __( 'was not saved', 'presshub-ai-editor' );
+                }
                 echo '<li><code>' . esc_html( $k ) . '</code> ' . esc_html( $state ) . '</li>';
             }
             echo '</ul></details></td><td>' . esc_html( $result ) . '</td><td>' . esc_html( $row['reason'] ) . '</td></tr>';
         }
         echo '</tbody></table>';
-        if ( ! empty( $report['export_saved'] ) && get_option( self::EXPORT_OPTION ) ) {
-            echo '<p><a class="button" href="' . esc_url( self::download_url() ) . '" download>' . esc_html__( 'Download the pre-clean-up copy (JSON, no keys)', 'presshub-ai-editor' ) . '</a> ';
+        if ( ! empty( $report['export_saved'] ) && get_option( self::export_option( $cleanup ) ) ) {
+            echo '<p><a class="button" href="' . esc_url( self::download_url( $cleanup ) ) . '" download>' . esc_html__( 'Download the pre-clean-up copy (JSON, no keys)', 'presshub-ai-editor' ) . '</a> ';
             echo '<span class="description">' . esc_html__( 'Import it under Settings → Site & system → Diagnostics to restore a value.', 'presshub-ai-editor' ) . '</span></p>';
         }
         echo '</section>';
@@ -350,12 +527,13 @@ class PressHub_Settings_Cleanup {
             wp_die( esc_html__( 'You are not allowed to download PressHub settings.', 'presshub-ai-editor' ), 403 );
         }
         check_admin_referer( self::NONCE );
-        $json = (string) get_option( self::EXPORT_OPTION, '' );
+        $cleanup = isset( $_GET['cleanup'] ) ? max( 1, (int) $_GET['cleanup'] ) : 1; // phpcs:ignore WordPress.Security.NonceVerification -- checked above.
+        $json    = (string) get_option( self::export_option( $cleanup ), '' );
         if ( '' === $json ) {
             wp_die( esc_html__( 'There is no pre-clean-up copy on this site.', 'presshub-ai-editor' ), 404 );
         }
-        $report = self::report();
-        $name   = 'presshub-settings-before-clean-up-' . gmdate( 'Y-m-d', (int) ( $report['time'] ?? time() ) ) . '.json';
+        $runs   = self::reports();
+        $name   = 'presshub-settings-before-clean-up-' . gmdate( 'Y-m-d', (int) ( $runs[ $cleanup ]['time'] ?? time() ) ) . '.json';
         if ( function_exists( 'nocache_headers' ) ) {
             nocache_headers();
         }

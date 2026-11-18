@@ -194,11 +194,12 @@ class APIClientModularTest
         self::reset_world();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [];
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']             = 'openai';
+        // #237: the old single key is no longer read, even if a row is left.
         $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']              = 'sk-legacy-openai-key';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai']         = 'gpt-4o-mini';
 
         $legacy_fallback = PressHub_AI_API_Client::resolve_module_config( 'coauthor' );
-        if ( $legacy_fallback['type'] !== 'openai' || $legacy_fallback['api_key'] !== 'sk-legacy-openai-key' || $legacy_fallback['model'] !== 'gpt-4o-mini' ) {
+        if ( $legacy_fallback['type'] !== 'openai' || $legacy_fallback['api_key'] !== '' || $legacy_fallback['model'] !== 'gpt-4o-mini' ) {
             $failures[] = "Legacy fallback resolution failed. Got: " . var_export( $legacy_fallback, true );
         }
 

@@ -376,8 +376,8 @@ class PressHub_AI_Audio_Synthesizer {
             return $manifest_slice;
         }
 
-        $api_key = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_api_key() : '';
-        if ( '' === $api_key && class_exists( 'PressHub_AI_Provider_Store' ) ) {
+        $api_key = '';
+        if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
             $all_providers = PressHub_AI_Provider_Store::get_all( true );
             foreach ( $all_providers as $p ) {
                 if ( ( $p['type'] ?? '' ) === 'gemini' && ! empty( $p['api_key'] ) ) {
@@ -385,9 +385,6 @@ class PressHub_AI_Audio_Synthesizer {
                     break;
                 }
             }
-        }
-        if ( '' === $api_key ) {
-            $api_key = (string) get_option( 'presshub_ai_gemini_api_key', '' );
         }
         if ( '' === $api_key ) {
             return $manifest_slice;

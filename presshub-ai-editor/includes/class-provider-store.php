@@ -281,9 +281,14 @@ class PressHub_AI_Provider_Store {
         }
 
         $legacy_provider_raw = get_option( 'presshub_ai_provider', null );
-        $legacy_api_key_raw  = get_option( 'presshub_ai_api_key', null );
+        // #237: the old key options are removed; this one-time migration is
+        // the only place that still reads them, to move them into Connections.
+        $read_old            = static function ( string $key ) {
+            return class_exists( 'PressHub_Settings_Cleanup' ) ? PressHub_Settings_Cleanup::read_removed( $key, null ) : get_option( $key, null );
+        };
+        $legacy_api_key_raw  = $read_old( 'presshub_ai_api_key' );
         $legacy_gcloud_key   = get_option( 'presshub_ai_google_cloud_api_key', null );
-        $legacy_tts_key      = get_option( 'presshub_ai_briefing_tts_api_key', null );
+        $legacy_tts_key      = $read_old( 'presshub_ai_briefing_tts_api_key' );
         $openai_org_raw      = get_option( 'presshub_ai_openai_org', null );
         $anthropic_ver_raw   = get_option( 'presshub_ai_anthropic_version', null );
 

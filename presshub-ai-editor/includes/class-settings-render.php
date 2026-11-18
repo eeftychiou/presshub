@@ -237,16 +237,7 @@ class PressHub_AI_Settings_Render {
 
         $this->group_start( 'ai-providers', $groups['ai-providers'], __( 'The AI services PressHub writes with. Test checks one provider and keeps the result until the next test.', 'presshub-ai-editor' ) );
         $this->render_providers_grid();
-        ?>
-        <table class="form-table" role="presentation">
-            <tbody>
-                <tr>
-                    <th scope="row"><label for="presshub_ai_briefing_tts_api_key"><?php echo esc_html__( 'Speech key (Google AI Studio)', 'presshub-ai-editor' ); ?></label></th>
-                    <td><?php $this->render_briefing_tts_api_key_field(); ?></td>
-                </tr>
-            </tbody>
-        </table>
-        <?php
+        // #237: no separate speech key; speech uses the provider chosen in AI models.
         $this->group_end();
 
         $this->group_start( 'google-cloud', $groups['google-cloud'] );
@@ -1839,30 +1830,6 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
-    /**
-     * P4: render a masked key input. The raw key is never placed in the
-     * DOM; only the last 4 characters are shown (in both the value and the
-     * placeholder). The sanitize callback maps the masked/empty value back
-     * to the saved key, so saving the form without touching the field keeps
-     * the existing key.
-     */
-    public function render_api_key_field() {
-        $saved = (string) get_option( 'presshub_ai_api_key', '' );
-        $mask  = self::mask_key( $saved );
-        ?>
-        <input type="password" name="presshub_ai_api_key" id="presshub_ai_api_key" value="<?php echo self::esc_attr_safe( $mask ); ?>" placeholder="<?php echo self::esc_attr_safe( $mask ); ?>" class="regular-text" autocomplete="off" />
-        <?php if ( '' !== $mask ) : ?>
-            <p class="description"><?php echo __( 'Saved key ends in', 'presshub-ai-editor' ); ?> <code><?php echo self::esc_html_safe( $mask ); ?></code>. <?php echo __( 'Leave empty to keep it.', 'presshub-ai-editor' ); ?></p>
-            <label>
-                <input type="checkbox" name="presshub_ai_remove_api_key" id="presshub_ai_remove_api_key" value="1" />
-                <?php echo __( 'Remove stored key', 'presshub-ai-editor' ); ?>
-            </label>
-        <?php else : ?>
-            <p class="description"><?php echo __( 'Used for the active AI provider (OpenAI, Anthropic or Gemini).', 'presshub-ai-editor' ); ?></p>
-        <?php endif; ?>
-        <?php
-    }
-
     public function render_github_token_field() {
         $saved = (string) get_option( 'presshub_ai_github_token', '' );
         PressHub_Secret_Field::render( [
@@ -2925,19 +2892,6 @@ class PressHub_AI_Settings_Render {
             <option value="10_min" <?php echo '10_min' === $selected ? 'selected="selected"' : ''; ?>><?php echo __( '10 Minutes (~1500 words, 20+ dialogue turns)', 'presshub-ai-editor' ); ?></option>
         </select>
         <p class="description"><?php echo __( 'Target duration and word budget pacing for daily podcast synthesis.', 'presshub-ai-editor' ); ?></p>
-        <?php
-    }
-
-    public function render_briefing_tts_api_key_field() {
-        $saved = (string) get_option( 'presshub_ai_briefing_tts_api_key', '' );
-        PressHub_Secret_Field::render( [
-            'name'        => 'presshub_ai_briefing_tts_api_key',
-            'masked'      => '' !== $saved ? self::mask_key( $saved ) : '',
-            'remove_name' => 'presshub_ai_remove_briefing_tts_api_key',
-            'describedby' => 'presshub_ai_briefing_tts_api_key-desc',
-        ] );
-        ?>
-        <p class="description" id="presshub_ai_briefing_tts_api_key-desc"><?php echo esc_html__( 'A separate Google AI Studio key for the podcast and Shorts narration. When empty, the Gemini provider key is used.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

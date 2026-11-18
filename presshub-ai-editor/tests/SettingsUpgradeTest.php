@@ -80,7 +80,8 @@ class SettingsUpgradeTest {
             }
         }
         foreach ( PressHub_Settings_Cleanup::removed_keys() as $key ) {
-            if ( ! in_array( $key, $old, true ) ) {
+            // presshub_ai_gemini_api_key was read but never registered.
+            if ( ! in_array( $key, $old, true ) && 'presshub_ai_gemini_api_key' !== $key ) {
                 $failures[] = "{$key} is in the clean-up list but was not a 2.36.x option.";
             }
         }
@@ -98,6 +99,7 @@ class SettingsUpgradeTest {
             'presshub_ai_briefing_text_model'            => 'gemini-3.1-pro',
             'presshub_ai_coauthor_model'                 => 'gemini-3.1-flash',
             'presshub_ai_api_key'                        => 'AIzaSyEXAMPLEKEY000000000000000003kQ',
+            'presshub_ai_briefing_tts_api_key'           => 'AIzaSyEXAMPLESPEECH0000000000000007zQ',
             'presshub_social_copy_mode'                  => 'ai',
             'presshub_social_worker_mode'                => 'pull',
             'presshub_social_tiktok_shorts_count'        => 3,
@@ -124,6 +126,11 @@ class SettingsUpgradeTest {
 
         // 3. Load the new release over it.
         $GLOBALS['OPTIONS_STORE'] = $snapshot;
+        // Its providers, as on presshub.cy: the old keys are copies of these (#237 part B).
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [
+            [ 'id' => 'gemini-main', 'type' => 'gemini', 'name' => 'Google Gemini', 'enabled' => true, 'api_key' => 'AIzaSyEXAMPLEKEY000000000000000003kQ', 'default_model' => 'gemini-3.1-flash' ],
+            [ 'id' => 'gemini-speech', 'type' => 'gemini', 'name' => 'Google Gemini (3.8 Speech)', 'enabled' => true, 'api_key' => 'AIzaSyEXAMPLESPEECH0000000000000007zQ', 'default_model' => 'gemini-3.1-flash-tts-preview' ],
+        ];
         // One-time repair flags a 2.36.x site has already set.
         foreach ( [ 'presshub_social_repaired_v263', 'presshub_social_upgraded_prompts_v269', 'presshub_social_upgraded_prompts_v284' ] as $flag ) {
             $GLOBALS['OPTIONS_STORE'][ $flag ] = '1';
@@ -174,10 +181,14 @@ class SettingsUpgradeTest {
                 }
             }
         }
-        if ( 7 !== PressHub_Settings_Cleanup::removed_count() ) {
-            $failures[] = 'The report should count seven removed settings; got ' . PressHub_Settings_Cleanup::removed_count();
+        $expected_removed = count( array_intersect( PressHub_Settings_Cleanup::removed_keys(), array_keys( $snapshot ) ) );
+        if ( $expected_removed !== PressHub_Settings_Cleanup::removed_count() ) {
+            $failures[] = "The report should count {$expected_removed} removed settings; got " . PressHub_Settings_Cleanup::removed_count();
         }
-        $export = json_decode( (string) get_option( PressHub_Settings_Cleanup::EXPORT_OPTION, '' ), true );
+        if ( PressHub_Settings_Cleanup::report()['kept'] ?? [ 'x' ] ) {
+            $failures[] = 'Old keys that match a Connections provider are not kept.';
+        }
+        $export = json_decode( (string) get_option( PressHub_Settings_Cleanup::export_option( PressHub_Settings_Cleanup::VERSION ), '' ), true );
         if ( ! is_array( $export ) || count( $export['options'] ?? [] ) < count( $snapshot ) - 60 ) {
             $failures[] = 'The pre-clean-up copy should hold the stored settings.';
         }

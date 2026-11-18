@@ -79,7 +79,8 @@ class SettingsCleanupTest {
         }
         $src = '';
         foreach ( glob( dirname( __DIR__ ) . '/includes/*.php' ) as $f ) {
-            if ( false === strpos( $f, 'class-settings-cleanup.php' ) ) {
+            // The clean-up itself and the one-time provider migration read them on purpose.
+            if ( false === strpos( $f, 'class-settings-cleanup.php' ) && false === strpos( $f, 'class-provider-store.php' ) ) {
                 $src .= file_get_contents( $f );
             }
         }
@@ -105,7 +106,7 @@ class SettingsCleanupTest {
         }
 
         // 3. The copy was saved first, without secrets.
-        $json   = (string) get_option( PressHub_Settings_Cleanup::EXPORT_OPTION, '' );
+        $json   = (string) get_option( PressHub_Settings_Cleanup::export_option( PressHub_Settings_Cleanup::VERSION ), '' );
         $export = json_decode( $json, true );
         if ( ! is_array( $export ) || PressHub_Settings_Transfer::FORMAT !== ( $export['format'] ?? '' ) ) {
             $failures[] = 'The pre-clean-up copy should be a settings export file.';
@@ -206,13 +207,13 @@ class SettingsCleanupTest {
         self::seed();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_female'] = INF;
         PressHub_Settings_Cleanup::maybe_run();
-        if ( ! array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) || array_key_exists( PressHub_Settings_Cleanup::EXPORT_OPTION, $GLOBALS['OPTIONS_STORE'] ) || PressHub_Settings_Cleanup::report() || array_key_exists( PressHub_Settings_Cleanup::VERSION_OPTION, $GLOBALS['OPTIONS_STORE'] ) ) {
+        if ( ! array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) || array_key_exists( PressHub_Settings_Cleanup::export_option( PressHub_Settings_Cleanup::VERSION ), $GLOBALS['OPTIONS_STORE'] ) || PressHub_Settings_Cleanup::report() || array_key_exists( PressHub_Settings_Cleanup::VERSION_OPTION, $GLOBALS['OPTIONS_STORE'] ) ) {
             $failures[] = 'When the copy cannot be written, nothing may be deleted or reported.';
         }
         // Malformed UTF-8 is substituted, so it does not block the clean-up.
         $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_host_female'] = "El\xC3\x28ni";
         PressHub_Settings_Cleanup::maybe_run();
-        if ( array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) || '' === (string) get_option( PressHub_Settings_Cleanup::EXPORT_OPTION, '' ) ) {
+        if ( array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) || '' === (string) get_option( PressHub_Settings_Cleanup::export_option( PressHub_Settings_Cleanup::VERSION ), '' ) ) {
             $failures[] = 'Malformed UTF-8 in one option should not stop the clean-up.';
         }
 
@@ -245,9 +246,89 @@ class SettingsCleanupTest {
             $failures[] = 'A site with nothing to remove gets no notice.';
         }
 
+        // 14. Part B: old API keys go into Connections or, when Connections
+        // already holds a different key, stay one release unread.
+        $gem = static function ( string $key ) {
+            return [ 'id' => 'gemini-main', 'type' => 'gemini', 'name' => 'Google Gemini', 'enabled' => true, 'api_key' => $key, 'default_model' => 'gemini-3.1-flash' ];
+        };
+        // a) Same keys as Connections (presshub.cy): deleted.
+        self::seed();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']              = 'gemini';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']               = 'AIzaSyMAINKEY00000000000000000000001';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_api_key']  = 'AIzaSyMAINKEY00000000000000000000001';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']  = [ $gem( 'AIzaSyMAINKEY00000000000000000000001' ) ];
+        $r = PressHub_Settings_Cleanup::run();
+        if ( array_key_exists( 'presshub_ai_api_key', $GLOBALS['OPTIONS_STORE'] ) || array_key_exists( 'presshub_ai_briefing_tts_api_key', $GLOBALS['OPTIONS_STORE'] ) || ! empty( $r['kept'] ) || isset( $r['copied']['presshub_ai_api_key'] ) || isset( $r['copied']['presshub_ai_briefing_tts_api_key'] ) ) {
+            $failures[] = 'Old keys that Connections already holds are deleted, not copied or kept.';
+        }
+        // b) Gemini provider without a key: the old Gemini key is copied into it.
+        self::seed();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_gemini_api_key']       = 'AIzaSyOLDGEMINI000000000000000000002';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [ $gem( '' ) ];
+        $r = PressHub_Settings_Cleanup::run();
+        if ( 'AIzaSyOLDGEMINI000000000000000000002' !== PressHub_AI_API_Client::lookup_provider_key_by_type( 'gemini' ) || array_key_exists( 'presshub_ai_gemini_api_key', $GLOBALS['OPTIONS_STORE'] ) || empty( $r['copied']['presshub_ai_gemini_api_key'] ) ) {
+            $failures[] = 'A site with only an old Gemini key keeps working: the key moves into its Gemini provider.';
+        }
+        // c) No provider of the type: one is added with the old key.
+        self::seed();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']             = 'openai';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']              = 'sk-OLDSINGLEKEY0000000000000000000003';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [ $gem( 'AIzaSyMAINKEY00000000000000000000001' ) ];
+        PressHub_Settings_Cleanup::run();
+        if ( 'sk-OLDSINGLEKEY0000000000000000000003' !== PressHub_AI_API_Client::lookup_provider_key_by_type( 'openai' ) || array_key_exists( 'presshub_ai_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'An old single key for a provider type with no record becomes a provider in Connections.';
+        }
+        // d) A different speech key: kept, not read, named in the report and the notice.
+        self::seed();
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_api_key'] = 'AIzaSyOTHERSPEECH0000000000000000004';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [ $gem( 'AIzaSyMAINKEY00000000000000000000001' ) ];
+        $r = PressHub_Settings_Cleanup::run();
+        if ( 'AIzaSyOTHERSPEECH0000000000000000004' !== ( $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_tts_api_key'] ?? null ) || [ 'presshub_ai_briefing_tts_api_key' ] !== $r['kept'] ) {
+            $failures[] = 'A speech key that differs from Connections stays for one release.';
+        }
+        $client = new PressHub_AI_API_Client();
+        if ( 'AIzaSyMAINKEY00000000000000000000001' !== $client->resolve_gemini_api_key() ) {
+            $failures[] = 'Speech uses the Connections key, not the old speech key.';
+        }
+        ob_start();
+        PressHub_Settings_Cleanup::render_notice();
+        $notice = (string) ob_get_clean();
+        ob_start();
+        PressHub_Settings_Cleanup::render_report();
+        $rep = (string) ob_get_clean();
+        if ( false === strpos( $notice, 'differs from the key in Connections' ) || false === strpos( $rep, 'Kept for one more release' ) || false === strpos( $rep, 'Separate speech key' ) ) {
+            $failures[] = 'A kept key is named in the notice and the report.';
+        }
+        // e) The Speech key field is gone from Connections.
+        if ( false !== strpos( presshub_test_render_section( 'connections' ), 'presshub_ai_briefing_tts_api_key' ) ) {
+            $failures[] = 'Connections should no longer show a separate speech key.';
+        }
+
+        // 15. A site that ran clean-up 1 (2.45.0) keeps that report and gets a second one.
+        self::seed();
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::VERSION_OPTION ] = 1;
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::REPORT_OPTION ]  = [ 'time' => 1763467200, 'version' => '2.45.0', 'removed' => [ 'presshub_social_twitter_api_key' => true ], 'copied' => [], 'export_saved' => true ];
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::EXPORT_OPTION ]  = '{"format":"presshub-settings"}';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']                       = 'AIzaSyMAINKEY00000000000000000000001';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']          = [ $gem( 'AIzaSyMAINKEY00000000000000000000001' ) ];
+        PressHub_Settings_Cleanup::maybe_run();
+        $runs = PressHub_Settings_Cleanup::reports();
+        if ( [ 2, 1 ] !== array_keys( $runs ) || array_key_exists( 'presshub_ai_api_key', $GLOBALS['OPTIONS_STORE'] ) || ! array_key_exists( 'presshub_social_twitter_api_key', $GLOBALS['OPTIONS_STORE'] ) ) {
+            $failures[] = 'Clean-up 2 removes only its own options and keeps the 2.45.0 report.';
+        }
+        if ( array_keys( $runs[2]['removed'] ) !== PressHub_Settings_Cleanup::removed_keys( 2 ) ) {
+            $failures[] = 'Clean-up 2 reports only its own options.';
+        }
+        ob_start();
+        PressHub_Settings_Cleanup::render_report();
+        $both = (string) ob_get_clean();
+        if ( false === strpos( $both, 'Clean-up report, 2.46.0' ) || false === strpos( $both, 'Clean-up report, 2.45.0' ) || strpos( $both, '2.46.0' ) > strpos( $both, '2.45.0' ) || false === strpos( $both, 'cleanup=1' ) || false === strpos( $both, 'cleanup=2' ) ) {
+            $failures[] = 'Usage & logs shows both reports, newest first, each with its own copy.';
+        }
+
         // 13. Uninstall removes the clean-up rows, including the copy.
         $uninstall = (string) file_get_contents( dirname( __DIR__ ) . '/uninstall.php' );
-        foreach ( [ PressHub_Settings_Cleanup::VERSION_OPTION, PressHub_Settings_Cleanup::REPORT_OPTION, PressHub_Settings_Cleanup::EXPORT_OPTION, PressHub_Settings_Cleanup::NOTICE_OPTION, PressHub_Settings_Cleanup::LOCK_OPTION ] as $opt ) {
+        foreach ( [ PressHub_Settings_Cleanup::VERSION_OPTION, PressHub_Settings_Cleanup::REPORT_OPTION, PressHub_Settings_Cleanup::EXPORT_OPTION, PressHub_Settings_Cleanup::export_option( 2 ), PressHub_Settings_Cleanup::NOTICE_OPTION, PressHub_Settings_Cleanup::LOCK_OPTION ] as $opt ) {
             if ( false === strpos( $uninstall, "'" . $opt . "'" ) ) {
                 $failures[] = "uninstall.php should delete {$opt}.";
             }
