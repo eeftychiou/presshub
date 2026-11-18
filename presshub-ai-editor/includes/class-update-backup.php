@@ -787,6 +787,7 @@ class PressHub_AI_Update_Backup {
      * @return array{safety_id:string,options:int,tables:int,rows:int,files:bool,version:string}|WP_Error
      */
     public static function restore( string $id, bool $with_files ) {
+        self::$files_restored = false;
         $manifest = self::read_manifest( $id );
         if ( ! $manifest ) {
             return new WP_Error( 'presshub_restore_missing', __( 'That backup was not found or is incomplete.', 'presshub-ai-editor' ) );
@@ -908,7 +909,7 @@ class PressHub_AI_Update_Backup {
             if ( ! empty( $info['create'] ) && ( ! is_readable( $sql_file ) || ! preg_match( '/^\s*CREATE\s+TABLE\b/i', (string) file_get_contents( $sql_file, false, null, 0, 64 ) ) ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
                 return new WP_Error( 'presshub_restore_file', sprintf(
                     /* translators: %s: file name. */
-                    __( 'The file %s is missing.', 'presshub-ai-editor' ),
+                    __( 'The table definition %s is missing or damaged.', 'presshub-ai-editor' ),
                     'tables/' . $suffix . '.sql'
                 ) );
             }
@@ -1234,14 +1235,12 @@ class PressHub_AI_Update_Backup {
                 return $cached;
             }
         }
-        $state    = self::check_exposure();
+        $raw      = self::check_exposure();
         $previous = get_transient( self::exposure_key() );
         // A check that could not finish never clears an earlier "exposed".
-        if ( 'unverified' === $state && 'exposed' === $previous ) {
-            $state = 'exposed';
-        }
+        $state = 'unverified' === $raw && 'exposed' === $previous ? 'exposed' : $raw;
         set_transient( self::exposure_key(), $state, 12 * 3600 );
-        if ( 'exposed' === $state ) {
+        if ( 'exposed' === $raw ) {
             PressHub_AI_Logger::warning( 'PressHub backup folder is publicly accessible over HTTP', [ 'dir' => self::base_dir() ] );
         }
         return $state;
@@ -1402,8 +1401,14 @@ class PressHub_AI_Update_Backup {
 
     public static function handle_recheck(): void {
         self::guard( self::RECHECK_ACTION );
-        $state = self::exposure( true );
+        // Look at what this check really found; a check that could not finish keeps the earlier result.
+        $state = self::check_exposure();
+        if ( 'unverified' === $state ) {
+            self::finish( 'warning', __( 'PressHub could not check whether the backup folder is blocked: the test request to this site did not get a clear answer. The earlier result stands. Check the folder by hand, or ask your host.', 'presshub-ai-editor' ) );
+        }
+        set_transient( self::exposure_key(), $state, 12 * 3600 );
         if ( 'exposed' === $state ) {
+            PressHub_AI_Logger::warning( 'PressHub backup folder is publicly accessible over HTTP', [ 'dir' => self::base_dir() ] );
             self::finish( 'error', __( 'Checked again: the web server still hands out files from the backup folder.', 'presshub-ai-editor' ) );
         }
         if ( 'protected' === $state ) {
@@ -1412,7 +1417,6 @@ class PressHub_AI_Update_Backup {
         if ( 'outside' === $state ) {
             self::finish( 'success', __( 'Checked again: the backup folder is outside wp-content, so the web server does not serve it.', 'presshub-ai-editor' ) );
         }
-        self::finish( 'warning', __( 'PressHub could not check whether the backup folder is blocked: the test request to this site did not answer. Check the folder by hand, or ask your host.', 'presshub-ai-editor' ) );
     }
 
     public static function handle_delete(): void {
@@ -1449,7 +1453,7 @@ class PressHub_AI_Update_Backup {
 
     private static function format_time( int $ts, bool $seconds = false ): string {
         if ( function_exists( 'wp_date' ) ) {
-            return (string) wp_date( get_option( 'date_format' ) . ' ' . ( $seconds ? 'H:i:s' : get_option( 'time_format' ) ), $ts );
+            return (string) wp_date( get_option( 'date_format' ) . ' ' . ( $seconds ? preg_replace( '/i(?!:s)/', 'i:s', (string) get_option( 'time_format' ), 1 ) : get_option( 'time_format' ) ), $ts );
         }
         return gmdate( $seconds ? 'Y-m-d H:i:s' : 'Y-m-d H:i', $ts );
     }
