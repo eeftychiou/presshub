@@ -386,7 +386,7 @@ class APIClientModularTest
         // 10. Backward compatibility for legacy calls
         // ==================================================================
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']      = 'legacy-key';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']      = presshub_test_provider_keys( 'legacy-key' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']     = 'openai';
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai'] = 'gpt-4o';
         $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
@@ -676,7 +676,7 @@ class APIClientModularTest
         // 18e: Legacy fallback client source tracking
         self::reset_world();
         $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']     = 'openai';
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']      = 'sk-legacy-test';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']      = presshub_test_provider_keys( 'sk-legacy-test' );
         $GLOBALS['OPTIONS_STORE']['presshub_ai_model_openai'] = 'gpt-4o-mini';
         $legacy_client_2 = new PressHub_AI_API_Client();
         if ( $legacy_client_2->get_provider_source() !== 'legacy_fallback:presshub_ai_provider' ) {

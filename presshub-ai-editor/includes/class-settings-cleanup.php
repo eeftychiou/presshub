@@ -303,8 +303,16 @@ class PressHub_Settings_Cleanup {
      * a different key of that type (the row stays for one release, unread).
      */
     private static function keep_api_key( string $key, string $value ): string {
-        if ( '' === $value || false !== strpos( $value, '•' ) || ! class_exists( 'PressHub_AI_Provider_Store' ) ) {
+        if ( '' === $value || false !== strpos( $value, '•' ) ) {
             return '';
+        }
+        if ( ! class_exists( 'PressHub_AI_Provider_Store' ) && is_readable( __DIR__ . '/class-provider-store.php' ) ) {
+            require_once __DIR__ . '/class-provider-defaults.php';
+            require_once __DIR__ . '/class-provider-store.php';
+        }
+        if ( ! class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            // Never delete a key we could not copy.
+            return 'kept';
         }
         $type = (string) self::REMOVED[ $key ]['key_type'];
         if ( '@provider' === $type ) {
@@ -438,8 +446,12 @@ class PressHub_Settings_Cleanup {
         $count  = self::removed_count( $report );
         $kept   = count( (array) ( $report['kept'] ?? [] ) );
         echo '<div class="notice ' . ( $kept ? 'notice-warning' : 'notice-success' ) . ' is-dismissible presshub-cleanup-notice"><p><strong>';
-        /* translators: %d: number of removed settings */
-        echo esc_html( sprintf( _n( 'PressHub cleaned up its settings: %d unused setting was removed.', 'PressHub cleaned up its settings: %d unused settings were removed.', $count, 'presshub-ai-editor' ), $count ) );
+        if ( $count ) {
+            /* translators: %d: number of removed settings */
+            echo esc_html( sprintf( _n( 'PressHub cleaned up its settings: %d unused setting was removed.', 'PressHub cleaned up its settings: %d unused settings were removed.', $count, 'presshub-ai-editor' ), $count ) );
+        } else {
+            echo esc_html__( 'PressHub checked its old settings.', 'presshub-ai-editor' );
+        }
         echo '</strong> ' . esc_html__( 'A copy of all settings was saved first. Nothing you use changed.', 'presshub-ai-editor' );
         if ( $kept ) {
             echo ' ' . esc_html__( 'An old API key differs from the key in Connections and is no longer used; the report says which. Add it in Connections if you still need it.', 'presshub-ai-editor' );

@@ -85,7 +85,7 @@ md_check( 'mixed: list', false !== strpos( $mixed, '<li>point A</li>' ) );
 md_check( 'mixed: closing paragraph', false !== strpos( $mixed, '<p>Closing paragraph.</p>' ) );
 
 // --- 10. integration: generate_draft returns converted HTML ----------------------
-$GLOBALS['OPTIONS_STORE']['presshub_ai_api_key'] = 'test-key';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'test-key' );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
 $GLOBALS['CURRENT_USER_ID'] = 5;
 $GLOBALS['CAPTURE_FILTER'] = function () {

@@ -159,7 +159,7 @@ class ChatRevisionTest
         $GLOBALS['CAPTURED_REQUESTS'] = [];
         $GLOBALS['OPTIONS_STORE'] = [
             'presshub_ai_provider' => 'openai',
-            'presshub_ai_api_key'  => 'sk-test-key',
+            'presshub_ai_configured_providers' => presshub_test_provider_keys( 'sk-test-key' ),
         ];
         $GLOBALS['NONCE_VALID'] = true;
         $_POST = [];

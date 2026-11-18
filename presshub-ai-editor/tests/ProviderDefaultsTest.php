@@ -79,7 +79,7 @@ class ProviderDefaultsTest
         //             runtime (empty options store -> provider defaults) ---
         foreach ( [ 'openai', 'anthropic', 'gemini' ] as $provider ) {
             self::reset_world();
-            $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']  = 'k';
+            $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']  = presshub_test_provider_keys( 'k' );
             $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = $provider;
             $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
                 [ $url ] = $req;

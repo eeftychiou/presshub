@@ -145,7 +145,7 @@ class UploadValidationTest
         $GLOBALS['CAPTURE_FILTER'] = null;
         $GLOBALS['CAPTURED_REQUESTS'] = [];
         $GLOBALS['OPTIONS_STORE'] = [
-            'presshub_ai_api_key'  => 'k',
+            'presshub_ai_configured_providers' => presshub_test_provider_keys( 'k', [ 'gemini', 'openai', 'anthropic' ] ),
             'presshub_ai_provider' => 'gemini', // OpenAI rejects direct uploads
         ];
         $GLOBALS['NONCE_VALID'] = true;

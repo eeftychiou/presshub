@@ -299,6 +299,19 @@ class SettingsCleanupTest {
         if ( false === strpos( $notice, 'differs from the key in Connections' ) || false === strpos( $rep, 'Kept for one more release' ) || false === strpos( $rep, 'Separate speech key' ) ) {
             $failures[] = 'A kept key is named in the notice and the report.';
         }
+        // f) Only a differing key, nothing deleted: the notice does not say "0 removed".
+        $GLOBALS['OPTIONS_STORE'] = [
+            'presshub_ai_provider'             => 'gemini',
+            'presshub_ai_briefing_tts_api_key' => 'AIzaSyOTHERSPEECH0000000000000000004',
+            'presshub_ai_configured_providers' => [ $gem( 'AIzaSyMAINKEY00000000000000000000001' ) ],
+        ];
+        PressHub_Settings_Cleanup::run();
+        ob_start();
+        PressHub_Settings_Cleanup::render_notice();
+        $notice = (string) ob_get_clean();
+        if ( false !== strpos( $notice, '0 unused' ) || false === strpos( $notice, 'differs from the key in Connections' ) ) {
+            $failures[] = 'With only a kept key, the notice should not count 0 removed settings: ' . $notice;
+        }
         // e) The Speech key field is gone from Connections.
         if ( false !== strpos( presshub_test_render_section( 'connections' ), 'presshub_ai_briefing_tts_api_key' ) ) {
             $failures[] = 'Connections should no longer show a separate speech key.';

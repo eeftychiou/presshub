@@ -40,6 +40,10 @@ $presshub_ai_options = [
     'presshub_ai_timeout_gemini',
     // Secrets (autoload disabled).
     'presshub_ai_api_key',
+    // #237: removed in 2.46.0; a differing key may be kept one more release.
+    'presshub_ai_gemini_api_key',
+    'presshub_ai_briefing_tts_api_key',
+    'presshub_ai_remove_briefing_tts_api_key',
     'presshub_ai_google_cloud_api_key',
     'presshub_ai_github_token',
     // "Remove stored key" checkboxes (stored as 0/1 flags).
