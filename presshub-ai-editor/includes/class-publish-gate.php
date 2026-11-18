@@ -321,6 +321,10 @@ class PressHub_AI_Publish_Gate {
 
         if ( $post_id > 0 ) {
             update_post_meta( $post_id, self::META_REVIEW, $gate );
+        }
+        // A review that could not run keeps the last good scorecard and SEO
+        // review: it is still recorded in the history above.
+        if ( $post_id > 0 && 'error' !== $gate['verdict'] ) {
             // The scorecard the editor metabox and the Social / Briefing screens read.
             update_post_meta( $post_id, PressHub_AI_QA_Reviewer::META_SCORECARD, [
                 'score'          => $gate['score'],
@@ -386,7 +390,26 @@ class PressHub_AI_Publish_Gate {
             $tags,
             $cats,
             (int) ( $input['featured_image_id'] ?? 0 ),
+            self::settings_fingerprint(),
         ] ) );
+    }
+
+    /**
+     * The settings a verdict depends on, so a saved review is not reused
+     * after an editor tightens or loosens the gate.
+     */
+    private static function settings_fingerprint(): array {
+        if ( ! class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            return [];
+        }
+        return [
+            PressHub_AI_Settings_Storage::get_qa_min_score(),
+            PressHub_AI_Settings_Storage::get_qa_legal_action(),
+            PressHub_AI_Settings_Storage::get_qa_legal_fail_risk(),
+            PressHub_AI_Settings_Storage::get_seo_review_enabled() ? 1 : 0,
+            PressHub_AI_Settings_Storage::get_qa_seo_action(),
+            PressHub_AI_Settings_Storage::get_qa_seo_min_score(),
+        ];
     }
 
     private static function risk( string $value ): string {

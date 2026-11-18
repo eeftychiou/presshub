@@ -196,6 +196,11 @@ class PressHub_AI_QA_Reviewer {
         if ( '' === $content_hash ) {
             $content_hash = md5( trim( (string) $post->post_content ) );
         }
+        // A gate alert also keys on the verdict, so a real result still goes
+        // out after an earlier "review could not run" email for the same text.
+        if ( isset( $scorecard['checks'] ) ) {
+            $content_hash .= '|' . (string) ( $scorecard['verdict'] ?? '' );
+        }
         $already_notified = (string) get_post_meta( $post_id, self::META_NOTIFIED_HASH, true );
         if ( $already_notified === $content_hash ) {
             return true; // Already notified for this exact content revision
@@ -235,7 +240,7 @@ class PressHub_AI_QA_Reviewer {
         }
 
         if ( isset( $scorecard['checks'] ) && is_array( $scorecard['checks'] ) ) {
-            list( $subject, $body ) = self::gate_email( $scorecard, $context, $site_name, $post_title, $author_name, $edit_url, $post_id );
+            list( $subject, $body ) = self::gate_email( $scorecard, $context, $site_name, $post_title, $author_name, $edit_url, $post_id, 'publish' === (string) ( $post->post_status ?? '' ) );
         } elseif ( 'briefing' === $context ) {
             $subject = sprintf( '[%s] Daily Briefing QA Review Failed (Score: %d/%d)', $site_name, $score, $min_score );
             $intro   = __( 'The automated Daily Briefing article failed the AI Editorial QA Review and has been held in Pending Review status.', 'presshub-ai-editor' );
@@ -307,7 +312,7 @@ class PressHub_AI_QA_Reviewer {
      *
      * @return array{0:string,1:string}
      */
-    private static function gate_email( array $gate, string $context, string $site_name, string $post_title, string $author_name, string $edit_url, int $post_id ): array {
+    private static function gate_email( array $gate, string $context, string $site_name, string $post_title, string $author_name, string $edit_url, int $post_id, bool $published = true ): array {
         $checks  = (array) $gate['checks'];
         $verdict = (string) ( $gate['verdict'] ?? 'hold' );
         $held    = in_array( $verdict, [ 'hold', 'error' ], true );
@@ -359,20 +364,24 @@ class PressHub_AI_QA_Reviewer {
             '[%s] %s %s: %s (%s)',
             $site_name,
             $what,
-            $held ? __( 'held by the QA gate', 'presshub-ai-editor' ) : __( 'published with QA warnings', 'presshub-ai-editor' ),
+            $held ? __( 'held by the QA gate', 'presshub-ai-editor' ) : ( $published ? __( 'published with QA warnings', 'presshub-ai-editor' ) : __( 'has QA warnings', 'presshub-ai-editor' ) ),
             $post_title,
             implode( ', ', $failed )
         );
         $status = $held
             ? __( 'Held in Pending Review', 'presshub-ai-editor' )
-            : __( 'Published; please review the warnings below', 'presshub-ai-editor' );
+            : ( $published
+                ? __( 'Published; please review the warnings below', 'presshub-ai-editor' )
+                : __( 'Not published yet; please review the warnings below before publishing', 'presshub-ai-editor' ) );
         $reviews_url = function_exists( 'admin_url' ) ? admin_url( 'admin.php?page=presshub-ai-qa-reviews&post_id=' . $post_id ) : '';
 
         $body = sprintf(
             "%s\n\n--------------------------------------------------\nArticle: %s\nAuthor: %s\nStatus: %s\n--------------------------------------------------\n\n%s\n\nReview and edit the post here:\n%s\n\nAll QA reviews of this post:\n%s\n\n--\nPressHub QA gate",
             $held
                 ? __( 'This post did not pass the QA gate and was not published.', 'presshub-ai-editor' )
-                : __( 'This post was published, but some QA checks failed.', 'presshub-ai-editor' ),
+                : ( $published
+                    ? __( 'This post was published, but some QA checks failed.', 'presshub-ai-editor' )
+                    : __( 'Some QA checks failed on this post. It can still be published.', 'presshub-ai-editor' ) ),
             $post_title,
             $author_name,
             $status,

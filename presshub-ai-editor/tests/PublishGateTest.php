@@ -202,12 +202,30 @@ $row = $history[0];
 pg_check( 'alert' === $row['verdict'] && 'fail' === $row['legal_result'] && 'High' === $row['legal_risk'] && 90 === (int) $row['editorial_score'] && 80 === (int) $row['editorial_threshold'], 'row columns hold verdict, scores and thresholds' );
 pg_check( 'Ο Χ έκλεψε τα χρήματα.' === ( $row['details']['checks']['legal']['issues'][0]['quote'] ?? '' ), 'row details keep the full legal feedback' );
 pg_check( 3 === PressHub_AI_QA_Review_Store::count( [ 'failed' => 'legal' ] ), 'filter by failed check' );
-pg_check( 0 === PressHub_AI_QA_Review_Store::count( [ 'verdict' => 'hold' ] ), 'filter by verdict' );
+// A settings change invalidates the saved review.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_legal_action'] = 'hold';
+$g3 = PressHub_AI_Publish_Gate::review_post( $post2, 'author_publish' );
+pg_check( 4 === $GLOBALS['PG_CALLS'] && empty( $g3['cached'] ) && 'hold' === $g3['verdict'], 'a stricter setting reviews again and holds' );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_legal_action'] = 'alert';
+// A review that could not run keeps the last good scorecard.
+$GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = [];
+$GLOBALS['CAPTURE_FILTER'] = null;
+$ge = PressHub_AI_Publish_Gate::review_post( $post2, 'review_button', [ 'force' => true ] );
+$sc = get_post_meta( 501, '_presshub_ai_scorecard', true );
+pg_check( 'error' === $ge['verdict'] && 90 === ( $sc['score'] ?? null ), 'an error verdict leaves the scorecard as it was' );
+pg_reply( $risky );
+pg_check( 1 === PressHub_AI_QA_Review_Store::count( [ 'verdict' => 'hold' ] ) && 1 === PressHub_AI_QA_Review_Store::count( [ 'verdict' => 'error' ] ), 'filter by verdict' );
 pg_check( [] === PressHub_AI_QA_Review_Store::sanitize_filters( [ 'verdict' => 'bogus', 'failed' => "x' OR 1=1" ] ), 'unknown filter values are dropped' );
 echo "  [7] review_post and history: OK\n";
 
 // 8. Alerts: one email per version, naming each failed check.
 $GLOBALS['PG_MAILS'] = [];
+PressHub_AI_Publish_Gate::notify( 501, $g1 );
+$draft_mail = $GLOBALS['PG_MAILS'][0] ?? [ 'subject' => '' ];
+pg_check( false === strpos( $draft_mail['subject'], 'published' ) && false !== strpos( $draft_mail['subject'], 'has QA warnings' ), 'a draft alert does not say published: ' . $draft_mail['subject'] );
+$GLOBALS['PG_MAILS'] = [];
+$GLOBALS['POST_META_STORE'][501]['_presshub_ai_qa_notified_hash'] = '';
+$GLOBALS['POSTS_STORE'][501]['post_status'] = 'publish';
 PressHub_AI_Publish_Gate::notify( 501, $g1 );
 PressHub_AI_Publish_Gate::notify( 501, $g1 );
 pg_check( 1 === count( $GLOBALS['PG_MAILS'] ), 'the same version alerts once; got ' . count( $GLOBALS['PG_MAILS'] ) );
@@ -225,6 +243,14 @@ PressHub_AI_Publish_Gate::notify( 501, $held );
 $mail = $GLOBALS['PG_MAILS'][0] ?? [ 'subject' => '', 'message' => '' ];
 pg_check( false !== strpos( $mail['subject'], 'held by the QA gate' ) && false !== strpos( $mail['subject'], 'editorial 50/80' ), 'held subject names the editorial score: ' . $mail['subject'] );
 pg_check( false !== strpos( $mail['message'], 'Held in Pending Review' ), 'held body says Pending Review' );
+// After a "could not run" email, the real result for the same text still goes out.
+$GLOBALS['PG_MAILS'] = [];
+$GLOBALS['POST_META_STORE'][501]['_presshub_ai_qa_notified_hash'] = '';
+$err = array_merge( $g1, [ 'verdict' => 'error' ] );
+$err['checks']['editorial'] = [ 'result' => 'error', 'error' => 'timeout', 'feedback' => '' ];
+PressHub_AI_Publish_Gate::notify( 501, $err );
+PressHub_AI_Publish_Gate::notify( 501, $held );
+pg_check( 2 === count( $GLOBALS['PG_MAILS'] ), 'an error email does not silence the later result; got ' . count( $GLOBALS['PG_MAILS'] ) );
 echo "  [8] alerts: OK\n";
 
 // 9. review_content + attach (Daily Briefing before the post exists).
