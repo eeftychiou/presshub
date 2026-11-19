@@ -410,6 +410,23 @@ class SettingsCleanupTest {
                 $failures[] = "The 2.71.0 report should say the values went to {$where}.";
             }
         }
+        // A site at clean-up 1 with no OpenAI provider: the old key creates one,
+        // and that provider also gets the old organization (clean-ups 2 and 3 in one run).
+        self::seed();
+        $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::VERSION_OPTION ] = 1;
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider']              = 'openai';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_api_key']               = 'sk-OLDKEY000000000000000000000001';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_openai_org']            = 'org-WITHKEY';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers']  = [];
+        PressHub_Settings_Cleanup::run();
+        $made = array_values( array_filter( (array) $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'], static function ( $r ) {
+            return 'openai' === ( $r['type'] ?? '' );
+        } ) );
+        if ( 1 !== count( $made ) || 'sk-OLDKEY000000000000000000000001' !== ( $made[0]['api_key'] ?? '' ) || 'org-WITHKEY' !== ( $made[0]['headers']['OpenAI-Organization'] ?? null ) ) {
+            $failures[] = 'A provider created from the old key should also get the old organization; got ' . json_encode( array_map( static function ( $r ) {
+                return [ 'type' => $r['type'] ?? '', 'key' => '' !== (string) ( $r['api_key'] ?? '' ), 'headers' => $r['headers'] ?? null ];
+            }, $made ) );
+        }
         // A set prefix (even empty) and a filled Morning pool are never overwritten.
         self::seed();
         $GLOBALS['OPTIONS_STORE'][ PressHub_Settings_Cleanup::VERSION_OPTION ] = 2;

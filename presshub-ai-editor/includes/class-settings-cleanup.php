@@ -306,9 +306,22 @@ class PressHub_Settings_Cleanup {
             // 2. Keep what is still needed.
             $copied = []; // option => where it went.
             $kept   = [];
+            foreach ( $stored as $key => $value ) {
+                if ( empty( self::REMOVED[ $key ]['key_type'] ) ) {
+                    continue;
+                }
+                $outcome = self::keep_api_key( $key, trim( (string) $value ) );
+                if ( 'kept' === $outcome ) {
+                    $kept[] = $key;
+                } elseif ( '' !== $outcome ) {
+                    $copied[ $key ] = $outcome;
+                }
+            }
+
             if ( self::removes_since( $keys, 3 ) ) {
-                // The provider store's one-time migration reads the old flat
-                // options; let it run before they go.
+                // After the key copies above, so a provider they create also
+                // gets its header. The provider store's one-time migration
+                // reads the old flat options; let it run before they go.
                 self::load_provider_store();
                 if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
                     PressHub_AI_Provider_Store::get_all( false );
@@ -332,18 +345,6 @@ class PressHub_Settings_Cleanup {
                 update_option( self::GITHUB_TOKEN, $social, false );
                 $copied['presshub_social_github_token'] = __( 'the GitHub token in Connections', 'presshub-ai-editor' );
             }
-            foreach ( $stored as $key => $value ) {
-                if ( empty( self::REMOVED[ $key ]['key_type'] ) ) {
-                    continue;
-                }
-                $outcome = self::keep_api_key( $key, trim( (string) $value ) );
-                if ( 'kept' === $outcome ) {
-                    $kept[] = $key;
-                } elseif ( '' !== $outcome ) {
-                    $copied[ $key ] = $outcome;
-                }
-            }
-
             // 3. Delete the rows (an old key that differs from Connections stays one more release).
             $removed = [];
             foreach ( $keys as $key ) {
