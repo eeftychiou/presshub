@@ -156,8 +156,12 @@ class SettingsPhase2LayoutTest {
         $index = PressHub_Settings_Registry::search_index();
         $keys  = array_column( $index, 'key' );
         foreach ( $index as $row ) {
-            if ( PressHub_Settings_Registry::is_secret( $row['key'] ) || PressHub_Settings_Registry::is_unused( $row['key'] ) ) {
+            if ( PressHub_Settings_Registry::is_unused( $row['key'] ) ) {
                 $failures[] = "Search index must not include {$row['key']}.";
+            }
+            // #309 (E3): secrets are in the index by label only, never with a default.
+            if ( PressHub_Settings_Registry::is_secret( $row['key'] ) && ( empty( $row['secret'] ) || array_key_exists( 'default', $row ) ) ) {
+                $failures[] = "Secret {$row['key']} must be in the index by label only.";
             }
         }
         if ( ! in_array( 'presshub_ai_briefing_host_female', $keys, true ) || ! in_array( 'presshub_social_tiktok_shorts_count', $keys, true ) ) {
