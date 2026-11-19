@@ -319,6 +319,34 @@ delete_option( 'presshub_ai_policy_fiches_budgets' );
 delete_option( $P::OPTION );
 mc_check( 'fit html: no published fiches', false !== strpos( PressHub_AI_Settings_Render::policy_fit_html( $P::fit_report(), [] ), 'No published policy fiches yet' ) );
 
+// Trending AI roundup image (#314): the texts are cut when the job is queued
+// (10 posts, 300 characters each) and the cuts are recorded on the image
+// prompt call that runs later, in the cron request.
+$tr_texts = new ReflectionMethod( 'PressHub_AI_Social_Trending', 'ai_image_texts' );
+$tr_texts->setAccessible( true );
+$tr_items = [];
+for ( $i = 0; $i < 12; $i++ ) {
+    $tr_items[] = [ 'text' => 0 === $i ? str_repeat( 'λ', 450 ) : 'Ανάρτηση ' . $i ];
+}
+$tr_cuts = [];
+$tr_out  = $tr_texts->invokeArgs( null, [ $tr_items, &$tr_cuts ] );
+mc_check( 'trending image: 10 texts sent, the long one cut to 300', 10 === count( $tr_out ) && 301 === mb_strlen( $tr_out[0] ) );
+mc_check( 'trending image: the cut text and the post count limit are both listed', 2 === count( $tr_cuts ) && 'clipped' === $tr_cuts[0]['reason'] && 450 === $tr_cuts[0]['needed'] && 300 === $tr_cuts[0]['kept'] && 'max_items' === $tr_cuts[1]['reason'] && 12 === $tr_cuts[1]['needed'] );
+$tr_none = [];
+$tr_texts->invokeArgs( null, [ [ [ 'text' => 'σύντομο' ] ], &$tr_none ] );
+mc_check( 'trending image: nothing cut, nothing listed', [] === $tr_none );
+update_post_meta( 4242, PressHub_AI_Social_Trending::AI_IMAGE_CUTS_META, $tr_cuts );
+$tr_note = new ReflectionMethod( 'PressHub_AI_Social_Trending', 'note_ai_image_cuts' );
+$tr_note->setAccessible( true );
+$tr_note->invoke( null, 4242 );
+$C::start_call( 'something_else' );
+mc_check( 'trending image: the cuts are not taken by another call', null === $C::last_material() );
+$C::start_call( 'generate_image_prompt' );
+$tr_last = $C::last_material();
+mc_check( 'trending image: the image prompt call takes both cuts', is_array( $tr_last ) && 2 === count( $tr_last ) );
+$C::start_call( 'generate_image_prompt' );
+mc_check( 'trending image: the next image prompt call starts clean', null === $C::last_material() );
+
 if ( $failures ) {
     echo "MaterialCutsTest: {$failures} of {$checks} checks failed\n";
     exit( 1 );

@@ -51,6 +51,8 @@ class PressHub_AI_Social_Trending {
     const AI_IMAGE_META = '_presshub_trending_ai_image_queued';
     /** Post meta: the QA gate release waits for the AI image job, so social shares get the AI image. */
     const AI_RELEASE_META = '_presshub_trending_ai_release_pending';
+    /** What ai_image_texts() cut when the AI image job was queued (agents.md rule 13). */
+    const AI_IMAGE_CUTS_META = '_presshub_trending_ai_image_cuts';
     /** Longest wait for the AI image job before the roundup is released with the stand-in picture. */
     const AI_IMAGE_MAX_WAIT = 900;
     /** Post meta: the watchdog released this roundup before its AI image arrived. */
@@ -1936,7 +1938,8 @@ class PressHub_AI_Social_Trending {
         if ( function_exists( 'get_post_meta' ) && '' !== (string) get_post_meta( $post_id, self::AI_IMAGE_META, true ) ) {
             return;
         }
-        $texts = self::ai_image_texts( $items );
+        $cuts  = [];
+        $texts = self::ai_image_texts( $items, $cuts );
         if ( empty( $texts ) ) {
             self::log( 'info', 'Social trending: no post text for an AI image; using the top post picture.', [ 'post_id' => $post_id ] );
             return;
@@ -1946,20 +1949,56 @@ class PressHub_AI_Social_Trending {
             return;
         }
         update_post_meta( $post_id, self::AI_IMAGE_META, (string) time() );
+        // The job runs in another request: keep the cuts with the post so the
+        // image prompt call records them (agents.md rule 13).
+        if ( ! empty( $cuts ) ) {
+            update_post_meta( $post_id, self::AI_IMAGE_CUTS_META, $cuts );
+        } elseif ( function_exists( 'delete_post_meta' ) ) {
+            delete_post_meta( $post_id, self::AI_IMAGE_CUTS_META );
+        }
         // Release (and so the social shares, which copy the featured image) waits for the AI image.
         update_post_meta( $post_id, self::AI_RELEASE_META, '1' );
     }
 
-    /** Up to 10 post texts, each cut to 300 characters. */
-    private static function ai_image_texts( array $items ): array {
+    /**
+     * Up to 10 post texts, each cut to 300 characters. $cuts gets what the
+     * two limits left out: [ 'what', 'reason', 'limit', 'needed', 'kept' ].
+     */
+    private static function ai_image_texts( array $items, ?array &$cuts = null ): array {
         $texts = [];
-        foreach ( array_slice( $items, 0, 10 ) as $it ) {
+        $cuts  = [];
+        foreach ( array_slice( $items, 0, 10 ) as $i => $it ) {
             $text = trim( (string) ( $it['text'] ?? '' ) );
-            if ( '' !== $text ) {
-                $texts[] = self::excerpt( $text, 300 );
+            if ( '' === $text ) {
+                continue;
+            }
+            $cut     = self::excerpt( $text, 300 );
+            $texts[] = $cut;
+            $full    = self::strlen( (string) preg_replace( '/\s+/u', ' ', $text ) );
+            if ( $full > 300 ) {
+                $cuts[] = [ 'what' => sprintf( 'Trending post %d', $i + 1 ), 'reason' => 'clipped', 'limit' => 300, 'needed' => $full, 'kept' => self::strlen( $cut ) - 1 ];
             }
         }
+        $with_text_after = count( array_filter( array_slice( $items, 10 ), static function ( $it ) {
+            return '' !== trim( (string) ( is_array( $it ) ? ( $it['text'] ?? '' ) : '' ) );
+        } ) );
+        if ( $with_text_after > 0 ) {
+            $cuts[] = [ 'what' => 'Trending posts', 'reason' => 'max_items', 'limit' => 10, 'needed' => count( $items ), 'kept' => min( 10, count( $items ) ) ];
+        }
         return $texts;
+    }
+
+    /** Note the cuts queue_ai_featured_image() kept with the post, for the image prompt call. */
+    private static function note_ai_image_cuts( int $post_id ): void {
+        if ( ! class_exists( 'PressHub_AI_Knowledge_Cuts' ) || ! function_exists( 'get_post_meta' ) ) {
+            return;
+        }
+        $cuts = get_post_meta( $post_id, self::AI_IMAGE_CUTS_META, true );
+        foreach ( is_array( $cuts ) ? array_slice( $cuts, 0, 20 ) : [] as $c ) {
+            if ( is_array( $c ) && isset( $c['what'], $c['reason'] ) ) {
+                PressHub_AI_Knowledge_Cuts::note_material( 'generate_image_prompt', (string) $c['what'], (string) $c['reason'], (int) ( $c['limit'] ?? 0 ), (int) ( $c['needed'] ?? 0 ), (int) ( $c['kept'] ?? -1 ) );
+            }
+        }
     }
 
     /**
@@ -2034,7 +2073,18 @@ class PressHub_AI_Social_Trending {
             }
             require_once __DIR__ . '/class-api-client.php';
             $client = new PressHub_AI_API_Client();
-            $prompt = $client->analyze_article_for_image_prompt( $content, $title, $tpl['template'], $tpl['id'] );
+            // The texts were cut when the job was queued: record those cuts with this call.
+            self::note_ai_image_cuts( $post_id );
+            try {
+                $prompt = $client->analyze_article_for_image_prompt( $content, $title, $tpl['template'], $tpl['id'] );
+            } finally {
+                if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                    PressHub_AI_Knowledge_Cuts::forget_material( 'generate_image_prompt' );
+                }
+                if ( function_exists( 'delete_post_meta' ) ) {
+                    delete_post_meta( $post_id, self::AI_IMAGE_CUTS_META );
+                }
+            }
             if ( is_wp_error( $prompt ) || '' === trim( (string) $prompt ) ) {
                 self::log( 'warning', 'Social trending: AI image prompt failed; using the top post picture.', [ 'error' => is_wp_error( $prompt ) ? $prompt->get_error_message() : 'empty prompt' ] );
                 return 0;
