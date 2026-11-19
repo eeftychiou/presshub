@@ -301,6 +301,12 @@ $html = ob_get_clean();
 ub_check( 'confirm delete: says it cannot be undone', false !== strpos( $html, 'cannot be undone' ) && false !== strpos( $html, $B::DELETE_ACTION ) );
 unset( $_GET['confirm'], $_GET['do'] );
 
+// Seconds for screen-reader times follow the site's time format.
+$tfs = [ 'g:i a' => 'g:i:s a', 'H:i' => 'H:i:s', 'H.i' => 'H.i.s', 'H.i.s' => 'H.i.s', 'H:i:s' => 'H:i:s', 'G \h i \m\i\n' => 'G \h i:s \m\i\n', 'H' => 'H:i:s', 'g a' => 'H:i:s' ];
+foreach ( $tfs as $in => $want ) {
+    ub_check( "time format with seconds: $in", $want === PressHub_AI_Update_Backup::time_format_with_seconds( $in ) );
+}
+
 // Clean up.
 $it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $GLOBALS['UB_TMP'], FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
 foreach ( $it as $f ) {

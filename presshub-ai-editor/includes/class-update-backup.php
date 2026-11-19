@@ -1451,9 +1451,26 @@ class PressHub_AI_Update_Backup {
         }
     }
 
+    /**
+     * The site's time format with seconds added after the minutes, for screen-reader text.
+     * Escaped letters are left alone; a format that already shows seconds, or has no minutes, falls back sensibly.
+     */
+    public static function time_format_with_seconds( string $tf ): string {
+        if ( preg_match( '/(?<!\\\\)s/', $tf ) ) {
+            return $tf;
+        }
+        if ( ! preg_match( '/(?<!\\\\)i/', $tf, $m, PREG_OFFSET_CAPTURE ) ) {
+            return 'H:i:s';
+        }
+        $pos = $m[0][1];
+        $sep = ( $pos > 0 && in_array( $tf[ $pos - 1 ], [ ':', '.' ], true ) ) ? $tf[ $pos - 1 ] : ':';
+        return substr( $tf, 0, $pos + 1 ) . $sep . 's' . substr( $tf, $pos + 1 );
+    }
+
     private static function format_time( int $ts, bool $seconds = false ): string {
         if ( function_exists( 'wp_date' ) ) {
-            return (string) wp_date( get_option( 'date_format' ) . ' ' . ( $seconds ? preg_replace( '/i(?!:s)/', 'i:s', (string) get_option( 'time_format' ), 1 ) : get_option( 'time_format' ) ), $ts );
+            $tf = (string) get_option( 'time_format' );
+            return (string) wp_date( get_option( 'date_format' ) . ' ' . ( $seconds ? self::time_format_with_seconds( $tf ) : $tf ), $ts );
         }
         return gmdate( $seconds ? 'Y-m-d H:i:s' : 'Y-m-d H:i', $ts );
     }
