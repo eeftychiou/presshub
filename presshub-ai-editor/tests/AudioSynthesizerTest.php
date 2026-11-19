@@ -835,7 +835,13 @@ $GLOBALS['GET_POSTS_RESULT'] = [];
 as_check( 'lead: the looked-up lead is cached for the request', $lead_expected === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
 $L::reset_lead_cache();
 as_check( 'lead: and in a transient across requests', $lead_expected === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
+$GLOBALS['GET_POSTS_RESULT'] = [];
+$GLOBALS['POST_META_STORE'][ 5161 ] = [ '_presshub_briefing_type' => 'text', '_presshub_briefing_date' => '2026-11-18', '_presshub_briefing_edition' => 'morning' ];
+$L::forget_brief_lead( 5161 );
+as_check( 'lead: saving the brief drops the cached lead (request and transient)', '' === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
 $GLOBALS['GET_POSTS_RESULT'] = [ $lead_brief ];
+$L::forget_brief_lead( 5161 );
+as_check( 'lead: after the brief is saved the card reads it again', $lead_expected === $L::filter_podcast_excerpt( '', (object) [ 'ID' => 5160, 'post_excerpt' => '' ] ) );
 
 // Update: one paragraph, the saved SEO description stays the excerpt.
 update_post_meta( (int) $lead_post_id, '_presshub_ai_seo', [ 'meta_description' => 'Περιγραφή SEO.' ] );

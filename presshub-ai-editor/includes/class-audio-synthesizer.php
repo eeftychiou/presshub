@@ -144,6 +144,9 @@ class PressHub_AI_Audio_Synthesizer {
         if ( function_exists( 'add_filter' ) ) {
             add_filter( 'get_the_excerpt', [ __CLASS__, 'filter_podcast_excerpt' ], 20, 2 );
         }
+        if ( function_exists( 'add_action' ) ) {
+            add_action( 'save_post', [ __CLASS__, 'forget_brief_lead' ], 10, 1 );
+        }
     }
 
     /**
@@ -251,6 +254,26 @@ class PressHub_AI_Audio_Synthesizer {
         return self::$lead_cache[ $key ];
     }
 
+    /**
+     * A written brief was saved (published, edited, held): drop the cached
+     * lead of its date and edition so podcast cards pick up the change.
+     */
+    public static function forget_brief_lead( $post_id ): void {
+        $post_id = (int) $post_id;
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) || 'text' !== get_post_meta( $post_id, '_presshub_briefing_type', true ) ) {
+            return;
+        }
+        $date    = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
+        $edition = 'noon' === get_post_meta( $post_id, '_presshub_briefing_edition', true ) ? 'noon' : 'morning';
+        if ( '' === $date ) {
+            return;
+        }
+        unset( self::$lead_cache[ $date . '|' . $edition ] );
+        if ( function_exists( 'delete_transient' ) ) {
+            delete_transient( 'presshub_ai_podcast_lead_' . str_replace( '-', '', $date ) . '_' . $edition );
+        }
+    }
+
     /** Forget the leads looked up in this request (tests). */
     public static function reset_lead_cache(): void {
         self::$lead_cache = [];
@@ -267,7 +290,7 @@ class PressHub_AI_Audio_Synthesizer {
         if ( ! self::lead_enabled( $date, $edition ) ) {
             return '';
         }
-        $brief = $this->find_brief_post( $date, $edition );
+        $brief = $this->find_brief_post( $date, $edition, [ 'publish' ] );
         if ( ! $brief || 'publish' !== (string) ( $brief->post_status ?? '' ) ) {
             return '';
         }
@@ -1327,13 +1350,13 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /** The written brief post for this date and edition, or null. */
-    private function find_brief_post( string $date, string $edition ) {
+    private function find_brief_post( string $date, string $edition, array $statuses = [ 'publish', 'future', 'pending', 'draft' ] ) {
         if ( '' === $date || ! function_exists( 'get_posts' ) ) {
             return null;
         }
         $posts = get_posts( [
             'post_type'        => 'post',
-            'post_status'      => [ 'publish', 'future', 'pending', 'draft' ],
+            'post_status'      => $statuses,
             'numberposts'      => 1,
             'suppress_filters' => true,
             'meta_query'       => [
