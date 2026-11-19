@@ -130,6 +130,7 @@ class PressHub_AI_Settings {
                 /* translators: %s: template name. */
                 'confirm_delete' => __( 'Delete the template "%s"? Editors can no longer pick it.', 'presshub-ai-editor' ),
                 'error'          => __( 'Could not save the template. Try again.', 'presshub-ai-editor' ),
+                'delete_error'   => __( 'Could not delete the template. Try again.', 'presshub-ai-editor' ),
             ],
         ] );
     }

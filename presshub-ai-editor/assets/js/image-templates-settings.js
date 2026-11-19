@@ -35,6 +35,11 @@
     // mode: 'add' | 'edit' | 'view'; id: template being edited or viewed.
     var current = { mode: '', id: '', opener: null };
 
+    // Fill %s without String.replace's special "$" patterns.
+    function fill(tpl, value) {
+        return String(tpl).replace('%s', function () { return value; });
+    }
+
     function find(id) {
         for (var i = 0; i < templates.length; i++) {
             if (templates[i].id === id) {
@@ -61,7 +66,7 @@
         if (tpl.builtin) {
             return t.builtin || 'Built-in';
         }
-        return tpl.author ? (t.saved_by || 'Saved by %s').replace('%s', tpl.author) : (t.saved || 'Saved');
+        return tpl.author ? fill(t.saved_by || 'Saved by %s', tpl.author) : (t.saved || 'Saved');
     }
 
     function render() {
@@ -72,6 +77,7 @@
                 $actions.append(
                     $('<a />').attr('href', '#presshub_ai_image_analysis_prompt').text(t.edit_above || 'Edit in the field above')
                 );
+                $actions.append(actionButton(t.copy || 'Copy', 'copy', tpl));
             } else if (tpl.builtin) {
                 $actions.append(actionButton(t.view || 'View', 'view', tpl));
                 $actions.append(actionButton(t.copy || 'Copy', 'copy', tpl));
@@ -86,11 +92,11 @@
                     $actions.append(actionButton(t['delete'] || 'Delete', 'delete', tpl, 'button-link button-link-delete'));
                 }
             }
-            var $name = $('<td />').append($('<strong />').text(tpl.name));
+            var $name = $('<th scope="row" class="presshub-image-templates-name" />').append($('<strong />').text(tpl.name));
             $rows.append(
                 $('<tr />').attr('data-template-id', tpl.id)
                     .append($name)
-                    .append($('<td />').text(kindLabel(tpl)))
+                    .append($('<td class="presshub-image-templates-kind" />').text(kindLabel(tpl)))
                     .append($actions)
             );
         });
@@ -103,12 +109,12 @@
         if (mode === 'add') {
             heading = t.heading_add || 'New template';
         } else if (mode === 'edit') {
-            heading = (t.heading_edit || 'Edit template: %s').replace('%s', tpl.name);
+            heading = fill(t.heading_edit || 'Edit template: %s', tpl.name);
         } else {
-            heading = (t.heading_view || 'Template: %s').replace('%s', tpl.name);
+            heading = fill(t.heading_view || 'Template: %s', tpl.name);
         }
         $title.text(heading);
-        $name.val(mode === 'add' ? (tpl ? (t.copy_name || '%s (copy)').replace('%s', tpl.name) : '') : tpl.name)
+        $name.val(mode === 'add' ? (tpl ? fill(t.copy_name || '%s (copy)', tpl.name) : '') : tpl.name)
             .prop('readOnly', readOnly);
         $text.val(tpl ? tpl.template : '').prop('readOnly', readOnly).scrollTop(0);
         $save.prop('hidden', readOnly).prop('disabled', false);
@@ -138,14 +144,14 @@
         return $.post(ajaxUrl, data);
     }
 
-    function errorText(res, xhr) {
+    function errorText(res, xhr, fallback) {
         if (res && typeof res.data === 'string' && res.data) {
             return res.data;
         }
         if (xhr && xhr.responseJSON && typeof xhr.responseJSON.data === 'string') {
             return xhr.responseJSON.data;
         }
-        return t.error || 'Could not save the template. Try again.';
+        return fallback || t.error || 'Could not save the template. Try again.';
     }
 
     function save() {
@@ -194,7 +200,7 @@
             var opener = $rows.find('button[data-action="edit"][data-template-id="' + saved.id + '"]').get(0);
             current.opener = opener || null;
             closeEditor();
-            setStatus((t.saved_msg || 'Template "%s" saved.').replace('%s', saved.name));
+            setStatus(fill(t.saved_msg || 'Template "%s" saved.', saved.name));
         }).fail(function (xhr) {
             setStatus(errorText(null, xhr), true);
         }).always(function () {
@@ -203,7 +209,7 @@
     }
 
     function remove(tpl, btn) {
-        if (!window.confirm((t.confirm_delete || 'Delete the template "%s"? Editors can no longer pick it.').replace('%s', tpl.name))) {
+        if (!window.confirm(fill(t.confirm_delete || 'Delete the template "%s"? Editors can no longer pick it.', tpl.name))) {
             return;
         }
         $(btn).prop('disabled', true);
@@ -221,10 +227,10 @@
             }
             render();
             $('#presshub-image-templates-add').trigger('focus');
-            setStatus((t.deleted_msg || 'Template "%s" deleted.').replace('%s', tpl.name));
+            setStatus(fill(t.deleted_msg || 'Template "%s" deleted.', tpl.name));
         }).fail(function (xhr) {
             $(btn).prop('disabled', false);
-            setStatus(errorText(null, xhr), true);
+            setStatus(errorText(null, xhr, t.delete_error || 'Could not delete the template. Try again.'), true);
         });
     }
 

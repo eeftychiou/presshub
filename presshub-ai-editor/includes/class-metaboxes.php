@@ -230,7 +230,7 @@ class PressHub_AI_Metaboxes {
                 </div>
                 <?php if ( class_exists( 'PressHub_Capabilities' ) && class_exists( 'PressHub_Settings_Sections' ) && current_user_can( PressHub_Capabilities::manage() ) ) : ?>
                     <p class="description presshub-image-studio-manage-link">
-                        <a href="<?php echo esc_url( PressHub_Settings_Sections::url( 'writing-qa', 'featured-images' ) ); ?>"><?php echo esc_html__( 'Manage all templates in Settings', 'presshub-ai-editor' ); ?></a>
+                        <a href="<?php echo esc_url( PressHub_Settings_Sections::url( 'writing-qa', 'featured-images' ) ); ?>" target="_blank" rel="noopener"><?php echo esc_html__( 'Manage all templates in Settings', 'presshub-ai-editor' ); ?><span class="screen-reader-text"> <?php echo esc_html__( '(opens in a new tab)', 'presshub-ai-editor' ); ?></span><span aria-hidden="true" class="dashicons dashicons-external presshub-image-studio-external"></span></a>
                     </p>
                 <?php endif; ?>
             </div>

@@ -4307,7 +4307,7 @@ class PressHub_AI_Settings_Render {
         </select>
         <p class="description" id="<?php echo self::esc_attr_safe( $option . '-help' ); ?>">
             <?php echo esc_html( $help ); ?>
-            <a href="<?php echo esc_url( $manage ); ?>"><?php echo esc_html__( 'Add or edit templates in Writing & QA', 'presshub-ai-editor' ); ?></a>
+            <a href="<?php echo esc_url( $manage ); ?>"><?php echo esc_html__( 'Add or edit templates in Writing & QA', 'presshub-ai-editor' ); ?></a>.
         </p>
         <?php
     }
@@ -4381,9 +4381,9 @@ class PressHub_AI_Settings_Render {
                 <tbody id="presshub-image-templates-rows">
                     <?php foreach ( $payload as $tpl ) : ?>
                         <tr data-template-id="<?php echo self::esc_attr_safe( $tpl['id'] ); ?>">
-                            <td><?php echo esc_html( $tpl['name'] ); ?></td>
-                            <td><?php echo esc_html( $tpl['builtin'] ? __( 'Built-in', 'presshub-ai-editor' ) : __( 'Saved', 'presshub-ai-editor' ) ); ?></td>
-                            <td></td>
+                            <th scope="row" class="presshub-image-templates-name"><strong><?php echo esc_html( $tpl['name'] ); ?></strong></th>
+                            <td class="presshub-image-templates-kind"><?php echo esc_html( $tpl['builtin'] ? __( 'Built-in', 'presshub-ai-editor' ) : __( 'Saved', 'presshub-ai-editor' ) ); ?></td>
+                            <td class="presshub-image-templates-actions"></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
