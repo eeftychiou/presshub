@@ -2231,7 +2231,12 @@ class PressHub_AI_Audio_Synthesizer {
             try {
                 $timeline = PressHub_AI_Podcast_Timeline::build( $timeline_topics, $timeline_opts );
                 if ( PressHub_AI_Podcast_Timeline::is_valid( $timeline ) ) {
-                    update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, $timeline );
+                    // update_post_meta() is false both on a failed write and when the value is
+                    // unchanged; only a stored value that differs counts as a failure.
+                    if ( false === update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, $timeline )
+                        && get_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, true ) != $timeline ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual
+                        throw new \RuntimeException( 'the timeline could not be written to the post' );
+                    }
                     if ( function_exists( 'delete_post_meta' ) ) {
                         delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY );
                     }
@@ -2242,6 +2247,10 @@ class PressHub_AI_Audio_Synthesizer {
                     update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, 'no spoken turn had audio and text to time' );
                 }
             } catch ( \Throwable $e ) {
+                // An earlier timeline belongs to the earlier audio: never keep it with new audio.
+                if ( function_exists( 'delete_post_meta' ) ) {
+                    delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY );
+                }
                 // Marked, so the episode is not taken for one made before 2.54.0.
                 update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, substr( $e->getMessage(), 0, 300 ) );
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {

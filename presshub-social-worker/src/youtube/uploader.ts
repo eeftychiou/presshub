@@ -452,11 +452,20 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
           state = String(status?.uploadStatus || '');
         } else {
           WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${apiError(res.status, body)}`);
+          if (res.status === 401) {
+            // The token was dropped early: the next read uses a fresh one.
+            try {
+              token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn, requestTimeout, true);
+            } catch (err: any) {
+              WorkerLogger.warn('YouTube', `Could not get a fresh access token for the status check: ${err.message}`);
+            }
+          }
         }
       } catch (err: any) {
         WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${err.message}`);
       }
-      if (refusal || state !== 'uploaded') break;
+      // A read that failed is tried again at the next step, like a status still "uploaded".
+      if (refusal || (state !== '' && state !== 'uploaded')) break;
     }
   }
   if (refusal) {
