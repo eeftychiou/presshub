@@ -413,23 +413,36 @@ st_check( 'featured: no picture, nothing to do', 0 === $T::maybe_set_featured_im
 $T::$sideload = static function () { return new WP_Error( 'http', 'expired' ); };
 st_check( 'featured: sideload failure tolerated', 0 === $T::maybe_set_featured_image( 78, [ $T::normalize_item( st_post( 'x', '205', 1, 10, [ 'thumbnail' => 'https://pbs.twimg.com/media/a.jpg' ] ), $now ) ] ) && empty( $GLOBALS['THUMBS'][78] ) );
 $T::$sideload = null;
-// Roundup featured image source: an AI image with the Trending in Cyprus template, the top post picture as fallback.
+// Roundup featured image source: an AI image with the Trending in Cyprus template, drawn in a job of
+// its own (not in the worker's request); the top post picture stands in and stays if drawing fails.
 $ai_calls = [];
 $T::$ai_image = static function ( $content, $title, $tpl, $pid ) use ( &$ai_calls ) { $ai_calls[] = [ $content, $tpl['id'], $pid ]; return 9500; };
 $T::$sideload = static function () { return 9600; };
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$ai_jobs = static function () { return array_values( array_filter( (array) $GLOBALS['SCHEDULED_EVENTS'], static function ( $e ) { return 'presshub_ai_social_trending_ai_image' === $e['hook']; } ) ); };
 $ai_items = [ $T::normalize_item( st_post( 'x', '206', 1, 10, [ 'text' => 'Heatwave in Nicosia', 'thumbnail' => 'https://pbs.twimg.com/media/b.jpg' ] ), $now ) ];
-st_check( 'featured source: top post by default', 'top_post' === $S::get_social_trending_image_source() && 9600 === $T::maybe_set_featured_image( 81, $ai_items ) && [] === $ai_calls );
+st_check( 'featured source: top post by default', 'top_post' === $S::get_social_trending_image_source() && 9600 === $T::maybe_set_featured_image( 81, $ai_items ) && [] === $ai_jobs() );
 st_check( 'featured source: sanitized', 'top_post' === $S::sanitize_social_trending_image_source( 'weird' ) && 'auto_generate' === $S::sanitize_social_trending_image_source( 'auto_generate' ) );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
 $GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled'] = 0;
-st_check( 'featured source: AI off falls back to the top post', 9600 === $T::maybe_set_featured_image( 82, $ai_items ) && [] === $ai_calls );
+st_check( 'featured source: AI off falls back to the top post, no job', 9600 === $T::maybe_set_featured_image( 82, $ai_items ) && [] === $ai_jobs() );
 $GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled'] = 1;
-$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] = 'builtin_default';
-st_check( 'featured source: AI image set from the post text', 9500 === $T::maybe_set_featured_image( 83, $ai_items ) && 9500 === $GLOBALS['THUMBS'][83] && 1 === count( $ai_calls ) && false !== strpos( $ai_calls[0][0], 'Heatwave in Nicosia' ) && 83 === $ai_calls[0][2] );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] = 'landscape_aerial';
+st_check( 'featured source: AI queues a job, top post picture meanwhile', 9600 === $T::maybe_set_featured_image( 83, $ai_items ) && 1 === count( $ai_jobs() ) && [] === $ai_calls );
+$job = $ai_jobs()[0];
+st_check( 'featured source: job carries the post and its texts only', [ 83, [ 'Heatwave in Nicosia' ] ] === $job['args'] );
+unset( $GLOBALS['THUMBS'][83] );
+$T::maybe_set_featured_image( 83, $ai_items );
+st_check( 'featured source: queued once per post', 1 === count( $ai_jobs() ) );
+$GLOBALS['POSTS_STORE'][83] = (object) [ 'ID' => 83, 'post_title' => 'Trending' ];
+st_check( 'featured source: job sets the AI image with the chosen template', 9500 === $T::run_ai_featured_image( 83, [ 'Heatwave in Nicosia' ] ) && 9500 === $GLOBALS['THUMBS'][83] && 1 === count( $ai_calls ) && 'landscape_aerial' === $ai_calls[0][1] && false !== strpos( $ai_calls[0][0], 'Heatwave in Nicosia' ) && 83 === $ai_calls[0][2] );
 $T::$ai_image = static function () { return new WP_Error( 'api', 'down' ); };
-st_check( 'featured source: AI failure falls back to the top post', 9600 === $T::maybe_set_featured_image( 84, $ai_items ) && 9600 === $GLOBALS['THUMBS'][84] );
+$GLOBALS['THUMBS'][84] = 9600;
+$GLOBALS['POSTS_STORE'][84] = (object) [ 'ID' => 84, 'post_title' => 'Trending' ];
+st_check( 'featured source: a failed job keeps the top post picture', 0 === $T::run_ai_featured_image( 84, [ 'Heatwave' ] ) && 9600 === $GLOBALS['THUMBS'][84] );
+st_check( 'featured source: job for a deleted post does nothing', 0 === $T::run_ai_featured_image( 999, [ 'x' ] ) );
 $T::$ai_image = null;
-unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'], $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] );
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'], $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'], $GLOBALS['POSTS_STORE'][83], $GLOBALS['POSTS_STORE'][84] );
 // TikTok photo posts: first image from the Media Library, never TikTok's player.
 $GLOBALS['THUMBS'] = [];
 unset( $GLOBALS['OPTIONS_STORE'][ $T::OPTION_IMAGES ] );

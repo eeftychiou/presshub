@@ -310,7 +310,7 @@ class PressHub_AI_Image_Prompt_Templates {
         if ( ! empty( $used ) ) {
             return new WP_Error( 'in_use', sprintf(
                 /* translators: %s: setting labels, comma separated. */
-                __( 'This template is used for automatic images (%s). Choose another template for them first, in Automatic images above.', 'presshub-ai-editor' ),
+                __( 'This template is used for automatic images (%s). Choose another template for them first, in Settings → Writing & QA → Featured images → Automatic images.', 'presshub-ai-editor' ),
                 implode( ', ', $used )
             ) );
         }

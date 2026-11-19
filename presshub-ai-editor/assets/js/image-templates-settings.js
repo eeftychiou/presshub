@@ -102,6 +102,27 @@
         });
     }
 
+    // The Automatic images selects above list the saved templates too: keep
+    // their "Saved templates" group in step with this store, without a reload.
+    function syncSelects() {
+        var saved = templates.filter(function (x) { return !x.builtin; });
+        $('select.presshub-auto-images-select').each(function () {
+            var $sel = $(this);
+            var value = $sel.val();
+            $sel.find('optgroup[data-group="saved"]').remove();
+            if (saved.length) {
+                var $group = $('<optgroup data-group="saved" />').attr('label', t.saved_group || 'Saved templates');
+                saved.forEach(function (tpl) {
+                    $group.append($('<option />').val(tpl.id).text(tpl.name));
+                });
+                $sel.append($group);
+            }
+            if (value && $sel.find('option').filter(function () { return this.value === value; }).length) {
+                $sel.val(value);
+            }
+        });
+    }
+
     function openEditor(mode, tpl, opener) {
         current = { mode: mode, id: tpl ? tpl.id : '', opener: opener || null };
         var readOnly = mode === 'view';
@@ -197,6 +218,7 @@
                 templates.push(row);
             }
             render();
+            syncSelects();
             var opener = $rows.find('button[data-action="edit"][data-template-id="' + saved.id + '"]').get(0);
             current.opener = opener || null;
             closeEditor();
@@ -221,6 +243,7 @@
                 return;
             }
             templates = templates.filter(function (x) { return x.id !== tpl.id; });
+            syncSelects();
             if (current.id === tpl.id) {
                 $editor.prop('hidden', true);
                 current = { mode: '', id: '', opener: null };

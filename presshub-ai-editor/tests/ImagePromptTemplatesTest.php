@@ -355,15 +355,35 @@ class ImagePromptTemplatesTest {
         }
         $this->assert( (bool) preg_match( '/name="presshub_ai_briefing_noon_podcast_image_template".*?value="custom_night_photo"\s+selected/s', $html ), 'Stored template selected' );
         $this->assert( false !== strpos( $html, 'Featured Image Pool, so no AI image is made' ), 'Shows that the pool is the image source' );
-        $this->assert( false !== strpos( $html, 'Enable Feature is off' ), 'Warns that the feature is off' );
+        $this->assert( false !== strpos( $html, 'Generate featured images is off' ), 'Warns that the feature is off' );
+        $this->assert( false === strpos( $html, 'Default: Editorial photo' ), 'No repeated default in the intro' );
+        $this->assert( false !== strpos( $html, 'aria-label="Change in Daily Briefing: image source for Noon podcast"' ), 'Each source link has its own name' );
+        $this->assert( false !== strpos( $html, '#presshub_ai_briefing_podcast_featured_image_source' ) && false !== strpos( $html, '#presshub_ai_social_trending_image_source' ), 'Links go to the source fields' );
+        $this->assert( false !== strpos( $html, 'optgroup data-group="saved"' ), 'Saved group marked for the store editor' );
+
+        // AI chosen but the feature off: the row says so in words, not only by colour (rule 5.2).
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_featured_image_source'] = 'auto_generate';
+        ob_start();
+        $render->render_auto_images_table();
+        $off = ob_get_clean();
+        $this->assert( false !== strpos( $off, 'Featured Image Pool: AI is chosen, but Generate featured images is off' ) && false === strpos( $off, 'AI image with this template' ), 'Off state named in each row' );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled'] = 1;
+        ob_start();
+        $render->render_auto_images_table();
+        $on = ob_get_clean();
+        $this->assert( 2 === substr_count( $on, 'AI image with this template' ) && false === strpos( $on, 'Generate featured images is off' ), 'On: the podcast rows make AI images' );
         $this->assert( false === strpos( $html, 'style=' ), 'No inline styles' );
 
         // Daily Briefing shows the templates read-only, linking to their home.
         $line = ( new ReflectionMethod( 'PressHub_AI_Settings_Render', 'auto_image_templates_line' ) );
         $line->setAccessible( true );
-        $out = $line->invoke( $render, [ 'briefing_morning', 'podcast_noon' ] );
+        $out = $line->invoke( $render, [ 'briefing_morning', 'podcast_noon' ], '', 'Image template:' );
         $this->assert( false !== strpos( $out, 'Morning briefing: Editorial photo' ) && false !== strpos( $out, 'Noon podcast: Night photo' ), 'Read-only line names each template' );
-        $this->assert( false !== strpos( $out, 'featured-images' ) && false === strpos( $out, '<select' ), 'Read-only line links to Writing & QA, no field' );
+        $this->assert( false !== strpos( $out, 'section=writing-qa' ) && false === strpos( $out, '<select' ), 'Read-only line links to Writing & QA, no field' );
+        $this->assert( 0 === strpos( $out, '<p class="presshub-model-line">Image template: ' ) && false !== strpos( $out, '#presshub-auto-images-heading' ), 'Lead-in and link to the table' );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_image_template'] = 'custom_gone';
+        $out = $line->invoke( $render, [ 'briefing_morning' ] );
+        $this->assert( false !== strpos( $out, 'Missing template (Editorial photo is used)' ), 'Missing template shown without resolve()' );
     }
 
     public function test_settings_manager(): void {

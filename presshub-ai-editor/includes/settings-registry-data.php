@@ -2326,7 +2326,7 @@ return [
     'tab' => 'images',
     'section' => 'presshub_ai_images',
     'label' => 'Generate featured images',
-    'help' => 'Generates a featured image for new posts. Default: off.',
+    'help' => 'Turns on the AI Featured Image Studio in the post editor and the AI images of the automatic posts (Daily Briefing, podcasts and Trending in Cyprus). Default: off.',
     'checkbox' => true,
     'secret' => false,
     'type' => 'integer',
