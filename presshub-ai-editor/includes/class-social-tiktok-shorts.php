@@ -899,45 +899,53 @@ class PressHub_Social_TikTok_Shorts {
         $shorts     = null;
         $record_ids = [];
         $prompt_now = $user_prompt;
-        for ( $attempt = 1; $attempt <= self::PLAN_ATTEMPTS; $attempt++ ) {
-            $raw = self::call_ai( $post_id, $sys_prompt, $prompt_now );
-            if ( self::$last_record_id > 0 ) {
-                $record_ids[] = self::$last_record_id;
-            }
-            if ( is_wp_error( $raw ) && 'empty_ai_response' !== $raw->get_error_code() ) {
-                // Provider errors are not retried here (the queue retries them).
-                if ( $attempt > 1 && ! empty( $record_ids ) ) {
-                    return new WP_Error( $raw->get_error_code(), sprintf( '%s See generation records %s.', $raw->get_error_message(), implode( ', ', array_map( fn( $id ) => '#' . $id, $record_ids ) ) ) );
+        // Every attempt records the article text cut; once the loop is over
+        // (plan, failure or provider error) it is dropped.
+        try {
+            for ( $attempt = 1; $attempt <= self::PLAN_ATTEMPTS; $attempt++ ) {
+                $raw = self::call_ai( $post_id, $sys_prompt, $prompt_now );
+                if ( self::$last_record_id > 0 ) {
+                    $record_ids[] = self::$last_record_id;
                 }
-                return $raw;
-            }
-
-            $shorts = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count, $max_words, $images );
-            if ( ! is_wp_error( $shorts ) ) {
-                if ( ! empty( self::$last_repairs ) ) {
-                    $note = 'JSON repaired: ' . implode( ', ', self::$last_repairs ) . '.';
-                    PressHub_Social_Logger::warning( sprintf( 'TikTok shorts plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
-                    if ( self::$last_record_id > 0 && class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
-                        PressHub_AI_Generation_Recorder::update_record( self::$last_record_id, [ 'error_message' => $note ] );
+                if ( is_wp_error( $raw ) && 'empty_ai_response' !== $raw->get_error_code() ) {
+                    // Provider errors are not retried here (the queue retries them).
+                    if ( $attempt > 1 && ! empty( $record_ids ) ) {
+                        return new WP_Error( $raw->get_error_code(), sprintf( '%s See generation records %s.', $raw->get_error_message(), implode( ', ', array_map( fn( $id ) => '#' . $id, $record_ids ) ) ) );
                     }
+                    return $raw;
                 }
-                break;
+
+                $shorts = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count, $max_words, $images );
+                if ( ! is_wp_error( $shorts ) ) {
+                    if ( ! empty( self::$last_repairs ) ) {
+                        $note = 'JSON repaired: ' . implode( ', ', self::$last_repairs ) . '.';
+                        PressHub_Social_Logger::warning( sprintf( 'TikTok shorts plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
+                        if ( self::$last_record_id > 0 && class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+                            PressHub_AI_Generation_Recorder::update_record( self::$last_record_id, [ 'error_message' => $note ] );
+                        }
+                    }
+                    break;
+                }
+                self::mark_call_unusable( $shorts );
+                $last_try = $attempt >= self::PLAN_ATTEMPTS;
+                PressHub_Social_Logger::log(
+                    $last_try ? 'ERROR' : 'WARNING',
+                    sprintf(
+                        'TikTok shorts plan for post #%d is invalid (attempt %d of %d): %s%s',
+                        $post_id,
+                        $attempt,
+                        self::PLAN_ATTEMPTS,
+                        $shorts->get_error_message(),
+                        $last_try ? '' : ' Asking the AI again.'
+                    ),
+                    [ 'record_ids' => $record_ids, 'response' => is_wp_error( $raw ) ? '' : mb_substr( (string) $raw, 0, 500 ) ]
+                );
+                $prompt_now = $user_prompt . "\n\n" . sprintf( 'Your previous answer was unusable: %s Reply with valid JSON only, in the format asked above.', $shorts->get_error_message() );
             }
-            self::mark_call_unusable( $shorts );
-            $last_try = $attempt >= self::PLAN_ATTEMPTS;
-            PressHub_Social_Logger::log(
-                $last_try ? 'ERROR' : 'WARNING',
-                sprintf(
-                    'TikTok shorts plan for post #%d is invalid (attempt %d of %d): %s%s',
-                    $post_id,
-                    $attempt,
-                    self::PLAN_ATTEMPTS,
-                    $shorts->get_error_message(),
-                    $last_try ? '' : ' Asking the AI again.'
-                ),
-                [ 'record_ids' => $record_ids, 'response' => is_wp_error( $raw ) ? '' : mb_substr( (string) $raw, 0, 500 ) ]
-            );
-            $prompt_now = $user_prompt . "\n\n" . sprintf( 'Your previous answer was unusable: %s Reply with valid JSON only, in the format asked above.', $shorts->get_error_message() );
+        } finally {
+            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::forget_material( 'social_tiktok_shorts' );
+            }
         }
         if ( is_wp_error( $shorts ) ) {
             if ( ! empty( $record_ids ) ) {

@@ -235,6 +235,7 @@ class PressHub_Social_Post_Images {
 
         $style   = PressHub_Social_Settings_Storage::get_post_image_style();
         $context = self::article_context( $post_id );
+        self::forget_cuts(); // the image library makes no AI call with it
         foreach ( $pending as $job ) {
             $job_id = (int) $job['id'];
             $meta   = self::decode_metadata( $job['metadata'] ?? null )[ self::JOB_META_KEY ];
@@ -345,16 +346,14 @@ class PressHub_Social_Post_Images {
 
         $context = self::article_context( $post_id );
         if ( '' === trim( $context['title'] . $context['content'] ) ) {
+            self::forget_cuts();
             return new WP_Error( 'post_images_no_content', sprintf( 'post #%d has no title or text to plan images from.', $post_id ) );
         }
 
         $hash   = hash( 'sha256', $prompt . '|' . $count . '|' . $context['title'] . '|' . $context['content'] );
         $stored = function_exists( 'get_post_meta' ) ? get_post_meta( $post_id, self::PLAN_META, true ) : null;
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['images'] ) ) {
-            // No AI call: nothing was sent, so nothing was cut.
-            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
-                PressHub_AI_Knowledge_Cuts::forget_material( 'social_post_images' );
-            }
+            self::forget_cuts(); // no AI call: nothing was sent, so nothing was cut
             return $stored;
         }
 
@@ -371,6 +370,7 @@ class PressHub_Social_Post_Images {
 
         PressHub_Social_Logger::info( sprintf( 'Planning %d AI post image(s) for post #%d.', $count, $post_id ) );
         $raw = self::call_ai( $post_id, $sys_prompt, $user_prompt );
+        self::forget_cuts(); // recorded with the planning call
         if ( is_wp_error( $raw ) ) {
             return $raw;
         }
@@ -439,9 +439,7 @@ class PressHub_Social_Post_Images {
     private static function article_context( int $post_id ): array {
         $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         if ( ! $post ) {
-            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
-                PressHub_AI_Knowledge_Cuts::forget_material( 'social_post_images' );
-            }
+            self::forget_cuts();
             return [ 'title' => '', 'content' => '' ];
         }
         $title   = (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) );
@@ -456,6 +454,13 @@ class PressHub_Social_Post_Images {
             $content = mb_substr( $content, 0, self::CONTENT_LIMIT ) . '...';
         }
         return [ 'title' => trim( wp_strip_all_tags( $title ) ), 'content' => $content ];
+    }
+
+    /** Drop the post text cut noted for the planning call (social_post_images). */
+    private static function forget_cuts(): void {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_post_images' );
+        }
     }
 
     private static function call_ai( int $post_id, string $sys_prompt, string $user_prompt ) {

@@ -539,13 +539,13 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             $gen_t0 = PressHub_AI_API_Client::begin_generation_record();
             $cut_for = $api->get_action();
             if ( $article_bytes_cut && '' !== trim( $article_content ) && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
-                PressHub_AI_Knowledge_Cuts::note_material( $cut_for, __( 'Article text (bytes)', 'presshub-ai-editor' ), 'clipped', 200000, $article_bytes_cut, 200000 );
+                PressHub_AI_Knowledge_Cuts::note_material( $cut_for, __( 'Article text', 'presshub-ai-editor' ), 'clipped', 200000, $article_bytes_cut, 200000, 'bytes' );
             }
             $api->suppress_provider_prompt_log = true;
             $result = $api->call_provider( $sys, $prompt, false, [] );
             $api->suppress_provider_prompt_log = false;
             if ( $article_bytes_cut && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
-                PressHub_AI_Knowledge_Cuts::forget_material( $cut_for, __( 'Article text (bytes)', 'presshub-ai-editor' ) );
+                PressHub_AI_Knowledge_Cuts::forget_material( $cut_for, __( 'Article text', 'presshub-ai-editor' ) );
             }
             // Issue #140 - copilot chat generation record. Linked to the post when there is one;
             // otherwise the user is identified by config.user_id (and inputs.user_id).

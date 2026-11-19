@@ -1656,8 +1656,7 @@ class PressHub_AI_Policy_Fiches {
             foreach ( $published as $slug => $f ) {
                 $hit = [ (string) $slug => [ 'count' => 1, 'fiche' => $f ] ];
                 if ( $budget <= 0 ) {
-                    $row['too_long'][] = (string) $f['title'];
-                    continue;
+                    continue; // the task is off: nothing is sent, nothing is cut
                 }
                 $r = self::render( $hit, $probe, $budget );
                 if ( '' !== $r['text'] ) {

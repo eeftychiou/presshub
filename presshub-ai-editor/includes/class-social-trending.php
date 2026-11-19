@@ -1346,12 +1346,25 @@ class PressHub_AI_Social_Trending {
         ] );
     }
 
-    /** The posts as the prompt lists them: rank, platform, author, numbers, text. */
+    /**
+     * The posts as the prompt lists them: rank, platform, author, numbers, text.
+     * Each post text cut to SUMMARY_POST_TEXT_CHARS is noted for the summary
+     * call (social_trending_summary).
+     */
     public static function summary_posts_text( array $items ): string {
+        $cuts = class_exists( 'PressHub_AI_Knowledge_Cuts' );
+        if ( $cuts ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_trending_summary' );
+        }
         $lines = [];
         foreach ( array_values( $items ) as $i => $it ) {
             $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? (string) $it['platform'];
             $author = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : ( '' !== (string) $it['handle'] ? '@' . $it['handle'] : $label );
+            $full   = self::strlen( trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) ) );
+            if ( $cuts && $full > self::SUMMARY_POST_TEXT_CHARS ) {
+                /* translators: 1: rank, 2: author */
+                PressHub_AI_Knowledge_Cuts::note_material( 'social_trending_summary', sprintf( __( 'Trending post %1$d (%2$s)', 'presshub-ai-editor' ), $i + 1, $author ), 'clipped', self::SUMMARY_POST_TEXT_CHARS, $full, self::SUMMARY_POST_TEXT_CHARS );
+            }
             $text   = self::excerpt( (string) $it['text'], self::SUMMARY_POST_TEXT_CHARS );
             $lines[] = sprintf(
                 '%d. [%s] %s (%s likes/reactions, %s comments, %s shares): %s',
@@ -1393,10 +1406,12 @@ class PressHub_AI_Social_Trending {
             $raw = call_user_func( self::$summary_caller, $sys, $user );
         } else {
             if ( ! class_exists( 'PressHub_AI_API_Client' ) || ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
+                self::forget_summary_cuts();
                 return new WP_Error( 'missing_api_client', 'The AI client is not loaded.' );
             }
             $config = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
             if ( is_wp_error( $config ) ) {
+                self::forget_summary_cuts();
                 return $config;
             }
             $client = null;
@@ -1417,6 +1432,7 @@ class PressHub_AI_Social_Trending {
                 ] );
             }
         }
+        self::forget_summary_cuts();
         if ( is_wp_error( $raw ) ) {
             return $raw;
         }
@@ -1490,6 +1506,13 @@ class PressHub_AI_Social_Trending {
             $ok = true;
         }
         return self::$oembed_cache[ $url ] = $ok;
+    }
+
+    /** The summary call has run (or will not): its post cuts are dropped. */
+    private static function forget_summary_cuts(): void {
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'social_trending_summary' );
+        }
     }
 
     private static function excerpt( string $text, int $max = 400 ): string {

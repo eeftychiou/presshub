@@ -198,11 +198,61 @@ mc_check( 'urls: a later sources block without URLs drops the earlier cuts', nul
 unset( $GLOBALS['GET_RESPONSE_FILTER'], $GLOBALS['FILTERS']['presshub_ai_enable_llm_extractor'] );
 $C::clear_pending();
 
+// Trending summary: each post text cut to 500 characters is noted for the
+// summary call, the prompt text is unchanged, and the call drops the notes.
+$T     = 'PressHub_AI_Social_Trending';
+$items = [
+    [ 'platform' => 'x', 'author_name' => 'Α', 'handle' => '', 'likes' => 1, 'comments' => 0, 'shares' => 0, 'text' => str_repeat( 'λόγια ', 200 ) ],
+    [ 'platform' => 'x', 'author_name' => 'Β', 'handle' => '', 'likes' => 1, 'comments' => 0, 'shares' => 0, 'text' => 'Σύντομο.' ],
+];
+$txt = $T::summary_posts_text( $items );
+$C::start_call( 'coauthor_draft' );
+$wrong = $C::last_material();
+$C::start_call( 'social_trending_summary' );
+$m = (array) $C::last_material();
+mc_check( 'trending: the long post is noted for the summary call only, the text keeps its shape', null === $wrong && 1 === count( $m ) && 'Trending post 1 (Α)' === $m[0]['item'] && 500 === $m[0]['kept'] && 1199 === $m[0]['needed'] && false !== strpos( $txt, '…' ) && false !== strpos( $txt, '2. [' ) );
+$seen = null;
+$T::$summary_caller = static function () use ( $C, &$seen ) { $C::start_call( 'social_trending_summary' ); $seen = $C::last_material(); return '{"summary":"Σύνοψη."}'; };
+$T::generate_summary( $items, 0 );
+$T::$summary_caller = null;
+$C::start_call( 'social_trending_summary' );
+mc_check( 'trending: the summary call records the cut and leaves nothing behind', is_array( $seen ) && 1 === count( $seen ) && null === $C::last_material() );
+$C::clear_pending();
+
+// Stakeholders: more known people than the prompt lists is recorded with the call.
+class MC_Stakeholder_Client extends PressHub_AI_API_Client {
+    public $seen = null;
+    public function __construct() {}
+    public function set_action( string $action ): PressHub_AI_API_Client { return $this; }
+    public function get_action(): string { return 'memory_stakeholders'; }
+    public function call_provider( $sys_prompt, $user_prompt, $json_mode = false, $files = [], $temperature = null, array $metadata = [] ) {
+        PressHub_AI_Knowledge_Cuts::start_call( 'memory_stakeholders' );
+        $this->seen = PressHub_AI_Knowledge_Cuts::last_material();
+        return json_encode( [ 'people' => [] ] );
+    }
+}
+update_option( 'presshub_ai_memory_enabled', 1 );
+$people = [];
+for ( $i = 0; $i < 85; $i++ ) {
+    $people[ 'p' . $i ] = [ 'name' => 'Πρόσωπο ' . $i, 'role' => '', 'last_seen' => '2026-11-14' ];
+}
+update_option( PressHub_AI_Stakeholders::OPTION, $people );
+$GLOBALS['POSTS_STORE'][ 4545 ] = [ 'ID' => 4545, 'post_content' => '<p>Ενημέρωση.</p>', 'post_date' => '2026-11-15 07:00:00', 'post_status' => 'publish' ];
+$sc = new MC_Stakeholder_Client();
+PressHub_AI_Stakeholders::extract_for_post( 4545, $sc );
+$C::start_call( 'memory_stakeholders' );
+mc_check( 'stakeholders: the known people cap is recorded with the call, then dropped', is_array( $sc->seen ) && 'Known people' === $sc->seen[0]['item'] && 'max_items' === $sc->seen[0]['reason'] && 80 === $sc->seen[0]['limit'] && 85 === $sc->seen[0]['needed'] && null === $C::last_material() );
+delete_option( PressHub_AI_Stakeholders::OPTION );
+$C::clear_pending();
+
+// Byte limits say bytes.
+mc_check( 'describe: a byte limit says bytes', [ 'Article text: cut to 200000 of 250000 bytes (limit 200000)' ] === $C::describe( $C::sanitize( [ [ 'item' => 'Article text', 'reason' => 'clipped', 'limit' => 200000, 'needed' => 250000, 'kept' => 200000, 'unit' => 'bytes' ] ] ) ) );
+
 // 4. Source checks for the sites a unit test cannot reach.
 $root  = dirname( __DIR__ ) . '/includes/';
 $ajax  = (string) file_get_contents( $root . 'class-ajax-handlers.php' );
 $p_cls = strpos( $ajax, '$api->classify_intent( $prompt )' );
-$p_not = strpos( $ajax, "note_material( \$cut_for, __( 'Article text (bytes)'" );
+$p_not = strpos( $ajax, "note_material( \$cut_for, __( 'Article text', 'presshub-ai-editor' ), 'clipped', 200000, \$article_bytes_cut, 200000, 'bytes' )" );
 $p_cal = false === $p_not ? false : strpos( $ajax, '$api->call_provider( $sys, $prompt', $p_not );
 mc_check( 'source: copilot notes the article cut after intent classification, right before the chat call', false !== $p_cls && false !== $p_not && $p_not > $p_cls && false !== $p_cal && $p_cal - $p_not < 400 );
 mc_check( 'source: image prompt notes for its own action', false !== strpos( (string) file_get_contents( $root . 'class-api-client.php' ), "clip_material( 'generate_image_prompt', \$clean_content, 8000" ) );
@@ -210,6 +260,9 @@ mc_check( 'source: url_extract notes its HTML cut for itself', false !== strpos(
 mc_check( 'source: the draft passes its action to the URL fetcher', false !== strpos( (string) file_get_contents( $root . 'class-api-client.php' ), 'process_sources( $sources, $this->get_action() )' ) );
 $shorts = (string) file_get_contents( $root . 'class-social-tiktok-shorts.php' );
 mc_check( 'source: a stored shorts plan drops the cut', 1 === preg_match( "/PLAN_META, true \);\s*if \( is_array\( \\\$stored \).*?forget_material\( 'social_tiktok_shorts' \);\s*}\s*return \\\$stored;/s", $shorts ) );
+mc_check( 'source: the shorts plan drops the cut once its attempts are over', 1 === preg_match( "/try \{\s*for \( \\\$attempt = 1;.*?\} finally \{\s*if \( class_exists\( 'PressHub_AI_Knowledge_Cuts' \) \) \{\s*PressHub_AI_Knowledge_Cuts::forget_material\( 'social_tiktok_shorts' \);/s", $shorts ) );
+$pimg = (string) file_get_contents( $root . 'class-social-post-images.php' );
+mc_check( 'source: post images drop the cut after the planning call and after the library context', false !== strpos( $pimg, "\$raw = self::call_ai( \$post_id, \$sys_prompt, \$user_prompt );\n        self::forget_cuts();" ) && false !== strpos( $pimg, "\$context = self::article_context( \$post_id );\n        self::forget_cuts(); // the image library" ) );
 mc_check( 'source: call_provider starts the call', false !== strpos( (string) file_get_contents( $root . 'class-api-client.php' ), 'PressHub_AI_Knowledge_Cuts::start_call( $this->get_action() )' ) );
 foreach ( [ 'class-social-trending.php' => 'the briefing count left out', 'class-press-release-inbox.php' => 'per-check message limit', 'class-social-monitor.php' => 'the briefing limit left out' ] as $file => $needle ) {
     mc_check( "source: {$file} logs its cut", false !== strpos( (string) file_get_contents( $root . $file ), $needle ) );
@@ -234,7 +287,10 @@ $fit = $P::fit_report();
 mc_check( 'fit: a fiche with nothing for the task is not called too long', [ 'Φάκελος αρχών' ] === $fit['social_copy_']['empty'] && [ 'Μακρύς φάκελος' ] === $fit['social_copy_']['too_long'] && 3 === $fit['briefing_curation']['fit'] );
 $fit_html = PressHub_AI_Settings_Render::policy_fit_html( $fit, [ 'social_copy_' => 'Social copy' ] );
 mc_check( 'fit html: says which fiches have nothing to send', false !== strpos( $fit_html, 'Social copy: 1 of 2 fit; too long: Μακρύς φάκελος; nothing to send here: Φάκελος αρχών' ) && false !== strpos( $fit_html, 'at most ' . $P::MAX_INJECTED . ' are sent' ) );
+$only = [ 'social_copy_' => [ 'budget' => 1200, 'fit' => 0, 'total' => 1, 'too_long' => [], 'empty' => [ 'Φάκελος αρχών' ] ] ];
+mc_check( 'fit html: no fiche with text for the task says so', false !== strpos( PressHub_AI_Settings_Render::policy_fit_html( $only, [ 'social_copy_' => 'Social copy' ] ), 'Social copy: no published fiche has text for this task' ) );
 update_option( 'presshub_ai_policy_fiches_budgets', array_merge( $P::BUDGETS, [ 'social_copy_' => 0 ] ) );
+mc_check( 'fit: a task switched off lists no fiche as too long', [] === $P::fit_report()['social_copy_']['too_long'] );
 mc_check( 'fit html: a task switched off says so', false !== strpos( PressHub_AI_Settings_Render::policy_fit_html( $P::fit_report(), [ 'social_copy_' => 'Social copy' ] ), 'Social copy: off (limit 0)' ) );
 delete_option( 'presshub_ai_policy_fiches_budgets' );
 delete_option( $P::OPTION );

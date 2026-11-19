@@ -93,9 +93,10 @@ class PressHub_AI_Knowledge_Cuts {
     /**
      * Note a cut the caller made itself, for the calls of $for. $reason
      * 'clipped' (text cut to $kept of $needed characters, limit $limit) or
-     * 'max_items' ($needed items, only $limit sent).
+     * 'max_items' ($needed items, only $limit sent). $unit 'bytes' when a
+     * clipped length counts bytes, not characters.
      */
-    public static function note_material( string $for, string $what, string $reason, int $limit, int $needed, int $kept = -1 ): void {
+    public static function note_material( string $for, string $what, string $reason, int $limit, int $needed, int $kept = -1, string $unit = '' ): void {
         $key = $for . '|' . $what;
         if ( ! isset( self::$pending[ $key ] ) && count( self::$pending ) >= 50 ) {
             return;
@@ -103,6 +104,9 @@ class PressHub_AI_Knowledge_Cuts {
         $row = [ 'for' => $for, 'item' => $what, 'reason' => $reason, 'limit' => $limit, 'needed' => $needed, 't' => time() ];
         if ( $kept >= 0 ) {
             $row['kept'] = $kept;
+        }
+        if ( 'bytes' === $unit ) {
+            $row['unit'] = 'bytes';
         }
         self::$pending[ $key ] = $row;
     }
@@ -190,6 +194,9 @@ class PressHub_AI_Knowledge_Cuts {
             }
             if ( ! empty( $c['parts'] ) && is_array( $c['parts'] ) ) {
                 $row['parts'] = array_values( array_map( 'strval', $c['parts'] ) );
+            }
+            if ( 'bytes' === ( $c['unit'] ?? '' ) ) {
+                $row['unit'] = 'bytes';
             }
             $out[] = $row;
         }
@@ -335,8 +342,11 @@ class PressHub_AI_Knowledge_Cuts {
                     $lines[] = sprintf( __( '%1$s: sent without %2$s (needed %3$d characters in full, limit %4$d)', 'presshub-ai-editor' ), $item, implode( ', ', $c['parts'] ?? [] ), $c['needed'] ?? 0, $c['limit'] ?? 0 );
                     break;
                 case 'clipped':
-                    /* translators: 1: item, 2: characters kept, 3: characters in full, 4: budget */
-                    $lines[] = sprintf( __( '%1$s: cut to %2$d of %3$d characters (limit %4$d)', 'presshub-ai-editor' ), $item, $c['kept'] ?? 0, $c['needed'] ?? 0, $c['limit'] ?? 0 );
+                    $lines[] = 'bytes' === ( $c['unit'] ?? '' )
+                        /* translators: 1: item, 2: bytes kept, 3: bytes in full, 4: limit */
+                        ? sprintf( __( '%1$s: cut to %2$d of %3$d bytes (limit %4$d)', 'presshub-ai-editor' ), $item, $c['kept'] ?? 0, $c['needed'] ?? 0, $c['limit'] ?? 0 )
+                        /* translators: 1: item, 2: characters kept, 3: characters in full, 4: budget */
+                        : sprintf( __( '%1$s: cut to %2$d of %3$d characters (limit %4$d)', 'presshub-ai-editor' ), $item, $c['kept'] ?? 0, $c['needed'] ?? 0, $c['limit'] ?? 0 );
                     break;
                 default:
                     /* translators: 1: item, 2: characters needed, 3: characters left, 4: budget */
