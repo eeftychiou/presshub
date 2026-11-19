@@ -274,14 +274,27 @@ bss_check( 'audio: part 0 skips when the podcast post exists, nothing queued', n
 bss_reset();
 presshub_ai_schedule_briefing_step( '2026-11-19', 'noon', 'script' );
 $GLOBALS['SCHEDULED_EVENTS'] = [];
-$GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] = time();
+$GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] = time() . ':other';
 $t0 = microtime( true );
 $n  = presshub_ai_sweep_lost_briefing_steps( time() + 3600 );
 bss_check( 'lock: a held lock stops the sweep (no re-queue, entry kept)', 0 === $n && [] === bss_steps_queued() && isset( bss_pending()[ $key ] ) );
 bss_check( 'lock: the wait is bounded (about 3 s)', microtime( true ) - $t0 < 6 );
-$GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] = time() - 31;
+$GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] = ( time() - 31 ) . ':other';
 bss_check( 'lock: a stale lock is taken over', 1 === presshub_ai_sweep_lost_briefing_steps( time() + 3600 ) );
 bss_check( 'lock: released after the sweep', ! array_key_exists( PRESSHUB_AI_PENDING_STEPS_LOCK, $GLOBALS['OPTIONS_STORE'] ) && 0 === (int) $GLOBALS['presshub_ai_pending_steps_lock_depth'] );
+
+// Unlock leaves a lock another request took over alone.
+bss_reset();
+$mine = presshub_ai_pending_steps_lock();
+$GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] = time() . ':someone-else';
+presshub_ai_pending_steps_unlock( $mine );
+bss_check( 'lock: unlock does not delete a lock taken over by another request', true === $mine && ( time() . ':someone-else' ) === ( $GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] ?? '' ) );
+$mine = true;
+$GLOBALS['OPTIONS_STORE'] = [];
+$mine = presshub_ai_pending_steps_lock();
+$own  = $GLOBALS['OPTIONS_STORE'][ PRESSHUB_AI_PENDING_STEPS_LOCK ] ?? '';
+presshub_ai_pending_steps_unlock( $mine );
+bss_check( 'lock: the lock value is "<time>:<token>" and unlock removes its own', 1 === preg_match( '/^\d+:\S+$/', (string) $own ) && ! array_key_exists( PRESSHUB_AI_PENDING_STEPS_LOCK, $GLOBALS['OPTIONS_STORE'] ) );
 
 // The cron cache is refreshed only when something is overdue.
 bss_reset();

@@ -1219,24 +1219,27 @@ function presshub_ai_pending_steps_lock() {
     global $wpdb;
     $ttl = 30;
     for ( $try = 0; $try < 30; $try++ ) {
-        $now = time();
+        $now   = time();
+        // "<time>:<token>": the time ages the lock, the token says whose it is.
+        $value = $now . ':' . ( function_exists( 'wp_generate_password' ) ? wp_generate_password( 12, false ) : bin2hex( random_bytes( 6 ) ) );
         if ( isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
-            $got = 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')", PRESSHUB_AI_PENDING_STEPS_LOCK, (string) $now ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+            $got = 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'no')", PRESSHUB_AI_PENDING_STEPS_LOCK, $value ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
             if ( ! $got ) {
-                $held = (int) $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", PRESSHUB_AI_PENDING_STEPS_LOCK ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-                if ( $held > 0 && $now - $held >= $ttl ) {
-                    $got = 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", (string) $now, PRESSHUB_AI_PENDING_STEPS_LOCK, (string) $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+                $held = (string) $wpdb->get_var( $wpdb->prepare( "SELECT `option_value` FROM `{$wpdb->options}` WHERE `option_name` = %s", PRESSHUB_AI_PENDING_STEPS_LOCK ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+                if ( '' !== $held && $now - (int) $held >= $ttl ) {
+                    $got = 1 === (int) $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET `option_value` = %s WHERE `option_name` = %s AND `option_value` = %s", $value, PRESSHUB_AI_PENDING_STEPS_LOCK, $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
                 }
             }
         } else {
-            $held = (int) get_option( PRESSHUB_AI_PENDING_STEPS_LOCK, 0 );
-            $got  = ! ( $held > 0 && $now - $held < $ttl );
+            $held = (string) get_option( PRESSHUB_AI_PENDING_STEPS_LOCK, '' );
+            $got  = ! ( '' !== $held && $now - (int) $held < $ttl );
             if ( $got ) {
-                update_option( PRESSHUB_AI_PENDING_STEPS_LOCK, $now, false );
+                update_option( PRESSHUB_AI_PENDING_STEPS_LOCK, $value, false );
             }
         }
         if ( $got ) {
             $GLOBALS['presshub_ai_pending_steps_lock_depth'] = 1;
+            $GLOBALS['presshub_ai_pending_steps_lock_value'] = $value;
             return true;
         }
         usleep( 100000 );
@@ -1249,6 +1252,8 @@ function presshub_ai_pending_steps_lock() {
 
 /**
  * Release the pending-steps lock taken by presshub_ai_pending_steps_lock().
+ * Only removes the row while it still holds this request's token, so a lock
+ * another request took over after 30 s is left alone.
  *
  * @param bool $held What presshub_ai_pending_steps_lock() returned.
  */
@@ -1257,16 +1262,19 @@ function presshub_ai_pending_steps_unlock( $held ) {
         return;
     }
     $GLOBALS['presshub_ai_pending_steps_lock_depth'] = max( 0, (int) ( $GLOBALS['presshub_ai_pending_steps_lock_depth'] ?? 1 ) - 1 );
-    if ( 0 === $GLOBALS['presshub_ai_pending_steps_lock_depth'] ) {
-        global $wpdb;
-        if ( isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
-            $wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s", PRESSHUB_AI_PENDING_STEPS_LOCK ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-            if ( function_exists( 'wp_cache_delete' ) ) {
-                wp_cache_delete( PRESSHUB_AI_PENDING_STEPS_LOCK, 'options' );
-            }
-        } else {
-            delete_option( PRESSHUB_AI_PENDING_STEPS_LOCK );
+    if ( 0 !== $GLOBALS['presshub_ai_pending_steps_lock_depth'] ) {
+        return;
+    }
+    $value = (string) ( $GLOBALS['presshub_ai_pending_steps_lock_value'] ?? '' );
+    $GLOBALS['presshub_ai_pending_steps_lock_value'] = '';
+    global $wpdb;
+    if ( isset( $wpdb ) && is_object( $wpdb ) && isset( $wpdb->options ) && method_exists( $wpdb, 'query' ) && method_exists( $wpdb, 'prepare' ) ) {
+        $wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE `option_name` = %s AND `option_value` = %s", PRESSHUB_AI_PENDING_STEPS_LOCK, $value ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+        if ( function_exists( 'wp_cache_delete' ) ) {
+            wp_cache_delete( PRESSHUB_AI_PENDING_STEPS_LOCK, 'options' );
         }
+    } elseif ( (string) get_option( PRESSHUB_AI_PENDING_STEPS_LOCK, '' ) === $value ) {
+        delete_option( PRESSHUB_AI_PENDING_STEPS_LOCK );
     }
 }
 
