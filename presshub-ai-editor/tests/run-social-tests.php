@@ -2121,6 +2121,25 @@ assert_equals( [], $no_visuals[0]['visuals'] ?? null, 'A plan without image desc
 $bad_speakers = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"Χωρίς ετικέτες","caption":"c"}]}', 3 );
 assert_true( is_wp_error( $bad_speakers ), 'parse_plan rejects a script without [SPEAKER_N]: lines' );
 assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( 'Δεν είναι JSON', 3 ) ), 'parse_plan rejects a non-JSON response' );
+// Job #224: the model closed the caption with a stray `]` (`"caption":"…"]}]}`).
+$misplaced = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"[SPEAKER_1]: Α [σημείωση]","visuals":["x"],"mood":"neutral","caption":"Λεζάντα #κύπρος"]}]}', 1 );
+assert_true( is_array( $misplaced ) && 'b' === ( $misplaced[0]['hook'] ?? '' ), 'parse_plan repairs a misplaced closing bracket' );
+assert_true( str_contains( $misplaced[0]['script'] ?? '', '[σημείωση]' ), 'The repair leaves brackets inside strings alone' );
+assert_equals( '{"a":[1,2]}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":[1,2,]}' ), 'repair_json drops a trailing comma' );
+$fixes = [];
+assert_equals( '{"a":{"b":"}]"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":{"b":"}]"}', $fixes ), 'repair_json leaves a cut-off response (brackets still open) unchanged' );
+assert_equals( [], $fixes, 'Nothing is reported as repaired in a cut-off response' );
+assert_equals( '{"a":"x\\"}"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"x\\"}"}' ), 'repair_json handles escaped quotes' );
+assert_equals( '{"a":"x\\\\"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"x\\\\"]}' ), 'An escaped backslash before the closing quote ends the string' );
+assert_equals( '{"a":"cut', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"cut' ), 'repair_json leaves a response cut off inside a string unchanged' );
+PressHub_Social_TikTok_Shorts::repair_json( '{"a":[1,2,]]}', $fixes );
+assert_equals( [ 'dropped 1 misplaced ]', 'dropped 1 trailing comma' ], $fixes, 'repair_json reports what it dropped' );
+// A 3-short answer cut off inside the third short is not turned into a 2-short plan.
+$three = json_decode( $short_json( 3 ), true );
+$cut   = substr( $short_json( 3 ), 0, (int) strpos( $short_json( 3 ), $three['shorts'][2]['caption'] ) );
+assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( $cut, 3 ) ), 'A cut-off plan is rejected, not repaired into fewer shorts' );
+$broken = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"hook":"b" "script":"x"}]}', 1 );
+assert_true( is_wp_error( $broken ) && str_contains( $broken->get_error_message(), 'not valid JSON' ), 'Broken JSON is reported as invalid JSON, not as a missing "shorts" list' );
 
 // A podcast post and the settings shorts need.
 $GLOBALS['POSTS_STORE'][880] = [
@@ -2313,9 +2332,42 @@ PressHub_Social_Queue::update_job( $surplus_ids[1], [ 'scheduled_at' => gmdate( 
 $surplus_claim = PressHub_Social_REST_Controller::handle_claim( $req_short );
 assert_equals( 2, (int) ( $surplus_claim['jobs'][0]['tiktok_short']['count'] ?? 0 ), 'The badge total is the number of stories the plan has, not the jobs queued' );
 
+// An unusable response is asked for once more in the same run before it fails.
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$retry_calls = 0;
+$retry_prompts = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$retry_calls, &$retry_prompts, $short_json ) {
+    $retry_calls++;
+    $retry_prompts[] = $user;
+    return 1 === $retry_calls ? '{"shorts":"oops"}' : $short_json( 3 );
+} );
+PressHub_Social_Queue::reset_memory_store();
+$retry_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, $retry_calls, 'An invalid plan response is retried once in the same run' );
+assert_true( str_contains( $retry_prompts[1] ?? '', 'Your previous answer was unusable: the AI response has no "shorts" list.' ) && ! str_contains( $retry_prompts[0], 'previous answer' ), 'The retry tells the AI why its first answer was unusable' );
+
+// An empty answer is retried like an unusable one.
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$empty_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$empty_calls, $short_json ) {
+    $empty_calls++;
+    return 1 === $empty_calls ? '  ' : $short_json( 3 );
+} );
+PressHub_Social_Queue::reset_memory_store();
+$empty_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_equals( 2, $empty_calls, 'An empty plan response is retried once in the same run' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $empty_ids[0] ) ), 'The shorts are prepared after an empty first answer' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $retry_ids[0] ) ), 'The shorts are prepared from the second response' );
+
 // A failed preparation is retried in the background without moving any posting time.
 update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
-PressHub_Social_TikTok_Shorts::set_ai_caller( fn() => 'Συγγνώμη, δεν μπορώ.' );
+$fail_calls = 0;
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$fail_calls ) {
+    $fail_calls++;
+    return 'Συγγνώμη, δεν μπορώ.';
+} );
 PressHub_Social_Queue::reset_memory_store();
 $fail_ids       = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
 $fail_slot      = PressHub_Social_Queue::get_job( $fail_ids[2] )['scheduled_at'];
@@ -2323,6 +2375,7 @@ $GLOBALS['SCHEDULED_EVENTS'] = [];
 PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 $fail_job = PressHub_Social_Queue::get_job( $fail_ids[2] );
 assert_true( str_contains( (string) $fail_job['last_error'], 'TikTok short failed' ), 'The invalid plan is recorded as the job error' );
+assert_equals( PressHub_Social_TikTok_Shorts::PLAN_ATTEMPTS, $fail_calls, 'A run asks the AI at most PLAN_ATTEMPTS times' );
 assert_equals( 'pending', $fail_job['status'], 'A job whose preparation failed stays pending' );
 assert_equals( $fail_slot, $fail_job['scheduled_at'], 'A failed preparation does not move the posting time of a later short' );
 assert_equals( 0, (int) $fail_job['attempts'], 'A failed preparation does not use the posting retry budget' );

@@ -41,6 +41,8 @@ class PressHub_AI_Generation_Recorder {
      * calls are logged on the record and it is linked to the article post.
      * tiktok_short: TTS of one TikTok short cut from a podcast post; the short's
      * script is the user prompt and its TTS calls are logged on the record.
+     * tiktok_short_script: the LLM call that writes the scripts of the TikTok and
+     * YouTube shorts of a post; a response the plan cannot use is marked error.
      */
     const KINDS = [
         'briefing_text',
@@ -58,6 +60,7 @@ class PressHub_AI_Generation_Recorder {
         'tts_test',
         'tiktok_narration',
         'tiktok_short',
+        'tiktok_short_script',
         'seo',
     ];
 
