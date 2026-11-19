@@ -173,7 +173,7 @@ class PressHub_AI_Briefing_SEO {
             function ( $m ) use ( $max, $target ) {
                 $attrs = $m[1] ?? '';
                 $inner = $m[2];
-                if ( mb_strlen( trim( strip_tags( $inner ) ) ) <= $max ) {
+                if ( mb_strlen( trim( strip_tags( $inner ) ) ) <= $max ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
                     return $m[0];
                 }
                 $sentences = self::split_sentences( $inner );
@@ -183,7 +183,7 @@ class PressHub_AI_Briefing_SEO {
                 $paras   = [];
                 $current = '';
                 foreach ( $sentences as $s ) {
-                    if ( '' !== $current && mb_strlen( strip_tags( $current . ' ' . $s ) ) > $target ) {
+                    if ( '' !== $current && mb_strlen( strip_tags( $current . ' ' . $s ) ) > $target ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
                         $paras[] = $current;
                         $current = $s;
                     } else {
@@ -195,8 +195,8 @@ class PressHub_AI_Briefing_SEO {
                 }
                 // Avoid a lonely short tail: merge it back if it would still fit.
                 $n = count( $paras );
-                if ( $n >= 2 && mb_strlen( strip_tags( $paras[ $n - 1 ] ) ) < 80
-                    && mb_strlen( strip_tags( $paras[ $n - 2 ] . ' ' . $paras[ $n - 1 ] ) ) <= $max ) {
+                if ( $n >= 2 && mb_strlen( strip_tags( $paras[ $n - 1 ] ) ) < 80 // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
+                    && mb_strlen( strip_tags( $paras[ $n - 2 ] . ' ' . $paras[ $n - 1 ] ) ) <= $max ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
                     $paras[ $n - 2 ] .= ' ' . $paras[ $n - 1 ];
                     array_pop( $paras );
                 }
@@ -272,7 +272,7 @@ class PressHub_AI_Briefing_SEO {
 
     public static function normalize_url( string $url ): string {
         $url   = trim( html_entity_decode( $url, ENT_QUOTES, 'UTF-8' ) );
-        $parts = parse_url( $url );
+        $parts = wp_parse_url( $url );
         if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
             return strtolower( rtrim( $url, '/' ) );
         }
@@ -283,7 +283,7 @@ class PressHub_AI_Briefing_SEO {
     }
 
     private static function host( string $url ): string {
-        $host = parse_url( trim( $url ), PHP_URL_HOST );
+        $host = wp_parse_url( trim( $url ), PHP_URL_HOST );
         return is_string( $host ) ? strtolower( (string) preg_replace( '/^www\./', '', $host ) ) : '';
     }
 

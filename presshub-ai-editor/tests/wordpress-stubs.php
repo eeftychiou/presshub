@@ -279,6 +279,20 @@ if ( ! function_exists( 'wp_upload_dir' ) ) {
     }
 }
 
+if ( ! function_exists( 'wp_parse_url' ) ) {
+    function wp_parse_url( $url, $component = -1 ) {
+        return parse_url( $url, $component );
+    }
+}
+
+if ( ! function_exists( 'wp_delete_file' ) ) {
+    function wp_delete_file( $file ) {
+        if ( is_file( $file ) ) {
+            unlink( $file );
+        }
+    }
+}
+
 if ( ! function_exists( 'wp_json_encode' ) ) {
     function wp_json_encode( $data, $options = 0, $depth = 512 ) {
         return json_encode( $data, $options, $depth );

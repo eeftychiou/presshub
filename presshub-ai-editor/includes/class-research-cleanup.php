@@ -55,14 +55,14 @@ class PressHub_AI_Research_Cleanup {
         $stale = get_posts( [
             'post_type'      => 'presshub_research',
             'post_status'    => 'any',
-            'posts_per_page' => 200,
+            'posts_per_page' => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- batch size for a clean-up job that returns IDs only.
             'date_query'     => [
                 'column' => 'post_date',
                 'before' => function_exists( 'wp_date' )
                     ? wp_date( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS )
                     : gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ),
             ],
-            'meta_query'     => [
+            'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded lookup of the plugin's own posts by meta key.
                 [
                     'key'     => '_research_status',
                     'value'   => [ 'completed', 'failed' ],

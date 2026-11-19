@@ -198,7 +198,7 @@ class PressHub_AI_Mime_Parser {
                 foreach ( $words as $m ) {
                     $cs = strtoupper( (string) preg_replace( '/\*.*$/', '', $m[1] ) );
                     $decoded = 'B' === strtoupper( $m[2] )
-                        ? (string) base64_decode( $m[3] )
+                        ? (string) base64_decode( $m[3] ) // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
                         : quoted_printable_decode( str_replace( '_', ' ', $m[3] ) );
                     if ( null !== $charset && $cs !== $charset ) {
                         $text .= self::to_utf8( $bytes, $charset );
@@ -397,7 +397,7 @@ class PressHub_AI_Mime_Parser {
 
     private static function decode_body( string $body, string $encoding ): string {
         if ( 'base64' === $encoding ) {
-            return (string) base64_decode( preg_replace( '/[^A-Za-z0-9+\/=]/', '', $body ) );
+            return (string) base64_decode( preg_replace( '/[^A-Za-z0-9+\/=]/', '', $body ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
         }
         if ( 'quoted-printable' === $encoding ) {
             return quoted_printable_decode( str_replace( "\r\n", "\n", $body ) );
@@ -413,7 +413,7 @@ class PressHub_AI_Mime_Parser {
         $html = preg_replace( '#<br\s*/?>#i', "\n", (string) $html );
         $html = preg_replace( '#</(p|div|h[1-6]|li|tr|table|blockquote)>#i', "\n\n", (string) $html );
         $html = preg_replace( '#<li[^>]*>#i', '- ', (string) $html );
-        $text = html_entity_decode( strip_tags( (string) $html ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+        $text = html_entity_decode( strip_tags( (string) $html ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
         $text = str_replace( "\xc2\xa0", ' ', $text );
         $text = preg_replace( "/[ \t]+/", ' ', $text );
         $text = preg_replace( "/ *\n */", "\n", (string) $text );

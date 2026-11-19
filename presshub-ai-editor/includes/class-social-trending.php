@@ -204,7 +204,7 @@ class PressHub_AI_Social_Trending {
             return null;
         }
 
-        $state['run_id']         = gmdate( 'YmdHis', $now ) . '-' . substr( md5( $now . '|' . mt_rand() ), 0, 6 );
+        $state['run_id']         = gmdate( 'YmdHis', $now ) . '-' . substr( md5( $now . '|' . wp_rand() ), 0, 6 );
         $state['started']        = $now;
         $state['open']           = true;
         $state['worker_pending'] = ! empty( $worker );
@@ -522,12 +522,12 @@ class PressHub_AI_Social_Trending {
      * the query parameters that identify the post (story_fbid / fbid / id).
      */
     public static function facebook_url( string $url, string $id ): string {
-        $host = strtolower( (string) parse_url( $url, PHP_URL_HOST ) );
+        $host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
         if ( ! preg_match( '/^(www\.|m\.|web\.)?facebook\.com$/', $host ) ) {
             return 'https://www.facebook.com/' . rawurlencode( $id );
         }
-        $path  = (string) parse_url( $url, PHP_URL_PATH );
-        $query = (string) parse_url( $url, PHP_URL_QUERY );
+        $path  = (string) wp_parse_url( $url, PHP_URL_PATH );
+        $query = (string) wp_parse_url( $url, PHP_URL_QUERY );
         parse_str( $query, $q );
         $keep = [];
         foreach ( [ 'story_fbid', 'fbid', 'id', 'v' ] as $k ) {
@@ -587,12 +587,12 @@ class PressHub_AI_Social_Trending {
         $text = (string) $item['text'];
         if ( preg_match_all( '#https?://[^\s]+#u', $text, $m ) ) {
             foreach ( $m[0] as $u ) {
-                $host = strtolower( (string) parse_url( $u, PHP_URL_HOST ) );
+                $host = strtolower( (string) wp_parse_url( $u, PHP_URL_HOST ) );
                 $host = (string) preg_replace( '/^(www\.|m\.)/', '', $host );
                 if ( '' === $host || preg_match( '/(^|\.)(x|twitter|t|tiktok|instagram|facebook|fb)\.(com|co|me|watch)$/', $host ) ) {
                     continue;
                 }
-                $path  = rtrim( (string) parse_url( $u, PHP_URL_PATH ), '/' );
+                $path  = rtrim( (string) wp_parse_url( $u, PHP_URL_PATH ), '/' );
                 $out[] = 'u:' . $host . strtolower( $path );
             }
         }
@@ -956,7 +956,7 @@ class PressHub_AI_Social_Trending {
             if ( ! in_array( (string) ( $src['type'] ?? '' ), [ 'text_news', 'rss_feed' ], true ) ) {
                 continue;
             }
-            $host = strtolower( (string) parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) );
+            $host = strtolower( (string) wp_parse_url( (string) ( $src['url'] ?? '' ), PHP_URL_HOST ) );
             $host = (string) preg_replace( '/^(www|m|en|el|gr)\./', '', $host );
             $name = (string) preg_replace( '/[^a-z0-9]/', '', explode( '.', $host )[0] ?? '' );
             if ( '' !== $name ) {
@@ -1181,7 +1181,7 @@ class PressHub_AI_Social_Trending {
         $map     = is_array( $map ) ? $map : [];
         $title   = self::build_title( $now );
         $status  = PressHub_AI_Settings_Storage::get_social_trending_post_status();
-        $items_meta = function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : json_encode( $items );
+        $items_meta = function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : wp_json_encode( $items );
 
         $existing = (int) ( $map[ $key ] ?? 0 );
         $post     = $existing > 0 ? get_post( $existing ) : null;
@@ -1419,7 +1419,7 @@ class PressHub_AI_Social_Trending {
     public static function parse_summary( string $raw ) {
         $data = class_exists( 'PressHub_AI_SEO' ) ? PressHub_AI_SEO::decode_json_object( $raw ) : json_decode( trim( $raw ), true );
         $text = is_array( $data ) && is_string( $data['summary'] ?? null ) ? $data['summary'] : '';
-        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $text ) : strip_tags( $text );
+        $text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $text ) : strip_tags( $text ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
         $text = (string) preg_replace( '#https?://\S+#u', '', $text );
         $text = trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
         if ( '' === $text ) {
@@ -1541,7 +1541,7 @@ class PressHub_AI_Social_Trending {
             if ( ! self::oembed_ok( $embed ) ) {
                 return self::quote_block( $it );
             }
-            $attrs = json_encode( [ 'url' => $embed, 'type' => $type, 'providerNameSlug' => $provider, 'responsive' => true ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );
+            $attrs = wp_json_encode( [ 'url' => $embed, 'type' => $type, 'providerNameSlug' => $provider, 'responsive' => true ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );
             return "<!-- wp:embed " . $attrs . " -->\n<figure class=\"wp-block-embed is-type-{$type} is-provider-{$provider} wp-block-embed-{$provider}\"><div class=\"wp-block-embed__wrapper\">\n" . esc_url( $embed ) . "\n</div></figure>\n<!-- /wp:embed -->";
         }
         if ( 'instagram' === $it['platform'] ) {

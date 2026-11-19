@@ -264,7 +264,7 @@ class PressHub_Social_Meta_API_Client {
                 'Authorization' => 'Bearer ' . $bearer_token,
                 'Content-Type'  => 'application/json',
             ],
-            'body'      => function_exists( 'wp_json_encode' ) ? wp_json_encode( $body ) : json_encode( $body ),
+            'body'      => function_exists( 'wp_json_encode' ) ? wp_json_encode( $body ) : wp_json_encode( $body ),
             'sslverify' => true,
         ] );
 
@@ -340,7 +340,7 @@ class PressHub_Social_Meta_API_Client {
                 'Authorization' => 'Bearer ' . $access_token,
                 'Content-Type'  => 'application/json; charset=UTF-8',
             ],
-            'body'      => function_exists( 'wp_json_encode' ) ? wp_json_encode( $payload ) : json_encode( $payload ),
+            'body'      => function_exists( 'wp_json_encode' ) ? wp_json_encode( $payload ) : wp_json_encode( $payload ),
             'sslverify' => true,
         ] );
 

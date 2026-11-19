@@ -230,7 +230,7 @@ class PressHub_AI_Ajax_Handlers {
 
         // Clean up temporary uploads so we don't clutter the server unnecessarily
         foreach ( $uploaded_files as $file_path ) {
-            @unlink( $file_path );
+            wp_delete_file( $file_path );
         }
 
         if ( is_wp_error( $draft ) ) {
@@ -1344,7 +1344,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $script = '';
         if ( isset( $_POST['script_b64'] ) && is_string( $_POST['script_b64'] ) ) {
-            $raw_script = base64_decode( sanitize_text_field( wp_unslash( $_POST['script_b64'] ) ) );
+            $raw_script = base64_decode( sanitize_text_field( wp_unslash( $_POST['script_b64'] ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
             if ( false !== $raw_script ) {
                 $script = (string) $raw_script;
             }
@@ -1393,7 +1393,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         $script = '';
         if ( isset( $_POST['script_b64'] ) && is_string( $_POST['script_b64'] ) ) {
-            $raw_script = base64_decode( sanitize_text_field( wp_unslash( $_POST['script_b64'] ) ) );
+            $raw_script = base64_decode( sanitize_text_field( wp_unslash( $_POST['script_b64'] ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
             if ( false !== $raw_script ) {
                 $script = (string) $raw_script;
             }
@@ -1565,7 +1565,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 $file_title = pathinfo( $filename, PATHINFO_FILENAME );
                 $extracted_text = '';
                 if ( 'txt' === $ext && file_exists( $file['tmp_name'] ) ) {
-                    $extracted_text = (string) @file_get_contents( $file['tmp_name'] );
+                    $extracted_text = (string) @file_get_contents( $file['tmp_name'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
                 }
 
                 $articles_to_merge[] = [
@@ -1824,7 +1824,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
             $post_data = $_POST;
             if ( isset( $_POST['payload_b64'] ) && is_string( $_POST['payload_b64'] ) ) {
-                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) );
+                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
                 if ( false !== $raw_json ) {
                     $decoded = json_decode( $raw_json, true );
                     if ( is_array( $decoded ) ) {
@@ -1914,7 +1914,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
             $post_data = $_POST;
             if ( isset( $_POST['payload_b64'] ) && is_string( $_POST['payload_b64'] ) ) {
-                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) );
+                $raw_json = base64_decode( wp_unslash( $_POST['payload_b64'] ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decodes or encodes an API / transport payload, not obfuscating code.
                 if ( false !== $raw_json ) {
                     $decoded = json_decode( $raw_json, true );
                     if ( is_array( $decoded ) ) {
@@ -2649,7 +2649,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             } else {
                 $f = PressHub_AI_Log_Paths::get_file( $channel );
                 if ( ! is_wp_error( $f ) && file_exists( $f ) ) {
-                    @file_put_contents( $f, '' );
+                    @file_put_contents( $f, '' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
                 }
             }
             $cleared[] = $channel;
@@ -2751,8 +2751,8 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                     header( 'Cache-Control: must-revalidate' );
                     header( 'Pragma: public' );
                     header( 'Content-Length: ' . filesize( $zip_path ) );
-                    readfile( $zip_path );
-                    @unlink( $zip_path );
+                    readfile( $zip_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
+                    wp_delete_file( $zip_path );
                     exit;
                 }
             }
@@ -2774,7 +2774,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 echo "FILE: {$name}\n";
                 echo "=================================================================\n";
                 if ( file_exists( $path ) && is_readable( $path ) ) {
-                    readfile( $path );
+                    readfile( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
                 } else {
                     echo "(File empty or does not exist)\n";
                 }
@@ -2803,7 +2803,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 break;
         }
 
-        $content = ( is_string( $file ) && file_exists( $file ) && is_readable( $file ) ) ? (string) file_get_contents( $file ) : '';
+        $content = ( is_string( $file ) && file_exists( $file ) && is_readable( $file ) ) ? (string) file_get_contents( $file ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
 
         if ( function_exists( 'nocache_headers' ) ) {
             nocache_headers();

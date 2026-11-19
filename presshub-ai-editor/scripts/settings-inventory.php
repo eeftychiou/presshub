@@ -164,7 +164,7 @@ function presshub_settings_inventory_filters( array $all ): string {
     $names = [];
     $files = array_merge( glob( dirname( __DIR__ ) . '/includes/*.php' ) ?: [], [ dirname( __DIR__ ) . '/presshub-ai-editor.php' ] );
     foreach ( $files as $file ) {
-        if ( preg_match_all( "/apply_filters\\(\\s*'(presshub_[a-z0-9_]+)'/", (string) file_get_contents( $file ), $m ) ) {
+        if ( preg_match_all( "/apply_filters\\(\\s*'(presshub_[a-z0-9_]+)'/", (string) file_get_contents( $file ), $m ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
             foreach ( $m[1] as $n ) {
                 $names[ $n ] = true;
             }
@@ -185,14 +185,14 @@ if ( PHP_SAPI === 'cli' && isset( $argv ) && realpath( $argv[0] ) === realpath( 
     $target = dirname( __DIR__, 2 ) . '/docs/settings-inventory.md';
     $md     = presshub_settings_inventory_markdown();
     if ( in_array( '--check', $argv, true ) ) {
-        $current = is_readable( $target ) ? file_get_contents( $target ) : '';
+        $current = is_readable( $target ) ? file_get_contents( $target ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
         if ( $current !== $md ) {
-            fwrite( STDERR, "docs/settings-inventory.md is stale. Run: php presshub-ai-editor/scripts/settings-inventory.php\n" );
+            fwrite( STDERR, "docs/settings-inventory.md is stale. Run: php presshub-ai-editor/scripts/settings-inventory.php\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
             exit( 1 );
         }
         echo "docs/settings-inventory.md is up to date.\n";
         exit( 0 );
     }
-    file_put_contents( $target, $md );
+    file_put_contents( $target, $md ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
     echo 'Wrote ' . $target . ' (' . count( PressHub_Settings_Registry::all() ) . " options)\n";
 }

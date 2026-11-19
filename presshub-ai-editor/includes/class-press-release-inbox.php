@@ -516,7 +516,7 @@ class PressHub_AI_Press_Release_Inbox {
         $ext_map = [ 'application/pdf' => 'pdf', 'image/png' => 'png', 'image/webp' => 'webp', 'video/mp4' => 'mp4', 'video/webm' => 'webm', 'video/quicktime' => 'mov' ];
         $ext     = $ext_map[ $mime ] ?? 'jpg';
         $tmp  = trailingslashit( sys_get_temp_dir() ) . 'presshub-ai-file-' . wp_generate_password( 12, false ) . '.' . $ext;
-        if ( false === @file_put_contents( $tmp, $data ) ) {
+        if ( false === @file_put_contents( $tmp, $data ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
             return new WP_Error( 'tmp_write_failed', 'Could not write a temporary file for the attachment.' );
         }
 
@@ -525,7 +525,7 @@ class PressHub_AI_Press_Release_Inbox {
         } catch ( \Throwable $t ) {
             $result = new WP_Error( 'extract_exception', $t->getMessage() );
         }
-        @unlink( $tmp );
+        wp_delete_file( $tmp );
         return $result;
     }
 
@@ -563,7 +563,7 @@ class PressHub_AI_Press_Release_Inbox {
             return '';
         }
         $tmp = tempnam( sys_get_temp_dir(), 'phdocx' );
-        if ( false === $tmp || false === @file_put_contents( $tmp, $data ) ) {
+        if ( false === $tmp || false === @file_put_contents( $tmp, $data ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
             return '';
         }
         $zip  = new ZipArchive();
@@ -574,12 +574,12 @@ class PressHub_AI_Press_Release_Inbox {
             if ( is_string( $xml ) ) {
                 $xml  = preg_replace( '#</w:p>#', "\n", $xml );
                 $xml  = preg_replace( '#<w:(tab|br)[^>]*/>#', ' ', (string) $xml );
-                $text = html_entity_decode( strip_tags( (string) $xml ), ENT_QUOTES | ENT_XML1, 'UTF-8' );
+                $text = html_entity_decode( strip_tags( (string) $xml ), ENT_QUOTES | ENT_XML1, 'UTF-8' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- keeps strip_tags() semantics; wp_strip_all_tags() also trims and removes script content.
                 $text = preg_replace( "/[ \t]+/", ' ', $text );
                 $text = trim( (string) preg_replace( "/\n\s*\n+/", "\n\n", (string) $text ) );
             }
         }
-        @unlink( $tmp );
+        wp_delete_file( $tmp );
         return $text;
     }
 

@@ -195,7 +195,7 @@ while ( true ) {
     $presshub_ai_research_posts = get_posts( [
         'post_type'      => 'presshub_research',
         'post_status'    => 'any',
-        'posts_per_page' => 200,
+        'posts_per_page' => 200, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- batch size for a clean-up job that returns IDs only.
         'offset'         => $presshub_ai_offset,
         'fields'         => 'ids',
         'no_found_rows'  => true,

@@ -57,7 +57,7 @@ class PressHub_AI_Briefing_Admin {
             $id = 'src_' . substr( md5( $norm_url . microtime() ), 0, 8 );
         }
 
-        $host      = (string) parse_url( $url, PHP_URL_HOST );
+        $host      = (string) wp_parse_url( $url, PHP_URL_HOST );
         $host_name = ucfirst( preg_replace( '/^www\./i', '', $host ) );
         $name      = sanitize_text_field( (string) ( $data['name'] ?? '' ) );
         if ( '' === trim( $name ) ) {
@@ -661,7 +661,7 @@ class PressHub_AI_Briefing_Admin {
             'post_type'      => 'post',
             'post_status'    => 'any',
             'posts_per_page' => 1,
-            'meta_query'     => $meta_query,
+            'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded lookup of the plugin's own posts by meta key.
         ] );
 
         return ! empty( $posts ) ? (object) $posts[0] : null;
@@ -787,7 +787,7 @@ class PressHub_AI_Briefing_Admin {
         // 1. Resolve blocked source labels first so the active filter below
         //    has a fully-populated blocklist to compare against.
         foreach ( $blocked_sources as $blocked_url ) {
-            $host = (string) parse_url( (string) $blocked_url, PHP_URL_HOST );
+            $host = (string) wp_parse_url( (string) $blocked_url, PHP_URL_HOST );
             if ( '' !== $host ) {
                 $blocked_source_labels[] = ucfirst( preg_replace( '/^www\./i', '', $host ) );
             }
@@ -797,7 +797,7 @@ class PressHub_AI_Briefing_Admin {
         //    from the same host and excluding any host that appears in the
         //    already-populated blocklist.
         foreach ( $snapshot['sources'] ?? [] as $src ) {
-            $host  = (string) parse_url( (string) $src, PHP_URL_HOST );
+            $host  = (string) wp_parse_url( (string) $src, PHP_URL_HOST );
             if ( '' === $host ) {
                 continue;
             }
@@ -1786,7 +1786,7 @@ class PressHub_AI_Briefing_Admin {
                             }
                             $capped_token_count = (int) PressHub_AI_Context_Estimator::estimate_tokens( $capped_card_text );
                         ?>
-                            <div class="presshub-inspector-card" data-index="<?php echo esc_attr( $index ); ?>" data-source="<?php echo esc_attr( strtolower( $art_source ) ); ?>" data-title="<?php echo esc_attr( strtolower( $art_title ) ); ?>" data-text="<?php echo esc_attr( strtolower( mb_substr( strip_tags( $art_content ), 0, 500 ) ) ); ?>" data-words="<?php echo esc_attr( $word_count ); ?>" data-tokens="<?php echo esc_attr( $token_count ); ?>" data-capped-tokens="<?php echo esc_attr( $capped_token_count ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>">
+                            <div class="presshub-inspector-card" data-index="<?php echo esc_attr( $index ); ?>" data-source="<?php echo esc_attr( strtolower( $art_source ) ); ?>" data-title="<?php echo esc_attr( strtolower( $art_title ) ); ?>" data-text="<?php echo esc_attr( strtolower( mb_substr( wp_strip_all_tags( $art_content ), 0, 500 ) ) ); ?>" data-words="<?php echo esc_attr( $word_count ); ?>" data-tokens="<?php echo esc_attr( $token_count ); ?>" data-capped-tokens="<?php echo esc_attr( $capped_token_count ); ?>" data-cap-chars="<?php echo esc_attr( (int) $cap_chars_per_article_server ); ?>">
                                 <div class="presshub-inspector-card-header">
                                     <div class="inspector-card-check">
                                         <input type="checkbox" class="presshub-article-checkbox" value="<?php echo esc_attr( $index ); ?>" checked="checked" id="inspector-check-<?php echo esc_attr( $index ); ?>" />

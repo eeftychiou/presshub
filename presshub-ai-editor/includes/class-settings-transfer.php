@@ -134,7 +134,7 @@ class PressHub_Settings_Transfer {
             $missing = new stdClass();
             $current = get_option( $key, $missing );
             $new     = $value;
-            if ( $current !== $missing && serialize( $current ) === serialize( $new ) ) {
+            if ( $current !== $missing && serialize( $current ) === serialize( $new ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- compares two values for equality only; nothing is stored or unserialized.
                 ++$unchanged;
                 continue;
             }
@@ -169,7 +169,7 @@ class PressHub_Settings_Transfer {
                 // (#261), so it is neither written nor reported.
                 $missing = new stdClass();
                 $current = get_option( $key, $missing );
-                if ( $current !== $missing && serialize( $current ) === serialize( $clean ) ) {
+                if ( $current !== $missing && serialize( $current ) === serialize( $clean ) ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- compares two values for equality only; nothing is stored or unserialized.
                     continue;
                 }
                 update_option( $key, $clean );
@@ -266,7 +266,7 @@ class PressHub_Settings_Transfer {
     public static function handle_preview(): void {
         self::guard();
         $file = $_FILES['presshub_settings_file'] ?? null; // phpcs:ignore WordPress.Security.NonceVerification -- checked in guard().
-        $json = ( is_array( $file ) && ! empty( $file['tmp_name'] ) && is_uploaded_file( $file['tmp_name'] ) ) ? (string) file_get_contents( $file['tmp_name'] ) : '';
+        $json = ( is_array( $file ) && ! empty( $file['tmp_name'] ) && is_uploaded_file( $file['tmp_name'] ) ) ? (string) file_get_contents( $file['tmp_name'] ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
         $parsed = '' === $json ? [ 'error' => __( 'Choose an export file first.', 'presshub-ai-editor' ) ] : self::parse( $json );
         if ( isset( $parsed['error'] ) ) {
             set_transient( self::transient_key(), [ 'error' => $parsed['error'] ], 15 * MINUTE_IN_SECONDS );

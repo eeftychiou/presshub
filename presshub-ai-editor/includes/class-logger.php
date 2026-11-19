@@ -137,10 +137,10 @@ class PressHub_AI_Logger {
             // Auto-rotate if > 5MB
             if ( file_exists( $file ) && filesize( $file ) > 5 * 1024 * 1024 ) {
                 $rotated = $file . '.' . gmdate( 'Ymd_His' ) . '.old';
-                @rename( $file, $rotated );
+                @rename( $file, $rotated ); // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
             }
 
-            @file_put_contents( $file, $formatted, FILE_APPEND | LOCK_EX );
+            @file_put_contents( $file, $formatted, FILE_APPEND | LOCK_EX ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
 
         // Also output to PHP error_log if level is WARNING or ERROR
@@ -181,7 +181,7 @@ class PressHub_AI_Logger {
             PressHub_AI_Log_Paths::delete_rotated_files( 'app' );
         }
         if ( file_exists( $file ) ) {
-            return @file_put_contents( $file, '' ) !== false;
+            return @file_put_contents( $file, '' ) !== false; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
         return true;
     }

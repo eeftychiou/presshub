@@ -68,7 +68,7 @@ class PressHub_AI_Log_Paths {
             if ( ! is_dir( $dir ) ) {
                 wp_mkdir_p( $dir );
             }
-            if ( ! is_dir( $dir ) || ! is_writable( $dir ) ) {
+            if ( ! is_dir( $dir ) || ! is_writable( $dir ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
                 $error = new WP_Error(
                     'presshub_ai_log_dir_unwritable',
                     sprintf(
@@ -147,7 +147,7 @@ class PressHub_AI_Log_Paths {
         foreach ( $files as $name => $content ) {
             $path = $dir . '/' . $name;
             if ( ! file_exists( $path ) ) {
-                @file_put_contents( $path, $content );
+                @file_put_contents( $path, $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
             }
         }
     }
@@ -203,6 +203,22 @@ class PressHub_AI_Log_Paths {
     }
 
     /**
+     * Delete one file through WordPress and report whether it is gone.
+     *
+     * wp_delete_file() returns nothing, so success is read back from the filesystem.
+     *
+     * @param string $path Absolute file path.
+     * @return bool True when the file existed and has been removed.
+     */
+    private static function delete_file( string $path ): bool {
+        if ( ! is_file( $path ) ) {
+            return false;
+        }
+        wp_delete_file( $path );
+        return ! file_exists( $path );
+    }
+
+    /**
      * Delete a channel's rotated copies.
      *
      * @return int Number of files removed.
@@ -210,7 +226,7 @@ class PressHub_AI_Log_Paths {
     public static function delete_rotated_files( string $channel ): int {
         $deleted = 0;
         foreach ( self::get_rotated_files( $channel ) as $path ) {
-            if ( @unlink( $path ) ) {
+            if ( self::delete_file( $path ) ) {
                 $deleted++;
             }
         }
@@ -235,7 +251,7 @@ class PressHub_AI_Log_Paths {
                 if ( false === $stamp ) {
                     continue;
                 }
-                if ( $stamp->getTimestamp() < $cutoff && @unlink( $path ) ) {
+                if ( $stamp->getTimestamp() < $cutoff && self::delete_file( $path ) ) {
                     $deleted++;
                 }
             }
@@ -274,11 +290,11 @@ class PressHub_AI_Log_Paths {
         $deleted = 0;
         foreach ( self::LEGACY_FILES as $legacy ) {
             $path = $dir . '/' . $legacy;
-            if ( is_file( $path ) && @unlink( $path ) ) {
+            if ( is_file( $path ) && self::delete_file( $path ) ) {
                 $deleted++;
             }
             foreach ( self::scan_rotated( $dir, $legacy ) as $old ) {
-                if ( @unlink( $old ) ) {
+                if ( self::delete_file( $old ) ) {
                     $deleted++;
                 }
             }

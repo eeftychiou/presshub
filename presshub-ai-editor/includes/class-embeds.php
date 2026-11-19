@@ -58,7 +58,7 @@ class PressHub_AI_Embeds {
      */
     public static function image_card_block( string $url, int $attachment_id, string $src, string $alt ): string {
         $u     = esc_url( $url );
-        $attrs = json_encode( [ 'id' => $attachment_id, 'sizeSlug' => 'large', 'linkDestination' => 'custom', 'align' => 'center', 'className' => 'presshub-tiktok-photo-card' ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );
+        $attrs = wp_json_encode( [ 'id' => $attachment_id, 'sizeSlug' => 'large', 'linkDestination' => 'custom', 'align' => 'center', 'className' => 'presshub-tiktok-photo-card' ], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP );
         return "<!-- wp:image " . $attrs . " -->\n"
             . '<figure class="wp-block-image aligncenter size-large presshub-tiktok-photo-card">'
             . '<a href="' . $u . '" target="_blank" rel="noopener nofollow"><img src="' . esc_url( $src ) . '" alt="' . esc_attr( $alt ) . '" class="wp-image-' . $attachment_id . '"/></a>'

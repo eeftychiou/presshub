@@ -928,13 +928,13 @@ class PressHub_AI_Podcast_Producer {
             if ( function_exists( 'wp_mkdir_p' ) ) {
                 wp_mkdir_p( $dir );
             } else {
-                @mkdir( $dir, 0755, true );
+                wp_mkdir_p( $dir );
             }
         }
 
         $filename = ( 'noon' === $edition ) ? 'podcast-script-noon.txt' : 'podcast-script.txt';
         $path     = trailingslashit( $dir ) . $filename;
-        $saved    = ( false !== @file_put_contents( $path, $script ) );
+        $saved    = ( false !== @file_put_contents( $path, $script ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
 
         // Issue #79 — persist execution lifecycle metadata for the Briefing
         // Hub stage card. Kept in a sibling JSON file (no WP post) so the
@@ -961,7 +961,7 @@ class PressHub_AI_Podcast_Producer {
                 'edition'        => $edition,
                 'generation_record_id' => max( 0, $generation_record_id ),
             ];
-            @file_put_contents( $meta_path, wp_json_encode( $meta, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) );
+            @file_put_contents( $meta_path, wp_json_encode( $meta, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
         }
 
         // Issue #134: deterministic podcast opening/closing line capture for editorial memory
@@ -1027,7 +1027,7 @@ class PressHub_AI_Podcast_Producer {
             return $defaults;
         }
 
-        $content = @file_get_contents( $path );
+        $content = @file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
         if ( false === $content || '' === trim( $content ) ) {
             return $defaults;
         }
@@ -1072,7 +1072,7 @@ class PressHub_AI_Podcast_Producer {
             return null;
         }
 
-        $content = @file_get_contents( $path );
+        $content = @file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
         if ( false === $content || '' === trim( $content ) ) {
             return null;
         }
@@ -1302,7 +1302,7 @@ class PressHub_AI_Podcast_Producer {
                 'post_type'      => 'post',
                 'post_status'    => 'any',
                 'posts_per_page' => 1,
-                'meta_query'     => $meta_query,
+                'meta_query'     => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- bounded lookup of the plugin's own posts by meta key.
             ] );
             if ( ! empty( $briefing_posts ) ) {
                 $briefing_source_post_id = (int) $briefing_posts[0]->ID;

@@ -52,7 +52,7 @@ class PressHub_AI_News_Harvester {
      * @param string $url Target request URL.
      */
     public function throttle_host_request( string $url ): void {
-        $host = (string) parse_url( $url, PHP_URL_HOST );
+        $host = (string) wp_parse_url( $url, PHP_URL_HOST );
         if ( empty( $host ) ) {
             return;
         }
@@ -227,7 +227,7 @@ class PressHub_AI_News_Harvester {
             return false;
         }
 
-        $parts = parse_url( $abs );
+        $parts = wp_parse_url( $abs );
         $path  = trim( (string) ( $parts['path'] ?? '' ), '/' );
 
         if ( '' === $path || 'index.php' === $path || 'index.html' === $path ) {
@@ -746,7 +746,7 @@ class PressHub_AI_News_Harvester {
      * Probe common feed endpoints on the source domain.
      */
     public function probe_feed_endpoints( string $base_url ): ?array {
-        $parsed = parse_url( $base_url );
+        $parsed = wp_parse_url( $base_url );
         $scheme = $parsed['scheme'] ?? 'https';
         $host   = $parsed['host'] ?? '';
         if ( empty( $host ) ) {
@@ -790,7 +790,7 @@ class PressHub_AI_News_Harvester {
      * @return string[] Array of unique, normalized article URLs.
      */
     public function extract_article_links_from_html( string $html, string $base_url ): array {
-        $parsed_base = parse_url( $base_url );
+        $parsed_base = wp_parse_url( $base_url );
         $base_scheme = $parsed_base['scheme'] ?? 'https';
         $base_host   = $parsed_base['host'] ?? '';
 
@@ -905,7 +905,7 @@ class PressHub_AI_News_Harvester {
             return '';
         }
 
-        $parts = parse_url( $abs );
+        $parts = wp_parse_url( $abs );
         if ( empty( $parts['host'] ) ) {
             return '';
         }
@@ -915,7 +915,7 @@ class PressHub_AI_News_Harvester {
             return '';
         }
 
-        $parsed_base = parse_url( $base_url );
+        $parsed_base = wp_parse_url( $base_url );
         $base_host   = $parsed_base['host'] ?? '';
 
         $target_host = strtolower( preg_replace( '/^www\./', '', $parts['host'] ) );
@@ -947,7 +947,7 @@ class PressHub_AI_News_Harvester {
             return $href;
         }
 
-        $parsed_base = parse_url( $base_url );
+        $parsed_base = wp_parse_url( $base_url );
         $scheme      = $parsed_base['scheme'] ?? 'https';
         $host        = $parsed_base['host'] ?? '';
 
@@ -1060,7 +1060,7 @@ class PressHub_AI_News_Harvester {
                 $url = trim( $source );
                 $source_struct = [
                     'id'           => 'src_' . substr( md5( $url ), 0, 8 ),
-                    'name'         => (string) ( parse_url( $url, PHP_URL_HOST ) ?: $url ),
+                    'name'         => (string) ( wp_parse_url( $url, PHP_URL_HOST ) ?: $url ),
                     'url'          => $url,
                     'type'         => 'text_news',
                     'enabled'      => true,
@@ -1072,7 +1072,7 @@ class PressHub_AI_News_Harvester {
                 $url = (string) ( $source['url'] ?? '' );
                 $source_struct = array_merge( [
                     'id'           => 'src_' . substr( md5( $url ), 0, 8 ),
-                    'name'         => (string) ( $source['name'] ?? ( parse_url( $url, PHP_URL_HOST ) ?: $url ) ),
+                    'name'         => (string) ( $source['name'] ?? ( wp_parse_url( $url, PHP_URL_HOST ) ?: $url ) ),
                     'url'          => $url,
                     'type'         => (string) ( $source['type'] ?? 'text_news' ),
                     'enabled'      => isset( $source['enabled'] ) ? (bool) $source['enabled'] : true,
@@ -1099,7 +1099,7 @@ class PressHub_AI_News_Harvester {
         }
 
         $source_url   = $source_struct['url'];
-        $source_host  = (string) ( parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
+        $source_host  = (string) ( wp_parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
         $src_enabled  = ! empty( $source_struct['enabled'] );
         $src_type     = $source_struct['type'] ?? 'text_news';
         $source_limit = isset( $source_struct['max_articles'] ) && (int) $source_struct['max_articles'] > 0
@@ -1226,7 +1226,7 @@ class PressHub_AI_News_Harvester {
                                         'url'             => $article_url,
                                         'title'           => $feed_title,
                                         'content'         => $feed_content,
-                                        'source'          => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
+                                        'source'          => $source_host ?: ( wp_parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
                                         'tier'            => 'rss_description',
                                         'published_at'    => $fitem['published_at'] ?? '',
                                         'char_count'      => mb_strlen( $feed_content ),
@@ -1382,7 +1382,7 @@ class PressHub_AI_News_Harvester {
                 if ( is_string( $item ) && preg_match( '/^https?:\/\//i', trim( $item ) ) ) {
                     $structured_sources[] = [
                         'id'           => 'src_' . substr( md5( trim( $item ) ), 0, 8 ),
-                        'name'         => (string) parse_url( trim( $item ), PHP_URL_HOST ),
+                        'name'         => (string) wp_parse_url( trim( $item ), PHP_URL_HOST ),
                         'url'          => trim( $item ),
                         'type'         => 'text_news',
                         'enabled'      => true,
@@ -1393,7 +1393,7 @@ class PressHub_AI_News_Harvester {
                 } elseif ( is_array( $item ) && ! empty( $item['url'] ) ) {
                     $structured_sources[] = array_merge( [
                         'id'           => 'src_' . substr( md5( (string) $item['url'] ), 0, 8 ),
-                        'name'         => (string) ( $item['name'] ?? parse_url( (string) $item['url'], PHP_URL_HOST ) ),
+                        'name'         => (string) ( $item['name'] ?? wp_parse_url( (string) $item['url'], PHP_URL_HOST ) ),
                         'url'          => (string) $item['url'],
                         'type'         => (string) ( $item['type'] ?? 'text_news' ),
                         'enabled'      => isset( $item['enabled'] ) ? (bool) $item['enabled'] : true,
@@ -1408,7 +1408,7 @@ class PressHub_AI_News_Harvester {
         $active_text_sources = [];
         foreach ( $structured_sources as $src ) {
             $src_url     = $src['url'] ?? '';
-            $src_name    = $src['name'] ?? ( parse_url( $src_url, PHP_URL_HOST ) ?: $src_url );
+            $src_name    = $src['name'] ?? ( wp_parse_url( $src_url, PHP_URL_HOST ) ?: $src_url );
             $src_type    = $src['type'] ?? 'text_news';
             $src_enabled = ! empty( $src['enabled'] );
 
@@ -1502,7 +1502,7 @@ class PressHub_AI_News_Harvester {
                 break;
             }
 
-            $source_host  = (string) ( parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
+            $source_host  = (string) ( wp_parse_url( $source_url, PHP_URL_HOST ) ?: $source_url );
             $source_limit = isset( $source_item['max_articles'] ) && (int) $source_item['max_articles'] > 0
                 ? (int) $source_item['max_articles']
                 : $this->get_max_links_per_source();
@@ -1581,7 +1581,7 @@ class PressHub_AI_News_Harvester {
                                         'url'             => $article_url,
                                         'title'           => $feed_title,
                                         'content'         => $feed_content,
-                                        'source'          => $source_host ?: ( parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
+                                        'source'          => $source_host ?: ( wp_parse_url( $article_url, PHP_URL_HOST ) ?: 'Feed' ),
                                         'tier'            => 'rss_description',
                                         'published_at'    => $fitem['published_at'] ?? '',
                                         'char_count'      => mb_strlen( $feed_content ),
@@ -1888,7 +1888,7 @@ class PressHub_AI_News_Harvester {
             'url'          => $url,
             'title'        => $title,
             'content'      => $content,
-            'source'       => $source_host ?: ( parse_url( $url, PHP_URL_HOST ) ?: 'Web' ),
+            'source'       => $source_host ?: ( wp_parse_url( $url, PHP_URL_HOST ) ?: 'Web' ),
             'tier'         => $extracted['tier'] ?? 'dom',
             'published_at' => $extracted['published_at'] ?? '',
             'char_count'   => mb_strlen( $content ),
@@ -2047,7 +2047,7 @@ class PressHub_AI_News_Harvester {
             if ( function_exists( 'wp_mkdir_p' ) ) {
                 wp_mkdir_p( $dir );
             } else {
-                @mkdir( $dir, 0755, true );
+                wp_mkdir_p( $dir );
             }
         }
 
@@ -2056,7 +2056,7 @@ class PressHub_AI_News_Harvester {
             return false;
         }
 
-        return false !== @file_put_contents( $path, $json );
+        return false !== @file_put_contents( $path, $json ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- direct access to the plugin's own log, cache or temp file; WP_Filesystem is unavailable in cron, AJAX and CLI runs.
     }
 
     /**
@@ -2074,7 +2074,7 @@ class PressHub_AI_News_Harvester {
 
         $path = $this->get_snapshot_path( $date, $edition );
         if ( file_exists( $path ) ) {
-            $content = @file_get_contents( $path );
+            $content = @file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
             if ( false !== $content && '' !== trim( $content ) ) {
                 $decoded = json_decode( $content, true );
                 if ( is_array( $decoded ) ) {

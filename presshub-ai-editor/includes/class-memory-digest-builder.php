@@ -174,7 +174,7 @@ class PressHub_AI_Memory_Digest_Builder {
         $briefing_text = '';
         $raw_post_content = trim( (string) ( $post->post_content ?? '' ) );
         if ( '' !== $raw_post_content ) {
-            $briefing_text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $raw_post_content ) : strip_tags( $raw_post_content );
+            $briefing_text = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $raw_post_content ) : strip_tags( $raw_post_content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- fallback for when WordPress is not loaded (unit tests).
             $briefing_text = trim( $briefing_text );
             if ( ! empty( $post->post_title ) && ! str_contains( $briefing_text, (string) $post->post_title ) ) {
                 $briefing_text = '# ' . $post->post_title . "\n\n" . $briefing_text;
@@ -187,7 +187,7 @@ class PressHub_AI_Memory_Digest_Builder {
             $filename     = ( 'noon' === $edition ) ? 'briefing-text-noon.md' : 'briefing-text.md';
             $snap_file    = trailingslashit( $snapshot_dir ) . $filename;
             if ( file_exists( $snap_file ) && is_readable( $snap_file ) ) {
-                $briefing_text = trim( (string) file_get_contents( $snap_file ) );
+                $briefing_text = trim( (string) file_get_contents( $snap_file ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local file or upload, not a remote URL.
             }
         }
 

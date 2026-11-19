@@ -416,7 +416,7 @@ class PressHub_Social_Meta_API_Client {
                 $job_meta['instagram_creation_id']         = $creation_id;
                 $job_meta['instagram_container_started_at'] = time();
                 PressHub_Social_Queue::update_job( (int) $job['id'], [
-                    'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
+                    'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : wp_json_encode( $job_meta ),
                 ] );
             }
         }
@@ -503,7 +503,7 @@ class PressHub_Social_Meta_API_Client {
         }
         unset( $job_meta['instagram_creation_id'], $job_meta['instagram_container_started_at'] );
         PressHub_Social_Queue::update_job( (int) $job['id'], [
-            'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
+            'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : wp_json_encode( $job_meta ),
         ] );
     }
 
@@ -526,7 +526,7 @@ class PressHub_Social_Meta_API_Client {
             if ( ! empty( $job['id'] ) && class_exists( 'PressHub_Social_Queue' ) ) {
                 $job_meta['instagram_container_started_at'] = $started_at;
                 PressHub_Social_Queue::update_job( (int) $job['id'], [
-                    'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : json_encode( $job_meta ),
+                    'metadata' => function_exists( 'wp_json_encode' ) ? wp_json_encode( $job_meta ) : wp_json_encode( $job_meta ),
                 ] );
             }
         }
@@ -708,7 +708,7 @@ class PressHub_Social_Meta_API_Client {
                 'Authorization' => 'Bearer ' . $bearer_token,
                 'Content-Type'  => 'application/json',
             ],
-            'body'      => function_exists( 'wp_json_encode' ) ? wp_json_encode( $body ) : json_encode( $body ),
+            'body'      => function_exists( 'wp_json_encode' ) ? wp_json_encode( $body ) : wp_json_encode( $body ),
             'sslverify' => true,
         ] );
 
@@ -784,7 +784,7 @@ class PressHub_Social_Meta_API_Client {
                 'Authorization' => 'Bearer ' . $access_token,
                 'Content-Type'  => 'application/json; charset=UTF-8',
             ],
-            'body'      => function_exists( 'wp_json_encode' ) ? wp_json_encode( $payload ) : json_encode( $payload ),
+            'body'      => function_exists( 'wp_json_encode' ) ? wp_json_encode( $payload ) : wp_json_encode( $payload ),
             'sslverify' => true,
         ] );
 
