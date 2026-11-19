@@ -50,6 +50,9 @@ class PressHub_AI_Ajax_Handlers {
         // AJAX Settings Save
         add_action( 'wp_ajax_presshub_ai_save_settings', [ $this, 'save_settings' ] );
         add_action( 'wp_ajax_presshub_ai_save_settings_section', [ $this, 'save_settings_section' ] );
+        // #309 (E2): the same section save for a submit without JavaScript.
+        require_once __DIR__ . '/class-settings-sections.php';
+        add_action( 'admin_post_' . PressHub_Settings_Sections::POST_ACTION, [ $this, 'handle_section_post' ] );
         add_action( 'wp_ajax_presshub_dismiss_settings_whats_new', [ $this, 'dismiss_settings_whats_new' ] );
         // Dynamic AI Providers Manager AJAX endpoints (Task 6).
         add_action( 'wp_ajax_presshub_ai_save_provider', [ $this, 'save_provider' ] );
@@ -1958,71 +1961,20 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 }
             }
 
-            require_once __DIR__ . '/class-settings.php';
-            require_once __DIR__ . '/class-settings-storage.php';
-            require_once __DIR__ . '/class-logger.php';
-
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::debug( sprintf( 'AJAX save_settings_section request received for tab: %s', $tab ), [ 'raw_keys' => array_keys( $post_data ) ] );
+            $saved = $this->perform_section_save( $tab, $post_data, 'ajax' );
+            if ( ! $saved['ok'] ) {
+                $error = [ 'message' => $saved['message'] ];
+                if ( $saved['field_errors'] ) {
+                    $error['field_errors'] = $saved['field_errors'];
+                }
+                wp_send_json_error( $error, 200 === $saved['status'] ? null : $saved['status'] );
             }
-
-            $GLOBALS['presshub_ai_save_post_data'] = $post_data;
-            $model_warnings       = [];
-            $model_warning_fields = [];
-            if ( class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab ) ) {
-                // #246: one Settings section, across both option groups. Social
-                // sanitizers read their "_present" / "_remove" markers from $_POST.
-                $with_social = current_user_can( PressHub_Capabilities::social() );
-                $defs        = PressHub_Settings_Sections::definitions();
-                if ( ! empty( $defs[ $tab ]['social'] ) && ! $with_social ) {
-                    wp_send_json_error( [ 'message' => __( 'Insufficient permissions to manage PressHub Social settings.', 'presshub-ai-editor' ) ], 403 );
-                }
-                foreach ( $post_data as $k => $v ) {
-                    if ( is_string( $k ) && ! isset( $_POST[ $k ] ) ) {
-                        $_POST[ $k ] = $v;
-                    }
-                }
-                // #236: a model known to be the wrong type for its task is refused
-                // before anything is written; an unknown one saves with a warning.
-                require_once __DIR__ . '/class-model-tasks.php';
-                $model_check = PressHub_Model_Tasks::validate( $post_data );
-                if ( $model_check['errors'] ) {
-                    wp_send_json_error( [
-                        'message'      => __( 'Not saved. A model does not fit its task; see the fields listed above.', 'presshub-ai-editor' ),
-                        'field_errors' => $model_check['errors'],
-                    ] );
-                }
-                $model_warnings       = [];
-                foreach ( $model_check['warnings'] as $opt => $msg ) {
-                    $model_warnings[] = PressHub_Model_Tasks::label_of( (string) $opt ) . ': ' . $msg;
-                }
-                $model_warning_fields = $model_check['warnings'];
-                $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
-            } else {
-                // #233: the registry decides which options belong to this tab, so a
-                // tab's Save never writes (or zeroes) another tab's options.
-                if ( '' !== $tab && ! PressHub_Settings_Registry::options_map( 'ai', $tab ) ) {
-                    wp_send_json_error( [ 'message' => __( 'Unknown settings section.', 'presshub-ai-editor' ) ], 400 );
-                }
-                $result = PressHub_Settings_Registry::save_posted( 'ai', $tab, $post_data );
-            }
-            $saved_keys  = $result['saved_keys'];
-            $saved_count = $result['count'];
-
-            $saved_gcloud       = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
-            $saved_github       = (string) get_option( 'presshub_ai_github_token', '' );
-
-            if ( class_exists( 'PressHub_AI_Logger' ) ) {
-                PressHub_AI_Logger::info( sprintf( 'Settings section "%s" successfully saved (%d options updated)', $tab, $saved_count ), [
-                    'user_id'    => get_current_user_id(),
-                    'saved_keys' => $saved_keys,
-                    'tab'        => $tab,
-                ] );
-            }
-
-            if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
-                PressHub_AI_Settings_Storage::log_settings_saved( $saved_keys, $saved_count, $tab ?: 'settings' );
-            }
+            $saved_keys           = $saved['saved_keys'];
+            $saved_count          = $saved['count'];
+            $model_warnings       = $saved['model_warnings'];
+            $model_warning_fields = $saved['model_warning_fields'];
+            $saved_gcloud         = (string) get_option( 'presshub_ai_google_cloud_api_key', '' );
+            $saved_github         = (string) get_option( 'presshub_ai_github_token', '' );
         } catch ( Throwable $t ) {
             if ( $t instanceof RuntimeException && 0 === strpos( $t->getMessage(), 'wp_send_json' ) ) {
                 throw $t;
@@ -2051,6 +2003,129 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 'github_token'     => PressHub_AI_Settings::mask_key( $saved_github ),
             ],
         ] );
+    }
+
+    /**
+     * The one section save behind the AJAX Save and the no-JS form (#246, #309 E2):
+     * model check first (nothing is written when it refuses), then the section's
+     * options only, across both option groups, then the audit event.
+     *
+     * @param array<string,mixed> $post_data Posted fields (unslashed for the no-JS form, JSON for AJAX).
+     * @return array{ok:bool,status:int,message:string,field_errors:array,saved_keys:array,count:int,model_warnings:array,model_warning_fields:array}
+     */
+    public function perform_section_save( string $tab, array $post_data, string $via = 'ajax' ): array {
+        $out = [
+            'ok'                   => false,
+            'status'               => 200,
+            'message'              => '',
+            'field_errors'         => [],
+            'saved_keys'           => [],
+            'count'                => 0,
+            'model_warnings'       => [],
+            'model_warning_fields' => [],
+        ];
+        require_once __DIR__ . '/class-settings.php';
+        require_once __DIR__ . '/class-settings-storage.php';
+        require_once __DIR__ . '/class-logger.php';
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::debug( sprintf( 'Settings section save (%s) received for tab: %s', $via, $tab ), [ 'raw_keys' => array_keys( $post_data ) ] );
+        }
+
+        $GLOBALS['presshub_ai_save_post_data'] = $post_data;
+        if ( class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab ) ) {
+            // #246: one Settings section, across both option groups. Social
+            // sanitizers read their "_present" / "_remove" markers from $_POST.
+            $with_social = current_user_can( PressHub_Capabilities::social() );
+            $defs        = PressHub_Settings_Sections::definitions();
+            if ( ! empty( $defs[ $tab ]['social'] ) && ! $with_social ) {
+                $out['status']  = 403;
+                $out['message'] = __( 'Insufficient permissions to manage PressHub Social settings.', 'presshub-ai-editor' );
+                return $out;
+            }
+            foreach ( $post_data as $k => $v ) {
+                if ( is_string( $k ) && ! isset( $_POST[ $k ] ) ) {
+                    $_POST[ $k ] = $v;
+                }
+            }
+            // #236: a model known to be the wrong type for its task is refused
+            // before anything is written; an unknown one saves with a warning.
+            require_once __DIR__ . '/class-model-tasks.php';
+            $model_check = PressHub_Model_Tasks::validate( $post_data );
+            if ( $model_check['errors'] ) {
+                $out['message']      = __( 'Not saved. A model does not fit its task; see the fields listed above.', 'presshub-ai-editor' );
+                $out['field_errors'] = $model_check['errors'];
+                return $out;
+            }
+            foreach ( $model_check['warnings'] as $opt => $msg ) {
+                $out['model_warnings'][] = PressHub_Model_Tasks::label_of( (string) $opt ) . ': ' . $msg;
+            }
+            $out['model_warning_fields'] = $model_check['warnings'];
+            $result = PressHub_Settings_Registry::save_section( $tab, $post_data, $with_social );
+        } else {
+            // #233: the registry decides which options belong to this tab, so a
+            // tab's Save never writes (or zeroes) another tab's options. The no-JS
+            // form only ever posts a Settings section.
+            if ( 'ajax' !== $via || ( '' !== $tab && ! PressHub_Settings_Registry::options_map( 'ai', $tab ) ) ) {
+                $out['status']  = 400;
+                $out['message'] = __( 'Unknown settings section.', 'presshub-ai-editor' );
+                return $out;
+            }
+            $result = PressHub_Settings_Registry::save_posted( 'ai', $tab, $post_data );
+        }
+        $out['ok']         = true;
+        $out['saved_keys'] = $result['saved_keys'];
+        $out['count']      = $result['count'];
+
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::info( sprintf( 'Settings section "%s" successfully saved (%d options updated)', $tab, $out['count'] ), [
+                'user_id'    => get_current_user_id(),
+                'saved_keys' => $out['saved_keys'],
+                'tab'        => $tab,
+                'via'        => $via,
+            ] );
+        }
+        if ( class_exists( 'PressHub_AI_Settings_Storage' ) ) {
+            PressHub_AI_Settings_Storage::log_settings_saved( $out['saved_keys'], $out['count'], $tab ?: 'settings' );
+        }
+        return $out;
+    }
+
+    /**
+     * admin-post: the Settings form submitted without JavaScript (#309, E2).
+     * Saves the one section on screen, like the AJAX Save, then returns to it.
+     */
+    public function handle_section_post(): void {
+        $tab = isset( $_POST['presshub_settings_section'] ) ? sanitize_key( wp_unslash( $_POST['presshub_settings_section'] ) ) : '';
+        check_admin_referer( PressHub_Settings_Sections::post_nonce( $tab ) );
+        if ( ! current_user_can( PressHub_Capabilities::manage() ) ) {
+            wp_die( esc_html__( 'Insufficient permissions to manage PressHub AI settings.', 'presshub-ai-editor' ), '', [ 'response' => 403 ] );
+        }
+        $post_data = wp_unslash( $_POST );
+        $post_data = is_array( $post_data ) ? $post_data : [];
+        unset( $post_data['action'], $post_data['_wpnonce'], $post_data['_wp_http_referer'], $post_data['presshub_settings_section'] );
+
+        try {
+            $saved = $this->perform_section_save( $tab, $post_data, 'form' );
+        } catch ( Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Exception in handle_section_post: ' . $t->getMessage(), [ 'file' => basename( $t->getFile() ), 'line' => $t->getLine() ] );
+            }
+            $saved = [ 'ok' => false, 'message' => __( 'Not saved: an error occurred. See the PressHub log.', 'presshub-ai-editor' ), 'field_errors' => [], 'model_warnings' => [] ];
+        }
+        set_transient( PressHub_Settings_Sections::post_result_key( (int) get_current_user_id() ), [
+            'section'        => $tab,
+            'ok'             => (bool) $saved['ok'],
+            'message'        => (string) $saved['message'],
+            'field_errors'   => (array) $saved['field_errors'],
+            'model_warnings' => (array) $saved['model_warnings'],
+        ], 120 );
+
+        $url = class_exists( 'PressHub_Settings_Sections' ) && PressHub_Settings_Sections::exists( $tab )
+            ? PressHub_Settings_Sections::url( $tab )
+            : admin_url( 'admin.php?page=presshub-ai' );
+        wp_safe_redirect( add_query_arg( 'presshub_saved', '1', $url ) );
+        exit;
     }
 
     /** Remembers, per user, that the "What's new in settings" panel was dismissed (#246). */

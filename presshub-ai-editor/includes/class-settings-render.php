@@ -43,6 +43,41 @@ class PressHub_AI_Settings_Render {
     }
 
     /**
+     * #309 (E2): the result of a save made without JavaScript (admin-post),
+     * shown once after the redirect back to the section.
+     */
+    private function render_section_post_result( string $section ): void {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- only reads a flag set by our own redirect.
+        if ( empty( $_GET['presshub_saved'] ) || ! function_exists( 'get_current_user_id' ) ) {
+            return;
+        }
+        $key    = PressHub_Settings_Sections::post_result_key( (int) get_current_user_id() );
+        $result = get_transient( $key );
+        delete_transient( $key );
+        if ( ! is_array( $result ) || ( $result['section'] ?? '' ) !== $section ) {
+            return;
+        }
+        if ( ! empty( $result['ok'] ) ) {
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'presshub-ai-editor' ) . '</p>';
+            foreach ( (array) ( $result['model_warnings'] ?? [] ) as $warning ) {
+                echo '<p>' . esc_html( (string) $warning ) . '</p>';
+            }
+            echo '</div>';
+            return;
+        }
+        echo '<div class="notice notice-error"><p>' . esc_html( (string) ( $result['message'] ?? __( 'Not saved.', 'presshub-ai-editor' ) ) ) . '</p>';
+        if ( ! empty( $result['field_errors'] ) ) {
+            echo '<ul>';
+            foreach ( (array) $result['field_errors'] as $option => $message ) {
+                $label = class_exists( 'PressHub_Model_Tasks' ) ? PressHub_Model_Tasks::label_of( (string) $option ) : (string) $option;
+                echo '<li><a href="#' . esc_attr( (string) $option ) . '">' . esc_html( $label ) . '</a>: ' . esc_html( (string) $message ) . '</li>';
+            }
+            echo '</ul>';
+        }
+        echo '</div>';
+    }
+
+    /**
      * Slug sanitizer, mirrored from the facade so render_providers_grid() can
      * call self::sanitize_slug() without depending on the facade.
      */
@@ -73,6 +108,7 @@ class PressHub_AI_Settings_Render {
         <div class="wrap presshub-ai-settings-wrap presshub-settings-page" id="presshub-settings-page" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
             <h1><?php echo esc_html__( 'PressHub — Settings', 'presshub-ai-editor' ); ?></h1>
             <hr class="wp-header-end" />
+            <?php $this->render_section_post_result( $section ); ?>
             <?php if ( $prompts_reset ) : ?>
                 <div class="notice notice-success is-dismissible"><p><?php echo esc_html__( 'All prompts and templates have been restored to their defaults.', 'presshub-ai-editor' ); ?></p></div>
             <?php endif; ?>
@@ -99,11 +135,15 @@ class PressHub_AI_Settings_Render {
                         </nav>
                     <?php endif; ?>
 
-                    <form method="post" action="options.php" id="presshub-ai-settings-form" novalidate class="presshub-settings-section-form" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="presshub-ai-settings-form" novalidate class="presshub-settings-section-form" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
                         <?php
-                        // option_page and nonce, so a no-JS submit still reaches options.php's capability check.
-                        settings_fields( 'presshub_ai_options' );
+                        // #309 (E2): without JavaScript the form saves this section only,
+                        // through the same path as the AJAX Save (never options.php, which
+                        // would save the whole option group and reset other sections).
                         ?>
+                        <input type="hidden" name="action" value="<?php echo self::esc_attr_safe( PressHub_Settings_Sections::POST_ACTION ); ?>" />
+                        <input type="hidden" name="presshub_settings_section" value="<?php echo self::esc_attr_safe( $section ); ?>" />
+                        <?php wp_nonce_field( PressHub_Settings_Sections::post_nonce( $section ), '_wpnonce', true ); ?>
                         <div id="presshub-tab-pane-<?php echo self::esc_attr_safe( $section ); ?>" class="presshub-tab-pane presshub-settings-section" data-section="<?php echo self::esc_attr_safe( $section ); ?>">
                             <?php $this->render_section( $section ); ?>
                         </div>
