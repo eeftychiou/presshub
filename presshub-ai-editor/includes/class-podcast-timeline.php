@@ -121,13 +121,18 @@ class PressHub_AI_Podcast_Timeline {
                 $t += $between;
             }
             $topic_start = $t;
-            foreach ( array_values( $topic['turns'] ) as $i => $turn ) {
-                if ( $i > 0 ) {
-                    $t += $turn_pause;
-                }
+            $placed = 0;
+            foreach ( array_values( $topic['turns'] ) as $turn ) {
                 $seconds = max( 0.0, (float) ( $turn['seconds'] ?? 0 ) );
                 $text    = trim( (string) ( $turn['text'] ?? '' ) );
-                if ( '' !== $text && $seconds > 0 ) {
+                // A turn without audio is skipped by stitch_wav_chunks(), pause and all.
+                if ( $seconds <= 0 ) {
+                    continue;
+                }
+                if ( $placed++ > 0 ) {
+                    $t += $turn_pause;
+                }
+                if ( '' !== $text ) {
                     $segments[] = [
                         'speaker' => self::speaker_number( (string) ( $turn['speaker'] ?? '' ), $hosts ),
                         'text'    => $text,
@@ -187,9 +192,10 @@ class PressHub_AI_Podcast_Timeline {
 
     /**
      * Chapter list for a YouTube description ("0:00 Title" per line), or '' when YouTube
-     * would not show it: fewer than three titled topics, or one shorter than 10 seconds.
-     * The first chapter starts at 0:00, as YouTube requires, so it takes in the intro.
-     * Estimated timelines are scaled to $audio_seconds when that is known.
+     * would not show it (fewer than three chapters). The first chapter starts at 0:00, as
+     * YouTube requires, so it takes in the intro. A topic shorter than 10 seconds (YouTube's
+     * minimum) is merged into the chapter before it, or into the next one when it is the
+     * first. Estimated timelines are scaled to $audio_seconds when that is known.
      */
     public static function chapters( array $timeline, float $audio_seconds = 0.0 ): string {
         $topics = array_values( array_filter( (array) ( $timeline['topics'] ?? [] ), static fn( $t ) => is_array( $t ) && '' !== trim( (string) ( $t['title'] ?? '' ) ) ) );
@@ -200,19 +206,30 @@ class PressHub_AI_Podcast_Timeline {
         $ratio    = ( $audio_seconds > 0 && $duration > 0 ) ? $audio_seconds / $duration : 1.0;
         $end      = $duration * $ratio;
 
-        $starts = [];
+        $chapters = [];
         foreach ( $topics as $i => $topic ) {
-            $starts[] = 0 === $i ? 0.0 : (float) $topic['start'] * $ratio;
+            $title      = trim( (string) preg_replace( '/\s+/u', ' ', ( function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( (string) $topic['title'] ) : strip_tags( (string) $topic['title'] ) ) ) );
+            $chapters[] = [ 'title' => $title, 'start' => 0 === $i ? 0.0 : (float) $topic['start'] * $ratio ];
         }
-        $lines = [];
-        foreach ( $topics as $i => $topic ) {
-            $next = $starts[ $i + 1 ] ?? $end;
-            if ( $next - $starts[ $i ] < self::MIN_CHAPTER_SECONDS ) {
-                return '';
+        // Merge chapters under the minimum length until every one is long enough.
+        for ( $i = 0; $i < count( $chapters ); ) {
+            $next = $chapters[ $i + 1 ]['start'] ?? $end;
+            if ( $next - $chapters[ $i ]['start'] >= self::MIN_CHAPTER_SECONDS || count( $chapters ) < 2 ) {
+                $i++;
+                continue;
             }
-            $title   = trim( preg_replace( '/\s+/u', ' ', ( function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( (string) $topic['title'] ) : strip_tags( (string) $topic['title'] ) ) ) );
-            $lines[] = self::stamp( $starts[ $i ] ) . ' ' . $title;
+            if ( 0 === $i ) {
+                // The first keeps 0:00 and takes the next chapter's place.
+                $chapters[1]['start'] = 0.0;
+                array_splice( $chapters, 0, 1 );
+            } else {
+                array_splice( $chapters, $i, 1 );
+                $i = max( 0, $i - 1 );
+            }
         }
-        return implode( "\n", $lines );
+        if ( count( $chapters ) < self::MIN_CHAPTERS ) {
+            return '';
+        }
+        return implode( "\n", array_map( static fn( $c ) => self::stamp( $c['start'] ) . ' ' . $c['title'], $chapters ) );
     }
 }

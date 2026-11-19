@@ -2619,7 +2619,9 @@ $tl_mp3 = PressHub_AI_Podcast_Timeline::build( [ [ 'title' => '', 'turns' => [ [
 assert_true( $tl_mp3['estimated'] && 1 === $tl_mp3['segments'][0]['speaker'], 'With one host every turn is speaker 1; an MP3 timeline is marked estimated' );
 assert_equals( "0:00 Η Βουλή ψηφίζει τον προϋπολογισμό\n0:20 Καιρός\n0:33 Ποδόσφαιρο: νίκη της Ομόνοιας", PressHub_AI_Podcast_Timeline::chapters( $tl ), 'Chapters start at 0:00 and follow the topics' );
 assert_equals( '', PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 60, 'topics' => array_slice( $tl['topics'], 0, 2 ) ] ), 'Fewer than three topics give no chapters' );
-assert_equals( '', PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 40, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 15 ], [ 'title' => 'C', 'start' => 20 ] ] ] ), 'A chapter under 10 seconds gives no chapters' );
+assert_equals( '', PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 40, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 15 ], [ 'title' => 'C', 'start' => 20 ] ] ] ), 'When merging short chapters leaves fewer than three there are no chapters' );
+assert_equals( "0:00 A\n0:15 B\n0:40 D", PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 60, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 15 ], [ 'title' => 'C', 'start' => 35 ], [ 'title' => 'D', 'start' => 40 ] ] ] ), 'A topic under 10 seconds is merged into the chapter before it' );
+assert_equals( "0:00 B\n0:30 C\n0:50 D", PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 70, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 5 ], [ 'title' => 'C', 'start' => 30 ], [ 'title' => 'D', 'start' => 50 ] ] ] ), 'A short first topic gives 0:00 to the next' );
 assert_equals( '1:02:05', PressHub_AI_Podcast_Timeline::stamp( 3725 ), 'Chapter times past an hour have hours' );
 
 assert_true( PressHub_Social_YouTube::topic_overlap( 'Ποδόσφαιρο: νίκη της Ομόνοιας', 'Η Ομόνοια νίκησε στο ποδόσφαιρο' ) >= 0.5, 'Greek titles match across accents and inflections' );
@@ -2640,6 +2642,8 @@ assert_true( 1 === count( $one ) && 4 === count( $one[0]['images'] ), 'Without t
 
 $desc = PressHub_Social_YouTube::with_chapters( str_repeat( 'α', 3000 ), "0:00 Α\n1:00 Β\n2:00 Γ" );
 assert_true( strlen( $desc ) <= PressHub_Social_YouTube::DESCRIPTION_MAX_BYTES && str_ends_with( $desc, "2:00 Γ" ), 'Chapters are kept at the end of a long description' );
+$desc2 = PressHub_Social_YouTube::with_chapters( str_repeat( 'α', 3000 ) . "\n\n#κύπρος #ειδήσεις\n\nhttps://example.com/?p=1", "0:00 Α\n1:00 Β\n2:00 Γ" );
+assert_true( strlen( $desc2 ) <= PressHub_Social_YouTube::DESCRIPTION_MAX_BYTES && str_ends_with( $desc2, "2:00 Γ\n\n#κύπρος #ειδήσεις\n\nhttps://example.com/?p=1" ), 'The link and hashtags stay whole after the chapters' );
 
 // The episode waits for the shorts' images, then is uploaded with them.
 $ep_id  = (int) $yt_eps[0]['id'];
@@ -2647,7 +2651,14 @@ $sh_id  = PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'tik
 $ep_job = PressHub_Social_Queue::get_job( $ep_id );
 $ep_job['metadata'] = [ 'youtube_episode' => [ 'queued_at' => gmdate( 'c' ) ] ];
 assert_false( PressHub_Social_YouTube::episode_ready( $ep_job ), 'An episode waits while a short has no images yet' );
-assert_true( PressHub_Social_YouTube::episode_ready( $ep_job, time() + PressHub_Social_YouTube::EPISODE_IMAGE_WAIT + 1 ), 'After the wait the episode goes without them' );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job, time() + 90 * 60 + 1 ), 'After the wait the episode goes without them' );
+assert_true( null !== PressHub_Social_YouTube::episode_hold( $ep_job ) && 300 === PressHub_Social_YouTube::episode_hold( $ep_job )['delay'], 'A held episode is checked again in 5 minutes' );
+update_option( 'presshub_social_youtube_episode_image_wait_minutes', 0 );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'Wait for Story Images 0 does not wait' );
+delete_option( 'presshub_social_youtube_episode_image_wait_minutes' );
+update_option( 'presshub_social_youtube_episode_enhanced', false );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'With enhanced episodes off nothing waits for images' );
+delete_option( 'presshub_social_youtube_episode_enhanced' );
 assert_true( PressHub_Social_YouTube::episode_ready( [ 'platform' => 'youtube', 'tiktok_short' => [] ] ), 'A short is never held for images' );
 PressHub_Social_Queue::update_job( (int) $sh_id, [ 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 2, 'topic' => 'Νίκη της Ομόνοιας στο ποδόσφαιρο', 'images' => [ [ 'url' => 'https://img/a1.jpg' ], [ 'url' => 'https://img/a2.jpg' ] ] ] ] ) ] );
 PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'youtube', 'engine' => 'automation', 'post_copy' => 'x', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ), 'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 2, 'topic' => 'Νίκη', 'images' => [ [ 'url' => 'https://img/a1.jpg' ] ] ] ] ] );
@@ -2676,11 +2687,25 @@ $GLOBALS['yt_long_calls']  = 0;
 PressHub_Social_YouTube::forget_access_token();
 update_post_meta( 880, '_presshub_audio_duration_sec', 600 );
 assert_true( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'A 10-minute episode may always be uploaded' );
+update_post_meta( 880, '_presshub_audio_duration_sec', 899 );
+assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'An episode just under 15 minutes counts the silence added at the end' );
+PressHub_Social_YouTube::forget_access_token();
+$GLOBALS['yt_long_calls'] = 0;
 assert_equals( 0, $GLOBALS['yt_long_calls'], 'A short episode needs no channel check' );
 update_post_meta( 880, '_presshub_audio_duration_sec', 1100 );
 assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'An 18-minute episode waits while the channel is not verified' );
 assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'It keeps waiting' );
 assert_equals( 1, $GLOBALS['yt_long_calls'], 'The channel status is read once and cached' );
+$held_before = PressHub_Social_Queue::get_job( $ep_id );
+PressHub_Social_Queue::update_job( $ep_id, [ 'status' => 'pending', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'metadata' => wp_json_encode( $ep_job['metadata'] ) ] );
+delete_transient( 'presshub_social_youtube_long_note_' . $ep_id );
+$held_claim = PressHub_Social_REST_Controller::handle_claim( $req_yt );
+$held_after = PressHub_Social_Queue::get_job( $ep_id );
+assert_false( in_array( $ep_id, array_map( fn( $j ) => (int) $j['id'], $held_claim['jobs'] ?? [] ), true ), 'The claim does not hand out the long episode' );
+assert_equals( 'pending', $held_after['status'], 'The held episode stays pending' );
+assert_equals( (int) ( $held_before['attempts'] ?? 0 ), (int) ( $held_after['attempts'] ?? 0 ), 'Holding the episode uses no attempt' );
+assert_true( str_contains( (string) $held_after['last_error'], 'over 15 minutes' ), 'The Queue screen says why the episode waits' );
+assert_true( strtotime( $held_after['scheduled_at'] . ' UTC' ) > time() + 3000, 'The held episode is moved an hour later in the queue' );
 $GLOBALS['yt_long_status'] = 'allowed';
 PressHub_Social_YouTube::forget_access_token();
 assert_true( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'Once long uploads are allowed the episode goes' );

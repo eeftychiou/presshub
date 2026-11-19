@@ -77,6 +77,8 @@ export interface GenerateEpisodeOptions {
 }
 
 export interface EpisodeVideoResult {
+  /** What the video lacks that the job asked for (no captions, story images that failed), for the job's report. */
+  notes?: string[];
   filePath: string;
   width: number;
   height: number;
@@ -99,7 +101,11 @@ export const EPISODE_MAX_SLOTS = 120;
 export const OPENING_SECONDS = 4.5;
 export const TOPIC_CARD_SECONDS = 3.5;
 export const EPISODE_END_SECONDS = 4;
-const EPISODE_MAX_IMAGES = 40;
+/** A caption stays this long after its last word; the end line shows at least END_LINE_MIN_SECONDS. */
+const CAPTION_HOLD_SECONDS = 0.4;
+export const END_LINE_MIN_SECONDS = 2.5;
+/** Most images in one episode; the same cap as WordPress (PressHub_Social_YouTube::EPISODE_MAX_IMAGES). */
+export const EPISODE_MAX_IMAGES = 30;
 
 const LAYOUT = {
   margin: 64,
@@ -163,16 +169,26 @@ export function fitTimeline(
 export function planEpisodeSlots(scenes: EpisodeScene[], total: number, imageIndex: (url: string) => number, imageCount: number): PreparedSlot[] {
   const motions: MotionSlot['motion'][] = ['in', 'left', 'out', 'right'];
   const all = Array.from({ length: Math.max(1, imageCount) }, (_, i) => i);
-  const list = scenes.length > 0 ? scenes : [{ start: 0, end: total, images: [] as string[] }];
+  const list = (scenes.length > 0 ? scenes : [{ start: 0, end: total, images: [] as string[] }])
+    .map((scene, si, arr) => ({ scene, duration: (si === arr.length - 1 ? total : Math.min(total, scene.end)) - scene.start }))
+    .filter((x) => x.duration > 0)
+    .slice(0, EPISODE_MAX_SLOTS);
   const slotSeconds = Math.max(EPISODE_SLOT_SECONDS, total / EPISODE_MAX_SLOTS);
+  const counts = list.map((x) => Math.max(1, Math.round(x.duration / slotSeconds)));
+  // A hard cap: rounding per scene must not push the total over EPISODE_MAX_SLOTS.
+  while (counts.reduce((a, b) => a + b, 0) > EPISODE_MAX_SLOTS) {
+    let widest = 0;
+    counts.forEach((c, i) => {
+      if (c > counts[widest]) widest = i;
+    });
+    if (counts[widest] <= 1) break;
+    counts[widest]--;
+  }
   const slots: PreparedSlot[] = [];
-  list.forEach((scene, si) => {
-    const end = si === list.length - 1 ? total : Math.min(total, scene.end);
-    const duration = end - scene.start;
-    if (duration <= 0) return;
+  list.forEach(({ scene, duration }, si) => {
     const own = (scene.images || []).map(imageIndex).filter((i) => i >= 0);
     const pool = own.length > 0 ? own : all;
-    const count = Math.max(1, Math.round(duration / slotSeconds));
+    const count = counts[si];
     for (let k = 0; k < count; k++) {
       slots.push({ image: pool[k % pool.length], motion: motions[slots.length % motions.length], duration: duration / count });
     }
@@ -198,7 +214,8 @@ export function buildEpisodeAssScript(opts: EpisodeAssOptions): string {
   const cx = W / 2;
   const total = opts.totalDuration;
   const lastSpeech = opts.chunks.length > 0 ? opts.chunks[opts.chunks.length - 1].end : 0;
-  const endStart = Math.max(lastSpeech + 0.3, total - EPISODE_END_SECONDS);
+  // After the last caption has gone (it stays 0.4 s past the voice).
+  const endStart = Math.max(lastSpeech + CAPTION_HOLD_SECONDS, total - EPISODE_END_SECONDS);
 
   const header = [
     '[Script Info]',
@@ -213,7 +230,8 @@ export function buildEpisodeAssScript(opts: EpisodeAssOptions): string {
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     `Style: Caption,Inter ExtraBold,70,${COLORS.white},${COLORS.white},${COLORS.black},&H96000000,0,0,0,0,100,100,0,0,1,6,3,5,${m * 3},${m * 3},0,1`,
     `Style: Card,Inter Black,84,${COLORS.white},${COLORS.white},${COLORS.black},&H96000000,0,0,0,0,100,100,0,0,1,7,4,5,${m * 2},${m * 2},0,1`,
-    `Style: Label,Inter Black,34,${COLORS.badgeText},${COLORS.badgeText},${COLORS.speaker1},&H00000000,0,0,0,0,100,100,1,0,3,12,0,7,${m},${m},0,1`,
+    // Right margin clear of the logo in the top-right corner, so a long topic wraps before it.
+    `Style: Label,Inter Black,34,${COLORS.badgeText},${COLORS.badgeText},${COLORS.speaker1},&H00000000,0,0,0,0,100,100,1,0,3,12,0,7,${m},${m + LAYOUT.logoWidth + 48},0,1`,
     `Style: Brand,Inter ExtraBold,36,${COLORS.white},${COLORS.white},${COLORS.black},&H96000000,0,0,0,0,100,100,0,0,1,3,2,9,${m},${m},0,1`,
     `Style: EndLine,Inter ExtraBold,56,${COLORS.speaker1},${COLORS.speaker1},${COLORS.black},&H96000000,0,0,0,0,100,100,0,0,1,5,2,5,${m},${m},0,1`,
     '',
@@ -292,15 +310,17 @@ async function prepareEpisodeImage(src: string, dest: string): Promise<boolean> 
   const w = Math.round(EPISODE_CANVAS.width * SOURCE_SCALE);
   const h = Math.round(EPISODE_CANVAS.height * SOURCE_SCALE);
   try {
-    const meta = await sharp(src).metadata();
+    // Turned upright first, by the camera's EXIF orientation.
+    const upright = await sharp(src).rotate().toBuffer();
+    const meta = await sharp(upright).metadata();
     const ratio = (meta.width || 1) / (meta.height || 1);
     if (ratio >= 1.4) {
-      await sharp(src).resize(w, h, { fit: 'cover', position: sharp.strategy.attention }).modulate({ saturation: 1.08 }).jpeg({ quality: 88 }).toFile(dest);
+      await sharp(upright).resize(w, h, { fit: 'cover', position: sharp.strategy.attention }).modulate({ saturation: 1.08 }).jpeg({ quality: 88 }).toFile(dest);
       return true;
     }
-    const backdrop = await sharp(src).resize(Math.round(w / 4), Math.round(h / 4), { fit: 'cover' }).blur(12).modulate({ brightness: 0.55, saturation: 1.1 }).toBuffer();
+    const backdrop = await sharp(upright).resize(Math.round(w / 4), Math.round(h / 4), { fit: 'cover' }).blur(12).modulate({ brightness: 0.55, saturation: 1.1 }).toBuffer();
     const fgHeight = Math.round(h * 0.94);
-    const fg = await sharp(src).resize({ height: fgHeight, width: Math.round(w * 0.9), fit: 'inside' }).modulate({ saturation: 1.08 }).toBuffer();
+    const fg = await sharp(upright).resize({ height: fgHeight, width: Math.round(w * 0.9), fit: 'inside' }).modulate({ saturation: 1.08 }).toBuffer();
     const fgMeta = await sharp(fg).metadata();
     await sharp(backdrop)
       .resize(w, h)
@@ -371,12 +391,18 @@ export function buildEpisodeFfmpegArgs(p: {
     parts.push(`[${inputOf.get(img)}:v]${n > 1 ? `split=${n}` : 'null'}${outs}`);
   });
   const taken = new Map<number, number>();
-  let frameBudget = Math.round(p.total * p.fps);
+  // Frames from the running time, so rounding never builds up and every scene cut stays
+  // where its topic starts (the last shot ends exactly at the end).
+  const totalFrames = Math.round(p.total * p.fps);
+  let elapsed = 0;
+  let framesSoFar = 0;
   p.slots.forEach((slot, i) => {
     const k = taken.get(slot.image) || 0;
     taken.set(slot.image, k + 1);
-    const frames = i === p.slots.length - 1 ? Math.max(1, frameBudget) : Math.max(1, Math.round(slot.duration * p.fps));
-    frameBudget -= frames;
+    elapsed += slot.duration;
+    const upTo = i === p.slots.length - 1 ? totalFrames : Math.min(totalFrames, Math.round(elapsed * p.fps));
+    const frames = Math.max(1, upTo - framesSoFar);
+    framesSoFar += frames;
     parts.push(`[i${slot.image}_${k}]${zoompanFor(slot.motion, frames, width, height, p.fps)},setsar=1,format=yuv420p[s${i}]`);
   });
   parts.push(`${p.slots.map((_, i) => `[s${i}]`).join('')}concat=n=${p.slots.length}:v=1:a=0[bg]`);
@@ -435,8 +461,13 @@ export async function generateEpisodeVideo(options: GenerateEpisodeOptions): Pro
     if (!audioDuration || audioDuration <= 0) {
       throw new Error(`Could not read the length of the episode's audio (${audio}).`);
     }
-    const total = Math.round((audioDuration + 0.5) * 1000) / 1000;
     const { segments, scenes } = fitTimeline(options.segments, options.scenes, options.timelineDuration, audioDuration);
+    const chunks = buildCaptionChunks(timeWords(segments));
+    // Silence is added after the audio so the end line is on screen for a moment after
+    // the last caption.
+    const lastSpeech = chunks.length > 0 ? chunks[chunks.length - 1].end : 0;
+    const tail = options.endCardLine ? lastSpeech + CAPTION_HOLD_SECONDS + END_LINE_MIN_SECONDS : 0;
+    const total = Math.round(Math.max(audioDuration + 0.5, tail) * 1000) / 1000;
 
     // Unique images: every scene's, then the flat list, then the featured image.
     const urls: string[] = [];
@@ -463,6 +494,10 @@ export async function generateEpisodeVideo(options: GenerateEpisodeOptions): Pro
       if (await prepareEpisodeImage(src, dest)) images.push(dest);
     }
     const usable = images.length;
+    const notes: string[] = [];
+    if (storyUrls > 0 && indexOfUrl.size < storyUrls) {
+      notes.push(`${storyUrls - indexOfUrl.size} of ${storyUrls} story image(s) could not be used`);
+    }
     if (usable === 0) {
       WorkerLogger.warn('EpisodeVideo', 'The episode has no usable image; rendering it on the branded background.');
       images.push(...(await brandedBackgrounds(work, Math.round((width * SOURCE_SCALE) / 2), Math.round((height * SOURCE_SCALE) / 2))));
@@ -477,8 +512,9 @@ export async function generateEpisodeVideo(options: GenerateEpisodeOptions): Pro
 
     if (segments.length === 0) {
       WorkerLogger.warn('EpisodeVideo', 'The episode has no caption timeline; rendering it without captions.');
+      notes.push('no captions (no caption timeline)');
     }
-    const chunks = buildCaptionChunks(timeWords(segments));
+    for (const n of notes) WorkerLogger.warn('EpisodeVideo', `Episode rendered with ${n}.`);
     const ass = buildEpisodeAssScript({
       title: options.title || '',
       siteName: options.siteName || 'PressHub.Cy',
@@ -508,12 +544,13 @@ export async function generateEpisodeVideo(options: GenerateEpisodeOptions): Pro
 
     WorkerLogger.info('EpisodeVideo', `Rendering episode (${(total / 60).toFixed(1)} min, ${scenes.length} scene(s), ${usable} image(s), ${chunks.length} caption chunks, ${slots.length} shots)`);
     const started = Date.now();
-    await runFfmpeg(ffmpegBin, args, work);
+    // A render that hangs is stopped: three times the episode's length, at least 20 minutes.
+    await runFfmpeg(ffmpegBin, args, work, Math.max(20 * 60, total * 3) * 1000);
     const finalPath = path.join(outputDir, outName);
     fs.renameSync(path.join(work, outName), finalPath);
     WorkerLogger.info('EpisodeVideo', `Episode rendered in ${((Date.now() - started) / 1000).toFixed(1)}s: ${finalPath}`);
 
-    return { filePath: finalPath, width, height, duration: total, captions: chunks.length, images: usable, scenes: scenes.length };
+    return { filePath: finalPath, width, height, duration: total, captions: chunks.length, images: usable, scenes: scenes.length, ...(notes.length ? { notes } : {}) };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }

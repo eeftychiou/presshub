@@ -296,6 +296,18 @@ class PressHub_Social_Settings_Storage {
             'default'           => false,
         ] );
 
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_episode_enhanced', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_episode_enhanced' ],
+            'default'           => true,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_episode_image_wait_minutes', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_episode_image_wait_minutes' ],
+            'default'           => 90,
+        ] );
+
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_podcast_playlist_id', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_podcast_playlist_id' ],
@@ -1358,6 +1370,27 @@ class PressHub_Social_Settings_Storage {
     }
 
     /** Whether each Daily Briefing podcast also goes to YouTube as a full episode (default off). */
+    /** Whether episodes get the shorts' story images and captions (default on). */
+    public static function get_youtube_episode_enhanced(): bool {
+        return in_array( get_option( 'presshub_social_youtube_episode_enhanced', true ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_youtube_episode_enhanced( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_youtube_episode_enhanced_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_youtube_episode_enhanced();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Minutes an episode waits for its shorts' story images before it goes without them (0-240, default 90). */
+    public static function get_youtube_episode_image_wait_minutes(): int {
+        return self::sanitize_youtube_episode_image_wait_minutes( get_option( 'presshub_social_youtube_episode_image_wait_minutes', 90 ) );
+    }
+
+    public static function sanitize_youtube_episode_image_wait_minutes( $value ): int {
+        return max( 0, min( 240, (int) $value ) );
+    }
+
     public static function get_youtube_podcast_enabled(): bool {
         return in_array( get_option( 'presshub_social_youtube_podcast_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
     }

@@ -674,6 +674,17 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_youtube_episode_enhanced_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_youtube_episode_enhanced();
+        ?>
+        <input type="hidden" name="presshub_social_youtube_episode_enhanced_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_youtube_episode_enhanced" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Show the story images of the podcast\'s shorts, one topic at a time, with captions like the shorts, a title card per topic and a chapter list in the description. Off: the whole audio over the podcast\'s image.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
     public function render_youtube_privacy_field(): void {
         $current = PressHub_Social_Settings_Storage::get_youtube_privacy_status();
         $labels  = [
