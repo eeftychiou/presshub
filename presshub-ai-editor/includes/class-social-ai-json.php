@@ -11,10 +11,6 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-if ( class_exists( 'PressHub_Social_AI_Json' ) ) {
-    return;
-}
-
 class PressHub_Social_AI_Json {
 
     /**
@@ -120,6 +116,23 @@ class PressHub_Social_AI_Json {
             }
         }
         return $out;
+    }
+
+    /**
+     * Tests only: a test AI caller returns the answer, or
+     * ['response' => answer, 'record_id' => id, 'log_id' => id] to stand in for the
+     * generation record and Usage & logs row the real client would have written.
+     *
+     * @param mixed $result
+     * @return mixed The answer (string or WP_Error).
+     */
+    public static function test_result( $result, int &$record_id, int &$log_id ) {
+        if ( is_array( $result ) && array_key_exists( 'response', $result ) ) {
+            $record_id = (int) ( $result['record_id'] ?? 0 );
+            $log_id    = (int) ( $result['log_id'] ?? 0 );
+            return $result['response'];
+        }
+        return $result;
     }
 
     /**

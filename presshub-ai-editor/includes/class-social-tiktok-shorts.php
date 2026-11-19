@@ -910,7 +910,7 @@ class PressHub_Social_TikTok_Shorts {
                 }
                 break;
             }
-            self::mark_call_unusable( $shorts );
+            PressHub_Social_AI_Json::mark_unusable( self::$last_record_id, self::$last_log_id, $shorts );
             $last_try = $attempt >= self::PLAN_ATTEMPTS;
             PressHub_Social_Logger::log(
                 $last_try ? 'ERROR' : 'WARNING',
@@ -1043,13 +1043,6 @@ class PressHub_Social_TikTok_Shorts {
             ];
         }
         return $shorts;
-    }
-
-    /**
-     * Repair the bracket structure of almost-valid JSON (see PressHub_Social_AI_Json::repair()).
-     */
-    public static function repair_json( string $json, array &$fixes = [] ): string {
-        return PressHub_Social_AI_Json::repair( $json, $fixes );
     }
 
     /**
@@ -1438,7 +1431,7 @@ class PressHub_Social_TikTok_Shorts {
         self::$last_record_id = 0;
         self::$last_log_id    = 0;
         if ( null !== self::$ai_caller ) {
-            $result = call_user_func( self::$ai_caller, $sys_prompt, $user_prompt );
+            $result = PressHub_Social_AI_Json::test_result( call_user_func( self::$ai_caller, $sys_prompt, $user_prompt ), self::$last_record_id, self::$last_log_id );
         } else {
             $config = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
             if ( is_wp_error( $config ) ) {
@@ -1477,10 +1470,6 @@ class PressHub_Social_TikTok_Shorts {
             return new WP_Error( 'empty_ai_response', 'the AI provider returned an empty response for the TikTok shorts.' );
         }
         return $result;
-    }
-
-    private static function mark_call_unusable( WP_Error $error ): void {
-        PressHub_Social_AI_Json::mark_unusable( self::$last_record_id, self::$last_log_id, $error );
     }
 
     private static function fail( int $job_id, WP_Error $error ): WP_Error {

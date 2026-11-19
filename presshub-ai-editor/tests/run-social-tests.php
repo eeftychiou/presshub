@@ -2125,14 +2125,14 @@ assert_true( is_wp_error( PressHub_Social_TikTok_Shorts::parse_plan( 'Δεν ε�
 $misplaced = PressHub_Social_TikTok_Shorts::parse_plan( '{"shorts":[{"topic":"a","hook":"b","script":"[SPEAKER_1]: Α [σημείωση]","visuals":["x"],"mood":"neutral","caption":"Λεζάντα #κύπρος"]}]}', 1 );
 assert_true( is_array( $misplaced ) && 'b' === ( $misplaced[0]['hook'] ?? '' ), 'parse_plan repairs a misplaced closing bracket' );
 assert_true( str_contains( $misplaced[0]['script'] ?? '', '[σημείωση]' ), 'The repair leaves brackets inside strings alone' );
-assert_equals( '{"a":[1,2]}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":[1,2,]}' ), 'repair_json drops a trailing comma' );
+assert_equals( '{"a":[1,2]}', PressHub_Social_AI_Json::repair( '{"a":[1,2,]}' ), 'repair_json drops a trailing comma' );
 $fixes = [];
-assert_equals( '{"a":{"b":"}]"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":{"b":"}]"}', $fixes ), 'repair_json leaves a cut-off response (brackets still open) unchanged' );
+assert_equals( '{"a":{"b":"}]"}', PressHub_Social_AI_Json::repair( '{"a":{"b":"}]"}', $fixes ), 'repair_json leaves a cut-off response (brackets still open) unchanged' );
 assert_equals( [], $fixes, 'Nothing is reported as repaired in a cut-off response' );
-assert_equals( '{"a":"x\\"}"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"x\\"}"}' ), 'repair_json handles escaped quotes' );
-assert_equals( '{"a":"x\\\\"}', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"x\\\\"]}' ), 'An escaped backslash before the closing quote ends the string' );
-assert_equals( '{"a":"cut', PressHub_Social_TikTok_Shorts::repair_json( '{"a":"cut' ), 'repair_json leaves a response cut off inside a string unchanged' );
-PressHub_Social_TikTok_Shorts::repair_json( '{"a":[1,2,]]}', $fixes );
+assert_equals( '{"a":"x\\"}"}', PressHub_Social_AI_Json::repair( '{"a":"x\\"}"}' ), 'repair_json handles escaped quotes' );
+assert_equals( '{"a":"x\\\\"}', PressHub_Social_AI_Json::repair( '{"a":"x\\\\"]}' ), 'An escaped backslash before the closing quote ends the string' );
+assert_equals( '{"a":"cut', PressHub_Social_AI_Json::repair( '{"a":"cut' ), 'repair_json leaves a response cut off inside a string unchanged' );
+PressHub_Social_AI_Json::repair( '{"a":[1,2,]]}', $fixes );
 assert_equals( [ 'dropped 1 misplaced ]', 'dropped 1 trailing comma' ], $fixes, 'repair_json reports what it dropped' );
 // A 3-short answer cut off inside the third short is not turned into a 2-short plan.
 $three = json_decode( $short_json( 3 ), true );
@@ -2360,6 +2360,61 @@ PressHub_Social_TikTok_Shorts::prepare_post( 880 );
 assert_equals( 2, $empty_calls, 'An empty plan response is retried once in the same run' );
 assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $empty_ids[0] ) ), 'The shorts are prepared after an empty first answer' );
 assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $retry_ids[0] ) ), 'The shorts are prepared from the second response' );
+
+
+// End to end: the records and Usage & logs rows of an unusable answer are marked as errors,
+// a repaired one is noted, and the job error names every record of the run.
+require_once $base_dir . '/includes/class-token-logger.php';
+if ( ! function_exists( 'presshub_test_plan_call' ) ) {
+    function presshub_test_plan_call( string $kind, string $action, $response ): array {
+        $record = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => $kind, 'status' => 'success', 'response_text' => is_string( $response ) ? $response : '' ] );
+        $log    = (int) PressHub_AI_Token_Logger::log_llm_request( $action, 'gemini', 'gemini-test', 100, 50, 10, 'success', null, [], 1 );
+        return [ 'response' => $response, 'record_id' => $record, 'log_id' => $log ];
+    }
+    function presshub_test_token_row( int $id ): array {
+        foreach ( $GLOBALS['wpdb']->tables[ PressHub_AI_Token_Logger::get_table_name() ] ?? [] as $row ) {
+            if ( (int) ( $row['id'] ?? 0 ) === $id ) {
+                return $row;
+            }
+        }
+        return [];
+    }
+}
+$GLOBALS['wpdb']->tables[ PressHub_AI_Generation_Recorder::get_table_name() ] = $GLOBALS['wpdb']->tables[ PressHub_AI_Generation_Recorder::get_table_name() ] ?? [];
+PressHub_AI_Generation_Recorder::create_table();
+PressHub_AI_Token_Logger::create_table();
+
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$e2e_calls = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$e2e_calls, $short_json ) {
+    $answer      = 0 === count( $e2e_calls ) ? '{"shorts":"oops"}' : substr( $short_json( 3 ), 0, -1 ) . ']}';
+    $call        = presshub_test_plan_call( 'tiktok_short_script', 'social_tiktok_shorts', $answer );
+    $e2e_calls[] = $call;
+    return $call;
+} );
+PressHub_Social_Queue::reset_memory_store();
+$e2e_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+$e2e_first  = PressHub_AI_Generation_Recorder::get( $e2e_calls[0]['record_id'] ?? 0 );
+$e2e_second = PressHub_AI_Generation_Recorder::get( $e2e_calls[1]['record_id'] ?? 0 );
+assert_true( 'error' === ( $e2e_first['status'] ?? '' ) && str_starts_with( (string) ( $e2e_first['error_message'] ?? '' ), 'Response not usable: ' ), 'Shorts: the unusable answer\'s record is marked error with the reason' );
+assert_true( 'error' === ( presshub_test_token_row( $e2e_calls[0]['log_id'] )['status'] ?? '' ), 'Shorts: the unusable answer\'s Usage & logs row is marked error' );
+assert_true( 'success' === ( $e2e_second['status'] ?? '' ) && 'JSON repaired: dropped 1 misplaced ].' === ( $e2e_second['error_message'] ?? '' ), 'Shorts: the repaired answer\'s record stays success with a note' );
+assert_equals( 'success', presshub_test_token_row( $e2e_calls[1]['log_id'] )['status'] ?? '', 'Shorts: the repaired answer\'s Usage & logs row stays success' );
+assert_true( PressHub_Social_TikTok_Shorts::is_ready( PressHub_Social_Queue::get_job( $e2e_ids[0] ) ), 'Shorts: the jobs are prepared from the repaired answer' );
+// Two unusable answers: the job error names both records.
+update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
+$e2e_bad = [];
+PressHub_Social_TikTok_Shorts::set_ai_caller( function () use ( &$e2e_bad ) {
+    $call      = presshub_test_plan_call( 'tiktok_short_script', 'social_tiktok_shorts', '{"shorts":"oops"}' );
+    $e2e_bad[] = $call['record_id'];
+    return $call;
+} );
+PressHub_Social_Queue::reset_memory_store();
+$e2e_bad_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'tiktok' ] );
+PressHub_Social_TikTok_Shorts::prepare_post( 880 );
+assert_true( str_ends_with( (string) PressHub_Social_Queue::get_job( $e2e_bad_ids[0] )['last_error'], sprintf( 'See generation records #%d, #%d.', $e2e_bad[0], $e2e_bad[1] ) ), 'Shorts: the job error names every record of the run' );
+delete_post_meta( 880, PressHub_Social_TikTok_Shorts::PREP_ATTEMPTS_META );
 
 // A failed preparation is retried in the background without moving any posting time.
 update_post_meta( 880, PressHub_Social_TikTok_Shorts::PLAN_META, '' );
@@ -4134,6 +4189,25 @@ foreach ( [ 'invalid' => '{"images":[]}', 'empty' => '' ] as $kind_of_bad => $fi
     assert_true( str_contains( $img_retry_prompts[1] ?? '', 'Your previous answer was unusable:' ) && ! str_contains( $img_retry_prompts[0], 'previous answer' ), "The {$kind_of_bad} image plan retry says why" );
     assert_equals( 'ready', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $img_retry_ids[0] ) ), "The images are made from the second answer after an {$kind_of_bad} one" );
 }
+
+// End to end for the image plan: records and rows marked, repair noted.
+PressHub_Social_Queue::reset_memory_store();
+delete_post_meta( 760, PressHub_Social_Post_Images::PLAN_META );
+delete_post_meta( 760, PressHub_Social_Post_Images::PREP_ATTEMPTS_META );
+$img_e2e = [];
+PressHub_Social_Post_Images::set_ai_caller( function () use ( &$img_e2e ) {
+    $answer    = 0 === count( $img_e2e ) ? '{"images":[]}' : '{"images":["Harbour at dawn","Power cable on a ship"]]}';
+    $call      = presshub_test_plan_call( 'post_images_plan', 'social_post_images', $answer );
+    $img_e2e[] = $call;
+    return $call;
+} );
+$img_e2e_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+PressHub_Social_Post_Images::prepare_post( 760 );
+$img_first  = PressHub_AI_Generation_Recorder::get( $img_e2e[0]['record_id'] ?? 0 );
+$img_second = PressHub_AI_Generation_Recorder::get( $img_e2e[1]['record_id'] ?? 0 );
+assert_true( 'error' === ( $img_first['status'] ?? '' ) && 'error' === ( presshub_test_token_row( $img_e2e[0]['log_id'] )['status'] ?? '' ), 'Image plan: the unusable answer\'s record and row are marked error' );
+assert_equals( 'JSON repaired: dropped 1 misplaced ].', $img_second['error_message'] ?? '', 'Image plan: the repaired answer is noted on its record' );
+assert_equals( 'ready', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $img_e2e_ids[0] ) ), 'Image plan: the images are made from the repaired answer' );
 
 // A job still waiting long after its posting time is released.
 PressHub_Social_Queue::reset_memory_store();

@@ -394,7 +394,7 @@ class PressHub_Social_Post_Images {
             }
             if ( is_wp_error( $raw ) && 'empty_ai_response' !== $raw->get_error_code() ) {
                 // Provider errors are not retried here (the run is retried with backoff).
-                return $attempt > 1 ? new WP_Error( $raw->get_error_code(), $raw->get_error_message() . PressHub_Social_AI_Json::records_suffix( $record_ids ) ) : $raw;
+                return ( $attempt > 1 && ! empty( $record_ids ) ) ? new WP_Error( $raw->get_error_code(), $raw->get_error_message() . PressHub_Social_AI_Json::records_suffix( $record_ids ) ) : $raw;
             }
 
             $images = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count );
@@ -488,7 +488,7 @@ class PressHub_Social_Post_Images {
         self::$last_record_id = 0;
         self::$last_log_id    = 0;
         if ( null !== self::$ai_caller ) {
-            $result = call_user_func( self::$ai_caller, $sys_prompt, $user_prompt );
+            $result = PressHub_Social_AI_Json::test_result( call_user_func( self::$ai_caller, $sys_prompt, $user_prompt ), self::$last_record_id, self::$last_log_id );
         } else {
             $config = PressHub_Social_AI_Copywriter::resolve_ai_provider_config();
             if ( is_wp_error( $config ) ) {

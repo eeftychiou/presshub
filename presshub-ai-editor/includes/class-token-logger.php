@@ -172,41 +172,49 @@ class PressHub_AI_Token_Logger {
     /**
      * Names of the logged actions for the Usage & logs filter. Always listed, in this
      * order; any other action found in the log is added after them (action_label()).
+     *
+     * @return array<string,string> action => name.
      */
-    const ACTION_LABELS = [
-        'coauthor_draft'          => 'Co-author draft',
-        'coauthor_scorecard'      => 'Editorial scorecard',
-        'copilot_chat'            => 'Copilot chat',
-        'copilot_research'        => 'Copilot research',
-        'briefing_curation'       => 'Briefing curation',
-        'podcast_script'          => 'Podcast script',
-        'podcast_audio'           => 'Podcast audio synthesis',
-        'scrape_harvest'          => 'News harvester',
-        'social_tiktok_shorts'    => 'Shorts script (TikTok/YouTube)',
-        'social_post_images'      => 'Post image plan (social)',
-        'social_trending_summary' => 'Trending roundup summary',
-        'social_video_transcribe' => 'Social video transcription',
-        'generate_image_prompt'   => 'Image prompt',
-        'generate_featured_image' => 'Image generation',
-        'generate_image_metadata' => 'Image metadata (SEO)',
-        'custom_test'             => 'Test connection',
-    ];
+    public static function known_actions(): array {
+        return [
+            'coauthor_draft'          => function_exists( '__' ) ? __( 'Co-author draft', 'presshub-ai-editor' ) : 'Co-author draft',
+            'coauthor_scorecard'      => function_exists( '__' ) ? __( 'Editorial scorecard', 'presshub-ai-editor' ) : 'Editorial scorecard',
+            'copilot_chat'            => function_exists( '__' ) ? __( 'Copilot chat', 'presshub-ai-editor' ) : 'Copilot chat',
+            'briefing_curation'       => function_exists( '__' ) ? __( 'Briefing curation', 'presshub-ai-editor' ) : 'Briefing curation',
+            'podcast_script'          => function_exists( '__' ) ? __( 'Podcast script', 'presshub-ai-editor' ) : 'Podcast script',
+            'podcast_audio'           => function_exists( '__' ) ? __( 'Podcast audio synthesis', 'presshub-ai-editor' ) : 'Podcast audio synthesis',
+            'scrape_harvest'          => function_exists( '__' ) ? __( 'News harvester', 'presshub-ai-editor' ) : 'News harvester',
+            'social_tiktok_shorts'    => function_exists( '__' ) ? __( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ) : 'Shorts script (TikTok/YouTube)',
+            'social_post_images'      => function_exists( '__' ) ? __( 'Post image plan (social)', 'presshub-ai-editor' ) : 'Post image plan (social)',
+            'social_trending_summary' => function_exists( '__' ) ? __( 'Trending roundup summary', 'presshub-ai-editor' ) : 'Trending roundup summary',
+            'social_video_transcribe' => function_exists( '__' ) ? __( 'Social video transcription', 'presshub-ai-editor' ) : 'Social video transcription',
+            'generate_image_prompt'   => function_exists( '__' ) ? __( 'Image prompt', 'presshub-ai-editor' ) : 'Image prompt',
+            'generate_featured_image' => function_exists( '__' ) ? __( 'Image generation', 'presshub-ai-editor' ) : 'Image generation',
+            'generate_image_metadata' => function_exists( '__' ) ? __( 'Image metadata (SEO)', 'presshub-ai-editor' ) : 'Image metadata (SEO)',
+            'custom_test'             => function_exists( '__' ) ? __( 'Test connection', 'presshub-ai-editor' ) : 'Test connection',
+        ];
+    }
 
     /**
      * The readable name of a logged action: a known name, "Social copy: X" for
      * social_copy_x, "SEO: x" for seo_x, otherwise the key with spaces.
      */
     public static function action_label( string $action ): string {
-        if ( isset( self::ACTION_LABELS[ $action ] ) ) {
-            return self::ACTION_LABELS[ $action ];
+        $known = self::known_actions();
+        if ( isset( $known[ $action ] ) ) {
+            return $known[ $action ];
         }
         $platforms = [ 'twitter' => 'X', 'facebook' => 'Facebook', 'instagram' => 'Instagram', 'tiktok' => 'TikTok', 'youtube' => 'YouTube' ];
         if ( 0 === strpos( $action, 'social_copy_' ) ) {
             $platform = substr( $action, strlen( 'social_copy_' ) );
-            return 'Social copy: ' . ( $platforms[ $platform ] ?? ucfirst( str_replace( '_', ' ', $platform ) ) );
+            /* translators: %s: social platform, e.g. Facebook. */
+            $format = function_exists( '__' ) ? __( 'Social copy: %s', 'presshub-ai-editor' ) : 'Social copy: %s';
+            return sprintf( $format, $platforms[ $platform ] ?? ucfirst( str_replace( '_', ' ', $platform ) ) );
         }
         if ( 0 === strpos( $action, 'seo_' ) ) {
-            return 'SEO: ' . str_replace( '_', ' ', substr( $action, 4 ) );
+            /* translators: %s: SEO task, e.g. post title. */
+            $format = function_exists( '__' ) ? __( 'SEO: %s', 'presshub-ai-editor' ) : 'SEO: %s';
+            return sprintf( $format, str_replace( '_', ' ', substr( $action, 4 ) ) );
         }
         return ucfirst( str_replace( '_', ' ', $action ) );
     }
@@ -236,10 +244,7 @@ class PressHub_AI_Token_Logger {
      * @return array<string,string>
      */
     public static function filter_options( ?array $logged = null ): array {
-        $options = [];
-        foreach ( array_keys( self::ACTION_LABELS ) as $action ) {
-            $options[ $action ] = self::action_label( $action );
-        }
+        $options = self::known_actions();
         $extra = [];
         foreach ( null === $logged ? self::get_logged_actions() : $logged as $action ) {
             $action = (string) $action;
