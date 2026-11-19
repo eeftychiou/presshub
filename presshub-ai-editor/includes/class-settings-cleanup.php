@@ -48,7 +48,7 @@ class PressHub_Settings_Cleanup {
     const RELEASES = [
         1 => '2.45.0',
         2 => '2.46.0',
-        3 => '2.70.0',
+        3 => '2.71.0',
     ];
 
     /** Release that removed the first options (kept for callers of 2.45.0). */

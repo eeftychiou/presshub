@@ -336,7 +336,7 @@ class SettingsCleanupTest {
         ob_start();
         PressHub_Settings_Cleanup::render_report();
         $both = (string) ob_get_clean();
-        if ( false === strpos( $both, 'Clean-up report, 2.70.0' ) || false === strpos( $both, 'Clean-up report, 2.45.0' ) || strpos( $both, '2.70.0' ) > strpos( $both, '2.45.0' ) || false === strpos( $both, 'cleanup=1' ) || false === strpos( $both, 'cleanup=3' ) ) {
+        if ( false === strpos( $both, 'Clean-up report, 2.71.0' ) || false === strpos( $both, 'Clean-up report, 2.45.0' ) || strpos( $both, '2.71.0' ) > strpos( $both, '2.45.0' ) || false === strpos( $both, 'cleanup=1' ) || false === strpos( $both, 'cleanup=3' ) ) {
             $failures[] = 'Usage & logs shows both reports, newest first, each with its own copy.';
         }
 
@@ -407,7 +407,7 @@ class SettingsCleanupTest {
         $r3 = (string) ob_get_clean();
         foreach ( [ 'the OpenAI A provider in Connections', 'the Claude provider in Connections', '(turned off)', '(turned on)' ] as $where ) {
             if ( false === strpos( $r3, $where ) ) {
-                $failures[] = "The 2.70.0 report should say the values went to {$where}.";
+                $failures[] = "The 2.71.0 report should say the values went to {$where}.";
             }
         }
         // A set prefix (even empty) and a filled Morning pool are never overwritten.
@@ -430,8 +430,8 @@ class SettingsCleanupTest {
         $GLOBALS['DOING_IT_WRONG'] = [];
         PressHub_Settings_Cleanup::reset_warnings();
         get_option( 'presshub_ai_provider' );
-        if ( ! $GLOBALS['DOING_IT_WRONG'] || false === strpos( (string) $GLOBALS['DOING_IT_WRONG'][0][1] . (string) $GLOBALS['DOING_IT_WRONG'][0][2], '2.70.0' ) ) {
-            $failures[] = 'Reading presshub_ai_provider after clean-up 3 should be flagged with 2.70.0.';
+        if ( ! $GLOBALS['DOING_IT_WRONG'] || false === strpos( (string) $GLOBALS['DOING_IT_WRONG'][0][1] . (string) $GLOBALS['DOING_IT_WRONG'][0][2], '2.71.0' ) ) {
+            $failures[] = 'Reading presshub_ai_provider after clean-up 3 should be flagged with 2.71.0.';
         }
 
         // 13. Uninstall removes the clean-up rows, including the copy.

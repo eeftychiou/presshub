@@ -436,7 +436,7 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 
 None.
 
-## Removed in 2.45.0 and 2.46.0 and 2.70.0 (#237)
+## Removed in 2.45.0 and 2.46.0 and 2.71.0 (#237)
 
 Deleted on the first admin request after the upgrade, after a copy of all settings (no secrets) was saved; the report is on PressHub → Usage & logs. Reading one fires `_doing_it_wrong()` for one release.
 
@@ -454,25 +454,25 @@ Deleted on the first admin request after the upgrade, after a copy of all settin
 | `presshub_ai_gemini_api_key` | 2.46.0 | Never registered or shown; read only as a fallback after the Gemini provider record. Same upgrade rule (copied into the Gemini provider when it has no key). |
 | `presshub_ai_briefing_tts_api_key` | 2.46.0 | Speech resolves the provider chosen for Speech in AI models first (`resolve_gemini_api_key()`), then any Gemini provider; the separate key was a later fallback. On presshub.cy it was the same key as the "Google Gemini (3.8 Speech)" provider. Same upgrade rule. |
 | `presshub_ai_remove_briefing_tts_api_key` | 2.46.0 | The "Remove stored key" flag of the key above. |
-| `presshub_ai_provider` | 2.70.0 |  |
-| `presshub_ai_model_openai` | 2.70.0 |  |
-| `presshub_ai_temperature_openai` | 2.70.0 |  |
-| `presshub_ai_max_tokens_openai` | 2.70.0 |  |
-| `presshub_ai_timeout_openai` | 2.70.0 |  |
-| `presshub_ai_model_anthropic` | 2.70.0 |  |
-| `presshub_ai_temperature_anthropic` | 2.70.0 |  |
-| `presshub_ai_max_tokens_anthropic` | 2.70.0 |  |
-| `presshub_ai_timeout_anthropic` | 2.70.0 |  |
-| `presshub_ai_model_gemini` | 2.70.0 |  |
-| `presshub_ai_temperature_gemini` | 2.70.0 |  |
-| `presshub_ai_max_tokens_gemini` | 2.70.0 |  |
-| `presshub_ai_timeout_gemini` | 2.70.0 |  |
-| `presshub_ai_openai_org` | 2.70.0 |  |
-| `presshub_ai_anthropic_version` | 2.70.0 |  |
-| `presshub_ai_briefing_morning_podcast_title_prefix` | 2.70.0 |  |
-| `presshub_ai_briefing_featured_image_ids` | 2.70.0 |  |
-| `presshub_social_enabled_twitter` | 2.70.0 |  |
-| `presshub_social_enabled_facebook` | 2.70.0 |  |
-| `presshub_social_enabled_instagram` | 2.70.0 |  |
-| `presshub_social_enabled_tiktok` | 2.70.0 |  |
-| `presshub_social_enabled_youtube` | 2.70.0 |  |
+| `presshub_ai_provider` | 2.71.0 |  |
+| `presshub_ai_model_openai` | 2.71.0 |  |
+| `presshub_ai_temperature_openai` | 2.71.0 |  |
+| `presshub_ai_max_tokens_openai` | 2.71.0 |  |
+| `presshub_ai_timeout_openai` | 2.71.0 |  |
+| `presshub_ai_model_anthropic` | 2.71.0 |  |
+| `presshub_ai_temperature_anthropic` | 2.71.0 |  |
+| `presshub_ai_max_tokens_anthropic` | 2.71.0 |  |
+| `presshub_ai_timeout_anthropic` | 2.71.0 |  |
+| `presshub_ai_model_gemini` | 2.71.0 |  |
+| `presshub_ai_temperature_gemini` | 2.71.0 |  |
+| `presshub_ai_max_tokens_gemini` | 2.71.0 |  |
+| `presshub_ai_timeout_gemini` | 2.71.0 |  |
+| `presshub_ai_openai_org` | 2.71.0 |  |
+| `presshub_ai_anthropic_version` | 2.71.0 |  |
+| `presshub_ai_briefing_morning_podcast_title_prefix` | 2.71.0 |  |
+| `presshub_ai_briefing_featured_image_ids` | 2.71.0 |  |
+| `presshub_social_enabled_twitter` | 2.71.0 |  |
+| `presshub_social_enabled_facebook` | 2.71.0 |  |
+| `presshub_social_enabled_instagram` | 2.71.0 |  |
+| `presshub_social_enabled_tiktok` | 2.71.0 |  |
+| `presshub_social_enabled_youtube` | 2.71.0 |  |
