@@ -175,7 +175,7 @@ class PressHub_AI_Audio_Synthesizer {
             : false;
 
         // When include_text is disabled, the dialogue script never shows. The
-        // card shows the lead story text instead (2.62.0), saved with the
+        // card shows the lead story text instead (2.63.0), saved with the
         // post or, for older posts, read from that day's written brief.
         if ( ! $include_text ) {
             return self::podcast_lead_excerpt( $post );
@@ -192,7 +192,7 @@ class PressHub_AI_Audio_Synthesizer {
         return (string) $excerpt;
     }
 
-    /** Meta key holding the lead story text shown on a podcast post (2.62.0). */
+    /** Meta key holding the lead story text shown on a podcast post (2.63.0). */
     const META_LEAD = '_presshub_podcast_lead';
 
     /** Most words the lead story text keeps. */
@@ -1415,7 +1415,7 @@ class PressHub_AI_Audio_Synthesizer {
             : 0;
 
         // Lead story text first, so the home page card and the post open
-        // with the day's top story (2.62.0).
+        // with the day's top story (2.63.0).
         $lead      = $this->lead_story_text( $date, $edition );
         $lead_html = $this->lead_story_html( $lead );
 
@@ -1567,7 +1567,7 @@ class PressHub_AI_Audio_Synthesizer {
             : 0;
 
         // Lead story text first, so the home page card and the post open
-        // with the day's top story (2.62.0).
+        // with the day's top story (2.63.0).
         $lead      = $this->lead_story_text( $date, $edition );
         $lead_html = $this->lead_story_html( $lead );
 
