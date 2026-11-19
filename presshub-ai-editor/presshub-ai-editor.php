@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.59.1
+ * Version: 2.60.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -157,7 +157,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.59.1' );
+define( 'PRESSHUB_AI_VERSION', '2.60.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -799,6 +799,8 @@ add_action( 'presshub_noon_news_harvest', 'presshub_ai_execute_noon_harvest_cron
 add_action( 'presshub_noon_news_generate', 'presshub_ai_execute_noon_generation_cron' );
 add_action( 'presshub_ai_retry_podcast_synthesis', 'presshub_ai_execute_synthesis_retry', 10, 2 );
 add_action( 'presshub_ai_run_briefing_step', 'presshub_ai_execute_briefing_step', 10, 4 );
+add_action( 'init', 'presshub_ai_maybe_sweep_lost_briefing_steps', 20 );
+add_action( 'admin_init', 'presshub_ai_maybe_sweep_lost_briefing_steps' );
 add_action( 'update_option_presshub_ai_briefing_schedule_enabled', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_harvest_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
 add_action( 'update_option_presshub_ai_briefing_generation_time', 'presshub_ai_on_briefing_time_updated', 10, 3 );
@@ -1082,7 +1084,12 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
         return false;
     }
     $args = [ (string) $date, (string) $edition, (string) $step, (int) $part ];
-    $ok   = wp_schedule_single_event( time() + max( 0, (int) $delay ), 'presshub_ai_run_briefing_step', $args );
+    $due  = time() + max( 0, (int) $delay );
+    // A long request (the generation cron runs for minutes) holds a copy of
+    // the cron list taken when it started; writing it back would undo what
+    // other requests scheduled since. Read the current list first.
+    presshub_ai_refresh_cron_cache();
+    $ok   = wp_schedule_single_event( $due, 'presshub_ai_run_briefing_step', $args );
     if ( false === $ok || ( function_exists( 'is_wp_error' ) && is_wp_error( $ok ) ) ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
             PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; the caller runs it now or, when the same step is already waiting, leaves it to that event.', [
@@ -1101,6 +1108,7 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
             'part'    => (int) $part,
         ] );
     }
+    presshub_ai_record_pending_briefing_step( $date, $edition, $step, (int) $part, $due );
     return true;
 }
 
@@ -1123,6 +1131,9 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
     $date    = (string) $date;
     $edition = 'noon' === $edition ? 'noon' : 'morning';
 
+    // The event ran, so the lost-step sweep has nothing to watch for it.
+    presshub_ai_clear_pending_briefing_step( $date, $edition, (string) $step, (int) $part );
+
     if ( 'audio' === $step ) {
         return presshub_ai_run_podcast_audio_step( $date, $edition, (int) $part, true );
     }
@@ -1138,6 +1149,223 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
         }
     }
     return presshub_ai_run_podcast_script_step( $date, $edition, true );
+}
+
+/**
+ * Option that lists the briefing steps queued on presshub_ai_run_briefing_step
+ * and not yet started (lost-step sweep, 2.60.0).
+ */
+const PRESSHUB_AI_PENDING_STEPS_OPTION = 'presshub_ai_briefing_pending_steps';
+
+/**
+ * Drop this request's cached copy of the cron list so the next read comes
+ * from the database.
+ *
+ * WordPress keeps the autoloaded `cron` option in memory for the whole
+ * request. A request that runs for minutes and then schedules an event
+ * writes that old copy back with its event added, and a request that started
+ * earlier and finishes later can do the same to ours: an event queued in
+ * between is silently lost (19/11/2026 noon edition: the script step was
+ * queued at 13:18:56 and never ran).
+ */
+function presshub_ai_refresh_cron_cache() {
+    if ( function_exists( 'wp_cache_delete' ) ) {
+        wp_cache_delete( 'alloptions', 'options' );
+        wp_cache_delete( 'cron', 'options' );
+    }
+}
+
+/**
+ * @return string Key of one step in the pending-steps option.
+ */
+function presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part ) {
+    return implode( '|', [ (string) $date, (string) $edition, (string) $step, (int) $part ] );
+}
+
+/**
+ * Read the pending steps from the database (not this request's cache, which
+ * another request may have changed since).
+ *
+ * @return array<string,array> Steps by key.
+ */
+function presshub_ai_read_pending_briefing_steps() {
+    if ( function_exists( 'wp_cache_delete' ) ) {
+        wp_cache_delete( PRESSHUB_AI_PENDING_STEPS_OPTION, 'options' );
+        wp_cache_delete( 'notoptions', 'options' );
+    }
+    $steps = get_option( PRESSHUB_AI_PENDING_STEPS_OPTION, [] );
+    return is_array( $steps ) ? $steps : [];
+}
+
+/**
+ * @param array<string,array> $steps Steps by key; empty deletes the option.
+ */
+function presshub_ai_write_pending_briefing_steps( array $steps ) {
+    if ( empty( $steps ) ) {
+        delete_option( PRESSHUB_AI_PENDING_STEPS_OPTION );
+        return;
+    }
+    update_option( PRESSHUB_AI_PENDING_STEPS_OPTION, $steps, false );
+}
+
+/**
+ * Remember a queued step until its event starts. Keeps the attempt count of
+ * an earlier entry for the same step, and drops entries over two days old.
+ *
+ * @param string $date    Briefing date (Y-m-d).
+ * @param string $edition morning | noon.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
+ * @param int    $part    Continuation number.
+ * @param int    $due     Timestamp the event was queued for.
+ */
+function presshub_ai_record_pending_briefing_step( $date, $edition, $step, $part, $due ) {
+    $steps = presshub_ai_read_pending_briefing_steps();
+    $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
+    $old   = isset( $steps[ $key ] ) && is_array( $steps[ $key ] ) ? $steps[ $key ] : [];
+    $now   = time();
+    foreach ( $steps as $k => $entry ) {
+        if ( ! is_array( $entry ) || (int) ( $entry['due'] ?? 0 ) < $now - 2 * DAY_IN_SECONDS ) {
+            unset( $steps[ $k ] );
+        }
+    }
+    $steps[ $key ] = [
+        'date'     => (string) $date,
+        'edition'  => (string) $edition,
+        'step'     => (string) $step,
+        'part'     => (int) $part,
+        'due'      => (int) $due,
+        'attempts' => (int) ( $old['attempts'] ?? 0 ),
+    ];
+    presshub_ai_write_pending_briefing_steps( $steps );
+}
+
+/**
+ * Forget a step once its event has started.
+ */
+function presshub_ai_clear_pending_briefing_step( $date, $edition, $step, $part ) {
+    $steps = presshub_ai_read_pending_briefing_steps();
+    $key   = presshub_ai_pending_briefing_step_key( $date, $edition, $step, $part );
+    if ( isset( $steps[ $key ] ) ) {
+        unset( $steps[ $key ] );
+        presshub_ai_write_pending_briefing_steps( $steps );
+    }
+}
+
+/**
+ * Seconds past its due time before a step whose event is gone counts as
+ * lost. Filter: `presshub_ai_briefing_step_lost_after_sec`.
+ */
+function presshub_ai_briefing_step_lost_after_sec() {
+    $sec = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_ai_briefing_step_lost_after_sec', 300 ) : 300;
+    return max( 60, $sec );
+}
+
+/**
+ * How many times one lost step is queued again. Filter:
+ * `presshub_ai_briefing_step_max_requeues`.
+ */
+function presshub_ai_briefing_step_max_requeues() {
+    $n = function_exists( 'apply_filters' ) ? (int) apply_filters( 'presshub_ai_briefing_step_max_requeues', 2 ) : 2;
+    return max( 0, $n );
+}
+
+/**
+ * Run the lost-step sweep at most every two minutes, in cron and admin
+ * requests only. Reads one non-autoloaded option when nothing is pending.
+ */
+function presshub_ai_maybe_sweep_lost_briefing_steps() {
+    $doing_cron = function_exists( 'wp_doing_cron' ) && wp_doing_cron();
+    $is_admin   = function_exists( 'is_admin' ) && is_admin() && ! ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() );
+    if ( ! $doing_cron && ! $is_admin ) {
+        return 0;
+    }
+    if ( 'init' === ( function_exists( 'current_action' ) ? current_action() : '' ) && ! $doing_cron ) {
+        return 0; // Admin requests run it on admin_init.
+    }
+    if ( false !== get_transient( 'presshub_ai_step_sweep_lock' ) ) {
+        return 0;
+    }
+    set_transient( 'presshub_ai_step_sweep_lock', 1, 2 * MINUTE_IN_SECONDS );
+    try {
+        return presshub_ai_sweep_lost_briefing_steps();
+    } catch ( \Throwable $t ) {
+        if ( class_exists( 'PressHub_AI_Logger' ) ) {
+            PressHub_AI_Logger::warning( 'Lost briefing step sweep failed: ' . $t->getMessage() );
+        }
+        return 0;
+    }
+}
+
+/**
+ * Queue again any briefing step whose cron event disappeared before it ran.
+ *
+ * A step is lost when it is past its due time by
+ * presshub_ai_briefing_step_lost_after_sec(), has not started (starting
+ * clears it) and its event is no longer in the cron list. An event that is
+ * still listed, even late, is left to WordPress. Each step is queued again at
+ * most presshub_ai_briefing_step_max_requeues() times; after that the sweep
+ * logs an error and forgets it.
+ *
+ * @param int|null $now Reference time (tests).
+ * @return int Steps queued again.
+ */
+function presshub_ai_sweep_lost_briefing_steps( $now = null ) {
+    $steps = presshub_ai_read_pending_briefing_steps();
+    if ( empty( $steps ) ) {
+        return 0;
+    }
+    $now       = null === $now ? time() : (int) $now;
+    $lost_sec  = presshub_ai_briefing_step_lost_after_sec();
+    $max       = presshub_ai_briefing_step_max_requeues();
+    $requeued  = 0;
+    presshub_ai_refresh_cron_cache();
+
+    foreach ( $steps as $key => $entry ) {
+        if ( ! is_array( $entry ) ) {
+            continue;
+        }
+        if ( (int) ( $entry['due'] ?? 0 ) + $lost_sec > $now ) {
+            continue;
+        }
+        $args = [ (string) ( $entry['date'] ?? '' ), (string) ( $entry['edition'] ?? 'morning' ), (string) ( $entry['step'] ?? '' ), (int) ( $entry['part'] ?? 0 ) ];
+        if ( '' === $args[0] || '' === $args[2] ) {
+            presshub_ai_clear_pending_briefing_step( $args[0], $args[1], $args[2], $args[3] );
+            continue;
+        }
+        if ( function_exists( 'wp_next_scheduled' ) && false !== wp_next_scheduled( 'presshub_ai_run_briefing_step', $args ) ) {
+            continue;
+        }
+        $context = [ 'date' => $args[0], 'edition' => $args[1], 'step' => $args[2], 'part' => $args[3], 'queued_for' => gmdate( 'c', (int) ( $entry['due'] ?? 0 ) ) ];
+        $attempt = (int) ( $entry['attempts'] ?? 0 ) + 1;
+        if ( $attempt > $max ) {
+            presshub_ai_clear_pending_briefing_step( $args[0], $args[1], $args[2], $args[3] );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( sprintf( 'Briefing step "%s" was lost from the cron list again and has been queued the maximum %d time(s); run it from the Daily Briefing Hub.', $args[2], $max ), $context );
+            }
+            continue;
+        }
+
+        // Save the attempt first: record_pending_briefing_step() keeps it.
+        $fresh = presshub_ai_read_pending_briefing_steps();
+        if ( ! isset( $fresh[ $key ] ) ) {
+            continue; // Started in the meantime.
+        }
+        $fresh[ $key ]['attempts'] = $attempt;
+        presshub_ai_write_pending_briefing_steps( $fresh );
+
+        if ( presshub_ai_schedule_briefing_step( $args[0], $args[1], $args[2], $args[3] ) ) {
+            $requeued++;
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( sprintf( 'Briefing step "%s" was queued but its cron event disappeared before it ran; queued again (attempt %d of %d).', $args[2], $attempt, $max ), $context );
+            }
+        } else {
+            presshub_ai_clear_pending_briefing_step( $args[0], $args[1], $args[2], $args[3] );
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( sprintf( 'Briefing step "%s" was lost from the cron list and could not be queued again; run it from the Daily Briefing Hub.', $args[2] ), $context );
+            }
+        }
+    }
+    return $requeued;
 }
 
 /**
