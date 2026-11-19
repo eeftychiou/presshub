@@ -387,6 +387,16 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_turn_pause_ms' ],
             'type'              => 'integer',
         ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_podcast_mp3_enabled', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_checkbox' ],
+            'type'              => 'integer',
+            'default'           => 1,
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_podcast_mp3_bitrate', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_podcast_mp3_bitrate' ],
+            'type'              => 'integer',
+            'default'           => self::PODCAST_MP3_BITRATE_DEFAULT,
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_tts_topic_pause_ms', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_tts_topic_pause_ms' ],
             'type'              => 'integer',
@@ -4651,6 +4661,26 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_podcast_lead_enabled(): bool {
         return self::get_switch( 'presshub_ai_podcast_lead_enabled' );
+    }
+
+    /** MP3 bitrates offered for the podcast episodes (kbps); the voice is 24 kHz mono. */
+    public const PODCAST_MP3_BITRATES = [ 48, 64, 96, 128 ];
+
+    public const PODCAST_MP3_BITRATE_DEFAULT = 64;
+
+    /** Whether the worker converts WAV podcast episodes to MP3. Default: on. */
+    public static function get_podcast_mp3_enabled(): bool {
+        return self::get_switch( 'presshub_ai_podcast_mp3_enabled' );
+    }
+
+    public static function sanitize_podcast_mp3_bitrate( $value ): int {
+        $n = is_numeric( $value ) ? (int) $value : self::PODCAST_MP3_BITRATE_DEFAULT;
+        return in_array( $n, self::PODCAST_MP3_BITRATES, true ) ? $n : self::PODCAST_MP3_BITRATE_DEFAULT;
+    }
+
+    /** MP3 bitrate of the podcast episodes, in kbps. Default: 64. */
+    public static function get_podcast_mp3_bitrate(): int {
+        return self::sanitize_podcast_mp3_bitrate( get_option( 'presshub_ai_podcast_mp3_bitrate', self::PODCAST_MP3_BITRATE_DEFAULT ) );
     }
 
     public static function sanitize_pool_max_age_hours( $value ): int {

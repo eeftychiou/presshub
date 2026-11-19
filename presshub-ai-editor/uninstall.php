@@ -147,6 +147,9 @@ $presshub_ai_options = [
     // Podcast post switches.
     'presshub_ai_podcast_show_notes_enabled',
     'presshub_ai_podcast_lead_enabled',
+    'presshub_ai_podcast_mp3_enabled',
+    'presshub_ai_podcast_mp3_bitrate',
+    'presshub_ai_podcast_mp3_queue',
     'presshub_ai_migrated_social_fiche_budgets',
     // Settings clean-up (#237): its bookkeeping and the pre-clean-up copy.
     'presshub_settings_cleanup_version',
@@ -307,6 +310,7 @@ $presshub_ai_uninstall_site = static function () use ( $presshub_ai_options ): v
     wp_clear_scheduled_hook( 'presshub_ai_social_trending_tick' );
     if ( function_exists( 'wp_unschedule_hook' ) ) {
         wp_unschedule_hook( 'presshub_ai_social_trending_ai_image' );
+        wp_unschedule_hook( 'presshub_ai_podcast_mp3_delete_wav' );
     }
 };
 
