@@ -3534,7 +3534,7 @@ class PressHub_AI_Settings_Render {
         $value  = PressHub_AI_Settings_Storage::get_briefing_host_tertiary();
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
-        <p class="description"><?php echo esc_html__( 'Name of the third presenter/commentator (e.g. Κώστας). Default Κώστας.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Name of the third presenter/commentator (e.g. Κώστας). Default: Presenter 3.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
