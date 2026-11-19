@@ -72,11 +72,25 @@ class PressHub_Social_Dispatcher {
         }
 
         // Guard against duplicate auto-enqueuing if jobs already exist for this post
-        if ( ! empty( PressHub_Social_Queue::get_jobs_for_post( $post->ID ) ) ) {
+        if ( self::has_publish_jobs( $post->ID ) ) {
             return;
         }
 
         self::enqueue_for_post( $post->ID );
+    }
+
+    /**
+     * Whether a post already has social jobs, not counting test renders of its shorts
+     * (those are never posted, so a test render on a draft must not stop auto-publish).
+     */
+    public static function has_publish_jobs( int $post_id ): bool {
+        foreach ( PressHub_Social_Queue::get_jobs_for_post( $post_id ) as $job ) {
+            if ( is_array( $job ) && class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_test_job( $job ) ) {
+                continue;
+            }
+            return true;
+        }
+        return false;
     }
 
     /**

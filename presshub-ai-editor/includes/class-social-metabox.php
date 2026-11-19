@@ -380,10 +380,11 @@ class PressHub_Social_Metabox {
             $auto_publish     = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_auto_publish_enabled' )
                 ? PressHub_Social_Settings_Storage::get_auto_publish_enabled()
                 : true;
-            $existing_jobs    = PressHub_Social_Queue::get_jobs_for_post( $post_id );
+            // Test renders of the post's shorts are never posted, so they don't count.
+            $has_jobs         = PressHub_Social_Dispatcher::has_publish_jobs( $post_id );
 
             // If explicitly requested OR if auto-publish is active and post currently has zero queue jobs:
-            if ( $explicit_requeue || ( $auto_publish && empty( $existing_jobs ) ) ) {
+            if ( $explicit_requeue || ( $auto_publish && ! $has_jobs ) ) {
                 PressHub_Social_Dispatcher::enqueue_for_post( $post_id, $platforms );
             }
         }

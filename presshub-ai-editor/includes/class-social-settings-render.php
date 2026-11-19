@@ -636,7 +636,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_tiktok_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_tiktok_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post one 30-60 second video per top story: a hook-first script read by the briefing presenters, with the hook on screen, captions that follow the voice, AI story images and its own caption. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post one 30-60 second video per top story: a hook-first script read by the briefing presenters, with the hook on screen, captions that follow the voice, AI story images and its own caption. With Article Shorts on, each article also becomes one such video. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }
@@ -647,7 +647,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_instagram_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_instagram_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Also post each podcast short as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Also post each short (podcast shorts, and article shorts when Article Shorts are on) as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }
@@ -805,7 +805,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_tiktok_article_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_tiktok_article_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Also turn every article and opinion piece into one short, made like the podcast shorts (narration, captions that follow the voice, AI images, music), on TikTok and, when Instagram Reels are on, on Instagram. The post text is the usual AI caption. If the short cannot be made, the article is posted the classic way.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Also turn every article and opinion piece into one short, made like the podcast shorts (narration, captions that follow the voice, AI images, music), on every platform whose own shorts switch is on (TikTok Shorts, Instagram Reels, YouTube Shorts), each independently of the others. The post text is the usual AI caption. If the short cannot be made, the article is posted the classic way on TikTok and Instagram; YouTube takes only videos, so there it is skipped.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }

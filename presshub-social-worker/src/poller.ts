@@ -398,6 +398,9 @@ export class PressHubPoller {
 
       for (const job of jobs) {
         const jobTag = `[Job #${job.id} - ${job.platform}]`;
+        // True while a short is being rendered: a failure then is reported with
+        // short_render_failed, so WordPress can post an article the classic way instead.
+        let shortRendering = false;
         WorkerLogger.info(
           'Poller',
           `${jobTag} Starting processing... Post ID: ${job.post_id || 'N/A'}, Title: "${job.post_title || ''}"`,
@@ -469,6 +472,7 @@ export class PressHubPoller {
             // A short is rendered with synced captions over its own story images. It
             // never falls back to the podcast's featured image.
             const short = job.tiktok_short;
+            shortRendering = true;
             if (!audioUrl) {
               throw new Error(`${platformLabel(platform)} short has no audio_url.`);
             }
@@ -491,6 +495,7 @@ export class PressHubPoller {
               outputDir: this.outputDir
             });
             mediaPath = video?.filePath;
+            shortRendering = false;
             WorkerLogger.info('Poller', `${jobTag} Short rendered at: ${mediaPath}`);
             if (platform === 'youtube' && !job.test_render && Number(video?.duration) > YOUTUBE_SHORT_MAX_SECONDS) {
               // Longer than 3 minutes, YouTube files it as a normal video, not a Short.
@@ -721,7 +726,8 @@ export class PressHubPoller {
             await this.reportComplete({
               job_id: job.id,
               status: 'failed',
-              error: jobErr.message || 'Worker automation failed'
+              error: jobErr.message || 'Worker automation failed',
+              ...(shortRendering ? { metadata: { short_render_failed: true } } : {})
             });
           } catch (reportErr: any) {
             WorkerLogger.error('Poller', `${jobTag} Failed to report failure for job #${job.id}: ${reportErr.message}`, reportErr);
