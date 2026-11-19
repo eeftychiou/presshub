@@ -1636,15 +1636,14 @@ class PressHub_AI_Policy_Fiches {
     }
 
     /**
-     * Common mistakes in a fiche, as plain sentences ([] when none).
-     */
-    /**
      * For each task with a policy fiche budget: how many published fiches fit
      * on their own (the most a task can then get), and the titles that do
      * not. Shown next to the budgets in Settings so an editor sees what a
      * limit will cut before a call does.
      *
-     * @return array<string,array{budget:int,fit:int,total:int,too_long:string[]}>
+     * 'empty' lists the fiches with nothing for the task (not cut).
+     *
+     * @return array<string,array{budget:int,fit:int,total:int,too_long:string[],empty:string[]}>
      */
     public static function fit_report(): array {
         $published = array_filter( self::all(), static function ( $f ) { return 'published' === ( $f['status'] ?? '' ); } );
@@ -1674,6 +1673,9 @@ class PressHub_AI_Policy_Fiches {
         return $out;
     }
 
+    /**
+     * Common mistakes in a fiche, as plain sentences ([] when none).
+     */
     public static function core_warnings( array $f ): array {
         $out   = [];
         $short = [];

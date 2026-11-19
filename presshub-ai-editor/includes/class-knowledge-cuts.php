@@ -45,6 +45,9 @@ class PressHub_AI_Knowledge_Cuts {
     /** A noted cut older than this is stale and is dropped. */
     const PENDING_TTL = 300;
 
+    /** Targets whose notes stay for every call until the site forgets them. */
+    const MULTI_CALL = [ 'social_copy_', 'social_tiktok_shorts' ];
+
     /** One log line for a call whose block lost something. Never throws. */
     public static function log( string $kind, string $action, array $cuts ): void {
         if ( empty( $cuts ) || ! class_exists( 'PressHub_AI_Logger' ) ) {
@@ -65,13 +68,15 @@ class PressHub_AI_Knowledge_Cuts {
     // Material cuts: text and lists a caller shortens before an AI call
     // (article body, podcast script, fetched pages, URL count...).
     //
-    // Every note names the action of the call(s) that send the text ($for:
-    // an action, or a prefix ending in "_" such as "social_copy_"). A call
+    // Every note names the action of the call that sends the text ($for: an
+    // action, or a prefix ending in "_" such as "social_copy_"). A call
     // records only the notes for its own action, so a cut never lands on an
-    // unrelated call, and every call of that action (each platform, each
-    // retry) records it. A note stays until the same material is clipped
-    // again (replaced, or removed when it fits), forget_material() drops it,
-    // or it is PENDING_TTL old.
+    // unrelated call, and takes them: the next call of that action starts
+    // clean. MULTI_CALL targets are the exception: one text goes into several
+    // calls (each platform, each retry), so every one records the cut and
+    // the site drops the notes with forget_material() when it is done.
+    // Re-clipping the same material replaces its note (or removes it when it
+    // fits); a note whose call never ran is dropped after PENDING_TTL.
     // ------------------------------------------------------------------
 
     /**
@@ -141,7 +146,8 @@ class PressHub_AI_Knowledge_Cuts {
     /**
      * Called by call_provider() before the provider call: the cuts noted for
      * this call's action become last_material() (for the generation record)
-     * and are logged. Stale notes are dropped; notes for other actions wait.
+     * and are logged, and leave the pending list (MULTI_CALL ones stay).
+     * Stale notes are dropped; notes for other actions wait.
      */
     public static function start_call( string $action ): void {
         $now   = time();
@@ -151,7 +157,11 @@ class PressHub_AI_Knowledge_Cuts {
                 unset( self::$pending[ $key ] );
                 continue;
             }
-            if ( self::matches( (string) ( $row['for'] ?? '' ), $action ) ) {
+            $for = (string) ( $row['for'] ?? '' );
+            if ( self::matches( $for, $action ) ) {
+                if ( ! in_array( $for, self::MULTI_CALL, true ) ) {
+                    unset( self::$pending[ $key ] );
+                }
                 unset( $row['t'], $row['for'] );
                 $fresh[] = $row;
             }

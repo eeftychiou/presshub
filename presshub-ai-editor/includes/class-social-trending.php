@@ -1361,11 +1361,12 @@ class PressHub_AI_Social_Trending {
             $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? (string) $it['platform'];
             $author = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : ( '' !== (string) $it['handle'] ? '@' . $it['handle'] : $label );
             $full   = self::strlen( trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) ) );
-            if ( $cuts && $full > self::SUMMARY_POST_TEXT_CHARS ) {
-                /* translators: 1: rank, 2: author */
-                PressHub_AI_Knowledge_Cuts::note_material( 'social_trending_summary', sprintf( __( 'Trending post %1$d (%2$s)', 'presshub-ai-editor' ), $i + 1, $author ), 'clipped', self::SUMMARY_POST_TEXT_CHARS, $full, self::SUMMARY_POST_TEXT_CHARS );
-            }
             $text   = self::excerpt( (string) $it['text'], self::SUMMARY_POST_TEXT_CHARS );
+            if ( $cuts && $full > self::SUMMARY_POST_TEXT_CHARS ) {
+                // Kept: the text sent, without the closing "…".
+                /* translators: 1: rank, 2: author */
+                PressHub_AI_Knowledge_Cuts::note_material( 'social_trending_summary', sprintf( __( 'Trending post %1$d (%2$s)', 'presshub-ai-editor' ), $i + 1, $author ), 'clipped', self::SUMMARY_POST_TEXT_CHARS, $full, self::strlen( $text ) - 1 );
+            }
             $lines[] = sprintf(
                 '%d. [%s] %s (%s likes/reactions, %s comments, %s shares): %s',
                 $i + 1,

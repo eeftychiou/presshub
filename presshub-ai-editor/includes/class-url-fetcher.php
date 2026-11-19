@@ -779,6 +779,9 @@ class PressHub_AI_URL_Fetcher {
             $user_prompt = "Source URL: {$url}\n\nHTML:\n{$truncated_html}";
 
             $result = $api->call_provider( $sys_prompt, $user_prompt, false, [] );
+            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                PressHub_AI_Knowledge_Cuts::forget_material( 'url_extract' ); // taken by the call, or the call never ran
+            }
             if ( is_wp_error( $result ) || empty( $result ) || ! is_string( $result ) ) {
                 return [];
             }

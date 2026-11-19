@@ -998,6 +998,9 @@ class PressHub_AI_API_Client {
         $this->suppress_provider_prompt_log = true;
         $result = $this->call_provider( $sys_prompt, $user_prompt, false, $uploaded_files );
         $this->suppress_provider_prompt_log = false;
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( $this->get_action() ); // taken by the call, or the call never ran
+        }
 
         // Issue #140 - generation record with the raw provider response (before Markdown conversion).
         self::finish_generation_record(
@@ -1246,6 +1249,9 @@ class PressHub_AI_API_Client {
         $sys_prompt  = PressHub_AI_Image_Prompt_Templates::system_prompt_for( '' === $template_id ? PressHub_AI_Image_Prompt_Templates::DEFAULT_ID : $template_id );
 
         $result = $client->call_provider( $sys_prompt, $user_prompt, false, [], 0.3 );
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( 'generate_image_prompt' ); // taken by the call, or the call never ran
+        }
         if ( is_wp_error( $result ) ) {
             return $result;
         }

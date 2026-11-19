@@ -458,7 +458,8 @@ class PressHub_AI_Ajax_Handlers {
         if ( '' === trim( $article_content ) && $post_id > 0 ) {
             $existing_post = get_post( $post_id );
             if ( $existing_post ) {
-                $article_content = (string) $existing_post->post_content;
+                $article_bytes_cut = 0; // the stored post is sent, not the cut request text
+                $article_content   = (string) $existing_post->post_content;
                 if ( '' === trim( $article_title ) ) {
                     $article_title = (string) $existing_post->post_title;
                 }

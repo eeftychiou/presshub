@@ -824,7 +824,12 @@ class PressHub_AI_SEO {
             $client = new PressHub_AI_API_Client( $module );
             $raw    = $client->call_seo_json( $sys_prompt, $user_prompt, $action, $post_id );
         } catch ( Throwable $t ) {
-            return new WP_Error( 'seo_call_failed', $t->getMessage() );
+            $raw = new WP_Error( 'seo_call_failed', $t->getMessage() );
+        }
+        // The call took its excerpt cut; when it never ran (no API key, an
+        // error before the provider) the note goes too.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::forget_material( $action );
         }
         if ( is_wp_error( $raw ) ) {
             return $raw;
