@@ -13,12 +13,12 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Connections (`connections`) | 42 | 18 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 28 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 79 | 2 | 0 |
+| Daily Briefing (`daily-briefing`) | 81 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 74 | 5 | 0 |
 | Social listening (`social-listening`) | 33 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **322** | | |
+| **Total** | **324** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -144,7 +144,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 | `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
-## Daily Briefing (`daily-briefing`, 79)
+## Daily Briefing (`daily-briefing`, 81)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -183,6 +183,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_audio_transition_sfx` | Topic Transition SFX | string |  | ai / briefing |  |
 | `presshub_ai_briefing_audio_intro_sfx` | Podcast Intro SFX | string |  | ai / briefing |  |
 | `presshub_ai_briefing_audio_outro_sfx` | Podcast Outro SFX | string |  | ai / briefing |  |
+| `presshub_ai_podcast_mp3_enabled` | Podcast MP3 files | integer |  | ai / briefing | checkbox |
+| `presshub_ai_podcast_mp3_bitrate` | Podcast MP3 bitrate | integer | kbps | ai / briefing | needs `presshub_ai_podcast_mp3_enabled` on |
 | `presshub_ai_briefing_voice_speed` | Podcast speaking rate (×) | number | × | ai / briefing | was: Speaking Rate / Speed |
 | `presshub_ai_briefing_voice_pitch` | Podcast voice pitch (semitones) | number | semitones | ai / briefing | was: Voice Pitch Tuning |
 | `presshub_ai_briefing_tts_style` | Speaking Delivery Style (logosAI) | string |  | ai / briefing |  |

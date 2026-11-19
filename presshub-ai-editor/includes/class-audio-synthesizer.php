@@ -2609,6 +2609,12 @@ class PressHub_AI_Audio_Synthesizer {
             update_post_meta( (int) $post_id, '_presshub_audio_completed_at', (string) $completed_at_v );
         }
 
+        // A WAV episode is converted to MP3 by the worker (32 MB → about 5 MB for 11 minutes),
+        // queued once all of the WAV's meta is saved.
+        if ( class_exists( 'PressHub_AI_Podcast_Mp3' ) && (int) $post_id > 0 && '.wav' === $ext ) {
+            PressHub_AI_Podcast_Mp3::queue( (int) $post_id, $attachment_id, $audio_url );
+        }
+
         $podcast_audio_completed_at = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
 
         return [

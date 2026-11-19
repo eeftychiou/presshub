@@ -236,6 +236,7 @@ if ( function_exists( 'add_action' ) ) {
     add_action( 'before_delete_post', [ 'PressHub_AI_Podcast_Translations', 'on_before_delete_post' ] );
 }
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-podcast-mp3.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-generation-recorder.php';
@@ -392,6 +393,7 @@ function presshub_ai_deactivate() {
     wp_clear_scheduled_hook( PressHub_AI_Social_Trending::CRON_HOOK );
     if ( function_exists( 'wp_unschedule_hook' ) ) {
         wp_unschedule_hook( PressHub_AI_Social_Trending::AI_IMAGE_HOOK ); // Its events carry arguments.
+        wp_unschedule_hook( PressHub_AI_Podcast_Mp3::DELETE_WAV_HOOK );
     }
     PressHub_AI_Memory_Rollup_Builder::clear_cron();
     if ( class_exists( 'PressHub_Social_Activator' ) ) {
@@ -481,6 +483,7 @@ function presshub_ai_init() {
     PressHub_Settings_Cleanup::register_hooks();
     new PressHub_AI_Social_Meta();
     PressHub_AI_Audio_Synthesizer::register_hooks();
+    PressHub_AI_Podcast_Mp3::register_hooks();
     PressHub_AI_Social_Trending::register_hooks();
     PressHub_AI_Research_Cleanup::register();
     if ( class_exists( 'PressHub_AI_Log_Exposure_Check' ) ) {
