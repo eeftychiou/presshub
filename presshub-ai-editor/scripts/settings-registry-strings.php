@@ -17,8 +17,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * A PHP string literal the .pot generator reads: single quotes, or double
- * quotes when the text has an apostrophe (make-pot does not read \' escapes).
+ * A PHP string literal for the .pot generator: single quotes, or double quotes
+ * when the text has an apostrophe, so the generated file stays easy to read.
  */
 function presshub_settings_registry_strings_literal( string $text ): string {
     if ( false === strpos( $text, "'" ) ) {

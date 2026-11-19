@@ -130,8 +130,12 @@ if ( 0 === $pot_rc && is_readable( $pot ) ) {
 }
 $missing = 0;
 foreach ( PressHub_Settings_Registry::all() as $k => $e ) {
-    foreach ( [ 'label', 'help' ] as $field ) {
-        $text = trim( (string) ( $e[ $field ] ?? '' ) );
+    $texts = [ 'label' => (string) ( $e['label'] ?? '' ), 'help' => (string) ( $e['help'] ?? '' ) ];
+    foreach ( (array) ( $e['aliases'] ?? [] ) as $i => $alias ) {
+        $texts[ 'old name ' . $i ] = (string) $alias;
+    }
+    foreach ( $texts as $field => $text ) {
+        $text = trim( $text );
         if ( '' !== $text && ! isset( $msgids[ $text ] ) ) {
             if ( ++$missing <= 5 ) {
                 $failures[] = "make-pot.php does not extract the {$field} of {$k}.";
