@@ -132,8 +132,8 @@ These tests and checks guard the rules. A change that has to edit one of them to
 | 5.3 | CI step "No inline style= in the settings renderers" (two renderers; exception E6) |
 | 7.1 | the claim-payload contract test at the end of `presshub-ai-editor/tests/run-social-tests.php` |
 | 7.2 | `SettingsTransferTest` |
-| 7.6 | `UninstallTest` (registry settings, Social settings, stores and multisite) |
 | 7.5 | `SettingsTranslationSafetyTest` (block-level HTML in translatable strings of the AI renderer, inline `code`/`strong`/`em`/`br`/`a` allowed; exception E8), `SettingsRegistryStringsTest` (registry strings listed for translators and translated in search) |
+| 7.6 | `UninstallTest` (registry settings, Social settings, stores and multisite) |
 | This document | `SettingsPrinciplesDocTest` (section table, guards, links, PR checklist) |
 
 ---

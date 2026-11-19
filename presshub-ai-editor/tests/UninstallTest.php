@@ -364,6 +364,12 @@ class UninstallTest
         if ( [ 1, 2 ] !== $GLOBALS['SWITCHED_TO'] ) {
             $failures[] = 'On multisite, uninstall should switch to every site; got ' . json_encode( $GLOBALS['SWITCHED_TO'] );
         }
+        $research_queries = array_filter( (array) $GLOBALS['GET_POSTS_ARGS'], static function ( $a ) {
+            return 'presshub_research' === ( $a['post_type'] ?? '' );
+        } );
+        if ( count( $research_queries ) < 2 ) {
+            $failures[] = 'On multisite, research posts should be removed on every site; got ' . count( $research_queries ) . ' queries.';
+        }
         foreach ( $GLOBALS['SITE_STORES'] as $site => $store ) {
             foreach ( array_keys( $store ) as $key ) {
                 if ( 0 === strpos( (string) $key, 'presshub_' ) ) {

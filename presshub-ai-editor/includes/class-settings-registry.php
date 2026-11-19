@@ -199,8 +199,8 @@ class PressHub_Settings_Registry {
 
     /**
      * Index for the settings search and the per-field Default / Reset links
-     * (#234): every active, rendered option of both pages (secrets by label only, #309 E3),
-     * with labels and help in the site's language (#309 E10).
+     * (#234): every active, rendered, non-secret option of both pages, with labels and
+     * help in the site's language (#309 E10).
      * Defaults come from the registry, else from register_setting(); only
      * scalar defaults are passed.
      *
@@ -239,8 +239,8 @@ class PressHub_Settings_Registry {
             if ( null === $default && isset( $registered[ $key ] ) && array_key_exists( 'default', $registered[ $key ] ) ) {
                 $default = $registered[ $key ]['default'];
             }
-            if ( is_bool( $default ) ) {
-                $default = $default ? 1 : 0;
+            if ( is_bool( $default ) || ( ! empty( $e['checkbox'] ) && is_scalar( $default ) ) ) {
+                $default = in_array( $default, [ true, 1, '1', 'on', 'yes', 'true' ], true ) ? 1 : 0;
             }
             if ( is_scalar( $default ) && ( ! is_string( $default ) || strlen( $default ) <= 200 ) ) {
                 $row['default'] = $default;

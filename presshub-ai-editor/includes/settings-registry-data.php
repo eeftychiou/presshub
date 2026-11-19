@@ -50,7 +50,7 @@ return [
     'aliases' => [
       0 => 'Fetch and extract source URLs server-side before prompting (recommended — models cannot browse web pages).',
     ],
-    'default' => '1',
+    'default' => 1,
   ],
   'presshub_ai_debug_prompts' => [
     'page' => 'ai',
@@ -66,6 +66,7 @@ return [
     'aliases' => [
       0 => 'Raw debug dump (developer use)',
     ],
+    'default' => 0,
   ],
   'presshub_ai_remove_google_cloud_api_key' => [
     'page' => 'ai',
@@ -435,7 +436,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
-    'default' => '',
+    'default_callback' => [
+      0 => 'PressHub_AI_Settings_Storage',
+      1 => 'default_log_level',
+    ],
   ],
   'presshub_ai_briefing_tts_engine' => [
     'page' => 'ai',
@@ -506,7 +510,7 @@ return [
     'aliases' => [
       0 => 'Raw debug dump (developer use)',
     ],
-    'default' => '0',
+    'default' => 0,
   ],
   'presshub_ai_generation_record_retention_days' => [
     'page' => 'ai',
@@ -589,7 +593,7 @@ return [
     'type' => 'boolean',
     'rendered' => true,
     'status' => 'active',
-    'default' => '1',
+    'default' => 1,
   ],
   'presshub_ai_social_meta_all_posts' => [
     'page' => 'ai',
@@ -602,7 +606,7 @@ return [
     'type' => 'boolean',
     'rendered' => true,
     'status' => 'active',
-    'default' => '1',
+    'default' => 1,
   ],
   'presshub_ai_briefing_sources' => [
     'page' => 'ai',
@@ -623,7 +627,7 @@ return [
     'group' => 'schedule',
     'section' => 'presshub_ai_briefing',
     'label' => 'Enable Scheduled Briefing Hub',
-    'help' => 'Runs the morning harvest and generation every day at the times below. Default: off.',
+    'help' => 'Runs the morning harvest and generation every day at the times below. Default: on.',
     'checkbox' => true,
     'secret' => false,
     'type' => 'integer',
@@ -941,7 +945,7 @@ return [
     'group' => 'trending',
     'section' => '',
     'label' => 'Trending from X',
-    'help' => 'Collects trending posts from X through the social worker. Default: off.',
+    'help' => 'Collects trending posts from X through the social worker. Default: on.',
     'checkbox' => true,
     'secret' => false,
     'type' => 'string',
@@ -959,7 +963,7 @@ return [
     'group' => 'trending',
     'section' => '',
     'label' => 'Trending from TikTok',
-    'help' => 'Collects trending videos from TikTok through the social worker. Default: off.',
+    'help' => 'Collects trending videos from TikTok through the social worker. Default: on.',
     'checkbox' => true,
     'secret' => false,
     'type' => 'string',
@@ -977,7 +981,7 @@ return [
     'group' => 'trending',
     'section' => '',
     'label' => 'Trending from Instagram',
-    'help' => 'Collects top hashtag posts from Instagram with the Meta token. Default: off.',
+    'help' => 'Collects top hashtag posts from Instagram with the Meta token. Default: on.',
     'checkbox' => true,
     'secret' => false,
     'type' => 'string',
@@ -995,7 +999,7 @@ return [
     'group' => 'trending',
     'section' => '',
     'label' => 'Trending from Facebook',
-    'help' => 'Collects posts from the listed Facebook Pages through the social worker. Default: off.',
+    'help' => 'Collects posts from the listed Facebook Pages through the social worker. Default: on.',
     'checkbox' => true,
     'secret' => false,
     'type' => 'string',
@@ -1727,7 +1731,7 @@ escort
     'group' => 'voices',
     'section' => 'presshub_ai_briefing',
     'label' => 'Presenter 3 Name',
-    'help' => 'Name of the third presenter/commentator (e.g. Κώστας). Default Κώστας.',
+    'help' => 'Name of the third presenter/commentator (e.g. Κώστας). Default: Presenter 3.',
     'checkbox' => false,
     'secret' => false,
     'type' => 'string',
@@ -2485,6 +2489,7 @@ escort
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_image_generation_provider' => [
     'page' => 'ai',

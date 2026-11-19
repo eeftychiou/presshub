@@ -29,6 +29,7 @@ if ( ! function_exists( 'register_deactivation_hook' ) ) {
 }
 defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER', true );
 require_once dirname( __DIR__ ) . '/presshub-ai-editor.php';
+require_once dirname( __DIR__ ) . '/scripts/settings-registry-strings.php';
 
 $failures = [];
 
@@ -48,7 +49,7 @@ foreach ( PressHub_Settings_Registry::all() as $key => $e ) {
             continue;
         }
         ++$checked;
-        $call = "__( '" . str_replace( [ '\\', "'" ], [ '\\\\', "\\'" ], $text ) . "', 'presshub-ai-editor' );";
+        $call = '__( ' . presshub_settings_registry_strings_literal( $text ) . ", 'presshub-ai-editor' );";
         if ( false === strpos( $strings, $call ) ) {
             $failures[] = "The {$field} of {$key} is not listed for translators.";
         }

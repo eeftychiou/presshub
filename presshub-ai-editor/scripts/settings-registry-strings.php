@@ -16,6 +16,17 @@ if ( ! defined( 'ABSPATH' ) ) {
     define( 'ABSPATH', __DIR__ . '/' );
 }
 
+/**
+ * A PHP string literal the .pot generator reads: single quotes, or double
+ * quotes when the text has an apostrophe (make-pot does not read \' escapes).
+ */
+function presshub_settings_registry_strings_literal( string $text ): string {
+    if ( false === strpos( $text, "'" ) ) {
+        return "'" . str_replace( '\\', '\\\\', $text ) . "'";
+    }
+    return '"' . str_replace( [ '\\', '"', '$' ], [ '\\\\', '\\"', '\\$' ], $text ) . '"';
+}
+
 /** The PHP source of the strings file for the current registry. */
 function presshub_settings_registry_strings_source(): string {
     $data    = include dirname( __DIR__ ) . '/includes/settings-registry-data.php';
@@ -42,12 +53,12 @@ function presshub_settings_registry_strings_source(): string {
     $out .= "if ( ! defined( 'ABSPATH' ) ) {\n    exit;\n}\n\n";
     $out .= "// phpcs:disable\nreturn;\n\n";
     foreach ( array_keys( $strings ) as $text ) {
-        $out .= "__( '" . str_replace( [ '\\', "'" ], [ '\\\\', "\\'" ], $text ) . "', 'presshub-ai-editor' );\n";
+        $out .= '__( ' . presshub_settings_registry_strings_literal( $text ) . ", 'presshub-ai-editor' );\n";
     }
     return $out;
 }
 
-if ( PHP_SAPI === 'cli' && isset( $argv ) && realpath( $argv[0] ) === __FILE__ ) {
+if ( PHP_SAPI === 'cli' && isset( $argv ) && realpath( $argv[0] ) === realpath( __FILE__ ) ) {
     $target = dirname( __DIR__ ) . '/includes/settings-registry-strings.php';
     $source = presshub_settings_registry_strings_source();
     if ( in_array( '--check', $argv, true ) ) {

@@ -44,7 +44,12 @@ foreach ( PressHub_Settings_Registry::all() as $key => $e ) {
     if ( 'active' !== ( $e['status'] ?? '' ) || empty( $e['rendered'] ) || ! empty( $e['secret'] ) || ! empty( $e['removes'] ) ) {
         continue;
     }
-    if ( 'array' === ( $e['type'] ?? '' ) || false !== strpos( $key, 'prompt' ) || false !== strpos( $key, 'template' ) || in_array( $key, $legacy, true ) ) {
+    // A prompt or template text (default from an asset file), not settings that
+    // merely mention prompts: the prompt debug switch, the image prompt model and
+    // provider, or the template choosers.
+    $is_text_asset = ( false !== strpos( $key, 'prompt' ) || false !== strpos( $key, 'template' ) )
+        && ! preg_match( '/(_model|_provider|_image_template|^presshub_ai_debug_prompts)$/', $key );
+    if ( 'array' === ( $e['type'] ?? '' ) || $is_text_asset || in_array( $key, $legacy, true ) ) {
         continue;
     }
     ++$checked;

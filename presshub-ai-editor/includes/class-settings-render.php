@@ -1219,7 +1219,7 @@ class PressHub_AI_Settings_Render {
      */
     public static function registry_help( string $key ): void {
         $entry = class_exists( 'PressHub_Settings_Registry' ) ? PressHub_Settings_Registry::get( $key ) : null;
-        $help  = is_array( $entry ) ? (string) ( $entry['help'] ?? '' ) : '';
+        $help  = is_array( $entry ) ? PressHub_Settings_Registry::translated( (string) ( $entry['help'] ?? '' ) ) : '';
         if ( '' === $help ) {
             return;
         }
@@ -2650,7 +2650,7 @@ class PressHub_AI_Settings_Render {
                         <?php foreach ( $preview['changes'] as $key => $change ) : ?>
                             <?php $entry = PressHub_Settings_Registry::get( $key ); ?>
                             <tr>
-                                <td><?php echo self::esc_html_safe( (string) ( $entry['label'] ?? $key ) ); ?><br /><code><?php echo self::esc_html_safe( $key ); ?></code></td>
+                                <td><?php echo self::esc_html_safe( PressHub_Settings_Registry::translated( (string) ( $entry['label'] ?? $key ) ) ); ?><br /><code><?php echo self::esc_html_safe( $key ); ?></code></td>
                                 <td><code><?php echo self::esc_html_safe( $T::display_value( $change['from'] ) ); ?></code></td>
                                 <td><code><?php echo self::esc_html_safe( $T::display_value( $change['to'] ) ); ?></code></td>
                             </tr>
@@ -2685,7 +2685,7 @@ class PressHub_AI_Settings_Render {
                 <?php foreach ( $unused as $key => $e ) : ?>
                     <?php $stored = get_option( $key, null ); ?>
                     <tr>
-                        <td><?php echo self::esc_html_safe( (string) ( $e['label'] ?? $key ) ); ?><br /><code><?php echo self::esc_html_safe( $key ); ?></code></td>
+                        <td><?php echo self::esc_html_safe( PressHub_Settings_Registry::translated( (string) ( $e['label'] ?? $key ) ) ); ?><br /><code><?php echo self::esc_html_safe( $key ); ?></code></td>
                         <td><?php echo self::esc_html_safe( (string) ( $e['was_shown_on'] ?? '' ) ); ?></td>
                         <td><code><?php echo self::esc_html_safe( class_exists( $T ) ? $T::display_value( $stored, ! empty( $e['secret'] ) ) : '' ); ?></code></td>
                         <td><?php echo self::esc_html_safe( (string) ( $e['unused_reason'] ?? '' ) ); ?></td>
@@ -4134,6 +4134,7 @@ class PressHub_AI_Settings_Render {
                 'selected'          => $selected,
                 'hierarchical'      => true,
                 'show_option_none'  => __( 'None (Default Category)', 'presshub-ai-editor' ),
+                'option_none_value' => '0',
                 'class'             => 'presshub-category-dropdown',
             ] );
         } else {
@@ -4157,6 +4158,7 @@ class PressHub_AI_Settings_Render {
                 'selected'          => $selected,
                 'hierarchical'      => true,
                 'show_option_none'  => __( 'None (Default Category)', 'presshub-ai-editor' ),
+                'option_none_value' => '0',
                 'class'             => 'presshub-category-dropdown',
             ] );
         } else {

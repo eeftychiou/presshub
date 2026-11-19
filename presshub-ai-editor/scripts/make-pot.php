@@ -102,8 +102,9 @@ foreach ( $php_sources as $file ) {
     $contents = file_get_contents( $file );
     $rel      = str_replace( PLUGIN_ROOT . '/', '', $file );
     // Strip line comments (// ...) and block comments (/* ... */) so a
-    // developer comment in source never lands in the catalogue.
-    $stripped = preg_replace( '#//[^\n]*#', '', $contents );
+    // developer comment in source never lands in the catalogue. The "//" of
+    // a URL (http://) is not a comment.
+    $stripped = preg_replace( '#(?<!:)//[^\n]*#', '', $contents );
     $stripped = preg_replace( '#/\*.*?\*/#s', '', $stripped );
     // Match the four WP i18n call shapes we actually use:
     //   __( 'foo', 'presshub-ai-editor' )
