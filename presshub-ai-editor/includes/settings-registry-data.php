@@ -874,7 +874,7 @@ return [
     'group' => 'trending',
     'section' => '',
     'label' => 'Roundup featured image',
-    'help' => 'The picture of the roundup\'s top post, or an AI image drawn from the roundup with the Trending in Cyprus image template (Writing & QA, Featured images). An AI image needs Generate featured images on; if it fails, the top post\'s picture is used.',
+    'help' => 'The picture of the roundup\'s top post, or an AI image drawn from the roundup with the Trending in Cyprus prompt template (Writing & QA, Featured images, Automatic images; Editorial cartoon by default, so a picture drawn from social posts is not taken for a news photo). An AI image needs Generate featured images on. It is drawn in the background: the roundup is held as pending, then it and its social posts go out with the AI image, or with the top post\'s picture if drawing fails or takes over 15 minutes. Default: the top post\'s picture.',
     'checkbox' => false,
     'secret' => false,
     'type' => 'string',

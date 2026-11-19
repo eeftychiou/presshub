@@ -129,7 +129,12 @@
             } else if (value) {
                 // An unsaved pick was deleted: fall back to the first template and
                 // tell the Reset link and unsaved-changes tracking about it.
-                $sel.prop('selectedIndex', 0).trigger('change');
+                var def = $sel.attr('data-default');
+                var $pick = $sel.find('option').filter(function () { return this.value === def; });
+                if (!$pick.length) {
+                    $pick = $sel.find('option:not([data-missing])').first();
+                }
+                $sel.val($pick.val()).trigger('change');
             }
         });
     }

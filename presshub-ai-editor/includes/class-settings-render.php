@@ -3376,8 +3376,8 @@ class PressHub_AI_Settings_Render {
                     <option value="top_post" <?php selected( $img_source, 'top_post' ); ?>><?php echo esc_html__( 'The top post\'s picture', 'presshub-ai-editor' ); ?></option>
                     <option value="auto_generate" <?php selected( $img_source, 'auto_generate' ); ?>><?php echo esc_html__( 'An AI image drawn from the roundup', 'presshub-ai-editor' ); ?></option>
                 </select>
-                <p class="description"><?php echo esc_html__( 'An AI image needs Generate featured images on (Writing & QA → Featured images). It is drawn in the background: the top post\'s picture stands in, and the roundup and its social posts go out once the AI image is in place (with the top post\'s picture if drawing fails). Each roundup post gets its image once. Its template defaults to Editorial cartoon, so a picture drawn from social posts is not taken for a news photo.', 'presshub-ai-editor' ); ?></p>
-                <?php echo $this->auto_image_templates_line( [ 'social_trending' ], '', __( 'Image template:', 'presshub-ai-editor' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in the helper. ?>
+                <p class="description"><?php echo esc_html__( 'An AI image needs Generate featured images on (Writing & QA → Featured images). It is drawn in the background: the roundup is held as pending, then it and its social posts go out with the AI image, or with the top post\'s picture if drawing fails or takes over 15 minutes. Each roundup post gets its image once. Its template defaults to Editorial cartoon, so a picture drawn from social posts is not taken for a news photo.', 'presshub-ai-editor' ); ?></p>
+                <?php echo $this->auto_image_templates_line( [ 'social_trending' ], '', __( 'Prompt template:', 'presshub-ai-editor' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in the helper. ?>
             </td>
         </tr>
         <?php
@@ -4297,7 +4297,7 @@ class PressHub_AI_Settings_Render {
         $templates = PressHub_AI_Image_Prompt_Templates::get_all();
         $ids       = array_column( $templates, 'id' );
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="presshub-auto-images-select">
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="presshub-auto-images-select" data-default="<?php echo self::esc_attr_safe( PressHub_AI_Settings_Storage::default_auto_image_template( $kind ) ); ?>">
             <?php if ( ! in_array( $selected, $ids, true ) ) : ?>
                 <option value="<?php echo self::esc_attr_safe( $selected ); ?>" selected="selected" data-missing="1"><?php echo esc_html( $this->missing_template_label( $kind ) ); ?></option>
             <?php endif; ?>
@@ -4417,7 +4417,8 @@ class PressHub_AI_Settings_Render {
             // get(), not resolve(): only showing it, so no missing-template warning in the log.
             $found   = PressHub_AI_Image_Prompt_Templates::get( PressHub_AI_Settings_Storage::get_auto_image_template( $kind ) );
             $name    = $found ? $found['name'] : $this->missing_template_label( $kind );
-            $parts[] = sprintf( '%s: %s', $rows[ $kind ][0], $name );
+            // One kind after a lead-in ("Prompt template:") needs no row label.
+            $parts[] = ( 1 === count( $kinds ) && '' !== $lead ) ? $name : sprintf( '%s: %s', $rows[ $kind ][0], $name );
         }
         return '<p class="presshub-model-line">' . ( '' !== $lead ? esc_html( $lead ) . ' ' : '' ) . esc_html( implode( ' · ', $parts ) ) . '. <a href="' . esc_url( PressHub_Settings_Sections::url( 'writing-qa', 'presshub-auto-images-heading' ) ) . '">' . esc_html__( 'Change in Writing & QA → Featured images → Automatic images', 'presshub-ai-editor' ) . '</a></p>'
             . ( '' !== $note ? '<p class="description">' . esc_html( $note ) . '</p>' : '' );

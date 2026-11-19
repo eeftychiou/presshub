@@ -458,6 +458,21 @@ $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_ge
 $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] = 'custom_gone';
 $T::run_ai_featured_image( 84, [ 'x' ] );
 st_check( 'featured source: a missing template falls back to Editorial cartoon', 'editorial_cartoon' === end( $ai_calls )[1] );
+// Watchdog: a job that never ran releases the roundup with the stand-in after 15 minutes.
+$GLOBALS['POSTS_STORE'][86] = [ 'ID' => 86, 'post_title' => 'Trending', 'post_status' => 'pending' ];
+$GLOBALS['POST_META_STORE'][86] = [ '_presshub_trending_ai_release_pending' => '1', '_presshub_trending_ai_image_queued' => (string) ( $now - 60 ), '_presshub_gate_target_status' => 'publish' ];
+st_check( 'watchdog: a fresh job is waited for', false === $T::maybe_release_stale_ai_wait( 86, $now ) && '1' === $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] );
+st_check( 'watchdog: a stale job releases the roundup', true === $T::maybe_release_stale_ai_wait( 86, $now + 901 ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_gate_target_status'] ) );
+// A new roundup with an AI image planned is held as pending even with the gate off for Trending.
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
+$GLOBALS['ST_NOW'] = $now + 2 * 86400;
+$plan = $T::get_worker_plan( false, $now + 2 * 86400 );
+$res  = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '207', 900, 10, [ 'text' => 'Storm over Limassol', 'thumbnail' => 'https://pbs.twimg.com/media/c.jpg' ] ) ], [], $now + 2 * 86400 );
+unset( $GLOBALS['ST_NOW'] );
+$rid  = (int) ( $res['post_id'] ?? 0 );
+$rpost = get_post( $rid );
+st_check( 'held for the AI image: new roundup pending with its target status kept', $rid > 0 && 'pending' === ( $rpost->post_status ?? '' ) && '' !== (string) get_post_meta( $rid, '_presshub_gate_target_status', true ) && 1 === count( $ai_jobs() ) );
 $T::$ai_image = null;
 unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'], $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'], $GLOBALS['POSTS_STORE'][83], $GLOBALS['POSTS_STORE'][84] );
 // TikTok photo posts: first image from the Media Library, never TikTok's player.
