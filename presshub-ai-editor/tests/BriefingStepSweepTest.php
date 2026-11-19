@@ -324,6 +324,7 @@ $rec = strpos( $fn, 'presshub_ai_record_pending_briefing_step(' );
 bss_check( 'wiring: the step is recorded before wp_schedule_single_event', false !== $rec && $rec < $sched );
 $ajax = (string) file_get_contents( dirname( __DIR__ ) . '/includes/class-ajax-handlers.php' );
 bss_check( 'wiring: Hub script and audio runs clear the queued step', false !== strpos( $ajax, "presshub_ai_clear_pending_briefing_step( \$date, \$edition, 'script', 0 );" ) && false !== strpos( $ajax, "presshub_ai_clear_pending_briefing_step( \$date, \$edition, 'audio', 0 );" ) );
+bss_check( 'wiring: the Hub audio run updates an existing podcast post instead of creating a second one', false !== strpos( $ajax, '$existing_id = function_exists( \'presshub_ai_find_podcast_post_id\' ) ? (int) presshub_ai_find_podcast_post_id( $date, $edition ) : 0;' ) && false !== strpos( $ajax, 'synthesize_podcast( $date, $script, $edition, null, $existing_id )' ) );
 $uninstall = (string) file_get_contents( dirname( __DIR__ ) . '/uninstall.php' );
 bss_check( 'wiring: uninstall removes the lock option', false !== strpos( $uninstall, "'presshub_ai_briefing_pending_steps_lock'" ) );
 bss_check( 'wiring: uninstall removes the pending-steps option', false !== strpos( $uninstall, "'presshub_ai_briefing_pending_steps'" ) );

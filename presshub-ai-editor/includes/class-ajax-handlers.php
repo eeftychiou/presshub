@@ -1423,7 +1423,11 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
                 presshub_ai_clear_pending_briefing_step( $date, $edition, 'audio', 0 );
             }
             $synthesizer = new PressHub_AI_Audio_Synthesizer();
-            $result      = $synthesizer->synthesize_podcast( $date, $script, $edition );
+            // Re-running an edition that already has its podcast post updates
+            // that post: a new post would be published and sent to every
+            // platform again.
+            $existing_id = function_exists( 'presshub_ai_find_podcast_post_id' ) ? (int) presshub_ai_find_podcast_post_id( $date, $edition ) : 0;
+            $result      = $synthesizer->synthesize_podcast( $date, $script, $edition, null, $existing_id );
 
             if ( is_wp_error( $result ) ) {
                 wp_send_json_error( $result->get_error_message() );
