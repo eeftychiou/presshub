@@ -108,6 +108,8 @@ pt_check( 'structure: a lost presenter is refused', str_contains( PressHub_AI_Po
 $no_end = str_replace( "[TOPIC_END]\n[TOPIC_START: Weather]\n", '', $english );
 $empty_topic = str_replace( "[SPEAKER_1]: Rain in the occupied areas and in Nicosia.\n[SPEAKER_2]: And snow on Troodos.\n", "Rain and snow.\n", $english );
 pt_check( 'structure: a topic without turns is named as such, not as equal counts', str_contains( PressHub_AI_Podcast_Translations::structure_error( $greek, $empty_topic ), 'has 1 topics with speaker turns; the Greek one has 2' ) );
+$fourth = str_replace( "[SPEAKER_2]: And snow on Troodos.", "[SPEAKER_2]: And snow on Troodos.\n[SPEAKER_4]: And wind.", $english );
+pt_check( 'structure: a speaker label the Greek does not have is refused', str_contains( PressHub_AI_Podcast_Translations::structure_error( $greek, $fourth ), '[SPEAKER_4]' ) );
 pt_check( 'structure: two topics run together are refused', str_contains( PressHub_AI_Podcast_Translations::structure_error( $greek, $no_end ), 'topics' ) );
 $named = "[TOPIC_START: Οικονομία]\nΜαρία: Καλημέρα, ο κατώτατος μισθός αυξάνεται.\nΝίκος: Από τον Ιανουάριο.\n[TOPIC_END]";
 $canon = PressHub_AI_Podcast_Translations::canonical_script( $named );
@@ -213,6 +215,13 @@ if ( class_exists( 'PressHub_Social_Queue' ) ) {
     pt_check( 'video: without a Greek timeline each English topic gets the short of its Greek topic', [ 'https://img/e1.jpg' ] === ( $ev_en['scenes'][0]['images'] ?? null ) && [ 'https://img/w1.jpg' ] === ( $ev_en['scenes'][1]['images'] ?? null ) && 'Economy' === ( $ev_en['scenes'][0]['title'] ?? '' ) );
 }
 pt_check( 'voice: the TTS call log is closed afterwards', class_exists( 'PressHub_AI_TTS_Call_Recorder' ) && ! PressHub_AI_TTS_Call_Recorder::is_active() );
+
+$all_was = PressHub_AI_Podcast_Translations::get_all( 701 );
+update_post_meta( 701, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => array_merge( $voiced, [ 'status' => 'failed', 'step' => 'voice', 'error' => 'TTS quota' ] ) ] );
+$client = new PT_Mock_Client();
+$again  = PressHub_AI_Podcast_Translations::translate( 701, 'en', $client );
+pt_check( 'translate: after a failed voice step the translation is kept, not made again', 0 === count( $client->calls ) && ! empty( $again['unchanged'] ) );
+update_post_meta( 701, PressHub_AI_Podcast_Translations::META_KEY, $all_was );
 
 $no_tr = PressHub_AI_Podcast_Translations::voice( 701, 'tr', $synth );
 pt_check( 'voice: a language without a translation is not voiced', is_wp_error( $no_tr ) );

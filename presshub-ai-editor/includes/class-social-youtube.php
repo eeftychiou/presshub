@@ -707,7 +707,8 @@ class PressHub_Social_YouTube {
     public static function episode_job( int $post_id, string $copy, ?string $media_url, ?string $media_type, string $scheduled_at, ?string $failed_error = null, string $language = '' ): array {
         $episode = [ 'queued_at' => gmdate( 'c' ) ];
         if ( '' !== $language ) {
-            $episode['language'] = $language;
+            $episode['language']         = $language;
+            $episode['description_hash'] = md5( trim( $copy ) );
         }
         return [
             'post_id'      => $post_id,
@@ -747,6 +748,13 @@ class PressHub_Social_YouTube {
                 return new WP_Error( 'youtube_episode_no_title', sprintf( 'The %s version of podcast post #%d has no title, so it is not uploaded.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], $post_id ) );
             }
             $title = '' !== trim( (string) ( $tr['title'] ?? '' ) ) ? (string) $tr['title'] : $title;
+            // A translation made again after the job was queued brings its new description,
+            // unless the copy was edited by hand on the Queue.
+            $tr_copy = trim( (string) ( $tr['description'] ?? '' ) );
+            $queued  = (string) ( self::decode_metadata( $job['metadata'] ?? null )[ self::EPISODE_META_KEY ]['description_hash'] ?? '' );
+            if ( '' !== $tr_copy && '' !== $queued && md5( trim( (string) ( $job['post_copy'] ?? '' ) ) ) === $queued ) {
+                $job['post_copy'] = $tr_copy;
+            }
         }
 
         if ( ! $is_ep && ! $is_shrt ) {
@@ -841,6 +849,11 @@ class PressHub_Social_YouTube {
     public static function episode_hold( array $job, ?int $now = null ): ?array {
         if ( ! self::is_episode_job( $job ) ) {
             return null;
+        }
+        // An English or Turkish episode translated again waits for its new audio.
+        $ep_lang = self::episode_language( $job );
+        if ( '' !== $ep_lang && 'translated' === ( PressHub_AI_Podcast_Translations::get_entry( (int) ( $job['post_id'] ?? 0 ), $ep_lang )['status'] ?? '' ) ) {
+            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting: the %s version is being voiced again.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'] ) ];
         }
         if ( ! self::episode_length_ok( $job ) ) {
             $status = self::long_uploads_status();

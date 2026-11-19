@@ -596,7 +596,9 @@ class PressHub_Social_Ajax_Handlers {
 
         // A TikTok short's caption is its own; it is not the post's TikTok copy.
         $is_short = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
-        if ( ! $is_short && ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
+        // Nor is an English or Turkish episode's description the post's (Greek) YouTube copy.
+        $is_lang = class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::episode_language( $job );
+        if ( ! $is_short && ! $is_lang && ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
             update_post_meta( (int) $job['post_id'], '_presshub_social_copy_' . sanitize_key( $job['platform'] ), $post_copy );
         }
 

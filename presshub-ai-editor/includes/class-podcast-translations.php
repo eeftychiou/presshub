@@ -245,6 +245,10 @@ class PressHub_AI_Podcast_Translations {
                 if ( $part < $max && function_exists( 'presshub_ai_schedule_briefing_step' ) && presshub_ai_schedule_briefing_step( $date, $edition, 'voice:' . $lang, $part + 1 ) ) {
                     return 'continued';
                 }
+                if ( $part < $max && function_exists( 'wp_next_scheduled' ) && false !== wp_next_scheduled( 'presshub_ai_run_briefing_step', [ (string) $date, (string) $edition, 'voice:' . $lang, $part + 1 ] ) ) {
+                    // That continuation is already waiting.
+                    return 'continued';
+                }
                 self::fail( $post_id, $lang, 'voice', new WP_Error( 'synthesis_time_budget', __( 'Voicing ran out of continuation steps.', 'presshub-ai-editor' ) ) );
             } elseif ( ! is_wp_error( $result ) ) {
                 self::maybe_enqueue( $post_id, $lang );
@@ -338,7 +342,8 @@ class PressHub_AI_Podcast_Translations {
         }
         $previous = self::get_entry( $post_id, $lang );
         if ( md5( $source ) === ( $previous['source_hash'] ?? '' )
-            && in_array( $previous['status'] ?? '', [ 'translated', 'voiced' ], true )
+            && ( in_array( $previous['status'] ?? '', [ 'translated', 'voiced' ], true )
+                || ( 'failed' === ( $previous['status'] ?? '' ) && 'voice' === ( $previous['step'] ?? '' ) ) )
             && '' !== trim( (string) ( $previous['script'] ?? '' ) )
         ) {
             // The Greek script did not change (a retry or re-run of the audio): keep it.
@@ -467,6 +472,12 @@ class PressHub_AI_Podcast_Translations {
         }
         if ( count( $a ) !== count( $b ) ) {
             return sprintf( __( 'The translated script has %1$d topics with speaker turns; the Greek one has %2$d (a topic lost its turns or its markers).', 'presshub-ai-editor' ), count( $b ), count( $a ) );
+        }
+        preg_match_all( '/^\s*\[SPEAKER_(\d+)\]\s*:/mu', $greek, $la_m );
+        preg_match_all( '/^\s*\[SPEAKER_(\d+)\]\s*:/mu', $translated, $lb_m );
+        $odd = array_diff( array_unique( $lb_m[1] ), array_unique( $la_m[1] ) );
+        if ( ! empty( $odd ) ) {
+            return sprintf( __( 'The translated script has speaker labels the Greek one does not have: %s.', 'presshub-ai-editor' ), implode( ', ', array_map( static fn( $n ) => '[SPEAKER_' . $n . ']', $odd ) ) );
         }
         $len       = static fn( array $turns ): int => array_sum( array_map( static fn( $t ) => mb_strlen( trim( (string) ( $t['text'] ?? '' ) ) ), $turns ) );
         $total_a   = 0;
@@ -627,6 +638,11 @@ class PressHub_AI_Podcast_Translations {
         if ( ! PressHub_Social_YouTube::wants_episode( $post_id ) || ! in_array( $lang, self::enabled_languages(), true ) || ! self::youtube_allowed( $post_id ) ) {
             return 0;
         }
+        if ( ! self::greek_episode_queued( $post_id ) ) {
+            // A language follows its Greek episode: none while that one was never queued
+            // (auto-publish off and the post not sent by hand, for example).
+            return 0;
+        }
         $post   = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         $status = $post ? (string) ( is_object( $post ) ? ( $post->post_status ?? '' ) : ( $post['post_status'] ?? '' ) ) : '';
         if ( 'publish' !== $status ) {
@@ -676,6 +692,16 @@ class PressHub_AI_Podcast_Translations {
             return false;
         }
         return true;
+    }
+
+    /** Whether the Greek YouTube episode of a post was queued (and not cancelled). */
+    public static function greek_episode_queued( int $post_id ): bool {
+        foreach ( PressHub_Social_Queue::get_jobs_for_post( $post_id ) as $job ) {
+            if ( PressHub_Social_YouTube::is_episode_job( $job ) && '' === PressHub_Social_YouTube::episode_language( $job ) && 'cancelled' !== (string) ( $job['status'] ?? '' ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Queues every voiced language of a post (when its Greek episode is queued). */

@@ -2758,6 +2758,16 @@ assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 
 update_post_meta( 880, '_presshub_social_platforms', [ 'facebook', 'youtube' ] );
 assert_true( PressHub_AI_Podcast_Translations::youtube_allowed( 880 ), 'YouTube ticked on the post lets the languages go' );
 delete_post_meta( 880, '_presshub_social_platforms' );
+$greek_eps = array_values( array_filter( PressHub_Social_Queue::get_jobs_for_post( 880 ), static fn( $j ) => PressHub_Social_YouTube::is_episode_job( $j ) && 'cancelled' !== ( $j['status'] ?? '' ) ) );
+$greek_st  = array_map( static fn( $j ) => [ (int) $j['id'], (string) $j['status'] ], $greek_eps );
+foreach ( $greek_st as [ $gid ] ) {
+    PressHub_Social_Queue::update_job( $gid, [ 'status' => 'cancelled' ] );
+}
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while its Greek episode is not (auto-publish off, for example)' );
+foreach ( $greek_st as [ $gid, $gst ] ) {
+    PressHub_Social_Queue::update_job( $gid, [ 'status' => $gst ] );
+}
+assert_true( count( $greek_st ) > 0 && PressHub_AI_Podcast_Translations::greek_episode_queued( 880 ), 'The Greek episode is queued again' );
 $en_id = PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' );
 assert_true( $en_id > 0, 'A voiced language of a published podcast gets its YouTube episode' );
 assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'Each language is queued once' );
@@ -2767,6 +2777,18 @@ assert_true( PressHub_Social_YouTube::is_episode_job( $en_job ) && 'en' === Pres
 assert_equals( '', PressHub_Social_YouTube::episode_language( $ep_job ), 'The Greek episode has no language of its own' );
 assert_equals( 'Youtube (EN)', PressHub_Social_YouTube::platform_label( $en_job ), 'The Queue shows the English episode as YouTube (EN)' );
 assert_equals( 'Youtube', PressHub_Social_YouTube::platform_label( $ep_job ), 'The Greek episode is plain YouTube' );
+// A translation made again after queueing: the job waits for the new audio, then takes the new description.
+$en_entry = PressHub_AI_Podcast_Translations::get_entry( 880, 'en' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => array_merge( $en_entry, [ 'status' => 'translated' ] ) ] ) );
+$held = PressHub_Social_YouTube::episode_hold( $en_job );
+assert_true( is_array( $held ) && str_contains( (string) ( $held['note'] ?? '' ), 'voiced again' ), 'An English episode waits while its new translation is voiced' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => array_merge( $en_entry, [ 'description' => 'New English description. #Cyprus' ] ) ] ) );
+$fresh = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( str_starts_with( (string) ( $fresh['youtube']['description'] ?? '' ), 'New English description.' ), 'An unedited English job takes the new translation\'s description' );
+$edited = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'post_copy' => 'Hand-written English copy', 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( str_starts_with( (string) ( $edited['youtube']['description'] ?? '' ), 'Hand-written English copy' ), 'Copy edited by hand on the Queue is kept' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => $en_entry ] ) );
+
 PressHub_Social_Queue::update_job_copy( $en_id, 'Edited by hand' );
 $_REQUEST['nonce'] = 'valid_nonce';
 $nonce_was         = $GLOBALS['NONCE_VALID'] ?? null;
