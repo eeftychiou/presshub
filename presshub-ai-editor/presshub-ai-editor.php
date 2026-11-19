@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.54.0
+ * Version: 2.55.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -157,7 +157,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.54.0' );
+define( 'PRESSHUB_AI_VERSION', '2.55.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -231,6 +231,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-trending.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-embeds.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-podcast-translations.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
@@ -1068,7 +1069,7 @@ function presshub_ai_briefing_step_max_continuations() {
  *
  * @param string $date    Briefing date (Y-m-d).
  * @param string $edition morning | noon.
- * @param string $step    script | audio.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Audio continuation number (0 for the first run).
  * @param int    $delay   Seconds from now.
  * @return bool True when the event was queued; false means run it inline.
@@ -1105,7 +1106,7 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
  *
  * @param string $date    Briefing date (Y-m-d).
  * @param string $edition morning | noon.
- * @param string $step    script | audio.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Audio continuation number.
  * @return mixed Step result.
  */
@@ -1121,6 +1122,17 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
 
     if ( 'audio' === $step ) {
         return presshub_ai_run_podcast_audio_step( $date, $edition, (int) $part, true );
+    }
+    // English and Turkish versions: translate:<lang> and voice:<lang>.
+    if ( 0 === strpos( (string) $step, 'translate:' ) || 0 === strpos( (string) $step, 'voice:' ) ) {
+        try {
+            return PressHub_AI_Podcast_Translations::run_step( $date, $edition, (string) $step, (int) $part, true );
+        } catch ( \Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast language step failed with an exception: ' . $t->getMessage(), [ 'date' => $date, 'edition' => $edition, 'step' => $step ] );
+            }
+            return new WP_Error( 'translation_exception', $t->getMessage() );
+        }
     }
     return presshub_ai_run_podcast_script_step( $date, $edition, true );
 }
@@ -1195,8 +1207,21 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
             if ( 'synthesis_time_budget' !== $result->get_error_code() && class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error( $label . ' generation cron error in audio synthesis: ' . $result->get_error_message() );
             }
-        } elseif ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+        } else {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+            }
+            // Then the English and Turkish versions, when they are turned on.
+            // Never lets a translation problem count as a failed Greek synthesis.
+            if ( is_array( $result ) && ! empty( $result['post_id'] ) && class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+                try {
+                    PressHub_AI_Podcast_Translations::start( (string) $date, (string) $edition, (int) $result['post_id'] );
+                } catch ( \Throwable $t ) {
+                    if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                        PressHub_AI_Logger::error( 'Podcast languages could not start: ' . $t->getMessage(), [ 'date' => $date, 'edition' => $edition ] );
+                    }
+                }
+            }
         }
     } catch ( \Throwable $t ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {

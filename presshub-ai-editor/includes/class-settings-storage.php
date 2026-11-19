@@ -329,6 +329,20 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_tertiary' ],
             'type'              => 'string',
         ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_languages', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_languages' ],
+            'type'              => 'array',
+            'default'           => [],
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_language_notes', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_language_notes' ],
+            'type'              => 'array',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_language_voices', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_language_voices' ],
+            'type'              => 'array',
+            'default'           => [],
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_audio_split_by_topic', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
             'type'              => 'integer',
@@ -2105,6 +2119,87 @@ class PressHub_AI_Settings_Storage {
     public static function get_briefing_audio_split_by_topic(): bool {
         $val = get_option( 'presshub_ai_briefing_audio_split_by_topic', 1 );
         return (bool) (int) $val;
+    }
+
+    /**
+     * Languages the Daily Briefing podcast is also made in (codes of
+     * PressHub_AI_Podcast_Translations::LANGUAGES, e.g. [ 'en', 'tr' ]). Default: none.
+     *
+     * @return string[]
+     */
+    public static function get_briefing_podcast_languages(): array {
+        return self::sanitize_briefing_podcast_languages( get_option( 'presshub_ai_briefing_podcast_languages', [] ) );
+    }
+
+    /** Known language codes only, in the order of LANGUAGES, each once. */
+    public static function sanitize_briefing_podcast_languages( $value ): array {
+        $value = is_array( $value ) ? array_map( 'strval', $value ) : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        return array_values( array_intersect( $known, $value ) );
+    }
+
+    /**
+     * Translator's notes for one language: place names, terms and wording the
+     * translation of the podcast must follow. Default: the built-in notes.
+     */
+    public static function get_briefing_podcast_language_notes( string $lang ): string {
+        $all = get_option( 'presshub_ai_briefing_podcast_language_notes', null );
+        $notes = ( is_array( $all ) && array_key_exists( $lang, $all ) ) ? self::sanitize_language_notes_text( $all[ $lang ] ) : '';
+        // An emptied box goes back to the built-in notes.
+        return '' !== $notes ? $notes : self::default_briefing_podcast_language_notes( $lang );
+    }
+
+    /** Built-in translator's notes of a language ('' for an unknown one). */
+    public static function default_briefing_podcast_language_notes( string $lang ): string {
+        $defaults = class_exists( 'PressHub_AI_Podcast_Translations' ) ? PressHub_AI_Podcast_Translations::default_notes() : [];
+        return (string) ( $defaults[ $lang ] ?? '' );
+    }
+
+    /** Notes per known language, each plain text of at most 4,000 characters. */
+    public static function sanitize_briefing_podcast_language_notes( $value ): array {
+        $value = is_array( $value ) ? $value : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out   = [];
+        foreach ( $known as $lang ) {
+            $out[ $lang ] = array_key_exists( $lang, $value )
+                ? self::sanitize_language_notes_text( $value[ $lang ] )
+                : self::get_briefing_podcast_language_notes( $lang );
+        }
+        return $out;
+    }
+
+    private static function sanitize_language_notes_text( $text ): string {
+        $text = is_string( $text ) ? $text : '';
+        $text = function_exists( 'wp_unslash' ) ? wp_unslash( $text ) : $text;
+        $text = function_exists( 'sanitize_textarea_field' ) ? sanitize_textarea_field( $text ) : trim( strip_tags( $text ) );
+        return mb_substr( trim( $text ), 0, 4000 );
+    }
+
+    /**
+     * Voices of one language's podcast, keyed presenter_1..presenter_3. An empty
+     * voice means the Greek podcast's voice for that presenter (the default).
+     *
+     * @return array{presenter_1:string,presenter_2:string,presenter_3:string}
+     */
+    public static function get_briefing_podcast_language_voices( string $lang ): array {
+        $all = self::sanitize_briefing_podcast_language_voices( get_option( 'presshub_ai_briefing_podcast_language_voices', [] ) );
+        return $all[ $lang ] ?? [ 'presenter_1' => '', 'presenter_2' => '', 'presenter_3' => '' ];
+    }
+
+    /** Voice names per known language and presenter; anything else is dropped. */
+    public static function sanitize_briefing_podcast_language_voices( $value ): array {
+        $value = is_array( $value ) ? $value : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out   = [];
+        foreach ( $known as $lang ) {
+            $row = is_array( $value[ $lang ] ?? null ) ? $value[ $lang ] : [];
+            foreach ( [ 'presenter_1', 'presenter_2', 'presenter_3' ] as $p ) {
+                $voice = is_string( $row[ $p ] ?? null ) ? trim( $row[ $p ] ) : '';
+                // Gemini names (Kore) and Google Cloud names (en-US-Chirp3-HD-Achird).
+                $out[ $lang ][ $p ] = preg_match( '/^[A-Za-z0-9][A-Za-z0-9_\-]{1,63}$/', $voice ) ? $voice : '';
+            }
+        }
+        return $out;
     }
 
     /**

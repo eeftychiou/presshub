@@ -213,6 +213,7 @@ class PressHub_Settings_Sections {
                     'briefing-text'       => __( 'Text story', 'presshub-ai-editor' ),
                     'briefing-podcast'    => __( 'Podcast script', 'presshub-ai-editor' ),
                     'briefing-voices'     => __( 'Voices & audio', 'presshub-ai-editor' ),
+                    'briefing-languages'  => __( 'Other languages', 'presshub-ai-editor' ),
                     'briefing-publishing' => __( 'Publishing', 'presshub-ai-editor' ),
                 ],
             ],

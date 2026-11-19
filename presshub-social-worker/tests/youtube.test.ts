@@ -555,6 +555,33 @@ describe('Poller: YouTube jobs', () => {
     expect(uploads).toHaveLength(1);
   });
 
+  test('a translated episode is rendered with its own title and end line', async () => {
+    const episode_video = {
+      duration: 300,
+      segments: [{ speaker: 1, text: 'Günaydın', start: 3.6, end: 5 }],
+      scenes: [{ start: 0, end: 300, title: 'Ekonomi', images: ['https://presshub.test/a.jpg'] }],
+      images: ['https://presshub.test/a.jpg'],
+      title: 'PressHub Sabah Bülteni: Ekonomi',
+      end_card_line: 'Haberlerin tamamı ve kaynakları: presshub.test'
+    };
+    const job: ClaimedJob = {
+      id: 51,
+      platform: 'youtube',
+      post_id: 883,
+      post_title: 'Πρωινό Podcast',
+      post_copy: 'Açıklama',
+      audio_url: 'https://presshub.test/podcast-tr.wav',
+      youtube: { ...episodeMeta, title: 'PressHub Sabah Bülteni: Ekonomi', width: 1920, height: 1080, episode_video }
+    };
+    const { poller, overrides } = makePoller(job);
+    await poller.pollOnce();
+    expect(overrides.episodeParams).toMatchObject({
+      audioUrl: 'https://presshub.test/podcast-tr.wav',
+      title: 'PressHub Sabah Bülteni: Ekonomi',
+      endCardLine: 'Haberlerin tamamı ve kaynakları: presshub.test'
+    });
+  });
+
   test('an episode without a timeline or images is rendered the plain way', async () => {
     const job: ClaimedJob = { id: 50, platform: 'youtube', post_id: 882, post_copy: 'x', audio_url: 'https://presshub.test/p.mp3', youtube: { ...episodeMeta, episode_video: { images: [] } } };
     const { poller, overrides } = makePoller(job);
