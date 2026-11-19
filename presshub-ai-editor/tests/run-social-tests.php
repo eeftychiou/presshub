@@ -2356,6 +2356,34 @@ $art_text = PressHub_Social_TikTok_Shorts::article_text( 890 );
 assert_true( str_contains( $art_text, 'κρίση εμπιστοσύνης.' ) && str_contains( $art_text, 'ομοσπονδίες & οι' ) && ! str_contains( $art_text, '<p>' ), 'The article text has no markup and decoded entities' );
 assert_equals( 'ΑΠΟΨΗ', PressHub_Social_TikTok_Shorts::article_badge( 890 ), 'The badge is the category in capitals without accents' );
 assert_equals( 'ΑΡΘΡΟ', PressHub_Social_TikTok_Shorts::article_badge( 99999 ), 'A post without a category gets the ΑΡΘΡΟ badge' );
+$GLOBALS['test_categories'][891] = [ (object) [ 'name' => 'Uncategorized', 'slug' => 'uncategorized' ], (object) [ 'name' => 'Άποψη', 'slug' => 'apopsi' ] ];
+assert_equals( 'Άποψη', PressHub_Social_TikTok_Shorts::primary_category( 891 ), 'The primary category skips Uncategorized' );
+$GLOBALS['POSTS_STORE'][891] = [ 'ID' => 891, 'post_title' => 'Τίτλος', 'post_content' => 'Κείμενο', 'post_excerpt' => '', 'post_status' => 'publish' ];
+$GLOBALS['test_posts'][891]  = new WP_Post( $GLOBALS['POSTS_STORE'][891] );
+assert_true( str_contains( PressHub_Social_TikTok_Shorts::build_prompt( 891, 'Κατηγορία: {category}', '', 1, 100, 3, 'Κείμενο' ), 'Κατηγορία: Άποψη' ), 'The article prompt gets the same primary category as the badge' );
+assert_equals( 'ΑΠΟΨΗ', PressHub_Social_TikTok_Shorts::article_badge( 891 ), 'The badge uses the same primary category as the prompt' );
+$GLOBALS['test_categories'][892] = [ (object) [ 'name' => 'Uncategorized', 'slug' => 'uncategorized' ] ];
+assert_equals( '', PressHub_Social_TikTok_Shorts::primary_category( 892 ), 'A post filed only under Uncategorized has no primary category' );
+assert_equals( 'ΑΡΘΡΟ', PressHub_Social_TikTok_Shorts::article_badge( 892 ), 'A post filed only under Uncategorized gets the ΑΡΘΡΟ badge' );
+$GLOBALS['test_categories'][892] = [ (object) [ 'name' => 'Χωρίς κατηγορία', 'slug' => 'xoris-katigoria', 'term_id' => 1 ], (object) [ 'name' => 'Πολιτική', 'slug' => 'politiki', 'term_id' => 7 ] ];
+assert_equals( 'Πολιτική', PressHub_Social_TikTok_Shorts::primary_category( 892 ), 'The Greek Uncategorized (Χωρίς κατηγορία) is skipped' );
+update_option( 'default_category', 55 );
+$GLOBALS['test_categories'][892] = [ (object) [ 'name' => 'Γενικά', 'slug' => 'genika', 'term_id' => 55 ], (object) [ 'name' => 'Πολιτική', 'slug' => 'politiki', 'term_id' => 7 ] ];
+assert_equals( 'Πολιτική', PressHub_Social_TikTok_Shorts::primary_category( 892 ), 'The site\'s default category, even renamed, is skipped' );
+update_option( 'default_category', 0 );
+$GLOBALS['test_categories'][892] = [ 'not a term', (object) [ 'name' => '' ], [ 'name' => 'Κοινωνία', 'slug' => 'koinonia' ] ];
+assert_equals( 'Κοινωνία', PressHub_Social_TikTok_Shorts::primary_category( 892 ), 'Invalid or nameless terms are skipped' );
+$GLOBALS['POSTS_STORE'][893] = [ 'ID' => 893, 'post_title' => 'Κενό', 'post_content' => "<p>&nbsp;</p>\n<p>\u{00A0}&nbsp;</p>", 'post_excerpt' => '', 'post_status' => 'draft' ];
+$GLOBALS['test_posts'][893]  = new WP_Post( $GLOBALS['POSTS_STORE'][893] );
+assert_equals( '', PressHub_Social_TikTok_Shorts::source_type( 893 ), 'A post of empty &nbsp; paragraphs has no text for a short' );
+
+// A test render of a draft does not stop the post going out when it is published.
+PressHub_Social_Queue::reset_memory_store();
+PressHub_Social_Queue::enqueue( [ 'post_id' => 891, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'Test', 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'source' => 'article', 'test' => true ] ] ) ] );
+assert_false( PressHub_Social_Dispatcher::has_publish_jobs( 891 ), 'A test render is not a social job of the post' );
+PressHub_Social_Queue::enqueue( [ 'post_id' => 891, 'platform' => 'twitter', 'engine' => 'automation', 'post_copy' => 'Tweet' ] );
+assert_true( PressHub_Social_Dispatcher::has_publish_jobs( 891 ), 'A real job is a social job of the post' );
+PressHub_Social_Queue::reset_memory_store();
 
 $art_ai_calls = [];
 PressHub_Social_TikTok_Shorts::set_ai_caller( function ( string $sys, string $user ) use ( &$art_ai_calls, $short_json ) {
@@ -2417,6 +2445,52 @@ assert_equals( 'article', $art_claimed['tiktok_short']['source'] ?? '', 'A claim
 assert_equals( 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός', $art_claimed['post_copy'] ?? '', 'A claimed article short posts the TikTok caption, not the plan caption' );
 assert_true( '' !== (string) ( $art_claimed['audio_url'] ?? '' ) && ! empty( $art_claimed['tiktok_short']['segments'] ), 'A claimed article short carries its narration and timings' );
 assert_equals( 2, count( $art_claim['jobs'] ), 'The TikTok short and the Instagram Reel of the article are both claimed' );
+
+// The worker cannot render the article short: it retries, then posts the article the classic way.
+$art_tt_id  = (int) $art_claimed['id'];
+$art_ig_id  = (int) ( array_values( array_filter( $art_claim['jobs'], fn( $j ) => 'instagram' === $j['platform'] ) )[0]['id'] ?? 0 );
+$max_att    = (int) PressHub_Social_Queue::get_job( $art_tt_id )['max_attempts'];
+$req_rf     = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_rf->set_param( 'job_id', $art_tt_id );
+$req_rf->set_param( 'status', 'failed' );
+$req_rf->set_param( 'error', 'FFmpeg exited with code 1' );
+$req_rf->set_param( 'metadata', [ 'short_render_failed' => true ] );
+$rf1 = PressHub_Social_REST_Controller::handle_complete( $req_rf );
+assert_equals( 'failed', $rf1['status'], 'A render failure before the last attempt is a normal failure' );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( PressHub_Social_Queue::get_job( $art_tt_id ) ), 'Before the last attempt the job is still the article short' );
+PressHub_Social_Queue::update_job( $art_tt_id, [ 'status' => 'processing', 'attempts' => $max_att ] );
+$rf2    = PressHub_Social_REST_Controller::handle_complete( $req_rf );
+$rf_job = PressHub_Social_Queue::get_job( $art_tt_id );
+$rf_meta = json_decode( (string) $rf_job['metadata'], true );
+assert_equals( 'pending', $rf2['status'], 'A render failure on the last attempt falls back' );
+assert_equals( 'pending', $rf_job['status'], 'The fallen-back job is pending again' );
+assert_equals( 0, (int) $rf_job['attempts'], 'The classic post gets fresh attempts' );
+assert_false( PressHub_Social_TikTok_Shorts::is_short_job( $rf_job ), 'The fallen-back job is no longer a short' );
+assert_equals( 'tiktok_short_render_failed', $rf_meta['tiktok_short_fallback']['error_code'] ?? '', 'The fallback records the render failure' );
+assert_equals( 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός', $rf_job['post_copy'], 'The classic post keeps the TikTok caption' );
+// A failure after the render (posting) never falls back: the short was made.
+PressHub_Social_Queue::update_job( $art_ig_id, [ 'status' => 'processing', 'attempts' => $max_att ] );
+$req_pf = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_pf->set_param( 'job_id', $art_ig_id );
+$req_pf->set_param( 'status', 'failed' );
+$req_pf->set_param( 'error', 'Instagram upload timed out' );
+PressHub_Social_REST_Controller::handle_complete( $req_pf );
+$pf_job = PressHub_Social_Queue::get_job( $art_ig_id );
+assert_equals( 'failed', $pf_job['status'], 'A posting failure on the last attempt fails for good' );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( $pf_job ), 'A posting failure keeps the article short' );
+$art_meta = wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'source' => 'article' ] ] );
+assert_false( PressHub_Social_TikTok_Shorts::fallback_after_render_failure( [ 'id' => 9001, 'post_id' => 890, 'platform' => 'youtube', 'attempts' => 3, 'max_attempts' => 3, 'metadata' => $art_meta ], 'x' ), 'A YouTube article short never falls back' );
+assert_false( PressHub_Social_TikTok_Shorts::fallback_after_render_failure( [ 'id' => 9002, 'post_id' => 890, 'platform' => 'tiktok', 'attempts' => 3, 'max_attempts' => 3, 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 1, 'source' => 'article', 'test' => true ] ] ) ], 'x' ), 'A test render never falls back' );
+assert_false( PressHub_Social_TikTok_Shorts::fallback_after_render_failure( [ 'id' => 9003, 'post_id' => 880, 'platform' => 'tiktok', 'attempts' => 3, 'max_attempts' => 3, 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 3 ] ] ) ], 'x' ), 'A podcast short never falls back' );
+
+// Editing the article's title or category without its text makes a new plan.
+$calls_before = count( $art_ai_calls );
+PressHub_Social_TikTok_Shorts::get_plan( 890, 1 );
+assert_equals( $calls_before, count( $art_ai_calls ), 'An unchanged article reuses its plan' );
+$GLOBALS['test_categories'][890] = [ (object) [ 'name' => 'Πολιτική', 'slug' => 'politiki' ] ];
+PressHub_Social_TikTok_Shorts::get_plan( 890, 1 );
+assert_equals( $calls_before + 1, count( $art_ai_calls ), 'A new category makes a new article plan' );
+$GLOBALS['test_categories'][890] = [ (object) [ 'name' => 'Άποψη', 'slug' => 'apopsi' ] ];
 
 // ----------------------------------------------------------------------
 // YouTube: Shorts and podcast episodes through the YouTube Data API

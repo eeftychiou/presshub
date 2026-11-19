@@ -583,7 +583,14 @@ class PressHub_Social_REST_Controller {
                 // video would be refused again, so the job fails now instead of retrying.
                 PressHub_Social_Queue::update_job( $job_id, [ 'attempts' => max( (int) ( $job['attempts'] ?? 0 ), (int) ( $job['max_attempts'] ?? 3 ) ) ] );
             }
-            PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );
+            if ( is_array( $job ) && ! empty( $metadata['short_render_failed'] ) && class_exists( 'PressHub_Social_TikTok_Shorts' )
+                && PressHub_Social_TikTok_Shorts::fallback_after_render_failure( $job, $error ) ) {
+                // The article short could not be rendered on its last attempt: the job
+                // is now the classic article post, pending again.
+                $status = 'pending';
+            } else {
+                PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );
+            }
         }
 
         return [
