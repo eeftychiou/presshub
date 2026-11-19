@@ -69,7 +69,11 @@ class PressHub_AI_Settings_Render {
         if ( ! empty( $result['field_errors'] ) ) {
             echo '<ul>';
             foreach ( (array) $result['field_errors'] as $option => $message ) {
-                $label = class_exists( 'PressHub_Model_Tasks' ) ? PressHub_Model_Tasks::label_of( (string) $option ) : (string) $option;
+                $label = class_exists( 'PressHub_Model_Tasks' ) ? (string) PressHub_Model_Tasks::label_of( (string) $option ) : '';
+                if ( '' === $label ) {
+                    $entry = PressHub_Settings_Registry::get( (string) $option );
+                    $label = (string) ( $entry['label'] ?? $option );
+                }
                 echo '<li><a href="#' . esc_attr( (string) $option ) . '">' . esc_html( $label ) . '</a>: ' . esc_html( (string) $message ) . '</li>';
             }
             echo '</ul>';

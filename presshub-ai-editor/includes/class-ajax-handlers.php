@@ -2113,6 +2113,11 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
             }
             $saved = [ 'ok' => false, 'message' => __( 'Not saved: an error occurred. See the PressHub log.', 'presshub-ai-editor' ), 'field_errors' => [], 'model_warnings' => [] ];
         }
+        // A refusal for rights or an unknown section cannot be shown on that
+        // section (the user cannot open it): say so here, as the capability check does.
+        if ( empty( $saved['ok'] ) && in_array( (int) ( $saved['status'] ?? 200 ), [ 400, 403 ], true ) ) {
+            wp_die( esc_html( (string) $saved['message'] ), '', [ 'response' => (int) $saved['status'] ] );
+        }
         set_transient( PressHub_Settings_Sections::post_result_key( (int) get_current_user_id() ), [
             'section'        => $tab,
             'ok'             => (bool) $saved['ok'],

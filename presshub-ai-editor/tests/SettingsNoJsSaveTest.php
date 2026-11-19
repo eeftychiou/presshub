@@ -124,6 +124,10 @@ $check( is_array( $result ) && ! empty( $result['ok'] ) && 'site-system' === $re
 $post_form( 'daily-briefing', [ 'presshub_ai_briefing_podcast_title_prefix' => "Today's podcast - " ] );
 $check( "Today's podcast - " === get_option( 'presshub_ai_briefing_podcast_title_prefix' ), 'A no-JS save stores the value unslashed; got ' . var_export( get_option( 'presshub_ai_briefing_podcast_title_prefix' ), true ) );
 
+// A prompt whose sanitizer does not unslash: the handler must (WordPress slashes $_POST).
+$post_form( 'social-publishing', [ 'presshub_social_prompt_system' => "Write in the editor's voice." ] );
+$check( "Write in the editor's voice." === get_option( 'presshub_social_prompt_system' ), 'A Social prompt is stored unslashed; got ' . var_export( get_option( 'presshub_social_prompt_system' ), true ) );
+
 // 3. A Social section saves its Social options.
 $GLOBALS['OPTIONS_STORE'] = [ 'presshub_social_ai_temperature' => 0.7 ];
 $post_form( 'ai-models', [ 'presshub_social_ai_temperature' => '0.4' ] );
@@ -152,6 +156,16 @@ $check( 0 === strpos( $r, 'error:' ) && 'DEBUG' === get_option( 'presshub_ai_log
 $GLOBALS['CURRENT_USER_CAPS'] = [ 'read', 'edit_posts' ];
 $r = $post_form( 'site-system', [ 'presshub_ai_log_level' => 'ERROR' ] );
 $check( 0 === strpos( $r, 'error:' ) && 'DEBUG' === get_option( 'presshub_ai_log_level' ), 'Without the PressHub capability nothing is saved.' );
+
+// Settings capability but not the Social one: a Social section is refused out loud.
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'read', 'edit_posts', 'edit_others_posts', 'manage_options' ];
+$narrow = static function () { return 'manage_network'; };
+add_filter( 'presshub_social_settings_cap', $narrow );
+$GLOBALS['OPTIONS_STORE']['presshub_social_prompt_system'] = 'kept';
+$r = $post_form( 'social-publishing', [ 'presshub_social_prompt_system' => 'changed' ] );
+$check( 0 === strpos( $r, 'error: wp_die' ) && 'kept' === get_option( 'presshub_social_prompt_system' ), 'Without the Social capability a Social section is refused with a message and nothing is saved; got ' . $r );
+$r = $post_form( 'no-such-section', [ 'presshub_ai_log_level' => 'ERROR' ] );
+$check( 0 === strpos( $r, 'error: wp_die' ) && 'DEBUG' === get_option( 'presshub_ai_log_level' ), 'An unknown section is refused with a message.' );
 
 if ( $failures ) {
     echo "FAIL\n";
