@@ -671,6 +671,22 @@ class PressHub_AI_Generation_Inspector {
                 }
             }
         }
+        $article_cuts = null;
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            list( $sent_articles, $dropped_articles ) = self::split_articles( $inputs );
+            $article_cuts = PressHub_AI_Knowledge_Cuts::article_cuts( $sent_articles, $dropped_articles, $totals );
+            $cut_lists    = [
+                __( 'Articles', 'presshub-ai-editor' ) => PressHub_AI_Knowledge_Cuts::describe_articles( $article_cuts ),
+                __( 'Editorial memory', 'presshub-ai-editor' ) => PressHub_AI_Knowledge_Cuts::describe_memory( is_array( $record['memory'] ?? null ) ? $record['memory'] : [] ),
+            ];
+            foreach ( $cut_lists as $label => $lines ) {
+                if ( ! empty( $lines ) ) {
+                    $cuts[ $label ] = [ 'html' => '<ul class="presshub-inspector-cuts">' . implode( '', array_map( static function ( $line ) {
+                        return '<li>' . esc_html( $line ) . '</li>';
+                    }, $lines ) ) . '</ul>' ];
+                }
+            }
+        }
 
         $token_estimate = $inputs['token_estimate'] ?? ( $totals['capped_tokens_estimate'] ?? '' );
         $usage_rows     = [
@@ -687,7 +703,12 @@ class PressHub_AI_Generation_Inspector {
                 $usage_rows[ ucfirst( str_replace( '_', ' ', $flag ) ) ] = $usage[ $flag ];
             }
         }
-        $usage_rows[ __( 'Articles truncated (count or per-article cap)', 'presshub-ai-editor' ) ] = $totals['articles_truncated'] ?? '';
+        $articles_truncated = $totals['articles_truncated'] ?? '';
+        if ( null !== $article_cuts && ( $article_cuts['shortened'] > 0 || $article_cuts['left_out'] > 0 ) ) {
+            /* translators: 1: articles shortened, 2: articles left out by the count cap */
+            $articles_truncated = sprintf( __( 'yes: %1$d shortened, %2$d left out (see "Left out because of limits")', 'presshub-ai-editor' ), $article_cuts['shortened'], $article_cuts['left_out'] );
+        }
+        $usage_rows[ __( 'Articles truncated (count or per-article cap)', 'presshub-ai-editor' ) ] = $articles_truncated;
 
         return self::section_heading( __( 'Generation', 'presshub-ai-editor' ) ) . self::kv_table( $general )
             . self::section_heading( __( 'Request settings (as resolved)', 'presshub-ai-editor' ) ) . self::kv_table( $settings )
@@ -739,12 +760,19 @@ class PressHub_AI_Generation_Inspector {
 
         $html = '';
         if ( ! empty( $totals ) ) {
-            $html .= self::section_heading( __( 'Caps and totals', 'presshub-ai-editor' ) ) . self::kv_table( [
+            $rows = [
                 __( 'Max articles (cap)', 'presshub-ai-editor' )         => $totals['cap_articles'] ?? '',
                 __( 'Max characters per article (cap)', 'presshub-ai-editor' ) => $totals['cap_chars_per_article'] ?? '',
                 __( 'Articles in pool', 'presshub-ai-editor' )           => $totals['articles_count_original'] ?? '',
                 __( 'Articles sent', 'presshub-ai-editor' )              => $totals['articles_count'] ?? count( $sent ),
-            ] );
+            ];
+            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                $cut = PressHub_AI_Knowledge_Cuts::article_cuts( $sent, $dropped, $totals );
+                $rows[ __( 'Articles shortened by the per-article cap', 'presshub-ai-editor' ) ] = $cut['shortened'];
+                $rows[ __( 'Characters cut from them', 'presshub-ai-editor' ) ]                 = $cut['chars_cut'];
+                $rows[ __( 'Articles left out by the article cap', 'presshub-ai-editor' ) ]     = $cut['left_out'];
+            }
+            $html .= self::section_heading( __( 'Caps and totals', 'presshub-ai-editor' ) ) . self::kv_table( $rows );
         }
         if ( isset( $inputs['context_mode'] ) || isset( $inputs['context_used'] ) ) {
             $html .= self::kv_table( [
@@ -760,10 +788,12 @@ class PressHub_AI_Generation_Inspector {
         } else {
             $html .= '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Title', 'presshub-ai-editor' ) . '</th><th>'
                 . esc_html__( 'Source', 'presshub-ai-editor' ) . '</th><th>' . esc_html__( 'Characters sent', 'presshub-ai-editor' ) . '</th><th>'
+                . esc_html__( 'Characters in full', 'presshub-ai-editor' ) . '</th><th>'
                 . esc_html__( 'Truncated', 'presshub-ai-editor' ) . '</th></tr></thead><tbody>';
             foreach ( $sent as $article ) {
                 $html .= '<tr><td>' . self::article_title_html( self::fmt_plain( $article['title'] ?? '' ), self::fmt_plain( $article['url'] ?? '' ) ) . '</td><td>'
                     . self::cell( $article['source'] ?? '' ) . '</td><td>' . self::cell( $article['chars_sent'] ?? '' ) . '</td><td>'
+                    . self::cell( $article['chars_original'] ?? '' ) . '</td><td>'
                     . self::cell( $article['truncated'] ?? '' ) . '</td></tr>';
             }
             $html .= '</tbody></table>';

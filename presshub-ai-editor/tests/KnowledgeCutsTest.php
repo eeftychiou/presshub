@@ -140,6 +140,52 @@ $one = [ 'p' => [ 'count' => 1, 'fiche' => [ 'name' => 'Πρόσωπο', 'name_e
 $short = $S::render_report( $one, 40 );
 kc_check( 'people: shortened names only the parts it had', 1 === count( $short['left_out'] ) && 'shortened' === $short['left_out'][0]['reason'] && [ 'positions' ] === $short['left_out'][0]['parts'] );
 
+// 5. Articles: the per-article cap and the article count cap are recorded.
+update_option( 'presshub_ai_curation_max_articles', 2 );
+update_option( 'presshub_ai_curation_max_chars_per_article', 100 );
+$curator  = new PressHub_AI_News_Curator();
+$articles = [
+    [ 'title' => 'Μακρύ άρθρο', 'source' => 'philenews', 'url' => 'https://a.test/1', 'content' => str_repeat( 'α', 250 ) ],
+    [ 'title' => 'Σύντομο άρθρο', 'source' => 'politis', 'url' => 'https://a.test/2', 'content' => str_repeat( 'β', 50 ) ],
+    [ 'title' => 'Τρίτο <b>άρθρο</b>', 'source' => 'sigma', 'url' => 'https://a.test/3', 'content' => str_repeat( 'γ', 50 ) ],
+];
+$before = strlen( (string) @file_get_contents( $log_file ) );
+$curator->format_articles_context( $articles );
+$bd  = $curator->last_articles_breakdown();
+$sum = $C::article_cuts( $bd['sent'], $bd['dropped'], [ 'cap_articles' => 2, 'cap_chars_per_article' => 100 ] );
+kc_check( 'articles: one shortened, 150 characters cut, one left out by the cap', 2 === $sum['sent'] && 1 === $sum['shortened'] && 150 === $sum['chars_cut'] && 1 === $sum['left_out'] );
+$alog = substr( (string) @file_get_contents( $log_file ), $before );
+kc_check( 'articles: one log line with the counts', false !== strpos( $alog, 'Article limits cut the briefing_curation prompt: 1 of 2 articles shortened to 100 characters (150 characters cut), 1 left out by the 2-article cap.' ) );
+$alines = $C::describe_articles( $sum );
+kc_check( 'articles: describe says what was cut and points to the Articles tab', 3 === count( $alines ) && false !== strpos( $alines[0], '1 of 2 articles cut to 100 characters' ) && false !== strpos( $alines[1], '1 articles left out: only 2 are sent' ) );
+kc_check( 'articles: not selected by the editor is not a limit', 0 === $C::article_cuts( [], [ [ 'title' => 'x', 'reason' => 'not_selected' ] ], [] )['left_out'] );
+kc_check( 'articles: nothing cut, nothing described', [] === $C::describe_articles( $C::article_cuts( [ [ 'title' => 'x', 'chars_sent' => 5, 'chars_original' => 5, 'truncated' => false ] ], [], [] ) ) );
+$before = strlen( (string) @file_get_contents( $log_file ) );
+update_option( 'presshub_ai_curation_max_articles', 40 );
+update_option( 'presshub_ai_curation_max_chars_per_article', 3000 );
+$curator->format_articles_context( $articles );
+kc_check( 'articles: no log line when nothing was cut', strlen( (string) @file_get_contents( $log_file ) ) === $before );
+
+$art_id = PressHub_AI_Generation_Recorder::record( [
+    'kind'          => 'briefing_text',
+    'config'        => [],
+    'inputs'        => [ 'articles' => $bd, 'totals' => [ 'cap_articles' => 2, 'cap_chars_per_article' => 100, 'articles_truncated' => true ] ],
+    'memory'        => [ 'enabled' => true, 'budget_chars' => 4000, 'entries' => [], 'trimmed' => [ [ 'entry_id' => 7, 'reason' => 'budget_oldest_background' ] ] ],
+    'system_prompt' => 'S',
+    'user_prompt'   => 'U',
+    'response_text' => 'OK',
+] );
+$art_rec = PressHub_AI_Generation_Inspector::get_structured_record( (int) $art_id );
+$ov      = PressHub_AI_Generation_Inspector::render_tab( $art_rec, 'overview' );
+kc_check( 'inspector: articles cut shown under "Left out because of limits"', false !== strpos( $ov, 'Left out because of limits' ) && false !== strpos( $ov, '1 of 2 articles cut to 100 characters each' ) && false !== strpos( $ov, '1 articles left out' ) );
+kc_check( 'inspector: memory trims shown with the budget', false !== strpos( $ov, '1 memory entries or stories left out to fit the memory budget of 4000 characters' ) );
+kc_check( 'inspector: usage row gives the counts, not just yes', false !== strpos( $ov, 'yes: 1 shortened, 1 left out' ) );
+$at = PressHub_AI_Generation_Inspector::render_tab( $art_rec, 'articles' );
+kc_check( 'inspector: Articles tab shows the full length and the totals', false !== strpos( $at, 'Characters in full' ) && false !== strpos( $at, '>250<' ) && false !== strpos( $at, 'Characters cut from them' ) && false !== strpos( $at, 'Articles left out by the article cap' ) );
+kc_check( 'inspector: article titles are escaped', false === strpos( $at, 'Τρίτο <b>άρθρο</b>' ) );
+delete_option( 'presshub_ai_curation_max_articles' );
+delete_option( 'presshub_ai_curation_max_chars_per_article' );
+
 @unlink( $log_file );
 if ( $failures ) {
     echo "KnowledgeCutsTest: {$failures} of {$checks} checks failed\n";
