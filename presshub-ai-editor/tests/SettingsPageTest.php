@@ -202,6 +202,8 @@ class SettingsPageTest
             'presshub_ai_briefing_featured_image_ids',
             'presshub_ai_briefing_featured_image_source',
             'presshub_ai_briefing_podcast_featured_image_source',
+            'presshub_ai_briefing_image_template',
+            'presshub_ai_briefing_podcast_image_template',
             // Issue #132 — Editorial Memory
             'presshub_ai_memory_enabled',
             'presshub_ai_memory_daily_days',

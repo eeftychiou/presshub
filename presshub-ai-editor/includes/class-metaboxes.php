@@ -187,18 +187,7 @@ class PressHub_AI_Metaboxes {
             $selected = PressHub_AI_Image_Prompt_Templates::DEFAULT_ID;
         }
 
-        $user_id    = (int) get_current_user_id();
-        $can_manage = current_user_can( 'edit_others_posts' );
-        $payload    = [];
-        foreach ( $templates as $tpl ) {
-            $payload[] = [
-                'id'        => $tpl['id'],
-                'name'      => $tpl['name'],
-                'template'  => $tpl['template'],
-                'builtin'   => ! empty( $tpl['builtin'] ),
-                'deletable' => empty( $tpl['builtin'] ) && ( $can_manage || (int) ( $tpl['author'] ?? 0 ) === $user_id ),
-            ];
-        }
+        $payload = PressHub_AI_Image_Prompt_Templates::client_payload();
         $selected_text = '';
         foreach ( $templates as $tpl ) {
             if ( $tpl['id'] === $selected ) {
@@ -239,6 +228,11 @@ class PressHub_AI_Metaboxes {
                     <button type="button" class="button-link button-link-delete" id="presshub-ai-image-template-delete" hidden><?php echo esc_html__( 'Delete this template', 'presshub-ai-editor' ); ?></button>
                     <span id="presshub-ai-image-template-status" class="presshub-image-studio-template-status" role="status"></span>
                 </div>
+                <?php if ( class_exists( 'PressHub_Capabilities' ) && class_exists( 'PressHub_Settings_Sections' ) && current_user_can( PressHub_Capabilities::manage() ) ) : ?>
+                    <p class="description presshub-image-studio-manage-link">
+                        <a href="<?php echo esc_url( PressHub_Settings_Sections::url( 'writing-qa', 'featured-images' ) ); ?>" target="_blank" rel="noopener"><?php echo esc_html__( 'Manage all templates in Settings', 'presshub-ai-editor' ); ?><span class="screen-reader-text"> <?php echo esc_html__( '(opens in a new tab)', 'presshub-ai-editor' ); ?></span><span aria-hidden="true" class="dashicons dashicons-external presshub-image-studio-external"></span></a>
+                    </p>
+                <?php endif; ?>
             </div>
         </div>
         <?php

@@ -118,6 +118,40 @@ class PressHub_AI_Image_Prompt_Templates {
         return null;
     }
 
+    /**
+     * Whether the current user may change or delete a saved template: the
+     * editor who saved it, or anyone who can edit others' posts.
+     */
+    public static function current_user_can_manage( array $tpl ): bool {
+        if ( ! empty( $tpl['builtin'] ) ) {
+            return false;
+        }
+        return current_user_can( 'edit_others_posts' ) || (int) ( $tpl['author'] ?? 0 ) === (int) get_current_user_id();
+    }
+
+    /**
+     * Templates as the studio and the Settings editor read them in
+     * JavaScript.
+     *
+     * @return array<int,array>
+     */
+    public static function client_payload(): array {
+        $out = [];
+        foreach ( self::get_all() as $tpl ) {
+            $author = (int) ( $tpl['author'] ?? 0 );
+            $user   = ( $author > 0 && function_exists( 'get_userdata' ) ) ? get_userdata( $author ) : false;
+            $out[]  = [
+                'id'        => $tpl['id'],
+                'name'      => $tpl['name'],
+                'template'  => $tpl['template'],
+                'builtin'   => ! empty( $tpl['builtin'] ),
+                'deletable' => self::current_user_can_manage( $tpl ),
+                'author'    => ( $user && isset( $user->display_name ) ) ? (string) $user->display_name : '',
+            ];
+        }
+        return $out;
+    }
+
     public static function is_builtin_id( string $id ): bool {
         return array_key_exists( $id, self::builtin_definitions() );
     }
@@ -129,21 +163,11 @@ class PressHub_AI_Image_Prompt_Templates {
      * @return array|WP_Error The stored template.
      */
     public static function add( string $name, string $template, int $author = 0 ) {
-        $name     = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $name ) ) );
-        $template = trim( str_replace( "\r\n", "\n", $template ) );
-
-        if ( '' === $name ) {
-            return new WP_Error( 'missing_name', __( 'Give the template a name.', 'presshub-ai-editor' ) );
+        $clean = self::clean_input( $name, $template );
+        if ( is_wp_error( $clean ) ) {
+            return $clean;
         }
-        if ( mb_strlen( $name ) > self::MAX_NAME_LEN ) {
-            $name = mb_substr( $name, 0, self::MAX_NAME_LEN );
-        }
-        if ( '' === $template ) {
-            return new WP_Error( 'missing_template', __( 'The template text is empty.', 'presshub-ai-editor' ) );
-        }
-        if ( mb_strlen( $template ) > self::MAX_TEMPLATE_LEN ) {
-            return new WP_Error( 'template_too_long', __( 'The template text is too long.', 'presshub-ai-editor' ) );
-        }
+        list( $name, $template ) = $clean;
 
         foreach ( self::get_all() as $existing ) {
             if ( 0 === strcasecmp( $existing['name'], $name ) ) {
@@ -181,13 +205,111 @@ class PressHub_AI_Image_Prompt_Templates {
     }
 
     /**
-     * Delete a saved template. Built-ins cannot be deleted.
+     * Change the name and text of a saved template. Built-ins cannot be
+     * changed here: Editorial photo is the Settings analysis prompt, and the
+     * others are copied into a new template to change them.
+     *
+     * @return array|WP_Error The stored template.
+     */
+    public static function update( string $id, string $name, string $template ) {
+        if ( self::is_builtin_id( $id ) ) {
+            return new WP_Error( 'builtin', __( 'Built-in templates cannot be changed. Copy it into a new template instead.', 'presshub-ai-editor' ) );
+        }
+        $clean = self::clean_input( $name, $template );
+        if ( is_wp_error( $clean ) ) {
+            return $clean;
+        }
+        list( $name, $template ) = $clean;
+
+        foreach ( self::get_all() as $existing ) {
+            if ( $existing['id'] !== $id && 0 === strcasecmp( $existing['name'], $name ) ) {
+                return new WP_Error( 'duplicate_name', __( 'A template with this name already exists. Choose another name.', 'presshub-ai-editor' ) );
+            }
+        }
+
+        $custom = self::get_custom_templates();
+        $found  = null;
+        foreach ( $custom as $i => $tpl ) {
+            if ( $tpl['id'] === $id ) {
+                $custom[ $i ]['name']     = $name;
+                $custom[ $i ]['template'] = $template;
+                $found                    = $custom[ $i ];
+            }
+        }
+        if ( null === $found ) {
+            return new WP_Error( 'not_found', __( 'That template no longer exists.', 'presshub-ai-editor' ) );
+        }
+        update_option( self::OPTION, array_map( [ __CLASS__, 'to_storage' ], $custom ), false );
+        return $found;
+    }
+
+    /**
+     * Settings that name a template for automatic Daily Briefing images:
+     * option => label. A template they use cannot be deleted.
+     */
+    public static function usage_options(): array {
+        return [
+            'presshub_ai_briefing_image_template'         => __( 'Text briefing image template', 'presshub-ai-editor' ),
+            'presshub_ai_briefing_podcast_image_template' => __( 'Podcast image template', 'presshub-ai-editor' ),
+        ];
+    }
+
+    /**
+     * Where a template is chosen for automatic images, as setting labels.
+     *
+     * @return string[]
+     */
+    public static function used_by( string $id ): array {
+        $out = [];
+        foreach ( self::usage_options() as $option => $label ) {
+            if ( (string) get_option( $option, self::DEFAULT_ID ) === $id ) {
+                $out[] = $label;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * The template to use for an id chosen in a setting. A template that no
+     * longer exists falls back to Editorial photo and logs a warning, so an
+     * automatic briefing image is never drafted without instructions.
+     *
+     * @return array{id:string,template:string}
+     */
+    public static function resolve( string $id, string $context = '' ): array {
+        $tpl = '' !== $id ? self::get( $id ) : null;
+        if ( null === $tpl ) {
+            if ( '' !== $id && class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( 'Image prompt template not found; using Editorial photo.', [
+                    'template_id' => $id,
+                    'context'     => $context,
+                ] );
+            }
+            $tpl = self::get( self::DEFAULT_ID );
+        }
+        return [
+            'id'       => $tpl ? (string) $tpl['id'] : self::DEFAULT_ID,
+            'template' => $tpl ? (string) $tpl['template'] : '',
+        ];
+    }
+
+    /**
+     * Delete a saved template. Built-ins cannot be deleted, and neither can
+     * a template that a Daily Briefing setting uses.
      *
      * @return true|WP_Error
      */
     public static function delete( string $id ) {
         if ( self::is_builtin_id( $id ) ) {
             return new WP_Error( 'builtin', __( 'Built-in templates cannot be deleted.', 'presshub-ai-editor' ) );
+        }
+        $used = self::used_by( $id );
+        if ( ! empty( $used ) ) {
+            return new WP_Error( 'in_use', sprintf(
+                /* translators: %s: setting labels, comma separated. */
+                __( 'This template is used by Daily Briefing (%s). Choose another template there first.', 'presshub-ai-editor' ),
+                implode( ', ', $used )
+            ) );
         }
         $custom = self::get_custom_templates();
         $kept   = array_values( array_filter( $custom, static function ( $tpl ) use ( $id ) {
@@ -216,6 +338,30 @@ class PressHub_AI_Image_Prompt_Templates {
             $template = rtrim( $template ) . "\n\nArticle Title:\n{title}\n\nArticle Content:\n{content}";
         }
         return str_replace( [ '{title}', '{content}' ], [ trim( $title ), trim( $content ) ], $template );
+    }
+
+    /**
+     * Trim and check a name and template text.
+     *
+     * @return array{0:string,1:string}|WP_Error
+     */
+    private static function clean_input( string $name, string $template ) {
+        $name     = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $name ) ) );
+        $template = trim( str_replace( "\r\n", "\n", $template ) );
+
+        if ( '' === $name ) {
+            return new WP_Error( 'missing_name', __( 'Give the template a name.', 'presshub-ai-editor' ) );
+        }
+        if ( mb_strlen( $name ) > self::MAX_NAME_LEN ) {
+            $name = mb_substr( $name, 0, self::MAX_NAME_LEN );
+        }
+        if ( '' === $template ) {
+            return new WP_Error( 'missing_template', __( 'The template text is empty.', 'presshub-ai-editor' ) );
+        }
+        if ( mb_strlen( $template ) > self::MAX_TEMPLATE_LEN ) {
+            return new WP_Error( 'template_too_long', __( 'The template text is too long.', 'presshub-ai-editor' ) );
+        }
+        return [ $name, $template ];
     }
 
     private static function to_storage( array $tpl ): array {
