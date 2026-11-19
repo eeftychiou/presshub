@@ -126,7 +126,9 @@ class PressHub_Social_Settings_Render {
             $is_checked    = in_array( $platform, $enabled, true );
             $is_configured = PressHub_Social_Settings_Storage::is_platform_configured( $platform );
             $engine        = PressHub_Social_Settings_Storage::get_platform_engine( $platform );
-            $engine_label  = ( 'automation' === $engine ) ? __( 'Automation Worker', 'presshub-social-autopost' ) : __( 'Official REST API', 'presshub-social-autopost' );
+            $engine_label  = 'youtube' === $platform
+                ? __( 'Worker + YouTube API (videos only)', 'presshub-social-autopost' )
+                : ( ( 'automation' === $engine ) ? __( 'Automation Worker', 'presshub-social-autopost' ) : __( 'Official REST API', 'presshub-social-autopost' ) );
 
             $session_ok    = PressHub_Social_Settings_Storage::is_platform_session_active( $platform );
             $badge = ( $is_configured && ! $session_ok )
@@ -138,7 +140,7 @@ class PressHub_Social_Settings_Render {
             echo '<div class="ph-display-flex ph-align-items-center ph-justify-content-space-between ph-padding-8px-12px ph-background-fff ph-border-1px-solid-ccd0d4 ph-border-radius-4px">';
             echo '<label class="ph-font-weight-600 ph-font-size-13px ph-cursor-pointer ph-display-flex ph-align-items-center ph-gap-8px">';
             echo '<input type="checkbox" name="presshub_social_enabled_platforms[]" value="' . esc_attr( $platform ) . '" ' . checked( $is_checked, true, false ) . ' /> ';
-            echo esc_html( ucfirst( $platform ) );
+            echo esc_html( self::platform_label( $platform ) );
             echo '</label>';
             echo '<div class="ph-display-flex ph-align-items-center ph-gap-10px">';
             echo '<span class="ph-font-size-12px ph-color-666">' . esc_html( $engine_label ) . '</span>';
@@ -376,7 +378,8 @@ class PressHub_Social_Settings_Render {
         // they are not a switch of their own here (#234 review).
         $tiktok    = PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled();
         $instagram = PressHub_Social_Settings_Storage::get_instagram_shorts_enabled();
-        if ( ! $tiktok && ! $instagram ) {
+        $youtube   = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() || PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
+        if ( ! $tiktok && ! $instagram && ! $youtube ) {
             return [];
         }
         $issues = [];
@@ -401,6 +404,26 @@ class PressHub_Social_Settings_Render {
                 'link' => __( 'Change Instagram engine', 'presshub-social-autopost' ),
             ];
         }
+        if ( $youtube && class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason() ) {
+            $issues[] = [
+                'text' => __( 'YouTube is on, but Google refused the stored sign-in. Connect YouTube again.', 'presshub-social-autopost' ),
+                'url'  => PressHub_Settings_Sections::url( 'connections', 'presshub-youtube-account' ),
+                'link' => __( 'Connect YouTube', 'presshub-social-autopost' ),
+            ];
+        } elseif ( $youtube && ! ( class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected() ) ) {
+            $issues[] = [
+                'text' => __( 'YouTube is on, but no YouTube channel is connected.', 'presshub-social-autopost' ),
+                'url'  => PressHub_Settings_Sections::url( 'connections', 'presshub-youtube-account' ),
+                'link' => __( 'Connect YouTube', 'presshub-social-autopost' ),
+            ];
+        }
+        if ( $youtube && ! PressHub_Social_Settings_Storage::is_platform_enabled( 'youtube' ) ) {
+            $issues[] = [
+                'text' => __( 'YouTube is off in the platform list, so nothing is queued for it.', 'presshub-social-autopost' ),
+                'url'  => $this->social_tab_url( 'general' ),
+                'link' => __( 'Turn on YouTube', 'presshub-social-autopost' ),
+            ];
+        }
         return $issues;
     }
 
@@ -414,7 +437,12 @@ class PressHub_Social_Settings_Render {
             <h3 class="ph-margin-0_8em-0-0_4em">
                 <?php
                 /* translators: %d: number of things to fix */
-                echo esc_html( sprintf( _n( 'Shorts can\'t run yet. %d thing to fix:', 'Shorts can\'t run yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) ) );
+                $only_episodes = ! PressHub_Social_Settings_Storage::get_tiktok_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_instagram_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+                echo esc_html( $only_episodes
+                    /* translators: %d: number of things to fix */
+                    ? sprintf( _n( 'YouTube podcast episodes can\'t be uploaded yet. %d thing to fix:', 'YouTube podcast episodes can\'t be uploaded yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) )
+                    /* translators: %d: number of things to fix */
+                    : sprintf( _n( 'Shorts can\'t run yet. %d thing to fix:', 'Shorts can\'t run yet. %d things to fix:', count( $issues ), 'presshub-social-autopost' ), count( $issues ) ) );
                 ?>
             </h3>
             <ol>
@@ -446,6 +474,23 @@ class PressHub_Social_Settings_Render {
                     $pull ? 'Pull' : 'Push'
                 ) ) ) . '</li>';
         }
+        $connected = class_exists( 'PressHub_Social_YouTube' ) && PressHub_Social_YouTube::is_connected();
+        $channel   = $connected ? (string) ( PressHub_Social_YouTube::channel()['title'] ?? '' ) : '';
+        $reported  = PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' );
+        if ( ! $connected ) {
+            $why = class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::reconnect_reason()
+                ? __( '(Google refused the sign-in: connect YouTube again in Connections)', 'presshub-social-autopost' )
+                : __( '(connect a YouTube channel in Connections)', 'presshub-social-autopost' );
+        } elseif ( ! $pull ) {
+            $why = __( '(the worker must be in Pull mode)', 'presshub-social-autopost' );
+        } elseif ( ! $reported ) {
+            $why = __( '(the worker has not reported YouTube yet: update and restart it)', 'presshub-social-autopost' );
+        } else {
+            $why = '';
+        }
+        echo '<li>YouTube: ' . ( '' === $why
+            ? '<strong>' . esc_html__( 'Ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html( sprintf( /* translators: %s: channel name */ __( '(channel %s, worker in Pull mode)', 'presshub-social-autopost' ), $channel ) )
+            : '<strong>' . esc_html__( 'Not ready', 'presshub-social-autopost' ) . '</strong> ' . esc_html( $why ) ) . '</li>';
         echo '</ul>';
     }
 
@@ -470,6 +515,7 @@ class PressHub_Social_Settings_Render {
             'facebook'  => 'Facebook',
             'instagram' => 'Instagram',
             'tiktok'    => 'TikTok',
+            'youtube'   => 'YouTube',
         ];
         return $labels[ $platform ] ?? ucfirst( $platform );
     }
@@ -504,7 +550,7 @@ class PressHub_Social_Settings_Render {
                 <p><?php echo esc_html__( 'In Push mode this site calls the worker when it has a job. Use Test below to check that it answers.', 'presshub-social-autopost' ); ?></p>
             <?php endif; ?>
             <?php
-            $automation = array_values( array_filter( PressHub_Social_Settings_Storage::PLATFORMS, static function ( $p ) {
+            $automation = array_values( array_filter( PressHub_Social_Settings_Storage::ENGINE_PLATFORMS, static function ( $p ) {
                 return 'automation' === PressHub_Social_Settings_Storage::get_platform_engine( $p );
             } ) );
             if ( $automation ) :
@@ -603,6 +649,153 @@ class PressHub_Social_Settings_Render {
             <input type="checkbox" name="presshub_social_instagram_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
             <?php echo esc_html__( 'Also post each podcast short as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
+        <?php
+    }
+
+    public function render_youtube_shorts_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_youtube_shorts_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_youtube_shorts_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_youtube_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Also upload each short (podcast stories and, with Article Shorts on, articles) to YouTube. YouTube makes every vertical video of three minutes or less a Short by itself. The title is the short\'s hook and the description is its caption. Needs a connected YouTube channel and the worker in Pull Mode.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_youtube_podcast_enabled_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_youtube_podcast_enabled();
+        ?>
+        <input type="hidden" name="presshub_social_youtube_podcast_enabled_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_youtube_podcast_enabled" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Upload every Daily Briefing podcast to YouTube as a full episode: a 16:9 video of the whole audio over the podcast\'s image, titled like the post, with the YouTube description from the YouTube Caption Prompt, added to the podcast playlist below.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_youtube_podcast_language_playlists_field(): void {
+        $option = 'presshub_social_youtube_podcast_language_playlists';
+        $langs  = class_exists( 'PressHub_AI_Podcast_Translations' ) ? PressHub_AI_Podcast_Translations::LANGUAGES : [];
+        $on     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_languages() : [];
+        foreach ( $langs as $lang => $info ) :
+            $id = $option . '_' . $lang;
+            ?>
+            <p>
+                <label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $info['name'] ); ?></label><br />
+                <input type="text" id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $option . '[' . $lang . ']' ); ?>" value="<?php echo esc_attr( PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( $lang ) ); ?>" class="regular-text" placeholder="PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+                <?php if ( ! in_array( $lang, $on, true ) ) : ?>
+                    <span class="description"><?php echo esc_html__( '(not made: turn this language on under Settings, Daily Briefing, Other languages)', 'presshub-social-autopost' ); ?></span>
+                <?php endif; ?>
+            </p>
+            <?php
+        endforeach;
+        ?>
+        <p class="description"><?php echo esc_html__( 'The playlist each language\'s episodes are added to. Make one playlist per language in YouTube Studio, set it as a podcast there, then paste its link or ID. Empty uploads that language\'s episodes without a playlist.', 'presshub-social-autopost' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Each language adds two uploads a day (morning and midday) to the channel\'s 100 uploads a day, which shorts share. Adding an episode to its playlist uses 50 of the project\'s 10,000 daily API units.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
+    public function render_youtube_episode_enhanced_field(): void {
+        $enabled = PressHub_Social_Settings_Storage::get_youtube_episode_enhanced();
+        ?>
+        <input type="hidden" name="presshub_social_youtube_episode_enhanced_present" value="1" />
+        <label>
+            <input type="checkbox" name="presshub_social_youtube_episode_enhanced" value="1" <?php checked( $enabled, true ); ?> />
+            <?php echo esc_html__( 'Show the story images of the podcast\'s shorts, one topic at a time, with captions like the shorts, a title card per topic and a chapter list in the description. Off: the whole audio over the podcast\'s image.', 'presshub-social-autopost' ); ?>
+        </label>
+        <?php
+    }
+
+    public function render_youtube_privacy_field(): void {
+        $current = PressHub_Social_Settings_Storage::get_youtube_privacy_status();
+        $labels  = [
+            'public'   => __( 'Public', 'presshub-social-autopost' ),
+            'unlisted' => __( 'Unlisted (only people with the link)', 'presshub-social-autopost' ),
+            'private'  => __( 'Private (only you, for testing)', 'presshub-social-autopost' ),
+        ];
+        ?>
+        <select id="presshub_social_youtube_privacy_status" name="presshub_social_youtube_privacy_status">
+            <?php foreach ( PressHub_Social_Settings_Storage::YOUTUBE_PRIVACY as $value ) : ?>
+                <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current, $value ); ?>><?php echo esc_html( $labels[ $value ] ?? $value ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'Who can watch the shorts and episodes once they are uploaded. Use Private for a first test.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
+    public function render_youtube_category_field(): void {
+        $current = PressHub_Social_Settings_Storage::get_youtube_category_id();
+        $labels  = [
+            25 => __( 'News & Politics', 'presshub-social-autopost' ),
+            22 => __( 'People & Blogs', 'presshub-social-autopost' ),
+            24 => __( 'Entertainment', 'presshub-social-autopost' ),
+            27 => __( 'Education', 'presshub-social-autopost' ),
+            17 => __( 'Sports', 'presshub-social-autopost' ),
+            28 => __( 'Science & Technology', 'presshub-social-autopost' ),
+        ];
+        if ( ! isset( $labels[ $current ] ) ) {
+            /* translators: %d: YouTube category number */
+            $labels[ $current ] = sprintf( __( 'Category %d', 'presshub-social-autopost' ), $current );
+        }
+        ?>
+        <select id="presshub_social_youtube_category_id" name="presshub_social_youtube_category_id">
+            <?php foreach ( $labels as $id => $label ) : ?>
+                <option value="<?php echo esc_attr( (string) $id ); ?>" <?php selected( $current, $id ); ?>><?php echo esc_html( $label ); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php echo esc_html__( 'YouTube category of every upload.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Connections → YouTube account: the address to paste in Google Cloud, the channel
+     * that is connected, and Connect / Disconnect / Test. Reads stored data only.
+     */
+    public function render_youtube_account_field(): void {
+        $notice    = PressHub_Social_YouTube::take_notice();
+        $connected = PressHub_Social_YouTube::is_connected();
+        $channel   = PressHub_Social_YouTube::channel();
+        ?>
+        <div id="presshub-youtube-account">
+            <?php if ( $notice ) : ?>
+                <div class="notice inline <?php echo ! empty( $notice['ok'] ) ? 'notice-success' : 'notice-error'; ?>"><p><?php echo esc_html( (string) $notice['text'] ); ?></p></div>
+            <?php endif; ?>
+            <p>
+                <label for="presshub-youtube-redirect-uri"><?php echo esc_html__( 'Authorized redirect URI (paste it into your Google OAuth client):', 'presshub-social-autopost' ); ?></label><br />
+                <input type="text" id="presshub-youtube-redirect-uri" class="large-text code" readonly="readonly" value="<?php echo esc_attr( PressHub_Social_YouTube::redirect_uri() ); ?>" />
+            </p>
+            <p>
+                <?php if ( $connected ) : ?>
+                    <?php
+                    /* translators: %s: YouTube channel name */
+                    echo esc_html( sprintf( __( 'Connected channel: %s', 'presshub-social-autopost' ), (string) ( $channel['title'] ?? __( 'unknown', 'presshub-social-autopost' ) ) ) );
+                    ?>
+                    <a class="button button-secondary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::disconnect_link() ); ?>"><?php echo esc_html__( 'Disconnect', 'presshub-social-autopost' ); ?></a>
+                    <a class="button button-secondary" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect another channel', 'presshub-social-autopost' ); ?></a>
+                <?php elseif ( PressHub_Social_YouTube::has_client() && '' !== PressHub_Social_YouTube::reconnect_reason() ) : ?>
+                    <?php
+                    /* translators: 1: channel name, 2: Google's error */
+                    echo esc_html( sprintf( __( 'Uploads to %1$s stopped: Google refused the sign-in (%2$s).', 'presshub-social-autopost' ), (string) ( $channel['title'] ?? 'YouTube' ), PressHub_Social_YouTube::reconnect_reason() ) );
+                    ?>
+                    <a class="button button-primary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect YouTube again', 'presshub-social-autopost' ); ?></a>
+                    <a class="button button-secondary" href="<?php echo esc_url( PressHub_Social_YouTube::disconnect_link() ); ?>"><?php echo esc_html__( 'Disconnect', 'presshub-social-autopost' ); ?></a>
+                <?php elseif ( PressHub_Social_YouTube::has_client() ) : ?>
+                    <?php echo esc_html__( 'No channel connected.', 'presshub-social-autopost' ); ?>
+                    <a class="button button-primary ph-margin-left-8px" href="<?php echo esc_url( PressHub_Social_YouTube::connect_link() ); ?>"><?php echo esc_html__( 'Connect YouTube', 'presshub-social-autopost' ); ?></a>
+                <?php else : ?>
+                    <?php echo esc_html__( 'Save the client ID and client secret above, then Connect YouTube appears here.', 'presshub-social-autopost' ); ?>
+                <?php endif; ?>
+            </p>
+            <p class="description"><?php echo esc_html__( 'Connect signs in with Google as the YouTube channel. Use the Google account that owns the channel; for a Brand Account channel, pick the channel when Google asks.', 'presshub-social-autopost' ); ?></p>
+            <?php if ( $connected && PressHub_Social_YouTube::paused_until() > 0 ) : ?>
+                <p><strong><?php
+                /* translators: %s: UTC date and time */
+                echo esc_html( sprintf( __( 'The daily YouTube upload quota is used up. Uploads resume at %s UTC.', 'presshub-social-autopost' ), gmdate( 'Y-m-d H:i', PressHub_Social_YouTube::paused_until() ) ) );
+                ?></strong></p>
+            <?php endif; ?>
+            <?php if ( $connected ) { $this->render_test_connection_button( 'youtube' ); } ?>
+        </div>
         <?php
     }
 

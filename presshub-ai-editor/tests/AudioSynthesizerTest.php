@@ -239,6 +239,7 @@ $GLOBALS['WP_INSERTED_POSTS'] = [];
 $GLOBALS['POST_META_STORE'] = [];
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_category'] = 42;
 $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_status'] = 'publish';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_qa_include_podcasts'] = 0; // The podcast QA gate is tested in PublishGateTest.
 
 $test_transcript = "[Μαρία]: Καλημέρα σε όλους!\n[Νίκος]: Καλημέρα Μαρία!";
 $post_id = $synthesizer->create_podcast_post(
@@ -350,8 +351,9 @@ as_check( 'e2e: script without turns returns WP_Error', is_wp_error( $err_invali
 // =========================================================================
 
 $GLOBALS['OPTIONS_STORE'] = [
-    // These cases count TTS HTTP requests; keep the post-creation SEO call out of them.
+    // These cases count TTS HTTP requests; keep the post-creation SEO and QA calls out of them.
     'presshub_ai_seo_auto_enabled'   => 0,
+    'presshub_ai_qa_include_podcasts' => 0,
     'presshub_ai_provider'           => 'gemini',
     'presshub_ai_configured_providers' => presshub_test_provider_keys( 'test-gemini-key', [ 'gemini' ] ),
     'presshub_ai_model_gemini'       => 'gemini-3.7-flash',
@@ -488,6 +490,9 @@ $pod_multi = $synthesizer->synthesize_podcast( '2026-08-27', $dialogue_script, n
 
 as_check( 'issue_69: synthesize_podcast succeeds with 2 speakers', is_array( $pod_multi ) && ( $pod_multi['success'] ?? false ) );
 as_check( 'issue_69: captured exactly 2 turn requests', count( $captured_requests ) === 2 );
+$pod_multi_tl = get_post_meta( (int) ( $pod_multi['post_id'] ?? 0 ), PressHub_AI_Podcast_Timeline::META_KEY, true );
+as_check( 'timeline: the podcast post stores a caption timeline with both turns', is_array( $pod_multi_tl ) && 2 === count( $pod_multi_tl['segments'] ?? [] ) );
+as_check( 'timeline: turns are in order with the second host as speaker 2', is_array( $pod_multi_tl ) && $pod_multi_tl['segments'][1]['start'] > $pod_multi_tl['segments'][0]['end'] && 2 === $pod_multi_tl['segments'][1]['speaker'] );
 
 $req0_cfg = $captured_requests[0]['body']['generationConfig']['speechConfig'] ?? [];
 $req1_cfg = $captured_requests[1]['body']['generationConfig']['speechConfig'] ?? [];

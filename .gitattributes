@@ -1,0 +1,25 @@
+# Keep LF in every checkout, Windows included. Several tests compare files
+# byte for byte (docs/settings-inventory.md) or search the plugin source for
+# multi-line strings, which breaks when core.autocrlf=true writes CRLF.
+* text=auto eol=lf
+
+# Windows batch files need CRLF to run reliably under cmd.exe.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets: never touch line endings or diff as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.wav  binary
+*.mp3  binary
+*.mp4  binary
+*.otf  binary
+*.ttf  binary
+*.woff binary
+*.woff2 binary
+*.mo   binary
+*.zip  binary

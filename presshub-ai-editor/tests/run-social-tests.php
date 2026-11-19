@@ -503,6 +503,9 @@ require_once $base_dir . '/includes/class-social-image-library.php';
 require_once $base_dir . '/includes/class-social-post-images.php';
 require_once $base_dir . '/includes/class-social-tiktok-shorts.php';
 require_once $base_dir . '/includes/class-social-tiktok-music.php';
+require_once $base_dir . '/includes/class-podcast-timeline.php';
+require_once $base_dir . '/includes/class-podcast-translations.php';
+require_once $base_dir . '/includes/class-social-youtube.php';
 require_once $base_dir . '/includes/class-social-meta-api-client.php';
 require_once $base_dir . '/includes/class-social-worker-client.php';
 require_once $base_dir . '/includes/class-social-dispatcher.php';
@@ -2414,6 +2417,600 @@ assert_equals( 'article', $art_claimed['tiktok_short']['source'] ?? '', 'A claim
 assert_equals( 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός', $art_claimed['post_copy'] ?? '', 'A claimed article short posts the TikTok caption, not the plan caption' );
 assert_true( '' !== (string) ( $art_claimed['audio_url'] ?? '' ) && ! empty( $art_claimed['tiktok_short']['segments'] ), 'A claimed article short carries its narration and timings' );
 assert_equals( 2, count( $art_claim['jobs'] ), 'The TikTok short and the Instagram Reel of the article are both claimed' );
+
+// ----------------------------------------------------------------------
+// YouTube: Shorts and podcast episodes through the YouTube Data API
+// ----------------------------------------------------------------------
+echo "\n--- YouTube ---\n";
+$yt_http       = [];
+$yt_no_channel = false;
+PressHub_Social_YouTube::set_http( function ( string $method, string $url, array $args ) use ( &$yt_http, &$yt_no_channel ) {
+    $yt_http[] = [ $method, $url, $args ];
+    if ( str_contains( $url, 'oauth2.googleapis.com/token' ) ) {
+        if ( 'refresh_token' === ( $args['body']['grant_type'] ?? '' ) && 'REVOKED' === ( $args['body']['refresh_token'] ?? '' ) ) {
+            return [ 'code' => 400, 'body' => '{"error":"invalid_grant","error_description":"Token has been expired or revoked."}' ];
+        }
+        if ( 'authorization_code' === ( $args['body']['grant_type'] ?? '' ) ) {
+            return [ 'code' => 200, 'body' => '{"access_token":"ya29.FIRST","expires_in":3599,"refresh_token":"1//REFRESH"}' ];
+        }
+        return [ 'code' => 200, 'body' => '{"access_token":"ya29.FRESH","expires_in":3599}' ];
+    }
+    if ( str_contains( $url, '/youtube/v3/channels?part=status' ) ) {
+        $GLOBALS['yt_long_calls'] = ( $GLOBALS['yt_long_calls'] ?? 0 ) + 1;
+        return [ 'code' => 200, 'body' => wp_json_encode( [ 'items' => [ [ 'status' => [ 'longUploadsStatus' => $GLOBALS['yt_long_status'] ?? 'allowed' ] ] ] ] ) ];
+    }
+    if ( str_contains( $url, '/youtube/v3/channels' ) ) {
+        return $yt_no_channel
+            ? [ 'code' => 200, 'body' => '{"items":[]}' ]
+            : [ 'code' => 200, 'body' => '{"items":[{"id":"UC123","snippet":{"title":"PressHub Cyprus"}}]}' ];
+    }
+    if ( str_contains( $url, '/youtube/v3/playlists' ) ) {
+        return str_contains( $url, 'PLpodcastplaylist01' )
+            ? [ 'code' => 200, 'body' => '{"items":[{"id":"PLpodcastplaylist01","snippet":{"title":"Daily Briefing","channelId":"UC123"}}]}' ]
+            : [ 'code' => 200, 'body' => '{"items":[]}' ];
+    }
+    if ( str_contains( $url, '/revoke' ) ) {
+        return [ 'code' => 200, 'body' => '' ];
+    }
+    return [ 'code' => 404, 'body' => '' ];
+} );
+
+// Settings sanitizers.
+assert_equals( 'PLabcdefghijklmnop', PressHub_Social_Settings_Storage::sanitize_youtube_podcast_playlist_id( 'https://www.youtube.com/playlist?list=PLabcdefghijklmnop' ), 'A pasted playlist link becomes its ID' );
+assert_equals( 'PLabcdefghijklmnop', PressHub_Social_Settings_Storage::sanitize_youtube_podcast_playlist_id( ' PLabcdefghijklmnop ' ), 'A playlist ID is kept' );
+assert_equals( '', PressHub_Social_Settings_Storage::sanitize_youtube_podcast_playlist_id( 'not a playlist <script>' ), 'Anything else is dropped' );
+assert_equals( 'public', PressHub_Social_Settings_Storage::sanitize_youtube_privacy_status( 'everyone' ), 'An unknown privacy status becomes public' );
+assert_equals( 'unlisted', PressHub_Social_Settings_Storage::sanitize_youtube_privacy_status( 'unlisted' ), 'Unlisted is kept' );
+assert_equals( 25, PressHub_Social_Settings_Storage::sanitize_youtube_category_id( 999 ), 'An out-of-range category becomes News & Politics' );
+assert_equals( 'automation', PressHub_Social_Settings_Storage::get_platform_engine( 'youtube' ), 'YouTube is always claimed by the worker' );
+assert_false( in_array( 'youtube', PressHub_Social_Settings_Storage::DEFAULT_ENABLED_PLATFORMS, true ), 'YouTube is opt-in in the platform list' );
+
+// Not connected: not configured, and the claim never hands out YouTube jobs.
+update_option( 'presshub_social_worker_sessions', [ 'tiktok' => true, 'instagram' => true, 'youtube' => true ] );
+delete_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION );
+update_option( 'presshub_social_youtube_client_id', '123-abc.apps.googleusercontent.com' );
+update_option( 'presshub_social_youtube_client_secret', 'GOCSPX-secret' );
+assert_false( PressHub_Social_YouTube::is_connected(), 'Without a sign-in YouTube is not connected' );
+assert_false( PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' ), 'Without a sign-in YouTube is not configured' );
+assert_true( is_wp_error( PressHub_Social_YouTube::access_token() ), 'No access token without a sign-in' );
+
+// Sign-in: a state started by another user (or none) is refused.
+$GLOBALS['CURRENT_USER_ID'] = 7;
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE1', 7, 900 );
+$bad = PressHub_Social_YouTube::complete_sign_in( 'STATE1', 'CODE', '', 8 );
+assert_equals( 'youtube_bad_state', is_wp_error( $bad ) ? $bad->get_error_code() : '', 'A sign-in returned to another user is refused' );
+assert_false( get_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE1' ), 'A state is used once' );
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE2', 7, 900 );
+$denied = PressHub_Social_YouTube::complete_sign_in( 'STATE2', '', 'access_denied', 7 );
+assert_true( is_wp_error( $denied ) && '' === PressHub_Social_YouTube::get_refresh_token(), 'A declined consent stores nothing' );
+$auth_url = PressHub_Social_YouTube::authorization_url( 'S' );
+assert_true( str_contains( $auth_url, 'access_type=offline' ) && str_contains( $auth_url, 'prompt=consent' ) && str_contains( $auth_url, rawurlencode( PressHub_Social_YouTube::redirect_uri() ) ), 'The consent URL asks for offline access with the plugin\'s redirect URI' );
+
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE3', 7, 900 );
+$yt_http = [];
+$chan = PressHub_Social_YouTube::complete_sign_in( 'STATE3', 'CODE', '', 7 );
+assert_equals( 'PressHub Cyprus', is_array( $chan ) ? $chan['title'] : '', 'A sign-in reads the channel' );
+assert_equals( '1//REFRESH', PressHub_Social_YouTube::get_refresh_token(), 'A sign-in stores the refresh token' );
+assert_equals( 'UC123', PressHub_Social_YouTube::channel()['id'] ?? '', 'A sign-in stores the channel' );
+assert_equals( 'authorization_code', $yt_http[0][2]['body']['grant_type'] ?? '', 'The code is swapped at the token endpoint' );
+assert_equals( 'GOCSPX-secret', $yt_http[0][2]['body']['client_secret'] ?? '', 'The token request carries the client secret (server side only)' );
+assert_true( ! empty( PressHub_Connection_Status::get( 'social:youtube' )['ok'] ), 'A sign-in records YouTube as connected' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' ), 'Connected, in Pull mode, with a worker that reported YouTube: configured' );
+
+// Access tokens: cached, then refreshed near expiry.
+$yt_http = [];
+$tok = PressHub_Social_YouTube::access_token();
+assert_equals( 'ya29.FIRST', $tok['access_token'] ?? '', 'The token from the sign-in is reused' );
+assert_equals( 0, count( $yt_http ), 'A cached token makes no request' );
+set_transient( PressHub_Social_YouTube::ACCESS_TOKEN_TRANSIENT, [ 'access_token' => 'ya29.OLD', 'expires_at' => time() + 30 ], 30 );
+$tok = PressHub_Social_YouTube::access_token();
+assert_equals( 'ya29.FRESH', $tok['access_token'] ?? '', 'A token about to expire is refreshed' );
+$rest_tok = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
+assert_equals( 'ya29.FRESH', is_array( $rest_tok ) ? ( $rest_tok['access_token'] ?? '' ) : '', 'The worker gets an access token from the token route' );
+assert_false( str_contains( wp_json_encode( $rest_tok ), '1//REFRESH' ) || str_contains( wp_json_encode( $rest_tok ), 'GOCSPX' ), 'The token route never returns the refresh token or client secret' );
+set_transient( PressHub_Social_YouTube::ACCESS_TOKEN_TRANSIENT, [ 'access_token' => 'ya29.CACHED', 'expires_at' => time() + 3000 ], 3000 );
+$rest_cached = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
+assert_equals( 'ya29.CACHED', is_array( $rest_cached ) ? ( $rest_cached['access_token'] ?? '' ) : '', 'The token route hands out the cached token while it has time left' );
+$fresh_req = new WP_REST_Request( 'POST', '/worker/youtube/token' );
+$fresh_req->set_param( 'refresh', true );
+$rest_fresh = PressHub_Social_REST_Controller::handle_youtube_token( $fresh_req );
+assert_equals( 'ya29.FRESH', is_array( $rest_fresh ) ? ( $rest_fresh['access_token'] ?? '' ) : '', 'refresh=true (YouTube refused the cached token) gets a new one from Google' );
+
+// Shorts: the same shorts as TikTok, as YouTube jobs.
+PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', true );
+update_option( 'presshub_social_youtube_shorts_enabled', true );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Περιγραφή YouTube για το άρθρο. #κύπρος #αθλητισμός #Shorts' );
+PressHub_Social_Queue::reset_memory_store();
+$yt_art_ids = PressHub_Social_Dispatcher::enqueue_for_post( 890, [ 'youtube' ] );
+assert_equals( 1, count( $yt_art_ids ), 'An article gets one YouTube short' );
+$yt_art = PressHub_Social_Queue::get_job( $yt_art_ids[0] );
+assert_equals( 'youtube', $yt_art['platform'], 'The short is a YouTube job' );
+assert_true( PressHub_Social_TikTok_Shorts::is_article_job( $yt_art ), 'The YouTube short is an article short' );
+assert_equals( 'Περιγραφή YouTube για το άρθρο. #κύπρος #αθλητισμός #Shorts', $yt_art['post_copy'], 'The article short keeps the YouTube description prompt\'s copy' );
+
+update_option( 'presshub_social_youtube_shorts_enabled', false );
+PressHub_Social_Queue::reset_memory_store();
+assert_equals( [], PressHub_Social_Dispatcher::enqueue_for_post( 890, [ 'youtube' ] ), 'With YouTube Shorts off an article is not posted to YouTube' );
+
+// Podcast: its shorts plus the full episode.
+update_option( 'presshub_social_youtube_shorts_enabled', true );
+update_option( 'presshub_social_youtube_podcast_enabled', true );
+update_option( 'presshub_social_youtube_podcast_playlist_id', 'PLpodcastplaylist01' );
+PressHub_Social_Queue::reset_memory_store();
+$yt_pod_ids = PressHub_Social_Dispatcher::enqueue_for_post( 880, [ 'youtube' ] );
+$yt_pod_jobs = array_map( [ 'PressHub_Social_Queue', 'get_job' ], $yt_pod_ids );
+$yt_eps = array_values( array_filter( $yt_pod_jobs, [ 'PressHub_Social_YouTube', 'is_episode_job' ] ) );
+assert_equals( 1, count( $yt_eps ), 'A podcast gets one YouTube episode job' );
+assert_equals( PressHub_Social_Settings_Storage::get_tiktok_shorts_count(), count( $yt_pod_jobs ) - 1, 'A podcast also gets its YouTube shorts' );
+assert_false( PressHub_Social_TikTok_Shorts::is_short_job( $yt_eps[0] ), 'The episode is not a short' );
+
+// Claim: the episode gets its upload details.
+foreach ( PressHub_Social_Queue::get_jobs_for_post( 880 ) as $pj ) {
+    if ( 'youtube' !== $pj['platform'] || ! PressHub_Social_YouTube::is_episode_job( $pj ) ) {
+        PressHub_Social_Queue::cancel_job( (int) $pj['id'] );
+    }
+}
+PressHub_Social_Queue::update_job( (int) $yt_eps[0]['id'], [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+
+delete_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION );
+$req_yt = new WP_REST_Request( 'POST', '/worker/claim' );
+$req_yt->set_param( 'sessions', [ 'youtube' => true ] );
+$req_yt->set_param( 'limit', 5 );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'Without a connected channel YouTube jobs wait in the queue' );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( (int) $yt_eps[0]['id'] )['status'], 'The waiting episode stays pending' );
+
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+$req_old = new WP_REST_Request( 'POST', '/worker/claim' );
+$req_old->set_param( 'limit', 5 );
+assert_equals( 0, count( array_filter( PressHub_Social_REST_Controller::handle_claim( $req_old )['jobs'], fn( $j ) => 'youtube' === $j['platform'] ) ), 'A worker that does not report YouTube never gets YouTube jobs' );
+$yt_claim = PressHub_Social_REST_Controller::handle_claim( $req_yt );
+$yt_ep    = $yt_claim['jobs'][0] ?? [];
+assert_equals( 'episode', $yt_ep['youtube']['kind'] ?? '', 'The claimed episode is marked as an episode' );
+assert_equals( 'PLpodcastplaylist01', $yt_ep['youtube']['playlist_id'] ?? '', 'The episode goes to the podcast playlist' );
+assert_equals( 1920, $yt_ep['youtube']['width'] ?? 0, 'The episode is rendered 16:9' );
+assert_equals( 'https://example.com/uploads/podcast-880.mp3', $yt_ep['audio_url'] ?? '', 'The episode carries the podcast audio' );
+assert_true( true === ( $yt_ep['youtube']['contains_synthetic_media'] ?? null ) && false === ( $yt_ep['youtube']['made_for_kids'] ?? null ), 'The upload declares AI content and not made for kids' );
+assert_false( isset( $yt_ep['access_token'] ) || str_contains( wp_json_encode( $yt_ep ), '1//REFRESH' ), 'The claim carries no token' );
+
+// Upload metadata rules.
+$long = str_repeat( 'Λέξη <b>με</b> ', 30 );
+$t    = PressHub_Social_YouTube::clean_title( $long );
+assert_true( mb_strlen( $t, 'UTF-8' ) <= 100 && ! str_contains( $t, '<' ) && ! str_contains( $t, '>' ), 'A title is at most 100 characters, without < or >' );
+assert_true( strlen( PressHub_Social_YouTube::clean_description( str_repeat( 'αβγ ', 3000 ) ) ) <= 5000, 'A description is at most 5000 bytes' );
+assert_equals( [ 'κύπρος', 'αθλητισμός' ], PressHub_Social_YouTube::tags_from( 'Κείμενο #κύπρος #αθλητισμός #Shorts #Κύπρος' ), 'Tags come from the hashtags, once each, without #Shorts' );
+$yt_short = PressHub_Social_YouTube::attach_upload( [
+    'id'           => 1,
+    'post_id'      => 890,
+    'platform'     => 'youtube',
+    'post_copy'    => 'Λεζάντα #κύπρος',
+    'video_title'  => 'Τι αλλάζει στον αθλητισμό',
+    'post_url'     => 'https://example.com/?p=890',
+    'tiktok_short' => [ 'index' => 0, 'count' => 1 ],
+] );
+assert_equals( 'short', $yt_short['youtube']['kind'] ?? '', 'A short is uploaded as a short' );
+assert_equals( 'Τι αλλάζει στον αθλητισμό', $yt_short['youtube']['title'] ?? '', 'A short\'s title is its hook' );
+assert_true( str_ends_with( $yt_short['youtube']['description'] ?? '', 'https://example.com/?p=890' ), 'The article link is added to the description' );
+assert_false( isset( $yt_short['youtube']['playlist_id'] ), 'A short goes to no playlist' );
+$no_audio = PressHub_Social_YouTube::attach_upload( [ 'id' => 2, 'post_id' => 880, 'platform' => 'youtube', 'metadata' => [ 'youtube_episode' => [ 'queued_at' => 'x' ] ] ] );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $no_audio ) ? $no_audio->get_error_code() : '', 'An episode without audio fails' );
+$plain = PressHub_Social_YouTube::attach_upload( [ 'id' => 3, 'post_id' => 890, 'platform' => 'youtube' ] );
+assert_true( is_wp_error( $plain ), 'YouTube only gets videos' );
+
+// Enhanced episodes: caption timeline, scenes from the shorts' images, chapters.
+$wav = static function ( float $sec ): string {
+    $pcm = str_repeat( "\x00", (int) round( $sec * 48000 ) );
+    return 'RIFF' . pack( 'V', 36 + strlen( $pcm ) ) . 'WAVEfmt ' . pack( 'VvvVVvv', 16, 1, 1, 24000, 48000, 2, 16 ) . 'data' . pack( 'V', strlen( $pcm ) ) . $pcm;
+};
+assert_equals( 2.5, PressHub_AI_Podcast_Timeline::turn_seconds( $wav( 2.5 ), 'x', false ), 'A WAV turn is measured from its samples' );
+assert_equals( 2.0, PressHub_AI_Podcast_Timeline::turn_seconds( '', str_repeat( 'α', 28 ), true ), 'An MP3 turn is estimated from its text' );
+$tl = PressHub_AI_Podcast_Timeline::build( [
+    [ 'title' => 'Η Βουλή ψηφίζει τον προϋπολογισμό', 'turns' => [ [ 'speaker' => 'female', 'text' => 'Καλημέρα.', 'seconds' => 10.0 ], [ 'speaker' => 'male', 'text' => 'Καλημέρα σας.', 'seconds' => 5.0 ] ] ],
+    [ 'title' => 'Καιρός', 'turns' => [ [ 'speaker' => 'male', 'text' => 'Βροχές.', 'seconds' => 12.0 ] ] ],
+    [ 'title' => 'Ποδόσφαιρο: νίκη της Ομόνοιας', 'turns' => [ [ 'speaker' => 'female', 'text' => 'Τέλος.', 'seconds' => 20.0 ] ] ],
+    [ 'title' => 'Κενό', 'turns' => [] ],
+], [ 'turn_pause_ms' => 250, 'topic_pause_ms' => 600, 'transition_seconds' => 1.0, 'intro_seconds' => 3.0, 'outro_seconds' => 2.0, 'host_count' => 2 ] );
+assert_equals( 3, count( $tl['topics'] ), 'A topic without turns is left out of the timeline' );
+assert_equals( 3.6, $tl['segments'][0]['start'], 'The first turn starts after the intro sound and the topic pause' );
+assert_equals( 13.85, $tl['segments'][1]['start'], 'Turns are separated by the turn pause' );
+assert_equals( 2, $tl['segments'][1]['speaker'], 'The male host is speaker 2' );
+assert_equals( 20.15, $tl['topics'][1]['start'], 'Topics are separated by 150 ms + transition sound + 150 ms' );
+assert_equals( 1, $tl['segments'][2]['topic'], 'Each turn knows its topic' );
+assert_equals( 56.05, $tl['duration'], 'The timeline ends after the topic pause and the outro sound' );
+$tl_mp3 = PressHub_AI_Podcast_Timeline::build( [ [ 'title' => '', 'turns' => [ [ 'speaker' => 'male', 'text' => 'α', 'seconds' => 1 ] ] ] ], [ 'host_count' => 1, 'estimated' => true ] );
+assert_true( $tl_mp3['estimated'] && 1 === $tl_mp3['segments'][0]['speaker'], 'With one host every turn is speaker 1; an MP3 timeline is marked estimated' );
+assert_equals( "0:00 Η Βουλή ψηφίζει τον προϋπολογισμό\n0:20 Καιρός\n0:33 Ποδόσφαιρο: νίκη της Ομόνοιας", PressHub_AI_Podcast_Timeline::chapters( $tl ), 'Chapters start at 0:00 and follow the topics' );
+assert_equals( '', PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 60, 'topics' => array_slice( $tl['topics'], 0, 2 ) ] ), 'Fewer than three topics give no chapters' );
+assert_equals( '', PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 40, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 15 ], [ 'title' => 'C', 'start' => 20 ] ] ] ), 'When merging short chapters leaves fewer than three there are no chapters' );
+assert_equals( "0:00 A\n0:15 B\n0:40 D", PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 60, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 15 ], [ 'title' => 'C', 'start' => 35 ], [ 'title' => 'D', 'start' => 40 ] ] ] ), 'A topic under 10 seconds is merged into the chapter before it' );
+assert_equals( "0:00 B\n0:30 C\n0:50 D", PressHub_AI_Podcast_Timeline::chapters( [ 'duration' => 70, 'topics' => [ [ 'title' => 'A', 'start' => 0 ], [ 'title' => 'B', 'start' => 5 ], [ 'title' => 'C', 'start' => 30 ], [ 'title' => 'D', 'start' => 50 ] ] ] ), 'A short first topic gives 0:00 to the next' );
+assert_equals( '1:02:05', PressHub_AI_Podcast_Timeline::stamp( 3725 ), 'Chapter times past an hour have hours' );
+
+assert_true( PressHub_Social_YouTube::topic_overlap( 'Ποδόσφαιρο: νίκη της Ομόνοιας', 'Η Ομόνοια νίκησε στο ποδόσφαιρο' ) >= 0.5, 'Greek titles match across accents and inflections' );
+assert_equals( 0.0, PressHub_Social_YouTube::topic_overlap( 'Καιρός', 'Ποδόσφαιρο' ), 'Unrelated titles do not match' );
+$groups = [
+    [ 'index' => 0, 'topic' => 'Νίκη της Ομόνοιας στο ποδόσφαιρο', 'urls' => [ 'https://img/a1.jpg', 'https://img/a2.jpg' ] ],
+    [ 'index' => 1, 'topic' => 'Ο προϋπολογισμός στη Βουλή', 'urls' => [ 'https://img/b1.jpg' ] ],
+    [ 'index' => 2, 'topic' => 'Τουρισμός', 'urls' => [ 'https://img/c1.jpg' ] ],
+];
+$scenes = PressHub_Social_YouTube::episode_scenes( $tl['topics'], $groups, 56.05 );
+assert_equals( [ 0.0, 20.15, 33.45 ], array_column( $scenes, 'start' ), 'Scenes cover the audio from 0, one per topic' );
+assert_equals( 56.05, $scenes[2]['end'], 'The last scene lasts to the end' );
+assert_equals( [ 'https://img/b1.jpg' ], $scenes[0]['images'], 'A topic gets the images of the short about it' );
+assert_equals( [ 'https://img/a1.jpg', 'https://img/a2.jpg' ], $scenes[2]['images'], 'The football topic gets the football short' );
+assert_equals( [ 'https://img/c1.jpg' ], $scenes[1]['images'], 'A topic no short matches gets a short left over' );
+$one = PressHub_Social_YouTube::episode_scenes( [], $groups, 30.0 );
+assert_true( 1 === count( $one ) && 4 === count( $one[0]['images'] ), 'Without topics one scene has every image' );
+
+$desc = PressHub_Social_YouTube::with_chapters( str_repeat( 'α', 3000 ), "0:00 Α\n1:00 Β\n2:00 Γ" );
+assert_true( strlen( $desc ) <= PressHub_Social_YouTube::DESCRIPTION_MAX_BYTES && str_ends_with( $desc, "2:00 Γ" ), 'Chapters are kept at the end of a long description' );
+$desc2 = PressHub_Social_YouTube::with_chapters( str_repeat( 'α', 3000 ) . "\n\n#κύπρος #ειδήσεις\n\nhttps://example.com/?p=1", "0:00 Α\n1:00 Β\n2:00 Γ" );
+assert_true( strlen( $desc2 ) <= PressHub_Social_YouTube::DESCRIPTION_MAX_BYTES && str_ends_with( $desc2, "2:00 Γ\n\n#κύπρος #ειδήσεις\n\nhttps://example.com/?p=1" ), 'The link and hashtags stay whole after the chapters' );
+
+// The episode waits for the shorts' images, then is uploaded with them.
+$ep_id  = (int) $yt_eps[0]['id'];
+$sh_id  = PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'tiktok', 'engine' => 'automation', 'post_copy' => 'x', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ), 'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 2 ] ] ] );
+$ep_job = PressHub_Social_Queue::get_job( $ep_id );
+$ep_job['metadata'] = [ 'youtube_episode' => [ 'queued_at' => gmdate( 'c' ) ] ];
+assert_false( PressHub_Social_YouTube::episode_ready( $ep_job ), 'An episode waits while a short has no images yet' );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job, time() + 90 * 60 + 1 ), 'After the wait the episode goes without them' );
+assert_true( null !== PressHub_Social_YouTube::episode_hold( $ep_job ) && 300 === PressHub_Social_YouTube::episode_hold( $ep_job )['delay'], 'A held episode is checked again in 5 minutes' );
+update_option( 'presshub_social_youtube_episode_image_wait_minutes', 0 );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'Wait for Story Images 0 does not wait' );
+assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_youtube_episode_image_wait_minutes( null ), 'A save from another section keeps Wait for Story Images' );
+assert_equals( 240, PressHub_Social_Settings_Storage::sanitize_youtube_episode_image_wait_minutes( 999 ), 'Wait for Story Images is at most 240 minutes' );
+delete_option( 'presshub_social_youtube_episode_image_wait_minutes' );
+update_option( 'presshub_social_youtube_episode_enhanced', false );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'With enhanced episodes off nothing waits for images' );
+delete_option( 'presshub_social_youtube_episode_enhanced' );
+assert_true( PressHub_Social_YouTube::episode_ready( [ 'platform' => 'youtube', 'tiktok_short' => [] ] ), 'A short is never held for images' );
+PressHub_Social_Queue::update_job( (int) $sh_id, [ 'metadata' => wp_json_encode( [ 'tiktok_short' => [ 'index' => 0, 'count' => 2, 'topic' => 'Νίκη της Ομόνοιας στο ποδόσφαιρο', 'images' => [ [ 'url' => 'https://img/a1.jpg' ], [ 'url' => 'https://img/a2.jpg' ] ] ] ] ) ] );
+PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'youtube', 'engine' => 'automation', 'post_copy' => 'x', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ), 'metadata' => [ 'tiktok_short' => [ 'index' => 0, 'count' => 2, 'topic' => 'Νίκη', 'images' => [ [ 'url' => 'https://img/a1.jpg' ] ] ] ] ] );
+assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'Once the shorts have their images the episode is ready' );
+assert_equals( [ [ 'index' => 0, 'topic' => 'Νίκη της Ομόνοιας στο ποδόσφαιρο', 'urls' => [ 'https://img/a1.jpg', 'https://img/a2.jpg' ] ] ], PressHub_Social_YouTube::short_image_groups( 880 ), 'Each short is taken once across platforms, from the job with the most images' );
+
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, $tl );
+$ep_up = PressHub_Social_YouTube::attach_upload( array_merge( $ep_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.wav', 'post_copy' => 'Η ενημέρωση της ημέρας.' ] ) );
+$ev    = $ep_up['youtube']['episode_video'] ?? [];
+assert_equals( 56.05, $ev['duration'] ?? 0, 'The episode carries the timeline length' );
+assert_equals( count( $tl['segments'] ), count( $ev['segments'] ?? [] ), 'The episode carries every spoken turn for the captions' );
+assert_equals( [ 'https://img/a1.jpg', 'https://img/a2.jpg' ], $ev['scenes'][2]['images'] ?? [], 'The football scene shows the football short\'s images' );
+assert_true( str_contains( $ep_up['youtube']['description'] ?? '', "0:00 Η Βουλή ψηφίζει τον προϋπολογισμό\n0:20 Καιρός" ), 'The description lists the chapters' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, array_merge( $tl, [ 'estimated' => true ] ) );
+$ep_est = PressHub_Social_YouTube::attach_upload( array_merge( $ep_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3', 'post_copy' => 'Η ενημέρωση.' ] ) );
+assert_false( str_contains( $ep_est['youtube']['description'] ?? '', '0:00' ), 'An estimated timeline gives no chapters' );
+assert_true( ! empty( $ep_est['youtube']['episode_video']['estimated'] ), 'The worker is told the timeline is estimated' );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
+PressHub_Social_Queue::cancel_job( (int) $sh_id );
+$ep_plain = PressHub_Social_YouTube::attach_upload( array_merge( $ep_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( isset( $ep_plain['youtube']['episode_video']['images'] ) && ! isset( $ep_plain['youtube']['episode_video']['segments'] ), 'Without a timeline the episode still gets the story images, without captions' );
+assert_equals( '', PressHub_AI_Podcast_Timeline::error( 880 ), 'A podcast without a timeline error is taken for one made before 2.54.0' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, 'disk full' );
+assert_equals( 'disk full', PressHub_AI_Podcast_Timeline::error( 880 ), 'A timeline that could not be saved is marked on the podcast' );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::ERROR_META_KEY );
+
+// An episode over 15 minutes waits while the channel may not upload long videos.
+$GLOBALS['yt_long_status'] = 'eligible';
+$GLOBALS['yt_long_calls']  = 0;
+PressHub_Social_YouTube::forget_access_token();
+update_post_meta( 880, '_presshub_audio_duration_sec', 600 );
+assert_true( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'A 10-minute episode may always be uploaded' );
+update_post_meta( 880, '_presshub_audio_duration_sec', 899 );
+assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'An episode just under 15 minutes counts the silence added at the end' );
+PressHub_Social_YouTube::forget_access_token();
+$GLOBALS['yt_long_calls'] = 0;
+assert_equals( 0, $GLOBALS['yt_long_calls'], 'A short episode needs no channel check' );
+update_post_meta( 880, '_presshub_audio_duration_sec', 1100 );
+assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'An 18-minute episode waits while the channel is not verified' );
+assert_false( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'It keeps waiting' );
+assert_equals( 1, $GLOBALS['yt_long_calls'], 'The channel status is read once and cached' );
+$held_before = PressHub_Social_Queue::get_job( $ep_id );
+PressHub_Social_Queue::update_job( $ep_id, [ 'status' => 'pending', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ), 'metadata' => wp_json_encode( $ep_job['metadata'] ) ] );
+delete_transient( 'presshub_social_youtube_long_note_' . $ep_id );
+$held_claim = PressHub_Social_REST_Controller::handle_claim( $req_yt );
+$held_after = PressHub_Social_Queue::get_job( $ep_id );
+assert_false( in_array( $ep_id, array_map( fn( $j ) => (int) $j['id'], $held_claim['jobs'] ?? [] ), true ), 'The claim does not hand out the long episode' );
+assert_equals( 'pending', $held_after['status'], 'The held episode stays pending' );
+assert_equals( (int) ( $held_before['attempts'] ?? 0 ), (int) ( $held_after['attempts'] ?? 0 ), 'Holding the episode uses no attempt' );
+assert_true( str_contains( (string) $held_after['last_error'], 'over 15 minutes' ), 'The Queue screen says why the episode waits' );
+assert_true( strtotime( $held_after['scheduled_at'] . ' UTC' ) > time() + 3000, 'The held episode is moved an hour later in the queue' );
+// An MP3 estimate shorter than the real audio does not let a long episode through.
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, array_merge( $tl, [ 'estimated' => true, 'duration' => 800.0 ] ) );
+assert_equals( 1100.0, PressHub_Social_YouTube::episode_seconds( 880 ), 'An estimated timeline counts the stored audio length when that is longer' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, array_merge( $tl, [ 'duration' => 800.0 ] ) );
+assert_equals( 800.0, PressHub_Social_YouTube::episode_seconds( 880 ), 'A measured timeline is taken as it is' );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
+$GLOBALS['yt_long_status'] = 'allowed';
+PressHub_Social_YouTube::forget_access_token();
+assert_true( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'Once long uploads are allowed the episode goes' );
+PressHub_Social_Queue::update_job( $ep_id, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+$freed_claim = PressHub_Social_REST_Controller::handle_claim( $req_yt );
+assert_true( in_array( $ep_id, array_map( fn( $j ) => (int) $j['id'], $freed_claim['jobs'] ?? [] ), true ), 'The episode is handed out once it may go up' );
+assert_equals( '', (string) PressHub_Social_Queue::get_job( $ep_id )['last_error'], 'The "Waiting" note is cleared when the episode is handed out' );
+assert_true( PressHub_Social_YouTube::episode_length_ok( [ 'platform' => 'youtube', 'post_id' => 880, 'tiktok_short' => [] ] ), 'A short is never held for length' );
+delete_post_meta( 880, '_presshub_audio_duration_sec' );
+PressHub_Social_YouTube::forget_access_token();
+
+// English and Turkish episodes: queued once voiced and published, uploaded with their own
+// audio, title, captions and playlist, the images following the Greek topics.
+update_option( 'presshub_ai_briefing_podcast_languages', [ 'en', 'tr' ] );
+update_option( 'presshub_social_youtube_podcast_language_playlists', [ 'en' => 'https://www.youtube.com/playlist?list=PLenglishplaylist1', 'tr' => 'not a playlist!' ] );
+assert_equals( 'PLenglishplaylist1', PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( 'en' ), 'A pasted playlist link gives the language its playlist ID' );
+assert_equals( '', PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( 'tr' ), 'A bad playlist ID is dropped' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, $tl );
+$tl_en = PressHub_AI_Podcast_Timeline::build( [
+    [ 'title' => 'Parliament passes the budget', 'turns' => [ [ 'speaker' => 'female', 'text' => 'Good morning.', 'seconds' => 8.0 ], [ 'speaker' => 'male', 'text' => 'Good morning.', 'seconds' => 4.0 ] ] ],
+    [ 'title' => 'Weather', 'turns' => [ [ 'speaker' => 'male', 'text' => 'Rain.', 'seconds' => 11.0 ] ] ],
+    [ 'title' => 'Football: Omonia wins', 'turns' => [ [ 'speaker' => 'female', 'text' => 'The end.', 'seconds' => 18.0 ] ] ],
+], [ 'turn_pause_ms' => 250, 'topic_pause_ms' => 600, 'host_count' => 2 ] );
+$tr_entry = [ 'status' => 'translated', 'title' => 'PressHub Morning Briefing: the budget', 'description' => 'The House passes the budget. #Cyprus', 'script' => 'x' ];
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => $tr_entry ] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is not queued before it is voiced' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => array_merge( $tr_entry, [ 'status' => 'voiced', 'audio_url' => 'https://example.com/uploads/podcast-880-en.wav', 'timeline' => $tl_en, 'duration_sec' => $tl_en['duration'] ] ) ] );
+$GLOBALS['POSTS_STORE'][880]['post_status'] = 'pending';
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language waits while the Greek post is held' );
+$GLOBALS['POSTS_STORE'][880]['post_status'] = 'publish';
+$yt_was = get_option( 'presshub_social_enabled_youtube', null );
+update_option( 'presshub_social_enabled_youtube', 0 );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while YouTube is off under Where to post' );
+null === $yt_was ? delete_option( 'presshub_social_enabled_youtube' ) : update_option( 'presshub_social_enabled_youtube', $yt_was );
+update_post_meta( 880, '_presshub_social_platforms', [ 'facebook' ] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued when YouTube is not ticked on the post' );
+update_post_meta( 880, '_presshub_social_platforms', [ 'facebook', 'youtube' ] );
+assert_true( PressHub_AI_Podcast_Translations::youtube_allowed( 880 ), 'YouTube ticked on the post lets the languages go' );
+delete_post_meta( 880, '_presshub_social_platforms' );
+$greek_eps = array_values( array_filter( PressHub_Social_Queue::get_jobs_for_post( 880 ), static fn( $j ) => PressHub_Social_YouTube::is_episode_job( $j ) && 'cancelled' !== ( $j['status'] ?? '' ) ) );
+$greek_st  = array_map( static fn( $j ) => [ (int) $j['id'], (string) $j['status'] ], $greek_eps );
+foreach ( $greek_st as [ $gid ] ) {
+    PressHub_Social_Queue::update_job( $gid, [ 'status' => 'cancelled' ] );
+}
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while its Greek episode is not (auto-publish off, for example)' );
+foreach ( $greek_st as [ $gid, $gst ] ) {
+    PressHub_Social_Queue::update_job( $gid, [ 'status' => $gst ] );
+}
+assert_true( count( $greek_st ) > 0 && PressHub_AI_Podcast_Translations::greek_episode_queued( 880 ), 'The Greek episode is queued again' );
+$en_id = PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' );
+assert_true( $en_id > 0, 'A voiced language of a published podcast gets its YouTube episode' );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'Each language is queued once' );
+assert_equals( [], PressHub_AI_Podcast_Translations::enqueue_ready( 880 ), 'Queueing the ready languages again adds nothing (Turkish is not voiced)' );
+$en_job = PressHub_Social_Queue::get_job( $en_id );
+assert_true( PressHub_Social_YouTube::is_episode_job( $en_job ) && 'en' === PressHub_Social_YouTube::episode_language( $en_job ), 'The job is the English episode' );
+assert_equals( '', PressHub_Social_YouTube::episode_language( $ep_job ), 'The Greek episode has no language of its own' );
+assert_equals( 'Youtube (EN)', PressHub_Social_YouTube::platform_label( $en_job ), 'The Queue shows the English episode as YouTube (EN)' );
+assert_equals( 'Youtube', PressHub_Social_YouTube::platform_label( $ep_job ), 'The Greek episode is plain YouTube' );
+// A translation made again after queueing: the job waits for the new audio, then takes the new description.
+$en_entry = PressHub_AI_Podcast_Translations::get_entry( 880, 'en' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => array_merge( $en_entry, [ 'status' => 'translated' ] ) ] ) );
+$held = PressHub_Social_YouTube::episode_hold( $en_job );
+assert_true( is_array( $held ) && str_contains( (string) ( $held['note'] ?? '' ), 'voiced again' ), 'An English episode waits while its new translation is voiced' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => array_merge( $en_entry, [ 'description' => 'New English description. #Cyprus' ] ) ] ) );
+$fresh = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( str_starts_with( (string) ( $fresh['youtube']['description'] ?? '' ), 'New English description.' ), 'An unedited English job takes the new translation\'s description' );
+$edited = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'post_copy' => 'Hand-written English copy', 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( str_starts_with( (string) ( $edited['youtube']['description'] ?? '' ), 'Hand-written English copy' ), 'Copy edited by hand on the Queue is kept' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => $en_entry ] ) );
+
+PressHub_Social_Queue::update_job_copy( $en_id, 'Edited by hand' );
+$_REQUEST['nonce'] = 'valid_nonce';
+$nonce_was         = $GLOBALS['NONCE_VALID'] ?? null;
+$GLOBALS['NONCE_VALID'] = true;
+$_POST['job_id']   = $en_id;
+$caps_was          = $GLOBALS['test_user_caps'] ?? [];
+$GLOBALS['test_user_caps'][ PressHub_Capabilities::social() ] = true;
+$GLOBALS['JSON_RESPONSES'] = [];
+try {
+    PressHub_Social_Ajax_Handlers::handle_regenerate_job_copy();
+} catch ( RuntimeException $e ) {
+    // wp_send_json_* stops here.
+}
+$regen = end( $GLOBALS['JSON_RESPONSES'] ) ?: [];
+assert_true( ! empty( $regen['success'] ) && 'The House passes the budget. #Cyprus' === ( $regen['data']['new_copy'] ?? '' ), 'Regen AI on the English episode restores its translated description' );
+assert_equals( 'The House passes the budget. #Cyprus', PressHub_Social_Queue::get_job( $en_id )['post_copy'] ?? '', 'The English job has its description back' );
+$GLOBALS['test_user_caps'] = $caps_was;
+$GLOBALS['NONCE_VALID']    = $nonce_was;
+unset( $_REQUEST['nonce'], $_POST['job_id'] );
+assert_equals( 'The House passes the budget. #Cyprus', $en_job['post_copy'], 'The English description is the translation\'s' );
+assert_true( abs( PressHub_AI_Podcast_Translations::duration( 880, 'en' ) - $tl_en['duration'] ) < 0.001, 'The English episode\'s length is its own audio\'s' );
+
+$budget_short = PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'youtube', 'engine' => 'automation', 'post_copy' => 'x', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ), 'metadata' => [ 'tiktok_short' => [ 'index' => 1, 'count' => 2, 'topic' => 'Ο προϋπολογισμός στη Βουλή', 'images' => [ [ 'url' => 'https://img/b1.jpg' ] ] ] ] ] );
+$en_up = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3', 'post_url' => 'https://example.com/?p=880' ] ) );
+$en_yt = $en_up['youtube'] ?? [];
+$en_ev = $en_yt['episode_video'] ?? [];
+$el_ev = PressHub_Social_YouTube::episode_video( 880 );
+assert_equals( 'https://example.com/uploads/podcast-880-en.wav', $en_up['audio_url'] ?? '', 'The English episode uploads the English audio' );
+assert_equals( 'PressHub Morning Briefing: the budget', $en_yt['title'] ?? '', 'The English episode has the English title' );
+assert_equals( 'en', ( $en_yt['default_language'] ?? '' ) . '', 'The English episode is marked English' );
+assert_equals( 'en', $en_yt['default_audio_language'] ?? '', 'Its audio is marked English' );
+assert_equals( 'PLenglishplaylist1', $en_yt['playlist_id'] ?? '', 'The English episode goes to the English playlist' );
+assert_equals( 'PressHub Morning Briefing: the budget', $en_ev['title'] ?? '', 'The video shows the English title' );
+assert_true( str_starts_with( (string) ( $en_ev['end_card_line'] ?? '' ), 'Full stories and sources at ' ), 'The video ends on an English line' );
+assert_equals( count( $tl_en['segments'] ), count( $en_ev['segments'] ?? [] ), 'The English captions are the English turns' );
+assert_equals( 'Good morning.', $en_ev['segments'][0]['text'] ?? '', 'The captions are in English' );
+assert_equals( array_column( $el_ev['scenes'], 'images' ), array_column( $en_ev['scenes'] ?? [], 'images' ), 'Each English topic shows the images of the same Greek topic' );
+assert_equals( $tl_en['topics'][1]['start'], $en_ev['scenes'][1]['start'] ?? null, 'The English scenes follow the English timing' );
+assert_equals( [ 'https://img/b1.jpg' ], $en_ev['scenes'][0]['images'] ?? [], 'The English budget topic shows the budget short, matched through the Greek topic' );
+assert_true( in_array( 'https://img/a1.jpg', $en_ev['scenes'][2]['images'] ?? [], true ) && ! in_array( 'https://img/b1.jpg', $en_ev['scenes'][2]['images'] ?? [], true ), 'The English football topic shows the football short' );
+assert_true( str_contains( $en_yt['description'] ?? '', "0:00 Parliament passes the budget\n0:" ) && ! str_contains( $en_yt['description'] ?? '', 'Καιρός' ), 'The English description lists English chapters' );
+
+$tr_job = PressHub_Social_YouTube::episode_job( 880, 'Açıklama', null, null, gmdate( 'Y-m-d H:i:s' ), null, 'tr' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'translated', 'audio_url' => 'https://example.com/uploads/podcast-880-tr-old.wav', 'title' => 'Yeni başlık' ] ] ) );
+$tr_stale = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_stale ) ? $tr_stale->get_error_code() : '', 'A language translated again but not voiced yet never uploads its old audio' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_diff_key( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => 1 ] ) );
+$tr_up  = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_up ) ? $tr_up->get_error_code() : '', 'A language without its own audio never uploads the Greek audio' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'voiced', 'audio_url' => 'https://example.com/uploads/podcast-880-tr.wav', 'title' => '' ] ] ) );
+$tr_up2 = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_title', is_wp_error( $tr_up2 ) ? $tr_up2->get_error_code() : '', 'A language without its own title never takes the Greek title' );
+
+PressHub_Social_Queue::cancel_job( (int) $budget_short );
+PressHub_Social_Queue::cancel_job( $en_id );
+assert_equals( 1, count( PressHub_AI_Podcast_Translations::enqueue_ready( 880 ) ), 'A cancelled language episode can be queued again' );
+update_option( 'presshub_ai_briefing_podcast_languages', [] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'tr' ), 'A language that is off is never queued' );
+foreach ( PressHub_Social_Queue::get_jobs_for_post( 880 ) as $pj ) {
+    if ( '' !== PressHub_Social_YouTube::episode_language( $pj ) ) {
+        PressHub_Social_Queue::cancel_job( (int) $pj['id'] );
+    }
+}
+delete_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
+delete_option( 'presshub_social_youtube_podcast_language_playlists' );
+
+// A revoked sign-in fails loudly and shows on Connections.
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, 'REVOKED' );
+PressHub_Social_YouTube::forget_access_token();
+$revoked = PressHub_Social_YouTube::access_token();
+assert_equals( 'youtube_invalid_grant', is_wp_error( $revoked ) ? $revoked->get_error_code() : '', 'A revoked sign-in is an invalid_grant error' );
+assert_true( empty( PressHub_Connection_Status::get( 'social:youtube' )['ok'] ), 'A revoked sign-in shows YouTube as not working' );
+
+assert_false( PressHub_Social_YouTube::is_connected(), 'After Google refuses the sign-in YouTube no longer counts as connected' );
+assert_true( '' !== PressHub_Social_YouTube::reconnect_reason(), 'The refusal is kept so Connections can say why' );
+assert_equals( 'youtube_not_connected', ( fn( $t ) => is_wp_error( $t ) ? $t->get_error_code() : '' )( PressHub_Social_YouTube::access_token() ), 'No new refresh is tried until Connect YouTube again' );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'After a refused sign-in no YouTube job is handed out' );
+assert_true( PressHub_Social_YouTube::is_set_up(), 'A refused sign-in is still set up (client and refresh token stored)' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_configured( 'youtube' ), 'While Google refuses the sign-in, new posts are still queued for YouTube and wait' );
+$tok_route = PressHub_Social_REST_Controller::handle_youtube_token( new WP_REST_Request( 'POST', '/worker/youtube/token' ) );
+assert_true( is_wp_error( $tok_route ) && 409 === ( $tok_route->get_error_data()['status'] ?? 0 ) && 'youtube_not_connected' === $tok_route->get_error_code(), 'The token route answers 409 with the reason' );
+assert_false( str_contains( wp_json_encode( $tok_route->get_error_message() ), 'REVOKED' ), 'The token route error carries no token' );
+
+// A sign-in that cannot read a channel stores nothing and keeps the earlier state.
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//OLD' );
+delete_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION );
+update_option( PressHub_Social_YouTube::CHANNEL_OPTION, [ 'id' => 'UCOLD', 'title' => 'Old channel' ] );
+$yt_no_channel = true;
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE4', 7, 900 );
+$nochan = PressHub_Social_YouTube::complete_sign_in( 'STATE4', 'CODE', '', 7 );
+$yt_no_channel = false;
+assert_equals( 'youtube_no_channel', is_wp_error( $nochan ) ? $nochan->get_error_code() : '', 'A Google account without a channel fails the sign-in' );
+assert_equals( '1//OLD', PressHub_Social_YouTube::get_refresh_token(), 'A failed sign-in does not replace the stored sign-in' );
+assert_equals( 'UCOLD', PressHub_Social_YouTube::channel()['id'] ?? '', 'A failed sign-in keeps the stored channel' );
+
+// A sign-in clears an earlier refusal.
+update_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION, 'refused' );
+set_transient( PressHub_Social_YouTube::STATE_TRANSIENT_PREFIX . 'STATE5', 7, 900 );
+PressHub_Social_YouTube::complete_sign_in( 'STATE5', 'CODE', '', 7 );
+assert_true( PressHub_Social_YouTube::is_connected() && '' === PressHub_Social_YouTube::reconnect_reason(), 'Connect YouTube again clears the refusal' );
+
+// The test button checks the podcast playlist.
+update_option( 'presshub_social_youtube_podcast_enabled', true );
+$yt_test = PressHub_Social_YouTube::test_connection();
+assert_true( ! is_wp_error( $yt_test ) && str_contains( $yt_test['message'], 'Daily Briefing' ), 'Test names the podcast playlist' );
+update_option( 'presshub_social_youtube_podcast_playlist_id', 'PLmissingplaylist1' );
+$yt_test = PressHub_Social_YouTube::test_connection();
+assert_equals( 'youtube_playlist_missing', is_wp_error( $yt_test ) ? $yt_test->get_error_code() : '', 'Test fails on a playlist that does not exist' );
+update_option( 'presshub_social_youtube_podcast_playlist_id', 'PLpodcastplaylist01' );
+
+// Quota and sign-in refusals reported by the worker hold the job and pause YouTube.
+$q_id = (int) $yt_eps[0]['id'];
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_c = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_c->set_param( 'job_id', $q_id );
+$req_c->set_param( 'status', 'failed' );
+$req_c->set_param( 'error', 'YouTube upload limit reached for today (quotaExceeded)' );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'quota' ] );
+$done = PressHub_Social_REST_Controller::handle_complete( $req_c );
+$q_job = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'deferred', $done['status'] ?? '', 'A quota refusal is not a failure' );
+assert_equals( 'pending', $q_job['status'], 'The job waits for the quota reset' );
+assert_true( strtotime( $q_job['scheduled_at'] . ' UTC' ) >= PressHub_Social_YouTube::paused_until() - 5, 'The job is due after the quota reset' );
+assert_true( PressHub_Social_YouTube::paused_until() > time(), 'YouTube is paused until the reset' );
+PressHub_Social_Queue::update_job( $q_id, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+assert_equals( 0, count( PressHub_Social_REST_Controller::handle_claim( $req_yt )['jobs'] ), 'While paused no YouTube job is handed out' );
+$reset = PressHub_Social_YouTube::next_quota_reset( strtotime( '2026-11-18 20:00:00 UTC' ) );
+assert_equals( '2026-11-19 08:05', gmdate( 'Y-m-d H:i', $reset ), 'The quota resets at midnight Pacific Time' );
+delete_option( PressHub_Social_YouTube::PAUSED_UNTIL_OPTION );
+
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'auth' ] );
+$req_c->set_param( 'error', 'Invalid Credentials' );
+PressHub_Social_REST_Controller::handle_complete( $req_c );
+assert_equals( 'pending', PressHub_Social_Queue::get_job( $q_id )['status'], 'A refused sign-in also holds the job' );
+assert_false( PressHub_Social_YouTube::is_connected(), 'A refused sign-in reported by the worker stops YouTube uploads' );
+delete_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION );
+
+// A finished upload YouTube refused fails at once: the same video would be refused again.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing', 'attempts' => 1 ] );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'refused' ] );
+$req_c->set_param( 'error', 'YouTube refused the uploaded video V9 (rejected: length).' );
+$refused_done = PressHub_Social_REST_Controller::handle_complete( $req_c );
+$refused_job  = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'failed', $refused_job['status'], 'A refused upload is failed, not retried' );
+assert_equals( 'failed', $refused_done['status'] ?? '', 'The worker is told it failed' );
+assert_true( PressHub_Social_YouTube::is_connected(), 'A refused video does not stop YouTube uploads' );
+
+// A playlist error is kept and shown; Retry never re-uploads a published video.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
+$req_p = new WP_REST_Request( 'POST', '/worker/complete' );
+$req_p->set_param( 'job_id', $q_id );
+$req_p->set_param( 'status', 'published' );
+$req_p->set_param( 'external_post_id', 'VID1' );
+$req_p->set_param( 'external_post_url', 'https://www.youtube.com/watch?v=VID1' );
+$req_p->set_param( 'metadata', [ 'youtube_kind' => 'episode', 'youtube_playlist_error' => 'Playlist not found.', 'youtube_episode_note' => 'story images: none could be downloaded' ] );
+PressHub_Social_REST_Controller::handle_complete( $req_p );
+$pub = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'published', $pub['status'], 'An upload with a playlist error is published' );
+assert_equals( 'Playlist not found.', PressHub_Social_YouTube::playlist_error( $pub ), 'The playlist error stays on the job for the Queue screen' );
+assert_false( PressHub_Social_YouTube::can_retry( $pub ), 'Retry is not offered on a published YouTube video' );
+assert_false( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'processing', 'updated_at' => gmdate( 'Y-m-d H:i:s' ) ] ), 'A YouTube job that is uploading now cannot be retried' );
+assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'processing', 'updated_at' => gmdate( 'Y-m-d H:i:s', time() - 4 * 3600 ) ] ), 'A YouTube job stuck for hours can be retried' );
+assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'status' => 'failed' ] ), 'A failed YouTube job can be retried' );
+$repost_id = PressHub_Social_Queue::repost_as_new_job( $q_id );
+$repost    = is_int( $repost_id ) ? PressHub_Social_Queue::get_job( $repost_id ) : [];
+assert_equals( '', PressHub_Social_YouTube::playlist_error( (array) $repost ), 'A re-post does not inherit the earlier playlist error' );
+assert_equals( 'story images: none could be downloaded', PressHub_Social_YouTube::episode_note( $pub ), 'What the episode video lacked stays on the job for the Queue screen' );
+assert_equals( '', PressHub_Social_YouTube::episode_note( (array) $repost ), 'A re-post does not inherit the earlier episode note' );
+$repost_meta = json_decode( (string) ( $repost['metadata'] ?? '' ), true );
+$repost_q    = strtotime( (string) ( $repost_meta['youtube_episode']['queued_at'] ?? '' ) );
+assert_true( false !== $repost_q && $repost_q >= time() - 5, 'A re-posted episode waits for story images from now' );
+if ( is_int( $repost_id ) ) {
+    PressHub_Social_Queue::cancel_job( $repost_id );
+}
+update_option( PressHub_Social_YouTube::PAUSED_UNTIL_OPTION, time() + 3600 );
+PressHub_Social_YouTube::client_changed( 'a', 'b' );
+assert_equals( 0, PressHub_Social_YouTube::paused_until(), 'A new OAuth client is not held by the old project\'s quota pause' );
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+update_option( PressHub_Social_YouTube::CHANNEL_OPTION, [ 'id' => 'UC123', 'title' => 'PressHub Cyprus' ] );
+
+// Outside Pull mode a YouTube job fails at once.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'pending' ] );
+update_option( 'presshub_social_worker_mode', 'push' );
+$push = PressHub_Social_Dispatcher::dispatch_job( $q_id );
+assert_equals( 'youtube_needs_pull', is_wp_error( $push ) ? $push->get_error_code() : '', 'A YouTube job is never dispatched in Push mode' );
+update_option( 'presshub_social_worker_mode', 'pull' );
+
+// Text rules for YouTube.
+$yt_host = function_exists( 'home_url' ) && wp_parse_url( home_url(), PHP_URL_HOST ) ? preg_replace( '/^www\./i', '', (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) : 'presshub.cy';
+assert_equals( 'Ολόκληρο το άρθρο στο ' . $yt_host . '.', PressHub_Social_YouTube::youtube_cta( 'Ολόκληρο το άρθρο στο PressHub, λινκ στο bio.' ), 'TikTok\'s "link in bio" names the site on YouTube' );
+assert_equals( 'Ολόκληρη η ενημέρωση στο ' . $yt_host, PressHub_Social_YouTube::youtube_cta( 'Ολόκληρη η ενημέρωση: λινκ στο bio' ), 'The podcast short caption line too' );
+assert_equals( 'Ολόκληρο το άρθρο στο ' . $yt_host . '.', PressHub_Social_YouTube::youtube_cta( 'Ολόκληρο το άρθρο στο PressHub.cy, το λινκ στο bio.' ), '"στο PressHub.cy, το λινκ στο bio" names the site once' );
+assert_equals( 'Δείτε στο ' . $yt_host . ' τώρα', PressHub_Social_YouTube::youtube_cta( 'Δείτε τον σύνδεσμο στο βιογραφικό τώρα' ), '"σύνδεσμο στο βιογραφικό" too' );
+assert_equals( 'Η βιογραφία του', PressHub_Social_YouTube::youtube_cta( 'Η βιογραφία του' ), 'Other text is left alone' );
+assert_equals( 'Τιμές 3 5 ευρώ', PressHub_Social_YouTube::clean_title( 'Τιμές 3 < 5 ευρώ' ), 'A bare < does not cut the rest of the title' );
+assert_equals( [ 'κύπρος' ], PressHub_Social_YouTube::tags_from( 'Δείτε https://example.com/a#section και #κύπρος' ), 'A #anchor in a link is not a tag' );
+$yt_cta = PressHub_Social_YouTube::attach_upload( [ 'id' => 9, 'post_id' => 890, 'platform' => 'youtube', 'post_copy' => 'Λεζάντα. Ολόκληρη η ενημέρωση: λινκ στο bio #κύπρος', 'video_title' => 'H', 'post_url' => 'https://example.com/?p=890', 'tiktok_short' => [ 'index' => 0 ] ] );
+assert_false( str_contains( $yt_cta['youtube']['description'] ?? '', 'bio' ), 'A YouTube description never says "link in bio"' );
+
+// A new OAuth client drops the old sign-in.
+PressHub_Social_YouTube::client_changed( 'old-client.apps.googleusercontent.com', 'new-client.apps.googleusercontent.com' );
+assert_equals( '', PressHub_Social_YouTube::get_refresh_token(), 'A changed client ID forgets the sign-in' );
+assert_equals( [], PressHub_Social_YouTube::channel(), 'A changed client ID forgets the channel' );
+update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, '1//REFRESH' );
+PressHub_Social_YouTube::client_changed( 'same', 'same' );
+assert_equals( '1//REFRESH', PressHub_Social_YouTube::get_refresh_token(), 'Saving the same client keeps the sign-in' );
+
+// Disconnect forgets everything.
+PressHub_Social_YouTube::disconnect();
+assert_false( PressHub_Social_YouTube::is_connected(), 'Disconnect removes the sign-in' );
+assert_equals( [], PressHub_Social_YouTube::channel(), 'Disconnect removes the channel' );
+
+PressHub_Social_YouTube::set_http( null );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', false );
+delete_option( 'presshub_social_youtube_shorts_enabled' );
+delete_option( 'presshub_social_youtube_podcast_enabled' );
+delete_option( 'presshub_social_youtube_podcast_playlist_id' );
+delete_option( 'presshub_social_youtube_client_id' );
+delete_option( 'presshub_social_youtube_client_secret' );
+PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Λεζάντα άρθρου TikTok #κύπρος #αθλητισμός' );
 
 // Fallback: an article short that cannot be prepared is posted the classic way.
 update_post_meta( 890, PressHub_Social_TikTok_Shorts::PLAN_META, '' );

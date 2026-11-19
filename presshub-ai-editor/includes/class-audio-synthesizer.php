@@ -18,6 +18,7 @@ require_once __DIR__ . '/class-api-client.php';
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-podcast-producer.php';
 require_once __DIR__ . '/class-markdown.php';
+require_once __DIR__ . '/class-podcast-timeline.php';
 require_once __DIR__ . '/class-token-logger.php';
 
 class PressHub_AI_Audio_Synthesizer {
@@ -71,6 +72,62 @@ class PressHub_AI_Audio_Synthesizer {
      */
     public function set_live_call_deadline( float $deadline ): void {
         $this->live_call_deadline = max( 0.0, $deadline );
+    }
+
+    /**
+     * Set by synthesize_script_audio(): the run stops after stitching and returns the
+     * audio and its timeline instead of saving a file and a podcast post.
+     *
+     * @var array|null [ 'language' => English name of the language, 'voices' => overrides ]
+     */
+    private $audio_only = null;
+
+    /**
+     * Voices a script in another language (an English or Turkish translation of the
+     * Greek podcast) with the podcast's voice settings, and returns the stitched audio
+     * without saving anything: no snapshot file, no Media Library item, no post.
+     *
+     * The delivery style is the podcast's style with "Greek" replaced by $language, and
+     * $voices (presenter_1, presenter_2, presenter_3) replace the podcast's voices where
+     * they are not empty. Honors set_live_call_deadline(), so a long translation resumes
+     * from the turn cache like the Greek episode.
+     *
+     * @param string $script   Script with the same speaker and topic markers as the Greek one.
+     * @param string $date     Briefing date (Y-m-d), for the turn cache.
+     * @param string $edition  morning | noon, for the TTS call record.
+     * @param string $language English name of the language, e.g. "English", "Turkish".
+     * @param array  $voices   Optional voice overrides keyed presenter_1..presenter_3.
+     * @return array|WP_Error [ audio, ext, timeline_topics, timeline_opts, turns_count, topic_count, engine, voices ]
+     */
+    public function synthesize_script_audio( string $script, string $date, string $edition, string $language, array $voices = [], ?PressHub_AI_API_Client $api_client = null ) {
+        if ( '' === trim( $script ) ) {
+            return new WP_Error( 'empty_script', __( 'The translated podcast script is empty.', 'presshub-ai-editor' ) );
+        }
+        $this->audio_only = [ 'language' => $language, 'voices' => $voices ];
+        try {
+            return $this->synthesize_podcast_run( $date, $script, 'noon' === $edition ? 'noon' : 'morning', $api_client, 0 );
+        } finally {
+            $this->audio_only = null;
+            if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                PressHub_AI_TTS_Call_Recorder::end_session();
+            }
+        }
+    }
+
+    /**
+     * Delivery style text for another language: the style's instruction with "Greek"
+     * replaced by $language, or the custom instruction with the language added.
+     */
+    public function style_for_language( string $style, string $language ): string {
+        $styles = $this->get_available_styles();
+        $text   = ( isset( $styles[ $style ] ) && '' !== $styles[ $style ]['instruction'] ) ? $styles[ $style ]['instruction'] : $style;
+        if ( '' === trim( $text ) ) {
+            $text = $styles['formal']['instruction'];
+        }
+        if ( false !== stripos( $text, 'Greek' ) ) {
+            return str_ireplace( 'Greek', $language, $text );
+        }
+        return rtrim( $text, " \t\n:." ) . '. Speak in ' . $language . ':';
     }
 
     /**
@@ -232,8 +289,13 @@ class PressHub_AI_Audio_Synthesizer {
      *         carries `name`, `label`, `gender`, `type`, and (for
      *         manifest-loaded voices) `language`, `engine_version`.
      */
-    public function get_available_voices( string $engine = 'gemini' ): array {
+    public function get_available_voices( string $engine = 'gemini', string $language = '' ): array {
         $engine = '' === trim( $engine ) ? 'gemini' : trim( $engine );
+        // Google Cloud voices speak one language each: the Greek podcast's lists show the
+        // el-GR ones, an English or Turkish podcast's its own (`language` "en", "tr").
+        if ( '' === $language && 'google_cloud' === $engine ) {
+            $language = 'el';
+        }
 
         // Backward-compat shim: legacy callers pass 'gemini' to mean
         // the canonical Gemini 2.5 catalog. Map that to the new
@@ -252,7 +314,14 @@ class PressHub_AI_Audio_Synthesizer {
             return [ 'female' => [], 'male' => [] ];
         }
 
-        return $this->group_voices_by_gender( $engine_slice['voices'] ?? [] );
+        $voices = (array) ( $engine_slice['voices'] ?? [] );
+        if ( '' !== $language ) {
+            $prefix = strtolower( $language ) . '-';
+            $voices = array_filter( $voices, static function ( $v ) use ( $prefix ) {
+                return ! is_array( $v ) || ! isset( $v['language'] ) || str_starts_with( strtolower( (string) $v['language'] ), $prefix );
+            } );
+        }
+        return $this->group_voices_by_gender( $voices );
     }
 
     /**
@@ -1295,6 +1364,11 @@ class PressHub_AI_Audio_Synthesizer {
             $postarr['post_category'] = $post_category;
         }
 
+        // QA gate: a podcast set to publish is saved as pending and released
+        // by the gate once its tags, excerpt and image are in place.
+        require_once __DIR__ . '/class-publish-gate.php';
+        $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'podcast' );
+
         $post_id = wp_insert_post( $postarr, true );
 
         if ( is_wp_error( $post_id ) ) {
@@ -1355,6 +1429,10 @@ class PressHub_AI_Audio_Synthesizer {
         if ( class_exists( 'PressHub_AI_SEO' ) ) {
             PressHub_AI_SEO::auto_optimize_post( $post_id, $title, $transcript, 'podcast' );
         }
+
+        // QA gate on the show notes and the spoken script (editorial and
+        // legal) and the post (measured SEO checks), then the configured status.
+        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning' );
 
         return $post_id;
     }
@@ -1467,6 +1545,11 @@ class PressHub_AI_Audio_Synthesizer {
                 }
             }
         }
+
+        // QA gate on the new script: a held podcast is released when it now
+        // passes, and a live one that now fails goes back to Pending Review.
+        require_once __DIR__ . '/class-publish-gate.php';
+        PressHub_AI_Publish_Gate::release( $post_id, 'podcast', 'noon' === $edition ? 'podcast_noon' : 'podcast_morning' );
 
         return $post_id;
     }
@@ -1592,6 +1675,9 @@ class PressHub_AI_Audio_Synthesizer {
         $result         = null;
         try {
             $result = $this->synthesize_podcast_run( $date, $custom_script, $edition_or_client, $api_client, $existing_post_id );
+            if ( is_array( $result ) && ! empty( $result['success'] ) && ! empty( $result['post_id'] ) ) {
+                self::start_languages( $result );
+            }
             return $result;
         } catch ( \Throwable $e ) {
             // Keep the exception's message for the audio card, then let it through.
@@ -1602,6 +1688,25 @@ class PressHub_AI_Audio_Synthesizer {
                 PressHub_AI_TTS_Call_Recorder::end_session();
             }
             self::log_audio_run( $result, $date, $custom_script, $edition_or_client, $run_started, $run_started_at );
+        }
+    }
+
+    /**
+     * Starts the English and Turkish versions (those turned on) of a Greek podcast just
+     * voiced, by any path: the cron step, the watchdog retry, the Hub's re-run or a
+     * corrected script. A language whose Greek script did not change keeps its
+     * translation. A problem here never counts as a failed Greek synthesis.
+     */
+    private static function start_languages( array $result ): void {
+        if ( ! class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+            return;
+        }
+        try {
+            PressHub_AI_Podcast_Translations::start( (string) ( $result['date'] ?? '' ), 'noon' === ( $result['edition'] ?? '' ) ? 'noon' : 'morning', (int) $result['post_id'] );
+        } catch ( \Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast languages could not start: ' . $t->getMessage(), [ 'date' => (string) ( $result['date'] ?? '' ), 'edition' => (string) ( $result['edition'] ?? '' ) ] );
+            }
         }
     }
 
@@ -1727,8 +1832,14 @@ class PressHub_AI_Audio_Synthesizer {
         // Issue #140 - every TTS call below is appended to the podcast_script record that
         // produced this script (tts_calls_json). Without one, the calls go to a tts_test record.
         if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
-            $tts_parent_id = (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
-            PressHub_AI_TTS_Call_Recorder::begin_session( $tts_parent_id, [ 'origin' => 'podcast_synthesis', 'date' => $date, 'edition' => $edition ] );
+            // A translation's calls go to a record of their own (a tts_test record carrying
+            // the origin and language), never over the Greek podcast's calls.
+            $tts_parent_id = null !== $this->audio_only ? 0 : (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
+            $tts_context   = [ 'origin' => null !== $this->audio_only ? 'podcast_translation' : 'podcast_synthesis', 'date' => $date, 'edition' => $edition ];
+            if ( null !== $this->audio_only ) {
+                $tts_context['language'] = (string) $this->audio_only['language'];
+            }
+            PressHub_AI_TTS_Call_Recorder::begin_session( $tts_parent_id, $tts_context );
         }
 
         $engine         = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : (string) get_option( self::OPTION_ENGINE, 'gemini' );
@@ -1738,6 +1849,12 @@ class PressHub_AI_Audio_Synthesizer {
         $presenter_1_voice = $this->get_voice_for_speaker( 'presenter_1' );
         $presenter_2_voice = $this->get_voice_for_speaker( 'presenter_2' );
         $presenter_3_voice = $this->get_voice_for_speaker( 'presenter_3' );
+        if ( null !== $this->audio_only ) {
+            $overrides         = (array) $this->audio_only['voices'];
+            $presenter_1_voice = '' !== trim( (string) ( $overrides['presenter_1'] ?? '' ) ) ? trim( (string) $overrides['presenter_1'] ) : $presenter_1_voice;
+            $presenter_2_voice = '' !== trim( (string) ( $overrides['presenter_2'] ?? '' ) ) ? trim( (string) $overrides['presenter_2'] ) : $presenter_2_voice;
+            $presenter_3_voice = '' !== trim( (string) ( $overrides['presenter_3'] ?? '' ) ) ? trim( (string) $overrides['presenter_3'] ) : $presenter_3_voice;
+        }
         $female_voice      = $presenter_1_voice;
         $male_voice        = $presenter_2_voice;
         $tertiary_voice    = $presenter_3_voice;
@@ -1747,6 +1864,9 @@ class PressHub_AI_Audio_Synthesizer {
         $style_key      = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_style() : (string) get_option( self::OPTION_STYLE, 'formal' );
         $custom_style   = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_custom_style() : (string) get_option( self::OPTION_CUSTOM_STYLE, '' );
         $used_style     = ( 'custom' === $style_key && ! empty( $custom_style ) ) ? $custom_style : $style_key;
+        if ( null !== $this->audio_only ) {
+            $used_style = $this->style_for_language( $used_style, (string) $this->audio_only['language'] );
+        }
 
         $turn_pause_ms    = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_turn_pause_ms() : 250;
         $topic_pause_ms   = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_topic_pause_ms() : 600;
@@ -1785,6 +1905,11 @@ class PressHub_AI_Audio_Synthesizer {
         };
 
         // 1. Topic-Based Audio Synthesis (Splits generation by topic to eliminate neural voice drift)
+        // Turn lengths for the episode's caption timeline (PressHub_AI_Podcast_Timeline).
+        $timeline_topics = [];
+        $timeline_opts   = [];
+        $timeline_mp3    = ( 'google_cloud' === $engine );
+
         if ( $split_by_topic ) {
             $topics = $producer->parse_script_topics( $script, $female_host, $male_host, $tertiary_host );
 
@@ -1857,6 +1982,7 @@ class PressHub_AI_Audio_Synthesizer {
 
                     // Unified Turn-by-Turn Synthesis for ALL host counts (1, 2, and 3 hosts)
                     $chunk_wavs = [];
+                    $tl_turns   = [];
                     foreach ( $topic_turns as $turn_idx => $t ) {
                         $t_voice  = $resolve_turn_voice( (string) ( $t['speaker'] ?? '' ) );
                         $turn_res = $this->synthesize_turn( $t['text'], $t_voice, $speed, $pitch, $api_client, $used_style, $date );
@@ -1864,6 +1990,11 @@ class PressHub_AI_Audio_Synthesizer {
                             return $turn_res;
                         }
                         $chunk_wavs[] = $turn_res;
+                        $tl_turns[]   = [
+                            'speaker' => (string) ( $t['speaker'] ?? '' ),
+                            'text'    => (string) ( $t['text'] ?? '' ),
+                            'seconds' => PressHub_AI_Podcast_Timeline::turn_seconds( (string) $turn_res, (string) ( $t['text'] ?? '' ), $timeline_mp3 ),
+                        ];
 
                         // Throttle between turns if live call was made and not in unit tests
                         if ( ! $this->last_turn_was_cache_hit && $request_delay_ms > 0 && ! $is_test_env && ( $turn_idx + 1 < count( $topic_turns ) ) ) {
@@ -1881,7 +2012,8 @@ class PressHub_AI_Audio_Synthesizer {
                         return $topic_audio;
                     }
 
-                    $topic_wavs[] = $topic_audio;
+                    $topic_wavs[]      = $topic_audio;
+                    $timeline_topics[] = [ 'title' => (string) ( $topic['title'] ?? '' ), 'turns' => $tl_turns ];
                 }
 
                 if ( ! empty( $topic_wavs ) ) {
@@ -1892,6 +2024,17 @@ class PressHub_AI_Audio_Synthesizer {
                     $intro_pcm = $this->get_sfx_pcm( $intro_sfx_setting );
                     $trans_pcm = $this->get_sfx_pcm( $trans_sfx_setting );
                     $outro_pcm = $this->get_sfx_pcm( $outro_sfx_setting );
+
+                    // Gaps as stitched below: MP3 topics are joined by the pause alone.
+                    $timeline_opts = [
+                        'turn_pause_ms'      => $turn_pause_ms,
+                        'topic_pause_ms'     => $topic_pause_ms,
+                        'transition_seconds' => ( ! $timeline_mp3 && count( $topic_wavs ) > 1 && '' !== (string) $trans_pcm ) ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $trans_pcm ) : 0.0,
+                        'intro_seconds'      => '' !== (string) $intro_pcm ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $intro_pcm ) : 0.0,
+                        'outro_seconds'      => '' !== (string) $outro_pcm ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $outro_pcm ) : 0.0,
+                        'host_count'         => (int) $host_count,
+                        'estimated'          => $timeline_mp3,
+                    ];
 
                     // 1. Stitch topics together with Topic Transition SFX between them
                     if ( count( $topic_wavs ) > 1 ) {
@@ -1971,6 +2114,7 @@ class PressHub_AI_Audio_Synthesizer {
             $turn_wavs   = [];
             $start_time  = microtime( true );
             $char_count  = 0;
+            $tl_turns    = [];
 
             foreach ( $turns as $turn_idx => $turn ) {
                 $turn_voice  = $resolve_turn_voice( (string) ( $turn['speaker'] ?? '' ) );
@@ -1980,6 +2124,11 @@ class PressHub_AI_Audio_Synthesizer {
                     return $turn_res;
                 }
                 $turn_wavs[] = $turn_res;
+                $tl_turns[]  = [
+                    'speaker' => (string) ( $turn['speaker'] ?? '' ),
+                    'text'    => (string) ( $turn['text'] ?? '' ),
+                    'seconds' => PressHub_AI_Podcast_Timeline::turn_seconds( (string) $turn_res, (string) ( $turn['text'] ?? '' ), $timeline_mp3 ),
+                ];
 
                 // Throttle between turns if live call was made and not in unit tests
                 if ( ! $this->last_turn_was_cache_hit && $request_delay_ms > 0 && ! $is_test_env && ( $turn_idx + 1 < count( $turns ) ) ) {
@@ -1987,7 +2136,14 @@ class PressHub_AI_Audio_Synthesizer {
                 }
             }
 
-            $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+            $duration_ms     = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+            $timeline_topics = [ [ 'title' => '', 'turns' => $tl_turns ] ];
+            $timeline_opts   = [
+                'turn_pause_ms'  => $turn_pause_ms,
+                'topic_pause_ms' => $topic_pause_ms,
+                'host_count'     => (int) $host_count,
+                'estimated'      => $timeline_mp3,
+            ];
             if ( 'google_cloud' === $engine ) {
                 $stitched_audio = $this->stitch_audio_chunks( $turn_wavs, $turn_pause_ms );
             } else {
@@ -2050,6 +2206,24 @@ class PressHub_AI_Audio_Synthesizer {
             );
         }
 
+        // A translation: hand back the audio and its timeline; the caller stores them.
+        if ( null !== $this->audio_only ) {
+            return [
+                'audio'           => $stitched_audio,
+                'ext'             => ( strlen( $stitched_audio ) >= 4 && 'RIFF' === substr( $stitched_audio, 0, 4 ) ) ? '.wav' : '.mp3',
+                'timeline_topics' => $timeline_topics,
+                'timeline_opts'   => $timeline_opts,
+                'turns_count'     => count( $turns ),
+                'topic_count'     => ! empty( $topics ) ? count( $topics ) : 0,
+                'engine'          => (string) $engine,
+                'voices'          => [
+                    'presenter_1' => (string) $presenter_1_voice,
+                    'presenter_2' => $host_count >= 2 ? (string) $presenter_2_voice : '',
+                    'presenter_3' => $host_count >= 3 ? (string) $presenter_3_voice : '',
+                ],
+            ];
+        }
+
         // Save copy to daily briefing storage
         $harvester = new PressHub_AI_News_Harvester();
         $snapshot_dir = $harvester->get_snapshot_dir( $date );
@@ -2089,6 +2263,39 @@ class PressHub_AI_Audio_Synthesizer {
         }
         if ( is_wp_error( $post_id ) ) {
             return $post_id;
+        }
+
+        // Caption timeline of the episode, for its YouTube video. Never breaks synthesis.
+        if ( function_exists( 'update_post_meta' ) && (int) $post_id > 0 ) {
+            try {
+                $timeline = PressHub_AI_Podcast_Timeline::build( $timeline_topics, $timeline_opts );
+                if ( PressHub_AI_Podcast_Timeline::is_valid( $timeline ) ) {
+                    // update_post_meta() is false both on a failed write and when the value is
+                    // unchanged; only a stored value that differs counts as a failure.
+                    if ( false === update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, $timeline )
+                        && get_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, true ) != $timeline ) { // phpcs:ignore Universal.Operators.StrictComparisons.LooseNotEqual
+                        throw new \RuntimeException( 'the timeline could not be written to the post' );
+                    }
+                    if ( function_exists( 'delete_post_meta' ) ) {
+                        delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY );
+                    }
+                } else {
+                    if ( function_exists( 'delete_post_meta' ) ) {
+                        delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY );
+                    }
+                    update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, 'no spoken turn had audio and text to time' );
+                }
+            } catch ( \Throwable $e ) {
+                // An earlier timeline belongs to the earlier audio: never keep it with new audio.
+                if ( function_exists( 'delete_post_meta' ) ) {
+                    delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY );
+                }
+                // Marked, so the episode is not taken for one made before 2.54.0.
+                update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, substr( $e->getMessage(), 0, 300 ) );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Podcast timeline could not be saved: ' . $e->getMessage() );
+                }
+            }
         }
 
         // Host-count gating for saved voices

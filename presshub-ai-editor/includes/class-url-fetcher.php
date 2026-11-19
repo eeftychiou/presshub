@@ -596,6 +596,9 @@ class PressHub_AI_URL_Fetcher {
 
         try {
             $api = new PressHub_AI_API_Client();
+            // Its own action: the default (`coauthor_draft`) would log it as a
+            // draft and add the agenda and policy fiches to an HTML extraction.
+            $api->set_action( 'url_extract' );
             $cfg = $api->get_provider_config();
             if ( empty( $cfg ) || ( empty( $cfg['api_key'] ) && 'ollama_local' !== ( $cfg['type'] ?? '' ) ) ) {
                 return [];

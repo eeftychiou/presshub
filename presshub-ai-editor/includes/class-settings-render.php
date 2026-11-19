@@ -22,6 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/class-capabilities.php';
 require_once __DIR__ . '/class-settings-sections.php';
+require_once __DIR__ . '/class-podcast-translations.php';
 require_once __DIR__ . '/class-secret-field.php';
 require_once __DIR__ . '/class-connection-status.php';
 require_once __DIR__ . '/class-setup-check.php';
@@ -318,7 +319,7 @@ class PressHub_AI_Settings_Render {
         $this->group_start( 'qa-gate', $groups['qa-gate'] );
         ?>
 
-                        <p><?php echo __( 'Configure the automated quality-assurance review gate. When enabled, articles submitted for publication are automatically evaluated against editorial standards and blocked if they do not meet the minimum score.', 'presshub-ai-editor' ); ?></p>
+                        <p><?php echo esc_html__( 'Before a post is published, one AI review checks it three ways: editorial quality, legal risk and SEO. Each check has its own threshold. A failed editorial check holds the post in Pending Review; what a failed legal or SEO check does is set below. Every review is saved under PressHub → QA reviews.', 'presshub-ai-editor' ); ?></p>
                         <table class="form-table" role="presentation">
                             <tbody>
                                 <tr>
@@ -338,9 +339,39 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><label for="presshub_ai_qa_min_score"><?php echo __( 'Minimum Passing Score', 'presshub-ai-editor' ); ?></label></th>
+                                    <th scope="row"><?php echo esc_html__( 'Check posts editors publish', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_check_editors_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'Include Daily Briefing podcasts', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_include_podcasts_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php echo esc_html__( 'Include the Trending roundup', 'presshub-ai-editor' ); ?></th>
+                                    <td>
+                                        <?php $this->render_qa_include_trending_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_min_score"><?php echo esc_html__( 'Minimum editorial score', 'presshub-ai-editor' ); ?></label></th>
                                     <td>
                                         <?php $this->render_qa_min_score_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_legal_action"><?php echo esc_html__( 'When the legal check fails', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_legal_action_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_legal_fail_risk"><?php echo esc_html__( 'Legal risk that fails the check', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_legal_fail_risk_field(); ?>
                                     </td>
                                 </tr>
                                 <tr>
@@ -396,9 +427,21 @@ class PressHub_AI_Settings_Render {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><?php echo esc_html__( 'SEO Score in Editorial Review', 'presshub-ai-editor' ); ?></th>
+                                    <th scope="row"><?php echo esc_html__( 'SEO check at the QA gate', 'presshub-ai-editor' ); ?></th>
                                     <td>
                                         <?php $this->render_seo_review_enabled_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_seo_action"><?php echo esc_html__( 'When the SEO check fails', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_seo_action_field(); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="presshub_ai_qa_seo_min_score"><?php echo esc_html__( 'Minimum SEO score', 'presshub-ai-editor' ); ?></label></th>
+                                    <td>
+                                        <?php $this->render_qa_seo_min_score_field(); ?>
                                     </td>
                                 </tr>
                             </tbody>
@@ -797,6 +840,35 @@ class PressHub_AI_Settings_Render {
                     </details>
                     </section>
 
+                    <section id="briefing-languages" class="presshub-settings-group" aria-labelledby="briefing-languages-title">
+                    <h3 id="briefing-languages-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Other languages', 'presshub-ai-editor' ); ?></h3>
+                    <p class="description"><?php echo esc_html__( 'After each edition\'s Greek podcast is voiced, PressHub can translate its script and voice it in English and Turkish. These versions are not published on the site: they go to YouTube as their own episodes, each in its own playlist (Shorts, YouTube). Each language takes one translation call and about as long to voice as the Greek episode.', 'presshub-ai-editor' ); ?></p>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'Podcast languages', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_languages_field(); ?>
+                                </td>
+                            </tr>
+                            <?php foreach ( PressHub_AI_Podcast_Translations::LANGUAGES as $lang => $info ) : ?>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_language_notes_<?php echo esc_attr( $lang ); ?>"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s translator\'s notes', 'presshub-ai-editor' ), $info['name'] ) ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_language_notes_field( $lang ); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s voices', 'presshub-ai-editor' ), $info['name'] ) ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_language_voices_field( $lang ); ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    </section>
+
                     <section id="briefing-publishing" class="presshub-settings-group" aria-labelledby="briefing-publishing-title">
                     <h3 id="briefing-publishing-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Publishing', 'presshub-ai-editor' ); ?></h3>
                     <table class="form-table" role="presentation">
@@ -980,6 +1052,10 @@ class PressHub_AI_Settings_Render {
         ?>
         <table class="form-table" role="presentation">
             <tbody>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_backup_keep"><?php echo esc_html__( 'Backups to keep', 'presshub-ai-editor' ); ?></label></th>
+                    <td><?php $this->render_backup_keep_field(); ?></td>
+                </tr>
                 <tr>
                     <th scope="row"><label for="presshub_ai_log_level"><?php echo esc_html__( 'Diagnostic Log Level', 'presshub-ai-editor' ); ?></label></th>
                     <td><?php $this->render_log_level_field(); ?></td>
@@ -1940,6 +2016,15 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="number" min="7" max="365" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'How long token usage rows are kept before the daily cleanup deletes them. 7-365 days, default 60.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_backup_keep_field() {
+        $option = 'presshub_ai_backup_keep';
+        $value  = PressHub_AI_Settings_Storage::get_backup_keep();
+        ?>
+        <input type="number" min="1" max="20" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How many backups PressHub keeps. One is taken before every PressHub update (see PressHub → Backups); older ones are deleted. 1-20, default 5.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -3370,6 +3455,81 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    public function render_briefing_podcast_languages_field() {
+        $option  = 'presshub_ai_briefing_podcast_languages';
+        $enabled = PressHub_AI_Settings_Storage::get_briefing_podcast_languages();
+        ?>
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>[]" value="" />
+        <fieldset>
+            <legend class="screen-reader-text"><?php echo esc_html__( 'Podcast languages', 'presshub-ai-editor' ); ?></legend>
+            <?php foreach ( PressHub_AI_Podcast_Translations::LANGUAGES as $lang => $info ) : ?>
+                <label>
+                    <input type="checkbox" name="<?php echo esc_attr( $option ); ?>[]" id="<?php echo esc_attr( $option . '_' . $lang ); ?>" value="<?php echo esc_attr( $lang ); ?>" <?php checked( in_array( $lang, $enabled, true ) ); ?> />
+                    <?php echo esc_html( $info['label'] ); ?>
+                </label><br />
+            <?php endforeach; ?>
+        </fieldset>
+        <p class="description"><?php echo esc_html__( 'Also make the podcast in these languages, for YouTube. Needs YouTube Podcast Episodes turned on under Shorts, YouTube. Default: none.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_language_notes_field( string $lang ) {
+        $option = 'presshub_ai_briefing_podcast_language_notes';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_podcast_language_notes( $lang );
+        $id     = $option . '_' . $lang;
+        ?>
+        <textarea name="<?php echo esc_attr( $option . '[' . $lang . ']' ); ?>" id="<?php echo esc_attr( $id ); ?>" rows="6" class="large-text" lang="<?php echo esc_attr( $lang ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <p class="description"><?php echo esc_html__( 'Place names, institutions and wording the translation must use. They go into every translation of the podcast into this language. Empty the box and save to go back to the built-in notes.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_language_voices_field( string $lang ) {
+        $option      = 'presshub_ai_briefing_podcast_language_voices';
+        $current     = PressHub_AI_Settings_Storage::get_briefing_podcast_language_voices( $lang );
+        $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
+        $engine      = PressHub_AI_Settings_Storage::get_briefing_tts_engine();
+        $engine_id   = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
+        $voices      = $synthesizer ? $synthesizer->get_available_voices( $engine_id, 'google_cloud' === $engine_id ? $lang : '' ) : [];
+        $female      = $voices['female'] ?? [];
+        $male        = $voices['male'] ?? [];
+        $host_count  = PressHub_AI_Settings_Storage::get_briefing_host_count();
+        $labels      = [
+            'presenter_1' => __( 'Presenter 1', 'presshub-ai-editor' ),
+            'presenter_2' => __( 'Presenter 2', 'presshub-ai-editor' ),
+            'presenter_3' => __( 'Presenter 3', 'presshub-ai-editor' ),
+        ];
+        ?>
+        <fieldset>
+            <legend class="screen-reader-text"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s voices', 'presshub-ai-editor' ), PressHub_AI_Podcast_Translations::LANGUAGES[ $lang ]['name'] ) ); ?></legend>
+            <?php foreach ( $labels as $presenter => $label ) : ?>
+                <?php
+                if ( (int) substr( $presenter, -1 ) > max( 1, $host_count ) ) {
+                    continue;
+                }
+                $id       = $option . '_' . $lang . '_' . $presenter;
+                $selected = (string) ( $current[ $presenter ] ?? '' );
+                ?>
+                <label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $label ); ?></label>
+                <select name="<?php echo esc_attr( $option . '[' . $lang . '][' . $presenter . ']' ); ?>" id="<?php echo esc_attr( $id ); ?>">
+                    <option value="" <?php selected( $selected, '' ); ?>><?php echo esc_html__( 'Same as the Greek podcast', 'presshub-ai-editor' ); ?></option>
+                    <?php echo self::unavailable_voice_option( $selected, $female, $male ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped option markup. ?>
+                    <?php foreach ( [ __( 'Female Voices', 'presshub-ai-editor' ) => $female, __( 'Male Voices', 'presshub-ai-editor' ) => $male ] as $group_label => $list ) : ?>
+                        <?php if ( ! empty( $list ) ) : ?>
+                            <optgroup label="<?php echo esc_attr( $group_label ); ?>">
+                                <?php foreach ( $list as $key => $v ) : ?>
+                                    <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, (string) $key ); ?>><?php echo esc_html( $v['label'] ?? $key ); ?></option>
+                                <?php endforeach; ?>
+                            </optgroup>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </select>
+                <br />
+            <?php endforeach; ?>
+        </fieldset>
+        <p class="description"><?php echo esc_html__( 'Gemini voices speak every language, so the Greek podcast\'s voices are used by default. With Google Cloud TTS, choose a voice made for this language for every presenter, or this language is not voiced.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
     public function render_briefing_audio_split_by_topic_field() {
         $option = 'presshub_ai_briefing_audio_split_by_topic';
         $checked = PressHub_AI_Settings_Storage::get_briefing_audio_split_by_topic();
@@ -4199,9 +4359,9 @@ class PressHub_AI_Settings_Render {
         <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
         <label for="presshub_ai_seo_review_enabled">
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_seo_review_enabled" value="1" <?php checked( true, $enabled ); ?> />
-            <?php echo esc_html__( 'Report a separate SEO Score with improvement suggestions when running the AI Editorial Review.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Score SEO in the QA review and act on a low score.', 'presshub-ai-editor' ); ?>
         </label>
-        <p class="description"><?php echo esc_html__( 'Default: Enabled. Checks headline, excerpt, tags, category, images and alt text, structure and links. The SEO score is advisory and never blocks publishing.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. Scores headline, excerpt, tags, category, images and alt text, structure and links in the QA review, and alerts the editor (or holds the post) when the score is below the minimum.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4381,6 +4541,45 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    /** Render "Check posts editors publish". */
+    public function render_qa_check_editors_field() {
+        $option = 'presshub_ai_qa_check_editors';
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_check_editors">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_check_editors" value="1" <?php checked( true, PressHub_AI_Settings_Storage::get_qa_check_editors() ); ?> />
+            <?php echo esc_html__( 'Check posts that editors and admins publish or schedule.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. Posts that editors and admins publish or schedule go through the QA gate too. A held post can be released with "Publish anyway" on PressHub → QA reviews, which records who released it and why.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "Include Daily Briefing podcasts". */
+    public function render_qa_include_podcasts_field() {
+        $option = 'presshub_ai_qa_include_podcasts';
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_include_podcasts">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_include_podcasts" value="1" <?php checked( true, PressHub_AI_Settings_Storage::get_qa_include_podcasts() ); ?> />
+            <?php echo esc_html__( 'Check Daily Briefing podcast posts before they publish.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. The podcast script and show notes get the editorial and legal checks and the post gets the measured SEO checks before the configured podcast status applies.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "Include the Trending roundup". */
+    public function render_qa_include_trending_field() {
+        $option = 'presshub_ai_qa_include_trending';
+        ?>
+        <input type="hidden" name="<?php echo self::esc_attr_safe( $option ); ?>" value="0" />
+        <label for="presshub_ai_qa_include_trending">
+            <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_include_trending" value="1" <?php checked( true, PressHub_AI_Settings_Storage::get_qa_include_trending() ); ?> />
+            <?php echo esc_html__( 'Check the Trending in Cyprus roundup before it publishes.', 'presshub-ai-editor' ); ?>
+        </label>
+        <p class="description"><?php echo esc_html__( 'Default: Enabled. The Trending in Cyprus summary and quoted posts get the legal check and the measured SEO checks; there is no editorial score for the roundup.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
     /**
      * Render the QA Minimum Passing Score input.
      */
@@ -4391,8 +4590,62 @@ class PressHub_AI_Settings_Render {
         <input type="number" min="50" max="100" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_min_score" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <span class="description"><?php echo esc_html__( '/ 100', 'presshub-ai-editor' ); ?></span>
         <p class="description">
-            <?php echo esc_html__( 'Minimum score (50-100) required for publication. Articles scoring below this threshold are held in Pending Review. Default: 80.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Minimum editorial score (50-100) required for publication. Articles scoring below this threshold are held in Pending Review. Default: 80.', 'presshub-ai-editor' ); ?>
         </p>
+        <?php
+    }
+
+    /** Select of fixed choices, showing what is stored. */
+    private function render_choice_select( string $option, string $selected, array $choices ): void {
+        echo '<select name="' . self::esc_attr_safe( $option ) . '" id="' . self::esc_attr_safe( $option ) . '">';
+        foreach ( $choices as $value => $label ) {
+            echo '<option value="' . self::esc_attr_safe( $value ) . '"' . ( $value === $selected ? ' selected="selected"' : '' ) . '>' . esc_html( $label ) . '</option>';
+        }
+        echo '</select>';
+    }
+
+    /** Render "When the legal check fails". */
+    public function render_qa_legal_action_field() {
+        $this->render_choice_select( 'presshub_ai_qa_legal_action', PressHub_AI_Settings_Storage::get_qa_legal_action(), [
+            'alert' => __( 'Alert only: publish and email the editor', 'presshub-ai-editor' ),
+            'hold'  => __( 'Hold in Pending Review and email the editor', 'presshub-ai-editor' ),
+            'off'   => __( 'Off: skip the legal check', 'presshub-ai-editor' ),
+        ] );
+        ?>
+        <p class="description"><?php echo esc_html__( 'Default: Alert only. The legal check looks for defamation, unattributed allegations, privacy and personal data, minors and victims, hate speech and copied material. Alert only publishes and emails the editor; Hold keeps the post in Pending Review; Off skips the check.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "Legal risk that fails the check". */
+    public function render_qa_legal_fail_risk_field() {
+        $this->render_choice_select( 'presshub_ai_qa_legal_fail_risk', PressHub_AI_Settings_Storage::get_qa_legal_fail_risk(), [
+            'high'   => __( 'High only', 'presshub-ai-editor' ),
+            'medium' => __( 'Medium or High', 'presshub-ai-editor' ),
+        ] );
+        ?>
+        <p class="description"><?php echo esc_html__( 'Default: High only. The reviewer rates each post Low, Medium or High legal risk; this is the lowest rating that fails the legal check.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "When the SEO check fails". */
+    public function render_qa_seo_action_field() {
+        $this->render_choice_select( 'presshub_ai_qa_seo_action', PressHub_AI_Settings_Storage::get_qa_seo_action(), [
+            'alert' => __( 'Alert only: publish and email the editor', 'presshub-ai-editor' ),
+            'hold'  => __( 'Hold in Pending Review and email the editor', 'presshub-ai-editor' ),
+        ] );
+        ?>
+        <p class="description"><?php echo esc_html__( 'Default: Alert only. Alert only publishes and emails the editor with the suggestions; Hold keeps the post in Pending Review. A post with no headline or no featured image always fails the SEO check.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /** Render "Minimum SEO score". */
+    public function render_qa_seo_min_score_field() {
+        $option = 'presshub_ai_qa_seo_min_score';
+        $value  = PressHub_AI_Settings_Storage::get_qa_seo_min_score();
+        ?>
+        <input type="number" min="0" max="100" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="presshub_ai_qa_seo_min_score" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <span class="description"><?php echo esc_html__( '/ 100', 'presshub-ai-editor' ); ?></span>
+        <p class="description"><?php echo esc_html__( 'Default: 60. Lowest SEO score (0 - 100) that passes the SEO check. The score is the mean of the measured checks and the AI assessment.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

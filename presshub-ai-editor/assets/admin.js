@@ -679,6 +679,47 @@ jQuery(document).ready(function($) {
         return 'presshub-score-high';
     }
 
+    // QA gate verdict and the legal issues it found (quote + suggested fix).
+    function renderGateResult(gate) {
+        if (!gate) {
+            return;
+        }
+        var verdicts = {
+            pass: __('QA gate: all checks passed.', 'presshub-ai-editor'),
+            alert: __('QA gate: this post can be published, but the editor will be alerted about the failed checks.', 'presshub-ai-editor'),
+            hold: __('QA gate: this post will be held in Pending Review until the failed checks are fixed.', 'presshub-ai-editor')
+        };
+        var checkNames = {
+            editorial: __('editorial', 'presshub-ai-editor'),
+            legal: __('legal', 'presshub-ai-editor'),
+            seo: __('SEO', 'presshub-ai-editor')
+        };
+        var failed = [];
+        for (var f = 0; f < (gate.failed || []).length; f++) {
+            failed.push(checkNames[gate.failed[f]] || gate.failed[f]);
+        }
+        var html = '<div class="presshub-gate-result">';
+        if (verdicts[gate.verdict]) {
+            html += '<p><strong>' + presshubEsc(verdicts[gate.verdict]) + '</strong>';
+            if (failed.length && 'pass' !== gate.verdict) {
+                html += ' ' + presshubEsc(__('Failed checks: %s.', 'presshub-ai-editor').replace('%s', failed.join(', ')));
+            }
+            html += '</p>';
+        }
+        var issues = (gate.legal && gate.legal.issues) ? gate.legal.issues : [];
+        if (issues.length) {
+            html += '<strong>' + presshubEsc(__('Legal issues:', 'presshub-ai-editor')) + '</strong><ol class="presshub-legal-issues">';
+            for (var i = 0; i < issues.length; i++) {
+                html += '<li><em>' + presshubEsc(issues[i].severity) + '</em>: &ldquo;' +
+                    presshubEsc(issues[i].quote) + '&rdquo;<br />' +
+                    presshubEsc(__('Fix:', 'presshub-ai-editor')) + ' ' + presshubEsc(issues[i].fix) + '</li>';
+            }
+            html += '</ol>';
+        }
+        html += '</div>';
+        $('#presshub-ai-scorecard-results').append(html);
+    }
+
     function renderScorecard(score, feedback, $btn, libelRisk, legalConcerns) {
         var scoreText = __('Score: %s/100', 'presshub-ai-editor')
             .replace('%s', presshubEsc(score));
@@ -880,6 +921,16 @@ jQuery(document).ready(function($) {
                     response.data.legal_concerns
                 );
                 renderSeoReview(response.data.seo || null);
+                renderGateResult(response.data.gate || null);
+                // The QA gate panel at the top of the box shows this review
+                // too: redraw it, and drop the scorecard copy once it does.
+                if (typeof window.presshubQaGatePanelRefresh === 'function') {
+                    window.presshubQaGatePanelRefresh(function(html) {
+                        if (html) {
+                            $('#presshub-ai-scorecard-results').empty();
+                        }
+                    });
+                }
 
                 // ME-8 / F-29: tell the journalist what happened to the
                 // post status, derived from the server response.

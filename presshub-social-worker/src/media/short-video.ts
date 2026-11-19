@@ -80,6 +80,8 @@ export interface GenerateShortOptions {
   musicPath?: string;
   /** Music level under the voice, 0-1 (default 0.15). */
   musicVolume?: number;
+  /** Last line of the end card; default END_CARD_TEXT.bio (TikTok's "link in bio"). */
+  endCardLine?: string;
 }
 
 export interface ShortVideoResult {
@@ -105,7 +107,7 @@ const LAYOUT = {
   captionY: 1150,
   sideMargin: 90,
 };
-const COLORS = {
+export const COLORS = {
   white: '&H00FFFFFF',
   black: '&H00000000',
   // PressHub yellow #FACC15 and sky blue #38BDF8, as ASS &HAABBGGRR.
@@ -124,6 +126,18 @@ export const END_CARD_TEXT = {
   follow: 'Ακολούθησε για την επόμενη ενημέρωση',
   bio: 'Ολόκληρη η ενημέρωση: λινκ στο bio',
 };
+
+/** End card line naming the site, for platforms without a "link in bio" (YouTube). */
+export function siteEndCardLine(siteUrl: string): string {
+  let host = '';
+  try {
+    host = new URL(siteUrl).hostname.replace(/^www\./i, '');
+  } catch {}
+  return `Ολόκληρη η ενημέρωση στο ${host || 'presshub.cy'}`;
+}
+
+/** YouTube files a vertical video as a Short only up to this length (seconds). */
+export const YOUTUBE_SHORT_MAX_SECONDS = 180;
 
 export function resolveFfmpegPath(): string {
   if (process.env.FFMPEG_PATH && process.env.FFMPEG_PATH.trim() !== '') {
@@ -337,6 +351,8 @@ export interface AssOptions {
   totalDuration: number;
   /** The logo image is overlaid by FFmpeg, so the site name is not written as text. */
   hasLogo?: boolean;
+  /** Last line of the end card; default END_CARD_TEXT.bio. */
+  endCardLine?: string;
 }
 
 /**
@@ -421,12 +437,12 @@ export function buildAssScript(opts: AssOptions): string {
     dialogue(4, endCardStart, total, 'EndTitle', `{\\pos(${cx},820)\\fad(200,0)\\fscx85\\fscy85\\t(0,200,\\fscx100\\fscy100)}${assEscape(opts.siteName)}`);
   }
   dialogue(4, endCardStart, total, 'EndLine', `{\\pos(${cx},970)\\fad(250,0)}${assEscape(END_CARD_TEXT.follow)}`);
-  dialogue(4, endCardStart, total, 'EndBio', `{\\pos(${cx},1070)\\fad(300,0)}${assEscape(END_CARD_TEXT.bio)}`);
+  dialogue(4, endCardStart, total, 'EndBio', `{\\pos(${cx},1070)\\fad(300,0)}${assEscape(opts.endCardLine || END_CARD_TEXT.bio)}`);
 
   return [...header, ...lines, ''].join('\n');
 }
 
-async function download(url: string, dest: string): Promise<boolean> {
+export async function download(url: string, dest: string): Promise<boolean> {
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 PressHub-ShortVideo/1.0' } });
     if (!res.ok) {
@@ -457,7 +473,7 @@ async function prepareImage(src: string, dest: string, width: number, height: nu
 }
 
 /** Branded backgrounds used when a short has no story image. */
-async function brandedBackgrounds(dir: string, width: number, height: number): Promise<string[]> {
+export async function brandedBackgrounds(dir: string, width: number, height: number): Promise<string[]> {
   const variants = [
     ['#0f172a', '#1e3a8a', '#facc15'],
     ['#111827', '#0e7490', '#38bdf8'],
@@ -517,16 +533,28 @@ async function shadeOverlay(dir: string, width: number, height: number): Promise
   return file;
 }
 
-function runFfmpeg(bin: string, args: string[], cwd: string): Promise<void> {
+export function runFfmpeg(bin: string, args: string[], cwd: string, timeoutMs?: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn(bin, args, { cwd });
     let tail = '';
+    let timedOut = false;
+    const timer = timeoutMs && timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          proc.kill('SIGKILL');
+        }, timeoutMs)
+      : null;
     proc.stderr.on('data', (d) => {
       tail = (tail + d.toString()).slice(-4000);
     });
-    proc.on('error', (err) => reject(err));
+    proc.on('error', (err) => {
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
     proc.on('close', (code) => {
-      if (code === 0) resolve();
+      if (timer) clearTimeout(timer);
+      if (timedOut) reject(new Error(`FFmpeg was stopped after ${Math.round((timeoutMs || 0) / 60000)} minutes without finishing.`));
+      else if (code === 0) resolve();
       else reject(new Error(`FFmpeg exited with code ${code}: ${tail.split('\n').slice(-6).join(' | ')}`));
     });
   });
@@ -738,6 +766,7 @@ export async function generateShortVideo(options: GenerateShortOptions): Promise
       chunks,
       totalDuration: total,
       hasLogo: Boolean(logo),
+      endCardLine: options.endCardLine,
     });
     fs.writeFileSync(path.join(work, 'captions.ass'), ass, 'utf8');
     const shade = await shadeOverlay(work, width, height);

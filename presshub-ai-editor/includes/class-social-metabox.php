@@ -67,6 +67,8 @@ class PressHub_Social_Metabox {
             'facebook'  => [ 'label' => 'Facebook Page', 'char_limit' => 2000 ],
             'instagram' => [ 'label' => 'Instagram', 'char_limit' => 2200 ],
             'tiktok'    => [ 'label' => 'TikTok', 'char_limit' => 2200 ],
+            // The YouTube copy is the video description (its own limit is 5000 bytes).
+            'youtube'   => [ 'label' => 'YouTube', 'char_limit' => 4500 ],
         ];
 
         // Nonce for security
@@ -120,7 +122,7 @@ class PressHub_Social_Metabox {
                         ? PressHub_Social_Settings_Storage::get_platform_engine( $slug )
                         : 'api';
                     $copy          = (string) get_post_meta( $post_id, '_presshub_social_copy_' . $slug, true );
-                    $badge_text    = ( 'automation' === $engine ) ? __( 'Browser Automation', 'presshub-social-autopost' ) : __( 'Official API', 'presshub-social-autopost' );
+                    $badge_text    = 'youtube' === $slug ? __( 'Videos only (YouTube API)', 'presshub-social-autopost' ) : ( ( 'automation' === $engine ) ? __( 'Browser Automation', 'presshub-social-autopost' ) : __( 'Official API', 'presshub-social-autopost' ) );
                     $badge_cls     = ( 'automation' === $engine ) ? 'badge-engine-automation' : 'badge-engine-api';
                     $card_style    = ! $is_ready ? 'opacity: 0.65;' : '';
                     $disabled_attr = ! $is_ready ? 'disabled="disabled"' : '';
@@ -139,6 +141,10 @@ class PressHub_Social_Metabox {
                                 <?php elseif ( ! $is_configured ) : ?>
                                     <span class="presshub-badge badge-engine-unconfigured" style="background:#d9534f; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
                                         <?php esc_html_e( 'Not Configured', 'presshub-social-autopost' ); ?>
+                                    </span>
+                                <?php elseif ( 'youtube' === $slug && ! PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() && ! PressHub_Social_Settings_Storage::get_youtube_podcast_enabled() ) : ?>
+                                    <span class="presshub-badge badge-engine-unconfigured" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
+                                        <?php esc_html_e( 'Shorts and episodes are off: nothing is uploaded', 'presshub-social-autopost' ); ?>
                                     </span>
                                 <?php elseif ( method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_session_active' ) && ! PressHub_Social_Settings_Storage::is_platform_session_active( $slug ) ) : ?>
                                     <span class="presshub-badge badge-engine-session-inactive" style="background:#f0ad4e; color:#fff; font-size:11px; padding:2px 6px; border-radius:3px;">
@@ -213,7 +219,7 @@ class PressHub_Social_Metabox {
                             ?>
                                 <tr>
                                     <td>#<?php echo esc_html( $job['id'] ); ?></td>
-                                    <td><strong><?php echo esc_html( ucfirst( $job['platform'] ) ); ?></strong></td>
+                                    <td><strong><?php echo esc_html( class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::platform_label( $job ) : ucfirst( $job['platform'] ) ); ?></strong></td>
                                     <td><span class="badge-engine"><?php echo esc_html( strtoupper( $job['engine'] ) ); ?></span></td>
                                     <td><span class="presshub-status-badge <?php echo esc_attr( $status_badge_class ); ?>"><?php echo esc_html( ucfirst( $status ) ); ?></span></td>
                                     <td><?php echo esc_html( $job['attempts'] . '/' . $job['max_attempts'] ); ?></td>
@@ -229,6 +235,18 @@ class PressHub_Social_Metabox {
                                             <a href="<?php echo esc_url( $job['external_post_url'] ); ?>" target="_blank" rel="noopener noreferrer" class="button button-small">
                                                 <?php esc_html_e( 'View Post ↗', 'presshub-social-autopost' ); ?>
                                             </a>
+                                            <?php $yt_playlist_error = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::playlist_error( $job ) : ''; ?>
+                                            <?php if ( '' !== $yt_playlist_error ) : ?>
+                                                <span class="presshub-error-preview" title="<?php echo esc_attr( $yt_playlist_error ); ?>">
+                                                    <?php esc_html_e( 'Not in the podcast playlist', 'presshub-social-autopost' ); ?>
+                                                </span>
+                                            <?php endif; ?>
+                                            <?php $yt_episode_note = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::episode_note( $job ) : ''; ?>
+                                            <?php if ( '' !== $yt_episode_note ) : ?>
+                                                <span class="presshub-error-preview" title="<?php echo esc_attr( $yt_episode_note ); ?>">
+                                                    <?php esc_html_e( 'Episode video incomplete', 'presshub-social-autopost' ); ?>
+                                                </span>
+                                            <?php endif; ?>
                                         <?php elseif ( ! empty( $job['last_error'] ) ) : ?>
                                             <span class="presshub-error-preview" title="<?php echo esc_attr( $job['last_error'] ); ?>">
                                                 <?php echo esc_html( wp_trim_words( $job['last_error'], 8 ) ); ?>
@@ -243,6 +261,53 @@ class PressHub_Social_Metabox {
                     </table>
                 </div>
             <?php endif; ?>
+            <?php self::render_language_status( (int) $post->ID ); ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * English and Turkish versions of a podcast post: where each one stands, and why it
+     * failed, so a language that never reached the Queue is not missed.
+     */
+    private static function render_language_status( int $post_id ): void {
+        if ( ! class_exists( 'PressHub_AI_Podcast_Translations' ) || 'podcast' !== (string) get_post_meta( $post_id, '_presshub_briefing_type', true ) ) {
+            return;
+        }
+        $entries = PressHub_AI_Podcast_Translations::get_all( $post_id );
+        $enabled = PressHub_AI_Podcast_Translations::enabled_languages();
+        if ( empty( $entries ) && empty( $enabled ) ) {
+            return;
+        }
+        $labels = [
+            'translated' => __( 'translated, being voiced', 'presshub-social-autopost' ),
+            'voiced'     => __( 'voiced, ready for YouTube', 'presshub-social-autopost' ),
+            'failed'     => __( 'failed', 'presshub-social-autopost' ),
+        ];
+        ?>
+        <div class="presshub-language-status" style="margin-top:12px;">
+            <h4 style="margin:0 0 6px;"><?php esc_html_e( 'Other languages (YouTube only)', 'presshub-social-autopost' ); ?></h4>
+            <ul style="margin:0;">
+                <?php foreach ( PressHub_AI_Podcast_Translations::LANGUAGES as $lang => $info ) :
+                    $entry = is_array( $entries[ $lang ] ?? null ) ? $entries[ $lang ] : [];
+                    if ( empty( $entry ) && ! in_array( $lang, $enabled, true ) ) {
+                        continue;
+                    }
+                    $status = (string) ( $entry['status'] ?? '' );
+                    $text   = '' === $status ? __( 'not made yet', 'presshub-social-autopost' ) : ( $labels[ $status ] ?? $status );
+                    ?>
+                    <li>
+                        <strong><?php echo esc_html( $info['name'] ); ?>:</strong>
+                        <span class="<?php echo 'failed' === $status ? 'presshub-text-error' : ''; ?>" style="<?php echo 'failed' === $status ? 'color:#b32d2e;' : ''; ?>"><?php echo esc_html( $text ); ?></span>
+                        <?php if ( 'failed' === $status && '' !== (string) ( $entry['error'] ?? '' ) ) : ?>
+                            <br /><small><?php echo esc_html( sprintf( /* translators: 1: step, 2: error */ __( 'At the %1$s step: %2$s', 'presshub-social-autopost' ), (string) ( $entry['step'] ?? '' ), wp_trim_words( (string) $entry['error'], 40 ) ) ); ?></small>
+                        <?php elseif ( '' !== (string) ( $entry['title'] ?? '' ) ) : ?>
+                            <br /><small><?php echo esc_html( (string) $entry['title'] ); ?></small>
+                        <?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+            <p class="description"><?php esc_html_e( 'Made again when the Greek audio is made again (Daily Briefing Hub, or a corrected script).', 'presshub-social-autopost' ); ?></p>
         </div>
         <?php
     }

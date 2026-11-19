@@ -98,6 +98,7 @@ class SettingsPageTest
             'presshub_ai_log_file_retention_days',
             'presshub_ai_token_log_retention_days',
             'presshub_ai_audit_log_retention_days',
+            'presshub_ai_backup_keep',
             'presshub_ai_social_meta_enabled',
             'presshub_ai_social_meta_all_posts',
             'presshub_ai_remove_google_cloud_api_key',
@@ -171,6 +172,9 @@ class SettingsPageTest
             'presshub_ai_briefing_voice_speed',
             'presshub_ai_briefing_voice_pitch',
             'presshub_ai_briefing_audio_split_by_topic',
+            'presshub_ai_briefing_podcast_languages',
+            'presshub_ai_briefing_podcast_language_notes',
+            'presshub_ai_briefing_podcast_language_voices',
             'presshub_ai_briefing_audio_transition_sfx',
             'presshub_ai_briefing_audio_intro_sfx',
             'presshub_ai_briefing_audio_outro_sfx',
@@ -282,6 +286,14 @@ class SettingsPageTest
             'presshub_ai_qa_editor_email',
             'presshub_ai_qa_article_prompt',
             'presshub_ai_qa_briefing_prompt',
+            // 2.47.0 — publish gate: legal and SEO checks
+            'presshub_ai_qa_legal_action',
+            'presshub_ai_qa_legal_fail_risk',
+            'presshub_ai_qa_seo_action',
+            'presshub_ai_qa_seo_min_score',
+            'presshub_ai_qa_check_editors',
+            'presshub_ai_qa_include_podcasts',
+            'presshub_ai_qa_include_trending',
             // #236 — Editorial QA's own model (empty: same as Co-author)
             'presshub_ai_qa_provider',
             'presshub_ai_qa_model',
@@ -376,6 +388,13 @@ class SettingsPageTest
             'presshub_ai_qa_editor_email',
             'presshub_ai_qa_article_prompt',
             'presshub_ai_qa_briefing_prompt',
+            'presshub_ai_qa_legal_action',
+            'presshub_ai_qa_legal_fail_risk',
+            'presshub_ai_qa_seo_action',
+            'presshub_ai_qa_seo_min_score',
+            'presshub_ai_qa_check_editors',
+            'presshub_ai_qa_include_podcasts',
+            'presshub_ai_qa_include_trending',
         ] as $qa_field ) {
             if ( false === strpos( $html, 'name="' . $qa_field . '"' ) ) {
                 $failures[] = "render_settings_page() should output {$qa_field} input.";

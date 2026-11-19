@@ -246,7 +246,7 @@ class QAReviewerTest {
             $failures[] = 'evaluate_content should return legal_concerns (None identified); got: ' . ( $res_post['legal_concerns'] ?? 'null' );
         }
         $user_msg_post = $last_payload['messages'][1]['content'] ?? '';
-        if ( false === strpos( $user_msg_post, 'Review this news article draft' ) ) {
+        if ( false === strpos( $user_msg_post, 'Review this news article before publication' ) ) {
             $failures[] = 'post context should use article QA prompt template; got: ' . $user_msg_post;
         }
 
@@ -256,7 +256,7 @@ class QAReviewerTest {
             $failures[] = 'evaluate_content with briefing context failed.';
         }
         $user_msg_briefing = $last_payload['messages'][1]['content'] ?? '';
-        if ( false === strpos( $user_msg_briefing, 'Review this daily news briefing draft' ) ) {
+        if ( false === strpos( $user_msg_briefing, 'Review this daily news briefing before publication' ) ) {
             $failures[] = 'briefing context should use briefing QA prompt template; got: ' . $user_msg_briefing;
         }
 

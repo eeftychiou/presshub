@@ -77,10 +77,41 @@ class PressHub_AI_Stakeholders {
         wp_schedule_single_event( time() + 60, self::CRON_HOOK, [ $post_id ] );
     }
 
+    /** Post meta: hash of the brief text the people were last extracted from. */
+    const META_SOURCE_HASH = '_presshub_stakeholders_source_hash';
+
     public static function handle_cron( $post_id ): void {
-        $res = self::extract_for_post( (int) $post_id );
-        if ( is_wp_error( $res ) && class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( 'Stakeholder extraction failed', [ 'post_id' => (int) $post_id, 'error' => $res->get_error_message() ] );
+        $post_id = (int) $post_id;
+        // Same guard as the policy fiche update: overlapping WP-Cron requests can
+        // run one event twice, and an unchanged brief needs no second extraction.
+        $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+        // The hash covers everything the prompt is built from: the text, date and edition.
+        $hash = $post ? md5( trim( wp_strip_all_tags( (string) ( $post->post_content ?? '' ) ) ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_date', true ) . '|' . substr( (string) ( $post->post_date ?? '' ), 0, 10 ) . '|' . (string) get_post_meta( $post_id, '_presshub_briefing_edition', true ) ) : '';
+        $lock = 'presshub_ai_stakeholders_lock_' . $post_id;
+        if ( '' !== $hash && (string) get_post_meta( $post_id, self::META_SOURCE_HASH, true ) === $hash ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Stakeholder extraction skipped: this brief was already processed', [ 'post_id' => $post_id ] );
+            }
+            return;
+        }
+        if ( false !== get_transient( $lock ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( 'Stakeholder extraction skipped: already running for this brief', [ 'post_id' => $post_id ] );
+            }
+            return;
+        }
+        set_transient( $lock, time(), 10 * MINUTE_IN_SECONDS );
+        try {
+            $res = self::extract_for_post( $post_id );
+        } finally {
+            delete_transient( $lock );
+        }
+        if ( is_wp_error( $res ) ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::warning( 'Stakeholder extraction failed', [ 'post_id' => $post_id, 'error' => $res->get_error_message() ] );
+            }
+        } elseif ( '' !== $hash && 'skipped' !== ( $res['status'] ?? '' ) ) {
+            update_post_meta( $post_id, self::META_SOURCE_HASH, $hash );
         }
     }
 
@@ -528,15 +559,33 @@ class PressHub_AI_Stakeholders {
     }
 
     public static function render( array $hits, int $budget ): string {
+        return self::render_report( $hits, $budget )['text'];
+    }
+
+    /**
+     * The people block plus what the budget cut. The budget counts the
+     * fiches' own lines; the fixed header and footer are not charged to it.
+     *
+     * @return array{text:string,people:string[],left_out:array}
+     */
+    public static function render_report( array $hits, int $budget ): array {
         if ( $budget <= 0 || empty( $hits ) ) {
-            return '';
+            return [ 'text' => '', 'people' => [], 'left_out' => [] ];
         }
-        $header = "=== ΦΑΚΕΛΟΙ ΠΡΟΣΩΠΩΝ (από τη συντακτική μνήμη) ===\n"
+        $header   = "=== ΦΑΚΕΛΟΙ ΠΡΟΣΩΠΩΝ (από τη συντακτική μνήμη) ===\n"
             . "Πρόσωπα που εμφανίζονται στο σημερινό υλικό, με την ιδιότητά τους και τις τελευταίες καταγεγραμμένες θέσεις τους. Χρησιμοποίησέ τα για σωστούς τίτλους και ιδιότητες και για να επισημαίνεις όταν κάποιος αλλάζει θέση. Οι παλαιότερες θέσεις δεν είναι σημερινές ειδήσεις.\n";
-        $footer = '=== ΤΕΛΟΣ ΦΑΚΕΛΩΝ ===';
-        $text   = $header;
-        $used   = 0;
-        foreach ( array_slice( $hits, 0, self::MAX_INJECTED ) as $hit ) {
+        $footer   = '=== ΤΕΛΟΣ ΦΑΚΕΛΩΝ ===';
+        $body     = '';
+        $people   = [];
+        $left_out = [];
+        $position = 0;
+        $full     = false;
+        foreach ( $hits as $key => $hit ) {
+            $key = (string) $key;
+            if ( $position++ >= self::MAX_INJECTED ) {
+                $left_out[] = [ 'item' => $key, 'reason' => 'max_items', 'limit' => self::MAX_INJECTED ];
+                continue;
+            }
             $f    = $hit['fiche'];
             $head = '- ' . $f['name'] . ( '' !== $f['name_en'] ? ' / ' . $f['name_en'] : '' );
             $meta = array_filter( [ $f['role'], $f['party'] ] );
@@ -551,17 +600,27 @@ class PressHub_AI_Stakeholders {
                 $lines[] = '  [' . $p['date'] . '] ' . ( '' !== $p['topic'] ? $p['topic'] . ': ' : '' ) . $p['position'];
             }
             $block = implode( "\n", $lines ) . "\n";
-            if ( self::len( $text . $block . $footer ) > $budget ) {
-                // Try the bare line (name and role) before giving up on this person.
-                $block = $head . "\n";
-                if ( self::len( $text . $block . $footer ) > $budget ) {
-                    break;
-                }
+            $need  = self::len( $block );
+            if ( $full ) {
+                // Once one person did not fit, the rest are left out too (the
+                // most mentioned come first).
+                $left_out[] = [ 'item' => $key, 'reason' => 'no_room', 'limit' => $budget, 'room' => max( 0, $budget - self::len( $body ) ), 'needed' => $need ];
+                continue;
             }
-            $text .= $block;
-            $used++;
+            if ( self::len( $body . $block ) > $budget ) {
+                // Try the bare line (name and role) before giving up on this person.
+                if ( self::len( $body . $head . "\n" ) > $budget ) {
+                    $left_out[] = [ 'item' => $key, 'reason' => 'no_room', 'limit' => $budget, 'room' => max( 0, $budget - self::len( $body ) ), 'needed' => $need ];
+                    $full       = true;
+                    continue;
+                }
+                $block      = $head . "\n";
+                $left_out[] = [ 'item' => $key, 'reason' => 'shortened', 'parts' => array_values( array_filter( [ '' !== $f['bio'] ? 'bio' : '', ! empty( $f['positions'] ) ? 'positions' : '' ] ) ), 'limit' => $budget, 'needed' => $need ];
+            }
+            $body    .= $block;
+            $people[] = $key;
         }
-        return $used > 0 ? $text . $footer : '';
+        return [ 'text' => empty( $people ) ? '' : $header . $body . $footer, 'people' => $people, 'left_out' => $left_out ];
     }
 
     /**
@@ -578,19 +637,22 @@ class PressHub_AI_Stakeholders {
             if ( $budget <= 0 || ! self::is_enabled() ) {
                 return $sys_prompt;
             }
-            $hits  = self::find_in_text( $user_prompt );
-            $block = self::render( $hits, $budget );
-            if ( '' === $block ) {
+            $hits   = self::find_in_text( $user_prompt );
+            $report = self::render_report( $hits, $budget );
+            $block  = $report['text'];
+            if ( '' === $block && empty( $report['left_out'] ) ) {
                 return $sys_prompt;
             }
-            $out                = rtrim( $sys_prompt ) . "\n\n" . $block;
+            $out                = '' === $block ? $sys_prompt : rtrim( $sys_prompt ) . "\n\n" . $block;
             self::$last_applied = [
                 'action'        => $action,
-                'people'        => array_slice( array_keys( $hits ), 0, substr_count( $block, "\n- " ) ),
+                'people'        => $report['people'],
                 'chars'         => self::len( $block ),
+                'left_out'      => $report['left_out'],
                 'original_hash' => md5( $sys_prompt ),
                 'prompt'        => $out,
             ];
+            class_exists( 'PressHub_AI_Knowledge_Cuts' ) && PressHub_AI_Knowledge_Cuts::log( 'stakeholders', $action, $report['left_out'] );
             return $out;
         } catch ( \Throwable $e ) {
             return $sys_prompt;

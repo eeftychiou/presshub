@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.46.0
+ * Version: 2.55.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -41,6 +41,41 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
     }
 }
 add_action( 'admin_init', 'presshub_ai_migrate_max_tokens_defaults' );
+
+/**
+ * 2.52.0: policy fiches in social copy and shorts got 800 characters, which
+ * after the block's instructions left too little room for a fiche, so most
+ * fiches were never sent there. The default is now 1,200 and the framing-only
+ * block has a short header. A saved budget that still equals the old default
+ * (the Editorial knowledge section saves every row) is raised to the new
+ * default; any other value was chosen by an editor and is kept. Runs once;
+ * guarded by the presshub_ai_migrated_social_fiche_budgets flag.
+ */
+if ( ! function_exists( 'presshub_ai_migrate_social_fiche_budgets' ) ) {
+    function presshub_ai_migrate_social_fiche_budgets() {
+        if ( '1' === get_option( 'presshub_ai_migrated_social_fiche_budgets', '0' ) || ! class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
+            return;
+        }
+        $stored = get_option( 'presshub_ai_policy_fiches_budgets', [] );
+        if ( is_array( $stored ) && $stored ) {
+            $raised = [];
+            foreach ( [ 'social_copy_', 'social_tiktok_shorts' ] as $action ) {
+                if ( isset( $stored[ $action ] ) && PressHub_AI_Policy_Fiches::OLD_SOCIAL_BUDGET === (int) $stored[ $action ] ) {
+                    $stored[ $action ] = PressHub_AI_Policy_Fiches::BUDGETS[ $action ];
+                    $raised[]          = $action;
+                }
+            }
+            if ( $raised ) {
+                update_option( 'presshub_ai_policy_fiches_budgets', $stored );
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::info( 'Policy fiche budgets for social copy raised to the new default', [ 'actions' => $raised, 'from' => PressHub_AI_Policy_Fiches::OLD_SOCIAL_BUDGET ] );
+                }
+            }
+        }
+        update_option( 'presshub_ai_migrated_social_fiche_budgets', '1', false );
+    }
+}
+add_action( 'admin_init', 'presshub_ai_migrate_social_fiche_budgets' );
 
 /**
  * #263 repair: earlier saves unslashed JSON-encoded briefing sources, which
@@ -122,7 +157,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.46.0' );
+define( 'PRESSHUB_AI_VERSION', '2.55.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -170,6 +205,10 @@ require_once PRESSHUB_AI_DIR . 'includes/class-ajax-handlers.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-seo.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviewer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-review-store.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-publish-gate.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-reviews-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-qa-held-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-workflow.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-research-cleanup.php';
 if ( file_exists( PRESSHUB_AI_DIR . 'includes/class-log-exposure-check.php' ) ) {
@@ -192,6 +231,10 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-trending.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-embeds.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-podcast-translations.php';
+if ( function_exists( 'add_action' ) ) {
+    add_action( 'before_delete_post', [ 'PressHub_AI_Podcast_Translations', 'on_before_delete_post' ] );
+}
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
@@ -207,8 +250,11 @@ require_once PRESSHUB_AI_DIR . 'includes/class-memory-context-builder.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-memory-editor.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-editorial-agenda.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-stakeholders.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-knowledge-cuts.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-policy-fiches.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-fiches-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-help-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-update-backup.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-transfer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-cleanup.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
@@ -224,7 +270,9 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-image-library.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-post-images.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-shorts.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-tiktok-music.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-social-youtube.php';
 PressHub_Social_TikTok_Shorts::register_hooks();
+PressHub_Social_YouTube::register_hooks();
 PressHub_Social_Post_Images::register_hooks();
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta-api-client.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-worker-client.php';
@@ -296,6 +344,7 @@ function presshub_ai_activate() {
     PressHub_AI_Audit_Logger::create_table();
     PressHub_AI_Memory_Store::create_tables();
     PressHub_AI_Generation_Recorder::create_table();
+    PressHub_AI_QA_Review_Store::create_table();
     if ( function_exists( 'presshub_ai_schedule_briefing_crons' ) ) {
         presshub_ai_schedule_briefing_crons();
     }
@@ -415,11 +464,15 @@ function presshub_ai_init() {
     new PressHub_AI_Workflow();
     new PressHub_AI_Briefing_Admin();
     new PressHub_AI_Generation_Inspector();
+    new PressHub_AI_QA_Reviews_Admin();
+    new PressHub_AI_QA_Held_Admin();
     new PressHub_AI_Memory_Editor();
     PressHub_AI_Editorial_Agenda::register_hooks();
     PressHub_AI_Stakeholders::register_hooks();
     PressHub_AI_Policy_Fiches::register_hooks();
     new PressHub_AI_Fiches_Admin();
+    new PressHub_AI_Help_Admin();
+    new PressHub_AI_Update_Backup();
     PressHub_Settings_Transfer::register_hooks();
     PressHub_Settings_Cleanup::register_hooks();
     new PressHub_AI_Social_Meta();
@@ -465,6 +518,10 @@ function presshub_ai_init() {
         if ( ! wp_next_scheduled( 'presshub_ai_prune_audit_logs' ) ) {
             wp_schedule_event( time(), 'daily', 'presshub_ai_prune_audit_logs' );
         }
+    }
+
+    if ( class_exists( 'PressHub_AI_QA_Review_Store' ) ) {
+        PressHub_AI_QA_Review_Store::maybe_upgrade();
     }
 
     if ( class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
@@ -1015,7 +1072,7 @@ function presshub_ai_briefing_step_max_continuations() {
  *
  * @param string $date    Briefing date (Y-m-d).
  * @param string $edition morning | noon.
- * @param string $step    script | audio.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Audio continuation number (0 for the first run).
  * @param int    $delay   Seconds from now.
  * @return bool True when the event was queued; false means run it inline.
@@ -1028,7 +1085,7 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
     $ok   = wp_schedule_single_event( time() + max( 0, (int) $delay ), 'presshub_ai_run_briefing_step', $args );
     if ( false === $ok || ( function_exists( 'is_wp_error' ) && is_wp_error( $ok ) ) ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; running it in this request.', [
+            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; the caller runs it now or, when the same step is already waiting, leaves it to that event.', [
                 'date'    => $date,
                 'edition' => $edition,
                 'step'    => $step,
@@ -1052,7 +1109,7 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
  *
  * @param string $date    Briefing date (Y-m-d).
  * @param string $edition morning | noon.
- * @param string $step    script | audio.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Audio continuation number.
  * @return mixed Step result.
  */
@@ -1068,6 +1125,17 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
 
     if ( 'audio' === $step ) {
         return presshub_ai_run_podcast_audio_step( $date, $edition, (int) $part, true );
+    }
+    // English and Turkish versions: translate:<lang> and voice:<lang>.
+    if ( 0 === strpos( (string) $step, 'translate:' ) || 0 === strpos( (string) $step, 'voice:' ) ) {
+        try {
+            return PressHub_AI_Podcast_Translations::run_step( $date, $edition, (string) $step, (int) $part, true );
+        } catch ( \Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast language step failed with an exception: ' . $t->getMessage(), [ 'date' => $date, 'edition' => $edition, 'step' => $step ] );
+            }
+            return new WP_Error( 'translation_exception', $t->getMessage() );
+        }
     }
     return presshub_ai_run_podcast_script_step( $date, $edition, true );
 }
@@ -1142,8 +1210,11 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
             if ( 'synthesis_time_budget' !== $result->get_error_code() && class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error( $label . ' generation cron error in audio synthesis: ' . $result->get_error_message() );
             }
-        } elseif ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+        } else {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+            }
+            // synthesize_podcast() has started the English and Turkish versions.
         }
     } catch ( \Throwable $t ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {

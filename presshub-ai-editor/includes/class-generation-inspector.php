@@ -643,6 +643,35 @@ class PressHub_AI_Generation_Inspector {
             }
         }
 
+        // What call_provider() added to the system prompt (agenda, people and
+        // policy fiches), so an editor can see which fiches a generation used.
+        $knowledge = [];
+        if ( isset( $config['policy_fiches'] ) ) {
+            $knowledge[ __( 'Policy fiches', 'presshub-ai-editor' ) ] = self::knowledge_line( $config['policy_fiches'], $config['policy_fiches_chars'] ?? 0 );
+        }
+        if ( isset( $config['stakeholders'] ) ) {
+            $knowledge[ __( 'People fiches', 'presshub-ai-editor' ) ] = self::knowledge_line( $config['stakeholders'], $config['stakeholders_chars'] ?? 0 );
+        }
+        if ( isset( $config['editorial_agenda_version'] ) ) {
+            $knowledge[ __( 'Editorial agenda', 'presshub-ai-editor' ) ] = 'v' . (int) $config['editorial_agenda_version'] . ' (' . (int) ( $config['editorial_agenda_chars'] ?? 0 ) . ' chars)';
+        }
+        // Design principle: every cut a context limit made is shown with the call.
+        $cuts = [];
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            $labels = [
+                'editorial_agenda' => __( 'Editorial agenda', 'presshub-ai-editor' ),
+                'stakeholders'     => __( 'People fiches', 'presshub-ai-editor' ),
+                'policy_fiches'    => __( 'Policy fiches', 'presshub-ai-editor' ),
+            ];
+            foreach ( PressHub_AI_Knowledge_Cuts::CONFIG_KEYS as $kind => $key ) {
+                if ( ! empty( $config[ $key ] ) && is_array( $config[ $key ] ) ) {
+                    $cuts[ $labels[ $kind ] ] = [ 'html' => '<ul class="presshub-inspector-cuts">' . implode( '', array_map( static function ( $line ) {
+                        return '<li>' . esc_html( $line ) . '</li>';
+                    }, PressHub_AI_Knowledge_Cuts::describe( $config[ $key ] ) ) ) . '</ul>' ];
+                }
+            }
+        }
+
         $token_estimate = $inputs['token_estimate'] ?? ( $totals['capped_tokens_estimate'] ?? '' );
         $usage_rows     = [
             __( 'Prompt tokens', 'presshub-ai-editor' )     => $usage['prompt_tokens'] ?? '',
@@ -662,7 +691,15 @@ class PressHub_AI_Generation_Inspector {
 
         return self::section_heading( __( 'Generation', 'presshub-ai-editor' ) ) . self::kv_table( $general )
             . self::section_heading( __( 'Request settings (as resolved)', 'presshub-ai-editor' ) ) . self::kv_table( $settings )
+            . ( empty( $knowledge ) ? '' : self::section_heading( __( 'Editorial knowledge sent', 'presshub-ai-editor' ) ) . self::kv_table( $knowledge ) )
+            . ( empty( $cuts ) ? '' : self::section_heading( __( 'Left out because of limits', 'presshub-ai-editor' ) ) . self::kv_table( $cuts ) )
             . self::section_heading( __( 'Usage and truncation', 'presshub-ai-editor' ) ) . self::kv_table( $usage_rows );
+    }
+
+    /** "a, b (1234 chars)" for a list of injected fiches. */
+    private static function knowledge_line( $items, $chars ): string {
+        $items = array_values( array_filter( array_map( 'strval', is_array( $items ) ? $items : [] ), 'strlen' ) );
+        return ( empty( $items ) ? '—' : implode( ', ', $items ) ) . ' (' . (int) $chars . ' chars)';
     }
 
     /**

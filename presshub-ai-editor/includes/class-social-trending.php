@@ -1163,6 +1163,18 @@ class PressHub_AI_Social_Trending {
     /**
      * @return int|WP_Error
      */
+    /** Whether the QA gate is holding this roundup in Pending Review. */
+    private static function held_by_gate( int $post_id, $post ): bool {
+        if ( ! class_exists( 'PressHub_AI_Publish_Gate' ) || 'pending' !== ( $post->post_status ?? '' ) ) {
+            return false;
+        }
+        if ( '' === (string) get_post_meta( $post_id, PressHub_AI_Publish_Gate::META_TARGET_STATUS, true ) ) {
+            return false;
+        }
+        $review = get_post_meta( $post_id, PressHub_AI_Publish_Gate::META_REVIEW, true );
+        return is_array( $review ) && PressHub_AI_Publish_Gate::holds( $review );
+    }
+
     public static function upsert_post( array $items, int $now, string $run_id ) {
         $key     = self::post_key( $now, $run_id );
         $map     = get_option( self::OPTION_POSTS, [] );
@@ -1174,13 +1186,30 @@ class PressHub_AI_Social_Trending {
         $existing = (int) ( $map[ $key ] ?? 0 );
         $post     = $existing > 0 ? get_post( $existing ) : null;
         $update   = $post && 'trash' !== ( $post->post_status ?? '' );
+        $new_set  = true;
+        if ( $update ) {
+            $prev_items = json_decode( (string) get_post_meta( $existing, self::META_ITEMS, true ), true );
+            $new_set    = self::summary_hash( $items ) !== self::summary_hash( is_array( $prev_items ) ? $prev_items : [] );
+            // A roundup the gate is holding keeps the text it was reviewed on
+            // until a new set of posts arrives, so "Publish anyway" still
+            // matches (and no summary is asked for).
+            if ( ! $new_set && self::held_by_gate( $existing, $post ) ) {
+                return $existing;
+            }
+        }
         $summary  = self::summary_for( $items, $update ? $existing : 0 );
         $content  = self::build_content( $items, $now, $summary['text'] );
         if ( $update ) {
+            // A new set of posts is not shown until the QA gate has read it.
+            if ( $new_set && class_exists( 'PressHub_AI_Publish_Gate' ) && PressHub_AI_Publish_Gate::applies( 'trending' ) ) {
+                PressHub_AI_Publish_Gate::hold_for_review( $existing );
+            }
+            $fresh_post = get_post( $existing );
             $res = wp_update_post( [
                 'ID'           => $existing,
                 'post_title'   => $title,
                 'post_content' => $content,
+                'post_status'  => (string) ( $fresh_post->post_status ?? $post->post_status ),
             ], true );
             if ( is_wp_error( $res ) ) {
                 return $res;
@@ -1188,6 +1217,11 @@ class PressHub_AI_Social_Trending {
             update_post_meta( $existing, self::META_ITEMS, $items_meta );
             self::save_summary_meta( $existing, $summary );
             self::maybe_set_featured_image( $existing, $items );
+            // A new set of posts is checked again (whether or not the AI
+            // summary is on); the numbers changing alone is not.
+            if ( $new_set ) {
+                self::release_through_gate( $existing );
+            }
             return $existing;
         }
 
@@ -1213,6 +1247,10 @@ class PressHub_AI_Social_Trending {
             $postarr['post_date_gmt'] = $held[1];
             self::log( 'info', sprintf( 'Social trending: roundup scheduled for %s (site time) so its social posts go out then.', $held[0] ) );
         }
+        // QA gate: saved as pending and released once the summary and image are in place.
+        if ( class_exists( 'PressHub_AI_Publish_Gate' ) ) {
+            $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'trending' );
+        }
         $id = wp_insert_post( $postarr, true );
         if ( is_wp_error( $id ) ) {
             return $id;
@@ -1227,7 +1265,20 @@ class PressHub_AI_Social_Trending {
         update_option( self::OPTION_POSTS, $map, false );
         self::save_summary_meta( (int) $id, $summary );
         self::maybe_set_featured_image( (int) $id, $items );
+        self::release_through_gate( (int) $id );
         return (int) $id;
+    }
+
+    /** Legal check of the summary and quoted posts plus the measured SEO checks; then the configured status. */
+    private static function release_through_gate( int $post_id ): void {
+        if ( ! class_exists( 'PressHub_AI_Publish_Gate' ) ) {
+            return;
+        }
+        try {
+            PressHub_AI_Publish_Gate::release( $post_id, 'trending', 'trending_roundup' );
+        } catch ( Throwable $t ) {
+            self::log( 'warning', 'Social trending: the QA gate could not run: ' . $t->getMessage() );
+        }
     }
 
     /* ------------------------------------------------------------------

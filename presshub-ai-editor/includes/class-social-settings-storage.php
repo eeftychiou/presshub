@@ -23,7 +23,25 @@ class PressHub_Social_Settings_Storage {
     /**
      * Supported social publishing platforms.
      */
-    const PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+    const PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok', 'youtube' ];
+
+    /**
+     * Platforms whose dispatch engine can be chosen. YouTube has no choice: the worker
+     * renders the video and uploads it through the YouTube Data API (PressHub_Social_YouTube).
+     */
+    const ENGINE_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+
+    /** Platforms that can get AI post images (YouTube videos keep their own story images). */
+    const IMAGE_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+
+    /**
+     * Platforms switched on until the list is saved. YouTube is opt-in: it needs its own
+     * sign-in, and an enabled but unconnected platform logs a warning on every publish.
+     */
+    const DEFAULT_ENABLED_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+
+    /** YouTube privacy statuses a new upload can get. */
+    const YOUTUBE_PRIVACY = [ 'public', 'unlisted', 'private' ];
 
     /**
      * Supported dispatch engines.
@@ -69,7 +87,7 @@ class PressHub_Social_Settings_Storage {
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_enabled_platforms', [
             'type'              => 'array',
             'sanitize_callback' => [ __CLASS__, 'sanitize_enabled_platforms' ],
-            'default'           => self::PLATFORMS,
+            'default'           => self::DEFAULT_ENABLED_PLATFORMS,
         ] );
 
         foreach ( self::PLATFORMS as $platform ) {
@@ -78,7 +96,7 @@ class PressHub_Social_Settings_Storage {
                 'sanitize_callback' => function( $val ) use ( $platform ) {
                     return self::sanitize_platform_enabled( $val, $platform );
                 },
-                'default'           => true,
+                'default'           => in_array( $platform, self::DEFAULT_ENABLED_PLATFORMS, true ),
             ] );
         }
 
@@ -89,7 +107,7 @@ class PressHub_Social_Settings_Storage {
         ] );
 
         // 2. Platform Engines
-        foreach ( self::PLATFORMS as $platform ) {
+        foreach ( self::ENGINE_PLATFORMS as $platform ) {
             PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_engine_' . $platform, [
                 'type'              => 'string',
                 'sanitize_callback' => function( $val ) use ( $platform ) {
@@ -241,7 +259,7 @@ class PressHub_Social_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_post_images_enabled' ],
             'default'           => false,
         ] );
-        foreach ( self::PLATFORMS as $images_platform ) {
+        foreach ( self::IMAGE_PLATFORMS as $images_platform ) {
             PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_post_images_' . $images_platform, [
                 'type'              => 'integer',
                 'sanitize_callback' => function ( $val ) use ( $images_platform ) {
@@ -263,6 +281,55 @@ class PressHub_Social_Settings_Storage {
             'type'              => 'boolean',
             'sanitize_callback' => [ __CLASS__, 'sanitize_instagram_shorts_enabled' ],
             'default'           => false,
+        ] );
+
+        // YouTube: the same shorts as YouTube Shorts, and podcast episodes in a playlist.
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_shorts_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_shorts_enabled' ],
+            'default'           => false,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_podcast_enabled', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_podcast_enabled' ],
+            'default'           => false,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_episode_enhanced', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_episode_enhanced' ],
+            'default'           => true,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_episode_image_wait_minutes', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_episode_image_wait_minutes' ],
+            'default'           => 90,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_podcast_playlist_id', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_podcast_playlist_id' ],
+            'default'           => '',
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_podcast_language_playlists', [
+            'type'              => 'array',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_podcast_language_playlists' ],
+            'default'           => [],
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_privacy_status', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_privacy_status' ],
+            'default'           => 'public',
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_category_id', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_category_id' ],
+            'default'           => 25,
         ] );
 
         // Article shorts: every other post (articles, opinion pieces) also becomes one short.
@@ -397,6 +464,18 @@ class PressHub_Social_Settings_Storage {
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_tiktok_open_id', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_tiktok_open_id' ],
+        ] );
+
+        // YouTube (Google OAuth client). The refresh token is not a form field: it is
+        // stored by the "Connect YouTube" sign-in (PressHub_Social_YouTube).
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_client_id', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_client_id' ],
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_client_secret', [
+            'type'              => 'string',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_client_secret' ],
         ] );
 
         // 8. Prompts & Templates
@@ -663,9 +742,9 @@ class PressHub_Social_Settings_Storage {
             update_option( 'presshub_social_auto_publish_enabled', true );
         }
 
-        $enabled_platforms = get_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
+        $enabled_platforms = get_option( 'presshub_social_enabled_platforms', self::DEFAULT_ENABLED_PLATFORMS );
         if ( ! is_array( $enabled_platforms ) || empty( $enabled_platforms ) ) {
-            update_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
+            update_option( 'presshub_social_enabled_platforms', self::DEFAULT_ENABLED_PLATFORMS );
         }
         foreach ( self::PLATFORMS as $platform ) {
             delete_option( 'presshub_social_enabled_' . $platform );
@@ -744,8 +823,8 @@ class PressHub_Social_Settings_Storage {
     }
 
     public static function get_enabled_platforms(): array {
-        $platforms = get_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
-        $valid     = array_values( array_intersect( is_array( $platforms ) ? $platforms : self::PLATFORMS, self::PLATFORMS ) );
+        $platforms = get_option( 'presshub_social_enabled_platforms', self::DEFAULT_ENABLED_PLATFORMS );
+        $valid     = array_values( array_intersect( is_array( $platforms ) ? $platforms : self::DEFAULT_ENABLED_PLATFORMS, self::PLATFORMS ) );
 
         foreach ( self::PLATFORMS as $p ) {
             $per = get_option( 'presshub_social_enabled_' . $p, null );
@@ -781,8 +860,8 @@ class PressHub_Social_Settings_Storage {
         }
         update_option( 'presshub_social_enabled_' . $platform, $enabled );
 
-        $current = get_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
-        $valid   = array_values( array_intersect( is_array( $current ) ? $current : self::PLATFORMS, self::PLATFORMS ) );
+        $current = get_option( 'presshub_social_enabled_platforms', self::DEFAULT_ENABLED_PLATFORMS );
+        $valid   = array_values( array_intersect( is_array( $current ) ? $current : self::DEFAULT_ENABLED_PLATFORMS, self::PLATFORMS ) );
         if ( $enabled && ! in_array( $platform, $valid, true ) ) {
             $valid[] = $platform;
         } elseif ( ! $enabled && in_array( $platform, $valid, true ) ) {
@@ -813,8 +892,8 @@ class PressHub_Social_Settings_Storage {
         }
 
         if ( empty( $_POST['presshub_social_enabled_platforms_present'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
-            $current = get_option( 'presshub_social_enabled_platforms', self::PLATFORMS );
-            $valid   = array_values( array_intersect( is_array( $current ) ? $current : self::PLATFORMS, self::PLATFORMS ) );
+            $current = get_option( 'presshub_social_enabled_platforms', self::DEFAULT_ENABLED_PLATFORMS );
+            $valid   = array_values( array_intersect( is_array( $current ) ? $current : self::DEFAULT_ENABLED_PLATFORMS, self::PLATFORMS ) );
             if ( $enabled && ! in_array( $platform, $valid, true ) ) {
                 $valid[] = $platform;
             } elseif ( ! $enabled && in_array( $platform, $valid, true ) ) {
@@ -866,6 +945,18 @@ class PressHub_Social_Settings_Storage {
         }
 
         $engine = self::get_platform_engine( $platform );
+
+        if ( 'youtube' === $platform ) {
+            // The worker renders and uploads, so it needs Pull Mode, a worker that
+            // reported it can upload to YouTube, and a connected YouTube account.
+            // Set up, not "uploading now": while Google refuses the sign-in (or the quota is
+            // used up) new posts are still queued and wait; only claims are held.
+            if ( 'pull' !== self::get_worker_mode() || ! class_exists( 'PressHub_Social_YouTube' ) || ! PressHub_Social_YouTube::is_set_up() ) {
+                return false;
+            }
+            $sessions = get_option( 'presshub_social_worker_sessions', [] );
+            return is_array( $sessions ) && array_key_exists( 'youtube', $sessions );
+        }
 
         if ( 'api' === $engine ) {
             switch ( $platform ) {
@@ -941,6 +1032,10 @@ class PressHub_Social_Settings_Storage {
 
     public static function get_platform_engine( string $platform ): string {
         $platform = sanitize_key( $platform );
+        if ( 'youtube' === $platform ) {
+            // Claimed by the worker, which renders the video and uploads it with the API.
+            return 'automation';
+        }
         $default  = in_array( $platform, [ 'twitter', 'tiktok' ], true ) ? 'automation' : 'api';
         $engine   = (string) get_option( 'presshub_social_engine_' . $platform, $default );
         return in_array( $engine, self::ENGINES, true ) ? $engine : $default;
@@ -1266,6 +1361,128 @@ class PressHub_Social_Settings_Storage {
             return self::get_instagram_shorts_enabled();
         }
         return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Whether the shorts also go to YouTube as YouTube Shorts (default off). */
+    public static function get_youtube_shorts_enabled(): bool {
+        return in_array( get_option( 'presshub_social_youtube_shorts_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_youtube_shorts_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_youtube_shorts_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_youtube_shorts_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Whether episodes get the shorts' story images and captions (default on). */
+    public static function get_youtube_episode_enhanced(): bool {
+        return in_array( get_option( 'presshub_social_youtube_episode_enhanced', true ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_youtube_episode_enhanced( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_youtube_episode_enhanced_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_youtube_episode_enhanced();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Minutes an episode waits for its shorts' story images before it goes without them (0-240, default 90). */
+    public static function get_youtube_episode_image_wait_minutes(): int {
+        return self::sanitize_youtube_episode_image_wait_minutes( get_option( 'presshub_social_youtube_episode_image_wait_minutes', 90 ) );
+    }
+
+    public static function sanitize_youtube_episode_image_wait_minutes( $value ): int {
+        if ( null === $value || '' === $value ) {
+            // Not in this save (another section's form): keep the stored value.
+            $value = get_option( 'presshub_social_youtube_episode_image_wait_minutes', 90 );
+            $value = ( null === $value || '' === $value ) ? 90 : $value;
+        }
+        return max( 0, min( 240, (int) $value ) );
+    }
+
+    /** Whether each Daily Briefing podcast also goes to YouTube as a full episode (default off). */
+    public static function get_youtube_podcast_enabled(): bool {
+        return in_array( get_option( 'presshub_social_youtube_podcast_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_youtube_podcast_enabled( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_youtube_podcast_enabled_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_youtube_podcast_enabled();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** ID of the YouTube playlist (marked as a podcast) that every episode is added to, or ''. */
+    public static function get_youtube_podcast_playlist_id(): string {
+        return self::sanitize_youtube_podcast_playlist_id( get_option( 'presshub_social_youtube_podcast_playlist_id', '' ) );
+    }
+
+    /**
+     * A playlist ID, or the ID taken from a pasted playlist link (…?list=PL…). Anything
+     * else is dropped.
+     */
+    public static function sanitize_youtube_podcast_playlist_id( $value ): string {
+        if ( null === $value ) {
+            // Not in this save (another section's form): keep the stored value.
+            return self::sanitize_youtube_podcast_playlist_id( (string) get_option( 'presshub_social_youtube_podcast_playlist_id', '' ) );
+        }
+        $value = trim( (string) $value );
+        if ( preg_match( '/[?&]list=([A-Za-z0-9_\-]+)/', $value, $m ) ) {
+            $value = $m[1];
+        }
+        return preg_match( '/^[A-Za-z0-9_\-]{10,64}$/', $value ) ? $value : '';
+    }
+
+    /**
+     * Playlist of one language's podcast episodes (English, Turkish), or '' to upload
+     * them without a playlist. Never the Greek podcast playlist's ID: each language
+     * gets its own playlist.
+     */
+    public static function get_youtube_podcast_playlist_id_for( string $lang ): string {
+        $all = self::sanitize_youtube_podcast_language_playlists( get_option( 'presshub_social_youtube_podcast_language_playlists', [] ) );
+        return (string) ( $all[ $lang ] ?? '' );
+    }
+
+    /** Playlist IDs (or pasted playlist links) per known language. */
+    public static function sanitize_youtube_podcast_language_playlists( $value ): array {
+        if ( null === $value ) {
+            $value = get_option( 'presshub_social_youtube_podcast_language_playlists', [] );
+        }
+        $value = is_array( $value ) ? $value : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out   = [];
+        foreach ( $known as $lang ) {
+            $id           = is_string( $value[ $lang ] ?? null ) ? self::sanitize_youtube_podcast_playlist_id( $value[ $lang ] ) : '';
+            $out[ $lang ] = $id;
+        }
+        return $out;
+    }
+
+    /** Privacy status of a new YouTube upload: public, unlisted or private (default public). */
+    public static function get_youtube_privacy_status(): string {
+        return self::sanitize_youtube_privacy_status( get_option( 'presshub_social_youtube_privacy_status', 'public' ) );
+    }
+
+    public static function sanitize_youtube_privacy_status( $value ): string {
+        if ( null === $value ) {
+            return self::sanitize_youtube_privacy_status( (string) get_option( 'presshub_social_youtube_privacy_status', 'public' ) );
+        }
+        $value = sanitize_key( (string) $value );
+        return in_array( $value, self::YOUTUBE_PRIVACY, true ) ? $value : 'public';
+    }
+
+    /** YouTube video category of the uploads (default 25, News & Politics). */
+    public static function get_youtube_category_id(): int {
+        return self::sanitize_youtube_category_id( get_option( 'presshub_social_youtube_category_id', 25 ) );
+    }
+
+    public static function sanitize_youtube_category_id( $value ): int {
+        if ( null === $value ) {
+            return self::sanitize_youtube_category_id( (int) get_option( 'presshub_social_youtube_category_id', 25 ) );
+        }
+        $value = (int) $value;
+        return ( $value >= 1 && $value <= 44 ) ? $value : 25;
     }
 
     /** Number of TikTok shorts made from one podcast post (1-5, default 3). */
@@ -1694,6 +1911,26 @@ class PressHub_Social_Settings_Storage {
         return sanitize_text_field( (string) $value );
     }
 
+    /** OAuth client ID of the Google Cloud project that uploads to YouTube. */
+    public static function get_youtube_client_id(): string {
+        return sanitize_text_field( (string) get_option( 'presshub_social_youtube_client_id', '' ) );
+    }
+
+    public static function sanitize_youtube_client_id( $value ): string {
+        if ( null === $value ) {
+            return trim( sanitize_text_field( (string) get_option( 'presshub_social_youtube_client_id', '' ) ) );
+        }
+        return trim( sanitize_text_field( (string) $value ) );
+    }
+
+    public static function get_youtube_client_secret(): string {
+        return (string) get_option( 'presshub_social_youtube_client_secret', '' );
+    }
+
+    public static function sanitize_youtube_client_secret( $value ): string {
+        return self::sanitize_secret( $value, 'presshub_social_youtube_client_secret' );
+    }
+
     // ------------------------------------------------------------------
     // Getters & Sanitizers: Prompts & Templates (Zero-Silent-Fallback)
     // ------------------------------------------------------------------
@@ -1853,6 +2090,7 @@ class PressHub_Social_Settings_Storage {
             'presshub_social_twitter_bearer_token' => [ 'social:twitter' ],
             'presshub_social_twitter_access_token' => [ 'social:twitter' ],
             'presshub_social_tiktok_access_token'  => [ 'social:tiktok' ],
+            'presshub_social_youtube_client_secret' => [ 'social:youtube' ],
             'presshub_social_worker_secret'        => [ 'worker' ],
         ];
         if ( empty( $checks[ $option_name ] ) ) {

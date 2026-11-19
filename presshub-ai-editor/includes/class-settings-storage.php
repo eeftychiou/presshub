@@ -217,6 +217,12 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
             'default'           => 90,
         ] );
+        // #296: how many pre-update backups PressHub → Backups keeps.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_backup_keep', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_backup_keep' ],
+            'type'              => 'integer',
+            'default'           => 5,
+        ] );
 
         // Settings-First: Social & OpenGraph metadata master toggle and scope.
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_meta_enabled', [
@@ -322,6 +328,20 @@ class PressHub_AI_Settings_Storage {
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_voice_tertiary', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_tertiary' ],
             'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_languages', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_languages' ],
+            'type'              => 'array',
+            'default'           => [],
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_language_notes', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_language_notes' ],
+            'type'              => 'array',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_language_voices', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_language_voices' ],
+            'type'              => 'array',
+            'default'           => [],
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_audio_split_by_topic', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
@@ -571,6 +591,30 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_qa_prompt' ],
             'type'              => 'string',
         ] );
+        // Publish gate (2.47.0): legal and SEO checks beside the editorial score.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_legal_action', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_legal_action' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_legal_fail_risk', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_legal_fail_risk' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_seo_action', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_seo_action' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_seo_min_score', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_qa_seo_min_score' ],
+            'type'              => 'integer',
+        ] );
+        // Publish gate coverage (2.48.0): which publish paths the gate checks.
+        foreach ( [ 'presshub_ai_qa_check_editors', 'presshub_ai_qa_include_podcasts', 'presshub_ai_qa_include_trending' ] as $gate_option ) {
+            PressHub_Settings_Registry::register( 'presshub_ai_options', $gate_option, [
+                'sanitize_callback' => [ __CLASS__, 'sanitize_qa_coverage_flag' ],
+                'type'              => 'integer',
+            ] );
+        }
 
         // #236: Editorial QA can run on its own model; empty = same as Co-author.
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_qa_provider', [
@@ -966,6 +1010,32 @@ class PressHub_AI_Settings_Storage {
      */
     public static function get_audit_log_retention_days(): int {
         return self::sanitize_audit_log_retention_days( get_option( 'presshub_ai_audit_log_retention_days', 90 ) );
+    }
+
+    /**
+     * Sanitize backup_keep (#296): how many backups to keep.
+     * Non-numeric input falls back to the default of 5; numeric input is clamped to 1-20.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_backup_keep( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 5;
+        }
+        return max( 1, min( 20, (int) $value ) );
+    }
+
+    /**
+     * backup_keep: backups PressHub keeps (default 5, clamped 1-20).
+     *
+     * @return int
+     */
+    public static function get_backup_keep(): int {
+        return self::sanitize_backup_keep( get_option( 'presshub_ai_backup_keep', 5 ) );
     }
 
     public static function sanitize_model( $value, $provider = 'openai' ) {
@@ -2052,6 +2122,99 @@ class PressHub_AI_Settings_Storage {
     }
 
     /**
+     * Languages the Daily Briefing podcast is also made in (codes of
+     * PressHub_AI_Podcast_Translations::LANGUAGES, e.g. [ 'en', 'tr' ]). Default: none.
+     *
+     * @return string[]
+     */
+    public static function get_briefing_podcast_languages(): array {
+        return self::sanitize_briefing_podcast_languages( get_option( 'presshub_ai_briefing_podcast_languages', [] ) );
+    }
+
+    /** Known language codes only, in the order of LANGUAGES, each once. */
+    public static function sanitize_briefing_podcast_languages( $value ): array {
+        if ( null === $value ) {
+            // Not in this save (another tab's form): keep what is stored.
+            $value = get_option( 'presshub_ai_briefing_podcast_languages', [] );
+        }
+        $value = is_array( $value ) ? array_map( 'strval', $value ) : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        return array_values( array_intersect( $known, $value ) );
+    }
+
+    /**
+     * Translator's notes for one language: place names, terms and wording the
+     * translation of the podcast must follow. Default: the built-in notes.
+     */
+    public static function get_briefing_podcast_language_notes( string $lang ): string {
+        $all = get_option( 'presshub_ai_briefing_podcast_language_notes', null );
+        $notes = ( is_array( $all ) && array_key_exists( $lang, $all ) ) ? self::sanitize_language_notes_text( $all[ $lang ] ) : '';
+        // An emptied box goes back to the built-in notes.
+        return '' !== $notes ? $notes : self::default_briefing_podcast_language_notes( $lang );
+    }
+
+    /** Built-in translator's notes of a language ('' for an unknown one). */
+    public static function default_briefing_podcast_language_notes( string $lang ): string {
+        $defaults = class_exists( 'PressHub_AI_Podcast_Translations' ) ? PressHub_AI_Podcast_Translations::default_notes() : [];
+        return (string) ( $defaults[ $lang ] ?? '' );
+    }
+
+    /** Notes per known language, each plain text of at most 4,000 characters. */
+    public static function sanitize_briefing_podcast_language_notes( $value ): array {
+        $value = is_array( $value ) ? $value : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out   = [];
+        foreach ( $known as $lang ) {
+            $out[ $lang ] = array_key_exists( $lang, $value )
+                ? self::sanitize_language_notes_text( $value[ $lang ] )
+                : self::get_briefing_podcast_language_notes( $lang );
+        }
+        return $out;
+    }
+
+    private static function sanitize_language_notes_text( $text ): string {
+        $text = is_string( $text ) ? $text : '';
+        $text = function_exists( 'wp_unslash' ) ? wp_unslash( $text ) : $text;
+        $text = function_exists( 'sanitize_textarea_field' ) ? sanitize_textarea_field( $text ) : trim( strip_tags( $text ) );
+        return mb_substr( trim( $text ), 0, 4000 );
+    }
+
+    /**
+     * Voices of one language's podcast, keyed presenter_1..presenter_3. An empty
+     * voice means the Greek podcast's voice for that presenter (the default).
+     *
+     * @return array{presenter_1:string,presenter_2:string,presenter_3:string}
+     */
+    public static function get_briefing_podcast_language_voices( string $lang ): array {
+        $all = self::sanitize_briefing_podcast_language_voices( get_option( 'presshub_ai_briefing_podcast_language_voices', [] ) );
+        return $all[ $lang ] ?? [ 'presenter_1' => '', 'presenter_2' => '', 'presenter_3' => '' ];
+    }
+
+    /**
+     * Voice names per known language and presenter; anything else is dropped. A
+     * language or presenter missing from the posted value (another tab's form, or a
+     * presenter hidden while the podcast has fewer hosts) keeps its stored voice.
+     */
+    public static function sanitize_briefing_podcast_language_voices( $value ): array {
+        $stored = get_option( 'presshub_ai_briefing_podcast_language_voices', [] );
+        $stored = is_array( $stored ) ? $stored : [];
+        $value  = is_array( $value ) ? $value : [];
+        $known  = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out    = [];
+        foreach ( $known as $lang ) {
+            $row = is_array( $value[ $lang ] ?? null ) ? $value[ $lang ] : [];
+            $old = is_array( $stored[ $lang ] ?? null ) ? $stored[ $lang ] : [];
+            foreach ( [ 'presenter_1', 'presenter_2', 'presenter_3' ] as $p ) {
+                $voice = array_key_exists( $p, $row ) ? $row[ $p ] : ( $old[ $p ] ?? '' );
+                $voice = is_string( $voice ) ? trim( $voice ) : '';
+                // Gemini names (Kore) and Google Cloud names (en-US-Chirp3-HD-Achird).
+                $out[ $lang ][ $p ] = preg_match( '/^[A-Za-z0-9][A-Za-z0-9_\-]{1,63}$/', $voice ) ? $voice : '';
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Is the automated AI Editorial QA review system enabled?
      * Default is true (1).
      *
@@ -2145,6 +2308,118 @@ class PressHub_AI_Settings_Storage {
             require_once __DIR__ . '/class-prompt-loader.php';
         }
         return PressHub_AI_Prompt_Loader::get_briefing_qa_prompt();
+    }
+
+    // ------------------------------------------------------------------
+    // Publish gate: legal and SEO checks (2.47.0)
+    // ------------------------------------------------------------------
+
+    /** What a failed legal check does: off, alert (publish and email) or hold (keep pending). */
+    const QA_LEGAL_ACTIONS = [ 'off', 'alert', 'hold' ];
+
+    /** What a failed SEO check does: alert (publish and email) or hold. */
+    const QA_SEO_ACTIONS = [ 'alert', 'hold' ];
+
+    /** Lowest legal risk that fails the legal check. */
+    const QA_LEGAL_FAIL_RISKS = [ 'high', 'medium' ];
+
+    public static function default_qa_legal_action(): string {
+        return 'alert';
+    }
+
+    public static function sanitize_qa_legal_action( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_LEGAL_ACTIONS, true ) ? $value : self::default_qa_legal_action();
+    }
+
+    /** Legal check action: 'off', 'alert' or 'hold'. Default: alert. */
+    public static function get_qa_legal_action(): string {
+        return self::sanitize_qa_legal_action( get_option( 'presshub_ai_qa_legal_action', self::default_qa_legal_action() ) );
+    }
+
+    public static function default_qa_legal_fail_risk(): string {
+        return 'high';
+    }
+
+    public static function sanitize_qa_legal_fail_risk( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_LEGAL_FAIL_RISKS, true ) ? $value : self::default_qa_legal_fail_risk();
+    }
+
+    /** Lowest legal risk that fails: 'high' (only High) or 'medium' (Medium or High). Default: high. */
+    public static function get_qa_legal_fail_risk(): string {
+        return self::sanitize_qa_legal_fail_risk( get_option( 'presshub_ai_qa_legal_fail_risk', self::default_qa_legal_fail_risk() ) );
+    }
+
+    public static function default_qa_seo_action(): string {
+        return 'alert';
+    }
+
+    public static function sanitize_qa_seo_action( $value ): string {
+        $value = sanitize_key( (string) wp_unslash( $value ) );
+        return in_array( $value, self::QA_SEO_ACTIONS, true ) ? $value : self::default_qa_seo_action();
+    }
+
+    /** SEO check action: 'alert' or 'hold'. Default: alert. */
+    public static function get_qa_seo_action(): string {
+        return self::sanitize_qa_seo_action( get_option( 'presshub_ai_qa_seo_action', self::default_qa_seo_action() ) );
+    }
+
+    public static function default_qa_seo_min_score(): int {
+        return 60;
+    }
+
+    /** Minimum SEO score, clamped to 0 - 100. */
+    public static function sanitize_qa_seo_min_score( $value ): int {
+        if ( '' === $value || null === $value ) {
+            return self::default_qa_seo_min_score();
+        }
+        return max( 0, min( 100, (int) wp_unslash( $value ) ) );
+    }
+
+    /** Minimum SEO score (0 - 100) the SEO check needs. Default: 60. */
+    public static function get_qa_seo_min_score(): int {
+        return self::sanitize_qa_seo_min_score( get_option( 'presshub_ai_qa_seo_min_score', self::default_qa_seo_min_score() ) );
+    }
+
+    /** Default of the three coverage switches below: on. */
+    public static function default_qa_coverage_flag(): int {
+        return 1;
+    }
+
+    /** A coverage switch: 1 or 0. Anything else falls back to the default. */
+    public static function sanitize_qa_coverage_flag( $value ): int {
+        if ( null === $value || '' === $value ) {
+            return 0; // An unticked checkbox posts the hidden "0" or nothing.
+        }
+        $value = is_string( $value ) ? strtolower( trim( wp_unslash( $value ) ) ) : $value;
+        if ( in_array( $value, [ 1, '1', true, 'on', 'yes' ], true ) ) {
+            return 1;
+        }
+        if ( in_array( $value, [ 0, '0', false, 'off', 'no' ], true ) ) {
+            return 0;
+        }
+        return self::default_qa_coverage_flag();
+    }
+
+    private static function qa_coverage_flag( string $option ): bool {
+        $value = get_option( $option, self::default_qa_coverage_flag() );
+        return 1 === self::sanitize_qa_coverage_flag( false === $value ? self::default_qa_coverage_flag() : $value );
+    }
+
+    /** Check posts that editors and admins publish. Default: on. */
+    public static function get_qa_check_editors(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_check_editors' );
+    }
+
+    /** Check Daily Briefing podcast posts. Default: on. */
+    public static function get_qa_include_podcasts(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_include_podcasts' );
+    }
+
+    /** Check the Trending in Cyprus roundup. Default: on. */
+    public static function get_qa_include_trending(): bool {
+        return self::qa_coverage_flag( 'presshub_ai_qa_include_trending' );
     }
 
     /**

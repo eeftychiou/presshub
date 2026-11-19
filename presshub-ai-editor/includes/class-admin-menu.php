@@ -5,6 +5,8 @@
  *   PressHub                     top-level, opens the Daily Briefing Hub
  *   ├─ Daily Briefing Hub        admin.php?page=presshub-ai-briefing-hub
  *   ├─ Generation records        admin.php?page=presshub-ai-generation-records
+ *   ├─ QA reviews                admin.php?page=presshub-ai-qa-reviews
+ *   ├─ Held by QA                admin.php?page=presshub-ai-qa-held
  *   ├─ Social Queue              admin.php?page=presshub-social-queue
  *   ├─ Memory                    admin.php?page=presshub-ai-memory
  *   ├─ Editorial agenda          admin.php?page=presshub-ai-agenda
@@ -12,7 +14,9 @@
  *   ├─ People                    admin.php?page=presshub-ai-people
  *   ├─ Usage & logs              admin.php?page=presshub-ai-usage
  *   ├─ Settings                  admin.php?page=presshub-ai&section=<slug>
- *   └─ Presets                   admin.php?page=presshub-ai-presets
+ *   ├─ Presets                   admin.php?page=presshub-ai-presets
+ *   ├─ Backups                   admin.php?page=presshub-ai-backups
+ *   └─ Help                      admin.php?page=presshub-ai-help
  *
  * Since 3b (#246) Settings holds both former settings pages in eight
  * sections, and the old Social settings URL redirects to its section.
@@ -53,6 +57,8 @@ class PressHub_Admin_Menu {
     const ORDER = [
         'presshub-ai-briefing-hub',
         'presshub-ai-generation-records',
+        'presshub-ai-qa-reviews',
+        'presshub-ai-qa-held',
         'presshub-social-queue',
         'presshub-ai-memory',
         'presshub-ai-agenda',
@@ -61,6 +67,8 @@ class PressHub_Admin_Menu {
         self::USAGE_SLUG,
         'presshub-ai',
         'presshub-ai-presets',
+        'presshub-ai-backups',
+        'presshub-ai-help',
     ];
 
     public static function register_hooks(): void {
