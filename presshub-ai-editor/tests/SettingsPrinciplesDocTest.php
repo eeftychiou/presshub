@@ -117,6 +117,12 @@ foreach ( $ex_rows as $ex ) {
     $check( 6 === count( $cells ) && ! in_array( '', $cells, true ), "Exception {$id} fills every column." );
     $check( (bool) preg_match( '/^#\d+$/', $cells[4] ?? '' ), "Exception {$id} names one tracking issue (#<number>)." );
 }
+// Every exception the rules and tables mention still has its row.
+$body = substr( $doc, 0, (int) strpos( $doc, "\n## Exceptions\n" ) );
+preg_match_all( '/\bE(\d+)\b/', $body, $refs );
+foreach ( array_unique( $refs[1] ) as $n ) {
+    $check( isset( $seen_ids[ 'E' . $n ] ), "Exception E{$n} is mentioned in the rules and has a row under Exceptions." );
+}
 
 if ( $failures ) {
     echo "FAIL\n";
