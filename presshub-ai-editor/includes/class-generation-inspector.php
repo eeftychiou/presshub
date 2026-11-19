@@ -496,7 +496,8 @@ class PressHub_AI_Generation_Inspector {
             'generic'        => __( 'Other LLM call', 'presshub-ai-editor' ),
             'tts_test'       => __( 'TTS test', 'presshub-ai-editor' ),
             'tiktok_narration' => __( 'TikTok narration', 'presshub-ai-editor' ),
-            'tiktok_short'     => __( 'TikTok short', 'presshub-ai-editor' ),
+            'tiktok_short'     => __( 'Shorts voice (TikTok/YouTube)', 'presshub-ai-editor' ),
+            'tiktok_short_script' => __( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ),
             'seo'              => __( 'SEO & media metadata', 'presshub-ai-editor' ),
         ];
         return $labels[ $kind ] ?? $kind;

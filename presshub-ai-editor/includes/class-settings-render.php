@@ -1600,6 +1600,7 @@ class PressHub_AI_Settings_Render {
                         <option value="podcast_script"><?php echo __( 'Podcast Script', 'presshub-ai-editor' ); ?></option>
                         <option value="podcast_audio"><?php echo __( 'Podcast Audio Synthesis', 'presshub-ai-editor' ); ?></option>
                         <option value="scrape_harvest"><?php echo __( 'News Harvester', 'presshub-ai-editor' ); ?></option>
+                        <option value="social_tiktok_shorts"><?php echo esc_html__( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ); ?></option>
                         <option value="custom_test"><?php echo __( 'Test Connection', 'presshub-ai-editor' ); ?></option>
                     </select>
                 </div>
@@ -2898,7 +2899,7 @@ class PressHub_AI_Settings_Render {
             'coauthor_draft'        => __( 'Co-Author draft', 'presshub-ai-editor' ),
             'copilot_chat'          => __( 'Copilot chat', 'presshub-ai-editor' ),
             'coauthor_scorecard'    => __( 'QA scorecard', 'presshub-ai-editor' ),
-            'social_tiktok_shorts'  => __( 'Shorts script', 'presshub-ai-editor' ),
+            'social_tiktok_shorts'  => __( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ),
             'generate_image_prompt' => __( 'Image prompt', 'presshub-ai-editor' ),
             'social_copy_'          => __( 'Social copy', 'presshub-ai-editor' ),
             'seo_'                  => __( 'SEO', 'presshub-ai-editor' ),
