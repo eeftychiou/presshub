@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.64.0
+ * Version: 2.65.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -157,7 +157,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.64.0' );
+define( 'PRESSHUB_AI_VERSION', '2.65.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -1165,7 +1165,7 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
 
 /**
  * Option that lists the briefing steps queued on presshub_ai_run_briefing_step
- * and not yet started (lost-step sweep, 2.64.0).
+ * and not yet started (lost-step sweep, 2.65.0).
  */
 const PRESSHUB_AI_PENDING_STEPS_OPTION = 'presshub_ai_briefing_pending_steps';
 
