@@ -9,7 +9,7 @@
 
 **Exceptions.** A rule may be broken only with the owner's agreement in the issue, recorded under [Exceptions](#exceptions) in the same PR, with the rule, what deviates, why, the tracking issue and when it ends. Places where the code did not yet meet a rule when this document was written are recorded there too. A PR that fixes one deletes its row.
 
-**Terms.** A *setting* is a scalar or list option an editor changes on PressHub → Settings: it is in the settings registry. A *structured store* is a record set with its own editor and save endpoint (AI provider records `presshub_ai_configured_providers`, news sources, the editorial agenda, policy and people fiches, the Shorts music library). *Runtime state* is written by PressHub itself (worker heartbeat and logins, connection status cache, clean-up reports). Rules 1–6 apply to settings; rule 2.7 and section 7 say what applies to stores and state.
+**Terms.** A *setting* is a scalar or list option an editor changes on PressHub → Settings: it is in the settings registry. A *structured store* is a record set with its own editor and save endpoint, outside the registry (AI provider records `presshub_ai_configured_providers`, the editorial agenda, policy and people fiches, the Shorts music library). News sources (`presshub_ai_briefing_sources`) are a registered list setting with their own editor in Daily Briefing: they follow rules 1–6 and are also saved by that editor's endpoint. *Runtime state* is written by PressHub itself (worker heartbeat and logins, connection status cache, clean-up reports). Rules 1–6 apply to settings; rule 2.7 and section 7 say what applies to stores and state.
 
 ---
 
@@ -42,7 +42,7 @@ A new section needs an issue and the owner's agreement. A new setting goes in th
 
 ## 2. Every setting is registered, read and shown
 
-**2.1 The registry is the single source of truth for settings.** Every setting has a `PressHub_Settings_Registry::register()` call (never a bare `register_setting()`) and an entry in `includes/settings-registry-data.php`: page, tab, section, label, help, type, checkbox and secret flags, status, `rendered`, a default for scalar settings, and `depends_on` when a switch disables it. The section Save (`save_section()`), options.php and import all write through the registry's sanitizers.
+**2.1 The registry is the single source of truth for settings.** Every setting has a `PressHub_Settings_Registry::register()` call (never a bare `register_setting()`) and an entry in `includes/settings-registry-data.php`: page, tab, section, label, help, type, checkbox and secret flags, status, `rendered`, a default for scalar settings (exception E9), and `depends_on` when a switch disables it. The section Save (`save_section()`), options.php and import all write through the registry's sanitizers.
 
 **2.2 No setting without a reader, no reader without a setting.** A setting is added in the same change as the code that reads it; an option nothing reads is not shipped. A user-visible limit (`max_`, `min_`, `_limit`, `_threshold`, `_timeout`, `_retries`, `_budget`, batch sizes, retention) is never a hard-coded default in business logic: it is a setting (agents.md, Settings-First Principle).
 
@@ -50,11 +50,11 @@ A new section needs an issue and the owner's agreement. A new setting goes in th
 
 **2.4 One sanitizer that clamps.** Each setting has one `sanitize_<knob>()` that clamps to documented safe bounds. A masked or empty secret keeps the stored value; an explicit Remove clears it.
 
-**2.5 One default, and it is shown.** A scalar setting has one default, in the registry, equal to the getter's fallback (`SettingsDefaultsTest`). Inputs and selects show it as "Default: …" with Reset to default. A select shows what is stored, so an untouched Save never stores a value nobody picked. Prompts take their default from an asset file (rule 7.3) and offer "Load default template" instead.
+**2.5 One default, and it is shown.** A new scalar setting has one default, in the registry, equal to the getter's fallback (`SettingsDefaultsTest`); older settings without a registry default are exception E9. Inputs and selects show it as "Default: …" with Reset to default. A select shows what is stored, so an untouched Save never stores a value nobody picked. Prompts take their default from an asset file (rule 7.3) and offer "Load default template" instead.
 
-**2.6 Every active setting is on screen.** A setting with `status => active` renders a field in its section and has `rendered => true`. The rows of a section are printed by its `render_section_<slug>()`; only the sections printed by `render_section_with_fields()` use `add_settings_field()`. A setting nobody should see is not active: it is `unused` and on its way out (rule 4.3).
+**2.6 Every active setting is on screen.** A setting with `status => active` renders a field in its section and has `rendered => true`. The rows of a section are printed by its `render_section_<slug>()`; `add_settings_field()` is used only by the sections printed field by field: the three AI sections printed by `render_section_with_fields()` and the Social sections printed by `PressHub_Social_Settings_Render::render_settings_sections()` (fields registered in `class-social-settings.php`). A setting nobody should see is not active: it is `unused` and on its way out (rule 4.3).
 
-**2.7 Stores and state.** Structured stores are not settings: they live outside the registry, are edited in their own editor (provider cards in Connections, news sources in Daily Briefing, fiches and agenda on their PressHub pages), and save through their own AJAX or admin-post endpoint, which follows rules 3.3 and 3.4. Runtime state is never shown as an editable field. A new structured store needs an issue, says where it is edited, and is listed in `uninstall.php` (rule 7.6).
+**2.7 Stores and state.** Structured stores are not settings: they live outside the registry, are edited in their own editor (provider cards in Connections, fiches and agenda on their PressHub pages, the music library in Social publishing), and save through their own AJAX or admin-post endpoint, which follows rules 3.3 and 3.4. Runtime state is never shown as an editable field. A new structured store needs an issue, says where it is edited, and is listed in `uninstall.php` (rule 7.6).
 
 ## 3. Saving
 
@@ -85,7 +85,7 @@ Never write a separate `presshub_ai_migrate_*` routine or `delete_option()` call
 
 ## 5. How settings look and read
 
-**5.1 Plain words first.** Every setting has a label and one sentence of help saying what it does for the editor, in plain language; numbers state their unit; labels are unique within a section. Option names, filters, hooks and class names never appear on screen except under a "Details" disclosure. An environment variable or constant the editor must set by hand (such as `PRESSHUB_WORKER_SECRET` or `PRESSHUB_AI_LOG_DIR`) may be named, in code formatting.
+**5.1 Plain words first.** Every setting has a label and one sentence of help saying what it does for the editor, in plain language; numbers state their unit; labels are unique within a section. Option names, filters, hooks and class names never appear on screen except under a "Details" disclosure. An environment variable or constant the editor must set by hand (such as `PRESSHUB_WORKER_SECRET` or `PRESSHUB_AI_LOG_DIR`) may be named; new ones are shown in code formatting.
 
 **5.2 Accessible.** Every field has a visible label; groups have headings; status uses text, not colour alone; errors are linked from a summary; focus stays visible and clear of the sticky save bar; leaving with unsaved changes asks first; the page works at 375px wide (the section `<select>`). The section links work without JavaScript. Saving needs JavaScript (exception E2).
 
@@ -101,7 +101,7 @@ Never write a separate `presshub_ai_migrate_*` routine or `delete_option()` call
 
 ## 7. Cross-cutting invariants
 
-**7.1 The worker contract is stable.** Moving, renaming or cleaning up settings never changes the worker claim payload (`/presshub-social/v1/worker/claim`, `PressHub_Social_REST_Controller`). A change to the payload needs its own issue, a worker release and a version bump of the contract; the byte-identical contract test at the end of `tests/run-social-tests.php` must keep passing otherwise.
+**7.1 The worker contract is stable.** Moving, renaming or cleaning up settings never changes the worker claim payload (`/presshub-social/v1/worker/claim`, `PressHub_Social_REST_Controller`). A change to the payload needs its own issue, a worker release and a version bump of the contract; the byte-identical contract test at the end of `presshub-ai-editor/tests/run-social-tests.php` must keep passing otherwise.
 
 **7.2 Secrets never leave masked.** Export (`PressHub_Settings_Transfer`) never writes a secret or a secret-bearing store (provider records); it lists them by name only, and import never changes them. Logs, audit events and localized JavaScript data mask secrets through `PressHub_AI_Secret_Masker`. Import preview runs no sanitizer with side effects.
 
@@ -109,7 +109,7 @@ Never write a separate `presshub_ai_migrate_*` routine or `delete_option()` call
 
 **7.4 Two option groups.** Settings belong to `presshub_ai_options` or `presshub_social_options`. Each registry group is wired to the PressHub capability through `PressHub_Capabilities::register_option_group()` (`option_page_capability_<group>`). Do not add a group without an issue.
 
-**7.5 Translatable and safe.** Every label, help text, error and notice is translatable, with a `/* translators: */` comment for placeholders and no raw HTML tags inside translatable strings.
+**7.5 Translatable and safe.** Every label, help text, error and notice printed by PHP is translatable, with a `/* translators: */` comment for placeholders. Translatable strings carry no block-level HTML; only the inline tags `code`, `strong`, `em`, `br` and `a` are allowed (`SettingsTranslationSafetyTest`). The registry's labels and help are not translated yet (exception E10).
 
 **7.6 Uninstall removes what PressHub stored.** A new setting, store or state option is added to `presshub-ai-editor/uninstall.php` (exception E7).
 
@@ -124,15 +124,15 @@ These tests and checks guard the rules. A change that has to edit one of them to
 | 1.4, 1.6 | `ConnectionsTest` (no remote request on load, Replace key, status cache) |
 | 1.5, 3.2, 6 | `ModelsTableTest` |
 | 2.1 | `SettingsRegistryTest`, `SettingsInventoryTest` (regenerate `docs/settings-inventory.md` with `php presshub-ai-editor/scripts/settings-inventory.php`) |
-| 2.5 | `SettingsDefaultsTest` (registry default against literal `get_option()` defaults), `SettingsSelectDefaultsTest` |
+| 2.5 | `SettingsDefaultsTest` (registry default against literal `get_option()` defaults; skips settings without a registry default, exception E9), `SettingsSelectDefaultsTest` |
 | 2.6 | `SettingsHiddenSurfacedTest` (every AI setting marked rendered has a field; exception E1) |
 | 3.1 | `SettingsSaveIsolationTest`, `SettingsPerTabAjaxSaveTest` (the per-tab save path) |
 | 4.3 | `SettingsCleanupTest`, `SettingsUpgradeTest` |
 | 5.1 | `SettingsHelpTextLintTest` (help text, units, unique labels per old page; exception E8) |
 | 5.3 | CI step "No inline style= in the settings renderers" (two renderers; exception E6) |
-| 7.1 | the claim-payload contract test at the end of `tests/run-social-tests.php` |
+| 7.1 | the claim-payload contract test at the end of `presshub-ai-editor/tests/run-social-tests.php` |
 | 7.2 | `SettingsTransferTest` |
-| 7.5 | `SettingsTranslationSafetyTest` (raw HTML in translatable strings of the AI renderer; exception E8) |
+| 7.5 | `SettingsTranslationSafetyTest` (block-level HTML in translatable strings of the AI renderer, inline `code`/`strong`/`em`/`br`/`a` allowed; exceptions E8, E10) |
 | This document | `SettingsPrinciplesDocTest` (section table, guards, links, PR checklist) |
 
 ---
@@ -162,8 +162,10 @@ Each row: the rule, what deviates, why it is allowed for now, the tracking issue
 | E1 | 2.6, 4.4 | 21 active, unrendered options (`presshub_ai_provider`, the per-provider model/temperature/max tokens/timeout options, `presshub_ai_openai_org`, `presshub_ai_anthropic_version`, `presshub_ai_briefing_morning_podcast_title_prefix`, `presshub_ai_briefing_featured_image_ids`, `presshub_social_enabled_<platform>`), some still read as fallbacks | Predate the overhaul; removing them needs the clean-up lifecycle | #309 | When migrated or removed |
 | E2 | 3.1, 3.4, 5.2 | Without JavaScript the section form posts the whole `presshub_ai_options` group to options.php | The section Save is AJAX-only today | #309 | When the no-JS submit is section-scoped or disabled |
 | E3 | 5.4 | Secrets are left out of Settings search | The index skips secret entries | #309 | When labels of secrets are indexed |
-| E4 | 3.4 | Regenerate worker secret writes no audit event | Added in #247 before this rule | #309 | When it is audited |
-| E5 | 5.1 | The `presshub_ai_tts_payload_log` action is named in help text outside Details | Developer-only setting | #309 | When moved under Details |
+| E4 | 3.4 | No audit event from: Regenerate worker secret, the Social prompts reset, the editorial agenda, people fiches and the Shorts music library editors | Written before this rule | #309 | When each writes an audit event |
+| E5 | 5.1 | Developer names outside Details: the `presshub_ai_tts_payload_log` action, and `assets/prompts/` file paths in the QA and Social prompt help | Written before this rule | #309 | When moved under Details |
 | E6 | 5.3 | `class-social-settings.php` has an inline `style=`; CI greps only two renderers | The CI step predates the newer renderers | #309 | When the grep covers every settings renderer |
-| E7 | 7.6 | `uninstall.php` misses the provider store, `presshub_social_*` options and multisite | Hand-maintained list | #309 | When derived from the registry and stores |
-| E8 | 5.1, 7.5 | `SettingsHelpTextLintTest` checks unique labels per old page; `SettingsTranslationSafetyTest` scans one renderer | Tests predate the one Settings page | #309 | When both cover every settings renderer |
+| E7 | 7.6 | `uninstall.php` misses most registry options (about 136 of the `presshub_ai_*` settings, all `presshub_social_*` settings), the provider store, the Shorts music library and multisite | Hand-maintained list | #309 | When derived from the registry and stores |
+| E8 | 5.1, 7.5 | `SettingsHelpTextLintTest` checks unique labels per old page and units only for settings typed as numbers (17 numeric settings are typed `string`); `SettingsTranslationSafetyTest` scans one renderer | Tests predate the one Settings page | #309 | When both cover every settings renderer and the types are fixed |
+| E9 | 2.1, 2.5 | About 126 scalar settings have no registry default, so they show no "Default: …" or Reset and `SettingsDefaultsTest` skips them | Defaults were added only where #233 needed them | #309 | When every scalar setting declares its default |
+| E10 | 7.5 | `settings-registry-data.php` labels and help are plain English, shown untranslated in Settings search and Reset labels | The registry is data, loaded before translations | #309 | When search and reset use translated strings |

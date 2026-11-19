@@ -162,7 +162,7 @@ Missing keys, unconfigured models, or failed API calls halt immediately with exp
 ### 🧹 Clean-Slate Architecture
 > **The Provider Store is the sole source of truth. No legacy option shadowing or backward-compatibility baggage.**
 
-All provider parameters and default models resolve through `PressHub_AI_Provider_Store` (`wp_presshub_ai_providers`). Deprecated options are actively purged via idempotent database migrations rather than lingering in resolution cascades.
+All provider parameters, keys and default models resolve through `PressHub_AI_Provider_Store` (the `presshub_ai_configured_providers` option, edited in Settings → Connections). Settings that are no longer read are removed through the settings clean-up (`PressHub_Settings_Cleanup`: a copy of all settings first, then a report on Usage & logs), never left in resolution cascades; see the [settings design principles](docs/settings-design-principles.md) §4.3.
 
 ---
 

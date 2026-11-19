@@ -275,7 +275,7 @@ graph TD
 
 ### 4.9 Capability & Role Access Gates
 - **Editor-and-Above Enclosure**:
-  - The Daily Briefing Hub admin menu and page (`admin.php?page=presshub-ai-briefing`) require `edit_others_posts` (WordPress Editors and Administrators), completely blocking simple Authors and Contributors.
+  - The Daily Briefing Hub page (`admin.php?page=presshub-ai-briefing-hub`, the PressHub menu's first page) requires `edit_others_posts` (WordPress Editors and Administrators), completely blocking simple Authors and Contributors.
   - All Briefing Hub AJAX endpoints (`briefing_run_harvest`, `briefing_run_curation`, `briefing_run_script`, `briefing_generate_audio`, `presshub_ai_regenerate_podcast_audio`) strictly enforce `current_user_can( 'edit_others_posts' )`.
 
 ### 4.10 AI Co-Pilot Block-Level Gutenberg Editing
@@ -307,8 +307,8 @@ graph TD
   - Sends AJAX request to `test_synthesize_speech()` which invokes Gemini's endpoint and returns an in-browser playable Base64 audio data URL, generation duration in milliseconds, audio byte size, and model identifier.
   - Embeds HTML5 `<audio>` player with instant playback and direct audio file download link.
 - **Access & Navigation**:
-  - Located in Daily Briefing settings (`admin.php?page=presshub-ai#briefing`).
-  - Directly accessible from the Daily Briefing Hub (`admin.php?page=presshub-ai-briefing`) via a direct link button in the **Audio Synthesis Stage Card** (`#stage-audio`).
+  - Located in PressHub → Settings → Daily Briefing → Voices & audio (`admin.php?page=presshub-ai&section=daily-briefing#briefing-voices`).
+  - Directly accessible from the Daily Briefing Hub (`admin.php?page=presshub-ai-briefing-hub`) via a direct link button in the **Audio Synthesis Stage Card** (`#stage-audio`).
   - Gated by capability filter `presshub_ai_briefing_cap` (defaults to `edit_others_posts`, Editors and above).
 
 ### 4.13 Module Tuning Safeguards & Sub-Threshold Fallbacks

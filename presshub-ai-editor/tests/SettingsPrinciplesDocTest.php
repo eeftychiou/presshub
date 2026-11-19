@@ -54,6 +54,7 @@ $doc_sections = [];
 foreach ( $rows as $row ) {
     $doc_sections[ $row[2] ] = trim( $row[1] );
 }
+$check( count( $rows ) === count( $doc_sections ), 'The §1.2 table lists each section once.' );
 $code_sections = [];
 foreach ( PressHub_Settings_Sections::slugs() as $slug ) {
     $code_sections[ $slug ] = PressHub_Settings_Sections::label( $slug );
@@ -70,6 +71,7 @@ foreach ( array_unique( $tests[1] ) as $test ) {
 }
 $ci = $read( '.github/workflows/ci.yml' );
 preg_match_all( '/CI step "([^"]+)"/', $enforcement, $steps );
+$check( count( $steps[1] ) >= 1, 'The Enforcement table names its CI step in the form CI step "<name>".' );
 foreach ( $steps[1] as $step ) {
     $check( false !== strpos( $ci, '- name: ' . $step . "\n" ), "CI step \"{$step}\" exists in .github/workflows/ci.yml." );
 }
@@ -102,9 +104,15 @@ $check( '' !== $template_list && $template_list === $doc_list, 'The PR template 
 
 // 6. Every exception row names a tracking issue.
 $exceptions = (string) strstr( $doc, "\n## Exceptions\n" );
-preg_match_all( '/^\| (E\d+) \|.*$/m', $exceptions, $ex_rows, PREG_SET_ORDER );
+preg_match_all( '/^\|(?!\s*#\s*\|)(?!\s*-)(.*)\|\s*$/m', $exceptions, $ex_rows, PREG_SET_ORDER );
+$check( count( $ex_rows ) >= 1 || false !== strpos( $exceptions, 'None.' ), 'The Exceptions section has rows, or says "None.".' );
 foreach ( $ex_rows as $ex ) {
-    $check( (bool) preg_match( '/\| #\d+ \|/', $ex[0] ), "Exception {$ex[1]} names a tracking issue." );
+    $cells = array_map( 'trim', explode( '|', $ex[1] ) );
+    $id    = $cells[0] ?? '';
+    $check( 6 === count( $cells ), "Exception {$id} has the six columns (#, rule, what deviates, why, tracking, ends)." );
+    $check( (bool) preg_match( '/^E\d+$/', $id ), "Exception id {$id} has the form E<number>." );
+    $check( 6 === count( $cells ) && ! in_array( '', $cells, true ), "Exception {$id} fills every column." );
+    $check( (bool) preg_match( '/^#\d+$/', $cells[4] ?? '' ), "Exception {$id} names one tracking issue (#<number>)." );
 }
 
 if ( $failures ) {
