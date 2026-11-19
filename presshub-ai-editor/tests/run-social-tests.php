@@ -4113,6 +4113,28 @@ for ( $i = 0; $i < PressHub_Social_Settings_Storage::get_max_attempts(); $i++ ) 
 }
 assert_equals( 'fallback', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $plan_fail_ids[0] ) ), 'After the retry budget the job falls back to the featured image' );
 
+// A misplaced bracket is repaired; an unusable or empty answer is asked for again, with the reason.
+assert_equals( [ 'a', 'b' ], PressHub_Social_Post_Images::parse_plan( '{"images":["a","b"]]}', 3 ), 'The image plan repairs a misplaced closing bracket' );
+assert_true( is_wp_error( PressHub_Social_Post_Images::parse_plan( '{"images":["a","b"', 3 ) ), 'A cut-off image plan is rejected, not repaired' );
+$broken_images = PressHub_Social_Post_Images::parse_plan( '{"images":["a" "b"]}', 3 );
+assert_true( is_wp_error( $broken_images ) && str_contains( $broken_images->get_error_message(), 'not valid JSON' ), 'Broken image plan JSON is reported as invalid JSON' );
+foreach ( [ 'invalid' => '{"images":[]}', 'empty' => '' ] as $kind_of_bad => $first_answer ) {
+    PressHub_Social_Queue::reset_memory_store();
+    delete_post_meta( 760, PressHub_Social_Post_Images::PLAN_META );
+    delete_post_meta( 760, PressHub_Social_Post_Images::PREP_ATTEMPTS_META );
+    $img_retry_prompts = [];
+    PressHub_Social_Post_Images::set_ai_caller( function ( $sys, $user ) use ( &$img_retry_prompts, $first_answer ) {
+        $img_retry_prompts[] = $user;
+        return 1 === count( $img_retry_prompts ) ? $first_answer : '{"images":["Harbour at dawn","Power cable on a ship"]}';
+    } );
+    PressHub_Social_Image_Library::set_generator( fn( $prompt, $aspect, $post_id, $context ) => [ 'url' => 'https://example.com/uploads/retry-' . md5( $prompt . $aspect ) . '.png', 'id' => 8900 ] );
+    $img_retry_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );
+    PressHub_Social_Post_Images::prepare_post( 760 );
+    assert_equals( 2, count( $img_retry_prompts ), "An {$kind_of_bad} image plan answer is asked for once more in the same run" );
+    assert_true( str_contains( $img_retry_prompts[1] ?? '', 'Your previous answer was unusable:' ) && ! str_contains( $img_retry_prompts[0], 'previous answer' ), "The {$kind_of_bad} image plan retry says why" );
+    assert_equals( 'ready', PressHub_Social_Post_Images::state( PressHub_Social_Queue::get_job( $img_retry_ids[0] ) ), "The images are made from the second answer after an {$kind_of_bad} one" );
+}
+
 // A job still waiting long after its posting time is released.
 PressHub_Social_Queue::reset_memory_store();
 $late_ids = PressHub_Social_Dispatcher::enqueue_for_post( 760, [ 'twitter' ] );

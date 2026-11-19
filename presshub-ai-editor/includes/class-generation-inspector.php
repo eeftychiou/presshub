@@ -498,6 +498,7 @@ class PressHub_AI_Generation_Inspector {
             'tiktok_narration' => __( 'TikTok narration', 'presshub-ai-editor' ),
             'tiktok_short'     => __( 'Shorts voice (TikTok/YouTube)', 'presshub-ai-editor' ),
             'tiktok_short_script' => __( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ),
+            'post_images_plan'    => __( 'Post image plan (social)', 'presshub-ai-editor' ),
             'seo'              => __( 'SEO & media metadata', 'presshub-ai-editor' ),
         ];
         return $labels[ $kind ] ?? $kind;

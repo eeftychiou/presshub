@@ -170,6 +170,88 @@ class PressHub_AI_Token_Logger {
     }
 
     /**
+     * Names of the logged actions for the Usage & logs filter. Always listed, in this
+     * order; any other action found in the log is added after them (action_label()).
+     */
+    const ACTION_LABELS = [
+        'coauthor_draft'          => 'Co-author draft',
+        'coauthor_scorecard'      => 'Editorial scorecard',
+        'copilot_chat'            => 'Copilot chat',
+        'copilot_research'        => 'Copilot research',
+        'briefing_curation'       => 'Briefing curation',
+        'podcast_script'          => 'Podcast script',
+        'podcast_audio'           => 'Podcast audio synthesis',
+        'scrape_harvest'          => 'News harvester',
+        'social_tiktok_shorts'    => 'Shorts script (TikTok/YouTube)',
+        'social_post_images'      => 'Post image plan (social)',
+        'social_trending_summary' => 'Trending roundup summary',
+        'social_video_transcribe' => 'Social video transcription',
+        'generate_image_prompt'   => 'Image prompt',
+        'generate_featured_image' => 'Image generation',
+        'generate_image_metadata' => 'Image metadata (SEO)',
+        'custom_test'             => 'Test connection',
+    ];
+
+    /**
+     * The readable name of a logged action: a known name, "Social copy: X" for
+     * social_copy_x, "SEO: x" for seo_x, otherwise the key with spaces.
+     */
+    public static function action_label( string $action ): string {
+        if ( isset( self::ACTION_LABELS[ $action ] ) ) {
+            return self::ACTION_LABELS[ $action ];
+        }
+        $platforms = [ 'twitter' => 'X', 'facebook' => 'Facebook', 'instagram' => 'Instagram', 'tiktok' => 'TikTok', 'youtube' => 'YouTube' ];
+        if ( 0 === strpos( $action, 'social_copy_' ) ) {
+            $platform = substr( $action, strlen( 'social_copy_' ) );
+            return 'Social copy: ' . ( $platforms[ $platform ] ?? ucfirst( str_replace( '_', ' ', $platform ) ) );
+        }
+        if ( 0 === strpos( $action, 'seo_' ) ) {
+            return 'SEO: ' . str_replace( '_', ' ', substr( $action, 4 ) );
+        }
+        return ucfirst( str_replace( '_', ' ', $action ) );
+    }
+
+    /**
+     * Every action ever logged (distinct), sorted. Empty when the table cannot be read.
+     *
+     * @return string[]
+     */
+    public static function get_logged_actions(): array {
+        global $wpdb;
+        if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_col' ) ) {
+            return [];
+        }
+        $table   = self::get_table_name();
+        $actions = (array) $wpdb->get_col( "SELECT DISTINCT action_trigger FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name only.
+        $actions = array_values( array_unique( array_filter( array_map( 'strval', $actions ), fn( $a ) => '' !== $a ) ) );
+        sort( $actions );
+        return $actions;
+    }
+
+    /**
+     * Options of the Usage & logs action filter: value => name. The known actions first,
+     * then every other logged action by name, so a new action never goes missing.
+     *
+     * @param string[]|null $logged Logged actions (null reads them from the table).
+     * @return array<string,string>
+     */
+    public static function filter_options( ?array $logged = null ): array {
+        $options = [];
+        foreach ( array_keys( self::ACTION_LABELS ) as $action ) {
+            $options[ $action ] = self::action_label( $action );
+        }
+        $extra = [];
+        foreach ( null === $logged ? self::get_logged_actions() : $logged as $action ) {
+            $action = (string) $action;
+            if ( '' !== $action && ! isset( $options[ $action ] ) ) {
+                $extra[ $action ] = self::action_label( $action );
+            }
+        }
+        asort( $extra, SORT_NATURAL | SORT_FLAG_CASE );
+        return $options + $extra;
+    }
+
+    /**
      * Mark a logged request as failed after the fact: the provider answered, but the
      * caller could not use the answer (e.g. broken JSON). Tokens stay as logged.
      *
