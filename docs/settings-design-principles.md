@@ -127,8 +127,10 @@ These tests and checks guard the rules. A change that has to edit one of them to
 | 2.5 | `SettingsDefaultsTest` (registry default against literal `get_option()` defaults; skips settings without a registry default, exception E9), `SettingsSelectDefaultsTest` |
 | 2.6 | `SettingsHiddenSurfacedTest` (every AI setting marked rendered has a field; exception E1) |
 | 3.1 | `SettingsSaveIsolationTest`, `SettingsPerTabAjaxSaveTest` (the per-tab save path) |
+| 3.4 | `SettingsAuditCoverageTest` (every writer outside the section Save writes its audit event; the worker secret only masked) |
 | 4.3 | `SettingsCleanupTest`, `SettingsUpgradeTest` |
 | 5.1 | `SettingsHelpTextLintTest` (help text, units for numeric settings, labels unique within a section) |
+| 5.4 | `SettingsSearchSecretsTest` (secrets in search by label only) |
 | 5.3 | CI step "No inline style= in the settings renderers" (every settings renderer) |
 | 7.1 | the claim-payload contract test at the end of `presshub-ai-editor/tests/run-social-tests.php` |
 | 7.2 | `SettingsTransferTest` |

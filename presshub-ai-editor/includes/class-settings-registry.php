@@ -187,7 +187,8 @@ class PressHub_Settings_Registry {
 
     /**
      * Index for the settings search and the per-field Default / Reset links
-     * (#234): every active, rendered, non-secret option of both pages.
+     * (#234): every active, rendered option of both pages; secrets by label and
+     * help only, never a value or default (#309 E3).
      * Defaults come from the registry, else from register_setting(); only
      * scalar defaults are passed.
      *
