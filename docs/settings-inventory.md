@@ -390,7 +390,9 @@ Hooks for developers and hosting. Where a filter has a related setting, the filt
 | `presshub_ai_briefing_cap` | code only |
 | `presshub_ai_briefing_claim_check` | `presshub_ai_claim_check_enabled` |
 | `presshub_ai_briefing_split_steps` | code only |
+| `presshub_ai_briefing_step_lost_after_sec` | code only |
 | `presshub_ai_briefing_step_max_continuations` | code only |
+| `presshub_ai_briefing_step_max_requeues` | code only |
 | `presshub_ai_briefing_step_time_budget_sec` | code only |
 | `presshub_ai_briefing_title_max_chars` | code only |
 | `presshub_ai_chat_system_prompt` | code only |
