@@ -45,6 +45,16 @@ class PressHub_AI_Social_Trending {
     const BRIEFING_TEXT_CHARS = 500;
 
     const CRON_HOOK  = 'presshub_ai_social_trending_tick';
+    /** One-off job that draws a roundup's AI featured image outside the worker's request. */
+    const AI_IMAGE_HOOK = 'presshub_ai_social_trending_ai_image';
+    /** Post meta: the AI image job for this roundup was queued (once per post). */
+    const AI_IMAGE_META = '_presshub_trending_ai_image_queued';
+    /** Post meta: the QA gate release waits for the AI image job, so social shares get the AI image. */
+    const AI_RELEASE_META = '_presshub_trending_ai_release_pending';
+    /** Longest wait for the AI image job before the roundup is released with the stand-in picture. */
+    const AI_IMAGE_MAX_WAIT = 900;
+    /** Post meta: the watchdog released this roundup before its AI image arrived. */
+    const AI_WATCHDOG_META = '_presshub_trending_ai_watchdog_release';
     const RUN_ACTION = 'presshub_ai_social_trending_run_now';
 
     /** Post meta on roundup posts: the run key and the items shown. */
@@ -97,6 +107,7 @@ class PressHub_AI_Social_Trending {
     public static function register_hooks(): void {
         add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
         add_action( self::CRON_HOOK, [ __CLASS__, 'cron_tick' ] );
+        add_action( self::AI_IMAGE_HOOK, [ __CLASS__, 'run_ai_featured_image' ], 10, 2 );
         add_action( 'admin_post_' . self::RUN_ACTION, [ __CLASS__, 'handle_run_now' ] );
         add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_front_assets' ] );
         add_action( 'wp_body_open', [ __CLASS__, 'print_fb_root' ] );
@@ -231,6 +242,7 @@ class PressHub_AI_Social_Trending {
      */
     public static function tick( ?int $now = null ): void {
         $now   = $now ?? time();
+        self::release_stale_ai_waits( $now );
         $state = self::get_state();
         if ( ! empty( $state['open'] ) && ( $now - (int) $state['started'] ) >= self::WORKER_WAIT_SEC ) {
             self::log( 'warning', sprintf( 'Social trending: the worker did not report run %s; publishing with what was collected.', $state['run_id'] ) );
@@ -1197,6 +1209,9 @@ class PressHub_AI_Social_Trending {
         $items_meta = function_exists( 'wp_json_encode' ) ? wp_json_encode( $items ) : json_encode( $items );
 
         $existing = (int) ( $map[ $key ] ?? 0 );
+        if ( $existing > 0 ) {
+            self::maybe_release_stale_ai_wait( $existing, $now );
+        }
         $post     = $existing > 0 ? get_post( $existing ) : null;
         $update   = $post && 'trash' !== ( $post->post_status ?? '' );
         $new_set  = true;
@@ -1232,7 +1247,7 @@ class PressHub_AI_Social_Trending {
             self::maybe_set_featured_image( $existing, $items );
             // A new set of posts is checked again (whether or not the AI
             // summary is on); the numbers changing alone is not.
-            if ( $new_set ) {
+            if ( $new_set && ! self::release_waits_for_ai_image( $existing ) ) {
                 self::release_through_gate( $existing );
             }
             return $existing;
@@ -1263,6 +1278,12 @@ class PressHub_AI_Social_Trending {
         // QA gate: saved as pending and released once the summary and image are in place.
         if ( class_exists( 'PressHub_AI_Publish_Gate' ) ) {
             $postarr = PressHub_AI_Publish_Gate::prepare_insert( $postarr, 'trending' );
+            // An AI image is drawn after this request: hold the roundup as pending even when the
+            // gate does not check Trending, so it and its social posts go out with that image.
+            if ( self::ai_image_planned() && in_array( $postarr['post_status'], [ 'publish', 'future' ], true ) ) {
+                $postarr['meta_input'][ PressHub_AI_Publish_Gate::META_TARGET_STATUS ] = $postarr['post_status'];
+                $postarr['post_status'] = 'pending';
+            }
         }
         $id = wp_insert_post( $postarr, true );
         if ( is_wp_error( $id ) ) {
@@ -1278,8 +1299,55 @@ class PressHub_AI_Social_Trending {
         update_option( self::OPTION_POSTS, $map, false );
         self::save_summary_meta( (int) $id, $summary );
         self::maybe_set_featured_image( (int) $id, $items );
-        self::release_through_gate( (int) $id );
+        if ( ! self::release_waits_for_ai_image( (int) $id ) ) {
+            self::release_through_gate( (int) $id );
+        }
         return (int) $id;
+    }
+
+    /** The roundup's featured image will be an AI image (the source and the feature are on). */
+    private static function ai_image_planned(): bool {
+        return 'auto_generate' === PressHub_AI_Settings_Storage::get_social_trending_image_source() && PressHub_AI_Settings_Storage::get_image_feature_enabled();
+    }
+
+    /**
+     * Watchdog: a roundup whose AI image job has not run within AI_IMAGE_MAX_WAIT
+     * (WP-Cron off, the job killed, the plugin deactivated) is released with the
+     * stand-in picture, so it never stays pending.
+     */
+    public static function maybe_release_stale_ai_wait( int $post_id, ?int $now = null ): bool {
+        if ( ! self::release_waits_for_ai_image( $post_id ) ) {
+            return false;
+        }
+        $now    = $now ?? time();
+        $queued = (int) get_post_meta( $post_id, self::AI_IMAGE_META, true );
+        if ( $queued > 0 && ( $now - $queued ) < self::AI_IMAGE_MAX_WAIT ) {
+            return false;
+        }
+        if ( false === delete_post_meta( $post_id, self::AI_RELEASE_META ) ) {
+            return false; // The job claimed it first.
+        }
+        update_post_meta( $post_id, self::AI_WATCHDOG_META, (string) $now );
+        self::log( 'warning', 'Social trending: the AI roundup image did not arrive in time; releasing with the top post picture.', [ 'post_id' => $post_id ] );
+        self::release_through_gate( $post_id );
+        return true;
+    }
+
+    private static function released_by_watchdog( int $post_id ): bool {
+        return '' !== (string) get_post_meta( $post_id, self::AI_WATCHDOG_META, true );
+    }
+
+    /** The watchdog over the latest roundups. */
+    private static function release_stale_ai_waits( int $now ): void {
+        $map = get_option( self::OPTION_POSTS, [] );
+        foreach ( array_slice( is_array( $map ) ? array_values( $map ) : [], -30 ) as $post_id ) {
+            self::maybe_release_stale_ai_wait( (int) $post_id, $now );
+        }
+    }
+
+    /** True while the AI image job for this roundup has not run: the job releases the post. */
+    private static function release_waits_for_ai_image( int $post_id ): bool {
+        return function_exists( 'get_post_meta' ) && '1' === (string) get_post_meta( $post_id, self::AI_RELEASE_META, true );
     }
 
     /** Legal check of the summary and quoted posts plus the measured SEO checks; then the configured status. */
@@ -1482,6 +1550,9 @@ class PressHub_AI_Social_Trending {
 
     /** @var callable|null fn( string $image_url, int $post_id, string $desc ): int|WP_Error — sideload override for tests. */
     public static $sideload = null;
+
+    /** @var callable|null fn( string $content, string $title, array $template, int $post_id ): int|WP_Error — AI featured image override for tests. */
+    public static $ai_image = null;
 
     /** TikTok photo image URLs whose copy failed in this request, so one roundup build downloads each at most once. */
     private static $photo_failed = [];
@@ -1811,13 +1882,25 @@ class PressHub_AI_Social_Trending {
     }
 
     /**
-     * Give a roundup post without a featured image the picture of its top
-     * post. The image is copied into the Media Library (platform image links
-     * are signed and expire), once per post, so a daily post adds one image a day.
+     * Give a roundup post without a featured image its picture, once per post.
+     * With "Roundup featured image" set to an AI image (and Generate featured
+     * images on), the image is drawn from the roundup with the Trending in
+     * Cyprus prompt template; otherwise, or if that fails, it is the picture
+     * of the top post, copied into the Media Library (platform image links
+     * are signed and expire), so a daily post adds one image a day.
      */
     public static function maybe_set_featured_image( int $post_id, array $items ): int {
         if ( $post_id <= 0 || ( function_exists( 'has_post_thumbnail' ) && has_post_thumbnail( $post_id ) ) ) {
             return 0;
+        }
+        if ( 'auto_generate' === PressHub_AI_Settings_Storage::get_social_trending_image_source() ) {
+            if ( PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
+                // Two AI calls can take a minute: draw it in a job of its own, not in
+                // the worker's request. The top post's picture below stands in until then.
+                self::queue_ai_featured_image( $post_id, $items );
+            } else {
+                self::log( 'info', 'Social trending: AI roundup image chosen, but Generate featured images is off; using the top post picture.', [ 'post_id' => $post_id ] );
+            }
         }
         $pick = null;
         foreach ( $items as $it ) {
@@ -1843,6 +1926,130 @@ class PressHub_AI_Social_Trending {
         }
         set_post_thumbnail( $post_id, (int) $att );
         return (int) $att;
+    }
+
+    /**
+     * Queue the AI image job for a roundup, once per post. Only the post texts
+     * travel with the job (at most 10 × 300 characters).
+     */
+    private static function queue_ai_featured_image( int $post_id, array $items ): void {
+        if ( function_exists( 'get_post_meta' ) && '' !== (string) get_post_meta( $post_id, self::AI_IMAGE_META, true ) ) {
+            return;
+        }
+        $texts = self::ai_image_texts( $items );
+        if ( empty( $texts ) ) {
+            self::log( 'info', 'Social trending: no post text for an AI image; using the top post picture.', [ 'post_id' => $post_id ] );
+            return;
+        }
+        if ( ! function_exists( 'wp_schedule_single_event' ) || false === wp_schedule_single_event( time(), self::AI_IMAGE_HOOK, [ $post_id, $texts ] ) ) {
+            self::log( 'warning', 'Social trending: could not queue the AI roundup image; using the top post picture.', [ 'post_id' => $post_id ] );
+            return;
+        }
+        update_post_meta( $post_id, self::AI_IMAGE_META, (string) time() );
+        // Release (and so the social shares, which copy the featured image) waits for the AI image.
+        update_post_meta( $post_id, self::AI_RELEASE_META, '1' );
+    }
+
+    /** Up to 10 post texts, each cut to 300 characters. */
+    private static function ai_image_texts( array $items ): array {
+        $texts = [];
+        foreach ( array_slice( $items, 0, 10 ) as $it ) {
+            $text = trim( (string) ( $it['text'] ?? '' ) );
+            if ( '' !== $text ) {
+                $texts[] = self::excerpt( $text, 300 );
+            }
+        }
+        return $texts;
+    }
+
+    /**
+     * The AI image job: draw the image and make it the roundup's featured
+     * image, replacing the top post's picture. On failure the picture stays.
+     *
+     * @param int   $post_id Roundup post.
+     * @param array $texts   Post texts from queue_ai_featured_image().
+     */
+    public static function run_ai_featured_image( $post_id, $texts = [] ): int {
+        $post_id = (int) $post_id;
+        $post    = ( $post_id > 0 && function_exists( 'get_post' ) ) ? get_post( $post_id ) : null;
+        if ( ! $post || 'trash' === (string) ( $post->post_status ?? '' ) ) {
+            if ( $post_id > 0 && function_exists( 'delete_post_meta' ) ) {
+                delete_post_meta( $post_id, self::AI_RELEASE_META );
+            }
+            return 0;
+        }
+        $att = 0;
+        try {
+            // The settings may have changed since the job was queued.
+            if ( self::ai_image_planned() ) {
+                if ( function_exists( 'set_time_limit' ) ) {
+                    @set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- may be disabled by the host.
+                }
+                $items = [];
+                foreach ( (array) $texts as $text ) {
+                    $items[] = [ 'text' => (string) $text ];
+                }
+                $att = self::ai_featured_image( $post_id, $items );
+                // A job that ran past the watchdog finds the roundup already released
+                // with the top post picture; its shares carry that one, so it stays.
+                if ( $att > 0 && self::released_by_watchdog( $post_id ) ) {
+                    self::log( 'info', 'Social trending: AI roundup image arrived after the release; keeping the top post picture.', [ 'post_id' => $post_id ] );
+                    $att = 0;
+                } elseif ( $att > 0 ) {
+                    set_post_thumbnail( $post_id, $att );
+                }
+            } else {
+                self::log( 'info', 'Social trending: AI roundup image no longer chosen; keeping the top post picture.', [ 'post_id' => $post_id ] );
+            }
+        } finally {
+            // Released now, with the AI image or the top post picture, so its shares carry it.
+            // Claimed by deleting the meta, so the watchdog and the job never both release.
+            if ( self::release_waits_for_ai_image( $post_id ) && false !== delete_post_meta( $post_id, self::AI_RELEASE_META ) ) {
+                self::release_through_gate( $post_id );
+            }
+        }
+        return $att;
+    }
+
+    /**
+     * Draw an AI featured image for a roundup from its title and the text of
+     * its top posts, with the Trending in Cyprus prompt template.
+     *
+     * @return int Attachment id, or 0 when it failed (logged).
+     */
+    private static function ai_featured_image( int $post_id, array $items ): int {
+        $lines = array_map( static function ( $text ) { return '- ' . $text; }, self::ai_image_texts( $items ) );
+        if ( empty( $lines ) ) {
+            self::log( 'info', 'Social trending: no post text for an AI image; using the top post picture.' );
+            return 0;
+        }
+        $title   = function_exists( 'get_the_title' ) ? (string) get_the_title( $post_id ) : '';
+        $content = "What people in Cyprus are posting about on social media:\n" . implode( "\n", $lines );
+        try {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+            $tpl = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_auto_image_template( 'social_trending' ), 'social_trending', PressHub_AI_Settings_Storage::default_social_trending_image_template() );
+            if ( is_callable( self::$ai_image ) ) {
+                $att = call_user_func( self::$ai_image, $content, $title, $tpl, $post_id );
+                return is_wp_error( $att ) ? 0 : max( 0, (int) $att );
+            }
+            require_once __DIR__ . '/class-api-client.php';
+            $client = new PressHub_AI_API_Client();
+            $prompt = $client->analyze_article_for_image_prompt( $content, $title, $tpl['template'], $tpl['id'] );
+            if ( is_wp_error( $prompt ) || '' === trim( (string) $prompt ) ) {
+                self::log( 'warning', 'Social trending: AI image prompt failed; using the top post picture.', [ 'error' => is_wp_error( $prompt ) ? $prompt->get_error_message() : 'empty prompt' ] );
+                return 0;
+            }
+            $img = $client->generate_featured_image( (string) $prompt, '', $post_id );
+            if ( is_wp_error( $img ) || empty( $img['id'] ) ) {
+                self::log( 'warning', 'Social trending: AI image failed; using the top post picture.', [ 'error' => is_wp_error( $img ) ? $img->get_error_message() : 'no attachment' ] );
+                return 0;
+            }
+            self::log( 'info', 'Social trending: AI featured image set.', [ 'post_id' => $post_id, 'template_id' => $tpl['id'] ] );
+            return (int) $img['id'];
+        } catch ( Throwable $t ) {
+            self::log( 'warning', 'Social trending: AI image failed; using the top post picture.', [ 'error' => $t->getMessage() ] );
+            return 0;
+        }
     }
 
     /* ------------------------------------------------------------------

@@ -107,6 +107,7 @@ class PressHub_AI_Settings {
                 'saved'          => __( 'Saved', 'presshub-ai-editor' ),
                 /* translators: %s: display name of the editor who saved the template. */
                 'saved_by'       => __( 'Saved by %s', 'presshub-ai-editor' ),
+                'saved_group'    => __( 'Saved templates', 'presshub-ai-editor' ),
                 'edit_above'     => __( 'Edit in the field above', 'presshub-ai-editor' ),
                 'view'           => __( 'View', 'presshub-ai-editor' ),
                 'edit'           => __( 'Edit', 'presshub-ai-editor' ),
