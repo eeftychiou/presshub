@@ -106,11 +106,14 @@ $check( '' !== $template_list && $template_list === $doc_list, 'The PR template 
 $exceptions = (string) strstr( $doc, "\n## Exceptions\n" );
 preg_match_all( '/^\|(?!\s*#\s*\|)(?!\s*-)(.*)\|\s*$/m', $exceptions, $ex_rows, PREG_SET_ORDER );
 $check( count( $ex_rows ) >= 1 || false !== strpos( $exceptions, 'None.' ), 'The Exceptions section has rows, or says "None.".' );
+$seen_ids = [];
 foreach ( $ex_rows as $ex ) {
-    $cells = array_map( 'trim', explode( '|', $ex[1] ) );
+    $cells = array_map( 'trim', preg_split( '/(?<!\\\\)\|/', $ex[1] ) );
     $id    = $cells[0] ?? '';
     $check( 6 === count( $cells ), "Exception {$id} has the six columns (#, rule, what deviates, why, tracking, ends)." );
     $check( (bool) preg_match( '/^E\d+$/', $id ), "Exception id {$id} has the form E<number>." );
+    $check( ! isset( $seen_ids[ $id ] ), "Exception id {$id} is used once." );
+    $seen_ids[ $id ] = true;
     $check( 6 === count( $cells ) && ! in_array( '', $cells, true ), "Exception {$id} fills every column." );
     $check( (bool) preg_match( '/^#\d+$/', $cells[4] ?? '' ), "Exception {$id} names one tracking issue (#<number>)." );
 }
