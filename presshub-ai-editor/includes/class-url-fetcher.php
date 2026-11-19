@@ -78,7 +78,7 @@ class PressHub_AI_URL_Fetcher {
      * Fetch one URL and return extracted article text ('' on failure).
      */
     public static function fetch_article( $url ): string {
-        $response = wp_remote_get( $url, [
+        $response = wp_remote_get( self::encode_iri( trim( (string) $url ) ), [
             'timeout'     => self::REQUEST_TIMEOUT,
             'user-agent'  => self::USER_AGENT,
             'redirection' => 3,
@@ -99,13 +99,158 @@ class PressHub_AI_URL_Fetcher {
     }
 
     /**
+     * Count the words of a title (Unicode aware).
+     *
+     * @param string $title Title text.
+     * @return int Number of words.
+     */
+    private static function count_title_words( string $title ): int {
+        $parts = preg_split( '/\s+/u', trim( $title ), -1, PREG_SPLIT_NO_EMPTY );
+        return is_array( $parts ) ? count( $parts ) : 0;
+    }
+
+    /**
+     * Find a headline that a page marks only with a large inline font size.
+     *
+     * Older sites exported from Word or Dreamweaver have no <h1> or og:title;
+     * the headline is a paragraph or span styled with a big font-size, for
+     * example `font-size:28.0pt`. This returns the text of the element with
+     * the largest font-size of at least 18pt (or 24px) whose text is 3 to 30
+     * words long, looking inside the first <article> when there is one.
+     *
+     * @param string $html Raw HTML.
+     * @return string Headline text, or '' when none qualifies.
+     */
+    public static function extract_styled_headline( string $html ): string {
+        $scope = $html;
+        if ( preg_match( '#<article\b[^>]*>(.*?)</article>#is', $html, $am ) ) {
+            $scope = $am[1];
+        } elseif ( preg_match( '#<body\b[^>]*>(.*)$#is', $html, $bm ) ) {
+            $scope = $bm[1];
+        }
+        $stripped = preg_replace(
+            [ '#<!--.*?-->#s', '#<(script|style|header|nav|footer|aside|form)\b[^>]*>.*?</\1>#is' ],
+            ' ',
+            $scope
+        );
+        if ( is_string( $stripped ) ) {
+            $scope = $stripped;
+        }
+        // Opening tags only, so a styled <span> inside an unstyled <p> is
+        // still seen; the text runs to that tag's next closing tag.
+        if ( ! is_string( $scope ) || ! preg_match_all(
+            '#<(p|span|div|font|strong|b)\b([^>]*)>#i',
+            $scope,
+            $matches,
+            PREG_SET_ORDER | PREG_OFFSET_CAPTURE
+        ) ) {
+            return '';
+        }
+
+        $best      = '';
+        $best_size = 0.0;
+        foreach ( $matches as $m ) {
+            $attrs = $m[2][0];
+            // Read font-size from the style attribute, which may itself
+            // contain the other quote kind (font-family:'Candara').
+            if ( ! preg_match( '#(?<![\w-])style\s*=\s*("|\')(.*?)\1#is', $attrs, $sm )
+                || ! preg_match( '#(?:^|[;\s])font-size\s*:\s*([\d.]+)\s*(pt|px)#i', $sm[2], $fm ) ) {
+                continue;
+            }
+            $start = $m[0][1] + strlen( $m[0][0] );
+            $close = self::find_matching_close( $scope, strtolower( $m[1][0] ), $start );
+            if ( false === $close ) {
+                continue;
+            }
+            $inner = substr( $scope, $start, $close - $start );
+            $size  = (float) $fm[1];
+            $pt    = ( 'px' === strtolower( $fm[2] ) ) ? $size * 0.75 : $size;
+            if ( $pt < 18.0 || $pt <= $best_size ) {
+                continue;
+            }
+            $text  = html_entity_decode( wp_strip_all_tags( $inner ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+            $text  = trim( (string) preg_replace( '/[\s\x{00A0}]+/u', ' ', $text ) );
+            $words = self::count_title_words( $text );
+            if ( $words < 3 || $words > 30 ) {
+                continue;
+            }
+            $best      = $text;
+            $best_size = $pt;
+        }
+        return $best;
+    }
+
+    /**
+     * Find the closing tag that matches an opening tag, counting nested tags
+     * of the same name (a styled <span> holding a red <span> kicker).
+     *
+     * @param string $html  HTML to search.
+     * @param string $tag   Lower-case tag name.
+     * @param int    $start Offset just after the opening tag.
+     * @return int|false Offset of the matching closing tag, or false.
+     */
+    private static function find_matching_close( string $html, string $tag, int $start ) {
+        $depth = 1;
+        if ( ! preg_match_all( '#<(/?)' . preg_quote( $tag, '#' ) . '\b[^>]*>#i', $html, $tags, PREG_SET_ORDER | PREG_OFFSET_CAPTURE, $start ) ) {
+            return false;
+        }
+        foreach ( $tags as $t ) {
+            if ( '/' === $t[1][0] ) {
+                $depth--;
+                if ( 0 === $depth ) {
+                    return $t[0][1];
+                }
+            } elseif ( '/' !== substr( $t[0][0], -2, 1 ) ) {
+                $depth++;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Percent-encode the non-ASCII characters of a URL (IRI to URI).
+     *
+     * Feeds such as tothemaonline.com publish links with raw characters like
+     * "–", "€" or "ϊ" in the path. PHP's FILTER_VALIDATE_URL rejects those, so
+     * the article was dropped as "Invalid URL" although the site serves it.
+     * Encoding them as UTF-8 percent escapes gives the same address in a form
+     * that validates and that the HTTP client sends correctly. ASCII is left
+     * as it is, so existing escapes are never encoded twice, and so is the
+     * host.
+     *
+     * @param string $url URL that may contain non-ASCII characters.
+     * @return string URL with every non-ASCII byte sequence percent-encoded.
+     */
+    public static function encode_iri( string $url ): string {
+        if ( '' === $url || ! preg_match( '/[^\x00-\x7F]/', $url ) ) {
+            return $url;
+        }
+        // Only the part after the host: a non-ASCII host (IDN) needs
+        // punycode, not percent escapes, so it is left as it is.
+        $prefix = '';
+        $rest   = $url;
+        if ( preg_match( '#^([a-z][a-z0-9+.\-]*://[^/?\#]*)(.*)$#is', $url, $parts ) ) {
+            $prefix = $parts[1];
+            $rest   = $parts[2];
+        }
+        $encoded = preg_replace_callback(
+            '/[^\x00-\x7F]+/',
+            static function ( $m ) {
+                return rawurlencode( $m[0] );
+            },
+            $rest
+        );
+        return is_string( $encoded ) ? $prefix . $encoded : $url;
+    }
+
+    /**
      * Fetch one URL and return structured extraction result.
      *
      * @param string $url Target article URL.
      * @return array Structured article data.
      */
     public static function fetch_article_data( string $url ): array {
-        $url = trim( $url );
+        $url = self::encode_iri( trim( $url ) );
         if ( empty( $url ) || ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
             return [
                 'success'      => false,
@@ -206,7 +351,21 @@ class PressHub_AI_URL_Fetcher {
             $page_title = preg_replace( '/\s*[-|–—]\s*[^-\|–—]+$/u', '', $page_title );
         } elseif ( preg_match( '#<title[^>]*>(.*?)</title>#is', $html, $m ) ) {
             $page_title = trim( wp_strip_all_tags( $m[1] ) );
+            $full_title = $page_title;
             $page_title = preg_replace( '/\s*[-|–—]\s*.*$/u', '', $page_title );
+            // A page with no <h1> and no og:title whose <title> is only the
+            // site name (socialistikiekfrasi.com: "Sosialistiki Ekfrasi" on
+            // every page) would be thrown away as a shallow page. Use the
+            // headline the page shows in large type instead.
+            // The whole <title> must be short too, so a title such as
+            // "COVID-19: Νέα μέτρα" that the separator cut leaves short does
+            // not hand the title to large promo text.
+            if ( self::count_title_words( (string) $page_title ) < 3 && self::count_title_words( $full_title ) < 3 ) {
+                $styled = self::extract_styled_headline( $html );
+                if ( '' !== $styled ) {
+                    $page_title = $styled;
+                }
+            }
         }
 
         // =========================================================================

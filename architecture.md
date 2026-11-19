@@ -133,6 +133,8 @@ graph TD
 - **Features**:
   - Multi-tier extraction (HTML selectors, Readability, RSS fallback).
   - Polite crawl delay (`presshub_ai_harvest_polite_delay`) and domain throttling.
+  - Non-ASCII article links (2.59.1): `PressHub_AI_URL_Fetcher::encode_iri()` percent-encodes characters like `–`, `€`, `ϊ` before `FILTER_VALIDATE_URL`, in `fetch_article_data()` and `is_article_url()`, so feeds such as tothemaonline.com no longer lose articles as "Invalid URL".
+  - Styled headline fallback (2.59.1): when a page has no `<h1>` or `og:title` and its `<title>` has fewer than 3 words (a site name), `extract_styled_headline()` takes the largest inline `font-size` text (at least 18pt/24px, 3 to 30 words) inside `<article>`, so Word-exported pages such as socialistikiekfrasi.com pass the shallow-page check.
   - Overall time budget enforcement (`presshub_ai_harvest_time_budget`).
   - Multi-edition snapshot persistence:
     - Morning: `raw-articles.json` + `presshub_ai_harvest_snapshot_{date}` transient.
