@@ -2056,9 +2056,13 @@ class PressHub_AI_Settings_Storage {
      *
      * @return string Third host voice persona.
      */
+    /** Default third presenter voice for the current speech engine (registry default, #309 E9). */
+    public static function default_voice_tertiary(): string {
+        return ( 'google_cloud' === self::get_briefing_tts_engine() ) ? 'el-GR-Wavenet-C' : 'Puck';
+    }
+
     public static function get_voice_tertiary(): string {
-        $engine = self::get_briefing_tts_engine();
-        $default = ( 'google_cloud' === $engine ) ? 'el-GR-Wavenet-C' : 'Puck';
+        $default = self::default_voice_tertiary();
         $voice = (string) get_option( 'presshub_ai_briefing_voice_tertiary', $default );
         $allowed = self::voice_catalog_allow_list();
         return in_array( $voice, $allowed, true ) ? $voice : $default;

@@ -50,6 +50,7 @@ return [
     'aliases' => [
       0 => 'Fetch and extract source URLs server-side before prompting (recommended — models cannot browse web pages).',
     ],
+    'default' => '1',
   ],
   'presshub_ai_debug_prompts' => [
     'page' => 'ai',
@@ -122,6 +123,7 @@ return [
     'aliases' => [
       0 => 'Temperature (Openai)',
     ],
+    'default' => 0.7,
   ],
   'presshub_ai_max_tokens_openai' => [
     'page' => 'ai',
@@ -154,6 +156,7 @@ return [
     'aliases' => [
       0 => 'Timeout (Openai)',
     ],
+    'default' => 300,
   ],
   'presshub_ai_model_anthropic' => [
     'page' => 'ai',
@@ -185,6 +188,7 @@ return [
     'aliases' => [
       0 => 'Temperature (Anthropic)',
     ],
+    'default' => 0.7,
   ],
   'presshub_ai_max_tokens_anthropic' => [
     'page' => 'ai',
@@ -217,6 +221,7 @@ return [
     'aliases' => [
       0 => 'Timeout (Anthropic)',
     ],
+    'default' => 300,
   ],
   'presshub_ai_model_gemini' => [
     'page' => 'ai',
@@ -248,6 +253,7 @@ return [
     'aliases' => [
       0 => 'Temperature (Gemini)',
     ],
+    'default' => 0.7,
   ],
   'presshub_ai_max_tokens_gemini' => [
     'page' => 'ai',
@@ -280,6 +286,7 @@ return [
     'aliases' => [
       0 => 'Timeout (Gemini)',
     ],
+    'default' => 300,
   ],
   'presshub_ai_openai_org' => [
     'page' => 'ai',
@@ -304,6 +311,7 @@ return [
     'type' => 'string',
     'rendered' => false,
     'status' => 'active',
+    'default' => '2023-06-01',
   ],
   'presshub_ai_github_token' => [
     'page' => 'ai',
@@ -340,6 +348,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'presshub-ai',
   ],
   'presshub_ai_imagen_region' => [
     'page' => 'ai',
@@ -352,6 +361,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'us-central1',
   ],
   'presshub_ai_rate_limit_enabled' => [
     'page' => 'ai',
@@ -364,6 +374,7 @@ return [
     'type' => 'boolean',
     'rendered' => true,
     'status' => 'active',
+    'default' => 0,
   ],
   'presshub_ai_rate_limit_per_hour' => [
     'page' => 'ai',
@@ -380,6 +391,7 @@ return [
     'aliases' => [
       0 => 'Requests per Window',
     ],
+    'default' => 30,
   ],
   'presshub_ai_rate_limit_window_seconds' => [
     'page' => 'ai',
@@ -396,6 +408,7 @@ return [
     'aliases' => [
       0 => 'Window Length (seconds)',
     ],
+    'default' => 3600,
   ],
   'presshub_ai_research_retention_days' => [
     'page' => 'ai',
@@ -409,6 +422,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'days',
+    'default' => 30,
   ],
   'presshub_ai_log_level' => [
     'page' => 'ai',
@@ -421,6 +435,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_tts_engine' => [
     'page' => 'ai',
@@ -475,6 +490,7 @@ return [
     'aliases' => [
       0 => 'Speech AI Timeout (seconds)',
     ],
+    'default' => 300,
   ],
   'presshub_ai_log_tts_payloads' => [
     'page' => 'ai',
@@ -490,6 +506,7 @@ return [
     'aliases' => [
       0 => 'Raw debug dump (developer use)',
     ],
+    'default' => '0',
   ],
   'presshub_ai_generation_record_retention_days' => [
     'page' => 'ai',
@@ -572,6 +589,7 @@ return [
     'type' => 'boolean',
     'rendered' => true,
     'status' => 'active',
+    'default' => '1',
   ],
   'presshub_ai_social_meta_all_posts' => [
     'page' => 'ai',
@@ -584,6 +602,7 @@ return [
     'type' => 'boolean',
     'rendered' => true,
     'status' => 'active',
+    'default' => '1',
   ],
   'presshub_ai_briefing_sources' => [
     'page' => 'ai',
@@ -610,6 +629,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_briefing_harvest_time' => [
     'page' => 'ai',
@@ -712,6 +732,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 0,
   ],
   'presshub_ai_social_monitor_interval_min' => [
     'page' => 'ai',
@@ -730,6 +751,7 @@ return [
       0 => 'Scan Schedule',
     ],
     'depends_on' => 'presshub_ai_social_monitor_enabled',
+    'default' => 120,
   ],
   'presshub_ai_social_monitor_max_age_hours' => [
     'page' => 'ai',
@@ -748,6 +770,7 @@ return [
       0 => 'Scan Schedule',
     ],
     'depends_on' => 'presshub_ai_social_monitor_enabled',
+    'default' => 24,
   ],
   'presshub_ai_social_monitor_max_posts_per_account' => [
     'page' => 'ai',
@@ -766,6 +789,7 @@ return [
       0 => 'Post Limits',
     ],
     'depends_on' => 'presshub_ai_social_monitor_enabled',
+    'default' => 10,
   ],
   'presshub_ai_social_monitor_max_posts_per_harvest' => [
     'page' => 'ai',
@@ -784,6 +808,7 @@ return [
       0 => 'Post Limits',
     ],
     'depends_on' => 'presshub_ai_social_monitor_enabled',
+    'default' => 15,
   ],
   'presshub_ai_social_monitor_x_list_url' => [
     'page' => 'ai',
@@ -798,6 +823,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_social_monitor_enabled',
+    'default' => '',
   ],
   'presshub_ai_social_monitor_transcribe_videos' => [
     'page' => 'ai',
@@ -815,6 +841,7 @@ return [
       0 => 'Videos',
     ],
     'depends_on' => 'presshub_ai_social_monitor_enabled',
+    'default' => 1,
   ],
   'presshub_ai_social_monitor_max_video_seconds' => [
     'page' => 'ai',
@@ -833,6 +860,7 @@ return [
       0 => 'Videos',
     ],
     'depends_on' => 'presshub_ai_social_monitor_enabled',
+    'default' => 180,
   ],
   'presshub_ai_social_monitor_max_video_mb' => [
     'page' => 'ai',
@@ -851,6 +879,7 @@ return [
       0 => 'Videos',
     ],
     'depends_on' => 'presshub_ai_social_monitor_enabled',
+    'default' => 15,
   ],
   'presshub_ai_social_trending_enabled' => [
     'page' => 'ai',
@@ -867,6 +896,7 @@ return [
     'aliases' => [
       0 => 'Publish Trending Roundup',
     ],
+    'default' => 0,
   ],
   'presshub_ai_social_trending_image_source' => [
     'page' => 'ai',
@@ -903,6 +933,7 @@ return [
       0 => 'Publish Trending Roundup',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 6,
   ],
   'presshub_ai_social_trending_platform_x' => [
     'page' => 'ai',
@@ -920,6 +951,7 @@ return [
       0 => 'Platforms',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 1,
   ],
   'presshub_ai_social_trending_platform_tiktok' => [
     'page' => 'ai',
@@ -937,6 +969,7 @@ return [
       0 => 'Platforms',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 1,
   ],
   'presshub_ai_social_trending_platform_instagram' => [
     'page' => 'ai',
@@ -954,6 +987,7 @@ return [
       0 => 'Platforms',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 1,
   ],
   'presshub_ai_social_trending_platform_facebook' => [
     'page' => 'ai',
@@ -971,6 +1005,7 @@ return [
       0 => 'Platforms',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 1,
   ],
   'presshub_ai_social_trending_keywords' => [
     'page' => 'ai',
@@ -985,6 +1020,16 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 'Κύπρος
+Κύπρου
+Λευκωσία
+Λεμεσός
+Λάρνακα
+Πάφος
+Αμμόχωστος
+Cyprus
+Nicosia
+Limassol',
   ],
   'presshub_ai_social_trending_hashtags' => [
     'page' => 'ai',
@@ -999,6 +1044,9 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 'cyprus
+κύπρος
+limassol',
   ],
   'presshub_ai_social_trending_facebook_pages' => [
     'page' => 'ai',
@@ -1013,6 +1061,16 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 'https://www.facebook.com/philenews
+https://www.facebook.com/SigmaLive
+https://www.facebook.com/Kathimerini.com.cy
+https://www.facebook.com/alphanews.live
+https://www.facebook.com/omegalivecy
+https://www.facebook.com/rik.cybc
+https://www.facebook.com/24hcomcy
+https://www.facebook.com/cyprus.times
+https://www.facebook.com/CyprusMail
+https://www.facebook.com/inCYPRUS',
   ],
   'presshub_ai_social_trending_category' => [
     'page' => 'ai',
@@ -1030,6 +1088,7 @@ return [
       0 => 'Roundup Post',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 'Trending στα Social',
   ],
   'presshub_ai_social_trending_post_mode' => [
     'page' => 'ai',
@@ -1047,6 +1106,7 @@ return [
       0 => 'Roundup Post',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 'daily',
   ],
   'presshub_ai_social_trending_post_status' => [
     'page' => 'ai',
@@ -1064,6 +1124,7 @@ return [
       0 => 'Roundup Post',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 'publish',
   ],
   'presshub_ai_social_trending_title' => [
     'page' => 'ai',
@@ -1081,6 +1142,7 @@ return [
       0 => 'Roundup Post',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 'Τι συζητά η Κύπρος στα social – {date}',
   ],
   'presshub_ai_social_trending_max_items' => [
     'page' => 'ai',
@@ -1099,6 +1161,7 @@ return [
       0 => 'Selection',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 15,
   ],
   'presshub_ai_social_trending_max_per_platform' => [
     'page' => 'ai',
@@ -1117,6 +1180,7 @@ return [
       0 => 'Selection',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 5,
   ],
   'presshub_ai_social_trending_max_age_hours' => [
     'page' => 'ai',
@@ -1135,6 +1199,7 @@ return [
       0 => 'Selection',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 24,
   ],
   'presshub_ai_social_trending_min_engagement' => [
     'page' => 'ai',
@@ -1153,6 +1218,7 @@ return [
       0 => 'Selection',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 20,
   ],
   'presshub_ai_social_trending_excluded_words' => [
     'page' => 'ai',
@@ -1167,6 +1233,15 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 'crypto
+bitcoin
+forex
+airdrop
+casino
+betting
+onlyfans
+escort
+#realestate',
   ],
   'presshub_ai_social_trending_summary_enabled' => [
     'page' => 'ai',
@@ -1184,6 +1259,7 @@ return [
       0 => 'AI summary',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 1,
   ],
   'presshub_ai_social_trending_briefing_enabled' => [
     'page' => 'ai',
@@ -1201,6 +1277,7 @@ return [
       0 => 'Use in the Briefing',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 0,
   ],
   'presshub_ai_social_trending_briefing_count' => [
     'page' => 'ai',
@@ -1219,6 +1296,7 @@ return [
       0 => 'Use in the Briefing',
     ],
     'depends_on' => 'presshub_ai_social_trending_enabled',
+    'default' => 5,
   ],
   'presshub_ai_press_inbox_enabled' => [
     'page' => 'ai',
@@ -1232,6 +1310,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 0,
   ],
   'presshub_ai_press_inbox_host' => [
     'page' => 'ai',
@@ -1249,6 +1328,7 @@ return [
       0 => 'Incoming Mail Server (IMAP)',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => '',
   ],
   'presshub_ai_press_inbox_port' => [
     'page' => 'ai',
@@ -1267,6 +1347,7 @@ return [
       0 => 'Port',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 993,
   ],
   'presshub_ai_press_inbox_encryption' => [
     'page' => 'ai',
@@ -1284,6 +1365,7 @@ return [
       0 => 'Incoming Mail Server (IMAP)',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 'ssl',
   ],
   'presshub_ai_press_inbox_verify_ssl' => [
     'page' => 'ai',
@@ -1301,6 +1383,7 @@ return [
       0 => 'Incoming Mail Server (IMAP)',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 1,
   ],
   'presshub_ai_press_inbox_username' => [
     'page' => 'ai',
@@ -1315,6 +1398,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => '',
   ],
   'presshub_ai_press_inbox_password' => [
     'page' => 'ai',
@@ -1357,6 +1441,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 'INBOX',
   ],
   'presshub_ai_press_inbox_processed_folder' => [
     'page' => 'ai',
@@ -1371,6 +1456,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 'Processed',
   ],
   'presshub_ai_press_inbox_allowed_senders' => [
     'page' => 'ai',
@@ -1385,6 +1471,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => '',
   ],
   'presshub_ai_press_inbox_max_messages' => [
     'page' => 'ai',
@@ -1403,6 +1490,7 @@ return [
       0 => 'Inbox Limits',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 15,
   ],
   'presshub_ai_press_inbox_max_age_hours' => [
     'page' => 'ai',
@@ -1421,6 +1509,7 @@ return [
       0 => 'Inbox Limits',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 48,
   ],
   'presshub_ai_press_inbox_max_attachment_mb' => [
     'page' => 'ai',
@@ -1439,6 +1528,7 @@ return [
       0 => 'Inbox Limits',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 10,
   ],
   'presshub_ai_press_inbox_timeout' => [
     'page' => 'ai',
@@ -1457,6 +1547,7 @@ return [
       0 => 'Inbox Limits',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 30,
   ],
   'presshub_ai_press_inbox_extract_attachments' => [
     'page' => 'ai',
@@ -1474,6 +1565,7 @@ return [
       0 => 'Inbox Limits',
     ],
     'depends_on' => 'presshub_ai_press_inbox_enabled',
+    'default' => 1,
   ],
   'presshub_ai_harvest_time_budget' => [
     'page' => 'ai',
@@ -1491,6 +1583,7 @@ return [
     'aliases' => [
       0 => 'Harvest Execution Time Budget (seconds)',
     ],
+    'default' => 60,
   ],
   'presshub_ai_curation_max_articles' => [
     'page' => 'ai',
@@ -1508,6 +1601,7 @@ return [
     'aliases' => [
       0 => 'Maximum Articles Sent to Curation LLM',
     ],
+    'default' => 40,
   ],
   'presshub_ai_curation_max_chars_per_article' => [
     'page' => 'ai',
@@ -1525,6 +1619,7 @@ return [
     'aliases' => [
       0 => 'Maximum Characters per Article (Curation)',
     ],
+    'default' => 3000,
   ],
   'presshub_ai_briefing_text_preset' => [
     'page' => 'ai',
@@ -1538,6 +1633,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_podcast_preset' => [
     'page' => 'ai',
@@ -1554,6 +1650,7 @@ return [
     'aliases' => [
       0 => 'Podcast Dialogue Preset',
     ],
+    'default' => '',
   ],
   'presshub_ai_briefing_target_duration' => [
     'page' => 'ai',
@@ -1588,6 +1685,7 @@ return [
     'aliases' => [
       0 => 'Podcast Presenters Count',
     ],
+    'default' => 2,
   ],
   'presshub_ai_briefing_host_female' => [
     'page' => 'ai',
@@ -1635,6 +1733,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'Presenter 3',
   ],
   'presshub_ai_briefing_voice_female' => [
     'page' => 'ai',
@@ -1682,6 +1781,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default_callback' => [
+      0 => 'PressHub_AI_Settings_Storage',
+      1 => 'default_voice_tertiary',
+    ],
   ],
   'presshub_ai_briefing_podcast_languages' => [
     'page' => 'ai',
@@ -1738,6 +1841,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_briefing_audio_transition_sfx' => [
     'page' => 'ai',
@@ -1751,6 +1855,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'silence',
   ],
   'presshub_ai_briefing_audio_intro_sfx' => [
     'page' => 'ai',
@@ -1764,6 +1869,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'silence',
   ],
   'presshub_ai_briefing_audio_outro_sfx' => [
     'page' => 'ai',
@@ -1777,6 +1883,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'silence',
   ],
   'presshub_ai_briefing_voice_speed' => [
     'page' => 'ai',
@@ -1794,6 +1901,7 @@ return [
     'aliases' => [
       0 => 'Speaking Rate / Speed',
     ],
+    'default' => 1.0,
   ],
   'presshub_ai_briefing_voice_pitch' => [
     'page' => 'ai',
@@ -1811,6 +1919,7 @@ return [
     'aliases' => [
       0 => 'Voice Pitch Tuning',
     ],
+    'default' => 0.0,
   ],
   'presshub_ai_briefing_tts_style' => [
     'page' => 'ai',
@@ -2037,6 +2146,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'category ID',
+    'default' => 0,
   ],
   'presshub_ai_briefing_podcast_category' => [
     'page' => 'ai',
@@ -2051,6 +2161,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'category ID',
+    'default' => 0,
   ],
   'presshub_ai_briefing_text_status' => [
     'page' => 'ai',
@@ -2064,6 +2175,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'pending',
   ],
   'presshub_ai_briefing_text_title_prefix' => [
     'page' => 'ai',
@@ -2178,6 +2290,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_featured_image_ids_noon' => [
     'page' => 'ai',
@@ -2191,6 +2304,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_featured_image_ids' => [
     'page' => 'ai',
@@ -2234,6 +2348,10 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default_callback' => [
+      0 => 'PressHub_AI_Settings_Storage',
+      1 => 'default_briefing_featured_image_source',
+    ],
   ],
   'presshub_ai_briefing_image_template' => [
     'page' => 'ai',
@@ -2428,6 +2546,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_seo_auto_enabled' => [
     'page' => 'ai',
@@ -2441,6 +2560,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_briefing_seo_enhance_enabled' => [
     'page' => 'ai',
@@ -2454,6 +2574,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_seo_max_tags' => [
     'page' => 'ai',
@@ -2491,6 +2612,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_briefing_podcast_include_text' => [
     'page' => 'ai',
@@ -2507,6 +2629,7 @@ return [
     'aliases' => [
       0 => 'Include Transcript in Podcast Post',
     ],
+    'default' => 0,
   ],
   'presshub_ai_briefing_podcast_status' => [
     'page' => 'ai',
@@ -2520,6 +2643,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'pending',
   ],
   'presshub_ai_briefing_text_prompt' => [
     'page' => 'ai',
@@ -2545,6 +2669,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_coauthor_model' => [
     'page' => 'ai',
@@ -2560,6 +2685,7 @@ return [
     'aliases' => [
       0 => 'Custom Model Override',
     ],
+    'default' => '',
   ],
   'presshub_ai_coauthor_temperature' => [
     'page' => 'ai',
@@ -2576,6 +2702,7 @@ return [
     'aliases' => [
       0 => 'Sampling Temperature',
     ],
+    'default' => '',
   ],
   'presshub_ai_coauthor_max_tokens' => [
     'page' => 'ai',
@@ -2592,6 +2719,7 @@ return [
     'aliases' => [
       0 => 'Maximum Output Tokens',
     ],
+    'default' => '',
   ],
   'presshub_ai_coauthor_timeout' => [
     'page' => 'ai',
@@ -2608,6 +2736,7 @@ return [
     'aliases' => [
       0 => 'Request Timeout (seconds)',
     ],
+    'default' => '',
   ],
   'presshub_ai_coauthor_max_source_chars' => [
     'page' => 'ai',
@@ -2621,6 +2750,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'characters',
+    'default' => 200000,
   ],
   'presshub_ai_qa_enabled' => [
     'page' => 'ai',
@@ -2633,6 +2763,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_qa_include_briefings' => [
     'page' => 'ai',
@@ -2645,6 +2776,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_qa_check_editors' => [
     'page' => 'ai',
@@ -2713,6 +2845,7 @@ return [
       0 => 'Minimum Passing Score',
       1 => 'Minimum passing QA score',
     ],
+    'default' => 80,
   ],
   'presshub_ai_qa_notify_editor' => [
     'page' => 'ai',
@@ -2725,6 +2858,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_qa_editor_email' => [
     'page' => 'ai',
@@ -2737,6 +2871,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_qa_article_prompt' => [
     'page' => 'ai',
@@ -2871,6 +3006,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_copilot_model' => [
     'page' => 'ai',
@@ -2886,6 +3022,7 @@ return [
     'aliases' => [
       0 => 'Custom Model Override',
     ],
+    'default' => '',
   ],
   'presshub_ai_copilot_temperature' => [
     'page' => 'ai',
@@ -2902,6 +3039,7 @@ return [
     'aliases' => [
       0 => 'Sampling Temperature',
     ],
+    'default' => '',
   ],
   'presshub_ai_copilot_max_tokens' => [
     'page' => 'ai',
@@ -2918,6 +3056,7 @@ return [
     'aliases' => [
       0 => 'Maximum Output Tokens',
     ],
+    'default' => '',
   ],
   'presshub_ai_copilot_timeout' => [
     'page' => 'ai',
@@ -2934,6 +3073,7 @@ return [
     'aliases' => [
       0 => 'Request Timeout (seconds)',
     ],
+    'default' => '',
   ],
   'presshub_ai_briefing_text_provider' => [
     'page' => 'ai',
@@ -2947,6 +3087,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_text_model' => [
     'page' => 'ai',
@@ -2960,6 +3101,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_text_temperature' => [
     'page' => 'ai',
@@ -2992,6 +3134,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'tokens',
+    'default' => 0,
   ],
   'presshub_ai_briefing_text_timeout' => [
     'page' => 'ai',
@@ -3023,6 +3166,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_podcast_model' => [
     'page' => 'ai',
@@ -3036,6 +3180,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_podcast_temperature' => [
     'page' => 'ai',
@@ -3068,6 +3213,7 @@ return [
     'rendered' => true,
     'status' => 'active',
     'unit' => 'tokens',
+    'default' => 0,
   ],
   'presshub_ai_briefing_podcast_timeout' => [
     'page' => 'ai',
@@ -3099,6 +3245,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_memory_enabled' => [
     'page' => 'ai',
@@ -3112,6 +3259,7 @@ return [
     'type' => 'integer',
     'rendered' => true,
     'status' => 'active',
+    'default' => 1,
   ],
   'presshub_ai_memory_daily_days' => [
     'page' => 'ai',
@@ -3127,6 +3275,7 @@ return [
     'status' => 'active',
     'unit' => 'days',
     'depends_on' => 'presshub_ai_memory_enabled',
+    'default' => 7,
   ],
   'presshub_ai_memory_background_days' => [
     'page' => 'ai',
@@ -3142,6 +3291,7 @@ return [
     'status' => 'active',
     'unit' => 'days',
     'depends_on' => 'presshub_ai_memory_enabled',
+    'default' => 30,
   ],
   'presshub_ai_memory_briefing_budget_chars' => [
     'page' => 'ai',
@@ -3157,6 +3307,7 @@ return [
     'status' => 'active',
     'unit' => 'characters',
     'depends_on' => 'presshub_ai_memory_enabled',
+    'default' => 12000,
   ],
   'presshub_ai_memory_podcast_budget_chars' => [
     'page' => 'ai',
@@ -3172,6 +3323,7 @@ return [
     'status' => 'active',
     'unit' => 'characters',
     'depends_on' => 'presshub_ai_memory_enabled',
+    'default' => 6000,
   ],
   'presshub_ai_memory_retention_days' => [
     'page' => 'ai',
@@ -3187,6 +3339,7 @@ return [
     'status' => 'active',
     'unit' => 'days',
     'depends_on' => 'presshub_ai_memory_enabled',
+    'default' => 180,
   ],
   'presshub_ai_briefing_memory_provider' => [
     'page' => 'ai',
@@ -3200,6 +3353,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_memory_model' => [
     'page' => 'ai',
@@ -3213,6 +3367,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_ai_briefing_podcast_style' => [
     'page' => 'ai',
@@ -3226,6 +3381,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'default_greek_chat',
   ],
   'presshub_ai_briefing_podcast_prompt_1_default_greek_chat' => [
     'page' => 'ai',
@@ -3476,6 +3632,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'automation',
   ],
   'presshub_social_engine_facebook' => [
     'page' => 'social',
@@ -3488,6 +3645,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'api',
   ],
   'presshub_social_engine_instagram' => [
     'page' => 'social',
@@ -3500,6 +3658,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'api',
   ],
   'presshub_social_engine_tiktok' => [
     'page' => 'social',
@@ -3512,6 +3671,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => 'automation',
   ],
   'presshub_social_ai_provider' => [
     'page' => 'social',
@@ -4336,6 +4496,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_social_meta_access_token' => [
     'page' => 'social',
@@ -4360,6 +4521,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_social_twitter_bearer_token' => [
     'page' => 'social',
@@ -4414,6 +4576,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_social_youtube_client_id' => [
     'page' => 'social',
@@ -4426,6 +4589,7 @@ return [
     'type' => 'string',
     'rendered' => true,
     'status' => 'active',
+    'default' => '',
   ],
   'presshub_social_youtube_client_secret' => [
     'page' => 'social',

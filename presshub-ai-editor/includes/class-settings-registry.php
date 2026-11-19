@@ -186,8 +186,21 @@ class PressHub_Settings_Registry {
     }
 
     /**
+     * A registry label, help text or old name in the site's language (#309, E10).
+     * The strings reach translators through includes/settings-registry-strings.php.
+     */
+    public static function translated( string $text ): string {
+        if ( '' === $text || ! function_exists( 'translate' ) ) {
+            return $text;
+        }
+        // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText,WordPress.WP.I18n.LowLevelTranslationFunction -- registry data; listed for translators in settings-registry-strings.php.
+        return (string) translate( $text, 'presshub-ai-editor' );
+    }
+
+    /**
      * Index for the settings search and the per-field Default / Reset links
-     * (#234): every active, rendered, non-secret option of both pages.
+     * (#234): every active, rendered option of both pages (secrets by label only, #309 E3),
+     * with labels and help in the site's language (#309 E10).
      * Defaults come from the registry, else from register_setting(); only
      * scalar defaults are passed.
      *
@@ -206,9 +219,9 @@ class PressHub_Settings_Registry {
                 'tab'      => (string) ( $e['tab'] ?? '' ),
                 'section'  => PressHub_Settings_Sections::section_of( (string) $key, $e ),
                 'group'    => (string) ( $e['group'] ?? '' ),
-                'label'    => (string) ( $e['label'] ?? $key ),
-                'help'     => (string) ( $e['help'] ?? '' ),
-                'aliases'  => array_values( array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ),
+                'label'    => self::translated( (string) ( $e['label'] ?? $key ) ),
+                'help'     => self::translated( (string) ( $e['help'] ?? '' ) ),
+                'aliases'  => array_values( array_map( [ __CLASS__, 'translated' ], array_map( 'strval', (array) ( $e['aliases'] ?? [] ) ) ) ),
                 'checkbox' => ! empty( $e['checkbox'] ),
             ];
             if ( ! empty( $e['depends_on'] ) && ( is_string( $e['depends_on'] ) || is_array( $e['depends_on'] ) ) ) {
@@ -217,7 +230,7 @@ class PressHub_Settings_Registry {
                 $labels  = [];
                 foreach ( $parents as $pk ) {
                     $parent   = self::get( $pk );
-                    $labels[] = (string) ( $parent['label'] ?? $pk );
+                    $labels[] = self::translated( (string) ( $parent['label'] ?? $pk ) );
                 }
                 $row['depends_on']    = 1 === count( $parents ) ? $parents[0] : $parents;
                 $row['depends_label'] = implode( '" or "', $labels );

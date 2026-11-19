@@ -157,8 +157,52 @@ $presshub_ai_options = [
     'presshub_settings_cleanup_lock',
 ];
 
-foreach ( $presshub_ai_options as $presshub_ai_option ) {
-    delete_option( $presshub_ai_option );
+// #309 (E7): every registered setting, from the registry itself, so a new
+// setting is removed without editing this list ...
+$presshub_ai_registry = defined( 'ABSPATH' ) && is_readable( __DIR__ . '/includes/settings-registry-data.php' ) ? include __DIR__ . '/includes/settings-registry-data.php' : [];
+if ( is_array( $presshub_ai_registry ) ) {
+    $presshub_ai_options = array_merge( $presshub_ai_options, array_keys( $presshub_ai_registry ) );
+}
+// ... and the stores and state PressHub keeps outside the registry.
+$presshub_ai_options = array_merge( $presshub_ai_options, [
+    'presshub_ai_configured_providers',
+    'presshub_ai_providers_migrated',
+    'presshub_ai_taxonomy_presets',
+    'presshub_ai_role_presets',
+    'presshub_social_tiktok_shorts_music_library',
+    'presshub_social_youtube_refresh_token',
+    'presshub_social_youtube_channel',
+    'presshub_social_youtube_needs_reconnect',
+    'presshub_social_youtube_paused_until',
+    'presshub_ai_memory_backfill_state',
+    'presshub_ai_log_file_suffix',
+    'presshub_ai_log_paths_version',
+    'presshub_ai_audit_logs_db_version',
+    'presshub_ai_generation_records_db_version',
+    'presshub_ai_memory_db_version',
+    'presshub_ai_qa_reviews_db_version',
+    'presshub_ai_token_logs_db_version',
+] );
+$presshub_ai_options = array_values( array_unique( $presshub_ai_options ) );
+
+$presshub_ai_delete_options = static function ( array $options ): void {
+    foreach ( $options as $option ) {
+        delete_option( $option );
+    }
+    if ( function_exists( 'delete_transient' ) ) {
+        delete_transient( 'presshub_connection_status' );
+    }
+};
+
+// #309 (E7): on multisite, every site's copy.
+if ( function_exists( 'is_multisite' ) && is_multisite() && function_exists( 'get_sites' ) && function_exists( 'switch_to_blog' ) ) {
+    foreach ( (array) get_sites( [ 'fields' => 'ids', 'number' => 0 ] ) as $presshub_ai_site_id ) {
+        switch_to_blog( (int) $presshub_ai_site_id );
+        $presshub_ai_delete_options( $presshub_ai_options );
+        restore_current_blog();
+    }
+} else {
+    $presshub_ai_delete_options( $presshub_ai_options );
 }
 
 // Per-user preset data for every user.
