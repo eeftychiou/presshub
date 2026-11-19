@@ -97,6 +97,33 @@ $before = $count( 'person_fiche_edited' );
 $r      = PressHub_AI_Stakeholders::save_edit( 'jane-doe', [ 'role' => 'Minister' ], 1 );
 $check( ! is_wp_error( $r ) && $count( 'person_fiche_edited' ) === $before + 1, 'Editing a people fiche writes person_fiche_edited.' );
 
+// 3. Regenerate worker secret, through the real handler: the event has the
+// masked secret only, and never the new secret itself.
+$GLOBALS['CURRENT_USER_CAPS'] = [ 'read', 'edit_posts', 'edit_others_posts', 'manage_options' ];
+$GLOBALS['NONCE_VALID']       = true;
+$GLOBALS['JSON_RESPONSES']    = [];
+$_POST                        = [ 'nonce' => 'n' ];
+try {
+    PressHub_Social_Ajax_Handlers::handle_regenerate_worker_secret();
+} catch ( Throwable $t ) {
+    // wp_send_json_* stubs throw to end the request.
+}
+$_POST  = [];
+$secret = (string) get_option( 'presshub_social_worker_secret', '' );
+$row    = null;
+global $wpdb;
+foreach ( (array) ( $wpdb->tables ?? [] ) as $name => $rows ) {
+    foreach ( (array) $rows as $r_row ) {
+        if ( false !== strpos( (string) $name, 'audit' ) && 'worker_secret_regenerated' === ( $r_row['event_type'] ?? '' ) ) {
+            $row = $r_row;
+        }
+    }
+}
+$check( strlen( $secret ) >= 32, 'Regenerate stores a new worker secret.' );
+$check( is_array( $row ), 'Regenerate writes worker_secret_regenerated.' );
+$dump = is_array( $row ) ? (string) json_encode( $row ) : '';
+$check( '' !== $secret && false === strpos( $dump, $secret ), 'The audit row never contains the new worker secret.' );
+
 if ( $failures ) {
     echo "FAIL\n";
     foreach ( $failures as $f ) {

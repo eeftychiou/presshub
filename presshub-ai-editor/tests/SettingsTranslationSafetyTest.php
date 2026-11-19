@@ -41,6 +41,7 @@ class SettingsTranslationSafetyTest
             'class-setup-check.php',
             'class-connection-status.php',
             'class-settings-cleanup.php',
+            'class-log-exposure-check.php',
         ];
         foreach ( $files as $file ) {
             $render_file = __DIR__ . '/../includes/' . $file;

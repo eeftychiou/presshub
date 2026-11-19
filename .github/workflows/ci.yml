@@ -104,7 +104,8 @@ jobs:
               presshub-ai-editor/includes/class-secret-field.php \
               presshub-ai-editor/includes/class-setup-check.php \
               presshub-ai-editor/includes/class-connection-status.php \
-              presshub-ai-editor/includes/class-settings-cleanup.php; then
+              presshub-ai-editor/includes/class-settings-cleanup.php \
+              presshub-ai-editor/includes/class-log-exposure-check.php; then
             echo "Inline style= found above. Use a class in presshub-ai-editor/assets/css/settings.css." >&2
             exit 1
           fi

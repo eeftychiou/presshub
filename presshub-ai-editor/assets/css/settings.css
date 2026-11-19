@@ -640,3 +640,7 @@ html:has(#presshub-settings-page) { scroll-padding-top: 90px; scroll-padding-bot
     .presshub-auto-images-table td { padding-top: 0; }
     .presshub-auto-images-source a { display: inline-flex; align-items: center; min-height: 44px; }
 }
+
+/* #309 (E6): the log folder exposure check in Site & system. */
+.presshub-log-exposure { padding: 10px 12px; margin: 15px 0; }
+.presshub-log-exposure-rule { background: #f6f7f7; padding: 8px; overflow: auto; }

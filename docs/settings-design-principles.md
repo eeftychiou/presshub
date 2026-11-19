@@ -120,7 +120,7 @@ These tests and checks guard the rules. A change that has to edit one of them to
 | Rule | Guard |
 |---|---|
 | 1.1, 3.3, 4.2, 7.4 | `AdminMenuCapabilitiesTest` (one menu, no raw `manage_options`, option-page capability per group, old URLs redirect) |
-| 1.2, 1.3, 3.1, 5.3 | `SettingsSectionsTest` (every setting in exactly one section, each section renders only its own settings, section save isolation, no inline styles in the two renderers) |
+| 1.2, 1.3, 3.1, 5.3 | `SettingsSectionsTest` (every setting in exactly one section, each section renders only its own settings, section save isolation, no inline styles in any settings renderer) |
 | 1.4, 1.6 | `ConnectionsTest` (no remote request on load, Replace key, status cache) |
 | 1.5, 3.2, 6 | `ModelsTableTest` |
 | 2.1 | `SettingsRegistryTest`, `SettingsInventoryTest` (regenerate `docs/settings-inventory.md` with `php presshub-ai-editor/scripts/settings-inventory.php`) |

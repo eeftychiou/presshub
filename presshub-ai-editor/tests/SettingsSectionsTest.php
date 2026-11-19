@@ -323,7 +323,8 @@ if ( null === $r || false !== $r['success'] ) {
 // ---------------------------------------------------------------------
 // 8. No inline styles in the settings renderers.
 // ---------------------------------------------------------------------
-foreach ( [ 'class-settings-render.php', 'class-social-settings-render.php' ] as $file ) {
+// #309 (E6): the same renderers as the CI grep.
+foreach ( [ 'class-settings-render.php', 'class-social-settings-render.php', 'class-social-settings.php', 'class-model-tasks.php', 'class-secret-field.php', 'class-setup-check.php', 'class-connection-status.php', 'class-settings-cleanup.php', 'class-log-exposure-check.php' ] as $file ) {
     $src = (string) file_get_contents( dirname( __DIR__ ) . '/includes/' . $file );
     if ( preg_match_all( '/(?<![-\w])style\s*=/', $src, $m ) ) {
         $failures[] = "{$file} has " . count( $m[0] ) . ' inline style= attribute(s); use a class in assets/css/settings.css.';

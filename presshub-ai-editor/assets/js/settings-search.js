@@ -140,6 +140,12 @@
             window.location.replace(data.legacy_hashes[hash]);
             return;
         }
+        // A secret (#309 E3): its password input is hidden until Replace key, so
+        // go to the button through fieldFor().
+        if (/^[a-z0-9_]+$/i.test(hash) && document.querySelector('.presshub-secret[data-secret-for="' + hash + '"]')) {
+            reveal(fieldFor(hash));
+            return;
+        }
         var target = (typeof window.PressHubModelControl === 'function' && window.PressHubModelControl(hash)) || document.getElementById(hash);
         // A hidden input (sources, image pools) is found through fieldFor() below.
         if (target && target.type !== 'hidden' && document.getElementById('presshub-settings-main').contains(target)) {
