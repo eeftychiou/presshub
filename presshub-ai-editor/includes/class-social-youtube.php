@@ -740,7 +740,8 @@ class PressHub_Social_YouTube {
         $ep_lang = $is_ep ? self::episode_language( $job ) : '';
         if ( '' !== $ep_lang ) {
             $tr               = PressHub_AI_Podcast_Translations::get_entry( $post_id, $ep_lang );
-            $job['audio_url'] = (string) ( $tr['audio_url'] ?? '' );
+            // Only a voiced translation has audio that matches its title and captions.
+            $job['audio_url'] = 'voiced' === ( $tr['status'] ?? '' ) ? (string) ( $tr['audio_url'] ?? '' ) : '';
             if ( '' !== $job['audio_url'] && '' === trim( (string) ( $tr['title'] ?? '' ) ) ) {
                 // Never the Greek title on an English or Turkish episode.
                 return new WP_Error( 'youtube_episode_no_title', sprintf( 'The %s version of podcast post #%d has no title, so it is not uploaded.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], $post_id ) );

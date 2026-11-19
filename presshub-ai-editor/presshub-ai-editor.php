@@ -1085,7 +1085,7 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
     $ok   = wp_schedule_single_event( time() + max( 0, (int) $delay ), 'presshub_ai_run_briefing_step', $args );
     if ( false === $ok || ( function_exists( 'is_wp_error' ) && is_wp_error( $ok ) ) ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; running it in this request.', [
+            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; the caller runs it now or, when the same step is already waiting, leaves it to that event.', [
                 'date'    => $date,
                 'edition' => $edition,
                 'step'    => $step,

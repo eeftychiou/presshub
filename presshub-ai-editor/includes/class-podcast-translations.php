@@ -405,6 +405,11 @@ class PressHub_AI_Podcast_Translations {
             'status'        => 'translated',
             'step'          => 'translate',
             'error'         => '',
+            // The earlier audio belongs to the earlier translation; attachment_id stays so the
+            // next voice step deletes that file.
+            'audio_url'     => '',
+            'timeline'      => null,
+            'duration_sec'  => 0,
             'title'         => $parsed['title'],
             'description'   => $parsed['description'],
             'script'        => $parsed['script'],
@@ -422,8 +427,9 @@ class PressHub_AI_Podcast_Translations {
         $text = trim( str_replace( "\r\n", "\n", $response ) );
         // A fenced answer: drop the fences.
         $text = (string) preg_replace( '/^```[a-z]*\n|\n```$/i', '', $text );
-        if ( ! preg_match( '/^\s*\**TITLE\**\s*:\s*(.+?)\s*$/mi', $text, $t )
-            || ! preg_match( '/^\s*\**DESCRIPTION\**\s*:\s*(.*?)^\s*\**SCRIPT\**\s*:\s*(.*)\z/msi', $text, $m )
+        // Labels may come bold, with the colon inside or outside: **TITLE:** or **TITLE**:.
+        if ( ! preg_match( '/^\s*\**\s*TITLE\s*\**\s*:\s*\**\s*(.+?)\s*$/mi', $text, $t )
+            || ! preg_match( '/^\s*\**\s*DESCRIPTION\s*\**\s*:\s*\**(.*?)^\s*\**\s*SCRIPT\s*\**\s*:\s*\**[ \t]*\n?(.*)\z/msi', $text, $m )
         ) {
             return new WP_Error( 'translation_format', __( 'The translation did not come back as TITLE, DESCRIPTION and SCRIPT.', 'presshub-ai-editor' ) );
         }
@@ -456,8 +462,11 @@ class PressHub_AI_Podcast_Translations {
         }
         $raw_a = preg_match_all( '/\[TOPIC_START\s*:/u', $greek );
         $raw_b = preg_match_all( '/\[TOPIC_START\s*:/u', $translated );
-        if ( count( $a ) !== count( $b ) || $raw_a !== $raw_b ) {
-            return sprintf( __( 'The translated script has %1$d topics; the Greek one has %2$d.', 'presshub-ai-editor' ), max( count( $b ), $raw_b ), max( count( $a ), $raw_a ) );
+        if ( $raw_a !== $raw_b ) {
+            return sprintf( __( 'The translated script has %1$d topics; the Greek one has %2$d.', 'presshub-ai-editor' ), $raw_b, $raw_a );
+        }
+        if ( count( $a ) !== count( $b ) ) {
+            return sprintf( __( 'The translated script has %1$d topics with speaker turns; the Greek one has %2$d (a topic lost its turns or its markers).', 'presshub-ai-editor' ), count( $b ), count( $a ) );
         }
         $len       = static fn( array $turns ): int => array_sum( array_map( static fn( $t ) => mb_strlen( trim( (string) ( $t['text'] ?? '' ) ) ), $turns ) );
         $total_a   = 0;

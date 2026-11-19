@@ -87,6 +87,8 @@ pt_check( 'parse: a fenced answer is accepted', ! is_wp_error( $fenced ) && $eng
 $bold = PressHub_AI_Podcast_Translations::parse_response( str_replace( [ 'TITLE:', 'DESCRIPTION:', 'SCRIPT:' ], [ '**TITLE**:', '**DESCRIPTION**:', '**SCRIPT**:' ], $answer ) );
 pt_check( 'parse: bold section names are accepted', ! is_wp_error( $bold ) && $english === $bold['script'] );
 $bad = PressHub_AI_Podcast_Translations::parse_response( $english );
+$bold = PressHub_AI_Podcast_Translations::parse_response( "**TITLE:** PressHub Morning Briefing: x\n**DESCRIPTION:**\nAbout x.\n**SCRIPT:**\n" . $english );
+pt_check( 'parse: bold labels with the colon inside are read', ! is_wp_error( $bold ) && 'PressHub Morning Briefing: x' === $bold['title'] && 'About x.' === $bold['description'] && $english === $bold['script'] );
 pt_check( 'parse: a bare script is refused', is_wp_error( $bad ) && 'translation_format' === $bad->get_error_code() );
 
 // ---------------------------------------------------------------------------
@@ -104,6 +106,8 @@ pt_check( 'structure: a summarised topic is refused', str_contains( PressHub_AI_
 $one_voice = str_replace( '[SPEAKER_2]', '[SPEAKER_1]', $english );
 pt_check( 'structure: a lost presenter is refused', str_contains( PressHub_AI_Podcast_Translations::structure_error( $greek, $one_voice ), 'lost speakers' ) );
 $no_end = str_replace( "[TOPIC_END]\n[TOPIC_START: Weather]\n", '', $english );
+$empty_topic = str_replace( "[SPEAKER_1]: Rain in the occupied areas and in Nicosia.\n[SPEAKER_2]: And snow on Troodos.\n", "Rain and snow.\n", $english );
+pt_check( 'structure: a topic without turns is named as such, not as equal counts', str_contains( PressHub_AI_Podcast_Translations::structure_error( $greek, $empty_topic ), 'has 1 topics with speaker turns; the Greek one has 2' ) );
 pt_check( 'structure: two topics run together are refused', str_contains( PressHub_AI_Podcast_Translations::structure_error( $greek, $no_end ), 'topics' ) );
 $named = "[TOPIC_START: Οικονομία]\nΜαρία: Καλημέρα, ο κατώτατος μισθός αυξάνεται.\nΝίκος: Από τον Ιανουάριο.\n[TOPIC_END]";
 $canon = PressHub_AI_Podcast_Translations::canonical_script( $named );

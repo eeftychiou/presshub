@@ -2767,6 +2767,25 @@ assert_true( PressHub_Social_YouTube::is_episode_job( $en_job ) && 'en' === Pres
 assert_equals( '', PressHub_Social_YouTube::episode_language( $ep_job ), 'The Greek episode has no language of its own' );
 assert_equals( 'Youtube (EN)', PressHub_Social_YouTube::platform_label( $en_job ), 'The Queue shows the English episode as YouTube (EN)' );
 assert_equals( 'Youtube', PressHub_Social_YouTube::platform_label( $ep_job ), 'The Greek episode is plain YouTube' );
+PressHub_Social_Queue::update_job_copy( $en_id, 'Edited by hand' );
+$_REQUEST['nonce'] = 'valid_nonce';
+$nonce_was         = $GLOBALS['NONCE_VALID'] ?? null;
+$GLOBALS['NONCE_VALID'] = true;
+$_POST['job_id']   = $en_id;
+$caps_was          = $GLOBALS['test_user_caps'] ?? [];
+$GLOBALS['test_user_caps'][ PressHub_Capabilities::social() ] = true;
+$GLOBALS['JSON_RESPONSES'] = [];
+try {
+    PressHub_Social_Ajax_Handlers::handle_regenerate_job_copy();
+} catch ( RuntimeException $e ) {
+    // wp_send_json_* stops here.
+}
+$regen = end( $GLOBALS['JSON_RESPONSES'] ) ?: [];
+assert_true( ! empty( $regen['success'] ) && 'The House passes the budget. #Cyprus' === ( $regen['data']['new_copy'] ?? '' ), 'Regen AI on the English episode restores its translated description' );
+assert_equals( 'The House passes the budget. #Cyprus', PressHub_Social_Queue::get_job( $en_id )['post_copy'] ?? '', 'The English job has its description back' );
+$GLOBALS['test_user_caps'] = $caps_was;
+$GLOBALS['NONCE_VALID']    = $nonce_was;
+unset( $_REQUEST['nonce'], $_POST['job_id'] );
 assert_equals( 'The House passes the budget. #Cyprus', $en_job['post_copy'], 'The English description is the translation\'s' );
 assert_true( abs( PressHub_AI_Podcast_Translations::duration( 880, 'en' ) - $tl_en['duration'] ) < 0.001, 'The English episode\'s length is its own audio\'s' );
 
@@ -2791,6 +2810,10 @@ assert_true( in_array( 'https://img/a1.jpg', $en_ev['scenes'][2]['images'] ?? []
 assert_true( str_contains( $en_yt['description'] ?? '', "0:00 Parliament passes the budget\n0:" ) && ! str_contains( $en_yt['description'] ?? '', 'Καιρός' ), 'The English description lists English chapters' );
 
 $tr_job = PressHub_Social_YouTube::episode_job( 880, 'Açıklama', null, null, gmdate( 'Y-m-d H:i:s' ), null, 'tr' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'translated', 'audio_url' => 'https://example.com/uploads/podcast-880-tr-old.wav', 'title' => 'Yeni başlık' ] ] ) );
+$tr_stale = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_stale ) ? $tr_stale->get_error_code() : '', 'A language translated again but not voiced yet never uploads its old audio' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_diff_key( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => 1 ] ) );
 $tr_up  = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
 assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_up ) ? $tr_up->get_error_code() : '', 'A language without its own audio never uploads the Greek audio' );
 update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'voiced', 'audio_url' => 'https://example.com/uploads/podcast-880-tr.wav', 'title' => '' ] ] ) );
