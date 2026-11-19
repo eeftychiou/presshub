@@ -18,6 +18,7 @@ require_once __DIR__ . '/class-api-client.php';
 require_once __DIR__ . '/class-news-harvester.php';
 require_once __DIR__ . '/class-podcast-producer.php';
 require_once __DIR__ . '/class-markdown.php';
+require_once __DIR__ . '/class-podcast-timeline.php';
 require_once __DIR__ . '/class-token-logger.php';
 
 class PressHub_AI_Audio_Synthesizer {
@@ -1799,6 +1800,11 @@ class PressHub_AI_Audio_Synthesizer {
         };
 
         // 1. Topic-Based Audio Synthesis (Splits generation by topic to eliminate neural voice drift)
+        // Turn lengths for the episode's caption timeline (PressHub_AI_Podcast_Timeline).
+        $timeline_topics = [];
+        $timeline_opts   = [];
+        $timeline_mp3    = ( 'google_cloud' === $engine );
+
         if ( $split_by_topic ) {
             $topics = $producer->parse_script_topics( $script, $female_host, $male_host, $tertiary_host );
 
@@ -1871,6 +1877,7 @@ class PressHub_AI_Audio_Synthesizer {
 
                     // Unified Turn-by-Turn Synthesis for ALL host counts (1, 2, and 3 hosts)
                     $chunk_wavs = [];
+                    $tl_turns   = [];
                     foreach ( $topic_turns as $turn_idx => $t ) {
                         $t_voice  = $resolve_turn_voice( (string) ( $t['speaker'] ?? '' ) );
                         $turn_res = $this->synthesize_turn( $t['text'], $t_voice, $speed, $pitch, $api_client, $used_style, $date );
@@ -1878,6 +1885,11 @@ class PressHub_AI_Audio_Synthesizer {
                             return $turn_res;
                         }
                         $chunk_wavs[] = $turn_res;
+                        $tl_turns[]   = [
+                            'speaker' => (string) ( $t['speaker'] ?? '' ),
+                            'text'    => (string) ( $t['text'] ?? '' ),
+                            'seconds' => PressHub_AI_Podcast_Timeline::turn_seconds( (string) $turn_res, (string) ( $t['text'] ?? '' ), $timeline_mp3 ),
+                        ];
 
                         // Throttle between turns if live call was made and not in unit tests
                         if ( ! $this->last_turn_was_cache_hit && $request_delay_ms > 0 && ! $is_test_env && ( $turn_idx + 1 < count( $topic_turns ) ) ) {
@@ -1895,7 +1907,8 @@ class PressHub_AI_Audio_Synthesizer {
                         return $topic_audio;
                     }
 
-                    $topic_wavs[] = $topic_audio;
+                    $topic_wavs[]      = $topic_audio;
+                    $timeline_topics[] = [ 'title' => (string) ( $topic['title'] ?? '' ), 'turns' => $tl_turns ];
                 }
 
                 if ( ! empty( $topic_wavs ) ) {
@@ -1906,6 +1919,17 @@ class PressHub_AI_Audio_Synthesizer {
                     $intro_pcm = $this->get_sfx_pcm( $intro_sfx_setting );
                     $trans_pcm = $this->get_sfx_pcm( $trans_sfx_setting );
                     $outro_pcm = $this->get_sfx_pcm( $outro_sfx_setting );
+
+                    // Gaps as stitched below: MP3 topics are joined by the pause alone.
+                    $timeline_opts = [
+                        'turn_pause_ms'      => $turn_pause_ms,
+                        'topic_pause_ms'     => $topic_pause_ms,
+                        'transition_seconds' => ( ! $timeline_mp3 && count( $topic_wavs ) > 1 && '' !== (string) $trans_pcm ) ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $trans_pcm ) : 0.0,
+                        'intro_seconds'      => '' !== (string) $intro_pcm ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $intro_pcm ) : 0.0,
+                        'outro_seconds'      => '' !== (string) $outro_pcm ? PressHub_AI_Podcast_Timeline::pcm_seconds( (string) $outro_pcm ) : 0.0,
+                        'host_count'         => (int) $host_count,
+                        'estimated'          => $timeline_mp3,
+                    ];
 
                     // 1. Stitch topics together with Topic Transition SFX between them
                     if ( count( $topic_wavs ) > 1 ) {
@@ -1985,6 +2009,7 @@ class PressHub_AI_Audio_Synthesizer {
             $turn_wavs   = [];
             $start_time  = microtime( true );
             $char_count  = 0;
+            $tl_turns    = [];
 
             foreach ( $turns as $turn_idx => $turn ) {
                 $turn_voice  = $resolve_turn_voice( (string) ( $turn['speaker'] ?? '' ) );
@@ -1994,6 +2019,11 @@ class PressHub_AI_Audio_Synthesizer {
                     return $turn_res;
                 }
                 $turn_wavs[] = $turn_res;
+                $tl_turns[]  = [
+                    'speaker' => (string) ( $turn['speaker'] ?? '' ),
+                    'text'    => (string) ( $turn['text'] ?? '' ),
+                    'seconds' => PressHub_AI_Podcast_Timeline::turn_seconds( (string) $turn_res, (string) ( $turn['text'] ?? '' ), $timeline_mp3 ),
+                ];
 
                 // Throttle between turns if live call was made and not in unit tests
                 if ( ! $this->last_turn_was_cache_hit && $request_delay_ms > 0 && ! $is_test_env && ( $turn_idx + 1 < count( $turns ) ) ) {
@@ -2001,7 +2031,14 @@ class PressHub_AI_Audio_Synthesizer {
                 }
             }
 
-            $duration_ms = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+            $duration_ms     = (int) round( ( microtime( true ) - $start_time ) * 1000 );
+            $timeline_topics = [ [ 'title' => '', 'turns' => $tl_turns ] ];
+            $timeline_opts   = [
+                'turn_pause_ms'  => $turn_pause_ms,
+                'topic_pause_ms' => $topic_pause_ms,
+                'host_count'     => (int) $host_count,
+                'estimated'      => $timeline_mp3,
+            ];
             if ( 'google_cloud' === $engine ) {
                 $stitched_audio = $this->stitch_audio_chunks( $turn_wavs, $turn_pause_ms );
             } else {
@@ -2103,6 +2140,22 @@ class PressHub_AI_Audio_Synthesizer {
         }
         if ( is_wp_error( $post_id ) ) {
             return $post_id;
+        }
+
+        // Caption timeline of the episode, for its YouTube video. Never breaks synthesis.
+        if ( function_exists( 'update_post_meta' ) && (int) $post_id > 0 ) {
+            try {
+                $timeline = PressHub_AI_Podcast_Timeline::build( $timeline_topics, $timeline_opts );
+                if ( PressHub_AI_Podcast_Timeline::is_valid( $timeline ) ) {
+                    update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, $timeline );
+                } elseif ( function_exists( 'delete_post_meta' ) ) {
+                    delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY );
+                }
+            } catch ( \Throwable $e ) {
+                if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                    PressHub_AI_Logger::warning( 'Podcast timeline could not be saved: ' . $e->getMessage() );
+                }
+            }
         }
 
         // Host-count gating for saved voices

@@ -477,6 +477,10 @@ describe('Poller: YouTube jobs', () => {
         overrides.shortParams = p;
         return { filePath: rendered, duration: overrides.shortDuration ?? 40 } as any;
       },
+      generateEpisodeFn: async (p: any) => {
+        overrides.episodeParams = p;
+        return { filePath: rendered, width: 1920, height: 1080, duration: 600, captions: 10, images: 2, scenes: 2 };
+      },
       generateVideoFn: async (p: any) => {
         overrides.videoParams = p;
         return { filePath: rendered, width: p.width, height: p.height, duration: 600 };
@@ -515,6 +519,48 @@ describe('Poller: YouTube jobs', () => {
     expect(uploads[0]).toMatchObject({ wpUrl: 'https://presshub.test', workerSecret: 'S', filePath: rendered, meta: job.youtube });
     expect(reports[0]).toMatchObject({ job_id: 41, status: 'published', external_post_id: 'VID', external_post_url: 'https://www.youtube.com/watch?v=VID', metadata: { youtube_kind: 'episode', youtube_playlist_item_id: 'PLI' } });
     expect(fs.existsSync(rendered)).toBe(false);
+  });
+
+  test('an enhanced episode is rendered with the story images, scenes and captions', async () => {
+    const episode_video = {
+      duration: 600,
+      segments: [{ speaker: 1, text: 'Καλημέρα', start: 3.6, end: 5 }],
+      scenes: [{ start: 0, end: 300, title: 'Α', images: ['https://presshub.test/a.jpg'] }, { start: 300, end: 600, title: 'Β', images: [] }],
+      images: ['https://presshub.test/a.jpg']
+    };
+    const job: ClaimedJob = {
+      id: 49,
+      platform: 'youtube',
+      post_id: 881,
+      post_title: 'Πρωινό Podcast',
+      post_copy: 'Περιγραφή',
+      audio_url: 'https://presshub.test/podcast.wav',
+      media_url: 'https://presshub.test/cover.jpg',
+      youtube: { ...episodeMeta, width: 1920, height: 1080, episode_video }
+    };
+    const { poller, uploads, overrides } = makePoller(job);
+    const stats = await poller.pollOnce();
+    expect(stats).toEqual({ claimed: 1, succeeded: 1, failed: 0 });
+    expect(overrides.videoParams).toBeUndefined();
+    expect(overrides.episodeParams).toMatchObject({
+      audioUrl: 'https://presshub.test/podcast.wav',
+      title: 'Πρωινό Podcast',
+      segments: episode_video.segments,
+      scenes: episode_video.scenes,
+      images: episode_video.images,
+      fallbackImageUrl: 'https://presshub.test/cover.jpg',
+      timelineDuration: 600,
+      endCardLine: 'Ολόκληρη η ενημέρωση στο presshub.test'
+    });
+    expect(uploads).toHaveLength(1);
+  });
+
+  test('an episode without a timeline or images is rendered the plain way', async () => {
+    const job: ClaimedJob = { id: 50, platform: 'youtube', post_id: 882, post_copy: 'x', audio_url: 'https://presshub.test/p.mp3', youtube: { ...episodeMeta, episode_video: { images: [] } } };
+    const { poller, overrides } = makePoller(job);
+    await poller.pollOnce();
+    expect(overrides.episodeParams).toBeUndefined();
+    expect(overrides.videoParams).toMatchObject({ isPodcast: true });
   });
 
   test('a YouTube short is rendered like the TikTok short and uploaded', async () => {

@@ -107,7 +107,7 @@ const LAYOUT = {
   captionY: 1150,
   sideMargin: 90,
 };
-const COLORS = {
+export const COLORS = {
   white: '&H00FFFFFF',
   black: '&H00000000',
   // PressHub yellow #FACC15 and sky blue #38BDF8, as ASS &HAABBGGRR.
@@ -442,7 +442,7 @@ export function buildAssScript(opts: AssOptions): string {
   return [...header, ...lines, ''].join('\n');
 }
 
-async function download(url: string, dest: string): Promise<boolean> {
+export async function download(url: string, dest: string): Promise<boolean> {
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 PressHub-ShortVideo/1.0' } });
     if (!res.ok) {
@@ -473,7 +473,7 @@ async function prepareImage(src: string, dest: string, width: number, height: nu
 }
 
 /** Branded backgrounds used when a short has no story image. */
-async function brandedBackgrounds(dir: string, width: number, height: number): Promise<string[]> {
+export async function brandedBackgrounds(dir: string, width: number, height: number): Promise<string[]> {
   const variants = [
     ['#0f172a', '#1e3a8a', '#facc15'],
     ['#111827', '#0e7490', '#38bdf8'],
@@ -533,7 +533,7 @@ async function shadeOverlay(dir: string, width: number, height: number): Promise
   return file;
 }
 
-function runFfmpeg(bin: string, args: string[], cwd: string): Promise<void> {
+export function runFfmpeg(bin: string, args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn(bin, args, { cwd });
     let tail = '';

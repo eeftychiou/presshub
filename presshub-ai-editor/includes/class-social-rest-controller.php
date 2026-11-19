@@ -300,6 +300,12 @@ class PressHub_Social_REST_Controller {
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
+                // A podcast episode waits (for a while) for its shorts' story images, and
+                // while it is longer than the channel may upload.
+                if ( 'youtube' === ( $candidate['platform'] ?? '' ) && ( ! PressHub_Social_YouTube::episode_ready( $candidate ) || ! PressHub_Social_YouTube::episode_length_ok( $candidate ) ) ) {
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
                 if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) && ! PressHub_Social_TikTok_Shorts::is_ready( $candidate ) ) {
                     PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $candidate['post_id'] ?? 0 ) );
                     $skipped[] = (int) $candidate['id'];

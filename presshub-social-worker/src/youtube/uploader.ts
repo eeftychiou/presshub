@@ -28,6 +28,17 @@ export interface YouTubeUploadMeta {
   playlist_id?: string;
   width?: number;
   height?: number;
+  /**
+   * Enhanced episode (WordPress PressHub_Social_YouTube::episode_video()): the episode's
+   * caption timeline and its scenes with the shorts' story images. Not sent to YouTube.
+   */
+  episode_video?: {
+    duration?: number;
+    estimated?: boolean;
+    segments?: { speaker: number; text: string; start: number; end: number }[];
+    scenes?: { start: number; end: number; title?: string; images?: string[] }[];
+    images?: string[];
+  };
 }
 
 export interface YouTubeUploadResult {

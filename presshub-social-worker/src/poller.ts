@@ -3,6 +3,7 @@ import { dispatchBrowserPost, PosterHandler, PostResult } from './automation/pos
 import { generateCard, CardResult } from './media/card-generator';
 import { generateVideo, VideoResult } from './media/video-generator';
 import { generateShortVideo, ShortSegment, ShortVideoResult, GenerateShortOptions, siteEndCardLine, YOUTUBE_SHORT_MAX_SECONDS } from './media/short-video';
+import { generateEpisodeVideo, GenerateEpisodeOptions, EpisodeVideoResult } from './media/episode-video';
 import { WorkerLogger } from './logger';
 import fs from 'fs';
 import path from 'path';
@@ -69,6 +70,7 @@ export interface PollerOptions {
   generateCardFn?: (params: any) => Promise<CardResult>;
   generateVideoFn?: (params: any) => Promise<VideoResult>;
   generateShortFn?: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
+  generateEpisodeFn?: (params: GenerateEpisodeOptions) => Promise<EpisodeVideoResult>;
   /** Uploads a rendered video to YouTube (tests inject a fake). */
   youtubeUploadFn?: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
   /** Tries of a YouTube "published" report (default 5) and the first wait between them (ms). */
@@ -109,6 +111,7 @@ export class PressHubPoller {
   private readonly generateCardFn: (params: any) => Promise<CardResult>;
   private readonly generateVideoFn: (params: any) => Promise<VideoResult>;
   private readonly generateShortFn: (params: GenerateShortOptions) => Promise<ShortVideoResult>;
+  private readonly generateEpisodeFn: (params: GenerateEpisodeOptions) => Promise<EpisodeVideoResult>;
   private readonly youtubeUploadFn: (options: YouTubeUploadOptions) => Promise<YouTubeUploadResult>;
   private readonly reportTries: number;
   private readonly reportRetryDelayMs: number;
@@ -141,6 +144,7 @@ export class PressHubPoller {
     this.generateCardFn = options.generateCardFn || generateCard;
     this.generateVideoFn = options.generateVideoFn || generateVideo;
     this.generateShortFn = options.generateShortFn || generateShortVideo;
+    this.generateEpisodeFn = options.generateEpisodeFn || generateEpisodeVideo;
     this.youtubeUploadFn = options.youtubeUploadFn || uploadToYouTube;
     this.reportTries = Math.max(1, options.reportTries ?? 5);
     this.reportRetryDelayMs = Math.max(0, options.reportRetryDelayMs ?? 2000);
@@ -517,24 +521,45 @@ export class PressHubPoller {
             if (!audioUrl) {
               throw new Error('YouTube podcast episode has no audio_url.');
             }
-            const width = job.youtube.width || 1920;
-            const height = job.youtube.height || 1080;
-            WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (${width}x${height}, full audio)...`);
-            const video = await this.generateVideoFn({
-              postId: Number(job.post_id) || 1,
-              title,
-              subtitle: '',
-              width,
-              height,
-              mediaUrl: imageUrl,
-              audioUrl,
-              isPodcast: true,
-              requireAudio: true,
-              siteName: job.site_name || 'PressHub.Cy',
-              outputDir: this.outputDir
-            });
-            mediaPath = video?.filePath;
-            WorkerLogger.info('Poller', `${jobTag} Episode rendered at: ${mediaPath}`);
+            const ev = job.youtube.episode_video;
+            const enhanced = Boolean(ev && ((ev.images?.length || 0) > 0 || (ev.segments?.length || 0) > 0));
+            if (enhanced && ev) {
+              // The shorts' story images, one scene per topic, with captions like the shorts.
+              WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (1920x1080, ${ev.scenes?.length || 0} topic(s), ${ev.images?.length || 0} story image(s), ${ev.segments?.length || 0} timed turns)...`);
+              const video = await this.generateEpisodeFn({
+                audioUrl,
+                title,
+                siteName: job.site_name || 'PressHub.Cy',
+                segments: Array.isArray(ev.segments) ? ev.segments : [],
+                scenes: Array.isArray(ev.scenes) ? ev.scenes : [],
+                images: Array.isArray(ev.images) ? ev.images : [],
+                fallbackImageUrl: imageUrl,
+                timelineDuration: typeof ev.duration === 'number' ? ev.duration : undefined,
+                endCardLine: siteEndCardLine(this.wpUrl),
+                outputDir: this.outputDir
+              });
+              mediaPath = video?.filePath;
+              WorkerLogger.info('Poller', `${jobTag} Episode rendered at: ${mediaPath}`);
+            } else {
+              const width = job.youtube.width || 1920;
+              const height = job.youtube.height || 1080;
+              WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (${width}x${height}, full audio)...`);
+              const video = await this.generateVideoFn({
+                postId: Number(job.post_id) || 1,
+                title,
+                subtitle: '',
+                width,
+                height,
+                mediaUrl: imageUrl,
+                audioUrl,
+                isPodcast: true,
+                requireAudio: true,
+                siteName: job.site_name || 'PressHub.Cy',
+                outputDir: this.outputDir
+              });
+              mediaPath = video?.filePath;
+              WorkerLogger.info('Poller', `${jobTag} Episode rendered at: ${mediaPath}`);
+            }
           } else if (platform === 'tiktok') {
             const hasAudio = Boolean(audioUrl);
             WorkerLogger.info(
