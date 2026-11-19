@@ -530,14 +530,15 @@ export class PressHubPoller {
               WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (1920x1080, ${ev.scenes?.length || 0} topic(s), ${ev.images?.length || 0} story image(s), ${ev.segments?.length || 0} timed turns)...`);
               const video = await this.generateEpisodeFn({
                 audioUrl,
-                title,
+                // An English or Turkish episode brings its own title and end line.
+                title: typeof ev.title === 'string' && ev.title.trim() !== '' ? ev.title : title,
                 siteName: job.site_name || 'PressHub.Cy',
                 segments: Array.isArray(ev.segments) ? ev.segments : [],
                 scenes: Array.isArray(ev.scenes) ? ev.scenes : [],
                 images: Array.isArray(ev.images) ? ev.images : [],
                 fallbackImageUrl: imageUrl,
                 timelineDuration: typeof ev.duration === 'number' ? ev.duration : undefined,
-                endCardLine: siteEndCardLine(this.wpUrl),
+                endCardLine: typeof ev.end_card_line === 'string' && ev.end_card_line.trim() !== '' ? ev.end_card_line : siteEndCardLine(this.wpUrl),
                 outputDir: this.outputDir
               });
               mediaPath = video?.filePath;
@@ -549,7 +550,8 @@ export class PressHubPoller {
               WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (${width}x${height}, full audio)...`);
               const video = await this.generateVideoFn({
                 postId: Number(job.post_id) || 1,
-                title,
+                // The upload's title: an English or Turkish episode's own, not the Greek post's.
+                title: typeof job.youtube.title === 'string' && job.youtube.title.trim() !== '' ? job.youtube.title : title,
                 subtitle: '',
                 width,
                 height,

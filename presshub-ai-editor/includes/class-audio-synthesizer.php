@@ -75,6 +75,62 @@ class PressHub_AI_Audio_Synthesizer {
     }
 
     /**
+     * Set by synthesize_script_audio(): the run stops after stitching and returns the
+     * audio and its timeline instead of saving a file and a podcast post.
+     *
+     * @var array|null [ 'language' => English name of the language, 'voices' => overrides ]
+     */
+    private $audio_only = null;
+
+    /**
+     * Voices a script in another language (an English or Turkish translation of the
+     * Greek podcast) with the podcast's voice settings, and returns the stitched audio
+     * without saving anything: no snapshot file, no Media Library item, no post.
+     *
+     * The delivery style is the podcast's style with "Greek" replaced by $language, and
+     * $voices (presenter_1, presenter_2, presenter_3) replace the podcast's voices where
+     * they are not empty. Honors set_live_call_deadline(), so a long translation resumes
+     * from the turn cache like the Greek episode.
+     *
+     * @param string $script   Script with the same speaker and topic markers as the Greek one.
+     * @param string $date     Briefing date (Y-m-d), for the turn cache.
+     * @param string $edition  morning | noon, for the TTS call record.
+     * @param string $language English name of the language, e.g. "English", "Turkish".
+     * @param array  $voices   Optional voice overrides keyed presenter_1..presenter_3.
+     * @return array|WP_Error [ audio, ext, timeline_topics, timeline_opts, turns_count, topic_count, engine, voices ]
+     */
+    public function synthesize_script_audio( string $script, string $date, string $edition, string $language, array $voices = [], ?PressHub_AI_API_Client $api_client = null ) {
+        if ( '' === trim( $script ) ) {
+            return new WP_Error( 'empty_script', __( 'The translated podcast script is empty.', 'presshub-ai-editor' ) );
+        }
+        $this->audio_only = [ 'language' => $language, 'voices' => $voices ];
+        try {
+            return $this->synthesize_podcast_run( $date, $script, 'noon' === $edition ? 'noon' : 'morning', $api_client, 0 );
+        } finally {
+            $this->audio_only = null;
+            if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
+                PressHub_AI_TTS_Call_Recorder::end_session();
+            }
+        }
+    }
+
+    /**
+     * Delivery style text for another language: the style's instruction with "Greek"
+     * replaced by $language, or the custom instruction with the language added.
+     */
+    public function style_for_language( string $style, string $language ): string {
+        $styles = $this->get_available_styles();
+        $text   = ( isset( $styles[ $style ] ) && '' !== $styles[ $style ]['instruction'] ) ? $styles[ $style ]['instruction'] : $style;
+        if ( '' === trim( $text ) ) {
+            $text = $styles['formal']['instruction'];
+        }
+        if ( false !== stripos( $text, 'Greek' ) ) {
+            return str_ireplace( 'Greek', $language, $text );
+        }
+        return rtrim( $text, " \t\n:." ) . '. Speak in ' . $language . ':';
+    }
+
+    /**
      * Constructor registers excerpt filter hooks.
      */
     public function __construct() {
@@ -233,8 +289,13 @@ class PressHub_AI_Audio_Synthesizer {
      *         carries `name`, `label`, `gender`, `type`, and (for
      *         manifest-loaded voices) `language`, `engine_version`.
      */
-    public function get_available_voices( string $engine = 'gemini' ): array {
+    public function get_available_voices( string $engine = 'gemini', string $language = '' ): array {
         $engine = '' === trim( $engine ) ? 'gemini' : trim( $engine );
+        // Google Cloud voices speak one language each: the Greek podcast's lists show the
+        // el-GR ones, an English or Turkish podcast's its own (`language` "en", "tr").
+        if ( '' === $language && 'google_cloud' === $engine ) {
+            $language = 'el';
+        }
 
         // Backward-compat shim: legacy callers pass 'gemini' to mean
         // the canonical Gemini 2.5 catalog. Map that to the new
@@ -253,7 +314,14 @@ class PressHub_AI_Audio_Synthesizer {
             return [ 'female' => [], 'male' => [] ];
         }
 
-        return $this->group_voices_by_gender( $engine_slice['voices'] ?? [] );
+        $voices = (array) ( $engine_slice['voices'] ?? [] );
+        if ( '' !== $language ) {
+            $prefix = strtolower( $language ) . '-';
+            $voices = array_filter( $voices, static function ( $v ) use ( $prefix ) {
+                return ! is_array( $v ) || ! isset( $v['language'] ) || str_starts_with( strtolower( (string) $v['language'] ), $prefix );
+            } );
+        }
+        return $this->group_voices_by_gender( $voices );
     }
 
     /**
@@ -1607,6 +1675,9 @@ class PressHub_AI_Audio_Synthesizer {
         $result         = null;
         try {
             $result = $this->synthesize_podcast_run( $date, $custom_script, $edition_or_client, $api_client, $existing_post_id );
+            if ( is_array( $result ) && ! empty( $result['success'] ) && ! empty( $result['post_id'] ) ) {
+                self::start_languages( $result );
+            }
             return $result;
         } catch ( \Throwable $e ) {
             // Keep the exception's message for the audio card, then let it through.
@@ -1617,6 +1688,25 @@ class PressHub_AI_Audio_Synthesizer {
                 PressHub_AI_TTS_Call_Recorder::end_session();
             }
             self::log_audio_run( $result, $date, $custom_script, $edition_or_client, $run_started, $run_started_at );
+        }
+    }
+
+    /**
+     * Starts the English and Turkish versions (those turned on) of a Greek podcast just
+     * voiced, by any path: the cron step, the watchdog retry, the Hub's re-run or a
+     * corrected script. A language whose Greek script did not change keeps its
+     * translation. A problem here never counts as a failed Greek synthesis.
+     */
+    private static function start_languages( array $result ): void {
+        if ( ! class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+            return;
+        }
+        try {
+            PressHub_AI_Podcast_Translations::start( (string) ( $result['date'] ?? '' ), 'noon' === ( $result['edition'] ?? '' ) ? 'noon' : 'morning', (int) $result['post_id'] );
+        } catch ( \Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast languages could not start: ' . $t->getMessage(), [ 'date' => (string) ( $result['date'] ?? '' ), 'edition' => (string) ( $result['edition'] ?? '' ) ] );
+            }
         }
     }
 
@@ -1742,8 +1832,14 @@ class PressHub_AI_Audio_Synthesizer {
         // Issue #140 - every TTS call below is appended to the podcast_script record that
         // produced this script (tts_calls_json). Without one, the calls go to a tts_test record.
         if ( class_exists( 'PressHub_AI_TTS_Call_Recorder' ) ) {
-            $tts_parent_id = (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
-            PressHub_AI_TTS_Call_Recorder::begin_session( $tts_parent_id, [ 'origin' => 'podcast_synthesis', 'date' => $date, 'edition' => $edition ] );
+            // A translation's calls go to a record of their own (a tts_test record carrying
+            // the origin and language), never over the Greek podcast's calls.
+            $tts_parent_id = null !== $this->audio_only ? 0 : (int) ( $producer->get_script_meta( $date, $edition )['generation_record_id'] ?? 0 );
+            $tts_context   = [ 'origin' => null !== $this->audio_only ? 'podcast_translation' : 'podcast_synthesis', 'date' => $date, 'edition' => $edition ];
+            if ( null !== $this->audio_only ) {
+                $tts_context['language'] = (string) $this->audio_only['language'];
+            }
+            PressHub_AI_TTS_Call_Recorder::begin_session( $tts_parent_id, $tts_context );
         }
 
         $engine         = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_engine() : (string) get_option( self::OPTION_ENGINE, 'gemini' );
@@ -1753,6 +1849,12 @@ class PressHub_AI_Audio_Synthesizer {
         $presenter_1_voice = $this->get_voice_for_speaker( 'presenter_1' );
         $presenter_2_voice = $this->get_voice_for_speaker( 'presenter_2' );
         $presenter_3_voice = $this->get_voice_for_speaker( 'presenter_3' );
+        if ( null !== $this->audio_only ) {
+            $overrides         = (array) $this->audio_only['voices'];
+            $presenter_1_voice = '' !== trim( (string) ( $overrides['presenter_1'] ?? '' ) ) ? trim( (string) $overrides['presenter_1'] ) : $presenter_1_voice;
+            $presenter_2_voice = '' !== trim( (string) ( $overrides['presenter_2'] ?? '' ) ) ? trim( (string) $overrides['presenter_2'] ) : $presenter_2_voice;
+            $presenter_3_voice = '' !== trim( (string) ( $overrides['presenter_3'] ?? '' ) ) ? trim( (string) $overrides['presenter_3'] ) : $presenter_3_voice;
+        }
         $female_voice      = $presenter_1_voice;
         $male_voice        = $presenter_2_voice;
         $tertiary_voice    = $presenter_3_voice;
@@ -1762,6 +1864,9 @@ class PressHub_AI_Audio_Synthesizer {
         $style_key      = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_style() : (string) get_option( self::OPTION_STYLE, 'formal' );
         $custom_style   = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_custom_style() : (string) get_option( self::OPTION_CUSTOM_STYLE, '' );
         $used_style     = ( 'custom' === $style_key && ! empty( $custom_style ) ) ? $custom_style : $style_key;
+        if ( null !== $this->audio_only ) {
+            $used_style = $this->style_for_language( $used_style, (string) $this->audio_only['language'] );
+        }
 
         $turn_pause_ms    = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_turn_pause_ms() : 250;
         $topic_pause_ms   = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_tts_topic_pause_ms() : 600;
@@ -2099,6 +2204,24 @@ class PressHub_AI_Audio_Synthesizer {
                 'stitching_failed',
                 __( 'Failed to generate synthesized audio stream.', 'presshub-ai-editor' )
             );
+        }
+
+        // A translation: hand back the audio and its timeline; the caller stores them.
+        if ( null !== $this->audio_only ) {
+            return [
+                'audio'           => $stitched_audio,
+                'ext'             => ( strlen( $stitched_audio ) >= 4 && 'RIFF' === substr( $stitched_audio, 0, 4 ) ) ? '.wav' : '.mp3',
+                'timeline_topics' => $timeline_topics,
+                'timeline_opts'   => $timeline_opts,
+                'turns_count'     => count( $turns ),
+                'topic_count'     => ! empty( $topics ) ? count( $topics ) : 0,
+                'engine'          => (string) $engine,
+                'voices'          => [
+                    'presenter_1' => (string) $presenter_1_voice,
+                    'presenter_2' => $host_count >= 2 ? (string) $presenter_2_voice : '',
+                    'presenter_3' => $host_count >= 3 ? (string) $presenter_3_voice : '',
+                ],
+            ];
         }
 
         // Save copy to daily briefing storage

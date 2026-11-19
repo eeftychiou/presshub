@@ -562,6 +562,14 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_youtube_podcast_language_playlists',
+            __( 'English and Turkish Playlists', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_podcast_language_playlists_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
             'presshub_social_youtube_privacy_status',
             __( 'YouTube Visibility', 'presshub-social-autopost' ),
             [ $render, 'render_youtube_privacy_field' ],

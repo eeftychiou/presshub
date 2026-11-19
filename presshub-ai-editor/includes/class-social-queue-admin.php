@@ -170,7 +170,7 @@ class PressHub_Social_Queue_Admin {
                                         </a>
                                     </td>
                                     <td>
-                                        <span class="platform-name"><?php echo esc_html( ucfirst( $platform ) ); ?></span>
+                                        <span class="platform-name"><?php echo esc_html( class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::platform_label( $job ) : ucfirst( $platform ) ); ?></span>
                                     </td>
                                     <td>
                                         <span class="presshub-badge <?php echo 'automation' === $engine ? 'badge-engine-automation' : 'badge-engine-api'; ?>">

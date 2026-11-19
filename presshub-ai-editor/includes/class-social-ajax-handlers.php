@@ -508,6 +508,28 @@ class PressHub_Social_Ajax_Handlers {
             ] );
         }
 
+        // An English or Turkish episode's description is its translation's, never the
+        // Greek copywriter's.
+        if ( class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::episode_language( $job ) && class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+            $entry   = PressHub_AI_Podcast_Translations::get_entry( $post_id, PressHub_Social_YouTube::episode_language( $job ) );
+            $caption = trim( (string) ( $entry['description'] ?? '' ) );
+            if ( '' === $caption ) {
+                $caption = trim( (string) ( $entry['title'] ?? '' ) );
+            }
+            if ( '' === $caption ) {
+                wp_send_json_error( [ 'message' => __( 'This episode\'s translation has no description.', 'presshub-social-autopost' ) ], 400 );
+            }
+            PressHub_Social_Queue::update_job_copy( $job_id, $caption );
+            wp_send_json_success( [
+                'message'  => __( 'Translated episode description restored.', 'presshub-social-autopost' ),
+                'job_id'   => $job_id,
+                'post_id'  => $post_id,
+                'platform' => $platform,
+                'new_copy' => $caption,
+                'preview'  => wp_trim_words( $caption, 15 ),
+            ] );
+        }
+
         if ( ! class_exists( 'PressHub_Social_AI_Copywriter' ) ) {
             wp_send_json_error( [ 'message' => __( 'AI Copywriter module is unavailable.', 'presshub-social-autopost' ) ], 500 );
         }
@@ -574,7 +596,9 @@ class PressHub_Social_Ajax_Handlers {
 
         // A TikTok short's caption is its own; it is not the post's TikTok copy.
         $is_short = class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $job );
-        if ( ! $is_short && ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
+        // Nor is an English or Turkish episode's description the post's (Greek) YouTube copy.
+        $is_lang = class_exists( 'PressHub_Social_YouTube' ) && '' !== PressHub_Social_YouTube::episode_language( $job );
+        if ( ! $is_short && ! $is_lang && ! empty( $job['post_id'] ) && ! empty( $job['platform'] ) ) {
             update_post_meta( (int) $job['post_id'], '_presshub_social_copy_' . sanitize_key( $job['platform'] ), $post_copy );
         }
 

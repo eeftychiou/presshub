@@ -674,6 +674,28 @@ class PressHub_Social_Settings_Render {
         <?php
     }
 
+    public function render_youtube_podcast_language_playlists_field(): void {
+        $option = 'presshub_social_youtube_podcast_language_playlists';
+        $langs  = class_exists( 'PressHub_AI_Podcast_Translations' ) ? PressHub_AI_Podcast_Translations::LANGUAGES : [];
+        $on     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_languages() : [];
+        foreach ( $langs as $lang => $info ) :
+            $id = $option . '_' . $lang;
+            ?>
+            <p>
+                <label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $info['name'] ); ?></label><br />
+                <input type="text" id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $option . '[' . $lang . ']' ); ?>" value="<?php echo esc_attr( PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( $lang ) ); ?>" class="regular-text" placeholder="PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+                <?php if ( ! in_array( $lang, $on, true ) ) : ?>
+                    <span class="description"><?php echo esc_html__( '(not made: turn this language on under Settings, Daily Briefing, Other languages)', 'presshub-social-autopost' ); ?></span>
+                <?php endif; ?>
+            </p>
+            <?php
+        endforeach;
+        ?>
+        <p class="description"><?php echo esc_html__( 'The playlist each language\'s episodes are added to. Make one playlist per language in YouTube Studio, set it as a podcast there, then paste its link or ID. Empty uploads that language\'s episodes without a playlist.', 'presshub-social-autopost' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Each language adds two uploads a day (morning and midday) to the channel\'s 100 uploads a day, which shorts share. Adding an episode to its playlist uses 50 of the project\'s 10,000 daily API units.', 'presshub-social-autopost' ); ?></p>
+        <?php
+    }
+
     public function render_youtube_episode_enhanced_field(): void {
         $enabled = PressHub_Social_Settings_Storage::get_youtube_episode_enhanced();
         ?>

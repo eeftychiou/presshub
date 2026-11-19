@@ -339,6 +339,10 @@ class PressHub_Social_Dispatcher {
                 $job_ids[] = $job_id;
                 PressHub_Social_Logger::info( sprintf( 'Enqueued YouTube podcast episode job #%d for post #%d (scheduled: %s%s)', $job_id, $post_id, $job['scheduled_at'], $failed_error ? ', description failed' : '' ) );
             }
+            // The English and Turkish episodes already voiced (the rest follow as they are).
+            if ( class_exists( 'PressHub_AI_Podcast_Translations' ) ) {
+                $job_ids = array_merge( $job_ids, PressHub_AI_Podcast_Translations::enqueue_ready( $post_id ) );
+            }
         }
 
         if ( empty( $job_ids ) ) {

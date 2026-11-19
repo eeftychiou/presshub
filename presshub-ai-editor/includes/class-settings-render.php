@@ -22,6 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/class-capabilities.php';
 require_once __DIR__ . '/class-settings-sections.php';
+require_once __DIR__ . '/class-podcast-translations.php';
 require_once __DIR__ . '/class-secret-field.php';
 require_once __DIR__ . '/class-connection-status.php';
 require_once __DIR__ . '/class-setup-check.php';
@@ -837,6 +838,35 @@ class PressHub_AI_Settings_Render {
                     </table>
                     <?php $this->render_gemini_tts_tester(); ?>
                     </details>
+                    </section>
+
+                    <section id="briefing-languages" class="presshub-settings-group" aria-labelledby="briefing-languages-title">
+                    <h3 id="briefing-languages-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Other languages', 'presshub-ai-editor' ); ?></h3>
+                    <p class="description"><?php echo esc_html__( 'After each edition\'s Greek podcast is voiced, PressHub can translate its script and voice it in English and Turkish. These versions are not published on the site: they go to YouTube as their own episodes, each in its own playlist (Shorts, YouTube). Each language takes one translation call and about as long to voice as the Greek episode.', 'presshub-ai-editor' ); ?></p>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'Podcast languages', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_languages_field(); ?>
+                                </td>
+                            </tr>
+                            <?php foreach ( PressHub_AI_Podcast_Translations::LANGUAGES as $lang => $info ) : ?>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_language_notes_<?php echo esc_attr( $lang ); ?>"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s translator\'s notes', 'presshub-ai-editor' ), $info['name'] ) ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_language_notes_field( $lang ); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s voices', 'presshub-ai-editor' ), $info['name'] ) ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_language_voices_field( $lang ); ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
                     </section>
 
                     <section id="briefing-publishing" class="presshub-settings-group" aria-labelledby="briefing-publishing-title">
@@ -3422,6 +3452,81 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
         <p class="description"><?php echo esc_html__( 'Name of the third presenter/commentator (e.g. Κώστας). Default Κώστας.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_languages_field() {
+        $option  = 'presshub_ai_briefing_podcast_languages';
+        $enabled = PressHub_AI_Settings_Storage::get_briefing_podcast_languages();
+        ?>
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>[]" value="" />
+        <fieldset>
+            <legend class="screen-reader-text"><?php echo esc_html__( 'Podcast languages', 'presshub-ai-editor' ); ?></legend>
+            <?php foreach ( PressHub_AI_Podcast_Translations::LANGUAGES as $lang => $info ) : ?>
+                <label>
+                    <input type="checkbox" name="<?php echo esc_attr( $option ); ?>[]" id="<?php echo esc_attr( $option . '_' . $lang ); ?>" value="<?php echo esc_attr( $lang ); ?>" <?php checked( in_array( $lang, $enabled, true ) ); ?> />
+                    <?php echo esc_html( $info['label'] ); ?>
+                </label><br />
+            <?php endforeach; ?>
+        </fieldset>
+        <p class="description"><?php echo esc_html__( 'Also make the podcast in these languages, for YouTube. Needs YouTube Podcast Episodes turned on under Shorts, YouTube. Default: none.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_language_notes_field( string $lang ) {
+        $option = 'presshub_ai_briefing_podcast_language_notes';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_podcast_language_notes( $lang );
+        $id     = $option . '_' . $lang;
+        ?>
+        <textarea name="<?php echo esc_attr( $option . '[' . $lang . ']' ); ?>" id="<?php echo esc_attr( $id ); ?>" rows="6" class="large-text" lang="<?php echo esc_attr( $lang ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <p class="description"><?php echo esc_html__( 'Place names, institutions and wording the translation must use. They go into every translation of the podcast into this language. Empty the box and save to go back to the built-in notes.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_language_voices_field( string $lang ) {
+        $option      = 'presshub_ai_briefing_podcast_language_voices';
+        $current     = PressHub_AI_Settings_Storage::get_briefing_podcast_language_voices( $lang );
+        $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
+        $engine      = PressHub_AI_Settings_Storage::get_briefing_tts_engine();
+        $engine_id   = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
+        $voices      = $synthesizer ? $synthesizer->get_available_voices( $engine_id, 'google_cloud' === $engine_id ? $lang : '' ) : [];
+        $female      = $voices['female'] ?? [];
+        $male        = $voices['male'] ?? [];
+        $host_count  = PressHub_AI_Settings_Storage::get_briefing_host_count();
+        $labels      = [
+            'presenter_1' => __( 'Presenter 1', 'presshub-ai-editor' ),
+            'presenter_2' => __( 'Presenter 2', 'presshub-ai-editor' ),
+            'presenter_3' => __( 'Presenter 3', 'presshub-ai-editor' ),
+        ];
+        ?>
+        <fieldset>
+            <legend class="screen-reader-text"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s voices', 'presshub-ai-editor' ), PressHub_AI_Podcast_Translations::LANGUAGES[ $lang ]['name'] ) ); ?></legend>
+            <?php foreach ( $labels as $presenter => $label ) : ?>
+                <?php
+                if ( (int) substr( $presenter, -1 ) > max( 1, $host_count ) ) {
+                    continue;
+                }
+                $id       = $option . '_' . $lang . '_' . $presenter;
+                $selected = (string) ( $current[ $presenter ] ?? '' );
+                ?>
+                <label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $label ); ?></label>
+                <select name="<?php echo esc_attr( $option . '[' . $lang . '][' . $presenter . ']' ); ?>" id="<?php echo esc_attr( $id ); ?>">
+                    <option value="" <?php selected( $selected, '' ); ?>><?php echo esc_html__( 'Same as the Greek podcast', 'presshub-ai-editor' ); ?></option>
+                    <?php echo self::unavailable_voice_option( $selected, $female, $male ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped option markup. ?>
+                    <?php foreach ( [ __( 'Female Voices', 'presshub-ai-editor' ) => $female, __( 'Male Voices', 'presshub-ai-editor' ) => $male ] as $group_label => $list ) : ?>
+                        <?php if ( ! empty( $list ) ) : ?>
+                            <optgroup label="<?php echo esc_attr( $group_label ); ?>">
+                                <?php foreach ( $list as $key => $v ) : ?>
+                                    <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, (string) $key ); ?>><?php echo esc_html( $v['label'] ?? $key ); ?></option>
+                                <?php endforeach; ?>
+                            </optgroup>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </select>
+                <br />
+            <?php endforeach; ?>
+        </fieldset>
+        <p class="description"><?php echo esc_html__( 'Gemini voices speak every language, so the Greek podcast\'s voices are used by default. With Google Cloud TTS, choose a voice made for this language for every presenter, or this language is not voiced.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 

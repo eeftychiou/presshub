@@ -38,6 +38,10 @@ export interface YouTubeUploadMeta {
     segments?: { speaker: number; text: string; start: number; end: number }[];
     scenes?: { start: number; end: number; title?: string; images?: string[] }[];
     images?: string[];
+    /** Title shown in the video, when it differs from the post's (a translated episode). */
+    title?: string;
+    /** Closing line of the video in the episode's language. */
+    end_card_line?: string;
   };
 }
 

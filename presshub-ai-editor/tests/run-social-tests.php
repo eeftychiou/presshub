@@ -504,6 +504,7 @@ require_once $base_dir . '/includes/class-social-post-images.php';
 require_once $base_dir . '/includes/class-social-tiktok-shorts.php';
 require_once $base_dir . '/includes/class-social-tiktok-music.php';
 require_once $base_dir . '/includes/class-podcast-timeline.php';
+require_once $base_dir . '/includes/class-podcast-translations.php';
 require_once $base_dir . '/includes/class-social-youtube.php';
 require_once $base_dir . '/includes/class-social-meta-api-client.php';
 require_once $base_dir . '/includes/class-social-worker-client.php';
@@ -2728,6 +2729,132 @@ assert_equals( '', (string) PressHub_Social_Queue::get_job( $ep_id )['last_error
 assert_true( PressHub_Social_YouTube::episode_length_ok( [ 'platform' => 'youtube', 'post_id' => 880, 'tiktok_short' => [] ] ), 'A short is never held for length' );
 delete_post_meta( 880, '_presshub_audio_duration_sec' );
 PressHub_Social_YouTube::forget_access_token();
+
+// English and Turkish episodes: queued once voiced and published, uploaded with their own
+// audio, title, captions and playlist, the images following the Greek topics.
+update_option( 'presshub_ai_briefing_podcast_languages', [ 'en', 'tr' ] );
+update_option( 'presshub_social_youtube_podcast_language_playlists', [ 'en' => 'https://www.youtube.com/playlist?list=PLenglishplaylist1', 'tr' => 'not a playlist!' ] );
+assert_equals( 'PLenglishplaylist1', PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( 'en' ), 'A pasted playlist link gives the language its playlist ID' );
+assert_equals( '', PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( 'tr' ), 'A bad playlist ID is dropped' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, $tl );
+$tl_en = PressHub_AI_Podcast_Timeline::build( [
+    [ 'title' => 'Parliament passes the budget', 'turns' => [ [ 'speaker' => 'female', 'text' => 'Good morning.', 'seconds' => 8.0 ], [ 'speaker' => 'male', 'text' => 'Good morning.', 'seconds' => 4.0 ] ] ],
+    [ 'title' => 'Weather', 'turns' => [ [ 'speaker' => 'male', 'text' => 'Rain.', 'seconds' => 11.0 ] ] ],
+    [ 'title' => 'Football: Omonia wins', 'turns' => [ [ 'speaker' => 'female', 'text' => 'The end.', 'seconds' => 18.0 ] ] ],
+], [ 'turn_pause_ms' => 250, 'topic_pause_ms' => 600, 'host_count' => 2 ] );
+$tr_entry = [ 'status' => 'translated', 'title' => 'PressHub Morning Briefing: the budget', 'description' => 'The House passes the budget. #Cyprus', 'script' => 'x' ];
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => $tr_entry ] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is not queued before it is voiced' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => array_merge( $tr_entry, [ 'status' => 'voiced', 'audio_url' => 'https://example.com/uploads/podcast-880-en.wav', 'timeline' => $tl_en, 'duration_sec' => $tl_en['duration'] ] ) ] );
+$GLOBALS['POSTS_STORE'][880]['post_status'] = 'pending';
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language waits while the Greek post is held' );
+$GLOBALS['POSTS_STORE'][880]['post_status'] = 'publish';
+$yt_was = get_option( 'presshub_social_enabled_youtube', null );
+update_option( 'presshub_social_enabled_youtube', 0 );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while YouTube is off under Where to post' );
+null === $yt_was ? delete_option( 'presshub_social_enabled_youtube' ) : update_option( 'presshub_social_enabled_youtube', $yt_was );
+update_post_meta( 880, '_presshub_social_platforms', [ 'facebook' ] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued when YouTube is not ticked on the post' );
+update_post_meta( 880, '_presshub_social_platforms', [ 'facebook', 'youtube' ] );
+assert_true( PressHub_AI_Podcast_Translations::youtube_allowed( 880 ), 'YouTube ticked on the post lets the languages go' );
+delete_post_meta( 880, '_presshub_social_platforms' );
+$greek_eps = array_values( array_filter( PressHub_Social_Queue::get_jobs_for_post( 880 ), static fn( $j ) => PressHub_Social_YouTube::is_episode_job( $j ) && 'cancelled' !== ( $j['status'] ?? '' ) ) );
+$greek_st  = array_map( static fn( $j ) => [ (int) $j['id'], (string) $j['status'] ], $greek_eps );
+foreach ( $greek_st as [ $gid ] ) {
+    PressHub_Social_Queue::update_job( $gid, [ 'status' => 'cancelled' ] );
+}
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while its Greek episode is not (auto-publish off, for example)' );
+foreach ( $greek_st as [ $gid, $gst ] ) {
+    PressHub_Social_Queue::update_job( $gid, [ 'status' => $gst ] );
+}
+assert_true( count( $greek_st ) > 0 && PressHub_AI_Podcast_Translations::greek_episode_queued( 880 ), 'The Greek episode is queued again' );
+$en_id = PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' );
+assert_true( $en_id > 0, 'A voiced language of a published podcast gets its YouTube episode' );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'Each language is queued once' );
+assert_equals( [], PressHub_AI_Podcast_Translations::enqueue_ready( 880 ), 'Queueing the ready languages again adds nothing (Turkish is not voiced)' );
+$en_job = PressHub_Social_Queue::get_job( $en_id );
+assert_true( PressHub_Social_YouTube::is_episode_job( $en_job ) && 'en' === PressHub_Social_YouTube::episode_language( $en_job ), 'The job is the English episode' );
+assert_equals( '', PressHub_Social_YouTube::episode_language( $ep_job ), 'The Greek episode has no language of its own' );
+assert_equals( 'Youtube (EN)', PressHub_Social_YouTube::platform_label( $en_job ), 'The Queue shows the English episode as YouTube (EN)' );
+assert_equals( 'Youtube', PressHub_Social_YouTube::platform_label( $ep_job ), 'The Greek episode is plain YouTube' );
+// A translation made again after queueing: the job waits for the new audio, then takes the new description.
+$en_entry = PressHub_AI_Podcast_Translations::get_entry( 880, 'en' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => array_merge( $en_entry, [ 'status' => 'translated' ] ) ] ) );
+$held = PressHub_Social_YouTube::episode_hold( $en_job );
+assert_true( is_array( $held ) && str_contains( (string) ( $held['note'] ?? '' ), 'voiced again' ), 'An English episode waits while its new translation is voiced' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => array_merge( $en_entry, [ 'description' => 'New English description. #Cyprus' ] ) ] ) );
+$fresh = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( str_starts_with( (string) ( $fresh['youtube']['description'] ?? '' ), 'New English description.' ), 'An unedited English job takes the new translation\'s description' );
+$edited = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'post_copy' => 'Hand-written English copy', 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_true( str_starts_with( (string) ( $edited['youtube']['description'] ?? '' ), 'Hand-written English copy' ), 'Copy edited by hand on the Queue is kept' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'en' => $en_entry ] ) );
+
+PressHub_Social_Queue::update_job_copy( $en_id, 'Edited by hand' );
+$_REQUEST['nonce'] = 'valid_nonce';
+$nonce_was         = $GLOBALS['NONCE_VALID'] ?? null;
+$GLOBALS['NONCE_VALID'] = true;
+$_POST['job_id']   = $en_id;
+$caps_was          = $GLOBALS['test_user_caps'] ?? [];
+$GLOBALS['test_user_caps'][ PressHub_Capabilities::social() ] = true;
+$GLOBALS['JSON_RESPONSES'] = [];
+try {
+    PressHub_Social_Ajax_Handlers::handle_regenerate_job_copy();
+} catch ( RuntimeException $e ) {
+    // wp_send_json_* stops here.
+}
+$regen = end( $GLOBALS['JSON_RESPONSES'] ) ?: [];
+assert_true( ! empty( $regen['success'] ) && 'The House passes the budget. #Cyprus' === ( $regen['data']['new_copy'] ?? '' ), 'Regen AI on the English episode restores its translated description' );
+assert_equals( 'The House passes the budget. #Cyprus', PressHub_Social_Queue::get_job( $en_id )['post_copy'] ?? '', 'The English job has its description back' );
+$GLOBALS['test_user_caps'] = $caps_was;
+$GLOBALS['NONCE_VALID']    = $nonce_was;
+unset( $_REQUEST['nonce'], $_POST['job_id'] );
+assert_equals( 'The House passes the budget. #Cyprus', $en_job['post_copy'], 'The English description is the translation\'s' );
+assert_true( abs( PressHub_AI_Podcast_Translations::duration( 880, 'en' ) - $tl_en['duration'] ) < 0.001, 'The English episode\'s length is its own audio\'s' );
+
+$budget_short = PressHub_Social_Queue::enqueue( [ 'post_id' => 880, 'platform' => 'youtube', 'engine' => 'automation', 'post_copy' => 'x', 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + 3600 ), 'metadata' => [ 'tiktok_short' => [ 'index' => 1, 'count' => 2, 'topic' => 'Ο προϋπολογισμός στη Βουλή', 'images' => [ [ 'url' => 'https://img/b1.jpg' ] ] ] ] ] );
+$en_up = PressHub_Social_YouTube::attach_upload( array_merge( $en_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3', 'post_url' => 'https://example.com/?p=880' ] ) );
+$en_yt = $en_up['youtube'] ?? [];
+$en_ev = $en_yt['episode_video'] ?? [];
+$el_ev = PressHub_Social_YouTube::episode_video( 880 );
+assert_equals( 'https://example.com/uploads/podcast-880-en.wav', $en_up['audio_url'] ?? '', 'The English episode uploads the English audio' );
+assert_equals( 'PressHub Morning Briefing: the budget', $en_yt['title'] ?? '', 'The English episode has the English title' );
+assert_equals( 'en', ( $en_yt['default_language'] ?? '' ) . '', 'The English episode is marked English' );
+assert_equals( 'en', $en_yt['default_audio_language'] ?? '', 'Its audio is marked English' );
+assert_equals( 'PLenglishplaylist1', $en_yt['playlist_id'] ?? '', 'The English episode goes to the English playlist' );
+assert_equals( 'PressHub Morning Briefing: the budget', $en_ev['title'] ?? '', 'The video shows the English title' );
+assert_true( str_starts_with( (string) ( $en_ev['end_card_line'] ?? '' ), 'Full stories and sources at ' ), 'The video ends on an English line' );
+assert_equals( count( $tl_en['segments'] ), count( $en_ev['segments'] ?? [] ), 'The English captions are the English turns' );
+assert_equals( 'Good morning.', $en_ev['segments'][0]['text'] ?? '', 'The captions are in English' );
+assert_equals( array_column( $el_ev['scenes'], 'images' ), array_column( $en_ev['scenes'] ?? [], 'images' ), 'Each English topic shows the images of the same Greek topic' );
+assert_equals( $tl_en['topics'][1]['start'], $en_ev['scenes'][1]['start'] ?? null, 'The English scenes follow the English timing' );
+assert_equals( [ 'https://img/b1.jpg' ], $en_ev['scenes'][0]['images'] ?? [], 'The English budget topic shows the budget short, matched through the Greek topic' );
+assert_true( in_array( 'https://img/a1.jpg', $en_ev['scenes'][2]['images'] ?? [], true ) && ! in_array( 'https://img/b1.jpg', $en_ev['scenes'][2]['images'] ?? [], true ), 'The English football topic shows the football short' );
+assert_true( str_contains( $en_yt['description'] ?? '', "0:00 Parliament passes the budget\n0:" ) && ! str_contains( $en_yt['description'] ?? '', 'Καιρός' ), 'The English description lists English chapters' );
+
+$tr_job = PressHub_Social_YouTube::episode_job( 880, 'Açıklama', null, null, gmdate( 'Y-m-d H:i:s' ), null, 'tr' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'translated', 'audio_url' => 'https://example.com/uploads/podcast-880-tr-old.wav', 'title' => 'Yeni başlık' ] ] ) );
+$tr_stale = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_stale ) ? $tr_stale->get_error_code() : '', 'A language translated again but not voiced yet never uploads its old audio' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_diff_key( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => 1 ] ) );
+$tr_up  = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_audio', is_wp_error( $tr_up ) ? $tr_up->get_error_code() : '', 'A language without its own audio never uploads the Greek audio' );
+update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, array_merge( PressHub_AI_Podcast_Translations::get_all( 880 ), [ 'tr' => [ 'status' => 'voiced', 'audio_url' => 'https://example.com/uploads/podcast-880-tr.wav', 'title' => '' ] ] ) );
+$tr_up2 = PressHub_Social_YouTube::attach_upload( array_merge( $tr_job, [ 'id' => 9, 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
+assert_equals( 'youtube_episode_no_title', is_wp_error( $tr_up2 ) ? $tr_up2->get_error_code() : '', 'A language without its own title never takes the Greek title' );
+
+PressHub_Social_Queue::cancel_job( (int) $budget_short );
+PressHub_Social_Queue::cancel_job( $en_id );
+assert_equals( 1, count( PressHub_AI_Podcast_Translations::enqueue_ready( 880 ) ), 'A cancelled language episode can be queued again' );
+update_option( 'presshub_ai_briefing_podcast_languages', [] );
+assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'tr' ), 'A language that is off is never queued' );
+foreach ( PressHub_Social_Queue::get_jobs_for_post( 880 ) as $pj ) {
+    if ( '' !== PressHub_Social_YouTube::episode_language( $pj ) ) {
+        PressHub_Social_Queue::cancel_job( (int) $pj['id'] );
+    }
+}
+delete_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
+delete_option( 'presshub_social_youtube_podcast_language_playlists' );
 
 // A revoked sign-in fails loudly and shows on Connections.
 update_option( PressHub_Social_YouTube::REFRESH_TOKEN_OPTION, 'REVOKED' );
