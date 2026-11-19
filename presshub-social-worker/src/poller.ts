@@ -183,7 +183,7 @@ export class PressHubPoller {
    * Reports an uploaded YouTube video, trying a few times: a lost report would leave the
    * job "processing" with the video already on YouTube.
    */
-  private async reportYouTubePublished(job: ClaimedJob, videoId: string, url: string, kind: string, playlistItemId?: string, playlistError?: string): Promise<void> {
+  private async reportYouTubePublished(job: ClaimedJob, videoId: string, url: string, kind: string, playlistItemId?: string, playlistError?: string, episodeNote?: string): Promise<void> {
     const payload = {
       job_id: job.id,
       status: 'published' as const,
@@ -192,7 +192,8 @@ export class PressHubPoller {
       metadata: {
         youtube_kind: kind,
         ...(playlistItemId ? { youtube_playlist_item_id: playlistItemId } : {}),
-        ...(playlistError ? { youtube_playlist_error: playlistError } : {})
+        ...(playlistError ? { youtube_playlist_error: playlistError } : {}),
+        ...(episodeNote ? { youtube_episode_note: episodeNote } : {})
       }
     };
     for (let attempt = 1; attempt <= this.reportTries; attempt++) {
@@ -454,6 +455,7 @@ export class PressHubPoller {
           }
 
           let mediaPath: string | undefined;
+          let episodeNote: string | undefined;
           let mediaPaths: string[] | undefined;
           let downloadedImages: string[] = [];
 
@@ -540,6 +542,7 @@ export class PressHubPoller {
                 outputDir: this.outputDir
               });
               mediaPath = video?.filePath;
+              episodeNote = Array.isArray(video?.notes) && video.notes.length > 0 ? `Rendered with ${video.notes.join('; ')}.` : undefined;
               WorkerLogger.info('Poller', `${jobTag} Episode rendered at: ${mediaPath}`);
             } else {
               const width = job.youtube.width || 1920;
@@ -547,7 +550,8 @@ export class PressHubPoller {
               WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (${width}x${height}, full audio)...`);
               const video = await this.generateVideoFn({
                 postId: Number(job.post_id) || 1,
-                title,
+                // The upload's title: an English or Turkish episode's own, not the Greek post's.
+                title: typeof job.youtube.title === 'string' && job.youtube.title.trim() !== '' ? job.youtube.title : title,
                 subtitle: '',
                 width,
                 height,
@@ -650,7 +654,7 @@ export class PressHubPoller {
               } catch (err: any) {
                 WorkerLogger.warn('Poller', `${jobTag} Could not save the local upload record: ${err.message}`);
               }
-              await this.reportYouTubePublished(job, upload.videoId, upload.url || '', job.youtube.kind, upload.playlistItemId, upload.playlistError);
+              await this.reportYouTubePublished(job, upload.videoId, upload.url || '', job.youtube.kind, upload.playlistItemId, upload.playlistError, episodeNote);
               succeeded++;
             } else {
               const error = upload.error || 'YouTube upload failed';

@@ -75,6 +75,14 @@ describe('YouTube episode renderer', () => {
     expect(frames).toBe(total * 25);
   });
 
+  test('many scenes never push the shots over the cap', () => {
+    const total = 20 * 60;
+    const many = Array.from({ length: 40 }, (_, i) => ({ start: i * 30, end: (i + 1) * 30, images: [] as string[] }));
+    const slots = planEpisodeSlots(many, total, () => -1, 5);
+    expect(slots.length).toBeLessThanOrEqual(EPISODE_MAX_SLOTS);
+    expect(slots.reduce((t, s) => t + s.duration, 0)).toBeCloseTo(total);
+  });
+
   test('short episodes use shots of about six seconds', () => {
     const slots = planEpisodeSlots([], 60, () => -1, 2);
     expect(slots).toHaveLength(60 / EPISODE_SLOT_SECONDS);
@@ -100,6 +108,7 @@ describe('YouTube episode renderer', () => {
     // The second host's words are highlighted in blue, as in the shorts.
     expect(ass).toMatch(/\\c&H00F8BD38&\}Καλημέρα/);
     expect(ass).toMatch(/Dialogue: 4,0:01:36\.50,0:01:40\.50,EndLine,.*presshub\.cy/);
+    expect(ass).toMatch(/Style: Label,.*,7,64,362,0,1/);
     expect(ass).not.toMatch(/Dialogue: [^\n]*,Brand,/);
   });
 });

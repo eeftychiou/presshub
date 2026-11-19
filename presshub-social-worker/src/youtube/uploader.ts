@@ -82,10 +82,27 @@ export interface YouTubeUploadOptions {
    * can remember it even if the worker stops before the upload call returns.
    */
   onUploaded?: (videoId: string, url: string) => void;
+  /** Wait before reading back the status of the finished upload (ms, default 5000). */
+  statusCheckDelayMs?: number;
+}
+
+/**
+ * Why YouTube refused a finished upload ("rejected: length", "failed: codec"), or '' when
+ * it accepted it so far (uploaded or processed). YouTube can reject a video after the
+ * upload itself succeeded, for example one over 15 minutes from an unverified channel.
+ */
+export function uploadRefusal(status: any): string {
+  const state = String(status?.uploadStatus || '');
+  if (state === 'rejected') return `rejected: ${status?.rejectionReason || 'no reason given'}`;
+  if (state === 'failed') return `failed: ${status?.failureReason || 'no reason given'}`;
+  return '';
 }
 
 const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos';
 const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
+const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
+/** Wait before reading back the status of a finished upload (ms). */
+const STATUS_CHECK_DELAY_MS = 5000;
 const CHUNK_UNIT = 256 * 1024;
 /** 8 MiB: large enough to be quick, small enough that a failed chunk costs little. */
 export const DEFAULT_CHUNK_SIZE = 32 * CHUNK_UNIT;
@@ -402,6 +419,32 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
   }
   const url = meta.kind === 'short' ? `https://www.youtube.com/shorts/${videoId}` : `https://www.youtube.com/watch?v=${videoId}`;
   WorkerLogger.info('YouTube', `Uploaded ${meta.kind} ${url} in ${Math.round((Date.now() - startedAt) / 1000)}s.`);
+
+  // A finished upload can still be refused (too long, a bad file): read its status back
+  // once, so a refused video is reported as failed, not published. A status that cannot
+  // be read is a warning, not a failure.
+  let refusal = uploadRefusal(video?.status);
+  if (!refusal) {
+    const delay = Math.max(0, options.statusCheckDelayMs ?? STATUS_CHECK_DELAY_MS);
+    if (delay > 0) await sleep(delay);
+    try {
+      const res = await fetchFn(`${VIDEOS_URL}?part=status&id=${encodeURIComponent(videoId)}`, withTimeout({
+        headers: { Authorization: `Bearer ${token}` }
+      }, requestTimeout));
+      const body = await readJson(res);
+      if (res.ok) {
+        refusal = uploadRefusal(body?.items?.[0]?.status);
+      } else {
+        WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${apiError(res.status, body)}`);
+      }
+    } catch (err: any) {
+      WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${err.message}`);
+    }
+  }
+  if (refusal) {
+    WorkerLogger.error('YouTube', `YouTube refused the uploaded ${meta.kind} ${videoId} (${refusal}).`);
+    return { success: false, videoId, error: `YouTube refused the uploaded video ${videoId} (${refusal}). Nothing was published; the refused video stays in YouTube Studio and can be deleted there.` };
+  }
   const result: YouTubeUploadResult = { success: true, videoId, url };
   if (options.onUploaded) {
     try {

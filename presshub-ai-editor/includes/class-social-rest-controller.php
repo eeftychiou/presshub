@@ -301,8 +301,14 @@ class PressHub_Social_REST_Controller {
                     continue;
                 }
                 // A podcast episode waits (for a while) for its shorts' story images, and
-                // while it is longer than the channel may upload.
-                if ( 'youtube' === ( $candidate['platform'] ?? '' ) && ( ! PressHub_Social_YouTube::episode_ready( $candidate ) || ! PressHub_Social_YouTube::episode_length_ok( $candidate ) ) ) {
+                // while it is longer than the channel may upload. It is moved later in the
+                // queue with the reason as its note, without using an attempt.
+                $hold = 'youtube' === ( $candidate['platform'] ?? '' ) ? PressHub_Social_YouTube::episode_hold( $candidate ) : null;
+                if ( null !== $hold ) {
+                    PressHub_Social_Queue::update_job( (int) $candidate['id'], [
+                        'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + (int) $hold['delay'] ),
+                        'last_error'   => (string) $hold['note'],
+                    ] );
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
@@ -538,6 +544,13 @@ class PressHub_Social_REST_Controller {
             PressHub_Social_Queue::mark_failed( $job_id, 'A TikTok short test render was reported as published; test renders must not be posted.', $metadata );
         } elseif ( 'published' === $status ) {
             PressHub_Social_Queue::mark_published( $job_id, $external_post_id, $external_post_url, $metadata );
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_episode_note'] ) ) {
+                // The enhanced episode was published without something it should have had.
+                PressHub_Social_Logger::warning(
+                    sprintf( 'YouTube episode %s (job #%d): %s', $external_post_id, $job_id, sanitize_text_field( (string) $metadata['youtube_episode_note'] ) ),
+                    [ 'job_id' => $job_id, 'post_id' => (int) ( $job['post_id'] ?? 0 ) ]
+                );
+            }
             if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_playlist_error'] ) ) {
                 PressHub_Social_Logger::warning(
                     sprintf( 'YouTube video %s (job #%d) is uploaded but not in the podcast playlist: %s', $external_post_id, $job_id, sanitize_text_field( (string) $metadata['youtube_playlist_error'] ) ),

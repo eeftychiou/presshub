@@ -80,13 +80,6 @@ class PressHub_Social_YouTube {
     const EPISODE_WIDTH  = 1920;
     const EPISODE_HEIGHT = 1080;
 
-    /**
-     * Seconds an episode waits, after it was queued, for the story images of the post's
-     * shorts. After that it is uploaded with the images that are ready (or the featured
-     * image), so a stuck short never holds the episode back for long.
-     */
-    const EPISODE_IMAGE_WAIT = 5400;
-
     /** Most story images in one episode video. */
     const EPISODE_MAX_IMAGES = 30;
 
@@ -95,6 +88,16 @@ class PressHub_Social_YouTube {
      * rejected by YouTube after they finish, until the channel is verified.
      */
     const LONG_UPLOAD_SECONDS = 900;
+
+    /**
+     * Seconds added to the audio length before comparing it with LONG_UPLOAD_SECONDS: the
+     * worker adds up to about 3 seconds of silence at the end for the closing line.
+     */
+    const LONG_UPLOAD_MARGIN = 5;
+
+    /** Seconds until a held episode is checked again: waiting for images, and for long uploads. */
+    const HOLD_RECHECK_IMAGES = 300;
+    const HOLD_RECHECK_LENGTH = 3600;
 
     /** Transient caching the channel's status.longUploadsStatus (an hour; ten minutes when unknown). */
     const LONG_UPLOADS_TRANSIENT = 'presshub_social_youtube_long_uploads';
@@ -775,7 +778,9 @@ class PressHub_Social_YouTube {
         }
         if ( $is_ep ) {
             $video = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::episode_video( $post_id, $ep_lang ) : self::episode_video( $post_id );
-            if ( null !== $video ) {
+            if ( null === $video && PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
+                PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) is rendered the plain way, on the featured image without captions: the podcast has no caption timeline (made before 2.54.0) and its shorts have no story images.', (int) ( $job['id'] ?? 0 ), $post_id ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
+            } elseif ( null !== $video ) {
                 $upload['episode_video'] = $video;
                 // Chapters only from a measured timeline: an estimated one (MP3) may be off.
                 $timeline                = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::timeline( $post_id, $ep_lang ) : ( class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null );
@@ -805,23 +810,54 @@ class PressHub_Social_YouTube {
     }
 
     /**
-     * Whether a claimed episode may be uploaded now: once every short of its post has its
-     * story images prepared, or EPISODE_IMAGE_WAIT seconds after it was queued. Jobs that
-     * are not episodes are always ready.
+     * Why a due episode must wait, or null when it may be uploaded now:
+     * [ 'delay' => seconds until it is due again, 'note' => why, shown on the Queue ].
+     * The claim moves a held episode's scheduled_at forward by the delay (no attempt is
+     * used), so held episodes never crowd the front of the queue.
+     * - Story images (episode_ready()): while a short of the post is still being prepared,
+     *   for at most Wait for Story Images after the episode was queued.
+     * - Length (episode_length_ok()): while the episode is longer than 15 minutes and the
+     *   channel may not upload long videos (status.longUploadsStatus is not "allowed").
+     */
+    public static function episode_hold( array $job, ?int $now = null ): ?array {
+        if ( ! self::is_episode_job( $job ) ) {
+            return null;
+        }
+        if ( ! self::episode_ready( $job, $now ) ) {
+            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting for the story images of the podcast\'s shorts, for at most %d minutes after the episode was queued.', PressHub_Social_Settings_Storage::get_youtube_episode_image_wait_minutes() ) ];
+        }
+        if ( ! self::episode_length_ok( $job ) ) {
+            $status = self::long_uploads_status();
+            return [
+                'delay' => self::HOLD_RECHECK_LENGTH,
+                'note'  => sprintf(
+                    'Waiting: the episode is %d minutes long and the YouTube channel may not upload videos over 15 minutes yet (long uploads: %s). Verify the channel in YouTube Studio (Settings, Channel, Feature eligibility); the episode then goes up on its own.',
+                    (int) ceil( self::episode_seconds( (int) ( $job['post_id'] ?? 0 ) ) / 60 ),
+                    '' !== $status ? $status : 'could not be read'
+                ),
+            ];
+        }
+        return null;
+    }
+
+    /**
+     * Whether an episode has the story images it waits for: once no short of its post is
+     * still being prepared, or Wait for Story Images minutes after it was queued (then
+     * with a WARNING naming what is missing). Always true for non-episodes and when
+     * enhanced episodes are off.
      */
     public static function episode_ready( array $job, ?int $now = null ): bool {
-        if ( ! self::is_episode_job( $job ) ) {
+        if ( ! self::is_episode_job( $job ) || ! PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
             return true;
         }
         $post_id = (int) ( $job['post_id'] ?? 0 );
-        $waiting = false;
+        $waiting = 0;
         foreach ( self::short_jobs( $post_id ) as [ $short_job, $short ] ) {
             if ( in_array( $short_job['status'] ?? '', [ 'pending', 'processing' ], true ) && ! is_array( $short['images'] ?? null ) ) {
-                $waiting = true;
-                break;
+                $waiting++;
             }
         }
-        if ( ! $waiting ) {
+        if ( 0 === $waiting ) {
             return true;
         }
         $meta   = self::decode_metadata( $job['metadata'] ?? null );
@@ -829,15 +865,22 @@ class PressHub_Social_YouTube {
         if ( false === $queued || $queued <= 0 ) {
             return true;
         }
-        return ( $now ?? time() ) - $queued >= self::EPISODE_IMAGE_WAIT;
+        $wait = PressHub_Social_Settings_Storage::get_youtube_episode_image_wait_minutes();
+        if ( ( $now ?? time() ) - $queued < $wait * 60 ) {
+            return false;
+        }
+        PressHub_Social_Logger::warning(
+            sprintf( 'YouTube episode job #%d (post #%d) is uploaded without the images of %d short job(s) still not prepared after %d minutes (Wait for Story Images).', (int) ( $job['id'] ?? 0 ), $post_id, $waiting, $wait ),
+            [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ]
+        );
+        return true;
     }
 
     /**
-     * Whether an episode's length is one the channel may upload: up to 15 minutes always,
-     * longer only when YouTube reports long uploads as allowed (a verified channel). A
-     * longer episode on an unverified channel stays pending, with a WARNING, so it is not
-     * rendered and uploaded only to be rejected. When the status cannot be read the
-     * upload is tried. Jobs that are not episodes always pass.
+     * Whether an episode's length is one the channel may upload: up to 15 minutes always
+     * (with a margin for the silence the worker adds at the end), longer only when YouTube
+     * reports long uploads as "allowed" (a verified channel). An unreadable status holds
+     * the episode too: a long upload would most likely be rejected after it finished.
      */
     public static function episode_length_ok( array $job ): bool {
         if ( ! self::is_episode_job( $job ) ) {
@@ -846,22 +889,10 @@ class PressHub_Social_YouTube {
         $post_id = (int) ( $job['post_id'] ?? 0 );
         $ep_lang = self::episode_language( $job );
         $seconds = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::duration( $post_id, $ep_lang ) : self::episode_seconds( $post_id );
-        if ( $seconds <= self::LONG_UPLOAD_SECONDS ) {
+        if ( $seconds + self::LONG_UPLOAD_MARGIN <= self::LONG_UPLOAD_SECONDS ) {
             return true;
         }
-        $status = self::long_uploads_status();
-        if ( '' === $status || 'allowed' === $status ) {
-            return true;
-        }
-        $note_key = 'presshub_social_youtube_long_note_' . (int) ( $job['id'] ?? 0 );
-        if ( ! get_transient( $note_key ) ) {
-            set_transient( $note_key, 1, 6 * 3600 );
-            PressHub_Social_Logger::warning(
-                sprintf( 'YouTube episode job #%d (post #%d) waits: it is %d minutes long and the channel may not upload videos over 15 minutes yet (long uploads: %s). Verify the channel in YouTube Studio (Settings, Channel, Feature eligibility).', (int) ( $job['id'] ?? 0 ), $post_id, (int) ceil( $seconds / 60 ), $status ),
-                [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ]
-            );
-        }
-        return false;
+        return 'allowed' === self::long_uploads_status();
     }
 
     /** Length of a podcast post's audio in seconds: the timeline's, else the stored audio length. */
@@ -883,15 +914,26 @@ class PressHub_Social_YouTube {
             return (string) ( $cached['status'] ?? '' );
         }
         $status = '';
+        $why    = '';
         $token  = self::access_token();
-        if ( ! is_wp_error( $token ) ) {
+        if ( is_wp_error( $token ) ) {
+            $why = $token->get_error_message();
+        } else {
             $res = self::http( 'GET', self::API_BASE . '/channels?part=status&mine=true', [
                 'headers' => [ 'Authorization' => 'Bearer ' . $token['access_token'] ],
             ] );
-            if ( ! is_wp_error( $res ) && (int) $res['code'] < 400 ) {
+            if ( is_wp_error( $res ) ) {
+                $why = $res->get_error_message();
+            } elseif ( (int) $res['code'] >= 400 ) {
+                $why = sprintf( 'HTTP %d', (int) $res['code'] );
+            } else {
                 $data   = json_decode( (string) $res['body'], true );
                 $status = is_array( $data ) ? (string) ( $data['items'][0]['status']['longUploadsStatus'] ?? '' ) : '';
+                $why    = '' === $status ? 'no longUploadsStatus in the answer' : '';
             }
+        }
+        if ( '' === $status ) {
+            PressHub_Social_Logger::warning( 'Could not read whether the YouTube channel may upload videos over 15 minutes (' . $why . '); episodes over 15 minutes wait until it can be read.', [ 'provider' => 'youtube' ] );
         }
         set_transient( self::LONG_UPLOADS_TRANSIENT, [ 'status' => $status ], '' === $status ? 600 : 3600 );
         return $status;
@@ -909,7 +951,8 @@ class PressHub_Social_YouTube {
         }
         $out = [];
         foreach ( PressHub_Social_Queue::get_jobs_for_post( $post_id ) as $job ) {
-            if ( ! PressHub_Social_TikTok_Shorts::is_short_job( $job ) || PressHub_Social_TikTok_Shorts::is_test_job( $job ) ) {
+            // A short an editor cancelled is left out, with its images.
+            if ( ! PressHub_Social_TikTok_Shorts::is_short_job( $job ) || PressHub_Social_TikTok_Shorts::is_test_job( $job ) || 'cancelled' === ( $job['status'] ?? '' ) ) {
                 continue;
             }
             $short = self::decode_metadata( $job['metadata'] ?? null )[ PressHub_Social_TikTok_Shorts::JOB_META_KEY ] ?? null;
@@ -984,6 +1027,9 @@ class PressHub_Social_YouTube {
      * - `images`: every story image, for an episode without a timeline.
      */
     public static function episode_video( int $post_id ): ?array {
+        if ( ! PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
+            return null;
+        }
         $timeline = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null;
         $groups   = self::short_image_groups( $post_id );
         if ( null === $timeline && empty( $groups ) ) {
@@ -1101,22 +1147,30 @@ class PressHub_Social_YouTube {
     }
 
     /**
-     * The episode description with its chapter list ("0:00 Title" lines) at the end. The
-     * text before it is shortened when both would not fit in DESCRIPTION_MAX_BYTES.
+     * The episode description with its chapter list ("0:00 Title" lines) after the text and
+     * before the closing link and hashtag lines, which are kept whole. Only the text is
+     * shortened when everything would not fit in DESCRIPTION_MAX_BYTES.
      */
     public static function with_chapters( string $description, string $chapters ): string {
         $chapters = trim( str_replace( [ '<', '>' ], '', $chapters ) );
         if ( '' === $chapters ) {
             return $description;
         }
-        $room = self::DESCRIPTION_MAX_BYTES - strlen( $chapters ) - 2;
+        $parts = preg_split( '/\n{2,}/', trim( $description ) ) ?: [];
+        $tail  = [];
+        while ( count( $parts ) > 1 && preg_match( '~^(?:\s*(?:https?://\S+|#[\p{L}\p{N}_]+)\s*)+$~u', (string) end( $parts ) ) ) {
+            array_unshift( $tail, array_pop( $parts ) );
+        }
+        $body  = implode( "\n\n", $parts );
+        $after = implode( "\n\n", array_merge( [ $chapters ], $tail ) );
+        $room  = self::DESCRIPTION_MAX_BYTES - strlen( $after ) - 2;
         if ( $room < 200 ) {
             return $description;
         }
-        if ( strlen( $description ) > $room ) {
-            $description = rtrim( mb_strcut( $description, 0, $room - 3, 'UTF-8' ) ) . '…';
+        if ( strlen( $body ) > $room ) {
+            $body = rtrim( mb_strcut( $body, 0, $room - 3, 'UTF-8' ) ) . '…';
         }
-        return rtrim( $description ) . "\n\n" . $chapters;
+        return rtrim( $body ) . "\n\n" . $after;
     }
 
     /** Seconds after which a YouTube job still "processing" counts as stuck (the worker stopped mid-upload). */

@@ -15,10 +15,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Writing & QA (`writing-qa`) | 23 | 0 | 0 |
 | Daily Briefing (`daily-briefing`) | 78 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
-| Social publishing (`social-publishing`) | 72 | 5 | 0 |
+| Social publishing (`social-publishing`) | 74 | 5 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **313** | | |
+| **Total** | **315** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -241,7 +241,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_stakeholders_budgets` | People fiche context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters | ai / knowledge |  |
 
-## Social publishing (`social-publishing`, 72)
+## Social publishing (`social-publishing`, 74)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -279,6 +279,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_instagram_shorts_enabled` | Instagram Reels (Shorts) | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_shorts_enabled` | YouTube Shorts | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_podcast_enabled` | YouTube Podcast Episodes | boolean |  | social / shorts | checkbox |
+| `presshub_social_youtube_episode_enhanced` | Episodes with Story Images and Captions | boolean |  | social / shorts | checkbox, needs `presshub_social_youtube_podcast_enabled` on |
+| `presshub_social_youtube_episode_image_wait_minutes` | Wait for Story Images | integer | min | social / shorts | needs `presshub_social_youtube_episode_enhanced` on |
 | `presshub_social_youtube_podcast_playlist_id` | Podcast Playlist ID | string |  | social / shorts | needs `presshub_social_youtube_podcast_enabled` on |
 | `presshub_social_youtube_podcast_language_playlists` | English and Turkish Playlists | array |  | social / shorts | needs `presshub_social_youtube_podcast_enabled` on |
 | `presshub_social_youtube_privacy_status` | YouTube Visibility | string |  | social / shorts |  |

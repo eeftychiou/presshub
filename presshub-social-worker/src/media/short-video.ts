@@ -533,16 +533,28 @@ async function shadeOverlay(dir: string, width: number, height: number): Promise
   return file;
 }
 
-export function runFfmpeg(bin: string, args: string[], cwd: string): Promise<void> {
+export function runFfmpeg(bin: string, args: string[], cwd: string, timeoutMs?: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn(bin, args, { cwd });
     let tail = '';
+    let timedOut = false;
+    const timer = timeoutMs && timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          proc.kill('SIGKILL');
+        }, timeoutMs)
+      : null;
     proc.stderr.on('data', (d) => {
       tail = (tail + d.toString()).slice(-4000);
     });
-    proc.on('error', (err) => reject(err));
+    proc.on('error', (err) => {
+      if (timer) clearTimeout(timer);
+      reject(err);
+    });
     proc.on('close', (code) => {
-      if (code === 0) resolve();
+      if (timer) clearTimeout(timer);
+      if (timedOut) reject(new Error(`FFmpeg was stopped after ${Math.round((timeoutMs || 0) / 60000)} minutes without finishing.`));
+      else if (code === 0) resolve();
       else reject(new Error(`FFmpeg exited with code ${code}: ${tail.split('\n').slice(-6).join(' | ')}`));
     });
   });

@@ -547,7 +547,8 @@ class PressHub_AI_Podcast_Translations {
      * translation keeps the topics in order; the times are the translation's own.
      */
     public static function episode_video( int $post_id, string $lang ): ?array {
-        if ( ! class_exists( 'PressHub_Social_YouTube' ) ) {
+        // Enhanced episodes off: the plain video, which shows the upload's (translated) title.
+        if ( ! class_exists( 'PressHub_Social_YouTube' ) || ! PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
             return null;
         }
         $entry    = self::get_entry( $post_id, $lang );
