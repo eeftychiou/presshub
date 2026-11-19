@@ -586,3 +586,28 @@ html:has(#presshub-settings-page) { scroll-padding-top: 90px; scroll-padding-bot
     .presshub-models-table th[scope="row"],
     .presshub-models-table td { display: block; width: auto; }
 }
+
+/* Writing & QA → Featured images: Featured Image Studio prompt templates editor. */
+.presshub-image-templates-table { max-width: 800px; margin-top: 8px; }
+.presshub-image-templates-table th:nth-child(2),
+.presshub-image-templates-table td:nth-child(2) { width: 22%; }
+.presshub-image-templates-actions { white-space: nowrap; }
+.presshub-image-templates-actions .button-link,
+.presshub-image-templates-actions a { margin-right: 12px; }
+.presshub-image-templates-add-row { margin: 8px 0 0; }
+.presshub-image-templates-editor { max-width: 800px; margin-top: 12px; padding: 12px 16px; border: 1px solid #c3c4c7; background: #fff; }
+.presshub-image-templates-editor[hidden] { display: none; }
+.presshub-image-templates-editor-title { margin: 0 0 8px; }
+.presshub-image-templates-field label { display: block; font-weight: 600; margin-bottom: 4px; }
+.presshub-image-templates-field .description { display: block; margin-top: 4px; }
+.presshub-image-templates-field textarea[readonly],
+.presshub-image-templates-field input[readonly] { background: #f6f7f7; }
+.presshub-image-templates-editor-actions .button,
+.presshub-image-templates-editor-actions .button-link { margin-right: 8px; }
+.presshub-image-templates-status { min-height: 1.5em; margin: 8px 0 0; font-weight: 600; }
+.presshub-image-templates-status.is-error { color: #b32d2e; }
+@media screen and (max-width: 782px) {
+    .presshub-image-templates-actions { white-space: normal; }
+    .presshub-image-templates-actions .button-link,
+    .presshub-image-templates-actions a { display: inline-block; padding: 6px 0; }
+}

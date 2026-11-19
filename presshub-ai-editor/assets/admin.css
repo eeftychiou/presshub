@@ -1823,3 +1823,5 @@ tr.presshub-setting-inactive button {
 .presshub-settings-group { overflow-x: auto; }
 .presshub-settings-group .presshub-sources-manager-wrap { max-width: 100%; overflow-x: auto; }
 
+
+.presshub-image-studio-manage-link { margin: 8px 0 0; }

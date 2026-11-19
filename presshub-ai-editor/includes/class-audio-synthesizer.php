@@ -1396,7 +1396,9 @@ class PressHub_AI_Audio_Synthesizer {
         if ( 'auto_generate' === $img_source && class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
             try {
                 $client     = new PressHub_AI_API_Client();
-                $gen_prompt = $client->analyze_article_for_image_prompt( PressHub_AI_SEO::clean_text( $transcript ), $title );
+                require_once __DIR__ . '/class-image-prompt-templates.php';
+                $img_tpl    = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_briefing_podcast_image_template(), 'briefing_podcast' );
+                $gen_prompt = $client->analyze_article_for_image_prompt( PressHub_AI_SEO::clean_text( $transcript ), $title, $img_tpl['template'], $img_tpl['id'] );
                 if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
                     $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );
                     if ( ! is_wp_error( $img_res ) && ! empty( $img_res['id'] ) ) {
@@ -1516,7 +1518,9 @@ class PressHub_AI_Audio_Synthesizer {
             if ( 'auto_generate' === $img_source && class_exists( 'PressHub_AI_Settings_Storage' ) && PressHub_AI_Settings_Storage::get_image_feature_enabled() ) {
                 try {
                     $client     = new PressHub_AI_API_Client();
-                    $gen_prompt = $client->analyze_article_for_image_prompt( PressHub_AI_SEO::clean_text( $script ), get_the_title( $post_id ) );
+                    require_once __DIR__ . '/class-image-prompt-templates.php';
+                    $img_tpl    = PressHub_AI_Image_Prompt_Templates::resolve( PressHub_AI_Settings_Storage::get_briefing_podcast_image_template(), 'briefing_podcast' );
+                    $gen_prompt = $client->analyze_article_for_image_prompt( PressHub_AI_SEO::clean_text( $script ), get_the_title( $post_id ), $img_tpl['template'], $img_tpl['id'] );
                     if ( ! is_wp_error( $gen_prompt ) && ! empty( $gen_prompt ) ) {
                         $img_res = $client->generate_featured_image( $gen_prompt, '', $post_id );
                         if ( ! is_wp_error( $img_res ) && ! empty( $img_res['id'] ) ) {

@@ -479,6 +479,14 @@ class PressHub_AI_Settings_Storage {
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_featured_image_source' ],
             'type'              => 'string',
         ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_image_template', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_image_template' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_image_template', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_image_template' ],
+            'type'              => 'string',
+        ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_image_feature_enabled', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_image_feature_enabled' ],
             'type'              => 'integer',
@@ -4058,6 +4066,37 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_briefing_podcast_featured_image_source(): string {
         return (string) get_option( 'presshub_ai_briefing_podcast_featured_image_source', self::default_briefing_featured_image_source() );
+    }
+
+    /** Featured Image Studio template for automatic briefing images: Editorial photo. */
+    public static function default_briefing_image_template(): string {
+        return 'editorial_photo';
+    }
+
+    /** A template id that exists (built-in or saved); anything else is the default. */
+    public static function sanitize_briefing_image_template( $value ): string {
+        $id = sanitize_key( (string) $value );
+        if ( '' === $id ) {
+            return self::default_briefing_image_template();
+        }
+        if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+        }
+        return null !== PressHub_AI_Image_Prompt_Templates::get( $id ) ? $id : self::default_briefing_image_template();
+    }
+
+    public static function sanitize_briefing_podcast_image_template( $value ): string {
+        return self::sanitize_briefing_image_template( $value );
+    }
+
+    /** Template id for automatic text briefing images (read through resolve(), which handles a deleted one). */
+    public static function get_briefing_image_template(): string {
+        return (string) get_option( 'presshub_ai_briefing_image_template', self::default_briefing_image_template() );
+    }
+
+    /** Template id for automatic podcast images. */
+    public static function get_briefing_podcast_image_template(): string {
+        return (string) get_option( 'presshub_ai_briefing_podcast_image_template', self::default_briefing_image_template() );
     }
 
     public static function default_image_feature_enabled(): int {
