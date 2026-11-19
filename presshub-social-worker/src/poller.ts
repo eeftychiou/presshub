@@ -398,6 +398,9 @@ export class PressHubPoller {
 
       for (const job of jobs) {
         const jobTag = `[Job #${job.id} - ${job.platform}]`;
+        // True while a short is being rendered: a failure then is reported with
+        // short_render_failed, so WordPress can post an article the classic way instead.
+        let shortRendering = false;
         WorkerLogger.info(
           'Poller',
           `${jobTag} Starting processing... Post ID: ${job.post_id || 'N/A'}, Title: "${job.post_title || ''}"`,
@@ -469,6 +472,7 @@ export class PressHubPoller {
             // A short is rendered with synced captions over its own story images. It
             // never falls back to the podcast's featured image.
             const short = job.tiktok_short;
+            shortRendering = true;
             if (!audioUrl) {
               throw new Error(`${platformLabel(platform)} short has no audio_url.`);
             }
@@ -491,6 +495,7 @@ export class PressHubPoller {
               outputDir: this.outputDir
             });
             mediaPath = video?.filePath;
+            shortRendering = false;
             WorkerLogger.info('Poller', `${jobTag} Short rendered at: ${mediaPath}`);
             if (platform === 'youtube' && !job.test_render && Number(video?.duration) > YOUTUBE_SHORT_MAX_SECONDS) {
               // Longer than 3 minutes, YouTube files it as a normal video, not a Short.
@@ -530,14 +535,15 @@ export class PressHubPoller {
               WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (1920x1080, ${ev.scenes?.length || 0} topic(s), ${ev.images?.length || 0} story image(s), ${ev.segments?.length || 0} timed turns)...`);
               const video = await this.generateEpisodeFn({
                 audioUrl,
-                title,
+                // An English or Turkish episode brings its own title and end line.
+                title: typeof ev.title === 'string' && ev.title.trim() !== '' ? ev.title : title,
                 siteName: job.site_name || 'PressHub.Cy',
                 segments: Array.isArray(ev.segments) ? ev.segments : [],
                 scenes: Array.isArray(ev.scenes) ? ev.scenes : [],
                 images: Array.isArray(ev.images) ? ev.images : [],
                 fallbackImageUrl: imageUrl,
                 timelineDuration: typeof ev.duration === 'number' ? ev.duration : undefined,
-                endCardLine: siteEndCardLine(this.wpUrl),
+                endCardLine: typeof ev.end_card_line === 'string' && ev.end_card_line.trim() !== '' ? ev.end_card_line : siteEndCardLine(this.wpUrl),
                 outputDir: this.outputDir
               });
               mediaPath = video?.filePath;
@@ -549,7 +555,8 @@ export class PressHubPoller {
               WorkerLogger.info('Poller', `${jobTag} Rendering YouTube podcast episode (${width}x${height}, full audio)...`);
               const video = await this.generateVideoFn({
                 postId: Number(job.post_id) || 1,
-                title,
+                // The upload's title: an English or Turkish episode's own, not the Greek post's.
+                title: typeof job.youtube.title === 'string' && job.youtube.title.trim() !== '' ? job.youtube.title : title,
                 subtitle: '',
                 width,
                 height,
@@ -719,7 +726,8 @@ export class PressHubPoller {
             await this.reportComplete({
               job_id: job.id,
               status: 'failed',
-              error: jobErr.message || 'Worker automation failed'
+              error: jobErr.message || 'Worker automation failed',
+              ...(shortRendering ? { metadata: { short_render_failed: true } } : {})
             });
           } catch (reportErr: any) {
             WorkerLogger.error('Poller', `${jobTag} Failed to report failure for job #${job.id}: ${reportErr.message}`, reportErr);

@@ -624,6 +624,40 @@ describe('Poller: YouTube jobs', () => {
     expect(uploads).toHaveLength(1);
   });
 
+  test('a translated episode is rendered with its own title and end line', async () => {
+    const episode_video = {
+      duration: 300,
+      segments: [{ speaker: 1, text: 'Günaydın', start: 3.6, end: 5 }],
+      scenes: [{ start: 0, end: 300, title: 'Ekonomi', images: ['https://presshub.test/a.jpg'] }],
+      images: ['https://presshub.test/a.jpg'],
+      title: 'PressHub Sabah Bülteni: Ekonomi',
+      end_card_line: 'Haberlerin tamamı ve kaynakları: presshub.test'
+    };
+    const job: ClaimedJob = {
+      id: 52,
+      platform: 'youtube',
+      post_id: 884,
+      post_title: 'Πρωινό Podcast',
+      post_copy: 'Açıklama',
+      audio_url: 'https://presshub.test/podcast-tr.wav',
+      youtube: { ...episodeMeta, title: 'PressHub Sabah Bülteni: Ekonomi', width: 1920, height: 1080, episode_video }
+    };
+    const { poller, overrides } = makePoller(job);
+    await poller.pollOnce();
+    expect(overrides.episodeParams).toMatchObject({
+      audioUrl: 'https://presshub.test/podcast-tr.wav',
+      title: 'PressHub Sabah Bülteni: Ekonomi',
+      endCardLine: 'Haberlerin tamamı ve kaynakları: presshub.test'
+    });
+  });
+
+  test('a plain translated episode shows its own title, not the Greek post title', async () => {
+    const job: ClaimedJob = { id: 53, platform: 'youtube', post_id: 885, post_title: 'Πρωινό Podcast', post_copy: 'x', audio_url: 'https://presshub.test/p-en.wav', youtube: { ...episodeMeta, title: 'PressHub Morning Briefing' } };
+    const { poller, overrides } = makePoller(job);
+    await poller.pollOnce();
+    expect(overrides.videoParams).toMatchObject({ isPodcast: true, title: 'PressHub Morning Briefing' });
+  });
+
   test('what an enhanced episode lacks is reported with the published video', async () => {
     const job: ClaimedJob = { id: 51, platform: 'youtube', post_id: 883, post_copy: 'x', audio_url: 'https://presshub.test/p.wav', youtube: { ...episodeMeta, episode_video: { images: ['https://presshub.test/a.jpg'] } } };
     const { poller, reports, overrides } = makePoller(job);

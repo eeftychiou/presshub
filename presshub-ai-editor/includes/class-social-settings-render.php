@@ -636,7 +636,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_tiktok_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_tiktok_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post one 30-60 second video per top story: a hook-first script read by the briefing presenters, with the hook on screen, captions that follow the voice, AI story images and its own caption. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Instead of posting the whole podcast to TikTok, post one 30-60 second video per top story: a hook-first script read by the briefing presenters, with the hook on screen, captions that follow the voice, AI story images and its own caption. With Article Shorts on, each article also becomes one such video. Needs the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }
@@ -647,7 +647,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_instagram_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_instagram_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Also post each podcast short as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Also post each short (podcast shorts, and article shorts when Article Shorts are on) as an Instagram Reel (reusing the same generated script, voiceover, and story images). Needs Instagram enabled with the automation engine in Pull Mode.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }
@@ -671,6 +671,28 @@ class PressHub_Social_Settings_Render {
             <input type="checkbox" name="presshub_social_youtube_podcast_enabled" value="1" <?php checked( $enabled, true ); ?> />
             <?php echo esc_html__( 'Upload every Daily Briefing podcast to YouTube as a full episode: a 16:9 video of the whole audio over the podcast\'s image, titled like the post, with the YouTube description from the YouTube Caption Prompt, added to the podcast playlist below.', 'presshub-social-autopost' ); ?>
         </label>
+        <?php
+    }
+
+    public function render_youtube_podcast_language_playlists_field(): void {
+        $option = 'presshub_social_youtube_podcast_language_playlists';
+        $langs  = class_exists( 'PressHub_AI_Podcast_Translations' ) ? PressHub_AI_Podcast_Translations::LANGUAGES : [];
+        $on     = class_exists( 'PressHub_AI_Settings_Storage' ) ? PressHub_AI_Settings_Storage::get_briefing_podcast_languages() : [];
+        foreach ( $langs as $lang => $info ) :
+            $id = $option . '_' . $lang;
+            ?>
+            <p>
+                <label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $info['name'] ); ?></label><br />
+                <input type="text" id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $option . '[' . $lang . ']' ); ?>" value="<?php echo esc_attr( PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( $lang ) ); ?>" class="regular-text" placeholder="PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+                <?php if ( ! in_array( $lang, $on, true ) ) : ?>
+                    <span class="description"><?php echo esc_html__( '(not made: turn this language on under Settings, Daily Briefing, Other languages)', 'presshub-social-autopost' ); ?></span>
+                <?php endif; ?>
+            </p>
+            <?php
+        endforeach;
+        ?>
+        <p class="description"><?php echo esc_html__( 'The playlist each language\'s episodes are added to. Make one playlist per language in YouTube Studio, set it as a podcast there, then paste its link or ID. Empty uploads that language\'s episodes without a playlist.', 'presshub-social-autopost' ); ?></p>
+        <p class="description"><?php echo esc_html__( 'Each language adds two uploads a day (morning and midday) to the channel\'s 100 uploads a day, which shorts share. Adding an episode to its playlist uses 50 of the project\'s 10,000 daily API units.', 'presshub-social-autopost' ); ?></p>
         <?php
     }
 
@@ -783,7 +805,7 @@ class PressHub_Social_Settings_Render {
         <input type="hidden" name="presshub_social_tiktok_article_shorts_enabled_present" value="1" />
         <label>
             <input type="checkbox" name="presshub_social_tiktok_article_shorts_enabled" value="1" <?php checked( $enabled, true ); ?> />
-            <?php echo esc_html__( 'Also turn every article and opinion piece into one short, made like the podcast shorts (narration, captions that follow the voice, AI images, music), on TikTok and, when Instagram Reels are on, on Instagram. The post text is the usual AI caption. If the short cannot be made, the article is posted the classic way.', 'presshub-social-autopost' ); ?>
+            <?php echo esc_html__( 'Also turn every article and opinion piece into one short, made like the podcast shorts (narration, captions that follow the voice, AI images, music), on every platform whose own shorts switch is on (TikTok Shorts, Instagram Reels, YouTube Shorts), each independently of the others. The post text is the usual AI caption. If the short cannot be made, the article is posted the classic way on TikTok and Instagram; YouTube takes only videos, so there it is skipped.', 'presshub-social-autopost' ); ?>
         </label>
         <?php
     }

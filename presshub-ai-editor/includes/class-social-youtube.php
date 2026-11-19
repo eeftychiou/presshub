@@ -683,8 +683,33 @@ class PressHub_Social_YouTube {
         return ! empty( $meta[ self::EPISODE_META_KEY ] );
     }
 
-    /** Job row of a podcast episode, for PressHub_Social_Queue::enqueue(). */
-    public static function episode_job( int $post_id, string $copy, ?string $media_url, ?string $media_type, string $scheduled_at, ?string $failed_error = null ): array {
+    /**
+     * Language of an episode job made from a translation of the podcast (en, tr), or ''
+     * for the Greek episode. See PressHub_AI_Podcast_Translations.
+     */
+    public static function episode_language( array $job ): string {
+        $meta = self::decode_metadata( $job['metadata'] ?? null );
+        $lang = (string) ( $meta[ self::EPISODE_META_KEY ]['language'] ?? '' );
+        return ( '' !== $lang && class_exists( 'PressHub_AI_Podcast_Translations' ) && PressHub_AI_Podcast_Translations::is_language( $lang ) ) ? $lang : '';
+    }
+
+    /** A job's platform as the Queue and the post box show it: "Youtube (EN)" for a language episode. */
+    public static function platform_label( array $job ): string {
+        $label = ucfirst( (string) ( $job['platform'] ?? '' ) );
+        $lang  = 'youtube' === ( $job['platform'] ?? '' ) ? self::episode_language( $job ) : '';
+        return '' !== $lang ? sprintf( '%s (%s)', $label, strtoupper( $lang ) ) : $label;
+    }
+
+    /**
+     * Job row of a podcast episode, for PressHub_Social_Queue::enqueue(). $language
+     * (en, tr) makes it the episode of that translation instead of the Greek one.
+     */
+    public static function episode_job( int $post_id, string $copy, ?string $media_url, ?string $media_type, string $scheduled_at, ?string $failed_error = null, string $language = '' ): array {
+        $episode = [ 'queued_at' => gmdate( 'c' ) ];
+        if ( '' !== $language ) {
+            $episode['language']         = $language;
+            $episode['description_hash'] = md5( trim( $copy ) );
+        }
         return [
             'post_id'      => $post_id,
             'platform'     => 'youtube',
@@ -695,7 +720,7 @@ class PressHub_Social_YouTube {
             'scheduled_at' => $scheduled_at,
             'status'       => $failed_error ? 'failed' : 'pending',
             'last_error'   => $failed_error,
-            'metadata'     => [ self::EPISODE_META_KEY => [ 'queued_at' => gmdate( 'c' ) ] ],
+            'metadata'     => [ self::EPISODE_META_KEY => $episode ],
         ];
     }
 
@@ -712,12 +737,33 @@ class PressHub_Social_YouTube {
         $title   = $post ? (string) ( is_object( $post ) ? $post->post_title : ( $post['post_title'] ?? '' ) ) : '';
         $is_ep   = self::is_episode_job( $job );
         $is_shrt = ! empty( $job['tiktok_short'] );
+        // An English or Turkish episode: the translation's audio and title.
+        $ep_lang = $is_ep ? self::episode_language( $job ) : '';
+        if ( '' !== $ep_lang ) {
+            $tr               = PressHub_AI_Podcast_Translations::get_entry( $post_id, $ep_lang );
+            // Only a voiced translation has audio that matches its title and captions.
+            $job['audio_url'] = 'voiced' === ( $tr['status'] ?? '' ) ? (string) ( $tr['audio_url'] ?? '' ) : '';
+            if ( '' !== $job['audio_url'] && '' === trim( (string) ( $tr['title'] ?? '' ) ) ) {
+                // Never the Greek title on an English or Turkish episode.
+                return new WP_Error( 'youtube_episode_no_title', sprintf( 'The %s version of podcast post #%d has no title, so it is not uploaded.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], $post_id ) );
+            }
+            $title = '' !== trim( (string) ( $tr['title'] ?? '' ) ) ? (string) $tr['title'] : $title;
+            // A translation made again after the job was queued brings its new description,
+            // unless the copy was edited by hand on the Queue.
+            $tr_copy = trim( (string) ( $tr['description'] ?? '' ) );
+            $queued  = (string) ( self::decode_metadata( $job['metadata'] ?? null )[ self::EPISODE_META_KEY ]['description_hash'] ?? '' );
+            if ( '' !== $tr_copy && '' !== $queued && md5( trim( (string) ( $job['post_copy'] ?? '' ) ) ) === $queued ) {
+                $job['post_copy'] = $tr_copy;
+            }
+        }
 
         if ( ! $is_ep && ! $is_shrt ) {
             return new WP_Error( 'youtube_not_a_video', sprintf( 'YouTube job #%d is neither a short nor a podcast episode; YouTube only gets videos.', (int) ( $job['id'] ?? 0 ) ) );
         }
         if ( $is_ep && empty( $job['audio_url'] ) ) {
-            return new WP_Error( 'youtube_episode_no_audio', sprintf( 'Podcast post #%d has no audio file, so there is no episode to upload.', $post_id ) );
+            return new WP_Error( 'youtube_episode_no_audio', '' !== $ep_lang
+                ? sprintf( 'The %s version of podcast post #%d has no audio file, so there is no episode to upload.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], $post_id )
+                : sprintf( 'Podcast post #%d has no audio file, so there is no episode to upload.', $post_id ) );
         }
 
         $video_title = $is_shrt ? (string) ( $job['video_title'] ?? '' ) : $title;
@@ -731,7 +777,7 @@ class PressHub_Social_YouTube {
         }
 
         $locale = function_exists( 'get_locale' ) ? (string) get_locale() : '';
-        $lang   = '' !== $locale ? strtolower( substr( $locale, 0, 2 ) ) : '';
+        $lang   = '' !== $ep_lang ? $ep_lang : ( '' !== $locale ? strtolower( substr( $locale, 0, 2 ) ) : '' );
 
         $upload = [
             'kind'                     => $is_ep ? 'episode' : 'short',
@@ -749,30 +795,36 @@ class PressHub_Social_YouTube {
             $upload['default_audio_language'] = $lang;
         }
         if ( $is_ep ) {
-            $video = self::episode_video( $post_id );
+            $video = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::episode_video( $post_id, $ep_lang ) : self::episode_video( $post_id );
             if ( null === $video && PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
-                $tl_error = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
+                $tl_error = ( '' === $ep_lang && class_exists( 'PressHub_AI_Podcast_Timeline' ) ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
                 $why      = '' !== $tl_error
                     ? sprintf( 'its caption timeline could not be built when the podcast was made (%s)', $tl_error )
-                    : 'the podcast has no caption timeline (made before 2.54.0)';
+                    : ( '' !== $ep_lang ? 'its translation has no caption timeline' : 'the podcast has no caption timeline (made before 2.54.0)' );
                 PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) is rendered the plain way, on the featured image without captions: %s and its shorts have no story images.', (int) ( $job['id'] ?? 0 ), $post_id, $why ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
             } elseif ( null !== $video ) {
                 $upload['episode_video'] = $video;
-                $tl_error                = ( ! isset( $video['segments'] ) && class_exists( 'PressHub_AI_Podcast_Timeline' ) ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
+                $tl_error                = ( '' === $ep_lang && ! isset( $video['segments'] ) && class_exists( 'PressHub_AI_Podcast_Timeline' ) ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
                 if ( '' !== $tl_error ) {
                     PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) has story images but no captions: its caption timeline could not be built when the podcast was made (%s).', (int) ( $job['id'] ?? 0 ), $post_id, $tl_error ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
                 }
                 // Chapters only from a measured timeline: an estimated one (MP3) may be off.
-                $chapters                = class_exists( 'PressHub_AI_Podcast_Timeline' ) && ! empty( $video['scenes'] ) && empty( $video['estimated'] )
-                    ? PressHub_AI_Podcast_Timeline::chapters( (array) PressHub_AI_Podcast_Timeline::get( $post_id ) )
+                $timeline                = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::timeline( $post_id, $ep_lang ) : ( class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null );
+                $chapters                = class_exists( 'PressHub_AI_Podcast_Timeline' ) && null !== $timeline && ! empty( $video['scenes'] ) && empty( $video['estimated'] )
+                    ? PressHub_AI_Podcast_Timeline::chapters( $timeline )
                     : '';
                 $upload['description']   = self::with_chapters( $upload['description'], $chapters );
             }
-            $upload['playlist_id'] = PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id();
+            // Each language has its own playlist; the Greek one is never used for a translation.
+            $upload['playlist_id'] = '' !== $ep_lang
+                ? PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( $ep_lang )
+                : PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id();
             $upload['width']       = self::EPISODE_WIDTH;
             $upload['height']      = self::EPISODE_HEIGHT;
             if ( '' === $upload['playlist_id'] ) {
-                PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d is uploaded without a podcast playlist: the Podcast Playlist ID is empty.', (int) ( $job['id'] ?? 0 ) ) );
+                PressHub_Social_Logger::warning( '' !== $ep_lang
+                    ? sprintf( 'YouTube %s episode job #%d is uploaded without a playlist: its playlist ID under Shorts, YouTube is empty.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], (int) ( $job['id'] ?? 0 ) )
+                    : sprintf( 'YouTube episode job #%d is uploaded without a podcast playlist: the Podcast Playlist ID is empty.', (int) ( $job['id'] ?? 0 ) ) );
             }
         }
         if ( '' === $upload['title'] ) {
@@ -798,13 +850,18 @@ class PressHub_Social_YouTube {
         if ( ! self::is_episode_job( $job ) ) {
             return null;
         }
+        // An English or Turkish episode translated again waits for its new audio.
+        $ep_lang = self::episode_language( $job );
+        if ( '' !== $ep_lang && 'translated' === ( PressHub_AI_Podcast_Translations::get_entry( (int) ( $job['post_id'] ?? 0 ), $ep_lang )['status'] ?? '' ) ) {
+            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting: the %s version is being voiced again.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'] ) ];
+        }
         if ( ! self::episode_length_ok( $job ) ) {
             $status = self::long_uploads_status();
             return [
                 'delay' => self::HOLD_RECHECK_LENGTH,
                 'note'  => sprintf(
                     'Waiting: the episode is %d minutes long and the YouTube channel may not upload videos over 15 minutes yet (long uploads: %s). Verify the channel in YouTube Studio (Settings, Channel, Feature eligibility); the episode then goes up on its own.',
-                    (int) ceil( self::episode_seconds( (int) ( $job['post_id'] ?? 0 ) ) / 60 ),
+                    (int) ceil( self::job_seconds( $job ) / 60 ),
                     '' !== $status ? $status : 'could not be read'
                 ),
             ];
@@ -861,11 +918,18 @@ class PressHub_Social_YouTube {
         if ( ! self::is_episode_job( $job ) ) {
             return true;
         }
-        $seconds = self::episode_seconds( (int) ( $job['post_id'] ?? 0 ) );
+        $seconds = self::job_seconds( $job );
         if ( $seconds + self::LONG_UPLOAD_MARGIN <= self::LONG_UPLOAD_SECONDS ) {
             return true;
         }
         return 'allowed' === self::long_uploads_status();
+    }
+
+    /** Length of an episode job's audio: its translation's for an English or Turkish episode. */
+    public static function job_seconds( array $job ): float {
+        $post_id = (int) ( $job['post_id'] ?? 0 );
+        $ep_lang = self::episode_language( $job );
+        return '' !== $ep_lang ? PressHub_AI_Podcast_Translations::duration( $post_id, $ep_lang ) : self::episode_seconds( $post_id );
     }
 
     /**
