@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.52.0
+ * Version: 2.59.1
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -157,7 +157,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.52.0' );
+define( 'PRESSHUB_AI_VERSION', '2.59.1' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 
@@ -231,6 +231,10 @@ require_once PRESSHUB_AI_DIR . 'includes/class-social-trending.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-embeds.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-news-curator.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-podcast-producer.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-podcast-translations.php';
+if ( function_exists( 'add_action' ) ) {
+    add_action( 'before_delete_post', [ 'PressHub_AI_Podcast_Translations', 'on_before_delete_post' ] );
+}
 require_once PRESSHUB_AI_DIR . 'includes/class-audio-synthesizer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-briefing-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-token-logger.php';
@@ -250,6 +254,7 @@ require_once PRESSHUB_AI_DIR . 'includes/class-knowledge-cuts.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-policy-fiches.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-fiches-admin.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-help-admin.php';
+require_once PRESSHUB_AI_DIR . 'includes/class-update-backup.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-transfer.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-settings-cleanup.php';
 require_once PRESSHUB_AI_DIR . 'includes/class-social-meta.php';
@@ -467,6 +472,7 @@ function presshub_ai_init() {
     PressHub_AI_Policy_Fiches::register_hooks();
     new PressHub_AI_Fiches_Admin();
     new PressHub_AI_Help_Admin();
+    new PressHub_AI_Update_Backup();
     PressHub_Settings_Transfer::register_hooks();
     PressHub_Settings_Cleanup::register_hooks();
     new PressHub_AI_Social_Meta();
@@ -1066,7 +1072,7 @@ function presshub_ai_briefing_step_max_continuations() {
  *
  * @param string $date    Briefing date (Y-m-d).
  * @param string $edition morning | noon.
- * @param string $step    script | audio.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Audio continuation number (0 for the first run).
  * @param int    $delay   Seconds from now.
  * @return bool True when the event was queued; false means run it inline.
@@ -1079,7 +1085,7 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
     $ok   = wp_schedule_single_event( time() + max( 0, (int) $delay ), 'presshub_ai_run_briefing_step', $args );
     if ( false === $ok || ( function_exists( 'is_wp_error' ) && is_wp_error( $ok ) ) ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; running it in this request.', [
+            PressHub_AI_Logger::warning( 'Could not queue the briefing step as its own cron event; the caller runs it now or, when the same step is already waiting, leaves it to that event.', [
                 'date'    => $date,
                 'edition' => $edition,
                 'step'    => $step,
@@ -1103,7 +1109,7 @@ function presshub_ai_schedule_briefing_step( $date, $edition, $step, $part = 0, 
  *
  * @param string $date    Briefing date (Y-m-d).
  * @param string $edition morning | noon.
- * @param string $step    script | audio.
+ * @param string $step    script | audio | translate:<lang> | voice:<lang>.
  * @param int    $part    Audio continuation number.
  * @return mixed Step result.
  */
@@ -1119,6 +1125,17 @@ function presshub_ai_execute_briefing_step( $date = '', $edition = 'morning', $s
 
     if ( 'audio' === $step ) {
         return presshub_ai_run_podcast_audio_step( $date, $edition, (int) $part, true );
+    }
+    // English and Turkish versions: translate:<lang> and voice:<lang>.
+    if ( 0 === strpos( (string) $step, 'translate:' ) || 0 === strpos( (string) $step, 'voice:' ) ) {
+        try {
+            return PressHub_AI_Podcast_Translations::run_step( $date, $edition, (string) $step, (int) $part, true );
+        } catch ( \Throwable $t ) {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::error( 'Podcast language step failed with an exception: ' . $t->getMessage(), [ 'date' => $date, 'edition' => $edition, 'step' => $step ] );
+            }
+            return new WP_Error( 'translation_exception', $t->getMessage() );
+        }
     }
     return presshub_ai_run_podcast_script_step( $date, $edition, true );
 }
@@ -1193,8 +1210,11 @@ function presshub_ai_run_podcast_audio_step( $date, $edition, $part = 0, $budget
             if ( 'synthesis_time_budget' !== $result->get_error_code() && class_exists( 'PressHub_AI_Logger' ) ) {
                 PressHub_AI_Logger::error( $label . ' generation cron error in audio synthesis: ' . $result->get_error_message() );
             }
-        } elseif ( class_exists( 'PressHub_AI_Logger' ) ) {
-            PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+        } else {
+            if ( class_exists( 'PressHub_AI_Logger' ) ) {
+                PressHub_AI_Logger::info( $label . ' audio podcast synthesized successfully.' );
+            }
+            // synthesize_podcast() has started the English and Turkish versions.
         }
     } catch ( \Throwable $t ) {
         if ( class_exists( 'PressHub_AI_Logger' ) ) {

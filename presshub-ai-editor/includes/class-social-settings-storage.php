@@ -296,10 +296,28 @@ class PressHub_Social_Settings_Storage {
             'default'           => false,
         ] );
 
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_episode_enhanced', [
+            'type'              => 'boolean',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_episode_enhanced' ],
+            'default'           => true,
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_episode_image_wait_minutes', [
+            'type'              => 'integer',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_episode_image_wait_minutes' ],
+            'default'           => 90,
+        ] );
+
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_podcast_playlist_id', [
             'type'              => 'string',
             'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_podcast_playlist_id' ],
             'default'           => '',
+        ] );
+
+        PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_podcast_language_playlists', [
+            'type'              => 'array',
+            'sanitize_callback' => [ __CLASS__, 'sanitize_youtube_podcast_language_playlists' ],
+            'default'           => [],
         ] );
 
         PressHub_Settings_Registry::register( self::OPTION_GROUP, 'presshub_social_youtube_privacy_status', [
@@ -1357,6 +1375,32 @@ class PressHub_Social_Settings_Storage {
         return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
     }
 
+    /** Whether episodes get the shorts' story images and captions (default on). */
+    public static function get_youtube_episode_enhanced(): bool {
+        return in_array( get_option( 'presshub_social_youtube_episode_enhanced', true ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    public static function sanitize_youtube_episode_enhanced( $value ): bool {
+        if ( null === $value && empty( $_POST['presshub_social_youtube_episode_enhanced_present'] ) && ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            return self::get_youtube_episode_enhanced();
+        }
+        return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
+    }
+
+    /** Minutes an episode waits for its shorts' story images before it goes without them (0-240, default 90). */
+    public static function get_youtube_episode_image_wait_minutes(): int {
+        return self::sanitize_youtube_episode_image_wait_minutes( get_option( 'presshub_social_youtube_episode_image_wait_minutes', 90 ) );
+    }
+
+    public static function sanitize_youtube_episode_image_wait_minutes( $value ): int {
+        if ( null === $value || '' === $value ) {
+            // Not in this save (another section's form): keep the stored value.
+            $value = get_option( 'presshub_social_youtube_episode_image_wait_minutes', 90 );
+            $value = ( null === $value || '' === $value ) ? 90 : $value;
+        }
+        return max( 0, min( 240, (int) $value ) );
+    }
+
     /** Whether each Daily Briefing podcast also goes to YouTube as a full episode (default off). */
     public static function get_youtube_podcast_enabled(): bool {
         return in_array( get_option( 'presshub_social_youtube_podcast_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
@@ -1388,6 +1432,31 @@ class PressHub_Social_Settings_Storage {
             $value = $m[1];
         }
         return preg_match( '/^[A-Za-z0-9_\-]{10,64}$/', $value ) ? $value : '';
+    }
+
+    /**
+     * Playlist of one language's podcast episodes (English, Turkish), or '' to upload
+     * them without a playlist. Never the Greek podcast playlist's ID: each language
+     * gets its own playlist.
+     */
+    public static function get_youtube_podcast_playlist_id_for( string $lang ): string {
+        $all = self::sanitize_youtube_podcast_language_playlists( get_option( 'presshub_social_youtube_podcast_language_playlists', [] ) );
+        return (string) ( $all[ $lang ] ?? '' );
+    }
+
+    /** Playlist IDs (or pasted playlist links) per known language. */
+    public static function sanitize_youtube_podcast_language_playlists( $value ): array {
+        if ( null === $value ) {
+            $value = get_option( 'presshub_social_youtube_podcast_language_playlists', [] );
+        }
+        $value = is_array( $value ) ? $value : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out   = [];
+        foreach ( $known as $lang ) {
+            $id           = is_string( $value[ $lang ] ?? null ) ? self::sanitize_youtube_podcast_playlist_id( $value[ $lang ] ) : '';
+            $out[ $lang ] = $id;
+        }
+        return $out;
     }
 
     /** Privacy status of a new YouTube upload: public, unlisted or private (default public). */

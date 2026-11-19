@@ -15,6 +15,7 @@
  *   ├─ Usage & logs              admin.php?page=presshub-ai-usage
  *   ├─ Settings                  admin.php?page=presshub-ai&section=<slug>
  *   ├─ Presets                   admin.php?page=presshub-ai-presets
+ *   ├─ Backups                   admin.php?page=presshub-ai-backups
  *   └─ Help                      admin.php?page=presshub-ai-help
  *
  * Since 3b (#246) Settings holds both former settings pages in eight
@@ -66,6 +67,7 @@ class PressHub_Admin_Menu {
         self::USAGE_SLUG,
         'presshub-ai',
         'presshub-ai-presets',
+        'presshub-ai-backups',
         'presshub-ai-help',
     ];
 

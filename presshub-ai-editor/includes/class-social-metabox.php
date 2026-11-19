@@ -219,7 +219,7 @@ class PressHub_Social_Metabox {
                             ?>
                                 <tr>
                                     <td>#<?php echo esc_html( $job['id'] ); ?></td>
-                                    <td><strong><?php echo esc_html( ucfirst( $job['platform'] ) ); ?></strong></td>
+                                    <td><strong><?php echo esc_html( class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::platform_label( $job ) : ucfirst( $job['platform'] ) ); ?></strong></td>
                                     <td><span class="badge-engine"><?php echo esc_html( strtoupper( $job['engine'] ) ); ?></span></td>
                                     <td><span class="presshub-status-badge <?php echo esc_attr( $status_badge_class ); ?>"><?php echo esc_html( ucfirst( $status ) ); ?></span></td>
                                     <td><?php echo esc_html( $job['attempts'] . '/' . $job['max_attempts'] ); ?></td>
@@ -241,6 +241,12 @@ class PressHub_Social_Metabox {
                                                     <?php esc_html_e( 'Not in the podcast playlist', 'presshub-social-autopost' ); ?>
                                                 </span>
                                             <?php endif; ?>
+                                            <?php $yt_episode_note = class_exists( 'PressHub_Social_YouTube' ) ? PressHub_Social_YouTube::episode_note( $job ) : ''; ?>
+                                            <?php if ( '' !== $yt_episode_note ) : ?>
+                                                <span class="presshub-error-preview" title="<?php echo esc_attr( $yt_episode_note ); ?>">
+                                                    <?php esc_html_e( 'Episode video incomplete', 'presshub-social-autopost' ); ?>
+                                                </span>
+                                            <?php endif; ?>
                                         <?php elseif ( ! empty( $job['last_error'] ) ) : ?>
                                             <span class="presshub-error-preview" title="<?php echo esc_attr( $job['last_error'] ); ?>">
                                                 <?php echo esc_html( wp_trim_words( $job['last_error'], 8 ) ); ?>
@@ -255,6 +261,53 @@ class PressHub_Social_Metabox {
                     </table>
                 </div>
             <?php endif; ?>
+            <?php self::render_language_status( (int) $post->ID ); ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * English and Turkish versions of a podcast post: where each one stands, and why it
+     * failed, so a language that never reached the Queue is not missed.
+     */
+    private static function render_language_status( int $post_id ): void {
+        if ( ! class_exists( 'PressHub_AI_Podcast_Translations' ) || 'podcast' !== (string) get_post_meta( $post_id, '_presshub_briefing_type', true ) ) {
+            return;
+        }
+        $entries = PressHub_AI_Podcast_Translations::get_all( $post_id );
+        $enabled = PressHub_AI_Podcast_Translations::enabled_languages();
+        if ( empty( $entries ) && empty( $enabled ) ) {
+            return;
+        }
+        $labels = [
+            'translated' => __( 'translated, being voiced', 'presshub-social-autopost' ),
+            'voiced'     => __( 'voiced, ready for YouTube', 'presshub-social-autopost' ),
+            'failed'     => __( 'failed', 'presshub-social-autopost' ),
+        ];
+        ?>
+        <div class="presshub-language-status" style="margin-top:12px;">
+            <h4 style="margin:0 0 6px;"><?php esc_html_e( 'Other languages (YouTube only)', 'presshub-social-autopost' ); ?></h4>
+            <ul style="margin:0;">
+                <?php foreach ( PressHub_AI_Podcast_Translations::LANGUAGES as $lang => $info ) :
+                    $entry = is_array( $entries[ $lang ] ?? null ) ? $entries[ $lang ] : [];
+                    if ( empty( $entry ) && ! in_array( $lang, $enabled, true ) ) {
+                        continue;
+                    }
+                    $status = (string) ( $entry['status'] ?? '' );
+                    $text   = '' === $status ? __( 'not made yet', 'presshub-social-autopost' ) : ( $labels[ $status ] ?? $status );
+                    ?>
+                    <li>
+                        <strong><?php echo esc_html( $info['name'] ); ?>:</strong>
+                        <span class="<?php echo 'failed' === $status ? 'presshub-text-error' : ''; ?>" style="<?php echo 'failed' === $status ? 'color:#b32d2e;' : ''; ?>"><?php echo esc_html( $text ); ?></span>
+                        <?php if ( 'failed' === $status && '' !== (string) ( $entry['error'] ?? '' ) ) : ?>
+                            <br /><small><?php echo esc_html( sprintf( /* translators: 1: step, 2: error */ __( 'At the %1$s step: %2$s', 'presshub-social-autopost' ), (string) ( $entry['step'] ?? '' ), wp_trim_words( (string) $entry['error'], 40 ) ) ); ?></small>
+                        <?php elseif ( '' !== (string) ( $entry['title'] ?? '' ) ) : ?>
+                            <br /><small><?php echo esc_html( (string) $entry['title'] ); ?></small>
+                        <?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+            <p class="description"><?php esc_html_e( 'Made again when the Greek audio is made again (Daily Briefing Hub, or a corrected script).', 'presshub-social-autopost' ); ?></p>
         </div>
         <?php
     }
@@ -327,10 +380,11 @@ class PressHub_Social_Metabox {
             $auto_publish     = class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'get_auto_publish_enabled' )
                 ? PressHub_Social_Settings_Storage::get_auto_publish_enabled()
                 : true;
-            $existing_jobs    = PressHub_Social_Queue::get_jobs_for_post( $post_id );
+            // Test renders of the post's shorts are never posted, so they don't count.
+            $has_jobs         = PressHub_Social_Dispatcher::has_publish_jobs( $post_id );
 
             // If explicitly requested OR if auto-publish is active and post currently has zero queue jobs:
-            if ( $explicit_requeue || ( $auto_publish && empty( $existing_jobs ) ) ) {
+            if ( $explicit_requeue || ( $auto_publish && ! $has_jobs ) ) {
                 PressHub_Social_Dispatcher::enqueue_for_post( $post_id, $platforms );
             }
         }

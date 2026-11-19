@@ -13,12 +13,12 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Connections (`connections`) | 42 | 18 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 23 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 75 | 2 | 0 |
+| Daily Briefing (`daily-briefing`) | 80 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
-| Social publishing (`social-publishing`) | 71 | 5 | 0 |
+| Social publishing (`social-publishing`) | 74 | 5 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
-| Site & system (`site-system`) | 14 | 0 | 0 |
-| **Total** | **308** | | |
+| Site & system (`site-system`) | 15 | 0 | 0 |
+| **Total** | **317** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -139,7 +139,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 | `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
-## Daily Briefing (`daily-briefing`, 75)
+## Daily Briefing (`daily-briefing`, 80)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -171,6 +171,9 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_voice_female` | Presenter 1 Voice (TTS) | string |  | ai / briefing |  |
 | `presshub_ai_briefing_voice_male` | Presenter 2 Voice (TTS) | string |  | ai / briefing |  |
 | `presshub_ai_briefing_voice_tertiary` | Presenter 3 Voice (TTS) | string |  | ai / briefing |  |
+| `presshub_ai_briefing_podcast_languages` | Podcast languages | array |  | ai / briefing | was: English podcast; Turkish podcast; translation; Türkçe |
+| `presshub_ai_briefing_podcast_language_notes` | Translator's notes | array |  | ai / briefing | was: glossary; place names |
+| `presshub_ai_briefing_podcast_language_voices` | Voices per language | array |  | ai / briefing |  |
 | `presshub_ai_briefing_audio_split_by_topic` | Split Audio Synthesis by Topic | integer |  | ai / briefing | checkbox |
 | `presshub_ai_briefing_audio_transition_sfx` | Topic Transition SFX | string |  | ai / briefing |  |
 | `presshub_ai_briefing_audio_intro_sfx` | Podcast Intro SFX | string |  | ai / briefing |  |
@@ -203,6 +206,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_featured_image_ids` | Featured Image Pool (Attachment IDs) | string |  | ai / briefing | not shown on screen |
 | `presshub_ai_briefing_featured_image_source` | Text Briefing Featured Image Source | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_featured_image_source` | Podcast Featured Image Source | string |  | ai / briefing |  |
+| `presshub_ai_briefing_image_template` | Text briefing image template | string |  | ai / briefing |  |
+| `presshub_ai_briefing_podcast_image_template` | Podcast image template | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_include_text` | Include transcript in podcast post | integer |  | ai / briefing | checkbox, was: Include Transcript in Podcast Post |
 | `presshub_ai_briefing_podcast_status` | Podcast Post Status | string |  | ai / briefing |  |
 | `presshub_ai_briefing_text_prompt` | Curator System Prompt | string |  | ai / briefing |  |
@@ -238,7 +243,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_stakeholders_budgets` | People fiche context per AI task (characters) | array | characters | ai / knowledge |  |
 | `presshub_ai_editorial_agenda_budgets` | Editorial agenda context per AI task (characters) | array | characters | ai / knowledge |  |
 
-## Social publishing (`social-publishing`, 71)
+## Social publishing (`social-publishing`, 74)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -276,7 +281,10 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_social_instagram_shorts_enabled` | Instagram Reels (Shorts) | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_shorts_enabled` | YouTube Shorts | boolean |  | social / shorts | checkbox |
 | `presshub_social_youtube_podcast_enabled` | YouTube Podcast Episodes | boolean |  | social / shorts | checkbox |
+| `presshub_social_youtube_episode_enhanced` | Episodes with Story Images and Captions | boolean |  | social / shorts | checkbox, needs `presshub_social_youtube_podcast_enabled` on |
+| `presshub_social_youtube_episode_image_wait_minutes` | Wait for Story Images | integer | min | social / shorts | needs `presshub_social_youtube_episode_enhanced` on |
 | `presshub_social_youtube_podcast_playlist_id` | Podcast Playlist ID | string |  | social / shorts | needs `presshub_social_youtube_podcast_enabled` on |
+| `presshub_social_youtube_podcast_language_playlists` | English and Turkish Playlists | array |  | social / shorts | needs `presshub_social_youtube_podcast_enabled` on |
 | `presshub_social_youtube_privacy_status` | YouTube Visibility | string |  | social / shorts |  |
 | `presshub_social_youtube_category_id` | YouTube Category | integer | category ID | social / shorts |  |
 | `presshub_social_tiktok_article_shorts_enabled` | Article Shorts | boolean |  | social / shorts | checkbox, needs `presshub_social_tiktok_shorts_enabled` or `presshub_social_instagram_shorts_enabled` or `presshub_social_youtube_shorts_enabled` on |
@@ -351,7 +359,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_social_trending_max_per_account` | Trending posts per account | integer | posts | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 | `presshub_ai_social_trending_share_after_hour` | Publish trending roundups from (hour) | integer | hour | ai / social_listening | needs `presshub_ai_social_trending_enabled` on |
 
-## Site & system (`site-system`, 14)
+## Site & system (`site-system`, 15)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -366,6 +374,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_log_file_retention_days` | Log File Retention (days) | integer | days | ai / advanced |  |
 | `presshub_ai_token_log_retention_days` | Token Log Retention (days) | integer | days | ai / advanced |  |
 | `presshub_ai_audit_log_retention_days` | Audit Log Retention (days) | integer | days | ai / advanced |  |
+| `presshub_ai_backup_keep` | Backups to keep | integer | backups | ai / advanced |  |
 | `presshub_ai_social_meta_enabled` | Enable Social Metadata (OpenGraph & Twitter Cards) | boolean |  | ai / advanced | checkbox |
 | `presshub_ai_social_meta_all_posts` | Enable for All Published Posts | boolean |  | ai / advanced | checkbox |
 | `presshub_ai_memory_retention_days` | Memory Retention Window (days) | integer | days | ai / knowledge | needs `presshub_ai_memory_enabled` on |

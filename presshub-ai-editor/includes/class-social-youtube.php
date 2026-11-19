@@ -80,6 +80,28 @@ class PressHub_Social_YouTube {
     const EPISODE_WIDTH  = 1920;
     const EPISODE_HEIGHT = 1080;
 
+    /** Most story images in one episode video. */
+    const EPISODE_MAX_IMAGES = 30;
+
+    /**
+     * Longest video an unverified channel may upload (15 minutes). Longer uploads are
+     * rejected by YouTube after they finish, until the channel is verified.
+     */
+    const LONG_UPLOAD_SECONDS = 900;
+
+    /**
+     * Seconds added to the audio length before comparing it with LONG_UPLOAD_SECONDS: the
+     * worker adds up to about 3 seconds of silence at the end for the closing line.
+     */
+    const LONG_UPLOAD_MARGIN = 5;
+
+    /** Seconds until a held episode is checked again: waiting for images, and for long uploads. */
+    const HOLD_RECHECK_IMAGES = 300;
+    const HOLD_RECHECK_LENGTH = 3600;
+
+    /** Transient caching the channel's status.longUploadsStatus (an hour; ten minutes when unknown). */
+    const LONG_UPLOADS_TRANSIENT = 'presshub_social_youtube_long_uploads';
+
     /** Timeout of the small JSON calls to Google's token and Data API endpoints. */
     const HTTP_TIMEOUT = 20;
 
@@ -482,6 +504,8 @@ class PressHub_Social_YouTube {
     public static function forget_access_token(): void {
         if ( function_exists( 'delete_transient' ) ) {
             delete_transient( self::ACCESS_TOKEN_TRANSIENT );
+            // The channel's long-upload status is read again with the next sign-in too.
+            delete_transient( self::LONG_UPLOADS_TRANSIENT );
         }
     }
 
@@ -659,8 +683,33 @@ class PressHub_Social_YouTube {
         return ! empty( $meta[ self::EPISODE_META_KEY ] );
     }
 
-    /** Job row of a podcast episode, for PressHub_Social_Queue::enqueue(). */
-    public static function episode_job( int $post_id, string $copy, ?string $media_url, ?string $media_type, string $scheduled_at, ?string $failed_error = null ): array {
+    /**
+     * Language of an episode job made from a translation of the podcast (en, tr), or ''
+     * for the Greek episode. See PressHub_AI_Podcast_Translations.
+     */
+    public static function episode_language( array $job ): string {
+        $meta = self::decode_metadata( $job['metadata'] ?? null );
+        $lang = (string) ( $meta[ self::EPISODE_META_KEY ]['language'] ?? '' );
+        return ( '' !== $lang && class_exists( 'PressHub_AI_Podcast_Translations' ) && PressHub_AI_Podcast_Translations::is_language( $lang ) ) ? $lang : '';
+    }
+
+    /** A job's platform as the Queue and the post box show it: "Youtube (EN)" for a language episode. */
+    public static function platform_label( array $job ): string {
+        $label = ucfirst( (string) ( $job['platform'] ?? '' ) );
+        $lang  = 'youtube' === ( $job['platform'] ?? '' ) ? self::episode_language( $job ) : '';
+        return '' !== $lang ? sprintf( '%s (%s)', $label, strtoupper( $lang ) ) : $label;
+    }
+
+    /**
+     * Job row of a podcast episode, for PressHub_Social_Queue::enqueue(). $language
+     * (en, tr) makes it the episode of that translation instead of the Greek one.
+     */
+    public static function episode_job( int $post_id, string $copy, ?string $media_url, ?string $media_type, string $scheduled_at, ?string $failed_error = null, string $language = '' ): array {
+        $episode = [ 'queued_at' => gmdate( 'c' ) ];
+        if ( '' !== $language ) {
+            $episode['language']         = $language;
+            $episode['description_hash'] = md5( trim( $copy ) );
+        }
         return [
             'post_id'      => $post_id,
             'platform'     => 'youtube',
@@ -671,7 +720,7 @@ class PressHub_Social_YouTube {
             'scheduled_at' => $scheduled_at,
             'status'       => $failed_error ? 'failed' : 'pending',
             'last_error'   => $failed_error,
-            'metadata'     => [ self::EPISODE_META_KEY => [ 'queued_at' => gmdate( 'c' ) ] ],
+            'metadata'     => [ self::EPISODE_META_KEY => $episode ],
         ];
     }
 
@@ -688,12 +737,33 @@ class PressHub_Social_YouTube {
         $title   = $post ? (string) ( is_object( $post ) ? $post->post_title : ( $post['post_title'] ?? '' ) ) : '';
         $is_ep   = self::is_episode_job( $job );
         $is_shrt = ! empty( $job['tiktok_short'] );
+        // An English or Turkish episode: the translation's audio and title.
+        $ep_lang = $is_ep ? self::episode_language( $job ) : '';
+        if ( '' !== $ep_lang ) {
+            $tr               = PressHub_AI_Podcast_Translations::get_entry( $post_id, $ep_lang );
+            // Only a voiced translation has audio that matches its title and captions.
+            $job['audio_url'] = 'voiced' === ( $tr['status'] ?? '' ) ? (string) ( $tr['audio_url'] ?? '' ) : '';
+            if ( '' !== $job['audio_url'] && '' === trim( (string) ( $tr['title'] ?? '' ) ) ) {
+                // Never the Greek title on an English or Turkish episode.
+                return new WP_Error( 'youtube_episode_no_title', sprintf( 'The %s version of podcast post #%d has no title, so it is not uploaded.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], $post_id ) );
+            }
+            $title = '' !== trim( (string) ( $tr['title'] ?? '' ) ) ? (string) $tr['title'] : $title;
+            // A translation made again after the job was queued brings its new description,
+            // unless the copy was edited by hand on the Queue.
+            $tr_copy = trim( (string) ( $tr['description'] ?? '' ) );
+            $queued  = (string) ( self::decode_metadata( $job['metadata'] ?? null )[ self::EPISODE_META_KEY ]['description_hash'] ?? '' );
+            if ( '' !== $tr_copy && '' !== $queued && md5( trim( (string) ( $job['post_copy'] ?? '' ) ) ) === $queued ) {
+                $job['post_copy'] = $tr_copy;
+            }
+        }
 
         if ( ! $is_ep && ! $is_shrt ) {
             return new WP_Error( 'youtube_not_a_video', sprintf( 'YouTube job #%d is neither a short nor a podcast episode; YouTube only gets videos.', (int) ( $job['id'] ?? 0 ) ) );
         }
         if ( $is_ep && empty( $job['audio_url'] ) ) {
-            return new WP_Error( 'youtube_episode_no_audio', sprintf( 'Podcast post #%d has no audio file, so there is no episode to upload.', $post_id ) );
+            return new WP_Error( 'youtube_episode_no_audio', '' !== $ep_lang
+                ? sprintf( 'The %s version of podcast post #%d has no audio file, so there is no episode to upload.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], $post_id )
+                : sprintf( 'Podcast post #%d has no audio file, so there is no episode to upload.', $post_id ) );
         }
 
         $video_title = $is_shrt ? (string) ( $job['video_title'] ?? '' ) : $title;
@@ -707,7 +777,7 @@ class PressHub_Social_YouTube {
         }
 
         $locale = function_exists( 'get_locale' ) ? (string) get_locale() : '';
-        $lang   = '' !== $locale ? strtolower( substr( $locale, 0, 2 ) ) : '';
+        $lang   = '' !== $ep_lang ? $ep_lang : ( '' !== $locale ? strtolower( substr( $locale, 0, 2 ) ) : '' );
 
         $upload = [
             'kind'                     => $is_ep ? 'episode' : 'short',
@@ -725,11 +795,36 @@ class PressHub_Social_YouTube {
             $upload['default_audio_language'] = $lang;
         }
         if ( $is_ep ) {
-            $upload['playlist_id'] = PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id();
+            $video = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::episode_video( $post_id, $ep_lang ) : self::episode_video( $post_id );
+            if ( null === $video && PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
+                $tl_error = ( '' === $ep_lang && class_exists( 'PressHub_AI_Podcast_Timeline' ) ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
+                $why      = '' !== $tl_error
+                    ? sprintf( 'its caption timeline could not be built when the podcast was made (%s)', $tl_error )
+                    : ( '' !== $ep_lang ? 'its translation has no caption timeline' : 'the podcast has no caption timeline (made before 2.54.0)' );
+                PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) is rendered the plain way, on the featured image without captions: %s and its shorts have no story images.', (int) ( $job['id'] ?? 0 ), $post_id, $why ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
+            } elseif ( null !== $video ) {
+                $upload['episode_video'] = $video;
+                $tl_error                = ( '' === $ep_lang && ! isset( $video['segments'] ) && class_exists( 'PressHub_AI_Podcast_Timeline' ) ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
+                if ( '' !== $tl_error ) {
+                    PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) has story images but no captions: its caption timeline could not be built when the podcast was made (%s).', (int) ( $job['id'] ?? 0 ), $post_id, $tl_error ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
+                }
+                // Chapters only from a measured timeline: an estimated one (MP3) may be off.
+                $timeline                = '' !== $ep_lang ? PressHub_AI_Podcast_Translations::timeline( $post_id, $ep_lang ) : ( class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null );
+                $chapters                = class_exists( 'PressHub_AI_Podcast_Timeline' ) && null !== $timeline && ! empty( $video['scenes'] ) && empty( $video['estimated'] )
+                    ? PressHub_AI_Podcast_Timeline::chapters( $timeline )
+                    : '';
+                $upload['description']   = self::with_chapters( $upload['description'], $chapters );
+            }
+            // Each language has its own playlist; the Greek one is never used for a translation.
+            $upload['playlist_id'] = '' !== $ep_lang
+                ? PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id_for( $ep_lang )
+                : PressHub_Social_Settings_Storage::get_youtube_podcast_playlist_id();
             $upload['width']       = self::EPISODE_WIDTH;
             $upload['height']      = self::EPISODE_HEIGHT;
             if ( '' === $upload['playlist_id'] ) {
-                PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d is uploaded without a podcast playlist: the Podcast Playlist ID is empty.', (int) ( $job['id'] ?? 0 ) ) );
+                PressHub_Social_Logger::warning( '' !== $ep_lang
+                    ? sprintf( 'YouTube %s episode job #%d is uploaded without a playlist: its playlist ID under Shorts, YouTube is empty.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'], (int) ( $job['id'] ?? 0 ) )
+                    : sprintf( 'YouTube episode job #%d is uploaded without a podcast playlist: the Podcast Playlist ID is empty.', (int) ( $job['id'] ?? 0 ) ) );
             }
         }
         if ( '' === $upload['title'] ) {
@@ -738,6 +833,385 @@ class PressHub_Social_YouTube {
 
         $job['youtube'] = $upload;
         return $job;
+    }
+
+    /**
+     * Why a due episode must wait, or null when it may be uploaded now:
+     * [ 'delay' => seconds until it is due again, 'note' => why, shown on the Queue ].
+     * The claim moves a held episode's scheduled_at forward by the delay (no attempt is
+     * used), so held episodes never crowd the front of the queue. Length is checked first,
+     * so the image wait (and its timeout warning) only runs for an episode that may go up.
+     * - Length (episode_length_ok()): while the episode is longer than 15 minutes and the
+     *   channel may not upload long videos (status.longUploadsStatus is not "allowed").
+     * - Story images (episode_ready()): while a short of the post is still being prepared,
+     *   for at most Wait for Story Images after the episode was queued.
+     */
+    public static function episode_hold( array $job, ?int $now = null ): ?array {
+        if ( ! self::is_episode_job( $job ) ) {
+            return null;
+        }
+        // An English or Turkish episode translated again waits for its new audio.
+        $ep_lang = self::episode_language( $job );
+        if ( '' !== $ep_lang && 'translated' === ( PressHub_AI_Podcast_Translations::get_entry( (int) ( $job['post_id'] ?? 0 ), $ep_lang )['status'] ?? '' ) ) {
+            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting: the %s version is being voiced again.', PressHub_AI_Podcast_Translations::LANGUAGES[ $ep_lang ]['name'] ) ];
+        }
+        if ( ! self::episode_length_ok( $job ) ) {
+            $status = self::long_uploads_status();
+            return [
+                'delay' => self::HOLD_RECHECK_LENGTH,
+                'note'  => sprintf(
+                    'Waiting: the episode is %d minutes long and the YouTube channel may not upload videos over 15 minutes yet (long uploads: %s). Verify the channel in YouTube Studio (Settings, Channel, Feature eligibility); the episode then goes up on its own.',
+                    (int) ceil( self::job_seconds( $job ) / 60 ),
+                    '' !== $status ? $status : 'could not be read'
+                ),
+            ];
+        }
+        if ( ! self::episode_ready( $job, $now ) ) {
+            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting for the story images of the podcast\'s shorts, for at most %d minutes after the episode was queued.', PressHub_Social_Settings_Storage::get_youtube_episode_image_wait_minutes() ) ];
+        }
+        return null;
+    }
+
+    /**
+     * Whether an episode has the story images it waits for: once no short of its post is
+     * still being prepared, or Wait for Story Images minutes after it was queued (then
+     * with a WARNING naming what is missing). Always true for non-episodes and when
+     * enhanced episodes are off.
+     */
+    public static function episode_ready( array $job, ?int $now = null ): bool {
+        if ( ! self::is_episode_job( $job ) || ! PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
+            return true;
+        }
+        $post_id = (int) ( $job['post_id'] ?? 0 );
+        $waiting = 0;
+        foreach ( self::short_jobs( $post_id ) as [ $short_job, $short ] ) {
+            if ( in_array( $short_job['status'] ?? '', [ 'pending', 'processing' ], true ) && ! is_array( $short['images'] ?? null ) ) {
+                $waiting++;
+            }
+        }
+        if ( 0 === $waiting ) {
+            return true;
+        }
+        $meta   = self::decode_metadata( $job['metadata'] ?? null );
+        $queued = strtotime( (string) ( $meta[ self::EPISODE_META_KEY ]['queued_at'] ?? '' ) );
+        if ( false === $queued || $queued <= 0 ) {
+            return true;
+        }
+        $wait = PressHub_Social_Settings_Storage::get_youtube_episode_image_wait_minutes();
+        if ( ( $now ?? time() ) - $queued < $wait * 60 ) {
+            return false;
+        }
+        PressHub_Social_Logger::warning(
+            sprintf( 'YouTube episode job #%d (post #%d) is uploaded without the images of %d short job(s) still not prepared after %d minutes (Wait for Story Images).', (int) ( $job['id'] ?? 0 ), $post_id, $waiting, $wait ),
+            [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ]
+        );
+        return true;
+    }
+
+    /**
+     * Whether an episode's length is one the channel may upload: up to 15 minutes always
+     * (with a margin for the silence the worker adds at the end), longer only when YouTube
+     * reports long uploads as "allowed" (a verified channel). An unreadable status holds
+     * the episode too: a long upload would most likely be rejected after it finished.
+     */
+    public static function episode_length_ok( array $job ): bool {
+        if ( ! self::is_episode_job( $job ) ) {
+            return true;
+        }
+        $seconds = self::job_seconds( $job );
+        if ( $seconds + self::LONG_UPLOAD_MARGIN <= self::LONG_UPLOAD_SECONDS ) {
+            return true;
+        }
+        return 'allowed' === self::long_uploads_status();
+    }
+
+    /** Length of an episode job's audio: its translation's for an English or Turkish episode. */
+    public static function job_seconds( array $job ): float {
+        $post_id = (int) ( $job['post_id'] ?? 0 );
+        $ep_lang = self::episode_language( $job );
+        return '' !== $ep_lang ? PressHub_AI_Podcast_Translations::duration( $post_id, $ep_lang ) : self::episode_seconds( $post_id );
+    }
+
+    /**
+     * Length of a podcast post's audio in seconds: a measured timeline's, else the longer of
+     * an estimated timeline and the stored audio length (an MP3 estimate can be short).
+     */
+    public static function episode_seconds( int $post_id ): float {
+        $timeline = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null;
+        if ( null !== $timeline && empty( $timeline['estimated'] ) ) {
+            return (float) $timeline['duration'];
+        }
+        $stored = $post_id > 0 ? (float) get_post_meta( $post_id, '_presshub_audio_duration_sec', true ) : 0.0;
+        return max( $stored, null !== $timeline ? (float) $timeline['duration'] : 0.0 );
+    }
+
+    /**
+     * The channel's status.longUploadsStatus (allowed, eligible, disallowed), or '' when it
+     * cannot be read. channels.list costs 1 quota unit; the answer is cached.
+     */
+    public static function long_uploads_status(): string {
+        $cached = get_transient( self::LONG_UPLOADS_TRANSIENT );
+        if ( is_array( $cached ) ) {
+            return (string) ( $cached['status'] ?? '' );
+        }
+        $status = '';
+        $why    = '';
+        $token  = self::access_token();
+        if ( is_wp_error( $token ) ) {
+            $why = $token->get_error_message();
+        } else {
+            $res = self::http( 'GET', self::API_BASE . '/channels?part=status&mine=true', [
+                'headers' => [ 'Authorization' => 'Bearer ' . $token['access_token'] ],
+            ] );
+            if ( is_wp_error( $res ) ) {
+                $why = $res->get_error_message();
+            } elseif ( (int) $res['code'] >= 400 ) {
+                $why = sprintf( 'HTTP %d', (int) $res['code'] );
+            } else {
+                $data   = json_decode( (string) $res['body'], true );
+                $status = is_array( $data ) ? (string) ( $data['items'][0]['status']['longUploadsStatus'] ?? '' ) : '';
+                $why    = '' === $status ? 'no longUploadsStatus in the answer' : '';
+            }
+        }
+        if ( '' === $status ) {
+            PressHub_Social_Logger::warning( 'Could not read whether the YouTube channel may upload videos over 15 minutes (' . $why . '); episodes over 15 minutes wait until it can be read.', [ 'provider' => 'youtube' ] );
+        }
+        set_transient( self::LONG_UPLOADS_TRANSIENT, [ 'status' => $status ], '' === $status ? 600 : 3600 );
+        return $status;
+    }
+
+    /**
+     * Short jobs of a post (every platform, test renders left out), newest first, each
+     * with its decoded `tiktok_short` metadata.
+     *
+     * @return array<int, array{0: array, 1: array}>
+     */
+    private static function short_jobs( int $post_id ): array {
+        if ( $post_id <= 0 || ! class_exists( 'PressHub_Social_TikTok_Shorts' ) ) {
+            return [];
+        }
+        $out = [];
+        foreach ( PressHub_Social_Queue::get_jobs_for_post( $post_id ) as $job ) {
+            // A short an editor cancelled is left out, with its images.
+            if ( ! PressHub_Social_TikTok_Shorts::is_short_job( $job ) || PressHub_Social_TikTok_Shorts::is_test_job( $job ) || 'cancelled' === ( $job['status'] ?? '' ) ) {
+                continue;
+            }
+            $short = self::decode_metadata( $job['metadata'] ?? null )[ PressHub_Social_TikTok_Shorts::JOB_META_KEY ] ?? null;
+            if ( is_array( $short ) ) {
+                $out[] = [ $job, $short ];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Story images of a post's shorts, one group per short in story order:
+     * [ [ 'index' => int, 'topic' => string, 'urls' => string[] ], ... ]. Each short is
+     * taken once (its TikTok, Reels and YouTube jobs share the same images), and no URL
+     * appears twice. At most EPISODE_MAX_IMAGES in all.
+     */
+    public static function short_image_groups( int $post_id ): array {
+        $groups = [];
+        foreach ( self::short_jobs( $post_id ) as [ , $short ] ) {
+            $index = (int) ( $short['index'] ?? -1 );
+            if ( $index < 0 || empty( $short['images'] ) || ! is_array( $short['images'] ) ) {
+                continue;
+            }
+            $urls = [];
+            foreach ( $short['images'] as $image ) {
+                $url = is_array( $image ) ? (string) ( $image['url'] ?? '' ) : (string) $image;
+                if ( '' !== $url ) {
+                    $urls[ $url ] = true;
+                }
+            }
+            // The job of this short with the most images (one may have lost an image).
+            if ( ! empty( $urls ) && count( $urls ) > count( $groups[ $index ]['urls'] ?? [] ) ) {
+                $groups[ $index ] = [ 'index' => $index, 'topic' => trim( (string) ( $short['topic'] ?? '' ) ), 'urls' => array_keys( $urls ) ];
+            }
+        }
+        ksort( $groups );
+        $seen = [];
+        foreach ( $groups as $i => $group ) {
+            $groups[ $i ]['urls'] = array_values( array_filter( $group['urls'], static function ( $url ) use ( &$seen ) {
+                if ( isset( $seen[ $url ] ) ) {
+                    return false;
+                }
+                $seen[ $url ] = true;
+                return true;
+            } ) );
+            if ( empty( $groups[ $i ]['urls'] ) ) {
+                unset( $groups[ $i ] );
+            }
+        }
+        $out   = [];
+        $total = 0;
+        foreach ( $groups as $group ) {
+            $room = self::EPISODE_MAX_IMAGES - $total;
+            if ( $room <= 0 ) {
+                break;
+            }
+            $group['urls'] = array_slice( $group['urls'], 0, $room );
+            $total        += count( $group['urls'] );
+            $out[]         = $group;
+        }
+        return $out;
+    }
+
+    /**
+     * What the worker needs to render the enhanced episode, or null when there is
+     * nothing to add to the plain episode (no timeline and no story images):
+     * - `duration`, `estimated`: the timeline's length and whether it is estimated (MP3),
+     *   so the worker can fit it to the real audio.
+     * - `segments`: the spoken turns, for the captions.
+     * - `scenes`: one per topic [ start, end, title, images ], each with the images of the
+     *   short about that topic (see episode_scenes()).
+     * - `images`: every story image, for an episode without a timeline.
+     */
+    public static function episode_video( int $post_id ): ?array {
+        if ( ! PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
+            return null;
+        }
+        $timeline = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null;
+        $groups   = self::short_image_groups( $post_id );
+        if ( null === $timeline && empty( $groups ) ) {
+            return null;
+        }
+        $images = [];
+        foreach ( $groups as $group ) {
+            array_push( $images, ...$group['urls'] );
+        }
+        $video = [ 'images' => $images ];
+        if ( null !== $timeline ) {
+            $video['duration']  = (float) $timeline['duration'];
+            $video['estimated'] = ! empty( $timeline['estimated'] );
+            $video['segments']  = array_values( array_map(
+                static fn( $s ) => [
+                    'speaker' => 2 === (int) ( $s['speaker'] ?? 1 ) ? 2 : 1,
+                    'text'    => (string) ( $s['text'] ?? '' ),
+                    'start'   => (float) ( $s['start'] ?? 0 ),
+                    'end'     => (float) ( $s['end'] ?? 0 ),
+                ],
+                (array) $timeline['segments']
+            ) );
+            $video['scenes']    = self::episode_scenes( (array) ( $timeline['topics'] ?? [] ), $groups, (float) $timeline['duration'] );
+        }
+        return $video;
+    }
+
+    /**
+     * Scenes of an episode, one per topic, covering the whole audio: the first starts at
+     * 0 (with the intro) and each ends where the next begins. Each topic gets the images of
+     * the short whose topic shares the most words with it; a topic no short matches gets
+     * the shorts left over in turn, or every image when none is left.
+     *
+     * @param array $topics [ [ 'title', 'start', 'end' ], ... ] from the timeline.
+     * @param array $groups short_image_groups().
+     */
+    public static function episode_scenes( array $topics, array $groups, float $duration ): array {
+        $topics = array_values( array_filter( $topics, 'is_array' ) );
+        $all    = [];
+        foreach ( $groups as $group ) {
+            array_push( $all, ...$group['urls'] );
+        }
+        if ( empty( $topics ) ) {
+            return [ [ 'start' => 0.0, 'end' => $duration, 'title' => '', 'images' => $all ] ];
+        }
+
+        // Best match first, each short and each topic used once.
+        $pairs = [];
+        foreach ( $topics as $ti => $topic ) {
+            foreach ( $groups as $gi => $group ) {
+                $score = self::topic_overlap( (string) ( $topic['title'] ?? '' ), (string) $group['topic'] );
+                if ( $score > 0 ) {
+                    $pairs[] = [ $score, $ti, $gi ];
+                }
+            }
+        }
+        usort( $pairs, static fn( $a, $b ) => $b[0] <=> $a[0] ?: $a[1] <=> $b[1] );
+        $topic_group = [];
+        $used        = [];
+        foreach ( $pairs as [ , $ti, $gi ] ) {
+            if ( isset( $topic_group[ $ti ] ) || isset( $used[ $gi ] ) ) {
+                continue;
+            }
+            $topic_group[ $ti ] = $gi;
+            $used[ $gi ]        = true;
+        }
+        $left = array_values( array_diff( array_keys( $groups ), array_keys( $used ) ) );
+        $next = 0;
+
+        $scenes = [];
+        $count  = count( $topics );
+        foreach ( $topics as $ti => $topic ) {
+            if ( isset( $topic_group[ $ti ] ) ) {
+                $images = $groups[ $topic_group[ $ti ] ]['urls'];
+            } elseif ( ! empty( $left ) ) {
+                $images = $groups[ $left[ $next % count( $left ) ] ]['urls'];
+                $next++;
+            } else {
+                $images = $all;
+            }
+            $scenes[] = [
+                'start'  => 0 === $ti ? 0.0 : (float) ( $topic['start'] ?? 0 ),
+                'end'    => $ti + 1 < $count ? (float) ( $topics[ $ti + 1 ]['start'] ?? $duration ) : $duration,
+                'title'  => trim( (string) ( $topic['title'] ?? '' ) ),
+                'images' => array_values( $images ),
+            ];
+        }
+        return $scenes;
+    }
+
+    /**
+     * How alike two topic titles are, 0-1: the share of the shorter title's words (by
+     * their first five letters, without accents, so Greek inflections still match) that
+     * the other title has too. Words of fewer than four letters are ignored.
+     */
+    public static function topic_overlap( string $a, string $b ): float {
+        $stems = static function ( string $text ): array {
+            $text  = mb_strtolower( $text, 'UTF-8' );
+            $text  = strtr( $text, [ 'ά' => 'α', 'έ' => 'ε', 'ή' => 'η', 'ί' => 'ι', 'ό' => 'ο', 'ύ' => 'υ', 'ώ' => 'ω', 'ϊ' => 'ι', 'ϋ' => 'υ', 'ΐ' => 'ι', 'ΰ' => 'υ', 'ς' => 'σ' ] );
+            $words = preg_split( '/[^\p{L}\p{N}]+/u', $text, -1, PREG_SPLIT_NO_EMPTY ) ?: [];
+            $out   = [];
+            foreach ( $words as $w ) {
+                if ( mb_strlen( $w, 'UTF-8' ) >= 4 ) {
+                    $out[ mb_substr( $w, 0, 5, 'UTF-8' ) ] = true;
+                }
+            }
+            return $out;
+        };
+        $sa = $stems( $a );
+        $sb = $stems( $b );
+        if ( empty( $sa ) || empty( $sb ) ) {
+            return 0.0;
+        }
+        return count( array_intersect_key( $sa, $sb ) ) / min( count( $sa ), count( $sb ) );
+    }
+
+    /**
+     * The episode description with its chapter list ("0:00 Title" lines) after the text and
+     * before the closing link and hashtag lines, which are kept whole. Only the text is
+     * shortened when everything would not fit in DESCRIPTION_MAX_BYTES.
+     */
+    public static function with_chapters( string $description, string $chapters ): string {
+        $chapters = trim( str_replace( [ '<', '>' ], '', $chapters ) );
+        if ( '' === $chapters ) {
+            return $description;
+        }
+        $parts = preg_split( '/\n{2,}/', trim( $description ) ) ?: [];
+        $tail  = [];
+        while ( count( $parts ) > 1 && preg_match( '~^(?:\s*(?:https?://\S+|#[\p{L}\p{N}_]+)\s*)+$~u', (string) end( $parts ) ) ) {
+            array_unshift( $tail, array_pop( $parts ) );
+        }
+        $body  = implode( "\n\n", $parts );
+        $after = implode( "\n\n", array_merge( [ $chapters ], $tail ) );
+        $room  = self::DESCRIPTION_MAX_BYTES - strlen( $after ) - 2;
+        if ( $room < 200 ) {
+            return $description;
+        }
+        if ( strlen( $body ) > $room ) {
+            $body = rtrim( mb_strcut( $body, 0, $room - 3, 'UTF-8' ) ) . '…';
+        }
+        return rtrim( $body ) . "\n\n" . $after;
     }
 
     /** Seconds after which a YouTube job still "processing" counts as stuck (the worker stopped mid-upload). */
@@ -750,6 +1224,15 @@ class PressHub_Social_YouTube {
         }
         $meta = self::decode_metadata( $job['metadata'] ?? null );
         return trim( (string) ( $meta['youtube_playlist_error'] ?? '' ) );
+    }
+
+    /** What an enhanced episode was published without (story images, captions), or ''. */
+    public static function episode_note( array $job ): string {
+        if ( 'youtube' !== ( $job['platform'] ?? '' ) ) {
+            return '';
+        }
+        $meta = self::decode_metadata( $job['metadata'] ?? null );
+        return trim( (string) ( $meta['youtube_episode_note'] ?? '' ) );
     }
 
     /**

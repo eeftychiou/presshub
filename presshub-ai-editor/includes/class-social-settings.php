@@ -287,8 +287,8 @@ class PressHub_Social_Settings {
         $image_platforms = [
             'twitter'   => [ __( 'X / Twitter Images', 'presshub-social-autopost' ), __( 'Landscape 16:9 images attached to the post (up to 4). An attached image replaces X\'s link preview card; the article link stays in the text.', 'presshub-social-autopost' ) ],
             'facebook'  => [ __( 'Facebook Images', 'presshub-social-autopost' ), __( 'Landscape 16:9 images (up to 4; more than 1 makes a multi-photo post). X and Facebook share the same images, so the second platform costs nothing extra.', 'presshub-social-autopost' ) ],
-            'instagram' => [ __( 'Instagram Image', 'presshub-social-autopost' ), __( 'One square 1:1 image used as the background of the Instagram card. Reels from podcast shorts keep their own story images.', 'presshub-social-autopost' ) ],
-            'tiktok'    => [ __( 'TikTok Image', 'presshub-social-autopost' ), __( 'One vertical 9:16 image used as the background of the TikTok video of an article. Podcast shorts keep their own story images.', 'presshub-social-autopost' ) ],
+            'instagram' => [ __( 'Instagram Image', 'presshub-social-autopost' ), __( 'One square 1:1 image used as the background of the Instagram card. Reels made from shorts keep their own story images.', 'presshub-social-autopost' ) ],
+            'tiktok'    => [ __( 'TikTok Image', 'presshub-social-autopost' ), __( 'One vertical 9:16 image used as the background of the TikTok video of an article. Shorts keep their own story images.', 'presshub-social-autopost' ) ],
         ];
         foreach ( $image_platforms as $image_platform => [ $label, $desc ] ) {
             add_settings_field(
@@ -525,6 +525,30 @@ class PressHub_Social_Settings {
         );
 
         add_settings_field(
+            'presshub_social_youtube_episode_enhanced',
+            __( 'Episodes with Story Images and Captions', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_episode_enhanced_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_episode_image_wait_minutes',
+            __( 'Wait for Story Images', 'presshub-social-autopost' ),
+            [ $render, 'render_number_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec',
+            [
+                'option'  => 'presshub_social_youtube_episode_image_wait_minutes',
+                'default' => 90,
+                'min'     => 0,
+                'max'     => 240,
+                'unit'    => __( 'minutes', 'presshub-social-autopost' ),
+                'desc'    => __( 'How long an episode waits for its shorts\' story images before it is uploaded with the images that are ready (or the podcast\'s image). 0 does not wait.', 'presshub-social-autopost' ),
+            ]
+        );
+
+        add_settings_field(
             'presshub_social_youtube_podcast_playlist_id',
             __( 'Podcast Playlist ID', 'presshub-social-autopost' ),
             [ $render, 'render_text_field' ],
@@ -535,6 +559,14 @@ class PressHub_Social_Settings {
                 'placeholder' => 'PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
                 'desc'        => __( 'The playlist every episode is added to. Make the playlist in YouTube Studio, set it as a podcast there (Create → New podcast, or the playlist\'s Set as podcast), then paste its link or ID. Empty uploads the episodes without a playlist.', 'presshub-social-autopost' ),
             ]
+        );
+
+        add_settings_field(
+            'presshub_social_youtube_podcast_language_playlists',
+            __( 'English and Turkish Playlists', 'presshub-social-autopost' ),
+            [ $render, 'render_youtube_podcast_language_playlists_field' ],
+            'presshub_social_shorts',
+            'presshub_social_shorts_youtube_sec'
         );
 
         add_settings_field(
@@ -1058,7 +1090,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_shorts',
                 'rows'   => 10,
-                'desc'   => __( 'Used only when TikTok Shorts are on, for podcast posts. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from Automation Worker → Media & Video Specifications: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used for podcast posts when TikTok Shorts, Instagram Reels or YouTube Shorts are on. One call writes every short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}: the spoken script, the on-screen hook, the image descriptions, the mood of the background music and the caption. Placeholders from the Shorts tab: {count} (Shorts per Podcast), {max_words} (Short Script Length), {image_count} (Story Images per Short), {caption_words} (Short Post Text Length), {moods} (the moods of TikTok Shorts: Music Prompts, plus none), {speakers} (Short Narrators). From the podcast post: {title}, {date}, {script} (the podcast script). {site_name} is the site title.', 'presshub-social-autopost' ),
             ]
         );
 
@@ -1071,7 +1103,7 @@ class PressHub_Social_Settings {
             [
                 'option' => 'presshub_social_prompt_tiktok_article_short',
                 'rows'   => 10,
-                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the TikTok or Instagram Caption Prompt; this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way.', 'presshub-social-autopost' ),
+                'desc'   => __( 'Used for posts that are not podcasts (articles, opinion pieces) when Article Shorts are on. One call writes the article\'s one short as JSON {"shorts":[{"topic","hook","script","visuals","mood","caption"}]}. The post text is still written by the platform\'s usual caption prompt (TikTok, Instagram or YouTube); this caption is used only when that one fails. Placeholders: {max_words}, {image_count}, {caption_words}, {moods}, {speakers} as in the Script Prompt above. From the article: {title}, {category}, {excerpt}, {content} (the article text), {date}. {site_name} is the site title. Emptied, articles are posted the classic way (and skipped on YouTube).', 'presshub-social-autopost' ),
             ]
         );
 

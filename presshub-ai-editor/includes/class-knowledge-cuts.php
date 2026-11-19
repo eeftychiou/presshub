@@ -68,6 +68,128 @@ class PressHub_AI_Knowledge_Cuts {
         return $out;
     }
 
+    /**
+     * What the article caps of the briefing curation cut, from the stored
+     * article breakdown: articles shortened to the per-article character cap
+     * and articles left out by the maximum article count. Articles the editor
+     * did not select are a choice, not a limit, and are not counted.
+     *
+     * @param array $sent    Breakdown of sent articles (chars_sent, chars_original, truncated).
+     * @param array $dropped Breakdown of dropped articles (reason).
+     * @param array $totals  Record totals (cap_articles, cap_chars_per_article).
+     * @return array{sent:int,shortened:int,chars_cut:int,cap_chars:int,left_out:int,cap_articles:int,shortened_items:string[],left_out_items:string[]}
+     */
+    public static function article_cuts( array $sent, array $dropped, array $totals ): array {
+        $out = [
+            'sent'            => 0,
+            'shortened'       => 0,
+            'chars_cut'       => 0,
+            'cap_chars'       => (int) ( $totals['cap_chars_per_article'] ?? 0 ),
+            'left_out'        => 0,
+            'cap_articles'    => (int) ( $totals['cap_articles'] ?? 0 ),
+            'shortened_items' => [],
+            'left_out_items'  => [],
+        ];
+        foreach ( $sent as $a ) {
+            if ( ! is_array( $a ) ) {
+                continue;
+            }
+            $out['sent']++;
+            if ( empty( $a['truncated'] ) ) {
+                continue;
+            }
+            $out['shortened']++;
+            $original = (int) ( $a['chars_original'] ?? 0 );
+            $kept     = (int) ( $a['chars_sent'] ?? 0 );
+            if ( $original > $kept ) {
+                $out['chars_cut'] += $original - $kept;
+            }
+            if ( 0 === $out['cap_chars'] && $kept > 0 ) {
+                $out['cap_chars'] = $kept;
+            }
+            $out['shortened_items'][] = self::article_label( $a );
+        }
+        foreach ( $dropped as $a ) {
+            if ( is_array( $a ) && 'cap_articles' === ( $a['reason'] ?? '' ) ) {
+                $out['left_out']++;
+                $out['left_out_items'][] = self::article_label( $a );
+            }
+        }
+        return $out;
+    }
+
+    /** One line per kind of article cut, for the generation inspector. */
+    public static function describe_articles( array $summary ): array {
+        $lines = [];
+        if ( ! empty( $summary['shortened'] ) ) {
+            /* translators: 1: articles shortened, 2: articles sent, 3: per-article character cap, 4: characters cut in total */
+            $lines[] = sprintf( __( '%1$d of %2$d articles cut to %3$d characters each (the per-article limit); %4$d characters cut in total', 'presshub-ai-editor' ), (int) $summary['shortened'], (int) ( $summary['sent'] ?? 0 ), (int) ( $summary['cap_chars'] ?? 0 ), (int) ( $summary['chars_cut'] ?? 0 ) );
+        }
+        if ( ! empty( $summary['left_out'] ) ) {
+            /* translators: 1: articles left out, 2: maximum number of articles */
+            $lines[] = sprintf( __( '%1$d articles left out: only %2$d are sent per call (lowest source priority first)', 'presshub-ai-editor' ), (int) $summary['left_out'], (int) ( $summary['cap_articles'] ?? 0 ) );
+        }
+        if ( ! empty( $lines ) ) {
+            $lines[] = __( 'Each article is listed in the Articles tab.', 'presshub-ai-editor' );
+        }
+        return $lines;
+    }
+
+    /** One log line when the article caps cut something. Never throws. */
+    public static function log_articles( string $action, array $summary ): void {
+        if ( ( empty( $summary['shortened'] ) && empty( $summary['left_out'] ) ) || ! class_exists( 'PressHub_AI_Logger' ) ) {
+            return;
+        }
+        try {
+            PressHub_AI_Logger::info(
+                sprintf(
+                    'Article limits cut the %s prompt: %d of %d articles shortened to %d characters (%d characters cut), %d left out by the %d-article cap.',
+                    $action,
+                    (int) $summary['shortened'],
+                    (int) $summary['sent'],
+                    (int) $summary['cap_chars'],
+                    (int) $summary['chars_cut'],
+                    (int) $summary['left_out'],
+                    (int) $summary['cap_articles']
+                ),
+                [
+                    'action'    => $action,
+                    'shortened' => array_slice( $summary['shortened_items'] ?? [], 0, 20 ),
+                    'left_out'  => array_slice( $summary['left_out_items'] ?? [], 0, 20 ),
+                ]
+            );
+        } catch ( \Throwable $e ) {
+            // Logging must never break the AI call.
+        }
+    }
+
+    /** Memory entries and stories the memory budget left out (manifest "trimmed"), for the inspector. */
+    public static function describe_memory( array $memory ): array {
+        $trimmed = is_array( $memory['trimmed'] ?? null ) ? $memory['trimmed'] : [];
+        if ( empty( $trimmed ) ) {
+            return [];
+        }
+        $budget = (int) ( $memory['budget_chars'] ?? 0 );
+        return [
+            $budget > 0
+                /* translators: 1: entries or stories left out, 2: memory budget in characters */
+                ? sprintf( __( '%1$d memory entries or stories left out to fit the memory budget of %2$d characters; listed in the Memory tab', 'presshub-ai-editor' ), count( $trimmed ), $budget )
+                /* translators: %d: entries or stories left out */
+                : sprintf( __( '%d memory entries or stories left out to fit the memory budget; listed in the Memory tab', 'presshub-ai-editor' ), count( $trimmed ) ),
+        ];
+    }
+
+    /** "Title (source)", at most 120 characters. */
+    private static function article_label( array $a ): string {
+        $title  = trim( (string) ( $a['title'] ?? '' ) );
+        $source = trim( (string) ( $a['source'] ?? '' ) );
+        $label  = '' !== $title ? $title : (string) ( $a['url'] ?? '?' );
+        if ( '' !== $source ) {
+            $label .= ' (' . $source . ')';
+        }
+        return function_exists( 'mb_substr' ) ? mb_substr( $label, 0, 120 ) : substr( $label, 0, 120 );
+    }
+
     /** One line per cut, for the generation inspector. */
     public static function describe( array $cuts ): array {
         $lines = [];

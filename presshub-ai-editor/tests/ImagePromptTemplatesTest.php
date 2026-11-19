@@ -18,6 +18,7 @@ require_once __DIR__ . '/../includes/class-image-prompt-templates.php';
 require_once __DIR__ . '/../includes/class-api-client.php';
 require_once __DIR__ . '/../includes/class-metaboxes.php';
 require_once __DIR__ . '/../includes/class-ajax-handlers.php';
+require_once __DIR__ . '/../includes/class-settings-render.php';
 
 class ImagePromptTemplatesTest {
     private $failures = [];
@@ -29,6 +30,10 @@ class ImagePromptTemplatesTest {
         $this->test_template_reaches_provider();
         $this->test_ajax_save_and_delete();
         $this->test_metabox_dropdown();
+        $this->test_update_resolve_and_in_use();
+        $this->test_ajax_update();
+        $this->test_briefing_template_setting();
+        $this->test_settings_manager();
 
         if ( ! empty( $this->failures ) ) {
             echo "FAILED:\n" . implode( "\n", $this->failures ) . "\n";
@@ -246,6 +251,113 @@ class ImagePromptTemplatesTest {
         $method->invoke( $metabox, $post );
         $html = ob_get_clean();
         $this->assert( (bool) preg_match( '/value="editorial_photo"\s+selected/', $html ), 'Missing template falls back to Editorial photo' );
+    }
+    public function test_update_resolve_and_in_use(): void {
+        $this->reset_env();
+        PressHub_AI_Image_Prompt_Templates::add( 'Night photo', 'Night {content}', 7 );
+        PressHub_AI_Image_Prompt_Templates::add( 'Day photo', 'Day {content}', 7 );
+
+        $up = PressHub_AI_Image_Prompt_Templates::update( 'custom_night_photo', 'Night photo, blue hour', 'Blue hour {content}' );
+        $this->assert( is_array( $up ) && 'Night photo, blue hour' === $up['name'] && 'Blue hour {content}' === $up['template'], 'update() changes name and text' );
+        $tpl = PressHub_AI_Image_Prompt_Templates::get( 'custom_night_photo' );
+        $this->assert( $tpl && 'Blue hour {content}' === $tpl['template'] && 7 === $tpl['author'], 'Updated text stored, id and author kept' );
+        $this->assert( 2 === count( PressHub_AI_Image_Prompt_Templates::get_custom_templates() ), 'update() adds no template' );
+
+        $dup = PressHub_AI_Image_Prompt_Templates::update( 'custom_night_photo', 'day PHOTO', 'x {content}' );
+        $this->assert( is_wp_error( $dup ) && 'duplicate_name' === $dup->get_error_code(), 'update() refuses another template\'s name' );
+        $same = PressHub_AI_Image_Prompt_Templates::update( 'custom_night_photo', 'Night photo, blue hour', 'Again {content}' );
+        $this->assert( is_array( $same ), 'update() may keep its own name' );
+        $this->assert( is_wp_error( PressHub_AI_Image_Prompt_Templates::update( 'editorial_cartoon', 'Cartoon 2', 'x' ) ), 'Built-ins cannot be updated' );
+        $this->assert( is_wp_error( PressHub_AI_Image_Prompt_Templates::update( 'custom_gone', 'Gone', 'x' ) ), 'Unknown id reports not found' );
+        $this->assert( is_wp_error( PressHub_AI_Image_Prompt_Templates::update( 'custom_day_photo', 'Day photo', '  ' ) ), 'Empty text refused on update' );
+
+        $r = PressHub_AI_Image_Prompt_Templates::resolve( 'custom_day_photo' );
+        $this->assert( 'custom_day_photo' === $r['id'] && 'Day {content}' === $r['template'], 'resolve() returns the chosen template' );
+        $r = PressHub_AI_Image_Prompt_Templates::resolve( 'custom_gone', 'test' );
+        $this->assert( 'editorial_photo' === $r['id'] && '' !== $r['template'], 'resolve() falls back to Editorial photo' );
+
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_image_template'] = 'custom_day_photo';
+        $this->assert( [ 'Podcast image template' ] === PressHub_AI_Image_Prompt_Templates::used_by( 'custom_day_photo' ), 'used_by() names the briefing setting' );
+        $del = PressHub_AI_Image_Prompt_Templates::delete( 'custom_day_photo' );
+        $this->assert( is_wp_error( $del ) && 'in_use' === $del->get_error_code(), 'A template Daily Briefing uses cannot be deleted' );
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_briefing_podcast_image_template'] = 'editorial_photo';
+        $this->assert( true === PressHub_AI_Image_Prompt_Templates::delete( 'custom_day_photo' ), 'Deletable once no longer used' );
+    }
+
+    public function test_ajax_update(): void {
+        $this->reset_env();
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_ID']   = 7;
+        PressHub_AI_Image_Prompt_Templates::add( 'Warm sunset', 'Sunset {content}', 7 );
+
+        $GLOBALS['CURRENT_USER_CAPS'] = [];
+        $_POST = [ 'nonce' => 'n', 'template_id' => 'custom_warm_sunset', 'name' => 'Warm sunset', 'template' => 'Hacked {content}' ];
+        $resp  = $this->call_ajax( 'update_image_prompt_template' );
+        $this->assert( empty( $resp['success'] ), 'Update denied without edit_posts' );
+
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts' ];
+        $GLOBALS['CURRENT_USER_ID']   = 9;
+        $resp = $this->call_ajax( 'update_image_prompt_template' );
+        $this->assert( empty( $resp['success'] ), 'Another author cannot change it' );
+        $this->assert( 'Sunset {content}' === PressHub_AI_Image_Prompt_Templates::get( 'custom_warm_sunset' )['template'], 'Text unchanged when denied' );
+
+        $GLOBALS['CURRENT_USER_ID'] = 7;
+        $_POST = [ 'nonce' => 'n', 'template_id' => 'custom_warm_sunset', 'name' => 'Golden sunset', 'template' => 'Golden {content}' ];
+        $resp  = $this->call_ajax( 'update_image_prompt_template' );
+        $this->assert( ! empty( $resp['success'] ) && 'Golden sunset' === ( $resp['data']['template']['name'] ?? '' ), 'Author changes their template' );
+
+        $GLOBALS['CURRENT_USER_ID']   = 9;
+        $GLOBALS['CURRENT_USER_CAPS'] = [ 'edit_posts', 'edit_others_posts' ];
+        $_POST = [ 'nonce' => 'n', 'template_id' => 'custom_warm_sunset', 'name' => 'Golden sunset', 'template' => 'Edited by editor {content}' ];
+        $resp  = $this->call_ajax( 'update_image_prompt_template' );
+        $this->assert( ! empty( $resp['success'] ), 'An editor can change anyone\'s template' );
+
+        $_POST = [ 'nonce' => 'n', 'template_id' => 'editorial_cartoon', 'name' => 'Cartoon', 'template' => 'x {content}' ];
+        $resp  = $this->call_ajax( 'update_image_prompt_template' );
+        $this->assert( empty( $resp['success'] ), 'Built-in update refused via AJAX' );
+
+        $GLOBALS['NONCE_VALID'] = false;
+        $_POST = [ 'nonce' => 'bad', 'template_id' => 'custom_warm_sunset', 'name' => 'X', 'template' => 'Y {content}' ];
+        $resp  = $this->call_ajax( 'update_image_prompt_template' );
+        $this->assert( empty( $resp['success'] ), 'Update refused with a bad nonce' );
+    }
+
+    public function test_briefing_template_setting(): void {
+        $this->reset_env();
+        PressHub_AI_Image_Prompt_Templates::add( 'Night photo', 'Night {content}', 7 );
+        $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::get_briefing_image_template(), 'Default text briefing template is Editorial photo' );
+        $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::get_briefing_podcast_image_template(), 'Default podcast template is Editorial photo' );
+        $this->assert( 'editorial_cartoon' === PressHub_AI_Settings_Storage::sanitize_briefing_image_template( 'editorial_cartoon' ), 'Built-in id kept' );
+        $this->assert( 'custom_night_photo' === PressHub_AI_Settings_Storage::sanitize_briefing_podcast_image_template( 'custom_night_photo' ), 'Saved id kept' );
+        $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::sanitize_briefing_image_template( 'custom_nope' ), 'Unknown id becomes the default' );
+        $this->assert( 'editorial_photo' === PressHub_AI_Settings_Storage::sanitize_briefing_image_template( '<script>' ), 'Junk becomes the default' );
+
+        $render = ( new ReflectionClass( 'PressHub_AI_Settings_Render' ) )->newInstanceWithoutConstructor();
+        ob_start();
+        $render->render_briefing_image_template_field( 'presshub_ai_briefing_image_template', 'custom_night_photo', 'Help.' );
+        $html = ob_get_clean();
+        $this->assert( false !== strpos( $html, 'name="presshub_ai_briefing_image_template"' ), 'Select posts the setting' );
+        $this->assert( (bool) preg_match( '/value="custom_night_photo"\s+selected/', $html ), 'Stored template selected' );
+        $this->assert( false !== strpos( $html, 'Editorial cartoon' ), 'Built-ins listed' );
+        $this->assert( false !== strpos( $html, 'section=writing-qa' ), 'Links to the template editor' );
+        $this->assert( false === strpos( $html, 'style=' ), 'No inline styles' );
+    }
+
+    public function test_settings_manager(): void {
+        $this->reset_env();
+        PressHub_AI_Image_Prompt_Templates::add( 'Night photo', 'Night <b>{content}</b>', 7 );
+        $render = ( new ReflectionClass( 'PressHub_AI_Settings_Render' ) )->newInstanceWithoutConstructor();
+        ob_start();
+        $render->render_image_prompt_templates_manager();
+        $html = ob_get_clean();
+        $this->assert( false !== strpos( $html, 'id="presshub-image-templates-manager"' ), 'Manager rendered' );
+        $this->assert( false !== strpos( $html, 'Night photo' ) && false !== strpos( $html, 'Editorial cartoon' ), 'Built-in and saved templates listed' );
+        $this->assert( false !== strpos( $html, 'Add template' ), 'Add button rendered' );
+        $this->assert( false === strpos( $html, 'style=' ), 'No inline styles in the manager' );
+        $this->assert( false === strpos( $html, '<b>{content}</b>' ), 'Template text escaped in the payload' );
+        // The editor's fields must never be posted by the section form.
+        $this->assert( ! preg_match( '/<(input|textarea|select)[^>]*\sname=/', $html ), 'Manager fields carry no name' );
+        $this->assert( 2 === substr_count( $html, 'presshub-no-dirty' ), 'Manager fields are left out of unsaved-changes tracking' );
     }
 }
 

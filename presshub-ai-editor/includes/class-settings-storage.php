@@ -217,6 +217,12 @@ class PressHub_AI_Settings_Storage {
             'type'              => 'integer',
             'default'           => 90,
         ] );
+        // #296: how many pre-update backups PressHub → Backups keeps.
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_backup_keep', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_backup_keep' ],
+            'type'              => 'integer',
+            'default'           => 5,
+        ] );
 
         // Settings-First: Social & OpenGraph metadata master toggle and scope.
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_social_meta_enabled', [
@@ -322,6 +328,20 @@ class PressHub_AI_Settings_Storage {
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_voice_tertiary', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_voice_tertiary' ],
             'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_languages', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_languages' ],
+            'type'              => 'array',
+            'default'           => [],
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_language_notes', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_language_notes' ],
+            'type'              => 'array',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_language_voices', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_language_voices' ],
+            'type'              => 'array',
+            'default'           => [],
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_audio_split_by_topic', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_audio_split_by_topic' ],
@@ -457,6 +477,14 @@ class PressHub_AI_Settings_Storage {
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_featured_image_source', [
             'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_featured_image_source' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_image_template', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_image_template' ],
+            'type'              => 'string',
+        ] );
+        PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_briefing_podcast_image_template', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_briefing_podcast_image_template' ],
             'type'              => 'string',
         ] );
         PressHub_Settings_Registry::register( 'presshub_ai_options', 'presshub_ai_image_feature_enabled', [
@@ -990,6 +1018,32 @@ class PressHub_AI_Settings_Storage {
      */
     public static function get_audit_log_retention_days(): int {
         return self::sanitize_audit_log_retention_days( get_option( 'presshub_ai_audit_log_retention_days', 90 ) );
+    }
+
+    /**
+     * Sanitize backup_keep (#296): how many backups to keep.
+     * Non-numeric input falls back to the default of 5; numeric input is clamped to 1-20.
+     *
+     * @param mixed $value Raw value.
+     * @return int
+     */
+    public static function sanitize_backup_keep( $value ): int {
+        if ( is_string( $value ) ) {
+            $value = wp_unslash( $value );
+        }
+        if ( ! is_numeric( $value ) ) {
+            return 5;
+        }
+        return max( 1, min( 20, (int) $value ) );
+    }
+
+    /**
+     * backup_keep: backups PressHub keeps (default 5, clamped 1-20).
+     *
+     * @return int
+     */
+    public static function get_backup_keep(): int {
+        return self::sanitize_backup_keep( get_option( 'presshub_ai_backup_keep', 5 ) );
     }
 
     public static function sanitize_model( $value, $provider = 'openai' ) {
@@ -2073,6 +2127,99 @@ class PressHub_AI_Settings_Storage {
     public static function get_briefing_audio_split_by_topic(): bool {
         $val = get_option( 'presshub_ai_briefing_audio_split_by_topic', 1 );
         return (bool) (int) $val;
+    }
+
+    /**
+     * Languages the Daily Briefing podcast is also made in (codes of
+     * PressHub_AI_Podcast_Translations::LANGUAGES, e.g. [ 'en', 'tr' ]). Default: none.
+     *
+     * @return string[]
+     */
+    public static function get_briefing_podcast_languages(): array {
+        return self::sanitize_briefing_podcast_languages( get_option( 'presshub_ai_briefing_podcast_languages', [] ) );
+    }
+
+    /** Known language codes only, in the order of LANGUAGES, each once. */
+    public static function sanitize_briefing_podcast_languages( $value ): array {
+        if ( null === $value ) {
+            // Not in this save (another tab's form): keep what is stored.
+            $value = get_option( 'presshub_ai_briefing_podcast_languages', [] );
+        }
+        $value = is_array( $value ) ? array_map( 'strval', $value ) : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        return array_values( array_intersect( $known, $value ) );
+    }
+
+    /**
+     * Translator's notes for one language: place names, terms and wording the
+     * translation of the podcast must follow. Default: the built-in notes.
+     */
+    public static function get_briefing_podcast_language_notes( string $lang ): string {
+        $all = get_option( 'presshub_ai_briefing_podcast_language_notes', null );
+        $notes = ( is_array( $all ) && array_key_exists( $lang, $all ) ) ? self::sanitize_language_notes_text( $all[ $lang ] ) : '';
+        // An emptied box goes back to the built-in notes.
+        return '' !== $notes ? $notes : self::default_briefing_podcast_language_notes( $lang );
+    }
+
+    /** Built-in translator's notes of a language ('' for an unknown one). */
+    public static function default_briefing_podcast_language_notes( string $lang ): string {
+        $defaults = class_exists( 'PressHub_AI_Podcast_Translations' ) ? PressHub_AI_Podcast_Translations::default_notes() : [];
+        return (string) ( $defaults[ $lang ] ?? '' );
+    }
+
+    /** Notes per known language, each plain text of at most 4,000 characters. */
+    public static function sanitize_briefing_podcast_language_notes( $value ): array {
+        $value = is_array( $value ) ? $value : [];
+        $known = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out   = [];
+        foreach ( $known as $lang ) {
+            $out[ $lang ] = array_key_exists( $lang, $value )
+                ? self::sanitize_language_notes_text( $value[ $lang ] )
+                : self::get_briefing_podcast_language_notes( $lang );
+        }
+        return $out;
+    }
+
+    private static function sanitize_language_notes_text( $text ): string {
+        $text = is_string( $text ) ? $text : '';
+        $text = function_exists( 'wp_unslash' ) ? wp_unslash( $text ) : $text;
+        $text = function_exists( 'sanitize_textarea_field' ) ? sanitize_textarea_field( $text ) : trim( strip_tags( $text ) );
+        return mb_substr( trim( $text ), 0, 4000 );
+    }
+
+    /**
+     * Voices of one language's podcast, keyed presenter_1..presenter_3. An empty
+     * voice means the Greek podcast's voice for that presenter (the default).
+     *
+     * @return array{presenter_1:string,presenter_2:string,presenter_3:string}
+     */
+    public static function get_briefing_podcast_language_voices( string $lang ): array {
+        $all = self::sanitize_briefing_podcast_language_voices( get_option( 'presshub_ai_briefing_podcast_language_voices', [] ) );
+        return $all[ $lang ] ?? [ 'presenter_1' => '', 'presenter_2' => '', 'presenter_3' => '' ];
+    }
+
+    /**
+     * Voice names per known language and presenter; anything else is dropped. A
+     * language or presenter missing from the posted value (another tab's form, or a
+     * presenter hidden while the podcast has fewer hosts) keeps its stored voice.
+     */
+    public static function sanitize_briefing_podcast_language_voices( $value ): array {
+        $stored = get_option( 'presshub_ai_briefing_podcast_language_voices', [] );
+        $stored = is_array( $stored ) ? $stored : [];
+        $value  = is_array( $value ) ? $value : [];
+        $known  = class_exists( 'PressHub_AI_Podcast_Translations' ) ? array_keys( PressHub_AI_Podcast_Translations::LANGUAGES ) : [ 'en', 'tr' ];
+        $out    = [];
+        foreach ( $known as $lang ) {
+            $row = is_array( $value[ $lang ] ?? null ) ? $value[ $lang ] : [];
+            $old = is_array( $stored[ $lang ] ?? null ) ? $stored[ $lang ] : [];
+            foreach ( [ 'presenter_1', 'presenter_2', 'presenter_3' ] as $p ) {
+                $voice = array_key_exists( $p, $row ) ? $row[ $p ] : ( $old[ $p ] ?? '' );
+                $voice = is_string( $voice ) ? trim( $voice ) : '';
+                // Gemini names (Kore) and Google Cloud names (en-US-Chirp3-HD-Achird).
+                $out[ $lang ][ $p ] = preg_match( '/^[A-Za-z0-9][A-Za-z0-9_\-]{1,63}$/', $voice ) ? $voice : '';
+            }
+        }
+        return $out;
     }
 
     /**
@@ -3919,6 +4066,37 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_briefing_podcast_featured_image_source(): string {
         return (string) get_option( 'presshub_ai_briefing_podcast_featured_image_source', self::default_briefing_featured_image_source() );
+    }
+
+    /** Featured Image Studio template for automatic briefing images: Editorial photo. */
+    public static function default_briefing_image_template(): string {
+        return 'editorial_photo';
+    }
+
+    /** A template id that exists (built-in or saved); anything else is the default. */
+    public static function sanitize_briefing_image_template( $value ): string {
+        $id = sanitize_key( (string) $value );
+        if ( '' === $id ) {
+            return self::default_briefing_image_template();
+        }
+        if ( ! class_exists( 'PressHub_AI_Image_Prompt_Templates' ) ) {
+            require_once __DIR__ . '/class-image-prompt-templates.php';
+        }
+        return null !== PressHub_AI_Image_Prompt_Templates::get( $id ) ? $id : self::default_briefing_image_template();
+    }
+
+    public static function sanitize_briefing_podcast_image_template( $value ): string {
+        return self::sanitize_briefing_image_template( $value );
+    }
+
+    /** Template id for automatic text briefing images (read through resolve(), which handles a deleted one). */
+    public static function get_briefing_image_template(): string {
+        return (string) get_option( 'presshub_ai_briefing_image_template', self::default_briefing_image_template() );
+    }
+
+    /** Template id for automatic podcast images. */
+    public static function get_briefing_podcast_image_template(): string {
+        return (string) get_option( 'presshub_ai_briefing_podcast_image_template', self::default_briefing_image_template() );
     }
 
     public static function default_image_feature_enabled(): int {

@@ -98,6 +98,19 @@ class PressHub_Social_TikTok_Shorts {
      */
     private static $ai_caller = null;
 
+    /** Generation record kind of the AI call that writes the shorts' scripts. */
+    const RECORD_KIND_SCRIPT = 'tiktok_short_script';
+
+    /** AI calls tried for one plan before its preparation run fails. */
+    const PLAN_ATTEMPTS = 2;
+
+    /** Generation record and Usage & logs row of the last plan call (0 when none). */
+    private static $last_record_id = 0;
+    private static $last_log_id    = 0;
+
+    /** What parse_plan() repaired in the last response (empty when nothing). */
+    private static $last_repairs = [];
+
     /**
      * Optional synthesizer override for tests.
      * Signature: fn( array $short, array $job ): array{url:string,id:int,voices?:array}|WP_Error
@@ -178,7 +191,9 @@ class PressHub_Social_TikTok_Shorts {
         $content = (string) preg_replace( '/<\/(p|h[1-6]|li|blockquote|div)>|<br\s*\/?>/iu', "\n", $content );
         $content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
         $content = html_entity_decode( $content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-        $content = (string) preg_replace( '/[ \t]+/u', ' ', $content );
+        // &nbsp; (U+00A0) and other Unicode spaces count as spaces, so an empty spacer
+        // paragraph is no text.
+        $content = (string) preg_replace( '/[ \t\p{Zs}\x{200B}\x{FEFF}]+/u', ' ', $content );
         $content = trim( (string) preg_replace( '/\s*\n\s*/u', "\n", $content ) );
         return mb_substr( $content, 0, self::ARTICLE_TEXT_MAX_CHARS );
     }
@@ -483,22 +498,39 @@ class PressHub_Social_TikTok_Shorts {
     }
 
     /**
-     * On-screen badge of an article short: the post's first category in capitals without
-     * accents (e.g. ΑΠΟΨΗ), or ΑΡΘΡΟ.
+     * The post's primary category name: its first category that is not Uncategorized,
+     * or '' when it has none. Shared by the article short prompt and its badge.
+     */
+    public static function primary_category( int $post_id ): string {
+        if ( $post_id <= 0 || ! function_exists( 'get_the_category' ) ) {
+            return '';
+        }
+        $cats = get_the_category( $post_id );
+        // The site's default category (Uncategorized, Χωρίς κατηγορία, or whatever it was
+        // renamed to) is not a real category.
+        $default_id = function_exists( 'get_option' ) ? (int) get_option( 'default_category', 0 ) : 0;
+        foreach ( is_array( $cats ) ? $cats : [] as $cat ) {
+            $cat_name = is_object( $cat ) ? (string) ( $cat->name ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['name'] ?? '' ) : '' );
+            $slug     = is_object( $cat ) ? (string) ( $cat->slug ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['slug'] ?? '' ) : '' );
+            $term_id  = is_object( $cat ) ? (int) ( $cat->term_id ?? 0 ) : ( is_array( $cat ) ? (int) ( $cat['term_id'] ?? 0 ) : 0 );
+            $lc_name  = function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $cat_name ), 'UTF-8' ) : strtolower( trim( $cat_name ) );
+            if ( '' === trim( $cat_name ) || 'uncategorized' === $slug || 'uncategorized' === $lc_name || 'χωρίς κατηγορία' === $lc_name ) {
+                continue;
+            }
+            if ( $default_id > 0 && $term_id === $default_id ) {
+                continue;
+            }
+            return trim( $cat_name );
+        }
+        return '';
+    }
+
+    /**
+     * On-screen badge of an article short: the post's primary category in capitals
+     * without accents (e.g. ΑΠΟΨΗ), or ΑΡΘΡΟ.
      */
     public static function article_badge( int $post_id ): string {
-        $name = '';
-        if ( $post_id > 0 && function_exists( 'get_the_category' ) ) {
-            $cats = get_the_category( $post_id );
-            foreach ( is_array( $cats ) ? $cats : [] as $cat ) {
-                $cat_name = is_object( $cat ) ? (string) ( $cat->name ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['name'] ?? '' ) : '' );
-                $slug     = is_object( $cat ) ? (string) ( $cat->slug ?? '' ) : ( is_array( $cat ) ? (string) ( $cat['slug'] ?? '' ) : '' );
-                if ( '' !== trim( $cat_name ) && 'uncategorized' !== $slug ) {
-                    $name = trim( $cat_name );
-                    break;
-                }
-            }
-        }
+        $name = self::primary_category( $post_id );
         if ( '' === $name ) {
             $name = 'Άρθρο';
         }
@@ -742,11 +774,18 @@ class PressHub_Social_TikTok_Shorts {
             $copy = is_wp_error( $generated ) ? sprintf( '[AI Copy Generation Failed: %s]', $generated->get_error_message() ) : (string) $generated;
         }
 
-        $updated = PressHub_Social_Queue::update_job( $job_id, [
+        $fields = [
             'metadata'   => function_exists( 'wp_json_encode' ) ? wp_json_encode( $metadata ) : json_encode( $metadata ),
             'post_copy'  => $copy,
             'last_error' => sprintf( 'Article short could not be made (%s); posted the classic way.', $error->get_error_message() ),
-        ] );
+        ];
+        // A posting time already past restarts now, so AI post images get their usual
+        // wait (PressHub_Social_Post_Images::MAX_WAIT counts from the posting time).
+        $scheduled = strtotime( (string) ( $job['scheduled_at'] ?? '' ) . ' UTC' );
+        if ( false === $scheduled || $scheduled < time() ) {
+            $fields['scheduled_at'] = gmdate( 'Y-m-d H:i:s' );
+        }
+        $updated = PressHub_Social_Queue::update_job( $job_id, $fields );
         if ( ! $updated ) {
             return false;
         }
@@ -754,7 +793,7 @@ class PressHub_Social_TikTok_Shorts {
             PressHub_Social_Post_Images::schedule_prepare( $post_id );
         }
         PressHub_Social_Logger::warning( sprintf(
-            '%s article short job #%d (post #%d) could not be prepared after %d runs (%s); it falls back to the classic article post.',
+            '%s article short job #%d (post #%d) could not be made after %d attempts (%s); it falls back to the classic article post.',
             self::platform_label( $platform ),
             $job_id,
             $post_id,
@@ -762,6 +801,34 @@ class PressHub_Social_TikTok_Shorts {
             $error->get_error_message()
         ), [ 'job_id' => $job_id, 'error_code' => $error->get_error_code() ] );
         return true;
+    }
+
+    /**
+     * The worker could not render an article short (it reports `short_render_failed`).
+     * Like a failed preparation, the job retries with the queue's backoff; once its last
+     * attempt fails it falls back to the classic article post instead of failing for good.
+     * Test renders and YouTube (videos only) never fall back. Returns whether it fell back,
+     * in which case the job is pending again with fresh attempts for the classic post.
+     */
+    public static function fallback_after_render_failure( array $job, string $error ): bool {
+        if ( ! self::is_article_job( $job ) || self::is_test_job( $job ) || 'youtube' === ( $job['platform'] ?? '' ) ) {
+            return false;
+        }
+        $attempts     = (int) ( $job['attempts'] ?? 0 );
+        $max_attempts = (int) ( $job['max_attempts'] ?? 3 );
+        if ( $attempts < $max_attempts ) {
+            return false;
+        }
+        $wp_error = new WP_Error( 'tiktok_short_render_failed', '' !== $error ? $error : 'the worker could not render the short' );
+        if ( ! self::fallback_to_classic( $job, $wp_error, $attempts ) ) {
+            return false;
+        }
+        $now = function_exists( 'current_time' ) ? current_time( 'mysql', true ) : gmdate( 'Y-m-d H:i:s' );
+        return PressHub_Social_Queue::update_job( (int) $job['id'], [
+            'status'       => 'pending',
+            'attempts'     => 0,
+            'scheduled_at' => $now,
+        ] );
     }
 
     /**
@@ -790,7 +857,16 @@ class PressHub_Social_TikTok_Shorts {
         $script    = $article ? self::article_text( $post_id ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
-        $hash      = hash( 'sha256', $script . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() );
+        // An article's prompt also gets its title, category and excerpt: editing those
+        // without touching the text makes a new plan too.
+        $article_key = '';
+        if ( $article ) {
+            $post        = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
+            $article_key = '|' . ( $post ? (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) ) : '' )
+                . '|' . self::primary_category( $post_id )
+                . '|' . ( $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '' );
+        }
+        $hash      = hash( 'sha256', $script . $article_key . '|' . $prompt . '|' . $count . '|' . $max_words . '|' . self::narrators() . '|' . $images . '|' . implode( ',', PressHub_Social_TikTok_Music::moods() ) . '|' . PressHub_Social_Settings_Storage::get_tiktok_shorts_caption_words() . '|yt' . (int) PressHub_Social_Settings_Storage::get_youtube_shorts_enabled() );
 
         $stored = get_post_meta( $post_id, self::PLAN_META, true );
         if ( is_array( $stored ) && ( $stored['hash'] ?? '' ) === $hash && ! empty( $stored['shorts'] ) ) {
@@ -805,14 +881,57 @@ class PressHub_Social_TikTok_Shorts {
         PressHub_Social_Logger::info( $article
             ? sprintf( 'Generating the short of article post #%d.', $post_id )
             : sprintf( 'Generating %d TikTok shorts for podcast post #%d.', $count, $post_id ) );
-        $raw = self::call_ai( $post_id, $sys_prompt, $user_prompt );
-        if ( is_wp_error( $raw ) ) {
-            return $raw;
-        }
 
-        $shorts = self::parse_plan( (string) $raw, $count, $max_words, $images );
+        // A response the plan cannot use (broken JSON, a script over the cap, an empty
+        // answer) is asked for once more, with the reason, before the preparation fails.
+        $shorts     = null;
+        $record_ids = [];
+        $prompt_now = $user_prompt;
+        for ( $attempt = 1; $attempt <= self::PLAN_ATTEMPTS; $attempt++ ) {
+            $raw = self::call_ai( $post_id, $sys_prompt, $prompt_now );
+            if ( self::$last_record_id > 0 ) {
+                $record_ids[] = self::$last_record_id;
+            }
+            if ( is_wp_error( $raw ) && 'empty_ai_response' !== $raw->get_error_code() ) {
+                // Provider errors are not retried here (the queue retries them).
+                if ( $attempt > 1 && ! empty( $record_ids ) ) {
+                    return new WP_Error( $raw->get_error_code(), sprintf( '%s See generation records %s.', $raw->get_error_message(), implode( ', ', array_map( fn( $id ) => '#' . $id, $record_ids ) ) ) );
+                }
+                return $raw;
+            }
+
+            $shorts = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count, $max_words, $images );
+            if ( ! is_wp_error( $shorts ) ) {
+                if ( ! empty( self::$last_repairs ) ) {
+                    $note = 'JSON repaired: ' . implode( ', ', self::$last_repairs ) . '.';
+                    PressHub_Social_Logger::warning( sprintf( 'TikTok shorts plan for post #%d: %s', $post_id, $note ), [ 'record_id' => self::$last_record_id ] );
+                    if ( self::$last_record_id > 0 && class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+                        PressHub_AI_Generation_Recorder::update_record( self::$last_record_id, [ 'error_message' => $note ] );
+                    }
+                }
+                break;
+            }
+            self::mark_call_unusable( $shorts );
+            $last_try = $attempt >= self::PLAN_ATTEMPTS;
+            PressHub_Social_Logger::log(
+                $last_try ? 'ERROR' : 'WARNING',
+                sprintf(
+                    'TikTok shorts plan for post #%d is invalid (attempt %d of %d): %s%s',
+                    $post_id,
+                    $attempt,
+                    self::PLAN_ATTEMPTS,
+                    $shorts->get_error_message(),
+                    $last_try ? '' : ' Asking the AI again.'
+                ),
+                [ 'record_ids' => $record_ids, 'response' => is_wp_error( $raw ) ? '' : mb_substr( (string) $raw, 0, 500 ) ]
+            );
+            $prompt_now = $user_prompt . "\n\n" . sprintf( 'Your previous answer was unusable: %s Reply with valid JSON only, in the format asked above.', $shorts->get_error_message() );
+        }
         if ( is_wp_error( $shorts ) ) {
-            PressHub_Social_Logger::error( sprintf( 'TikTok shorts plan for post #%d is invalid: %s', $post_id, $shorts->get_error_message() ), [ 'response' => mb_substr( (string) $raw, 0, 500 ) ] );
+            if ( ! empty( $record_ids ) ) {
+                $refs = implode( ', ', array_map( fn( $id ) => '#' . $id, $record_ids ) );
+                return new WP_Error( $shorts->get_error_code(), sprintf( '%s See generation %s %s.', $shorts->get_error_message(), 1 === count( $record_ids ) ? 'record' : 'records', $refs ) );
+            }
             return $shorts;
         }
 
@@ -833,12 +952,7 @@ class PressHub_Social_TikTok_Shorts {
         $title     = $post ? (string) ( is_object( $post ) ? ( $post->post_title ?? '' ) : ( $post['post_title'] ?? '' ) ) : '';
         $excerpt   = $post ? (string) ( is_object( $post ) ? ( $post->post_excerpt ?? '' ) : ( $post['post_excerpt'] ?? '' ) ) : '';
         $excerpt   = trim( function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $excerpt ) : strip_tags( $excerpt ) );
-        $category  = '';
-        if ( function_exists( 'get_the_category' ) ) {
-            $cats     = get_the_category( $post_id );
-            $first    = is_array( $cats ) ? reset( $cats ) : null;
-            $category = is_object( $first ) ? (string) ( $first->name ?? '' ) : ( is_array( $first ) ? (string) ( $first['name'] ?? '' ) : '' );
-        }
+        $category  = self::primary_category( $post_id );
         $date      = (string) get_post_meta( $post_id, '_presshub_briefing_date', true );
         if ( '' === $date && function_exists( 'get_the_date' ) ) {
             $date = (string) get_the_date( 'Y-m-d', $post_id );
@@ -876,14 +990,27 @@ class PressHub_Social_TikTok_Shorts {
      *                        A missing or unknown mood becomes the default mood.
      */
     public static function parse_plan( string $raw, int $count, int $max_words = 0, int $image_count = 3 ) {
+        self::$last_repairs = [];
         $text  = (string) preg_replace( '/^```(?:json)?\s*|\s*```$/iu', '', trim( $raw ) );
         $start = strpos( $text, '{' );
         $end   = strrpos( $text, '}' );
         if ( false === $start || false === $end || $end <= $start ) {
             return new WP_Error( 'tiktok_short_invalid_json', 'the AI response is not JSON.' );
         }
-        $decoded = json_decode( substr( $text, $start, $end - $start + 1 ), true );
-        if ( ! is_array( $decoded ) || ! is_array( $decoded['shorts'] ?? null ) || empty( $decoded['shorts'] ) ) {
+        $json    = substr( $text, $start, $end - $start + 1 );
+        $decoded = json_decode( $json, true );
+        if ( ! is_array( $decoded ) ) {
+            $json_error = function_exists( 'json_last_error_msg' ) ? json_last_error_msg() : 'Syntax error';
+            // Models sometimes misplace a closing bracket (seen on job #224:
+            // `"caption":"…"]}]}`); a structural repair keeps every value as written.
+            $fixes   = [];
+            $decoded = json_decode( self::repair_json( $json, $fixes ), true );
+            if ( ! is_array( $decoded ) ) {
+                return new WP_Error( 'tiktok_short_invalid_json', sprintf( 'the AI response is not valid JSON (%s).', $json_error ) );
+            }
+            self::$last_repairs = $fixes;
+        }
+        if ( ! is_array( $decoded['shorts'] ?? null ) || empty( $decoded['shorts'] ) ) {
             return new WP_Error( 'tiktok_short_invalid_json', 'the AI response has no "shorts" list.' );
         }
 
@@ -933,6 +1060,71 @@ class PressHub_Social_TikTok_Shorts {
             ];
         }
         return $shorts;
+    }
+
+    /**
+     * Repair the bracket structure of almost-valid JSON from a model.
+     *
+     * Outside strings, a closing bracket that does not match the innermost open one is
+     * dropped, and so is a comma right before a closing bracket. Strings and values are
+     * never changed. A response with brackets still open at the end (or cut off inside a
+     * string) was cut off, so it is returned unchanged: closing it would silently turn
+     * it into a shorter plan.
+     *
+     * @param array $fixes Filled with what was repaired, e.g. "dropped 1 misplaced ]".
+     */
+    public static function repair_json( string $json, array &$fixes = [] ): string {
+        $fixes     = [];
+        $out       = '';
+        $stack     = [];
+        $in_string = false;
+        $escaped   = false;
+        $dropped   = [ '}' => 0, ']' => 0, ',' => 0 ];
+        $length    = strlen( $json );
+        for ( $i = 0; $i < $length; $i++ ) {
+            $ch = $json[ $i ];
+            if ( $in_string ) {
+                $out .= $ch;
+                if ( $escaped ) {
+                    $escaped = false;
+                } elseif ( '\\' === $ch ) {
+                    $escaped = true;
+                } elseif ( '"' === $ch ) {
+                    $in_string = false;
+                }
+                continue;
+            }
+            if ( '"' === $ch ) {
+                $in_string = true;
+                $out      .= $ch;
+            } elseif ( '{' === $ch || '[' === $ch ) {
+                $stack[] = '{' === $ch ? '}' : ']';
+                $out    .= $ch;
+            } elseif ( '}' === $ch || ']' === $ch ) {
+                if ( empty( $stack ) || end( $stack ) !== $ch ) {
+                    $dropped[ $ch ]++; // A stray or misplaced closer.
+                    continue;
+                }
+                array_pop( $stack );
+                $out = rtrim( $out );
+                if ( str_ends_with( $out, ',' ) ) {
+                    $out = substr( $out, 0, -1 );
+                    $dropped[',']++;
+                }
+                $out .= $ch;
+            } else {
+                $out .= $ch;
+            }
+        }
+        if ( $in_string || ! empty( $stack ) ) {
+            return $json; // Cut off: nothing safe to repair.
+        }
+        foreach ( [ ']' => 'misplaced ]', '}' => 'misplaced }', ',' => 'trailing comma' ] as $key => $label ) {
+            if ( $dropped[ $key ] > 0 ) {
+                $fixes[] = sprintf( 'dropped %d %s', $dropped[ $key ], $label );
+            }
+        }
+        return $out;
     }
 
     /**
@@ -1318,6 +1510,8 @@ class PressHub_Social_TikTok_Shorts {
      * @return string|WP_Error
      */
     private static function call_ai( int $post_id, string $sys_prompt, string $user_prompt ) {
+        self::$last_record_id = 0;
+        self::$last_log_id    = 0;
         if ( null !== self::$ai_caller ) {
             $result = call_user_func( self::$ai_caller, $sys_prompt, $user_prompt );
         } else {
@@ -1342,9 +1536,13 @@ class PressHub_Social_TikTok_Shorts {
             }
             if ( null !== $client ) {
                 $client->suppress_provider_prompt_log = false;
-                PressHub_AI_API_Client::finish_generation_record( $t0, 'generic', $client, $sys_prompt, $user_prompt, $result, [
+                $last_request = class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'get_last_llm_request' )
+                    ? PressHub_AI_Token_Logger::get_last_llm_request()
+                    : null;
+                self::$last_log_id    = (int) ( $last_request['log_id'] ?? 0 );
+                self::$last_record_id = PressHub_AI_API_Client::finish_generation_record( $t0, self::RECORD_KIND_SCRIPT, $client, $sys_prompt, $user_prompt, $result, [
                     'post_id' => $post_id,
-                    'config'  => [ 'action' => 'social_tiktok_shorts', 'platform' => 'tiktok' ],
+                    'config'  => [ 'action' => 'social_tiktok_shorts', 'platform' => 'shorts' ],
                 ] );
             }
         }
@@ -1357,6 +1555,21 @@ class PressHub_Social_TikTok_Shorts {
             return new WP_Error( 'empty_ai_response', 'the AI provider returned an empty response for the TikTok shorts.' );
         }
         return $result;
+    }
+
+    /**
+     * The last AI call answered, but its response could not be used: show that as an
+     * error on its generation record and on its Usage & logs row, which both said
+     * "success" because the provider call itself worked.
+     */
+    private static function mark_call_unusable( WP_Error $error ): void {
+        $message = 'Response not usable: ' . $error->get_error_message();
+        if ( self::$last_record_id > 0 && class_exists( 'PressHub_AI_Generation_Recorder' ) ) {
+            PressHub_AI_Generation_Recorder::update_record( self::$last_record_id, [ 'status' => 'error', 'error_message' => $message ] );
+        }
+        if ( self::$last_log_id > 0 && class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'mark_failed' ) ) {
+            PressHub_AI_Token_Logger::mark_failed( self::$last_log_id, $message );
+        }
     }
 
     private static function fail( int $job_id, WP_Error $error ): WP_Error {

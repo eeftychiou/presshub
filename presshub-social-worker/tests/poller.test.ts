@@ -713,6 +713,42 @@ describe('Pull Mode Poller & .env Loader Suite', () => {
       expect(mockPoster).not.toHaveBeenCalled();
       expect(reports[0]).toEqual(expect.objectContaining({ job_id: 402, status: 'failed' }));
       expect(reports[0].error).toMatch(/no audio_url/);
+      expect(reports[0].metadata).toEqual({ short_render_failed: true });
+    });
+
+    test('flags a short that failed to render, but not one that failed to post', async () => {
+      const reports: any[] = [];
+      const mockFetch: typeof fetch = jest.fn().mockImplementation(async (url: string, init?: any) => {
+        if (url.endsWith('/worker/claim')) {
+          return {
+            ok: true,
+            json: async () => ({
+              jobs: [
+                { id: 410, platform: 'tiktok', post_copy: 'Λεζάντα', video_title: 'Hook', audio_url: 'https://presshub.cy/a.wav', tiktok_short: { index: 0, count: 1, hook: 'Hook', source: 'article', badge: 'ΑΠΟΨΗ' } },
+                { id: 411, platform: 'instagram', post_copy: 'Λεζάντα', video_title: 'Hook', audio_url: 'https://presshub.cy/a.wav', tiktok_short: { index: 0, count: 1, hook: 'Hook', source: 'article', badge: 'ΑΠΟΨΗ' } }
+              ]
+            })
+          } as any;
+        }
+        if (url.endsWith('/worker/complete')) {
+          reports.push(JSON.parse(init.body));
+          return { ok: true, json: async () => ({ success: true }) } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      });
+      const mockGenerateShort = jest.fn()
+        .mockRejectedValueOnce(new Error('FFmpeg exited with code 1'))
+        .mockResolvedValueOnce({ filePath: '/tmp/ig-reel.mp4', width: 1080, height: 1920, duration: 35, captions: 10, images: 0, music: false });
+      const mockPoster = jest.fn().mockRejectedValue(new Error('Instagram upload timed out'));
+      const poller = new PressHubPoller({ wpUrl: 'https://presshub.cy', workerSecret: 's', fetchFn: mockFetch, posterHandler: mockPoster, generateShortFn: mockGenerateShort });
+
+      const stats = await poller.pollOnce();
+      expect(stats.failed).toBe(2);
+      const renderFail = reports.find((r) => r.job_id === 410);
+      const postFail = reports.find((r) => r.job_id === 411);
+      expect(renderFail).toEqual(expect.objectContaining({ status: 'failed', metadata: { short_render_failed: true } }));
+      expect(postFail).toEqual(expect.objectContaining({ status: 'failed' }));
+      expect(postFail.metadata).toBeUndefined();
     });
   });
 

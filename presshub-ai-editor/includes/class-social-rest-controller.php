@@ -300,6 +300,18 @@ class PressHub_Social_REST_Controller {
                     $skipped[] = (int) $candidate['id'];
                     continue;
                 }
+                // A podcast episode waits (for a while) for its shorts' story images, and
+                // while it is longer than the channel may upload. It is moved later in the
+                // queue with the reason as its note, without using an attempt.
+                $hold = 'youtube' === ( $candidate['platform'] ?? '' ) ? PressHub_Social_YouTube::episode_hold( $candidate ) : null;
+                if ( null !== $hold ) {
+                    PressHub_Social_Queue::update_job( (int) $candidate['id'], [
+                        'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() + (int) $hold['delay'] ),
+                        'last_error'   => (string) $hold['note'],
+                    ] );
+                    $skipped[] = (int) $candidate['id'];
+                    continue;
+                }
                 if ( class_exists( 'PressHub_Social_TikTok_Shorts' ) && PressHub_Social_TikTok_Shorts::is_short_job( $candidate ) && ! PressHub_Social_TikTok_Shorts::is_ready( $candidate ) ) {
                     PressHub_Social_TikTok_Shorts::schedule_prepare( (int) ( $candidate['post_id'] ?? 0 ) );
                     $skipped[] = (int) $candidate['id'];
@@ -341,6 +353,12 @@ class PressHub_Social_REST_Controller {
 
             // Re-read the row: ready_to_post() may have just released it to the featured image.
             $job = PressHub_Social_Queue::get_job( $job_id ) ?? $job;
+
+            // A held episode's "Waiting…" note no longer applies once it is handed out.
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && str_starts_with( (string) ( $job['last_error'] ?? '' ), 'Waiting' ) ) {
+                PressHub_Social_Queue::update_job( $job_id, [ 'last_error' => '' ] );
+                $job['last_error'] = '';
+            }
 
             // Every AI post image, for platforms that carry several (X, Facebook).
             if ( class_exists( 'PressHub_Social_Post_Images' ) ) {
@@ -532,6 +550,13 @@ class PressHub_Social_REST_Controller {
             PressHub_Social_Queue::mark_failed( $job_id, 'A TikTok short test render was reported as published; test renders must not be posted.', $metadata );
         } elseif ( 'published' === $status ) {
             PressHub_Social_Queue::mark_published( $job_id, $external_post_id, $external_post_url, $metadata );
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_episode_note'] ) ) {
+                // The enhanced episode was published without something it should have had.
+                PressHub_Social_Logger::warning(
+                    sprintf( 'YouTube episode %s (job #%d): %s', $external_post_id, $job_id, sanitize_text_field( (string) $metadata['youtube_episode_note'] ) ),
+                    [ 'job_id' => $job_id, 'post_id' => (int) ( $job['post_id'] ?? 0 ) ]
+                );
+            }
             if ( 'youtube' === ( $job['platform'] ?? '' ) && ! empty( $metadata['youtube_playlist_error'] ) ) {
                 PressHub_Social_Logger::warning(
                     sprintf( 'YouTube video %s (job #%d) is uploaded but not in the podcast playlist: %s', $external_post_id, $job_id, sanitize_text_field( (string) $metadata['youtube_playlist_error'] ) ),
@@ -553,7 +578,19 @@ class PressHub_Social_REST_Controller {
             $status = 'deferred';
         } else {
             $status = 'failed';
-            PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && 'refused' === (string) ( $metadata['youtube_error_reason'] ?? '' ) && is_array( $job ) ) {
+                // YouTube refused the finished upload (too long, a bad file): the same
+                // video would be refused again, so the job fails now instead of retrying.
+                PressHub_Social_Queue::update_job( $job_id, [ 'attempts' => max( (int) ( $job['attempts'] ?? 0 ), (int) ( $job['max_attempts'] ?? 3 ) ) ] );
+            }
+            if ( is_array( $job ) && ! empty( $metadata['short_render_failed'] ) && class_exists( 'PressHub_Social_TikTok_Shorts' )
+                && PressHub_Social_TikTok_Shorts::fallback_after_render_failure( $job, $error ) ) {
+                // The article short could not be rendered on its last attempt: the job
+                // is now the classic article post, pending again.
+                $status = 'pending';
+            } else {
+                PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );
+            }
         }
 
         return [

@@ -44,6 +44,7 @@ class PressHub_AI_Ajax_Handlers {
         add_action( 'wp_ajax_presshub_ai_generate_image_prompt', [ $this, 'generate_image_prompt' ] );
         add_action( 'wp_ajax_presshub_ai_save_image_prompt_template', [ $this, 'save_image_prompt_template' ] );
         add_action( 'wp_ajax_presshub_ai_delete_image_prompt_template', [ $this, 'delete_image_prompt_template' ] );
+        add_action( 'wp_ajax_presshub_ai_update_image_prompt_template', [ $this, 'update_image_prompt_template' ] );
         add_action( 'wp_ajax_presshub_ai_generate_featured_image', [ $this, 'generate_featured_image' ] );
         add_action( 'wp_ajax_presshub_ai_set_featured_image', [ $this, 'set_featured_image' ] );
         // AJAX Settings Save
@@ -3120,6 +3121,45 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
     }
 
     /**
+     * AJAX: Change the name and text of a saved drafting template, from the
+     * Settings template editor. Same rights as deleting it.
+     */
+    public function update_image_prompt_template() {
+        check_ajax_referer( 'presshub_ai_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'edit_posts' ) ) {
+            wp_send_json_error( __( 'Unauthorized capability to change image prompt templates.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $id       = isset( $_POST['template_id'] ) ? sanitize_key( wp_unslash( $_POST['template_id'] ) ) : '';
+        $name     = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+        $template = isset( $_POST['template'] ) ? sanitize_textarea_field( wp_unslash( $_POST['template'] ) ) : '';
+
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $tpl = PressHub_AI_Image_Prompt_Templates::get( $id );
+        if ( $tpl && empty( $tpl['builtin'] ) && ! PressHub_AI_Image_Prompt_Templates::current_user_can_manage( $tpl ) ) {
+            wp_send_json_error( __( 'Only the editor who saved this template, or an editor, can change it.', 'presshub-ai-editor' ), 403 );
+        }
+
+        $saved = PressHub_AI_Image_Prompt_Templates::update( $id, $name, $template );
+        if ( is_wp_error( $saved ) ) {
+            wp_send_json_error( $saved->get_error_message() );
+        }
+
+        if ( class_exists( 'PressHub_AI_Audit_Logger' ) ) {
+            PressHub_AI_Audit_Logger::log( 'image_prompt_template_updated', 'image_prompt_template', $id, [
+                'name'         => $saved['name'],
+                'renamed_from' => $tpl && $tpl['name'] !== $saved['name'] ? $tpl['name'] : '',
+            ] );
+        }
+
+        wp_send_json_success( [
+            'template' => $saved,
+            'message'  => __( 'Template saved.', 'presshub-ai-editor' ),
+        ] );
+    }
+
+    /**
      * AJAX: Delete a saved drafting template. Built-ins cannot be deleted;
      * a template can be deleted by whoever saved it or by an editor who can
      * edit others' posts.
@@ -3135,7 +3175,7 @@ You can output multiple <<<REVISION ... REVISION>>> blocks if multiple distinct 
 
         require_once __DIR__ . '/class-image-prompt-templates.php';
         $tpl = PressHub_AI_Image_Prompt_Templates::get( $id );
-        if ( $tpl && empty( $tpl['builtin'] ) && (int) $tpl['author'] !== (int) get_current_user_id() && ! current_user_can( 'edit_others_posts' ) ) {
+        if ( $tpl && empty( $tpl['builtin'] ) && ! PressHub_AI_Image_Prompt_Templates::current_user_can_manage( $tpl ) ) {
             wp_send_json_error( __( 'Only the editor who saved this template, or an editor, can delete it.', 'presshub-ai-editor' ), 403 );
         }
 

@@ -22,6 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 require_once __DIR__ . '/class-capabilities.php';
 require_once __DIR__ . '/class-settings-sections.php';
+require_once __DIR__ . '/class-podcast-translations.php';
 require_once __DIR__ . '/class-secret-field.php';
 require_once __DIR__ . '/class-connection-status.php';
 require_once __DIR__ . '/class-setup-check.php';
@@ -474,6 +475,12 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_image_analysis_prompt_field(); ?>
                                 </td>
                             </tr>
+                            <tr>
+                                <th scope="row"><span id="presshub-image-templates-heading"><?php echo esc_html__( 'Prompt templates', 'presshub-ai-editor' ); ?></span></th>
+                                <td>
+                                    <?php $this->render_image_prompt_templates_manager(); ?>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
         <?php
@@ -839,6 +846,35 @@ class PressHub_AI_Settings_Render {
                     </details>
                     </section>
 
+                    <section id="briefing-languages" class="presshub-settings-group" aria-labelledby="briefing-languages-title">
+                    <h3 id="briefing-languages-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Other languages', 'presshub-ai-editor' ); ?></h3>
+                    <p class="description"><?php echo esc_html__( 'After each edition\'s Greek podcast is voiced, PressHub can translate its script and voice it in English and Turkish. These versions are not published on the site: they go to YouTube as their own episodes, each in its own playlist (Shorts, YouTube). Each language takes one translation call and about as long to voice as the Greek episode.', 'presshub-ai-editor' ); ?></p>
+                    <table class="form-table" role="presentation">
+                        <tbody>
+                            <tr>
+                                <th scope="row"><?php echo esc_html__( 'Podcast languages', 'presshub-ai-editor' ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_languages_field(); ?>
+                                </td>
+                            </tr>
+                            <?php foreach ( PressHub_AI_Podcast_Translations::LANGUAGES as $lang => $info ) : ?>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_language_notes_<?php echo esc_attr( $lang ); ?>"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s translator\'s notes', 'presshub-ai-editor' ), $info['name'] ) ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_language_notes_field( $lang ); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s voices', 'presshub-ai-editor' ), $info['name'] ) ); ?></th>
+                                <td>
+                                    <?php $this->render_briefing_podcast_language_voices_field( $lang ); ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    </section>
+
                     <section id="briefing-publishing" class="presshub-settings-group" aria-labelledby="briefing-publishing-title">
                     <h3 id="briefing-publishing-title" class="presshub-settings-group-title"><?php echo esc_html__( 'Publishing', 'presshub-ai-editor' ); ?></h3>
                     <table class="form-table" role="presentation">
@@ -922,9 +958,21 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_image_template"><?php echo esc_html__( 'Text briefing image template', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_image_template_field( 'presshub_ai_briefing_image_template', PressHub_AI_Settings_Storage::get_briefing_image_template(), __( 'The prompt template the AI follows when a text briefing makes its own image (Text Briefing Featured Image Source set to Automatic AI Image Generation).', 'presshub-ai-editor' ) ); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_featured_image_source"><?php echo __( 'Podcast Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_featured_image_source_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_image_template"><?php echo esc_html__( 'Podcast image template', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_image_template_field( 'presshub_ai_briefing_podcast_image_template', PressHub_AI_Settings_Storage::get_briefing_podcast_image_template(), __( 'The prompt template the AI follows when a podcast post makes its own image (Podcast Featured Image Source set to Automatic AI Image Generation).', 'presshub-ai-editor' ) ); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -1022,6 +1070,10 @@ class PressHub_AI_Settings_Render {
         ?>
         <table class="form-table" role="presentation">
             <tbody>
+                <tr>
+                    <th scope="row"><label for="presshub_ai_backup_keep"><?php echo esc_html__( 'Backups to keep', 'presshub-ai-editor' ); ?></label></th>
+                    <td><?php $this->render_backup_keep_field(); ?></td>
+                </tr>
                 <tr>
                     <th scope="row"><label for="presshub_ai_log_level"><?php echo esc_html__( 'Diagnostic Log Level', 'presshub-ai-editor' ); ?></label></th>
                     <td><?php $this->render_log_level_field(); ?></td>
@@ -1548,6 +1600,7 @@ class PressHub_AI_Settings_Render {
                         <option value="podcast_script"><?php echo __( 'Podcast Script', 'presshub-ai-editor' ); ?></option>
                         <option value="podcast_audio"><?php echo __( 'Podcast Audio Synthesis', 'presshub-ai-editor' ); ?></option>
                         <option value="scrape_harvest"><?php echo __( 'News Harvester', 'presshub-ai-editor' ); ?></option>
+                        <option value="social_tiktok_shorts"><?php echo esc_html__( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ); ?></option>
                         <option value="custom_test"><?php echo __( 'Test Connection', 'presshub-ai-editor' ); ?></option>
                     </select>
                 </div>
@@ -1982,6 +2035,15 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="number" min="7" max="365" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
         <p class="description"><?php echo esc_html__( 'How long token usage rows are kept before the daily cleanup deletes them. 7-365 days, default 60.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_backup_keep_field() {
+        $option = 'presshub_ai_backup_keep';
+        $value  = PressHub_AI_Settings_Storage::get_backup_keep();
+        ?>
+        <input type="number" min="1" max="20" step="1" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="small-text" />
+        <p class="description"><?php echo esc_html__( 'How many backups PressHub keeps. One is taken before every PressHub update (see PressHub → Backups); older ones are deleted. 1-20, default 5.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -2837,7 +2899,7 @@ class PressHub_AI_Settings_Render {
             'coauthor_draft'        => __( 'Co-Author draft', 'presshub-ai-editor' ),
             'copilot_chat'          => __( 'Copilot chat', 'presshub-ai-editor' ),
             'coauthor_scorecard'    => __( 'QA scorecard', 'presshub-ai-editor' ),
-            'social_tiktok_shorts'  => __( 'Shorts script', 'presshub-ai-editor' ),
+            'social_tiktok_shorts'  => __( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ),
             'generate_image_prompt' => __( 'Image prompt', 'presshub-ai-editor' ),
             'social_copy_'          => __( 'Social copy', 'presshub-ai-editor' ),
             'seo_'                  => __( 'SEO', 'presshub-ai-editor' ),
@@ -3409,6 +3471,81 @@ class PressHub_AI_Settings_Render {
         ?>
         <input type="text" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="<?php echo self::esc_attr_safe( $value ); ?>" class="regular-text" />
         <p class="description"><?php echo esc_html__( 'Name of the third presenter/commentator (e.g. Κώστας). Default Κώστας.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_languages_field() {
+        $option  = 'presshub_ai_briefing_podcast_languages';
+        $enabled = PressHub_AI_Settings_Storage::get_briefing_podcast_languages();
+        ?>
+        <input type="hidden" name="<?php echo esc_attr( $option ); ?>[]" value="" />
+        <fieldset>
+            <legend class="screen-reader-text"><?php echo esc_html__( 'Podcast languages', 'presshub-ai-editor' ); ?></legend>
+            <?php foreach ( PressHub_AI_Podcast_Translations::LANGUAGES as $lang => $info ) : ?>
+                <label>
+                    <input type="checkbox" name="<?php echo esc_attr( $option ); ?>[]" id="<?php echo esc_attr( $option . '_' . $lang ); ?>" value="<?php echo esc_attr( $lang ); ?>" <?php checked( in_array( $lang, $enabled, true ) ); ?> />
+                    <?php echo esc_html( $info['label'] ); ?>
+                </label><br />
+            <?php endforeach; ?>
+        </fieldset>
+        <p class="description"><?php echo esc_html__( 'Also make the podcast in these languages, for YouTube. Needs YouTube Podcast Episodes turned on under Shorts, YouTube. Default: none.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_language_notes_field( string $lang ) {
+        $option = 'presshub_ai_briefing_podcast_language_notes';
+        $value  = PressHub_AI_Settings_Storage::get_briefing_podcast_language_notes( $lang );
+        $id     = $option . '_' . $lang;
+        ?>
+        <textarea name="<?php echo esc_attr( $option . '[' . $lang . ']' ); ?>" id="<?php echo esc_attr( $id ); ?>" rows="6" class="large-text" lang="<?php echo esc_attr( $lang ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+        <p class="description"><?php echo esc_html__( 'Place names, institutions and wording the translation must use. They go into every translation of the podcast into this language. Empty the box and save to go back to the built-in notes.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    public function render_briefing_podcast_language_voices_field( string $lang ) {
+        $option      = 'presshub_ai_briefing_podcast_language_voices';
+        $current     = PressHub_AI_Settings_Storage::get_briefing_podcast_language_voices( $lang );
+        $synthesizer = class_exists( 'PressHub_AI_Audio_Synthesizer' ) ? new PressHub_AI_Audio_Synthesizer() : null;
+        $engine      = PressHub_AI_Settings_Storage::get_briefing_tts_engine();
+        $engine_id   = ( 'gemini' === $engine || '' === $engine ) ? 'gemini-2.5' : $engine;
+        $voices      = $synthesizer ? $synthesizer->get_available_voices( $engine_id, 'google_cloud' === $engine_id ? $lang : '' ) : [];
+        $female      = $voices['female'] ?? [];
+        $male        = $voices['male'] ?? [];
+        $host_count  = PressHub_AI_Settings_Storage::get_briefing_host_count();
+        $labels      = [
+            'presenter_1' => __( 'Presenter 1', 'presshub-ai-editor' ),
+            'presenter_2' => __( 'Presenter 2', 'presshub-ai-editor' ),
+            'presenter_3' => __( 'Presenter 3', 'presshub-ai-editor' ),
+        ];
+        ?>
+        <fieldset>
+            <legend class="screen-reader-text"><?php echo esc_html( sprintf( /* translators: %s: language name */ __( '%s voices', 'presshub-ai-editor' ), PressHub_AI_Podcast_Translations::LANGUAGES[ $lang ]['name'] ) ); ?></legend>
+            <?php foreach ( $labels as $presenter => $label ) : ?>
+                <?php
+                if ( (int) substr( $presenter, -1 ) > max( 1, $host_count ) ) {
+                    continue;
+                }
+                $id       = $option . '_' . $lang . '_' . $presenter;
+                $selected = (string) ( $current[ $presenter ] ?? '' );
+                ?>
+                <label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $label ); ?></label>
+                <select name="<?php echo esc_attr( $option . '[' . $lang . '][' . $presenter . ']' ); ?>" id="<?php echo esc_attr( $id ); ?>">
+                    <option value="" <?php selected( $selected, '' ); ?>><?php echo esc_html__( 'Same as the Greek podcast', 'presshub-ai-editor' ); ?></option>
+                    <?php echo self::unavailable_voice_option( $selected, $female, $male ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped option markup. ?>
+                    <?php foreach ( [ __( 'Female Voices', 'presshub-ai-editor' ) => $female, __( 'Male Voices', 'presshub-ai-editor' ) => $male ] as $group_label => $list ) : ?>
+                        <?php if ( ! empty( $list ) ) : ?>
+                            <optgroup label="<?php echo esc_attr( $group_label ); ?>">
+                                <?php foreach ( $list as $key => $v ) : ?>
+                                    <option value="<?php echo esc_attr( $key ); ?>" <?php selected( $selected, (string) $key ); ?>><?php echo esc_html( $v['label'] ?? $key ); ?></option>
+                                <?php endforeach; ?>
+                            </optgroup>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </select>
+                <br />
+            <?php endforeach; ?>
+        </fieldset>
+        <p class="description"><?php echo esc_html__( 'Gemini voices speak every language, so the Greek podcast\'s voices are used by default. With Google Cloud TTS, choose a voice made for this language for every presenter, or this language is not voiced.', 'presshub-ai-editor' ); ?></p>
         <?php
     }
 
@@ -4141,6 +4278,41 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    /**
+     * A Featured Image Studio template select for an automatic briefing
+     * image. A stored template that was deleted shows as missing. The
+     * "Default: …" note and Reset come from the registry default.
+     */
+    public function render_briefing_image_template_field( string $option, string $selected, string $help ) {
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $templates = PressHub_AI_Image_Prompt_Templates::get_all();
+        $ids       = array_column( $templates, 'id' );
+        $manage    = PressHub_Settings_Sections::url( 'writing-qa', 'featured-images' );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text" aria-describedby="<?php echo self::esc_attr_safe( $option . '-help' ); ?>">
+            <?php if ( ! in_array( $selected, $ids, true ) ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $selected ); ?>" selected="selected"><?php echo esc_html__( 'Missing template (Editorial photo is used)', 'presshub-ai-editor' ); ?></option>
+            <?php endif; ?>
+            <optgroup label="<?php echo esc_attr__( 'Built-in', 'presshub-ai-editor' ); ?>">
+                <?php foreach ( $templates as $tpl ) : if ( empty( $tpl['builtin'] ) ) { continue; } ?>
+                    <option value="<?php echo self::esc_attr_safe( $tpl['id'] ); ?>" <?php selected( $selected, $tpl['id'] ); ?>><?php echo esc_html( $tpl['name'] ); ?></option>
+                <?php endforeach; ?>
+            </optgroup>
+            <?php if ( count( $templates ) > count( PressHub_AI_Image_Prompt_Templates::get_builtin_templates() ) ) : ?>
+                <optgroup label="<?php echo esc_attr__( 'Saved templates', 'presshub-ai-editor' ); ?>">
+                    <?php foreach ( $templates as $tpl ) : if ( ! empty( $tpl['builtin'] ) ) { continue; } ?>
+                        <option value="<?php echo self::esc_attr_safe( $tpl['id'] ); ?>" <?php selected( $selected, $tpl['id'] ); ?>><?php echo esc_html( $tpl['name'] ); ?></option>
+                    <?php endforeach; ?>
+                </optgroup>
+            <?php endif; ?>
+        </select>
+        <p class="description" id="<?php echo self::esc_attr_safe( $option . '-help' ); ?>">
+            <?php echo esc_html( $help ); ?>
+            <a href="<?php echo esc_url( $manage ); ?>"><?php echo esc_html__( 'Add or edit templates in Writing & QA', 'presshub-ai-editor' ); ?></a>.
+        </p>
+        <?php
+    }
+
     public function render_briefing_podcast_featured_image_source_field() {
         $option   = 'presshub_ai_briefing_podcast_featured_image_source';
         $selected = PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source();
@@ -4182,7 +4354,63 @@ class PressHub_AI_Settings_Render {
         $value  = PressHub_AI_Settings_Storage::get_image_analysis_prompt();
         ?>
         <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="14" class="ph-font-family-monospace ph-font-size-13px ph-line-height-1_5 large-text code"><?php echo esc_textarea( $value ); ?></textarea>
-        <p class="description"><?php echo __( 'Prompt instructions used to analyze article text and compose the visual image description. Available placeholders: {title}, {content}. Leave empty to restore plugin default template.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'The instructions of the built-in Editorial photo (default) template: the AI follows them to write the image prompt from the article. Available placeholders: {title}, {content}. Leave empty to restore plugin default template. Saved with Save settings.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Featured Image Studio prompt templates: a structured store with its own
+     * editor (settings design rule 2.7). Changes save at once through the
+     * template endpoints, not with the section's Save. The fields here carry
+     * no name, so the section form never posts them.
+     */
+    public function render_image_prompt_templates_manager() {
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $payload = PressHub_AI_Image_Prompt_Templates::client_payload();
+        ?>
+        <div id="presshub-image-templates-manager" class="presshub-image-templates-manager" role="group" aria-labelledby="presshub-image-templates-heading" data-templates="<?php echo self::esc_attr_safe( wp_json_encode( $payload ) ); ?>">
+            <p class="description"><?php echo esc_html__( 'The templates editors pick in the Featured Image Studio of the post editor, and that Daily Briefing uses for its automatic images. A template is the instructions the AI follows when it writes the image prompt from the article. Changes here are saved at once, without Save settings.', 'presshub-ai-editor' ); ?></p>
+            <table class="widefat striped presshub-image-templates-table">
+                <caption class="screen-reader-text"><?php echo esc_html__( 'Featured Image Studio prompt templates', 'presshub-ai-editor' ); ?></caption>
+                <thead>
+                    <tr>
+                        <th scope="col"><?php echo esc_html__( 'Template', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Kind', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Actions', 'presshub-ai-editor' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody id="presshub-image-templates-rows">
+                    <?php foreach ( $payload as $tpl ) : ?>
+                        <tr data-template-id="<?php echo self::esc_attr_safe( $tpl['id'] ); ?>">
+                            <th scope="row" class="presshub-image-templates-name"><strong><?php echo esc_html( $tpl['name'] ); ?></strong></th>
+                            <td class="presshub-image-templates-kind"><?php echo esc_html( $tpl['builtin'] ? __( 'Built-in', 'presshub-ai-editor' ) : __( 'Saved', 'presshub-ai-editor' ) ); ?></td>
+                            <td class="presshub-image-templates-actions"></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <p class="presshub-image-templates-add-row">
+                <button type="button" class="button" id="presshub-image-templates-add"><?php echo esc_html__( 'Add template', 'presshub-ai-editor' ); ?></button>
+            </p>
+            <div id="presshub-image-templates-editor" class="presshub-image-templates-editor" role="group" aria-labelledby="presshub-image-templates-editor-title" hidden>
+                <h4 id="presshub-image-templates-editor-title" class="presshub-image-templates-editor-title" tabindex="-1"></h4>
+                <p class="presshub-image-templates-field">
+                    <label for="presshub-image-templates-name"><?php echo esc_html__( 'Name', 'presshub-ai-editor' ); ?></label>
+                    <input type="text" id="presshub-image-templates-name" class="regular-text presshub-no-dirty" maxlength="<?php echo self::esc_attr_safe( (string) PressHub_AI_Image_Prompt_Templates::MAX_NAME_LEN ); ?>" autocomplete="off" />
+                </p>
+                <p class="presshub-image-templates-field">
+                    <label for="presshub-image-templates-text"><?php echo esc_html__( 'Instructions', 'presshub-ai-editor' ); ?></label>
+                    <textarea id="presshub-image-templates-text" class="large-text code presshub-no-dirty" rows="12" maxlength="<?php echo self::esc_attr_safe( (string) PressHub_AI_Image_Prompt_Templates::MAX_TEMPLATE_LEN ); ?>" aria-describedby="presshub-image-templates-text-help"></textarea>
+                    <span id="presshub-image-templates-text-help" class="description"><?php echo __( '<code>{title}</code> and <code>{content}</code> are replaced with the article. Without <code>{content}</code> the article is added at the end.', 'presshub-ai-editor' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- translatable string with inline code tags only. ?></span>
+                </p>
+                <p class="presshub-image-templates-editor-actions">
+                    <button type="button" class="button button-primary" id="presshub-image-templates-save"><?php echo esc_html__( 'Save template', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button" id="presshub-image-templates-copy" hidden><?php echo esc_html__( 'Copy into a new template', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button-link" id="presshub-image-templates-cancel"><?php echo esc_html__( 'Close', 'presshub-ai-editor' ); ?></button>
+                </p>
+            </div>
+            <p id="presshub-image-templates-status" class="presshub-image-templates-status" role="status" aria-live="polite"></p>
+        </div>
         <?php
     }
 

@@ -28,6 +28,21 @@ export interface YouTubeUploadMeta {
   playlist_id?: string;
   width?: number;
   height?: number;
+  /**
+   * Enhanced episode (WordPress PressHub_Social_YouTube::episode_video()): the episode's
+   * caption timeline and its scenes with the shorts' story images. Not sent to YouTube.
+   */
+  episode_video?: {
+    duration?: number;
+    estimated?: boolean;
+    segments?: { speaker: number; text: string; start: number; end: number }[];
+    scenes?: { start: number; end: number; title?: string; images?: string[] }[];
+    images?: string[];
+    /** Title shown in the video, when it differs from the post's (a translated episode). */
+    title?: string;
+    /** Closing line of the video in the episode's language. */
+    end_card_line?: string;
+  };
 }
 
 export interface YouTubeUploadResult {
@@ -37,7 +52,7 @@ export interface YouTubeUploadResult {
    * daily upload quota is used up) or `auth` (the sign-in was refused). WordPress then
    * holds the job and pauses YouTube instead of failing it.
    */
-  reason?: 'quota' | 'auth';
+  reason?: 'quota' | 'auth' | 'refused';
   videoId?: string;
   url?: string;
   playlistItemId?: string;
@@ -67,10 +82,29 @@ export interface YouTubeUploadOptions {
    * can remember it even if the worker stops before the upload call returns.
    */
   onUploaded?: (videoId: string, url: string) => void;
+  /** First wait before reading back the status of the finished upload (ms, default 5000; 0 for tests). */
+  statusCheckDelayMs?: number;
+}
+
+/**
+ * Why YouTube refused a finished upload ("rejected: length", "failed: codec"), or '' when
+ * it accepted it so far (uploaded or processed). YouTube can reject a video after the
+ * upload itself succeeded, for example one over 15 minutes from an unverified channel.
+ */
+export function uploadRefusal(status: any): string {
+  const state = String(status?.uploadStatus || '');
+  if (state === 'rejected') return `rejected: ${status?.rejectionReason || 'no reason given'}`;
+  if (state === 'failed') return `failed: ${status?.failureReason || 'no reason given'}`;
+  return '';
 }
 
 const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos';
 const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
+const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
+/** First wait before reading back the status of a finished upload (ms). */
+const STATUS_CHECK_DELAY_MS = 5000;
+/** Waits between status reads, as multiples of the first wait. */
+const STATUS_CHECK_STEPS = [1, 2, 4, 6];
 const CHUNK_UNIT = 256 * 1024;
 /** 8 MiB: large enough to be quick, small enough that a failed chunk costs little. */
 export const DEFAULT_CHUNK_SIZE = 32 * CHUNK_UNIT;
@@ -387,6 +421,58 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<Yo
   }
   const url = meta.kind === 'short' ? `https://www.youtube.com/shorts/${videoId}` : `https://www.youtube.com/watch?v=${videoId}`;
   WorkerLogger.info('YouTube', `Uploaded ${meta.kind} ${url} in ${Math.round((Date.now() - startedAt) / 1000)}s.`);
+
+  // A finished upload can still be refused (too long, a bad file): read its status back
+  // once, so a refused video is reported as failed, not published. A status that cannot
+  // be read is a warning, not a failure.
+  let refusal = uploadRefusal(video?.status);
+  if (!refusal) {
+    // A long upload can outlast the first token: ask WordPress again (it returns the
+    // cached one while it has time left) and keep the old one if that fails.
+    try {
+      token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn, requestTimeout);
+    } catch (err: any) {
+      WorkerLogger.warn('YouTube', `Could not refresh the access token before the status check: ${err.message}`);
+    }
+    // YouTube checks a finished upload on its side; while the status is still "uploaded"
+    // it is read again, with growing waits (5, 10, 20 and 30 s by default, about a minute
+    // in all). "processed" or a refusal ends it early.
+    const base = Math.max(0, options.statusCheckDelayMs ?? STATUS_CHECK_DELAY_MS);
+    for (const factor of STATUS_CHECK_STEPS) {
+      if (base > 0) await sleep(base * factor);
+      let state = '';
+      try {
+        const res = await fetchFn(`${VIDEOS_URL}?part=status&id=${encodeURIComponent(videoId)}`, withTimeout({
+          headers: { Authorization: `Bearer ${token}` }
+        }, requestTimeout));
+        const body = await readJson(res);
+        if (res.ok) {
+          const status = body?.items?.[0]?.status;
+          refusal = uploadRefusal(status);
+          state = String(status?.uploadStatus || '');
+        } else {
+          WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${apiError(res.status, body)}`);
+          if (res.status === 401) {
+            // The token was dropped early: the next read uses a fresh one.
+            try {
+              token = await fetchYouTubeToken(options.wpUrl, options.workerSecret, fetchFn, requestTimeout, true);
+            } catch (err: any) {
+              WorkerLogger.warn('YouTube', `Could not get a fresh access token for the status check: ${err.message}`);
+            }
+          }
+        }
+      } catch (err: any) {
+        WorkerLogger.warn('YouTube', `Could not read back the status of ${videoId}: ${err.message}`);
+      }
+      // A read that failed is tried again at the next step, like a status still "uploaded".
+      if (refusal || (state !== '' && state !== 'uploaded')) break;
+    }
+  }
+  if (refusal) {
+    WorkerLogger.error('YouTube', `YouTube refused the uploaded ${meta.kind} ${videoId} (${refusal}).`);
+    // Not retried: uploading the same video again would be refused again.
+    return { success: false, reason: 'refused', videoId, error: `YouTube refused the uploaded video ${videoId} (${refusal}). Nothing was published; the refused video stays in YouTube Studio and can be deleted there.` };
+  }
   const result: YouTubeUploadResult = { success: true, videoId, url };
   if (options.onUploaded) {
     try {
