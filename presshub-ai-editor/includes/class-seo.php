@@ -766,6 +766,10 @@ class PressHub_AI_SEO {
 
     private static function excerpt( string $text, int $max ): string {
         $text = trim( $text );
+        if ( mb_strlen( $text ) > $max && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            // Every excerpt here goes into an AI prompt: record the cut.
+            return PressHub_AI_Knowledge_Cuts::clip_material( $text, $max, __( 'Article text', 'presshub-ai-editor' ), '...' );
+        }
         return mb_strlen( $text ) > $max ? mb_substr( $text, 0, $max ) . '...' : $text;
     }
 

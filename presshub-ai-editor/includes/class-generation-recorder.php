@@ -341,6 +341,9 @@ class PressHub_AI_Generation_Recorder {
         if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
             PressHub_AI_Policy_Fiches::clear_last_applied();
         }
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::clear_last_material();
+        }
         if ( class_exists( 'PressHub_AI_Token_Logger' ) && method_exists( 'PressHub_AI_Token_Logger', 'reset_last_llm_request' ) ) {
             PressHub_AI_Token_Logger::reset_last_llm_request();
         }
@@ -405,6 +408,15 @@ class PressHub_AI_Generation_Recorder {
                 }
             }
             PressHub_AI_Policy_Fiches::clear_last_applied();
+        }
+        // Material the caller cut to fit its limits (article body, script,
+        // fetched pages, URL count): design principle, never silent.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            $material = PressHub_AI_Knowledge_Cuts::last_material();
+            if ( ! empty( $material ) ) {
+                $config['material_left_out'] = PressHub_AI_Knowledge_Cuts::sanitize( $material );
+            }
+            PressHub_AI_Knowledge_Cuts::clear_last_material();
         }
         return [ $sys_prompt, $config ];
     }

@@ -446,6 +446,10 @@ class PressHub_AI_Ajax_Handlers {
 
         $article_content = isset( $_POST['article_content'] ) ? (string) wp_unslash( $_POST['article_content'] ) : '';
         if ( strlen( $article_content ) > 200000 ) {
+            if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+                // Bytes, not characters: the cap protects the request size.
+                PressHub_AI_Knowledge_Cuts::note_material( __( 'Article text (bytes)', 'presshub-ai-editor' ), 'clipped', 200000, strlen( $article_content ), 200000 );
+            }
             $article_content = substr( $article_content, 0, 200000 );
         }
         $article_title = isset( $_POST['article_title'] ) ? sanitize_text_field( wp_unslash( $_POST['article_title'] ) ) : '';

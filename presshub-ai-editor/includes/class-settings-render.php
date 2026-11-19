@@ -2957,6 +2957,9 @@ class PressHub_AI_Settings_Render {
                                     </label>
                                 <?php endforeach; ?>
                                 <p class="description"><?php echo self::esc_html_safe( sprintf( __( 'Most characters of %s added to each kind of AI call. 0 leaves that task without them.', 'presshub-ai-editor' ), strtolower( $budget_names[ $option ] ?? $option ) ) ); ?></p>
+                                <?php if ( 'presshub_ai_policy_fiches_budgets' === $option && class_exists( 'PressHub_AI_Policy_Fiches' ) ) : ?>
+                                    <?php echo self::policy_fit_html( PressHub_AI_Policy_Fiches::fit_report(), $task_names ); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in policy_fit_html(). ?>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -2965,6 +2968,39 @@ class PressHub_AI_Settings_Render {
         </details>
         <p class="description"><?php echo esc_html__( 'Developers can still adjust each of these with its code filter, which runs on top of the value saved here.', 'presshub-ai-editor' ); ?></p>
         <?php
+    }
+
+    /**
+     * "Do the published fiches fit?" under the policy fiche budgets: per task,
+     * how many published fiches fit on their own with the saved budget, and
+     * which do not (they would be left out of that task's calls).
+     */
+    public static function policy_fit_html( array $report, array $task_names ): string {
+        $total = 0;
+        foreach ( $report as $row ) {
+            $total = max( $total, (int) $row['total'] );
+        }
+        if ( 0 === $total ) {
+            return '<p class="description">' . esc_html__( 'No published policy fiches yet, so nothing to check against these limits.', 'presshub-ai-editor' ) . '</p>';
+        }
+        $items = '';
+        foreach ( $report as $task => $row ) {
+            $label = (string) ( $task_names[ $task ] ?? $task );
+            if ( (int) $row['budget'] <= 0 ) {
+                /* translators: %s: task name */
+                $line = sprintf( __( '%s: off (limit 0)', 'presshub-ai-editor' ), $label );
+            } elseif ( (int) $row['fit'] === (int) $row['total'] ) {
+                /* translators: 1: task name, 2: number of published fiches */
+                $line = sprintf( __( '%1$s: all %2$d published fiches fit', 'presshub-ai-editor' ), $label, (int) $row['total'] );
+            } else {
+                /* translators: 1: task name, 2: fiches that fit, 3: published fiches, 4: titles that do not fit */
+                $line = sprintf( __( '%1$s: %2$d of %3$d fit; too long: %4$s', 'presshub-ai-editor' ), $label, (int) $row['fit'], (int) $row['total'], implode( ', ', (array) $row['too_long'] ) );
+            }
+            $items .= '<li>' . esc_html( $line ) . '</li>';
+        }
+        return '<p class="description"><strong>' . esc_html__( 'Do the published fiches fit?', 'presshub-ai-editor' ) . '</strong> '
+            . esc_html__( 'Each fiche alone, with the limits saved above. Several fiches in one call share the limit; at most 3 are sent.', 'presshub-ai-editor' ) . '</p>'
+            . '<ul class="presshub-fiche-fit">' . $items . '</ul>';
     }
 
     public function render_briefing_podcast_preset_field() {

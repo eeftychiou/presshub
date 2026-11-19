@@ -29,7 +29,17 @@ class PressHub_AI_Knowledge_Cuts {
         'editorial_agenda' => 'editorial_agenda_left_out',
         'stakeholders'     => 'stakeholders_left_out',
         'policy_fiches'    => 'policy_fiches_left_out',
+        'material'         => 'material_left_out',
     ];
+
+    /** Material cuts noted before the next AI call (see clip_material()). */
+    private static array $pending = [];
+
+    /** Material cuts of the last call_provider(), for the recorder. */
+    private static ?array $last_material = null;
+
+    /** A noted cut older than this is stale (its call never ran) and is dropped. */
+    const PENDING_TTL = 300;
 
     /** One log line for a call whose block lost something. Never throws. */
     public static function log( string $kind, string $action, array $cuts ): void {
@@ -45,6 +55,74 @@ class PressHub_AI_Knowledge_Cuts {
         } catch ( \Throwable $e ) {
             // Logging must never break the AI call.
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Material cuts: text and lists a caller shortens before an AI call
+    // (article body, podcast script, fetched pages, URL count...).
+    // ------------------------------------------------------------------
+
+    /**
+     * Cut $text to $limit characters and note the cut for the next AI call.
+     * Returns the text unchanged when it fits. $suffix is appended to a cut
+     * text, as the caller did before.
+     */
+    public static function clip_material( string $text, int $limit, string $what, string $suffix = '' ): string {
+        $len = self::len( $text );
+        if ( $limit <= 0 || $len <= $limit ) {
+            return $text;
+        }
+        self::note_material( $what, 'clipped', $limit, $len, $limit );
+        return ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, $limit ) : substr( $text, 0, $limit ) ) . $suffix;
+    }
+
+    /**
+     * Note a cut the caller made itself. $reason 'clipped' (text cut to
+     * $kept of $needed characters, limit $limit) or 'max_items' ($needed
+     * items, only $limit sent).
+     */
+    public static function note_material( string $what, string $reason, int $limit, int $needed, int $kept = -1 ): void {
+        if ( count( self::$pending ) >= 50 ) {
+            return;
+        }
+        $row = [ 'item' => $what, 'reason' => $reason, 'limit' => $limit, 'needed' => $needed, 't' => time() ];
+        if ( $kept >= 0 ) {
+            $row['kept'] = $kept;
+        }
+        self::$pending[] = $row;
+    }
+
+    /**
+     * Called by call_provider() before the provider call: the cuts noted for
+     * this call become last_material() (for the generation record) and are
+     * logged once. Stale notes from a call that never ran are dropped.
+     */
+    public static function start_call( string $action ): void {
+        $fresh = array_values( array_filter( self::$pending, static function ( $c ) {
+            return (int) ( $c['t'] ?? 0 ) >= time() - self::PENDING_TTL;
+        } ) );
+        self::$pending       = [];
+        self::$last_material = $fresh ? array_map( static function ( $c ) { unset( $c['t'] ); return $c; }, $fresh ) : null;
+        if ( $fresh ) {
+            self::log( 'material', $action, self::$last_material );
+        }
+    }
+
+    public static function last_material(): ?array {
+        return self::$last_material;
+    }
+
+    public static function clear_last_material(): void {
+        self::$last_material = null;
+    }
+
+    /** Drop everything noted (tests, or a caller that aborts before its call). */
+    public static function clear_pending(): void {
+        self::$pending = [];
+    }
+
+    private static function len( string $s ): int {
+        return function_exists( 'mb_strlen' ) ? mb_strlen( $s ) : strlen( $s );
     }
 
     /** Keep the stored list small and well formed. */
@@ -197,8 +275,10 @@ class PressHub_AI_Knowledge_Cuts {
             $item = '' !== $c['item'] ? $c['item'] : '?';
             switch ( $c['reason'] ) {
                 case 'max_items':
-                    /* translators: 1: item, 2: maximum number of items */
-                    $lines[] = sprintf( __( '%1$s: left out, only %2$d are sent per call', 'presshub-ai-editor' ), $item, $c['limit'] ?? 0 );
+                    /* translators: 1: item, 2: maximum number of items, 3: number of items there were */
+                    $lines[] = isset( $c['needed'] ) && $c['needed'] > ( $c['limit'] ?? 0 )
+                        ? sprintf( __( '%1$s: only %2$d of %3$d sent, the rest left out', 'presshub-ai-editor' ), $item, $c['limit'] ?? 0, $c['needed'] )
+                        : sprintf( __( '%1$s: left out, only %2$d are sent per call', 'presshub-ai-editor' ), $item, $c['limit'] ?? 0 );
                     break;
                 case 'shortened':
                     /* translators: 1: item, 2: parts left out, 3: characters needed in full, 4: budget */

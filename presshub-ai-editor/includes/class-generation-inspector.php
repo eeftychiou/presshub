@@ -663,6 +663,7 @@ class PressHub_AI_Generation_Inspector {
                 'editorial_agenda' => __( 'Editorial agenda', 'presshub-ai-editor' ),
                 'stakeholders'     => __( 'People fiches', 'presshub-ai-editor' ),
                 'policy_fiches'    => __( 'Policy fiches', 'presshub-ai-editor' ),
+                'material'         => __( 'Material', 'presshub-ai-editor' ),
             ];
             foreach ( PressHub_AI_Knowledge_Cuts::CONFIG_KEYS as $kind => $key ) {
                 if ( ! empty( $config[ $key ] ) && is_array( $config[ $key ] ) ) {

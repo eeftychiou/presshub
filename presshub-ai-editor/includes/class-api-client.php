@@ -1236,7 +1236,9 @@ class PressHub_AI_API_Client {
         // Strip HTML and clamp excessively long text to protect token budgets
         $clean_content = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( $content ) : strip_tags( $content );
         if ( mb_strlen( $clean_content ) > 8000 ) {
-            $clean_content = mb_substr( $clean_content, 0, 8000 ) . '...';
+            $clean_content = class_exists( 'PressHub_AI_Knowledge_Cuts' )
+                ? PressHub_AI_Knowledge_Cuts::clip_material( $clean_content, 8000, __( 'Article text', 'presshub-ai-editor' ), '...' )
+                : mb_substr( $clean_content, 0, 8000 ) . '...';
         }
 
         $user_prompt = PressHub_AI_Image_Prompt_Templates::render( $template, $title, $clean_content );
@@ -3125,6 +3127,12 @@ class PressHub_AI_API_Client {
         // in the material; last, so the recorder can rebuild the prompt as sent.
         if ( class_exists( 'PressHub_AI_Policy_Fiches' ) ) {
             $sys_prompt = PressHub_AI_Policy_Fiches::apply( $sys_prompt, $policy_material, $this->get_action() );
+        }
+
+        // Material the caller cut to fit its limits (noted with
+        // PressHub_AI_Knowledge_Cuts::clip_material()) belongs to this call.
+        if ( class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            PressHub_AI_Knowledge_Cuts::start_call( $this->get_action() );
         }
 
         if ( $this->provider === 'anthropic' ) {

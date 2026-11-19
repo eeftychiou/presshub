@@ -178,7 +178,7 @@ class PressHub_Social_TikTok_Shorts {
      * The article's text for its short: the post content without markup, shortcodes or
      * audio players, cut to ARTICLE_TEXT_MAX_CHARS.
      */
-    public static function article_text( int $post_id ): string {
+    public static function article_text( int $post_id, bool $record_cut = false ): string {
         $post = function_exists( 'get_post' ) ? get_post( $post_id ) : null;
         if ( ! $post ) {
             return '';
@@ -195,7 +195,11 @@ class PressHub_Social_TikTok_Shorts {
         // paragraph is no text.
         $content = (string) preg_replace( '/[ \t\p{Zs}\x{200B}\x{FEFF}]+/u', ' ', $content );
         $content = trim( (string) preg_replace( '/\s*\n\s*/u', "\n", $content ) );
-        return mb_substr( $content, 0, self::ARTICLE_TEXT_MAX_CHARS );
+        // $record_cut: the text goes into the AI call, so a cut is recorded
+        // with it (the source check only asks whether there is any text).
+        return $record_cut && class_exists( 'PressHub_AI_Knowledge_Cuts' )
+            ? PressHub_AI_Knowledge_Cuts::clip_material( $content, self::ARTICLE_TEXT_MAX_CHARS, __( 'Article text', 'presshub-ai-editor' ) )
+            : mb_substr( $content, 0, self::ARTICLE_TEXT_MAX_CHARS );
     }
 
     /**
@@ -854,7 +858,7 @@ class PressHub_Social_TikTok_Shorts {
         }
 
         $count     = $article ? 1 : max( 1, $count );
-        $script    = $article ? self::article_text( $post_id ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
+        $script    = $article ? self::article_text( $post_id, true ) : (string) get_post_meta( $post_id, '_presshub_podcast_script', true );
         $max_words = PressHub_Social_Settings_Storage::get_tiktok_shorts_max_words();
         $images    = PressHub_Social_Settings_Storage::get_tiktok_shorts_images();
         // An article's prompt also gets its title, category and excerpt: editing those

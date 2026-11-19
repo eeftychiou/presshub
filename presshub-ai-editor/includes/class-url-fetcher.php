@@ -22,6 +22,9 @@ class PressHub_AI_URL_Fetcher {
     /** Per-URL character budget (roughly 10k tokens). */
     const MAX_CHARS_PER_URL = 40000;
 
+    /** Length of the last extracted text before the MAX_CHARS_PER_URL cut (process_sources() records the cuts). */
+    private static int $last_extract_len = 0;
+
     /** Request timeout in seconds. */
     const REQUEST_TIMEOUT = 15;
 
@@ -461,6 +464,7 @@ class PressHub_AI_URL_Fetcher {
     public static function extract_text( $html ): string {
         $extracted = self::extract_article_semantic( (string) $html );
         $text = (string) ( $extracted['content'] ?? '' );
+        self::$last_extract_len = function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text );
 
         // Truncate (mb-safe when available).
         if ( function_exists( 'mb_substr' ) ) {
@@ -765,7 +769,10 @@ class PressHub_AI_URL_Fetcher {
 
             // Strip heavyweight elements and truncate HTML to avoid prompt bloat
             $stripped_html = preg_replace( '#<(script|style|svg|iframe|noscript)[^>]*>.*?</\1>#is', ' ', $html );
-            $truncated_html = mb_substr( $stripped_html, 0, 25000 );
+            // Recorded with this url_extract call (design principle: cuts are never silent).
+            $truncated_html = class_exists( 'PressHub_AI_Knowledge_Cuts' )
+                ? PressHub_AI_Knowledge_Cuts::clip_material( (string) $stripped_html, 25000, __( 'Page HTML', 'presshub-ai-editor' ) )
+                : mb_substr( $stripped_html, 0, 25000 );
 
             $sys_prompt = 'You are an accurate news article extraction engine. Given raw HTML from a news webpage, extract the main news article headline and full body text in plain text. Exclude navigation menus, footer text, advertisements, cookie notices, and related article lists. Format your response strictly as:\nTITLE: [article headline]\nBODY:\n[full article body text]';
 
@@ -881,14 +888,30 @@ class PressHub_AI_URL_Fetcher {
             $out[] = $notes;
         }
 
+        // Cuts are noted after the loop, so a page's own extraction call
+        // (url_extract) does not carry them; they belong to the caller's call.
+        $cuts = [];
+        if ( count( $urls ) > self::MAX_URLS ) {
+            $cuts[] = [ __( 'Source URLs', 'presshub-ai-editor' ), 'max_items', self::MAX_URLS, count( $urls ), -1 ];
+        }
         foreach ( array_slice( $urls, 0, self::MAX_URLS ) as $url ) {
+            self::$last_extract_len = 0;
             $article = self::fetch_article( $url );
+            if ( '' !== $article && self::$last_extract_len > self::MAX_CHARS_PER_URL ) {
+                /* translators: %s: URL */
+                $cuts[] = [ sprintf( __( 'Fetched page %s', 'presshub-ai-editor' ), $url ), 'clipped', self::MAX_CHARS_PER_URL, self::$last_extract_len, self::MAX_CHARS_PER_URL ];
+            }
             if ( '' !== $article ) {
                 $out[] = 'Source article (fetched from ' . $url . '):' . "\n" . $article;
             } else {
                 $out[] = 'NOTE: could not fetch ' . $url
                     . ' (blocked, paywalled or JavaScript-rendered). The URL is listed for reference — '
                     . 'paste the article text manually if the rebuttal needs its content: ' . $url;
+            }
+        }
+        if ( $cuts && class_exists( 'PressHub_AI_Knowledge_Cuts' ) ) {
+            foreach ( $cuts as $c ) {
+                PressHub_AI_Knowledge_Cuts::note_material( $c[0], $c[1], $c[2], $c[3], $c[4] );
             }
         }
 

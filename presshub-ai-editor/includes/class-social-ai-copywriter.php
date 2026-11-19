@@ -616,7 +616,10 @@ class PressHub_Social_AI_Copywriter {
         // Clean plain text content clamped to 3000 chars for context.
         $content = wp_strip_all_tags( function_exists( 'strip_shortcodes' ) ? strip_shortcodes( $raw_content ) : $raw_content );
         $content = preg_replace( '/\s+/', ' ', $content );
-        $content = mb_substr( trim( $content ), 0, 3000, 'UTF-8' );
+        $content = trim( $content );
+        $content = class_exists( 'PressHub_AI_Knowledge_Cuts' )
+            ? PressHub_AI_Knowledge_Cuts::clip_material( $content, 3000, __( 'Post text', 'presshub-ai-editor' ) )
+            : mb_substr( $content, 0, 3000, 'UTF-8' );
 
         // Podcast script / dialogue ingestion:
         // When content is short (< 300 chars), or post is marked as podcast/briefing,
@@ -710,7 +713,9 @@ class PressHub_Social_AI_Copywriter {
                 $cleaned = self::clean_podcast_script( $podcast_script );
                 if ( '' !== $cleaned ) {
                     if ( mb_strlen( $cleaned, 'UTF-8' ) > mb_strlen( $content, 'UTF-8' ) || $is_podcast || '' === trim( $content ) ) {
-                        $content = mb_substr( $cleaned, 0, 4000, 'UTF-8' );
+                        $content = class_exists( 'PressHub_AI_Knowledge_Cuts' )
+                            ? PressHub_AI_Knowledge_Cuts::clip_material( $cleaned, 4000, __( 'Podcast script', 'presshub-ai-editor' ) )
+                            : mb_substr( $cleaned, 0, 4000, 'UTF-8' );
                     }
                     if ( '' === trim( $excerpt ) || mb_strlen( $excerpt, 'UTF-8' ) < 40 || false !== strpos( $excerpt, 'TOPIC' ) || false !== strpos( $excerpt, 'SPEAKER_' ) ) {
                         $excerpt = function_exists( 'wp_trim_words' ) ? wp_trim_words( $cleaned, 50, '...' ) : mb_substr( $cleaned, 0, 250, 'UTF-8' );

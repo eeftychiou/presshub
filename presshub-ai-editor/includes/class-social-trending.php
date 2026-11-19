@@ -1030,6 +1030,14 @@ class PressHub_AI_Social_Trending {
             return $b['score'] <=> $a['score'];
         } );
         $picked = array_slice( $cands, 0, PressHub_AI_Settings_Storage::get_social_trending_briefing_count(), true );
+        if ( count( $cands ) > count( $picked ) ) {
+            // Design principle: a limit that leaves content out says so.
+            self::log( 'info', 'Social trending: the briefing count left out lower-scored posts.', [
+                'picked'    => count( $picked ),
+                'left_out'  => count( $cands ) - count( $picked ),
+                'limit'     => PressHub_AI_Settings_Storage::get_social_trending_briefing_count(),
+            ] );
+        }
         foreach ( array_keys( $picked ) as $key ) {
             $pool[ $key ]['used_in'] = $date . '|' . $edition;
         }
@@ -1049,12 +1057,14 @@ class PressHub_AI_Social_Trending {
         $lines   = [];
         $lines[] = 'Δημοφιλείς αναρτήσεις για την Κύπρο στα μέσα κοινωνικής δικτύωσης, με βάση τις αντιδράσεις των χρηστών. Δείχνουν τι συζητά το κοινό: είναι απόψεις και ισχυρισμοί λογαριασμών, όχι επιβεβαιωμένες ειδήσεις. Αν χρησιμοποιηθούν, να παρουσιαστούν ως σύντομη αναφορά στη δημόσια συζήτηση, με απόδοση στον λογαριασμό.';
         $keys    = [];
+        $cut     = [];
         foreach ( $items as $i => $it ) {
             $keys[] = (string) $it['key'];
             $label  = self::PLATFORM_LABELS[ $it['platform'] ] ?? $it['platform'];
             $name   = '' !== (string) $it['author_name'] ? (string) $it['author_name'] : (string) $it['handle'];
             $text   = trim( (string) preg_replace( '/\s+/u', ' ', (string) $it['text'] ) );
             if ( ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text ) ) > self::BRIEFING_TEXT_CHARS ) {
+                $cut[] = '@' . $it['handle'] . ' (' . ( function_exists( 'mb_strlen' ) ? mb_strlen( $text ) : strlen( $text ) ) . ')';
                 $text = ( function_exists( 'mb_substr' ) ? mb_substr( $text, 0, self::BRIEFING_TEXT_CHARS ) : substr( $text, 0, self::BRIEFING_TEXT_CHARS ) ) . '…';
             }
             $lines[] = sprintf(
@@ -1075,6 +1085,9 @@ class PressHub_AI_Social_Trending {
         $url     = $roundup_id > 0 && function_exists( 'get_permalink' ) ? (string) get_permalink( $roundup_id ) : '';
         if ( '' === $url ) {
             $url = (string) ( $items[0]['url'] ?? '' );
+        }
+        if ( $cut ) {
+            self::log( 'info', sprintf( 'Social trending: %d post text(s) cut to %d characters for the briefing.', count( $cut ), self::BRIEFING_TEXT_CHARS ), [ 'posts' => $cut ] );
         }
         return [
             'id'             => 'st_' . substr( md5( implode( ',', $keys ) ), 0, 12 ),
