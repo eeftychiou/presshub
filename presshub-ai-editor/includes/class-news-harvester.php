@@ -222,6 +222,7 @@ class PressHub_AI_News_Harvester {
         $abs = ( 0 === strpos( $url, 'http://' ) || 0 === strpos( $url, 'https://' ) )
             ? $url
             : $this->resolve_relative_url( $url, $base_url );
+        $abs = PressHub_AI_URL_Fetcher::encode_iri( (string) $abs );
 
         if ( empty( $abs ) || ! filter_var( $abs, FILTER_VALIDATE_URL ) ) {
             return false;
