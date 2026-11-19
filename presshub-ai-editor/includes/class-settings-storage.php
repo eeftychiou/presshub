@@ -755,7 +755,7 @@ class PressHub_AI_Settings_Storage {
 
         // #233 step 5: switches that were filter-only. Each default equals the
         // value the code used before, and the filter still runs on top.
-        foreach ( [ 'presshub_ai_policy_fiches_enabled', 'presshub_ai_stakeholders_enabled', 'presshub_ai_claim_check_enabled', 'presshub_ai_pool_cleanup_enabled', 'presshub_ai_podcast_show_notes_enabled' ] as $switch ) {
+        foreach ( [ 'presshub_ai_policy_fiches_enabled', 'presshub_ai_stakeholders_enabled', 'presshub_ai_claim_check_enabled', 'presshub_ai_pool_cleanup_enabled', 'presshub_ai_podcast_show_notes_enabled', 'presshub_ai_podcast_lead_enabled' ] as $switch ) {
             PressHub_Settings_Registry::register( 'presshub_ai_options', $switch, [
                 'sanitize_callback' => [ __CLASS__, 'sanitize_checkbox' ],
                 'type'              => 'integer',
@@ -4563,6 +4563,10 @@ class PressHub_AI_Settings_Storage {
 
     public static function get_podcast_show_notes_enabled(): bool {
         return self::get_switch( 'presshub_ai_podcast_show_notes_enabled' );
+    }
+
+    public static function get_podcast_lead_enabled(): bool {
+        return self::get_switch( 'presshub_ai_podcast_lead_enabled' );
     }
 
     public static function sanitize_pool_max_age_hours( $value ): int {
