@@ -1369,7 +1369,6 @@ class PressHub_Social_Settings_Storage {
         return in_array( $value, [ true, 1, '1', 'on', 'yes', 'true' ], true );
     }
 
-    /** Whether each Daily Briefing podcast also goes to YouTube as a full episode (default off). */
     /** Whether episodes get the shorts' story images and captions (default on). */
     public static function get_youtube_episode_enhanced(): bool {
         return in_array( get_option( 'presshub_social_youtube_episode_enhanced', true ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
@@ -1388,9 +1387,15 @@ class PressHub_Social_Settings_Storage {
     }
 
     public static function sanitize_youtube_episode_image_wait_minutes( $value ): int {
+        if ( null === $value || '' === $value ) {
+            // Not in this save (another section's form): keep the stored value.
+            $value = get_option( 'presshub_social_youtube_episode_image_wait_minutes', 90 );
+            $value = ( null === $value || '' === $value ) ? 90 : $value;
+        }
         return max( 0, min( 240, (int) $value ) );
     }
 
+    /** Whether each Daily Briefing podcast also goes to YouTube as a full episode (default off). */
     public static function get_youtube_podcast_enabled(): bool {
         return in_array( get_option( 'presshub_social_youtube_podcast_enabled', false ), [ true, 1, '1', 'on', 'yes', 'true' ], true );
     }

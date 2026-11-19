@@ -350,7 +350,8 @@ describe('YouTube uploader', () => {
     };
     const res = await uploadToYouTube({ statusCheckDelayMs: 0, wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: shortMeta, fetchFn, sleepFn: async () => {} });
     expect(res).toMatchObject({ success: true, videoId: 'V401' });
-    expect(tokenBodies).toEqual(['{}', '{"refresh":true}']);
+    // The fresh token, then one more ask before the status check (WordPress returns the cached one).
+    expect(tokenBodies).toEqual(['{}', '{"refresh":true}', '{}']);
     expect(inits).toBe(2);
 
     // Still refused with the new token: now it is a sign-in problem.
@@ -381,7 +382,7 @@ describe('YouTube uploader', () => {
     };
     const onUploaded = (id: string) => noted.push(id);
     const rejectedNow = await uploadToYouTube({ statusCheckDelayMs: 0, wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: episodeMeta, fetchFn: mk({ uploadStatus: 'rejected', rejectionReason: 'length' }, {}), onUploaded });
-    expect(rejectedNow).toMatchObject({ success: false, videoId: 'VLONG' });
+    expect(rejectedNow).toMatchObject({ success: false, reason: 'refused', videoId: 'VLONG' });
     expect(rejectedNow.error).toContain('rejected: length');
     const rejectedLater = await uploadToYouTube({ statusCheckDelayMs: 0, wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: episodeMeta, fetchFn: mk({ uploadStatus: 'uploaded' }, { uploadStatus: 'rejected', rejectionReason: 'length' }), onUploaded });
     expect(rejectedLater.success).toBe(false);
@@ -390,6 +391,22 @@ describe('YouTube uploader', () => {
     const ok = await uploadToYouTube({ statusCheckDelayMs: 0, wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: episodeMeta, fetchFn: mk({ uploadStatus: 'uploaded' }, { uploadStatus: 'uploaded' }), onUploaded });
     expect(ok).toMatchObject({ success: true, videoId: 'VLONG', playlistItemId: 'PLI' });
     expect(noted).toEqual(['VLONG']);
+
+    // While YouTube still says "uploaded" the status is read again with growing waits,
+    // and a refusal on a later read still stops the publish.
+    let reads = 0;
+    const waits: number[] = [];
+    const polled: any = async (url: string) => {
+      if (url.includes('/youtube/v3/videos?part=status')) {
+        reads++;
+        return response(200, { items: [{ status: reads < 3 ? { uploadStatus: 'uploaded' } : { uploadStatus: 'rejected', rejectionReason: 'length' } }] });
+      }
+      return mk({ uploadStatus: 'uploaded' }, {})(url);
+    };
+    const late = await uploadToYouTube({ statusCheckDelayMs: 10, wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: episodeMeta, fetchFn: polled, sleepFn: async (ms: number) => { waits.push(ms); } });
+    expect(late).toMatchObject({ success: false, reason: 'refused' });
+    expect(reads).toBe(3);
+    expect(waits.slice(-3)).toEqual([10, 20, 40]);
   });
 
   test('rateLimitExceeded is a short wait and another try, not the daily quota', async () => {

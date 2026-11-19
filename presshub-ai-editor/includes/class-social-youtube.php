@@ -751,9 +751,17 @@ class PressHub_Social_YouTube {
         if ( $is_ep ) {
             $video = self::episode_video( $post_id );
             if ( null === $video && PressHub_Social_Settings_Storage::get_youtube_episode_enhanced() ) {
-                PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) is rendered the plain way, on the featured image without captions: the podcast has no caption timeline (made before 2.54.0) and its shorts have no story images.', (int) ( $job['id'] ?? 0 ), $post_id ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
+                $tl_error = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
+                $why      = '' !== $tl_error
+                    ? sprintf( 'its caption timeline could not be built when the podcast was made (%s)', $tl_error )
+                    : 'the podcast has no caption timeline (made before 2.54.0)';
+                PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) is rendered the plain way, on the featured image without captions: %s and its shorts have no story images.', (int) ( $job['id'] ?? 0 ), $post_id, $why ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
             } elseif ( null !== $video ) {
                 $upload['episode_video'] = $video;
+                $tl_error                = ( ! isset( $video['segments'] ) && class_exists( 'PressHub_AI_Podcast_Timeline' ) ) ? PressHub_AI_Podcast_Timeline::error( $post_id ) : '';
+                if ( '' !== $tl_error ) {
+                    PressHub_Social_Logger::warning( sprintf( 'YouTube episode job #%d (post #%d) has story images but no captions: its caption timeline could not be built when the podcast was made (%s).', (int) ( $job['id'] ?? 0 ), $post_id, $tl_error ), [ 'job_id' => (int) ( $job['id'] ?? 0 ), 'post_id' => $post_id ] );
+                }
                 // Chapters only from a measured timeline: an estimated one (MP3) may be off.
                 $chapters                = class_exists( 'PressHub_AI_Podcast_Timeline' ) && ! empty( $video['scenes'] ) && empty( $video['estimated'] )
                     ? PressHub_AI_Podcast_Timeline::chapters( (array) PressHub_AI_Podcast_Timeline::get( $post_id ) )
@@ -779,18 +787,16 @@ class PressHub_Social_YouTube {
      * Why a due episode must wait, or null when it may be uploaded now:
      * [ 'delay' => seconds until it is due again, 'note' => why, shown on the Queue ].
      * The claim moves a held episode's scheduled_at forward by the delay (no attempt is
-     * used), so held episodes never crowd the front of the queue.
-     * - Story images (episode_ready()): while a short of the post is still being prepared,
-     *   for at most Wait for Story Images after the episode was queued.
+     * used), so held episodes never crowd the front of the queue. Length is checked first,
+     * so the image wait (and its timeout warning) only runs for an episode that may go up.
      * - Length (episode_length_ok()): while the episode is longer than 15 minutes and the
      *   channel may not upload long videos (status.longUploadsStatus is not "allowed").
+     * - Story images (episode_ready()): while a short of the post is still being prepared,
+     *   for at most Wait for Story Images after the episode was queued.
      */
     public static function episode_hold( array $job, ?int $now = null ): ?array {
         if ( ! self::is_episode_job( $job ) ) {
             return null;
-        }
-        if ( ! self::episode_ready( $job, $now ) ) {
-            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting for the story images of the podcast\'s shorts, for at most %d minutes after the episode was queued.', PressHub_Social_Settings_Storage::get_youtube_episode_image_wait_minutes() ) ];
         }
         if ( ! self::episode_length_ok( $job ) ) {
             $status = self::long_uploads_status();
@@ -802,6 +808,9 @@ class PressHub_Social_YouTube {
                     '' !== $status ? $status : 'could not be read'
                 ),
             ];
+        }
+        if ( ! self::episode_ready( $job, $now ) ) {
+            return [ 'delay' => self::HOLD_RECHECK_IMAGES, 'note' => sprintf( 'Waiting for the story images of the podcast\'s shorts, for at most %d minutes after the episode was queued.', PressHub_Social_Settings_Storage::get_youtube_episode_image_wait_minutes() ) ];
         }
         return null;
     }
@@ -859,13 +868,17 @@ class PressHub_Social_YouTube {
         return 'allowed' === self::long_uploads_status();
     }
 
-    /** Length of a podcast post's audio in seconds: the timeline's, else the stored audio length. */
+    /**
+     * Length of a podcast post's audio in seconds: a measured timeline's, else the longer of
+     * an estimated timeline and the stored audio length (an MP3 estimate can be short).
+     */
     public static function episode_seconds( int $post_id ): float {
         $timeline = class_exists( 'PressHub_AI_Podcast_Timeline' ) ? PressHub_AI_Podcast_Timeline::get( $post_id ) : null;
-        if ( null !== $timeline ) {
+        if ( null !== $timeline && empty( $timeline['estimated'] ) ) {
             return (float) $timeline['duration'];
         }
-        return $post_id > 0 ? (float) get_post_meta( $post_id, '_presshub_audio_duration_sec', true ) : 0.0;
+        $stored = $post_id > 0 ? (float) get_post_meta( $post_id, '_presshub_audio_duration_sec', true ) : 0.0;
+        return max( $stored, null !== $timeline ? (float) $timeline['duration'] : 0.0 );
     }
 
     /**
@@ -1147,6 +1160,15 @@ class PressHub_Social_YouTube {
         }
         $meta = self::decode_metadata( $job['metadata'] ?? null );
         return trim( (string) ( $meta['youtube_playlist_error'] ?? '' ) );
+    }
+
+    /** What an enhanced episode was published without (story images, captions), or ''. */
+    public static function episode_note( array $job ): string {
+        if ( 'youtube' !== ( $job['platform'] ?? '' ) ) {
+            return '';
+        }
+        $meta = self::decode_metadata( $job['metadata'] ?? null );
+        return trim( (string) ( $meta['youtube_episode_note'] ?? '' ) );
     }
 
     /**

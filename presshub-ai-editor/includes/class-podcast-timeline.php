@@ -34,6 +34,17 @@ class PressHub_AI_Podcast_Timeline {
 
     const META_KEY = '_presshub_podcast_timeline';
 
+    /** Why the timeline of a podcast made by 2.54.0 or later could not be built or saved. */
+    const ERROR_META_KEY = '_presshub_podcast_timeline_error';
+
+    /** Why a podcast post has no timeline: the saved failure, or '' (none, or made before 2.54.0). */
+    public static function error( int $post_id ): string {
+        if ( $post_id <= 0 || ! function_exists( 'get_post_meta' ) ) {
+            return '';
+        }
+        return trim( (string) get_post_meta( $post_id, self::ERROR_META_KEY, true ) );
+    }
+
     /** Padding on each side of the transition sound, as in stitch_wav_chunks(). */
     const SFX_PAD_SECONDS = 0.15;
 

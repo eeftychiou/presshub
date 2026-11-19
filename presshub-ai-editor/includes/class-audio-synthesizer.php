@@ -2148,10 +2148,18 @@ class PressHub_AI_Audio_Synthesizer {
                 $timeline = PressHub_AI_Podcast_Timeline::build( $timeline_topics, $timeline_opts );
                 if ( PressHub_AI_Podcast_Timeline::is_valid( $timeline ) ) {
                     update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY, $timeline );
-                } elseif ( function_exists( 'delete_post_meta' ) ) {
-                    delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY );
+                    if ( function_exists( 'delete_post_meta' ) ) {
+                        delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY );
+                    }
+                } else {
+                    if ( function_exists( 'delete_post_meta' ) ) {
+                        delete_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::META_KEY );
+                    }
+                    update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, 'no spoken turn had audio and text to time' );
                 }
             } catch ( \Throwable $e ) {
+                // Marked, so the episode is not taken for one made before 2.54.0.
+                update_post_meta( (int) $post_id, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, substr( $e->getMessage(), 0, 300 ) );
                 if ( class_exists( 'PressHub_AI_Logger' ) ) {
                     PressHub_AI_Logger::warning( 'Podcast timeline could not be saved: ' . $e->getMessage() );
                 }

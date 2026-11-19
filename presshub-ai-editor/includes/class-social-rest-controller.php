@@ -354,6 +354,12 @@ class PressHub_Social_REST_Controller {
             // Re-read the row: ready_to_post() may have just released it to the featured image.
             $job = PressHub_Social_Queue::get_job( $job_id ) ?? $job;
 
+            // A held episode's "Waiting…" note no longer applies once it is handed out.
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && str_starts_with( (string) ( $job['last_error'] ?? '' ), 'Waiting' ) ) {
+                PressHub_Social_Queue::update_job( $job_id, [ 'last_error' => '' ] );
+                $job['last_error'] = '';
+            }
+
             // Every AI post image, for platforms that carry several (X, Facebook).
             if ( class_exists( 'PressHub_Social_Post_Images' ) ) {
                 $media_urls = PressHub_Social_Post_Images::media_urls( $job );
@@ -572,6 +578,11 @@ class PressHub_Social_REST_Controller {
             $status = 'deferred';
         } else {
             $status = 'failed';
+            if ( 'youtube' === ( $job['platform'] ?? '' ) && 'refused' === (string) ( $metadata['youtube_error_reason'] ?? '' ) && is_array( $job ) ) {
+                // YouTube refused the finished upload (too long, a bad file): the same
+                // video would be refused again, so the job fails now instead of retrying.
+                PressHub_Social_Queue::update_job( $job_id, [ 'attempts' => max( (int) ( $job['attempts'] ?? 0 ), (int) ( $job['max_attempts'] ?? 3 ) ) ] );
+            }
             PressHub_Social_Queue::mark_failed( $job_id, '' !== $error ? $error : 'Worker reported failure', $metadata );
         }
 

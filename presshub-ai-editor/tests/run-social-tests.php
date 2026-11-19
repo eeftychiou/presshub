@@ -2655,6 +2655,8 @@ assert_true( PressHub_Social_YouTube::episode_ready( $ep_job, time() + 90 * 60 +
 assert_true( null !== PressHub_Social_YouTube::episode_hold( $ep_job ) && 300 === PressHub_Social_YouTube::episode_hold( $ep_job )['delay'], 'A held episode is checked again in 5 minutes' );
 update_option( 'presshub_social_youtube_episode_image_wait_minutes', 0 );
 assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'Wait for Story Images 0 does not wait' );
+assert_equals( 0, PressHub_Social_Settings_Storage::sanitize_youtube_episode_image_wait_minutes( null ), 'A save from another section keeps Wait for Story Images' );
+assert_equals( 240, PressHub_Social_Settings_Storage::sanitize_youtube_episode_image_wait_minutes( 999 ), 'Wait for Story Images is at most 240 minutes' );
 delete_option( 'presshub_social_youtube_episode_image_wait_minutes' );
 update_option( 'presshub_social_youtube_episode_enhanced', false );
 assert_true( PressHub_Social_YouTube::episode_ready( $ep_job ), 'With enhanced episodes off nothing waits for images' );
@@ -2680,6 +2682,10 @@ delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
 PressHub_Social_Queue::cancel_job( (int) $sh_id );
 $ep_plain = PressHub_Social_YouTube::attach_upload( array_merge( $ep_job, [ 'audio_url' => 'https://example.com/uploads/podcast-880.mp3' ] ) );
 assert_true( isset( $ep_plain['youtube']['episode_video']['images'] ) && ! isset( $ep_plain['youtube']['episode_video']['segments'] ), 'Without a timeline the episode still gets the story images, without captions' );
+assert_equals( '', PressHub_AI_Podcast_Timeline::error( 880 ), 'A podcast without a timeline error is taken for one made before 2.54.0' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::ERROR_META_KEY, 'disk full' );
+assert_equals( 'disk full', PressHub_AI_Podcast_Timeline::error( 880 ), 'A timeline that could not be saved is marked on the podcast' );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::ERROR_META_KEY );
 
 // An episode over 15 minutes waits while the channel may not upload long videos.
 $GLOBALS['yt_long_status'] = 'eligible';
@@ -2706,9 +2712,19 @@ assert_equals( 'pending', $held_after['status'], 'The held episode stays pending
 assert_equals( (int) ( $held_before['attempts'] ?? 0 ), (int) ( $held_after['attempts'] ?? 0 ), 'Holding the episode uses no attempt' );
 assert_true( str_contains( (string) $held_after['last_error'], 'over 15 minutes' ), 'The Queue screen says why the episode waits' );
 assert_true( strtotime( $held_after['scheduled_at'] . ' UTC' ) > time() + 3000, 'The held episode is moved an hour later in the queue' );
+// An MP3 estimate shorter than the real audio does not let a long episode through.
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, array_merge( $tl, [ 'estimated' => true, 'duration' => 800.0 ] ) );
+assert_equals( 1100.0, PressHub_Social_YouTube::episode_seconds( 880 ), 'An estimated timeline counts the stored audio length when that is longer' );
+update_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY, array_merge( $tl, [ 'duration' => 800.0 ] ) );
+assert_equals( 800.0, PressHub_Social_YouTube::episode_seconds( 880 ), 'A measured timeline is taken as it is' );
+delete_post_meta( 880, PressHub_AI_Podcast_Timeline::META_KEY );
 $GLOBALS['yt_long_status'] = 'allowed';
 PressHub_Social_YouTube::forget_access_token();
 assert_true( PressHub_Social_YouTube::episode_length_ok( $ep_job ), 'Once long uploads are allowed the episode goes' );
+PressHub_Social_Queue::update_job( $ep_id, [ 'scheduled_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ] );
+$freed_claim = PressHub_Social_REST_Controller::handle_claim( $req_yt );
+assert_true( in_array( $ep_id, array_map( fn( $j ) => (int) $j['id'], $freed_claim['jobs'] ?? [] ), true ), 'The episode is handed out once it may go up' );
+assert_equals( '', (string) PressHub_Social_Queue::get_job( $ep_id )['last_error'], 'The "Waiting" note is cleared when the episode is handed out' );
 assert_true( PressHub_Social_YouTube::episode_length_ok( [ 'platform' => 'youtube', 'post_id' => 880, 'tiktok_short' => [] ] ), 'A short is never held for length' );
 delete_post_meta( 880, '_presshub_audio_duration_sec' );
 PressHub_Social_YouTube::forget_access_token();
@@ -2785,6 +2801,16 @@ assert_equals( 'pending', PressHub_Social_Queue::get_job( $q_id )['status'], 'A 
 assert_false( PressHub_Social_YouTube::is_connected(), 'A refused sign-in reported by the worker stops YouTube uploads' );
 delete_option( PressHub_Social_YouTube::NEEDS_RECONNECT_OPTION );
 
+// A finished upload YouTube refused fails at once: the same video would be refused again.
+PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing', 'attempts' => 1 ] );
+$req_c->set_param( 'metadata', [ 'youtube_error_reason' => 'refused' ] );
+$req_c->set_param( 'error', 'YouTube refused the uploaded video V9 (rejected: length).' );
+$refused_done = PressHub_Social_REST_Controller::handle_complete( $req_c );
+$refused_job  = PressHub_Social_Queue::get_job( $q_id );
+assert_equals( 'failed', $refused_job['status'], 'A refused upload is failed, not retried' );
+assert_equals( 'failed', $refused_done['status'] ?? '', 'The worker is told it failed' );
+assert_true( PressHub_Social_YouTube::is_connected(), 'A refused video does not stop YouTube uploads' );
+
 // A playlist error is kept and shown; Retry never re-uploads a published video.
 PressHub_Social_Queue::update_job( $q_id, [ 'status' => 'processing' ] );
 $req_p = new WP_REST_Request( 'POST', '/worker/complete' );
@@ -2792,7 +2818,7 @@ $req_p->set_param( 'job_id', $q_id );
 $req_p->set_param( 'status', 'published' );
 $req_p->set_param( 'external_post_id', 'VID1' );
 $req_p->set_param( 'external_post_url', 'https://www.youtube.com/watch?v=VID1' );
-$req_p->set_param( 'metadata', [ 'youtube_kind' => 'episode', 'youtube_playlist_error' => 'Playlist not found.' ] );
+$req_p->set_param( 'metadata', [ 'youtube_kind' => 'episode', 'youtube_playlist_error' => 'Playlist not found.', 'youtube_episode_note' => 'story images: none could be downloaded' ] );
 PressHub_Social_REST_Controller::handle_complete( $req_p );
 $pub = PressHub_Social_Queue::get_job( $q_id );
 assert_equals( 'published', $pub['status'], 'An upload with a playlist error is published' );
@@ -2804,6 +2830,11 @@ assert_true( PressHub_Social_YouTube::can_retry( [ 'platform' => 'youtube', 'sta
 $repost_id = PressHub_Social_Queue::repost_as_new_job( $q_id );
 $repost    = is_int( $repost_id ) ? PressHub_Social_Queue::get_job( $repost_id ) : [];
 assert_equals( '', PressHub_Social_YouTube::playlist_error( (array) $repost ), 'A re-post does not inherit the earlier playlist error' );
+assert_equals( 'story images: none could be downloaded', PressHub_Social_YouTube::episode_note( $pub ), 'What the episode video lacked stays on the job for the Queue screen' );
+assert_equals( '', PressHub_Social_YouTube::episode_note( (array) $repost ), 'A re-post does not inherit the earlier episode note' );
+$repost_meta = json_decode( (string) ( $repost['metadata'] ?? '' ), true );
+$repost_q    = strtotime( (string) ( $repost_meta['youtube_episode']['queued_at'] ?? '' ) );
+assert_true( false !== $repost_q && $repost_q >= time() - 5, 'A re-posted episode waits for story images from now' );
 if ( is_int( $repost_id ) ) {
     PressHub_Social_Queue::cancel_job( $repost_id );
 }
