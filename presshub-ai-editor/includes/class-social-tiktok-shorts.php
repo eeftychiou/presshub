@@ -893,7 +893,11 @@ class PressHub_Social_TikTok_Shorts {
                 $record_ids[] = self::$last_record_id;
             }
             if ( is_wp_error( $raw ) && 'empty_ai_response' !== $raw->get_error_code() ) {
-                return $raw; // Provider errors are not retried here (the queue retries them).
+                // Provider errors are not retried here (the queue retries them).
+                if ( $attempt > 1 && ! empty( $record_ids ) ) {
+                    return new WP_Error( $raw->get_error_code(), sprintf( '%s See generation records %s.', $raw->get_error_message(), implode( ', ', array_map( fn( $id ) => '#' . $id, $record_ids ) ) ) );
+                }
+                return $raw;
             }
 
             $shorts = is_wp_error( $raw ) ? $raw : self::parse_plan( (string) $raw, $count, $max_words, $images );

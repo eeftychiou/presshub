@@ -189,7 +189,7 @@ class PressHub_AI_Token_Logger {
             [ '%s', '%s' ],
             [ '%d' ]
         );
-        return false !== $result;
+        return is_int( $result ) && $result > 0;
     }
 
     /**
