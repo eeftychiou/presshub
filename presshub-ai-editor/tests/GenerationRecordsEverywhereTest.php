@@ -546,7 +546,7 @@ gre_check( 'access: no metabox for another non-editor', empty( $GLOBALS['META_BO
 
 // Inspector rendering of the new kinds and the TTS calls table
 gre_as( 9, [ 'edit_posts', 'edit_others_posts' ] );
-foreach ( [ 'coauthor_draft' => 'Co-author draft', 'scorecard' => 'Editorial scorecard', 'copilot_chat' => 'Copilot chat', 'research' => 'Research', 'image_generation' => 'Image generation', 'generic' => 'Other LLM call', 'tts_test' => 'TTS test', 'tiktok_short_script' => 'Shorts script (TikTok/YouTube)', 'tiktok_short' => 'Shorts voice (TikTok/YouTube)' ] as $kind => $label ) {
+foreach ( [ 'coauthor_draft' => 'Co-author draft', 'scorecard' => 'Editorial scorecard', 'copilot_chat' => 'Copilot chat', 'research' => 'Research', 'image_generation' => 'Image generation', 'generic' => 'Other LLM call', 'tts_test' => 'TTS test', 'tiktok_short_script' => 'Shorts script (TikTok/YouTube)', 'tiktok_short' => 'Shorts voice (TikTok/YouTube)', 'post_images_plan' => 'Post image plan (social)' ] as $kind => $label ) {
     gre_check( "inspector: label for {$kind}", $label === PressHub_AI_Generation_Inspector::kind_label( $kind ) && in_array( $kind, PressHub_AI_Generation_Recorder::KINDS, true ) );
 }
 $xss_call_id = (int) PressHub_AI_Generation_Recorder::record( [ 'kind' => 'tts_test', 'config' => [ 'user_id' => 9 ] ] );
