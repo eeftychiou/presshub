@@ -91,6 +91,24 @@ hu_check( 'no headline below 18pt', '' === PressHub_AI_URL_Fetcher::extract_styl
 hu_check( 'one-word large text ignored', '' === PressHub_AI_URL_Fetcher::extract_styled_headline( '<body><p><span style="font-size:40pt">Ανακοίνωση</span></p></body>' ) );
 hu_check( '32px headline accepted', 'Νέος τίτλος σε pixels εδώ' === PressHub_AI_URL_Fetcher::extract_styled_headline( '<body><div style="font-size: 32px">Νέος τίτλος σε pixels εδώ</div></body>' ) );
 
+// --- 3. Review round 1 follow-ups --------------------------------------------
+hu_check( 'encode_iri is idempotent', PressHub_AI_URL_Fetcher::encode_iri( $enc ) === $enc );
+$mixed = 'https://example.com/a%20b/€?q=ϊ#frag–x';
+hu_check( 'mixed escapes + raw: only raw encoded', 'https://example.com/a%20b/%E2%82%AC?q=%CF%8A#frag%E2%80%93x' === PressHub_AI_URL_Fetcher::encode_iri( $mixed ) );
+hu_check( 'IDN host left alone, path encoded', 'https://παράδειγμα.gr/%CE%AC' === PressHub_AI_URL_Fetcher::encode_iri( 'https://παράδειγμα.gr/ά' ) );
+
+$nested = '<body><article><p><span style="font-size:28pt"><span style="color:#c00">Έκτακτο:</span> Το όνειρο που κακοφόρμισε</span></p></article></body>';
+hu_check( 'nested same-name tag keeps the whole headline', 'Έκτακτο: Το όνειρο που κακοφόρμισε' === PressHub_AI_URL_Fetcher::extract_styled_headline( $nested ) );
+hu_check( 'data-style is not a style attribute', '' === PressHub_AI_URL_Fetcher::extract_styled_headline( '<body><p data-style="font-size:30pt">Τρεις λέξεις εδώ τώρα</p></body>' ) );
+hu_check( 'aside and comments are not headline candidates', 'Ο πραγματικός τίτλος εδώ' === PressHub_AI_URL_Fetcher::extract_styled_headline( '<body><aside><p style="font-size:40pt">Διαφήμιση μεγάλη στο πλάι</p></aside><!-- <p style="font-size:50pt">Σχόλιο του Word εδώ</p> --><p style="font-size:24pt">Ο πραγματικός τίτλος εδώ</p></body>' ) );
+hu_check( 'more than 30 words is not a headline', '' === PressHub_AI_URL_Fetcher::extract_styled_headline( '<body><p style="font-size:30pt">' . str_repeat( 'λέξη ', 31 ) . '</p></body>' ) );
+
+$hyph = '<html><head><title>COVID-19: Νέα μέτρα από σήμερα</title></head><body><article><p style="font-size:30pt">Προσφορά συνδρομής τώρα μόνο</p><p>' . str_repeat( 'λέξη ', 60 ) . '</p></article></body></html>';
+$ex4 = PressHub_AI_URL_Fetcher::extract_article_semantic( $hyph );
+hu_check( 'long <title> cut short by a hyphen does not take promo text', 'Προσφορά συνδρομής τώρα μόνο' !== ( $ex4['title'] ?? '' ) );
+$og = '<html><head><meta property="og:title" content="Ο τίτλος από το og"><title>Site</title></head><body><article><p style="font-size:30pt">Άλλο κείμενο με μεγάλα γράμματα</p><p>' . str_repeat( 'λέξη ', 60 ) . '</p></article></body></html>';
+hu_check( 'og:title still wins', 'Ο τίτλος από το og' === ( PressHub_AI_URL_Fetcher::extract_article_semantic( $og )['title'] ?? '' ) );
+
 if ( $failures > 0 ) {
     fwrite( STDERR, "HarvestUrlAndTitleTest: {$failures} failure(s)\n" );
     exit( 1 );

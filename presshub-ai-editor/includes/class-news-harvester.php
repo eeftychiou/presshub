@@ -654,7 +654,7 @@ class PressHub_AI_News_Harvester {
 
         $title = (string) $entry->title;
         $link  = trim( (string) $entry->link );
-        if ( empty( $link ) && isset( $entry->guid ) && filter_var( (string) $entry->guid, FILTER_VALIDATE_URL ) ) {
+        if ( empty( $link ) && isset( $entry->guid ) && filter_var( PressHub_AI_URL_Fetcher::encode_iri( trim( (string) $entry->guid ) ), FILTER_VALIDATE_URL ) ) {
             $link = trim( (string) $entry->guid );
         }
 
@@ -705,7 +705,7 @@ class PressHub_AI_News_Harvester {
                 $link = trim( (string) $entry->link['href'] );
             }
         }
-        if ( empty( $link ) && isset( $entry->id ) && filter_var( (string) $entry->id, FILTER_VALIDATE_URL ) ) {
+        if ( empty( $link ) && isset( $entry->id ) && filter_var( PressHub_AI_URL_Fetcher::encode_iri( trim( (string) $entry->id ) ), FILTER_VALIDATE_URL ) ) {
             $link = trim( (string) $entry->id );
         }
 
