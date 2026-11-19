@@ -6,8 +6,7 @@
  * Not covered on purpose:
  *  - secrets and remove flags (no default to show);
  *  - prompts and templates (their default is an asset file, rule 7.3);
- *  - list (array) settings;
- *  - the legacy options of exception E1, which are being removed.
+ *  - list (array) settings.
  */
 
 require_once __DIR__ . '/wordpress-stubs.php';
@@ -24,20 +23,6 @@ if ( ! function_exists( 'register_deactivation_hook' ) ) {
 defined( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER' ) || define( 'PRESSHUB_AI_SKIP_UPDATE_CHECKER', true );
 require_once dirname( __DIR__ ) . '/presshub-ai-editor.php';
 
-// Exception E1 (docs/settings-design-principles.md): hidden legacy options on their way out.
-$legacy = [
-    'presshub_ai_provider', 'presshub_ai_openai_org', 'presshub_ai_anthropic_version',
-    'presshub_ai_briefing_morning_podcast_title_prefix', 'presshub_ai_briefing_featured_image_ids',
-];
-foreach ( [ 'openai', 'anthropic', 'gemini' ] as $p ) {
-    foreach ( [ 'model', 'temperature', 'max_tokens', 'timeout' ] as $knob ) {
-        $legacy[] = "presshub_ai_{$knob}_{$p}";
-    }
-}
-foreach ( [ 'twitter', 'facebook', 'instagram', 'tiktok' ] as $p ) {
-    $legacy[] = "presshub_social_enabled_{$p}";
-}
-
 $failures = [];
 $checked  = 0;
 foreach ( PressHub_Settings_Registry::all() as $key => $e ) {
@@ -49,7 +34,7 @@ foreach ( PressHub_Settings_Registry::all() as $key => $e ) {
     // provider, or the template choosers.
     $is_text_asset = ( false !== strpos( $key, 'prompt' ) || false !== strpos( $key, 'template' ) )
         && ! preg_match( '/(_model|_provider|_image_template|^presshub_ai_debug_prompts)$/', $key );
-    if ( 'array' === ( $e['type'] ?? '' ) || $is_text_asset || in_array( $key, $legacy, true ) ) {
+    if ( 'array' === ( $e['type'] ?? '' ) || $is_text_asset ) {
         continue;
     }
     ++$checked;

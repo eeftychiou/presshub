@@ -2413,8 +2413,9 @@ jQuery(document).ready(function($) {
             $('#provider-form-temperature').val(providerData.temperature !== undefined ? providerData.temperature : 0.7);
             $('#provider-form-max-tokens').val(providerData.max_tokens !== undefined ? providerData.max_tokens : 20000);
             $('#provider-form-timeout').val(providerData.timeout !== undefined ? providerData.timeout : 300);
-            var headers = providerData.headers ? (typeof providerData.headers === 'object' ? JSON.stringify(providerData.headers) : providerData.headers) : '';
-            $('#provider-form-headers').val(headers);
+            fillProviderHeaderFields(providerData.headers);
+            // Opened from the card alone (no record in memory): the headers are unknown.
+            providerHeadersKnown = providerData.headers !== undefined;
             $('#provider-form-enabled').prop('checked', !!providerData.enabled);
 
             var maskedKey = providerData.masked_key || providerData.masked_api_key || (providerData.api_key ? (providerData.api_key.indexOf('•') !== -1 ? providerData.api_key : maskApiKey(providerData.api_key)) : '');
@@ -2435,6 +2436,8 @@ jQuery(document).ready(function($) {
             $('#provider-form-max-tokens').val('20000');
             $('#provider-form-timeout').val('300');
             $('#provider-form-api-key').attr('placeholder', __('Enter API Key', 'presshub-ai-editor'));
+            fillProviderHeaderFields({});
+            providerHeadersKnown = true;
 
             var firstTmplKey = Object.keys(providerTemplates)[0] || 'openai';
             var tmpl = providerTemplates[firstTmplKey] || {};
@@ -2444,6 +2447,7 @@ jQuery(document).ready(function($) {
             $('#provider-model-manual-wrap').hide();
         }
 
+        toggleProviderHeaderFields();
         $modal.data('presshub-opener', document.activeElement);
         $modal.show().addClass('is-open');
         $('body').addClass('presshub-modal-open');
@@ -2451,6 +2455,73 @@ jQuery(document).ready(function($) {
         providerModalBaseline = getProviderModalSnapshot();
         // Move focus into the dialog (#285 review).
         $modal.find('input, select, textarea, button').filter(':visible:not(:disabled)').not('.presshub-modal-close').first().trigger('focus');
+    }
+
+    // #309 (E1): the OpenAI organization and the Anthropic API version have
+    // their own fields; they are stored in the provider's headers.
+    var providerHeadersKnown = true;
+    var PROVIDER_HEADER_FIELDS = {
+        openai: { header: 'OpenAI-Organization', field: '#provider-form-openai-org' },
+        anthropic: { header: 'anthropic-version', field: '#provider-form-anthropic-version' }
+    };
+
+    function fillProviderHeaderFields(headers) {
+        var rest = {};
+        if (typeof headers === 'string' && headers.trim()) {
+            try { headers = JSON.parse(headers); } catch (err) { headers = {}; }
+        }
+        if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+            Object.keys(headers).forEach(function(name) { rest[name] = headers[name]; });
+        }
+        Object.keys(PROVIDER_HEADER_FIELDS).forEach(function(type) {
+            var map = PROVIDER_HEADER_FIELDS[type];
+            var value = '';
+            Object.keys(rest).forEach(function(name) {
+                if (name.toLowerCase() === map.header.toLowerCase()) {
+                    value = String(rest[name]);
+                    delete rest[name];
+                }
+            });
+            $(map.field).val(value);
+        });
+        $('#provider-form-headers').val(Object.keys(rest).length ? JSON.stringify(rest) : '');
+    }
+
+    function toggleProviderHeaderFields() {
+        var type = $('#provider-form-type').val();
+        $('.presshub-provider-header-field').each(function() {
+            this.hidden = $(this).data('provider-type') !== type;
+        });
+    }
+
+    // The headers to send: the JSON box plus the field of this provider type.
+    // Null when the JSON box is not a JSON object (the caller shows an error).
+    function collectProviderHeaders() {
+        var raw = $('#provider-form-headers').val().trim();
+        var headers = {};
+        if (raw) {
+            try { headers = JSON.parse(raw); } catch (err) { return null; }
+            if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+                return null;
+            }
+        }
+        var map = PROVIDER_HEADER_FIELDS[$('#provider-form-type').val()];
+        if (map) {
+            Object.keys(headers).forEach(function(name) {
+                if (name.toLowerCase() === map.header.toLowerCase()) {
+                    delete headers[name];
+                }
+            });
+            var value = $(map.field).val().trim();
+            if (value) {
+                headers[map.header] = value;
+            }
+        }
+        return headers;
+    }
+
+    function providerHeadersError($notice) {
+        $notice.html('<div class="notice notice-error"><p>' + presshubEsc(__('Custom HTTP headers must be a JSON object, for example {"HTTP-Referer": "https://mysite.com"}.', 'presshub-ai-editor')) + '</p></div>');
     }
 
     function closeProviderModal() {
@@ -2530,11 +2601,13 @@ jQuery(document).ready(function($) {
         $('#provider-form-temperature').val(tmpl.temperature !== undefined ? tmpl.temperature : 0.7);
         $('#provider-form-max-tokens').val(tmpl.max_tokens !== undefined ? tmpl.max_tokens : 20000);
         $('#provider-form-timeout').val(tmpl.timeout !== undefined ? tmpl.timeout : 300);
+        toggleProviderHeaderFields();
     });
 
     // Provider Type Change Handler
     $(document).on('change', '#provider-form-type', function() {
         var provType = $(this).val();
+        toggleProviderHeaderFields();
         if (providerTemplates[provType]) {
             var tmpl = providerTemplates[provType];
             if (!$('#provider-form-base-url').val()) {
@@ -2582,8 +2655,12 @@ jQuery(document).ready(function($) {
             type: $('#provider-form-type').val(),
             base_url: $('#provider-form-base-url').val().trim(),
             api_key: $('#provider-form-api-key').val().trim(),
-            headers: $('#provider-form-headers').val().trim()
+            headers: collectProviderHeaders()
         };
+        if (providerData.headers === null) {
+            providerHeadersError($notice);
+            return;
+        }
 
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
@@ -2685,9 +2762,16 @@ jQuery(document).ready(function($) {
             temperature: parseFloat($('#provider-form-temperature').val()) || 0.7,
             max_tokens: parseInt($('#provider-form-max-tokens').val(), 10) || 20000,
             timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
-            headers: $('#provider-form-headers').val().trim(),
+            headers: collectProviderHeaders(),
             enabled: $('#provider-form-enabled').is(':checked') ? 1 : 0
         };
+        if (providerData.headers === null) {
+            providerHeadersError($notice);
+            return;
+        }
+        if (!providerHeadersKnown && $.isEmptyObject(providerData.headers)) {
+            delete providerData.headers; // Keep the saved headers.
+        }
 
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');
@@ -2820,8 +2904,12 @@ jQuery(document).ready(function($) {
             api_key: $('#provider-form-api-key').val().trim(),
             default_model: defaultModel,
             timeout: parseInt($('#provider-form-timeout').val(), 10) || 300,
-            headers: $('#provider-form-headers').val().trim()
+            headers: collectProviderHeaders()
         };
+        if (providerData.headers === null) {
+            providerHeadersError($notice);
+            return;
+        }
 
         $btn.prop('disabled', true);
         $spinner.addClass('is-active');

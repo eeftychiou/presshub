@@ -2,7 +2,7 @@
 /**
  * Plugin Name: PressHub AI Co-Pilot
  * Description: AI Co-Authoring and Editorial Workflow for PressHub.
- * Version: 2.69.0
+ * Version: 2.70.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Tested up to: 6.7
@@ -33,7 +33,8 @@ if ( ! function_exists( 'presshub_ai_migrate_max_tokens_defaults' ) ) {
         }
         foreach ( array( 'openai', 'anthropic', 'gemini' ) as $provider ) {
             $option = 'presshub_ai_max_tokens_' . $provider;
-            if ( 2000 === (int) get_option( $option, 0 ) ) {
+            $value  = class_exists( 'PressHub_Settings_Cleanup' ) ? PressHub_Settings_Cleanup::read_removed( $option, 0 ) : get_option( $option, 0 );
+            if ( 2000 === (int) $value ) {
                 delete_option( $option );
             }
         }
@@ -157,7 +158,7 @@ if ( ! function_exists( 'presshub_ai_migrate_purge_legacy_provider_tuning' ) ) {
 }
 add_action( 'admin_init', 'presshub_ai_migrate_purge_legacy_provider_tuning' );
 
-define( 'PRESSHUB_AI_VERSION', '2.69.0' );
+define( 'PRESSHUB_AI_VERSION', '2.70.0' );
 define( 'PRESSHUB_AI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRESSHUB_AI_URL', plugin_dir_url( __FILE__ ) );
 

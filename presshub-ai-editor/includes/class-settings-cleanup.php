@@ -29,7 +29,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class PressHub_Settings_Cleanup {
 
     /** Bump to run a new clean-up; each REMOVED entry names the version that removes it. */
-    const VERSION = 2;
+    const VERSION = 3;
 
     const VERSION_OPTION  = 'presshub_settings_cleanup_version';
     const REPORT_OPTION   = 'presshub_settings_cleanup_report';
@@ -48,6 +48,7 @@ class PressHub_Settings_Cleanup {
     const RELEASES = [
         1 => '2.45.0',
         2 => '2.46.0',
+        3 => '2.70.0',
     ];
 
     /** Release that removed the first options (kept for callers of 2.45.0). */
@@ -72,6 +73,41 @@ class PressHub_Settings_Cleanup {
         'presshub_ai_gemini_api_key'              => [ 'group' => 'legacy_gemini_key', 'secret' => true, 'since' => 2, 'key_type' => 'gemini' ],
         'presshub_ai_briefing_tts_api_key'        => [ 'group' => 'legacy_speech_key', 'secret' => true, 'since' => 2, 'key_type' => 'gemini' ],
         'presshub_ai_remove_briefing_tts_api_key' => [ 'group' => 'legacy_speech_key', 'secret' => false, 'since' => 2 ],
+        // #309 (E1): old options that were still registered but never shown.
+        'presshub_ai_provider'                    => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_model_openai'                => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_temperature_openai'          => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_max_tokens_openai'           => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_timeout_openai'              => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_model_anthropic'             => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_temperature_anthropic'       => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_max_tokens_anthropic'        => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_timeout_anthropic'           => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_model_gemini'                => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_temperature_gemini'          => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_max_tokens_gemini'           => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_timeout_gemini'              => [ 'group' => 'flat_provider', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_openai_org'                  => [ 'group' => 'provider_headers', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_anthropic_version'           => [ 'group' => 'provider_headers', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_briefing_morning_podcast_title_prefix'=> [ 'group' => 'morning_prefix', 'secret' => false, 'since' => 3 ],
+        'presshub_ai_briefing_featured_image_ids' => [ 'group' => 'morning_pool', 'secret' => false, 'since' => 3 ],
+        'presshub_social_enabled_twitter'         => [ 'group' => 'social_switches', 'secret' => false, 'since' => 3 ],
+        'presshub_social_enabled_facebook'        => [ 'group' => 'social_switches', 'secret' => false, 'since' => 3 ],
+        'presshub_social_enabled_instagram'       => [ 'group' => 'social_switches', 'secret' => false, 'since' => 3 ],
+        'presshub_social_enabled_tiktok'          => [ 'group' => 'social_switches', 'secret' => false, 'since' => 3 ],
+        'presshub_social_enabled_youtube'         => [ 'group' => 'social_switches', 'secret' => false, 'since' => 3 ],
+    ];
+
+    /** Where the social switches went (#309 E1), in the plugin's platform order. */
+    const SOCIAL_PLATFORMS = [ 'twitter', 'facebook', 'instagram', 'tiktok', 'youtube' ];
+    const SOCIAL_PLATFORMS_OPTION = 'presshub_social_enabled_platforms';
+    const PODCAST_PREFIX_OPTION   = 'presshub_ai_briefing_podcast_title_prefix';
+    const MORNING_POOL_OPTION     = 'presshub_ai_briefing_featured_image_ids_morning';
+
+    /** Old option => [ provider type, header ] it moves to (#309 E1). */
+    const PROVIDER_HEADERS = [
+        'presshub_ai_openai_org'        => [ 'openai', 'OpenAI-Organization' ],
+        'presshub_ai_anthropic_version' => [ 'anthropic', 'anthropic-version' ],
     ];
 
     /** Plugin updates read this token; the second one is copied here if it is empty. */
@@ -120,6 +156,26 @@ class PressHub_Settings_Cleanup {
             'legacy_speech_key' => [
                 'label'  => __( 'Separate speech key', 'presshub-ai-editor' ),
                 'reason' => __( 'Speech uses the key of the provider chosen for Speech in AI models.', 'presshub-ai-editor' ),
+            ],
+            'flat_provider'     => [
+                'label'  => __( 'Old provider choice and per-provider model, temperature, max tokens and timeout (13)', 'presshub-ai-editor' ),
+                'reason' => __( 'Each AI provider in Connections has its own model and tuning, and AI models picks the provider for each task.', 'presshub-ai-editor' ),
+            ],
+            'provider_headers'  => [
+                'label'  => __( 'OpenAI organization and Anthropic API version', 'presshub-ai-editor' ),
+                'reason' => __( 'Set on the OpenAI and Anthropic providers in Connections.', 'presshub-ai-editor' ),
+            ],
+            'morning_prefix'    => [
+                'label'  => __( 'Old morning podcast title prefix', 'presshub-ai-editor' ),
+                'reason' => __( 'Replaced by the podcast title prefix.', 'presshub-ai-editor' ),
+            ],
+            'morning_pool'      => [
+                'label'  => __( 'Old featured image pool', 'presshub-ai-editor' ),
+                'reason' => __( 'Replaced by the Morning image pool.', 'presshub-ai-editor' ),
+            ],
+            'social_switches'   => [
+                'label'  => __( 'Per-platform social switches (5)', 'presshub-ai-editor' ),
+                'reason' => __( 'The enabled platforms list is the only switch.', 'presshub-ai-editor' ),
             ],
         ];
     }
@@ -250,6 +306,27 @@ class PressHub_Settings_Cleanup {
             // 2. Keep what is still needed.
             $copied = []; // option => where it went.
             $kept   = [];
+            if ( self::removes_since( $keys, 3 ) ) {
+                // The provider store's one-time migration reads the old flat
+                // options; let it run before they go.
+                self::load_provider_store();
+                if ( class_exists( 'PressHub_AI_Provider_Store' ) ) {
+                    PressHub_AI_Provider_Store::get_all( false );
+                }
+                $copied += self::keep_social_switches( $stored );
+                $copied += self::keep_morning_values( $stored );
+                foreach ( self::PROVIDER_HEADERS as $key => $target ) {
+                    if ( ! array_key_exists( $key, $stored ) ) {
+                        continue;
+                    }
+                    $outcome = self::keep_provider_header( $target[0], $target[1], trim( (string) $stored[ $key ] ) );
+                    if ( 'kept' === $outcome ) {
+                        $kept[] = $key;
+                    } elseif ( '' !== $outcome ) {
+                        $copied[ $key ] = $outcome;
+                    }
+                }
+            }
             $social = trim( (string) ( $stored['presshub_social_github_token'] ?? '' ) );
             if ( '' !== $social && '' === trim( (string) get_option( self::GITHUB_TOKEN, '' ) ) ) {
                 update_option( self::GITHUB_TOKEN, $social, false );
@@ -297,6 +374,113 @@ class PressHub_Settings_Cleanup {
         }
     }
 
+    /** True when $keys holds an option removed by clean-up $version. */
+    private static function removes_since( array $keys, int $version ): bool {
+        foreach ( $keys as $key ) {
+            if ( (int) ( self::REMOVED[ $key ]['since'] ?? 0 ) === $version ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static function load_provider_store(): void {
+        if ( ! class_exists( 'PressHub_AI_Provider_Store' ) && is_readable( __DIR__ . '/class-provider-store.php' ) ) {
+            require_once __DIR__ . '/class-provider-defaults.php';
+            require_once __DIR__ . '/class-provider-store.php';
+        }
+    }
+
+    /**
+     * #309 (E1): fold the per-platform switches into the platforms list, the
+     * way get_enabled_platforms() combined them (a switch that is on adds its
+     * platform, one that is off removes it).
+     *
+     * @return array<string,string> option => where it went (only switches that changed the list).
+     */
+    private static function keep_social_switches( array $stored ): array {
+        $platforms = get_option( self::SOCIAL_PLATFORMS_OPTION, null );
+        if ( ! is_array( $platforms ) ) {
+            $platforms = class_exists( 'PressHub_Social_Settings_Storage' ) ? PressHub_Social_Settings_Storage::DEFAULT_ENABLED_PLATFORMS : [ 'twitter', 'facebook', 'instagram', 'tiktok' ];
+        }
+        $list   = array_values( array_intersect( self::SOCIAL_PLATFORMS, $platforms ) );
+        $copied = [];
+        foreach ( self::SOCIAL_PLATFORMS as $platform ) {
+            $key = 'presshub_social_enabled_' . $platform;
+            if ( ! array_key_exists( $key, $stored ) ) {
+                continue;
+            }
+            $on = in_array( $stored[ $key ], [ 1, '1', true, 'on', 'yes', 'true' ], true );
+            if ( $on !== in_array( $platform, $list, true ) ) {
+                $list           = $on ? array_merge( $list, [ $platform ] ) : array_values( array_diff( $list, [ $platform ] ) );
+                $copied[ $key ] = $on
+                    ? __( 'the enabled platforms list in Social settings (turned on)', 'presshub-ai-editor' )
+                    : __( 'the enabled platforms list in Social settings (turned off)', 'presshub-ai-editor' );
+            }
+        }
+        if ( $copied ) {
+            update_option( self::SOCIAL_PLATFORMS_OPTION, array_values( array_intersect( self::SOCIAL_PLATFORMS, $list ) ) );
+        }
+        return $copied;
+    }
+
+    /**
+     * #309 (E1): the old morning title prefix and featured image pool, each
+     * copied into its replacement when that one is not set, as the getters
+     * used them.
+     *
+     * @return array<string,string>
+     */
+    private static function keep_morning_values( array $stored ): array {
+        $copied = [];
+        $prefix = 'presshub_ai_briefing_morning_podcast_title_prefix';
+        if ( array_key_exists( $prefix, $stored ) && null === get_option( self::PODCAST_PREFIX_OPTION, null ) ) {
+            update_option( self::PODCAST_PREFIX_OPTION, (string) $stored[ $prefix ] );
+            $copied[ $prefix ] = __( 'the podcast title prefix', 'presshub-ai-editor' );
+        }
+        $pool = 'presshub_ai_briefing_featured_image_ids';
+        if ( array_key_exists( $pool, $stored ) && '' !== trim( (string) $stored[ $pool ] )
+            && '' === trim( (string) get_option( self::MORNING_POOL_OPTION, '' ) ) ) {
+            update_option( self::MORNING_POOL_OPTION, (string) $stored[ $pool ] );
+            $copied[ $pool ] = __( 'the Morning image pool', 'presshub-ai-editor' );
+        }
+        return $copied;
+    }
+
+    /**
+     * #309 (E1): an old header option onto every provider of its type in
+     * Connections that sets no value of its own. '' when there is nothing to
+     * copy, where it went, or 'kept' when a save failed (the row stays).
+     */
+    private static function keep_provider_header( string $type, string $header, string $value ): string {
+        if ( '' === $value || ! class_exists( 'PressHub_AI_Provider_Store' ) ) {
+            return '';
+        }
+        $names = [];
+        foreach ( PressHub_AI_Provider_Store::get_all( false ) as $record ) {
+            if ( ! is_array( $record ) || ( $record['type'] ?? '' ) !== $type ) {
+                continue;
+            }
+            $headers = is_array( $record['headers'] ?? null ) ? $record['headers'] : [];
+            if ( '' !== trim( (string) ( $headers[ $header ] ?? '' ) ) ) {
+                continue;
+            }
+            $headers[ $header ] = $value;
+            $record['headers']  = $headers;
+            $id                 = PressHub_AI_Provider_Store::save_provider( $record );
+            $saved              = PressHub_AI_Provider_Store::get( (string) $id );
+            if ( ! is_array( $saved ) || trim( (string) ( $saved['headers'][ $header ] ?? '' ) ) !== $value ) {
+                return 'kept';
+            }
+            $names[] = (string) ( $saved['name'] ?? $type );
+        }
+        if ( ! $names ) {
+            return '';
+        }
+        /* translators: %s: provider names in Connections */
+        return sprintf( __( 'the %s provider in Connections', 'presshub-ai-editor' ), implode( ', ', $names ) );
+    }
+
     /**
      * An old API key: '' when Connections already holds it (or it is empty),
      * a description of where it was copied, or 'kept' when Connections holds
@@ -306,10 +490,7 @@ class PressHub_Settings_Cleanup {
         if ( '' === $value || false !== strpos( $value, '•' ) ) {
             return '';
         }
-        if ( ! class_exists( 'PressHub_AI_Provider_Store' ) && is_readable( __DIR__ . '/class-provider-store.php' ) ) {
-            require_once __DIR__ . '/class-provider-defaults.php';
-            require_once __DIR__ . '/class-provider-store.php';
-        }
+        self::load_provider_store();
         if ( ! class_exists( 'PressHub_AI_Provider_Store' ) ) {
             // Never delete a key we could not copy.
             return 'kept';
@@ -506,8 +687,9 @@ class PressHub_Settings_Cleanup {
             if ( $group_kept ) {
                 $result = __( 'Kept for one more release, no longer used: it differs from the key in Connections. Add it there if you still need it.', 'presshub-ai-editor' );
             } elseif ( $group_copy ) {
+                // Every place the group's values went (#309 E1: one group can copy to several).
                 /* translators: %s: where the value went, e.g. "the Google Gemini provider in Connections" */
-                $result = sprintf( __( 'Copied to %s, then removed', 'presshub-ai-editor' ), (string) reset( $group_copy ) );
+                $result = sprintf( __( 'Copied to %s, then removed', 'presshub-ai-editor' ), implode( '; ', array_unique( array_map( 'strval', $group_copy ) ) ) );
             } elseif ( $had ) {
                 $result = __( 'Removed', 'presshub-ai-editor' );
             } else {
@@ -517,6 +699,9 @@ class PressHub_Settings_Cleanup {
             foreach ( $keys as $k ) {
                 if ( in_array( $k, $group_kept, true ) ) {
                     $state = __( 'kept, not read', 'presshub-ai-editor' );
+                } elseif ( isset( $group_copy[ $k ] ) ) {
+                    /* translators: %s: where the value went */
+                    $state = sprintf( __( 'copied to %s, then deleted', 'presshub-ai-editor' ), (string) $group_copy[ $k ] );
                 } elseif ( in_array( $k, $had, true ) ) {
                     $state = __( 'saved value deleted', 'presshub-ai-editor' );
                 } else {

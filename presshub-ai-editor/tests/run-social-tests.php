@@ -1754,10 +1754,6 @@ update_option( 'presshub_social_engine_twitter', 'automation' );
 
 // 5. Per-platform enable/disable settings
 update_option( 'presshub_social_enabled_platforms', [ 'twitter', 'facebook', 'instagram', 'tiktok' ] );
-delete_option( 'presshub_social_enabled_facebook' );
-delete_option( 'presshub_social_enabled_twitter' );
-delete_option( 'presshub_social_enabled_instagram' );
-delete_option( 'presshub_social_enabled_tiktok' );
 update_option( 'presshub_social_engine_twitter', 'automation' );
 update_option( 'presshub_social_engine_tiktok', 'automation' );
 update_option( 'presshub_social_engine_facebook', 'api' );
@@ -1773,9 +1769,14 @@ PressHub_Social_Settings_Storage::set_platform_enabled( 'twitter', true );
 assert_true( PressHub_Social_Settings_Storage::is_platform_enabled( 'twitter' ), 'set_platform_enabled(twitter, true) re-enables twitter' );
 assert_true( in_array( 'twitter', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms includes re-enabled twitter' );
 
+// #309 (E1): the platforms list is the only switch; a left-over per-platform row is not read.
 update_option( 'presshub_social_enabled_facebook', false );
-assert_false( PressHub_Social_Settings_Storage::is_platform_enabled( 'facebook' ), 'Option presshub_social_enabled_facebook=false disables facebook' );
-assert_false( in_array( 'facebook', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms reflects individual facebook option' );
+assert_true( PressHub_Social_Settings_Storage::is_platform_enabled( 'facebook' ), 'A left-over presshub_social_enabled_facebook row does not disable facebook' );
+delete_option( 'presshub_social_enabled_facebook' );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'facebook', false );
+assert_false( PressHub_Social_Settings_Storage::is_platform_enabled( 'facebook' ), 'set_platform_enabled(facebook, false) disables facebook' );
+assert_false( in_array( 'facebook', PressHub_Social_Settings_Storage::get_enabled_platforms(), true ), 'get_enabled_platforms excludes disabled facebook' );
+assert_false( array_key_exists( 'presshub_social_enabled_facebook', $GLOBALS['OPTIONS_STORE'] ?? [] ), 'set_platform_enabled() writes no per-platform option' );
 
 // 6. Platform readiness checks
 // Twitter: enabled=true, configured=true
@@ -1784,7 +1785,7 @@ assert_false( in_array( 'facebook', PressHub_Social_Settings_Storage::get_enable
 // Instagram: enabled=true, configured=false
 delete_option( 'presshub_social_instagram_account_id' );
 delete_option( 'presshub_social_meta_access_token' );
-update_option( 'presshub_social_enabled_instagram', true );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'instagram', true );
 
 assert_true( PressHub_Social_Settings_Storage::is_platform_ready( 'twitter' ), 'Twitter is ready (enabled and configured)' );
 assert_true( PressHub_Social_Settings_Storage::is_platform_ready( 'tiktok' ), 'TikTok is ready (enabled and configured)' );
@@ -2931,10 +2932,10 @@ update_post_meta( 880, PressHub_AI_Podcast_Translations::META_KEY, [ 'en' => arr
 $GLOBALS['POSTS_STORE'][880]['post_status'] = 'pending';
 assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language waits while the Greek post is held' );
 $GLOBALS['POSTS_STORE'][880]['post_status'] = 'publish';
-$yt_was = get_option( 'presshub_social_enabled_youtube', null );
-update_option( 'presshub_social_enabled_youtube', 0 );
+$yt_was = get_option( 'presshub_social_enabled_platforms', null );
+PressHub_Social_Settings_Storage::set_platform_enabled( 'youtube', false );
 assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued while YouTube is off under Where to post' );
-null === $yt_was ? delete_option( 'presshub_social_enabled_youtube' ) : update_option( 'presshub_social_enabled_youtube', $yt_was );
+null === $yt_was ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $yt_was );
 update_post_meta( 880, '_presshub_social_platforms', [ 'facebook' ] );
 assert_equals( 0, PressHub_AI_Podcast_Translations::maybe_enqueue( 880, 'en' ), 'A language is never queued when YouTube is not ticked on the post' );
 update_post_meta( 880, '_presshub_social_platforms', [ 'facebook', 'youtube' ] );
@@ -3984,10 +3985,9 @@ update_option( 'presshub_social_engine_instagram', 'automation' );
 update_option( 'presshub_social_worker_mode', 'pull' );
 $img_saved_sessions = get_option( 'presshub_social_worker_sessions', [] );
 update_option( 'presshub_social_worker_sessions', [ 'twitter' => true, 'facebook' => true, 'instagram' => true, 'tiktok' => true ] );
-$img_saved_enabled = [];
+$img_saved_enabled = get_option( 'presshub_social_enabled_platforms', null );
 foreach ( [ 'twitter', 'facebook', 'instagram' ] as $img_p ) {
-    $img_saved_enabled[ $img_p ] = get_option( 'presshub_social_enabled_' . $img_p, null );
-    update_option( 'presshub_social_enabled_' . $img_p, 1 );
+    PressHub_Social_Settings_Storage::set_platform_enabled( $img_p, true );
 }
 PressHub_Social_AI_Copywriter::set_ai_caller( fn() => 'Κείμενο ανάρτησης https://presshub.cy/x' );
 delete_option( 'presshub_social_post_images_enabled' );
@@ -4236,13 +4236,7 @@ delete_option( 'presshub_social_post_images_instagram' );
 delete_option( 'presshub_social_meta_page_id' );
 delete_option( 'presshub_social_meta_access_token' );
 update_option( 'presshub_social_worker_sessions', $img_saved_sessions );
-foreach ( $img_saved_enabled as $img_p => $img_v ) {
-    if ( null === $img_v ) {
-        delete_option( 'presshub_social_enabled_' . $img_p );
-    } else {
-        update_option( 'presshub_social_enabled_' . $img_p, $img_v );
-    }
-}
+null === $img_saved_enabled ? delete_option( 'presshub_social_enabled_platforms' ) : update_option( 'presshub_social_enabled_platforms', $img_saved_enabled );
 
 // ----------------------------------------------------------------------
 // Contract (#237): the settings clean-up leaves the worker claim payload

@@ -23,8 +23,7 @@ class ClassifyIntentProviderTest
 
         // --- Case 1: provider=openai -> must hit api.openai.com, not gemini
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'openai-key' );
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_providers( 'openai-key', 'openai' );
         $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
             [ $url ] = $req;
             if ( str_contains( $url, 'api.openai.com' ) ) {
@@ -65,8 +64,7 @@ class ClassifyIntentProviderTest
 
         // --- Case 2: provider=anthropic -> must hit api.anthropic.com
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'anthropic-key' );
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'anthropic';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_providers( 'anthropic-key', 'anthropic' );
         $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
             [ $url ] = $req;
             if ( str_contains( $url, 'api.anthropic.com' ) ) {
@@ -106,8 +104,7 @@ class ClassifyIntentProviderTest
 
         // --- Case 3: provider=gemini -> still works (regression guard)
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'gemini-key' );
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'gemini';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_providers( 'gemini-key', 'gemini' );
         $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
             [ $url ] = $req;
             if ( str_contains( $url, 'generativelanguage.googleapis.com' ) ) {
@@ -133,8 +130,7 @@ class ClassifyIntentProviderTest
 
         // --- Case 4: provider=openai with API error -> falls back to 'chat'
         self::reset_world();
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_provider_keys( 'openai-key' );
-        $GLOBALS['OPTIONS_STORE']['presshub_ai_provider'] = 'openai';
+        $GLOBALS['OPTIONS_STORE']['presshub_ai_configured_providers'] = presshub_test_providers( 'openai-key', 'openai' );
         $GLOBALS['CAPTURE_FILTER'] = function ( $existing, $req ) {
             [ $url ] = $req;
             if ( str_contains( $url, 'api.openai.com' ) ) {

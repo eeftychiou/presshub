@@ -80,8 +80,9 @@ class SettingsUpgradeTest {
             }
         }
         foreach ( PressHub_Settings_Cleanup::removed_keys() as $key ) {
-            // presshub_ai_gemini_api_key was read but never registered.
-            if ( ! in_array( $key, $old, true ) && 'presshub_ai_gemini_api_key' !== $key ) {
+            // presshub_ai_gemini_api_key was read but never registered; the
+            // YouTube switch came after 2.36.x (#309 E1 removes it too).
+            if ( ! in_array( $key, $old, true ) && ! in_array( $key, [ 'presshub_ai_gemini_api_key', 'presshub_social_enabled_youtube' ], true ) ) {
                 $failures[] = "{$key} is in the clean-up list but was not a 2.36.x option.";
             }
         }
@@ -107,6 +108,15 @@ class SettingsUpgradeTest {
             'presshub_social_tiktok_shorts_spacing_minutes' => 90,
             // A 2.36.x site has a worker secret (generated on first load).
             'presshub_social_worker_secret'              => 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6',
+            // The per-platform switches were kept in step with the list (#309 E1).
+            'presshub_social_enabled_twitter'            => 1,
+            'presshub_social_enabled_facebook'           => 1,
+            'presshub_social_enabled_instagram'          => 1,
+            'presshub_social_enabled_tiktok'             => 0,
+            'presshub_social_enabled_platforms'          => [ 'twitter', 'facebook', 'instagram' ],
+            // The old single pool, used while the Morning pool was empty.
+            'presshub_ai_briefing_featured_image_ids'    => '11,12',
+            'presshub_ai_briefing_featured_image_ids_morning' => '',
         ];
         $snapshot = [];
         foreach ( $old as $key ) {
@@ -150,6 +160,8 @@ class SettingsUpgradeTest {
         $after = self::resolved();
 
         $github_copied = '' === (string) ( $snapshot['presshub_ai_github_token'] ?? '' ) && '' !== (string) ( $snapshot['presshub_social_github_token'] ?? '' );
+        // #309 (E1): the clean-up copies the old single pool into the empty Morning pool.
+        $copied_to = [ 'presshub_ai_briefing_featured_image_ids_morning' => '11,12' ];
         foreach ( $snapshot as $key => $value ) {
             $now = array_key_exists( $key, $GLOBALS['OPTIONS_STORE'] ) ? $GLOBALS['OPTIONS_STORE'][ $key ] : '(deleted)';
             if ( PressHub_Settings_Cleanup::is_removed( $key ) ) {
@@ -161,13 +173,16 @@ class SettingsUpgradeTest {
             if ( 'presshub_ai_github_token' === $key && $github_copied ) {
                 $value = $snapshot['presshub_social_github_token'];
             }
+            if ( array_key_exists( $key, $copied_to ) ) {
+                $value = $copied_to[ $key ];
+            }
             if ( serialize( $now ) !== serialize( $value ) ) {
                 $failures[] = "{$key} changed on upgrade: " . var_export( $value, true ) . ' → ' . var_export( $now, true );
             }
         }
         // Nothing else the clean-up did touched a stored setting (its own bookkeeping aside).
         foreach ( $store_before as $key => $value ) {
-            if ( PressHub_Settings_Cleanup::is_removed( $key ) || 'presshub_ai_github_token' === $key ) {
+            if ( PressHub_Settings_Cleanup::is_removed( $key ) || 'presshub_ai_github_token' === $key || array_key_exists( $key, $copied_to ) ) {
                 continue;
             }
             if ( ! array_key_exists( $key, $GLOBALS['OPTIONS_STORE'] ) || serialize( $GLOBALS['OPTIONS_STORE'][ $key ] ) !== serialize( $value ) ) {
