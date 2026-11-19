@@ -475,6 +475,12 @@ class PressHub_AI_Settings_Render {
                                     <?php $this->render_image_analysis_prompt_field(); ?>
                                 </td>
                             </tr>
+                            <tr>
+                                <th scope="row"><span id="presshub-image-templates-heading"><?php echo esc_html__( 'Prompt templates', 'presshub-ai-editor' ); ?></span></th>
+                                <td>
+                                    <?php $this->render_image_prompt_templates_manager(); ?>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
         <?php
@@ -952,9 +958,21 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_image_template"><?php echo esc_html__( 'Text briefing image template', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_image_template_field( 'presshub_ai_briefing_image_template', PressHub_AI_Settings_Storage::get_briefing_image_template(), __( 'The prompt template the AI follows when a text briefing makes its own image (Text Briefing Featured Image Source set to Automatic AI Image Generation).', 'presshub-ai-editor' ) ); ?>
+                                </td>
+                            </tr>
+                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_featured_image_source"><?php echo __( 'Podcast Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_featured_image_source_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label for="presshub_ai_briefing_podcast_image_template"><?php echo esc_html__( 'Podcast image template', 'presshub-ai-editor' ); ?></label></th>
+                                <td>
+                                    <?php $this->render_briefing_image_template_field( 'presshub_ai_briefing_podcast_image_template', PressHub_AI_Settings_Storage::get_briefing_podcast_image_template(), __( 'The prompt template the AI follows when a podcast post makes its own image (Podcast Featured Image Source set to Automatic AI Image Generation).', 'presshub-ai-editor' ) ); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -4259,6 +4277,41 @@ class PressHub_AI_Settings_Render {
         <?php
     }
 
+    /**
+     * A Featured Image Studio template select for an automatic briefing
+     * image. A stored template that was deleted shows as missing. The
+     * "Default: …" note and Reset come from the registry default.
+     */
+    public function render_briefing_image_template_field( string $option, string $selected, string $help ) {
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $templates = PressHub_AI_Image_Prompt_Templates::get_all();
+        $ids       = array_column( $templates, 'id' );
+        $manage    = PressHub_Settings_Sections::url( 'writing-qa', 'featured-images' );
+        ?>
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text" aria-describedby="<?php echo self::esc_attr_safe( $option . '-help' ); ?>">
+            <?php if ( ! in_array( $selected, $ids, true ) ) : ?>
+                <option value="<?php echo self::esc_attr_safe( $selected ); ?>" selected="selected"><?php echo esc_html__( 'Missing template (Editorial photo is used)', 'presshub-ai-editor' ); ?></option>
+            <?php endif; ?>
+            <optgroup label="<?php echo esc_attr__( 'Built-in', 'presshub-ai-editor' ); ?>">
+                <?php foreach ( $templates as $tpl ) : if ( empty( $tpl['builtin'] ) ) { continue; } ?>
+                    <option value="<?php echo self::esc_attr_safe( $tpl['id'] ); ?>" <?php selected( $selected, $tpl['id'] ); ?>><?php echo esc_html( $tpl['name'] ); ?></option>
+                <?php endforeach; ?>
+            </optgroup>
+            <?php if ( count( $templates ) > count( PressHub_AI_Image_Prompt_Templates::get_builtin_templates() ) ) : ?>
+                <optgroup label="<?php echo esc_attr__( 'Saved templates', 'presshub-ai-editor' ); ?>">
+                    <?php foreach ( $templates as $tpl ) : if ( ! empty( $tpl['builtin'] ) ) { continue; } ?>
+                        <option value="<?php echo self::esc_attr_safe( $tpl['id'] ); ?>" <?php selected( $selected, $tpl['id'] ); ?>><?php echo esc_html( $tpl['name'] ); ?></option>
+                    <?php endforeach; ?>
+                </optgroup>
+            <?php endif; ?>
+        </select>
+        <p class="description" id="<?php echo self::esc_attr_safe( $option . '-help' ); ?>">
+            <?php echo esc_html( $help ); ?>
+            <a href="<?php echo esc_url( $manage ); ?>"><?php echo esc_html__( 'Add or edit templates in Writing & QA', 'presshub-ai-editor' ); ?></a>.
+        </p>
+        <?php
+    }
+
     public function render_briefing_podcast_featured_image_source_field() {
         $option   = 'presshub_ai_briefing_podcast_featured_image_source';
         $selected = PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source();
@@ -4300,7 +4353,63 @@ class PressHub_AI_Settings_Render {
         $value  = PressHub_AI_Settings_Storage::get_image_analysis_prompt();
         ?>
         <textarea name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" rows="14" class="ph-font-family-monospace ph-font-size-13px ph-line-height-1_5 large-text code"><?php echo esc_textarea( $value ); ?></textarea>
-        <p class="description"><?php echo __( 'Prompt instructions used to analyze article text and compose the visual image description. Available placeholders: {title}, {content}. Leave empty to restore plugin default template.', 'presshub-ai-editor' ); ?></p>
+        <p class="description"><?php echo __( 'The instructions of the built-in Editorial photo (default) template: the AI follows them to write the image prompt from the article. Available placeholders: {title}, {content}. Leave empty to restore plugin default template. Saved with Save settings.', 'presshub-ai-editor' ); ?></p>
+        <?php
+    }
+
+    /**
+     * Featured Image Studio prompt templates: a structured store with its own
+     * editor (settings design rule 2.7). Changes save at once through the
+     * template endpoints, not with the section's Save. The fields here carry
+     * no name, so the section form never posts them.
+     */
+    public function render_image_prompt_templates_manager() {
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $payload = PressHub_AI_Image_Prompt_Templates::client_payload();
+        ?>
+        <div id="presshub-image-templates-manager" class="presshub-image-templates-manager" role="group" aria-labelledby="presshub-image-templates-heading" data-templates="<?php echo self::esc_attr_safe( wp_json_encode( $payload ) ); ?>">
+            <p class="description"><?php echo esc_html__( 'The templates editors pick in the Featured Image Studio of the post editor, and that Daily Briefing uses for its automatic images. A template is the instructions the AI follows when it writes the image prompt from the article. Changes here are saved at once, without Save settings.', 'presshub-ai-editor' ); ?></p>
+            <table class="widefat striped presshub-image-templates-table">
+                <caption class="screen-reader-text"><?php echo esc_html__( 'Featured Image Studio prompt templates', 'presshub-ai-editor' ); ?></caption>
+                <thead>
+                    <tr>
+                        <th scope="col"><?php echo esc_html__( 'Template', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Kind', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Actions', 'presshub-ai-editor' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody id="presshub-image-templates-rows">
+                    <?php foreach ( $payload as $tpl ) : ?>
+                        <tr data-template-id="<?php echo self::esc_attr_safe( $tpl['id'] ); ?>">
+                            <th scope="row" class="presshub-image-templates-name"><strong><?php echo esc_html( $tpl['name'] ); ?></strong></th>
+                            <td class="presshub-image-templates-kind"><?php echo esc_html( $tpl['builtin'] ? __( 'Built-in', 'presshub-ai-editor' ) : __( 'Saved', 'presshub-ai-editor' ) ); ?></td>
+                            <td class="presshub-image-templates-actions"></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <p class="presshub-image-templates-add-row">
+                <button type="button" class="button" id="presshub-image-templates-add"><?php echo esc_html__( 'Add template', 'presshub-ai-editor' ); ?></button>
+            </p>
+            <div id="presshub-image-templates-editor" class="presshub-image-templates-editor" role="group" aria-labelledby="presshub-image-templates-editor-title" hidden>
+                <h4 id="presshub-image-templates-editor-title" class="presshub-image-templates-editor-title" tabindex="-1"></h4>
+                <p class="presshub-image-templates-field">
+                    <label for="presshub-image-templates-name"><?php echo esc_html__( 'Name', 'presshub-ai-editor' ); ?></label>
+                    <input type="text" id="presshub-image-templates-name" class="regular-text presshub-no-dirty" maxlength="<?php echo self::esc_attr_safe( (string) PressHub_AI_Image_Prompt_Templates::MAX_NAME_LEN ); ?>" autocomplete="off" />
+                </p>
+                <p class="presshub-image-templates-field">
+                    <label for="presshub-image-templates-text"><?php echo esc_html__( 'Instructions', 'presshub-ai-editor' ); ?></label>
+                    <textarea id="presshub-image-templates-text" class="large-text code presshub-no-dirty" rows="12" maxlength="<?php echo self::esc_attr_safe( (string) PressHub_AI_Image_Prompt_Templates::MAX_TEMPLATE_LEN ); ?>" aria-describedby="presshub-image-templates-text-help"></textarea>
+                    <span id="presshub-image-templates-text-help" class="description"><?php echo __( '<code>{title}</code> and <code>{content}</code> are replaced with the article. Without <code>{content}</code> the article is added at the end.', 'presshub-ai-editor' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- translatable string with inline code tags only. ?></span>
+                </p>
+                <p class="presshub-image-templates-editor-actions">
+                    <button type="button" class="button button-primary" id="presshub-image-templates-save"><?php echo esc_html__( 'Save template', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button" id="presshub-image-templates-copy" hidden><?php echo esc_html__( 'Copy into a new template', 'presshub-ai-editor' ); ?></button>
+                    <button type="button" class="button-link" id="presshub-image-templates-cancel"><?php echo esc_html__( 'Close', 'presshub-ai-editor' ); ?></button>
+                </p>
+            </div>
+            <p id="presshub-image-templates-status" class="presshub-image-templates-status" role="status" aria-live="polite"></p>
+        </div>
         <?php
     }
 

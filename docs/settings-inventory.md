@@ -13,12 +13,12 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | Connections (`connections`) | 42 | 18 | 9 |
 | AI models (`ai-models`) | 37 | 0 | 0 |
 | Writing & QA (`writing-qa`) | 23 | 0 | 0 |
-| Daily Briefing (`daily-briefing`) | 78 | 2 | 0 |
+| Daily Briefing (`daily-briefing`) | 80 | 2 | 0 |
 | Editorial knowledge (`editorial-knowledge`) | 14 | 0 | 0 |
 | Social publishing (`social-publishing`) | 74 | 5 | 0 |
 | Social listening (`social-listening`) | 32 | 0 | 0 |
 | Site & system (`site-system`) | 15 | 0 | 0 |
-| **Total** | **315** | | |
+| **Total** | **317** | | |
 
 **Scheduled for removal:** 0 option(s). **Removed by the clean-up (#237):** 12 option(s); both lists are at the end.
 
@@ -139,7 +139,7 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_qa_seo_action` | When the SEO check fails | string |  | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 | `presshub_ai_qa_seo_min_score` | Minimum SEO score | integer | points | ai / coauthor | needs `presshub_ai_seo_review_enabled` on |
 
-## Daily Briefing (`daily-briefing`, 78)
+## Daily Briefing (`daily-briefing`, 80)
 
 | Option | Label | Type | Unit | Stored as | Notes |
 |---|---|---|---|---|---|
@@ -206,6 +206,8 @@ Every option belongs to one section of PressHub → Settings (`admin.php?page=pr
 | `presshub_ai_briefing_featured_image_ids` | Featured Image Pool (Attachment IDs) | string |  | ai / briefing | not shown on screen |
 | `presshub_ai_briefing_featured_image_source` | Text Briefing Featured Image Source | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_featured_image_source` | Podcast Featured Image Source | string |  | ai / briefing |  |
+| `presshub_ai_briefing_image_template` | Text briefing image template | string |  | ai / briefing |  |
+| `presshub_ai_briefing_podcast_image_template` | Podcast image template | string |  | ai / briefing |  |
 | `presshub_ai_briefing_podcast_include_text` | Include transcript in podcast post | integer |  | ai / briefing | checkbox, was: Include Transcript in Podcast Post |
 | `presshub_ai_briefing_podcast_status` | Podcast Post Status | string |  | ai / briefing |  |
 | `presshub_ai_briefing_text_prompt` | Curator System Prompt | string |  | ai / briefing |  |
