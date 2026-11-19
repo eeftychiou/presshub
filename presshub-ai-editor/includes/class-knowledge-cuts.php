@@ -46,7 +46,7 @@ class PressHub_AI_Knowledge_Cuts {
     const PENDING_TTL = 300;
 
     /** Targets whose notes stay for every call until the site forgets them. */
-    const MULTI_CALL = [ 'social_copy_', 'social_tiktok_shorts' ];
+    const MULTI_CALL = [ 'social_copy_', 'social_tiktok_shorts', 'social_post_images' ];
 
     /** One log line for a call whose block lost something. Never throws. */
     public static function log( string $kind, string $action, array $cuts ): void {
