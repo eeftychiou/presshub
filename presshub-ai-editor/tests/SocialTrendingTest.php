@@ -413,6 +413,71 @@ st_check( 'featured: no picture, nothing to do', 0 === $T::maybe_set_featured_im
 $T::$sideload = static function () { return new WP_Error( 'http', 'expired' ); };
 st_check( 'featured: sideload failure tolerated', 0 === $T::maybe_set_featured_image( 78, [ $T::normalize_item( st_post( 'x', '205', 1, 10, [ 'thumbnail' => 'https://pbs.twimg.com/media/a.jpg' ] ), $now ) ] ) && empty( $GLOBALS['THUMBS'][78] ) );
 $T::$sideload = null;
+// Roundup featured image source: an AI image with the Trending in Cyprus template, drawn in a job of
+// its own (not in the worker's request); the top post picture stands in and stays if drawing fails.
+$ai_calls = [];
+$T::$ai_image = static function ( $content, $title, $tpl, $pid ) use ( &$ai_calls ) { $ai_calls[] = [ $content, $tpl['id'], $pid ]; return 9500; };
+$T::$sideload = static function () { return 9600; };
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$ai_jobs = static function () { return array_values( array_filter( (array) $GLOBALS['SCHEDULED_EVENTS'], static function ( $e ) { return 'presshub_ai_social_trending_ai_image' === $e['hook']; } ) ); };
+$ai_items = [ $T::normalize_item( st_post( 'x', '206', 1, 10, [ 'text' => 'Heatwave in Nicosia', 'thumbnail' => 'https://pbs.twimg.com/media/b.jpg' ] ), $now ) ];
+st_check( 'featured source: top post by default', 'top_post' === $S::get_social_trending_image_source() && 9600 === $T::maybe_set_featured_image( 81, $ai_items ) && [] === $ai_jobs() );
+st_check( 'featured source: sanitized', 'top_post' === $S::sanitize_social_trending_image_source( 'weird' ) && 'auto_generate' === $S::sanitize_social_trending_image_source( 'auto_generate' ) );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled'] = 0;
+st_check( 'featured source: AI off falls back to the top post, no job', 9600 === $T::maybe_set_featured_image( 82, $ai_items ) && [] === $ai_jobs() );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_image_feature_enabled'] = 1;
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] = 'landscape_aerial';
+st_check( 'featured source: AI queues a job, top post picture meanwhile', 9600 === $T::maybe_set_featured_image( 83, $ai_items ) && 1 === count( $ai_jobs() ) && [] === $ai_calls );
+$job = $ai_jobs()[0];
+st_check( 'featured source: release waits for the AI image', '1' === (string) get_post_meta( 83, '_presshub_trending_ai_release_pending', true ) );
+st_check( 'featured source: job carries the post and its texts only', [ 83, [ 'Heatwave in Nicosia' ] ] === $job['args'] );
+unset( $GLOBALS['THUMBS'][83] );
+$T::maybe_set_featured_image( 83, $ai_items );
+st_check( 'featured source: queued once per post', 1 === count( $ai_jobs() ) );
+if ( ! function_exists( 'delete_post_meta' ) ) {
+    function delete_post_meta( $post_id, $key, $value = '' ) { unset( $GLOBALS['POST_META_STORE'][ $post_id ][ $key ] ); return true; }
+}
+$GLOBALS['POSTS_STORE'][83] = [ 'ID' => 83, 'post_title' => 'Trending', 'post_status' => 'pending' ];
+$GLOBALS['POST_META_STORE'][83]['_presshub_gate_target_status'] = 'publish';
+st_check( 'featured source: job sets the AI image with the chosen template', 9500 === $T::run_ai_featured_image( 83, [ 'Heatwave in Nicosia' ] ) && 9500 === $GLOBALS['THUMBS'][83] && 1 === count( $ai_calls ) && 'landscape_aerial' === $ai_calls[0][1] && false !== strpos( $ai_calls[0][0], 'Heatwave in Nicosia' ) && 83 === $ai_calls[0][2] );
+st_check( 'featured source: the job releases the post after the image', '' === (string) get_post_meta( 83, '_presshub_trending_ai_release_pending', true ) && '' === (string) get_post_meta( 83, '_presshub_gate_target_status', true ) );
+$T::$ai_image = static function () { return new WP_Error( 'api', 'down' ); };
+$GLOBALS['THUMBS'][84] = 9600;
+$GLOBALS['POSTS_STORE'][84] = [ 'ID' => 84, 'post_title' => 'Trending' ];
+st_check( 'featured source: a failed job keeps the top post picture', 0 === $T::run_ai_featured_image( 84, [ 'Heatwave' ] ) && 9600 === $GLOBALS['THUMBS'][84] );
+st_check( 'featured source: job for a deleted post does nothing', 0 === $T::run_ai_featured_image( 999, [ 'x' ] ) );
+$GLOBALS['POSTS_STORE'][85] = [ 'ID' => 85, 'post_title' => 'Trending', 'post_status' => 'trash' ];
+$n_calls = count( $ai_calls );
+st_check( 'featured source: job for a trashed post draws nothing', 0 === $T::run_ai_featured_image( 85, [ 'x' ] ) && $n_calls === count( $ai_calls ) );
+$T::$ai_image = static function ( $c, $t, $tpl ) use ( &$ai_calls ) { $ai_calls[] = [ $c, $tpl['id'], 0 ]; return 9700; };
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'top_post';
+$GLOBALS['POST_META_STORE'][84]['_presshub_trending_ai_release_pending'] = '1';
+st_check( 'featured source: source switched back before the job: no drawing, still released', 0 === $T::run_ai_featured_image( 84, [ 'x' ] ) && $n_calls === count( $ai_calls ) && '' === (string) get_post_meta( 84, '_presshub_trending_ai_release_pending', true ) );
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'] = 'custom_gone';
+$T::run_ai_featured_image( 84, [ 'x' ] );
+st_check( 'featured source: a missing template falls back to Editorial cartoon', 'editorial_cartoon' === end( $ai_calls )[1] );
+// Watchdog: a job that never ran releases the roundup with the stand-in after 15 minutes.
+$GLOBALS['POSTS_STORE'][86] = [ 'ID' => 86, 'post_title' => 'Trending', 'post_status' => 'pending' ];
+$GLOBALS['POST_META_STORE'][86] = [ '_presshub_trending_ai_release_pending' => '1', '_presshub_trending_ai_image_queued' => (string) ( $now - 60 ), '_presshub_gate_target_status' => 'publish' ];
+st_check( 'watchdog: a fresh job is waited for', false === $T::maybe_release_stale_ai_wait( 86, $now ) && '1' === $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] );
+st_check( 'watchdog: a stale job releases the roundup', true === $T::maybe_release_stale_ai_wait( 86, $now + 901 ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_trending_ai_release_pending'] ) && empty( $GLOBALS['POST_META_STORE'][86]['_presshub_gate_target_status'] ) && 'publish' === get_post( 86 )->post_status );
+$T::$ai_image = static function () { return 9800; };
+unset( $GLOBALS['THUMBS'][86] );
+st_check( 'watchdog: a late job keeps the released picture and does not release again', 0 === $T::run_ai_featured_image( 86, [ 'x' ] ) && empty( $GLOBALS['THUMBS'][86] ) );
+// A new roundup with an AI image planned is held as pending even with the gate off for Trending.
+$GLOBALS['SCHEDULED_EVENTS'] = [];
+$GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'] = 'auto_generate';
+$GLOBALS['ST_NOW'] = $now + 2 * 86400;
+$plan = $T::get_worker_plan( false, $now + 2 * 86400 );
+$res  = $T::ingest_worker_posts( $plan['run_id'], [ st_post( 'x', '207', 900, 10, [ 'text' => 'Storm over Limassol', 'thumbnail' => 'https://pbs.twimg.com/media/c.jpg' ] ) ], [], $now + 2 * 86400 );
+unset( $GLOBALS['ST_NOW'] );
+$rid  = (int) ( $res['post_id'] ?? 0 );
+$rpost = get_post( $rid );
+st_check( 'held for the AI image: new roundup pending with its target status kept', $rid > 0 && 'pending' === ( $rpost->post_status ?? '' ) && '' !== (string) get_post_meta( $rid, '_presshub_gate_target_status', true ) && 1 === count( $ai_jobs() ) );
+$T::$ai_image = null;
+unset( $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_source'], $GLOBALS['OPTIONS_STORE']['presshub_ai_social_trending_image_template'], $GLOBALS['POSTS_STORE'][83], $GLOBALS['POSTS_STORE'][84] );
 // TikTok photo posts: first image from the Media Library, never TikTok's player.
 $GLOBALS['THUMBS'] = [];
 unset( $GLOBALS['OPTIONS_STORE'][ $T::OPTION_IMAGES ] );

@@ -454,7 +454,7 @@ class PressHub_AI_Settings_Render {
         <table class="form-table" role="presentation">
                         <tbody>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_image_feature_enabled"><?php echo __( 'Enable Feature', 'presshub-ai-editor' ); ?></label></th>
+                                <th scope="row"><label for="presshub_ai_image_feature_enabled"><?php echo esc_html__( 'Generate featured images', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_image_feature_enabled_field(); ?>
                                 </td>
@@ -473,6 +473,12 @@ class PressHub_AI_Settings_Render {
                                 <th scope="row"><label for="presshub_ai_image_analysis_prompt"><?php echo __( 'Article Analysis Prompt Template', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_image_analysis_prompt_field(); ?>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><span id="presshub-auto-images-heading"><?php echo esc_html__( 'Automatic images', 'presshub-ai-editor' ); ?></span></th>
+                                <td>
+                                    <?php $this->render_auto_images_table(); ?>
                                 </td>
                             </tr>
                             <tr>
@@ -964,22 +970,14 @@ class PressHub_AI_Settings_Render {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_image_template"><?php echo esc_html__( 'Text briefing image template', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_image_template_field( 'presshub_ai_briefing_image_template', PressHub_AI_Settings_Storage::get_briefing_image_template(), __( 'The prompt template the AI follows when a text briefing makes its own image (Text Briefing Featured Image Source set to Automatic AI Image Generation).', 'presshub-ai-editor' ) ); ?>
-                                </td>
-                            </tr>
-                            <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_featured_image_source"><?php echo __( 'Podcast Featured Image Source', 'presshub-ai-editor' ); ?></label></th>
                                 <td>
                                     <?php $this->render_briefing_podcast_featured_image_source_field(); ?>
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label for="presshub_ai_briefing_podcast_image_template"><?php echo esc_html__( 'Podcast image template', 'presshub-ai-editor' ); ?></label></th>
-                                <td>
-                                    <?php $this->render_briefing_image_template_field( 'presshub_ai_briefing_podcast_image_template', PressHub_AI_Settings_Storage::get_briefing_podcast_image_template(), __( 'The prompt template the AI follows when a podcast post makes its own image (Podcast Featured Image Source set to Automatic AI Image Generation).', 'presshub-ai-editor' ) ); ?>
-                                </td>
+                                <th scope="row"><?php echo esc_html__( 'Image templates', 'presshub-ai-editor' ); ?></th>
+                                <td><?php echo $this->auto_image_templates_line( [ 'briefing_morning', 'briefing_noon', 'podcast_morning', 'podcast_noon' ], __( 'Used when the image source above is Automatic AI Image Generation.', 'presshub-ai-editor' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in the helper. ?></td>
                             </tr>
                             <tr>
                                 <th scope="row"><label for="presshub_ai_briefing_podcast_include_text"><?php echo __( 'Include Transcript in Podcast Post', 'presshub-ai-editor' ); ?></label></th>
@@ -3369,6 +3367,18 @@ class PressHub_AI_Settings_Render {
                 <p class="description"><?php echo esc_html__( 'The category is created if it does not exist. In the title, {date} and {time} are replaced with the refresh date and time. X and TikTok posts are embedded; Instagram and Facebook posts are quoted with a link.', 'presshub-ai-editor' ); ?></p>
             </td>
         </tr>
+        <tr>
+            <th scope="row"><label for="presshub_ai_social_trending_image_source"><?php echo esc_html__( 'Roundup featured image', 'presshub-ai-editor' ); ?></label></th>
+            <td>
+                <?php $img_source = PressHub_AI_Settings_Storage::get_social_trending_image_source(); ?>
+                <select name="presshub_ai_social_trending_image_source" id="presshub_ai_social_trending_image_source">
+                    <option value="top_post" <?php selected( $img_source, 'top_post' ); ?>><?php echo esc_html__( 'The top post\'s picture', 'presshub-ai-editor' ); ?></option>
+                    <option value="auto_generate" <?php selected( $img_source, 'auto_generate' ); ?>><?php echo esc_html__( 'An AI image drawn from the roundup', 'presshub-ai-editor' ); ?></option>
+                </select>
+                <p class="description"><?php echo esc_html__( 'An AI image needs Generate featured images on (Writing & QA → Featured images). It is drawn in the background: the roundup is held as pending, then it and its social posts go out with the AI image, or with the top post\'s picture if drawing fails or takes over 15 minutes. Each roundup post gets its image once. Its template defaults to Editorial cartoon, so a picture drawn from social posts is not taken for a news photo.', 'presshub-ai-editor' ); ?></p>
+                <?php echo $this->auto_image_templates_line( [ 'social_trending' ], '', __( 'Prompt template:', 'presshub-ai-editor' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in the helper. ?>
+            </td>
+        </tr>
         <?php
     }
 
@@ -4278,19 +4288,17 @@ class PressHub_AI_Settings_Render {
     }
 
     /**
-     * A Featured Image Studio template select for an automatic briefing
-     * image. A stored template that was deleted shows as missing. The
-     * "Default: …" note and Reset come from the registry default.
+     * A Featured Image Studio template select. A stored template that was
+     * deleted shows as missing (Editorial photo is used for it).
      */
-    public function render_briefing_image_template_field( string $option, string $selected, string $help ) {
+    private function render_image_template_select( string $option, string $selected, string $kind = '' ) {
         require_once __DIR__ . '/class-image-prompt-templates.php';
         $templates = PressHub_AI_Image_Prompt_Templates::get_all();
         $ids       = array_column( $templates, 'id' );
-        $manage    = PressHub_Settings_Sections::url( 'writing-qa', 'featured-images' );
         ?>
-        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="regular-text" aria-describedby="<?php echo self::esc_attr_safe( $option . '-help' ); ?>">
+        <select name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" class="presshub-auto-images-select" data-default="<?php echo self::esc_attr_safe( PressHub_AI_Settings_Storage::default_auto_image_template( $kind ) ); ?>">
             <?php if ( ! in_array( $selected, $ids, true ) ) : ?>
-                <option value="<?php echo self::esc_attr_safe( $selected ); ?>" selected="selected"><?php echo esc_html__( 'Missing template (Editorial photo is used)', 'presshub-ai-editor' ); ?></option>
+                <option value="<?php echo self::esc_attr_safe( $selected ); ?>" selected="selected" data-missing="1"><?php echo esc_html( $this->missing_template_label( $kind ) ); ?></option>
             <?php endif; ?>
             <optgroup label="<?php echo esc_attr__( 'Built-in', 'presshub-ai-editor' ); ?>">
                 <?php foreach ( $templates as $tpl ) : if ( empty( $tpl['builtin'] ) ) { continue; } ?>
@@ -4298,18 +4306,121 @@ class PressHub_AI_Settings_Render {
                 <?php endforeach; ?>
             </optgroup>
             <?php if ( count( $templates ) > count( PressHub_AI_Image_Prompt_Templates::get_builtin_templates() ) ) : ?>
-                <optgroup label="<?php echo esc_attr__( 'Saved templates', 'presshub-ai-editor' ); ?>">
+                <optgroup data-group="saved" label="<?php echo esc_attr__( 'Saved templates', 'presshub-ai-editor' ); ?>">
                     <?php foreach ( $templates as $tpl ) : if ( ! empty( $tpl['builtin'] ) ) { continue; } ?>
                         <option value="<?php echo self::esc_attr_safe( $tpl['id'] ); ?>" <?php selected( $selected, $tpl['id'] ); ?>><?php echo esc_html( $tpl['name'] ); ?></option>
                     <?php endforeach; ?>
                 </optgroup>
             <?php endif; ?>
         </select>
-        <p class="description" id="<?php echo self::esc_attr_safe( $option . '-help' ); ?>">
-            <?php echo esc_html( $help ); ?>
-            <a href="<?php echo esc_url( $manage ); ?>"><?php echo esc_html__( 'Add or edit templates in Writing & QA', 'presshub-ai-editor' ); ?></a>.
-        </p>
         <?php
+    }
+
+    /** A stored template that was deleted: names the template used instead (the kind's default). */
+    private function missing_template_label( string $kind ): string {
+        return 'social_trending' === $kind
+            ? __( 'Missing template (Editorial cartoon is used)', 'presshub-ai-editor' )
+            : __( 'Missing template (Editorial photo is used)', 'presshub-ai-editor' );
+    }
+
+    /**
+     * The automatic post types, their labels and where their image source is
+     * set: kind => [ label, source text, makes an AI image, link, link label, source field id ].
+     * With Generate featured images off, a post set to AI says so and names what it gets instead.
+     */
+    private function auto_image_rows( ?bool $enabled = null ): array {
+        $enabled    = null === $enabled ? PressHub_AI_Settings_Storage::get_image_feature_enabled() : $enabled;
+        $text_ai    = 'auto_generate' === PressHub_AI_Settings_Storage::get_briefing_featured_image_source();
+        $podcast_ai = 'auto_generate' === PressHub_AI_Settings_Storage::get_briefing_podcast_featured_image_source();
+        $trend_ai   = 'auto_generate' === PressHub_AI_Settings_Storage::get_social_trending_image_source();
+        $ai         = __( 'AI image with this template', 'presshub-ai-editor' );
+        $pool       = __( 'Featured Image Pool, so no AI image is made', 'presshub-ai-editor' );
+        $pool_off   = __( 'Featured Image Pool: AI is chosen, but Generate featured images is off', 'presshub-ai-editor' );
+        $top        = __( 'Top post\'s picture, so no AI image is made', 'presshub-ai-editor' );
+        $top_off    = __( 'Top post\'s picture: AI is chosen, but Generate featured images is off', 'presshub-ai-editor' );
+        $in_brief   = __( 'Change in Daily Briefing', 'presshub-ai-editor' );
+        $source     = static function ( bool $chosen, string $none, string $off ) use ( $enabled, $ai ): array {
+            if ( ! $chosen ) {
+                return [ $none, false ];
+            }
+            return $enabled ? [ $ai, true ] : [ $off, false ];
+        };
+        $rows   = [];
+        $labels = [
+            'briefing_morning' => __( 'Morning briefing', 'presshub-ai-editor' ),
+            'briefing_noon'    => __( 'Noon briefing', 'presshub-ai-editor' ),
+            'podcast_morning'  => __( 'Morning podcast', 'presshub-ai-editor' ),
+            'podcast_noon'     => __( 'Noon podcast', 'presshub-ai-editor' ),
+            'social_trending'  => __( 'Trending in Cyprus', 'presshub-ai-editor' ),
+        ];
+        foreach ( [ 'briefing_morning', 'briefing_noon' ] as $kind ) {
+            $rows[ $kind ] = array_merge( [ $labels[ $kind ] ], $source( $text_ai, $pool, $pool_off ), [ PressHub_Settings_Sections::url( 'daily-briefing', 'presshub_ai_briefing_featured_image_source' ), $in_brief, 'presshub_ai_briefing_featured_image_source' ] );
+        }
+        foreach ( [ 'podcast_morning', 'podcast_noon' ] as $kind ) {
+            $rows[ $kind ] = array_merge( [ $labels[ $kind ] ], $source( $podcast_ai, $pool, $pool_off ), [ PressHub_Settings_Sections::url( 'daily-briefing', 'presshub_ai_briefing_podcast_featured_image_source' ), $in_brief, 'presshub_ai_briefing_podcast_featured_image_source' ] );
+        }
+        $rows['social_trending'] = array_merge( [ $labels['social_trending'] ], $source( $trend_ai, $top, $top_off ), [ PressHub_Settings_Sections::url( 'social-listening', 'presshub_ai_social_trending_image_source' ), __( 'Change in Social listening', 'presshub-ai-editor' ), 'presshub_ai_social_trending_image_source' ] );
+        return $rows;
+    }
+
+    /**
+     * Writing & QA → Featured images: one row per automatic post type with
+     * the prompt template its AI image uses (the home of these five settings).
+     */
+    public function render_auto_images_table() {
+        $enabled = PressHub_AI_Settings_Storage::get_image_feature_enabled();
+        $rows    = $this->auto_image_rows( $enabled );
+        $options = PressHub_AI_Settings_Storage::auto_image_template_options();
+        ?>
+        <div class="presshub-auto-images" role="group" aria-labelledby="presshub-auto-images-heading">
+            <p class="description"><?php echo esc_html__( 'The prompt template each automatic post uses when it makes its own AI featured image. Trending in Cyprus defaults to Editorial cartoon, so a picture drawn from social posts is not taken for a news photo.', 'presshub-ai-editor' ); ?></p>
+            <?php if ( ! $enabled ) : ?>
+                <p class="presshub-auto-images-off"><strong><?php echo esc_html__( 'Note:', 'presshub-ai-editor' ); ?></strong> <?php echo esc_html__( 'Generate featured images is off above, so no automatic post makes an AI image until you turn it on.', 'presshub-ai-editor' ); ?></p>
+            <?php endif; ?>
+            <table class="widefat striped presshub-auto-images-table">
+                <caption class="screen-reader-text"><?php echo esc_html__( 'Prompt template for each automatic post', 'presshub-ai-editor' ); ?></caption>
+                <thead>
+                    <tr>
+                        <th scope="col"><?php echo esc_html__( 'Post', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Prompt template', 'presshub-ai-editor' ); ?></th>
+                        <th scope="col"><?php echo esc_html__( 'Featured image now', 'presshub-ai-editor' ); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ( $rows as $kind => $row ) : $option = $options[ $kind ]; ?>
+                        <tr>
+                            <th scope="row"><label for="<?php echo self::esc_attr_safe( $option ); ?>"><?php echo esc_html( $row[0] ); ?></label></th>
+                            <td><?php $this->render_image_template_select( $option, PressHub_AI_Settings_Storage::get_auto_image_template( $kind ), $kind ); ?></td>
+                            <td class="presshub-auto-images-source<?php echo $row[2] ? ' is-ai' : ''; ?>">
+                                <?php echo esc_html( $row[1] ); ?>.
+                                <?php /* translators: 1: where to change it, 2: automatic post, e.g. Noon podcast. */ ?>
+                                <a href="<?php echo esc_url( $row[3] ); ?>" aria-label="<?php echo esc_attr( sprintf( __( '%1$s: image source for %2$s', 'presshub-ai-editor' ), $row[4], $row[0] ) ); ?>"><?php echo esc_html( $row[4] ); ?></a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
+    }
+
+    /**
+     * Read-only line naming the templates of some automatic post types, with
+     * a link to their home in Writing & QA (rule 1.3).
+     */
+    private function auto_image_templates_line( array $kinds, string $note = '', string $lead = '' ): string {
+        require_once __DIR__ . '/class-image-prompt-templates.php';
+        $rows  = $this->auto_image_rows();
+        $parts = [];
+        foreach ( $kinds as $kind ) {
+            // get(), not resolve(): only showing it, so no missing-template warning in the log.
+            $found   = PressHub_AI_Image_Prompt_Templates::get( PressHub_AI_Settings_Storage::get_auto_image_template( $kind ) );
+            $name    = $found ? $found['name'] : $this->missing_template_label( $kind );
+            // One kind after a lead-in ("Prompt template:") needs no row label.
+            $parts[] = ( 1 === count( $kinds ) && '' !== $lead ) ? $name : sprintf( '%s: %s', $rows[ $kind ][0], $name );
+        }
+        return '<p class="presshub-model-line">' . ( '' !== $lead ? esc_html( $lead ) . ' ' : '' ) . esc_html( implode( ' · ', $parts ) ) . '. <a href="' . esc_url( PressHub_Settings_Sections::url( 'writing-qa', 'presshub-auto-images-heading' ) ) . '">' . esc_html__( 'Change in Writing & QA → Featured images → Automatic images', 'presshub-ai-editor' ) . '</a></p>'
+            . ( '' !== $note ? '<p class="description">' . esc_html( $note ) . '</p>' : '' );
     }
 
     public function render_briefing_podcast_featured_image_source_field() {
@@ -4330,7 +4441,7 @@ class PressHub_AI_Settings_Render {
         ?>
         <label>
             <input type="checkbox" name="<?php echo self::esc_attr_safe( $option ); ?>" id="<?php echo self::esc_attr_safe( $option ); ?>" value="1" <?php checked( $checked, true ); ?> />
-            <?php echo __( 'Enable AI Featured Image generation studio across post editor metaboxes and Daily Briefing Hub.', 'presshub-ai-editor' ); ?>
+            <?php echo esc_html__( 'Turn on the AI Featured Image Studio in the post editor and the AI images of the automatic posts (Daily Briefing, podcasts and Trending in Cyprus).', 'presshub-ai-editor' ); ?>
         </label>
         <?php
     }
@@ -4368,7 +4479,7 @@ class PressHub_AI_Settings_Render {
         $payload = PressHub_AI_Image_Prompt_Templates::client_payload();
         ?>
         <div id="presshub-image-templates-manager" class="presshub-image-templates-manager" role="group" aria-labelledby="presshub-image-templates-heading" data-templates="<?php echo self::esc_attr_safe( wp_json_encode( $payload ) ); ?>">
-            <p class="description"><?php echo esc_html__( 'The templates editors pick in the Featured Image Studio of the post editor, and that Daily Briefing uses for its automatic images. A template is the instructions the AI follows when it writes the image prompt from the article. Changes here are saved at once, without Save settings.', 'presshub-ai-editor' ); ?></p>
+            <p class="description"><?php echo esc_html__( 'The templates editors pick in the Featured Image Studio of the post editor, and that the automatic posts in Automatic images above use. A template is the instructions the AI follows when it writes the image prompt from the article. Changes here are saved at once, without Save settings.', 'presshub-ai-editor' ); ?></p>
             <table class="widefat striped presshub-image-templates-table">
                 <caption class="screen-reader-text"><?php echo esc_html__( 'Featured Image Studio prompt templates', 'presshub-ai-editor' ); ?></caption>
                 <thead>
