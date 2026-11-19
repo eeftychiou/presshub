@@ -407,6 +407,27 @@ describe('YouTube uploader', () => {
     expect(late).toMatchObject({ success: false, reason: 'refused' });
     expect(reads).toBe(3);
     expect(waits.slice(-3)).toEqual([10, 20, 40]);
+
+    // A failed read (a 401, then a 5xx) is not the end: a fresh token, and the next read finds the refusal.
+    let tries = 0;
+    const tokens: string[] = [];
+    const flaky: any = async (url: string, init: any) => {
+      if (url.includes('/worker/youtube/token')) {
+        tokens.push(init.body);
+        return response(200, { access_token: 'T' });
+      }
+      if (url.includes('/youtube/v3/videos?part=status')) {
+        tries++;
+        if (tries === 1) return response(401, { error: { message: 'Invalid Credentials' } });
+        if (tries === 2) return response(503, { error: { message: 'Backend Error' } });
+        return response(200, { items: [{ status: { uploadStatus: 'rejected', rejectionReason: 'length' } }] });
+      }
+      return mk({ uploadStatus: 'uploaded' }, {})(url);
+    };
+    const flakyRes = await uploadToYouTube({ statusCheckDelayMs: 0, wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: episodeMeta, fetchFn: flaky });
+    expect(flakyRes).toMatchObject({ success: false, reason: 'refused' });
+    expect(tries).toBe(3);
+    expect(tokens).toContain('{"refresh":true}');
   });
 
   test('rateLimitExceeded is a short wait and another try, not the daily quota', async () => {
@@ -444,7 +465,7 @@ describe('YouTube uploader', () => {
       }
       return response(200, { id: 'VUP' });
     };
-    await uploadToYouTube({
+    await uploadToYouTube({ statusCheckDelayMs: 0,
       wpUrl: 'https://w.test', workerSecret: 'S', filePath: file, meta: episodeMeta, fetchFn,
       onUploaded: (id, url) => order.push(`uploaded:${id}:${url}`)
     });

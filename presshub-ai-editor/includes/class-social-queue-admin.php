@@ -198,7 +198,7 @@ class PressHub_Social_Queue_Admin {
                                         <?php if ( '' !== $yt_episode_note ) : ?>
                                             <div class="presshub-error-msg" title="<?php echo esc_attr( $yt_episode_note ); ?>">
                                                 <span class="dashicons dashicons-warning" style="font-size:14px; width:14px; height:14px; vertical-align:middle; color:#dba617;"></span>
-                                                <?php echo esc_html( sprintf( /* translators: %s: what the episode video lacks */ __( 'Episode published without: %s', 'presshub-social-autopost' ), wp_trim_words( $yt_episode_note, 10 ) ) ); ?>
+                                                <?php echo esc_html( sprintf( /* translators: %s: what the episode video lacks */ __( 'Episode video incomplete: %s', 'presshub-social-autopost' ), wp_trim_words( $yt_episode_note, 10 ) ) ); ?>
                                             </div>
                                         <?php endif; ?>
                                         <?php if ( ! empty( $job['last_error'] ) ) : ?>
