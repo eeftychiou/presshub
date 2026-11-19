@@ -1596,16 +1596,9 @@ class PressHub_AI_Settings_Render {
                     <label for="token-filter-action"><?php echo __( 'Action:', 'presshub-ai-editor' ); ?></label>
                     <select id="token-filter-action">
                         <option value=""><?php echo __( 'All Actions', 'presshub-ai-editor' ); ?></option>
-                        <option value="coauthor_draft"><?php echo __( 'Co-Author Draft', 'presshub-ai-editor' ); ?></option>
-                        <option value="coauthor_scorecard"><?php echo __( 'Editorial Scorecard', 'presshub-ai-editor' ); ?></option>
-                        <option value="copilot_chat"><?php echo __( 'Copilot Chat', 'presshub-ai-editor' ); ?></option>
-                        <option value="copilot_research"><?php echo __( 'Copilot Research', 'presshub-ai-editor' ); ?></option>
-                        <option value="briefing_curation"><?php echo __( 'Briefing Curation', 'presshub-ai-editor' ); ?></option>
-                        <option value="podcast_script"><?php echo __( 'Podcast Script', 'presshub-ai-editor' ); ?></option>
-                        <option value="podcast_audio"><?php echo __( 'Podcast Audio Synthesis', 'presshub-ai-editor' ); ?></option>
-                        <option value="scrape_harvest"><?php echo __( 'News Harvester', 'presshub-ai-editor' ); ?></option>
-                        <option value="social_tiktok_shorts"><?php echo esc_html__( 'Shorts script (TikTok/YouTube)', 'presshub-ai-editor' ); ?></option>
-                        <option value="custom_test"><?php echo __( 'Test Connection', 'presshub-ai-editor' ); ?></option>
+                        <?php foreach ( ( class_exists( 'PressHub_AI_Token_Logger' ) ? PressHub_AI_Token_Logger::filter_options() : [] ) as $presshub_action => $presshub_label ) : ?>
+                            <option value="<?php echo esc_attr( $presshub_action ); ?>"><?php echo esc_html( $presshub_label ); ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="filter-group">
