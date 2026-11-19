@@ -154,7 +154,7 @@ class PressHub_Social_Settings {
      */
     public function handle_reset_prompts_action(): void {
         // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        $page = isset( $_GET['page'] ) && is_scalar( $_GET['page'] ) ? (string) $_GET['page'] : '';
+        $page = isset( $_GET['page'] ) && is_scalar( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
         // #246: the reset link lives on PressHub → Settings → Social publishing; the old page slug still works.
         if ( self::SETTINGS_SLUG !== $page && PressHub_Settings_Sections::PAGE_SLUG !== $page ) {
             return;

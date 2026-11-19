@@ -53,9 +53,11 @@ class PressHub_Social_Queue_Admin {
             wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'presshub-social-autopost' ) );
         }
 
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only list filters.
         $current_status   = isset( $_GET['status'] ) ? sanitize_key( wp_unslash( $_GET['status'] ) ) : '';
         $current_platform = isset( $_GET['platform'] ) ? sanitize_key( wp_unslash( $_GET['platform'] ) ) : '';
-        $paged            = isset( $_GET['paged'] ) ? max( 1, (int) $_GET['paged'] ) : 1;
+        $paged            = isset( $_GET['paged'] ) ? max( 1, (int) wp_unslash( $_GET['paged'] ) ) : 1;
+        // phpcs:enable WordPress.Security.NonceVerification.Recommended
         $per_page         = 25;
         $offset           = ( $paged - 1 ) * $per_page;
 

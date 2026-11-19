@@ -874,7 +874,7 @@ class PressHub_Social_Settings_Storage {
             if ( ! empty( $_POST[ 'presshub_social_enabled_' . $platform . '_present' ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
                 $enabled = false;
             } elseif ( ! empty( $_POST['presshub_social_enabled_platforms_present'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
-                $platforms = (array) ( $_POST['presshub_social_enabled_platforms'] ?? [] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+                $platforms = array_map( 'sanitize_key', (array) wp_unslash( $_POST['presshub_social_enabled_platforms'] ?? [] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
                 $enabled   = in_array( $platform, $platforms, true );
             } elseif ( ! empty( $_POST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
                 return self::is_platform_enabled( $platform );

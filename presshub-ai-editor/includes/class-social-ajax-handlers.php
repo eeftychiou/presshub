@@ -110,8 +110,7 @@ class PressHub_Social_Ajax_Handlers {
         // Persist selected platforms if passed from metabox
         $platforms = [];
         if ( isset( $_POST['platforms'] ) && is_array( $_POST['platforms'] ) ) {
-            foreach ( $_POST['platforms'] as $p ) {
-                $sanitized = sanitize_key( wp_unslash( $p ) );
+            foreach ( array_map( 'sanitize_key', (array) wp_unslash( $_POST['platforms'] ) ) as $sanitized ) {
                 if ( in_array( $sanitized, PressHub_Social_Queue::VALID_PLATFORMS, true ) ) {
                     if ( class_exists( 'PressHub_Social_Settings_Storage' ) && method_exists( 'PressHub_Social_Settings_Storage', 'is_platform_ready' ) ) {
                         if ( ! PressHub_Social_Settings_Storage::is_platform_ready( $sanitized ) ) {

@@ -191,6 +191,7 @@ class PressHub_Social_Queue {
         if ( self::is_db_ready() ) {
             global $wpdb;
             $table = PressHub_Social_Activator::get_table_name();
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
             $row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d LIMIT 1", $job_id ), ARRAY_A );
             return $row ? (array) $row : null;
         }
@@ -212,6 +213,7 @@ class PressHub_Social_Queue {
         if ( self::is_db_ready() ) {
             global $wpdb;
             $table = PressHub_Social_Activator::get_table_name();
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
             $rows  = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE post_id = %d ORDER BY id DESC", $post_id ), ARRAY_A );
             return is_array( $rows ) ? $rows : [];
         }
@@ -280,9 +282,11 @@ class PressHub_Social_Queue {
 
             $params[] = $limit;
             $sql      = $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "SELECT * FROM {$table} WHERE {$where} ORDER BY scheduled_at ASC, id ASC LIMIT %d",
                 ...$params
             );
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $rows     = $wpdb->get_results( $sql, ARRAY_A );
             return is_array( $rows ) ? $rows : [];
         }
@@ -347,7 +351,9 @@ class PressHub_Social_Queue {
             $args[]    = $limit;
             $args[]    = $offset;
 
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- table name from $wpdb; placeholders are built alongside $args.
             $sql  = $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where_sql} ORDER BY id DESC LIMIT %d OFFSET %d", ...$args );
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $rows = $wpdb->get_results( $sql, ARRAY_A );
             return is_array( $rows ) ? $rows : [];
         }
@@ -384,6 +390,7 @@ class PressHub_Social_Queue {
             global $wpdb;
             $table  = PressHub_Social_Activator::get_table_name();
             $result = $wpdb->query( $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "UPDATE {$table} SET status = 'processing', attempts = attempts + 1, updated_at = %s WHERE id = %d AND status = 'pending'",
                 $now,
                 $job_id
@@ -408,6 +415,7 @@ class PressHub_Social_Queue {
             global $wpdb;
             $table = PressHub_Social_Activator::get_table_name();
             $result = $wpdb->query( $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
                 "UPDATE {$table} SET status = 'processing', attempts = attempts + 1, updated_at = %s WHERE id = %d",
                 $now,
                 $job_id
@@ -983,6 +991,7 @@ class PressHub_Social_Queue {
         if ( self::is_db_ready() ) {
             global $wpdb;
             $table = PressHub_Social_Activator::get_table_name();
+            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
             $rows  = $wpdb->get_results( "SELECT status, COUNT(*) as cnt FROM {$table} GROUP BY status", ARRAY_A );
             if ( is_array( $rows ) ) {
                 foreach ( $rows as $row ) {

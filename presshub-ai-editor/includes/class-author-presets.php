@@ -41,7 +41,7 @@ class PressHub_AI_Author_Presets {
             return;
         }
         $viewed_user_id = 'user-edit.php' === $hook
-            ? (int) ( $_GET['user_id'] ?? 0 )
+            ? (int) wp_unslash( $_GET['user_id'] ?? 0 ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin screen lookup.
             : (int) get_current_user_id();
 
         wp_enqueue_script( PressHub_AI_Admin_Presets::SCRIPT_HANDLE, PRESSHUB_AI_URL . 'assets/presets.js', [ 'jquery', 'wp-i18n' ], PRESSHUB_AI_VERSION, true );

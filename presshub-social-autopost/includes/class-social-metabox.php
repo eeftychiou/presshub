@@ -227,8 +227,7 @@ class PressHub_Social_Metabox {
         // Save selected platforms
         $platforms = [];
         if ( isset( $_POST['presshub_social_platforms'] ) && is_array( $_POST['presshub_social_platforms'] ) ) {
-            foreach ( $_POST['presshub_social_platforms'] as $p ) {
-                $sanitized = sanitize_key( $p );
+            foreach ( array_map( 'sanitize_key', (array) wp_unslash( $_POST['presshub_social_platforms'] ) ) as $sanitized ) {
                 if ( in_array( $sanitized, PressHub_Social_Queue::VALID_PLATFORMS, true ) ) {
                     $platforms[] = $sanitized;
                 }

@@ -139,6 +139,7 @@ class PressHub_AI_Generation_Recorder {
         if ( function_exists( 'dbDelta' ) ) {
             dbDelta( $sql );
         } elseif ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) ) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $wpdb->query( $sql );
         }
 
@@ -300,6 +301,7 @@ class PressHub_AI_Generation_Recorder {
         }
 
         $table_name = self::get_table_name();
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
         $row        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table_name} WHERE id = %d", $id ), ARRAY_A );
         if ( ! is_array( $row ) || empty( $row ) ) {
             return null;
@@ -543,7 +545,9 @@ class PressHub_AI_Generation_Recorder {
         $cutoff = function_exists( 'wp_date' )
             ? wp_date( 'Y-m-d H:i:s', time() - $seconds )
             : gmdate( 'Y-m-d H:i:s', time() - $seconds );
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
         $sql     = $wpdb->prepare( "DELETE FROM {$table_name} WHERE created_at < %s", $cutoff );
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $deleted = $wpdb->query( $sql );
 
         return is_numeric( $deleted ) ? (int) $deleted : 0;

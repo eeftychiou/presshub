@@ -91,6 +91,7 @@ class PressHub_AI_Token_Logger {
         if ( function_exists( 'dbDelta' ) ) {
             dbDelta( $sql );
         } elseif ( isset( $wpdb ) && method_exists( $wpdb, 'query' ) ) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $wpdb->query( $sql );
         }
 
@@ -465,13 +466,17 @@ class PressHub_AI_Token_Logger {
 
         $count_sql = "SELECT COUNT(*) FROM {$table_name} WHERE {$where_sql}";
         if ( ! empty( $params ) ) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $count_sql = $wpdb->prepare( $count_sql, ...$params );
         }
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $total = (int) $wpdb->get_var( $count_sql );
 
         $query_sql = "SELECT * FROM {$table_name} WHERE {$where_sql} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
         $query_params = array_merge( $params, [ $per_page, $offset ] );
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $query_sql = $wpdb->prepare( $query_sql, ...$query_params );
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $items = $wpdb->get_results( $query_sql, ARRAY_A );
         if ( ! is_array( $items ) ) {
             $items = [];
@@ -545,9 +550,11 @@ class PressHub_AI_Token_Logger {
 
         $query = "SELECT * FROM {$table_name} WHERE {$where_sql}";
         if ( ! empty( $params ) ) {
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
             $query = $wpdb->prepare( $query, ...$params );
         }
 
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $rows = $wpdb->get_results( $query, ARRAY_A );
         if ( ! is_array( $rows ) ) {
             $rows = [];
@@ -701,7 +708,9 @@ class PressHub_AI_Token_Logger {
         $cutoff = function_exists( 'wp_date' )
             ? wp_date( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * ( defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 ) ) )
             : gmdate( 'Y-m-d H:i:s', time() - ( max( 1, $days ) * ( defined( 'DAY_IN_SECONDS' ) ? DAY_IN_SECONDS : 86400 ) ) );
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
         $sql = $wpdb->prepare( "DELETE FROM {$table_name} WHERE created_at < %s", $cutoff );
+        // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built from internal table names and prepared placeholders upstream.
         $deleted = $wpdb->query( $sql );
 
         return is_numeric( $deleted ) ? (int) $deleted : 0;
@@ -719,6 +728,7 @@ class PressHub_AI_Token_Logger {
         }
 
         $table_name = self::get_table_name();
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from $wpdb->prefix / internal constant, not user input.
         $result = $wpdb->query( "DELETE FROM {$table_name}" );
 
         return false !== $result;
